@@ -1,6 +1,6 @@
 # Consent path and developer release — September 11, 2026
 
-Status: release preparation; no production promotion or npm publication is implied by this document.
+Status: deployed September 11, 2026. Production revisions and verification are recorded below.
 
 ## Included changes
 
@@ -19,7 +19,7 @@ Enabled means all eligible authorized paths, not forced clicks on missing, ambig
 
 ## Release sequence
 
-Use one clean tested descendant commit for all components. Refresh production SHA before dispatch and verify ancestry.
+Use clean tested descendant commits. Refresh production SHA before dispatch and verify ancestry. The final documentation-only correction changed web source after the compatible runtime consumers deployed; the exact component revisions are recorded below.
 
 1. Publish SDK tag `certscore-sdk-v0.2.11` through `certscore-sdk-release.yml`; publish MCP tag `certscore-mcp-npm-v0.2.21` through `certscore-mcp-npm-release.yml`. Verify actual npm tarball versions, bundled generated types, and local MCP bundle. Include the existing standalone distribution via `certscore-mcp-v0.2.21` / `certscore-mcp-linux-release.yml` and review its generated Homebrew release/PR. Do not claim external directory submissions or a Homebrew PR merge merely from manifest updates. Do not present npm publication as complete merely because package manifests were bumped.
 2. Deploy compatible hosted MCP through `mcp-aws-ecs-deploy.yml` at the same commit. This is a separate workflow: `deploy:all` does **not** include hosted MCP or npm publication.
@@ -79,5 +79,87 @@ Read-only localhost API requests for both saved Mackolik and PestPac scans
 returned HTTP 200 and all four expected after-click summaries. No new scans were
 created. Final production-source hashes matched the tested hashes. Detailed logs
 and the runner correction are recorded in `validation-summary.json` under the
-release-preparation artifact directory. Production promotion and package publishing
-remain pending.
+release-preparation artifact directory. Production promotion and package publishing completed; see the release record below.
+
+## Production release record
+
+All canonical AWS deployments succeeded. Production web reports `ecs-fargate`.
+
+| Component | Deployed source or package |
+| --- | --- |
+| Web and materializer | `20892312aa702b285342849669548c57513e5e0b` |
+| Scanners, Frankfurt / Ireland / California | `20892312aa702b285342849669548c57513e5e0b` |
+| Hosted MCP and validation worker/scheduler | `2870e964d9ff23ccaf37b45335c184d2289626bb` |
+| SDK npm | `@certscore/sdk@0.2.11`, tag at `aef64de7a9dffd784341a795a467e2cf2192a997` |
+| MCP npm and standalone | `@certscore/mcp@0.2.21`, tags at `aef64de7a9dffd784341a795a467e2cf2192a997` |
+
+The difference between `2870e964` and `20892312` is public consent guidance and
+its existing test assertion. Scanner, MCP and validation runtime source is
+unchanged between them. All include the authenticated user-activity logging
+ancestor. This release record is documentation written after deployment; its
+own commit is not a new runtime deployment.
+
+Successful workflow runs:
+
+- [Final web/documentation](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/34641802882), following [initial web](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/34640866547).
+- [Hosted MCP](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/34640805602).
+- [Validation](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/34640810633).
+- [SDK npm](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/34640441598), [MCP npm](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/34640441323), and [standalone MCP](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/34640441858).
+
+The reviewed [Homebrew metadata PR 188](https://github.com/ergoveritas1-alt/certscore.ai/pull/188)
+was merged at `a6026668b97ab92e1722980bd6a45a2308c102fa`. Both default-branch
+Homebrew files reference the checksum-verified 0.2.21 archive. Published npm
+packages were downloaded and checked for their version, checksum and new types
+or bundled evidence handling; publication was not inferred from local manifests.
+
+Canonical scanner deployment completed in 3m18s, reusing the cached full-image
+path because California lacked a runtime base. No runtime base or capacity was
+added. All six Lambda functions are Active/Successful at 3008 MB and share image
+digest `sha256:cf049076c8e025cb2b818c1781268d5060b7d305818d1425c9e4472a9ba30f22`.
+All regional image/provenance and crawler-identity checks passed. The all-region
+verification timestamp is `2026-09-11T20:03:48.637Z`.
+
+All four ECS services stabilized with the expected immutable revision, required
+running count, no pending tasks and one completed deployment. Web remains
+sharded; Accept and Reject remain enabled with `all_eligible`; GPC remains
+unconditionally enabled for sharded dispatch. Live SDK/reference/MCP pages,
+OpenAPI v1/v2, agent-readable guidance and discovery were checked. The final
+web correction removes stale wording that discounted unconfirmed click evidence
+and omitted the approved Reject-click tracking policy.
+
+Initial deployment checks caught an outdated generated MCP manifest and an old
+HTTP tool-description assertion. These were corrected before the successful
+MCP deployment; HTTP tests passed 35/35 and the release guard passed. The public
+copy follow-up passed 26 tests with one existing skip. Preflight was not repeated
+inside deployment wrappers after the completed preparation gates and focused
+correction checks; canonical workflow checks, image verification, migration
+steps and service-stability gates remained enabled.
+
+No production scans were created for this release verification. Two naturally
+initiated, non-ErgoVeritas scans after regional readiness were checked against
+original S3 bytes/checksums, canonical schemas, reconstructed GPC observations,
+persisted action projections, public API output and a single terminal result:
+
+- `3274368b-18c1-4089-83d4-8104994e88ab` (`djatoya.com`): GPC observation complete;
+  A/R lanes explicitly limited at the passive barrier, without manufactured
+  click evidence.
+- `300c7693-99cd-47d3-9674-80cf246d4175` (`n0c.com`): GPC unavailable and paired
+  result indeterminate. The retained GPC worker records transport failures,
+  no successful main document, and incomplete capture. A/R were not attempted;
+  the unavailable evidence remained neutral.
+
+This is deployment-integrity verification, not a new A/R or GPC completion-rate
+estimate. Detailed retained verification lives under the local
+`artifacts/consent-release-20260911/` directory. Mac mini dependency/parser/export
+work remains the separate handoff described above.
+
+Three additional existing scans were verified through the newly deployed API:
+`uwaterloo.ca` (`0865f7f8-76f8-4d62-8b2e-2b7fc2b32527`), `adswizz.com`
+(`28bd06b8-827e-4683-b268-066eedc329c0`) and `brother.com`
+(`c9157267-01bb-4038-a259-eda375d5c432`). Their original scanner revision was
+`6f704ff2`; they are existing-capture API checks, not evidence of new-scanner
+click success. All five completed captures (three Accept, two Reject) matched
+verified packet hashes and canonical persisted projections, including the new
+public `afterAction` summary. Registration remained unconfirmed for all five;
+no click was relabeled as registered consent. The remaining Reject packet was
+not attempted and did not acquire an after-click summary.
