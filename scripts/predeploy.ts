@@ -63,7 +63,20 @@ const REPRESENTATIVE_PROOF_CHECK: Check = {
   command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-name-pattern=^consent-proof lane (binds a completed generic negative|retains same-document Playwright proof)", "packages/certscore-scan-core/src/integration-fixtures.test.ts"],
 };
 
+const GPC_OBSERVATION_RELEASE_CHECK: Check = {
+  key: "gpc-production-observation",
+  label: "GPC retained delivery, blocked requests, canonical projection and public contracts",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-concurrency=1",
+    "packages/certscore-scan-core/src/gpc-observation-completion.test.ts",
+    "packages/certscore-scan-core/src/gpc-pre-transmission-block.test.ts",
+    "packages/certscore-contracts/src/gpc-public-contract.test.ts",
+    "apps/web/lib/scans/gpc-production-observation.test.ts",
+    "apps/web/components/scans/report-lab/shadow-scan-report.test.ts",
+    "packages/certscore-mcp/src/tools.test.ts"],
+};
+
 const ROOT_FULL_CHECKS: Check[] = [
+  GPC_OBSERVATION_RELEASE_CHECK,
   SCAN_NO_GO_RELEASE_CHECK,
   RUNTIME_GRAPH_RELEASE_CHECK,
   RUNTIME_GRAPH_CAPTURE_CHECK,
@@ -126,6 +139,11 @@ const ROOT_FULL_CHECKS: Check[] = [
 ];
 
 const TARGETS: Target[] = [
+  {
+    key: "gpc-observation", label: "GPC bounded observation",
+    matches: file => file.includes("/gpc-") || file === "scripts/run-gpc-observation-local.ts" || file === "scripts/sync-gpc-observation-contract.ts" || file === "apps/v2-dag-lambda/src/handler.ts" || file === "packages/certscore-scan-core/src/index.ts",
+    checks: [GPC_OBSERVATION_RELEASE_CHECK],
+  },
   {
     key: "runtime-graph-operations",
     label: "runtime graph rollout controls",

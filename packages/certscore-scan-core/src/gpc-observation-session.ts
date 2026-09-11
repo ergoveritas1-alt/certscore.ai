@@ -1,4 +1,5 @@
-import type { Page, CDPSession, Request } from "playwright";
+import { verifiedGpcPreTransmissionBlock } from "./gpc-pre-transmission-block.js";
+import type { Page, CDPSession, Request, Response } from "playwright";
 import { gpcObservationSessionSchema, type GpcOptOutObservation, type GpcObservationSession, type NetworkEvent } from "@certscore/contracts";
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { installGpcSemanticMonitor } from "./gpc-semantic-monitor.js";
@@ -21,7 +22,13 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
   let committed: { loader: string; urlHash: string; at: number } | null = null;
   let documentDrops = 0, stopped = false, requestsObserved = 0, requestsDropped = 0;
   const requests: GpcObservationSession["requests"] = [];
-  let pendingHeaders = 0, failedHeaders = 0;
+  const requestHandles = new Map<string, Request>();
+  const requestLoaders = new Map<string, string>();
+  const responses = new Set<Request>();
+  const onResponse = (response: Response) => {
+    if (!stopped && responses.size < 5000) responses.add(response.request());
+  };
+  page.on("response", onResponse);
   const onRequest = (p: any) => {
     if (stopped || p.type !== "Document" || p.frameId !== mainFrameId || typeof p.loaderId !== "string" || !/^https?:/.test(p.request?.url ?? "")) return;
     if (documents.length >= 32) { documentDrops++; documents.shift(); }
@@ -51,6 +58,10 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
       const row: GpcObservationSession["requests"][number] = { eventId: event.eventId, timestampMs: event.timestampMs,
         urlSha256: gpcDocumentHash(event.requestUrl), secGpc: event.requestHeaders?.secGpc ?? null, headerSource: "request_snapshot" };
       requests.push(row);
+      if (request) {
+        requestHandles.set(event.eventId, request as Request);
+        try { if (committed && request.frame?.() === page.mainFrame()) requestLoaders.set(event.eventId, committed.loader); } catch { /* No main-document owner. */ }
+      }
       if (request && [request.timing, request.method, request.resourceType, request.serviceWorker, request.failure].every(fn => typeof fn === "function")) {
         let isMainFrame: boolean | null = null;
         try { if (request.frame) isMainFrame = request.frame() === page.mainFrame(); } catch { /* Worker-owned requests have no frame. */ }
@@ -60,13 +71,13 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
       // missing values from the same request, overlapping the existing window.
       // Finalization never waits for these promises or borrows configured values.
       if (row.secGpc === null && request) {
-        row.headerSource = "readback_pending"; pendingHeaders++;
+        row.headerSource = "readback_pending";
         void request.allHeaders().then(headers => {
           if (stopped) return;
           const value = headers["sec-gpc"];
           row.secGpc = typeof value === "string" && value.length <= 8 ? value : null;
           row.headerSource = "all_headers_readback"; row.headerReadbackAtMs = now();
-        }).catch(() => { if (!stopped) { failedHeaders++; row.headerSource = "readback_failed"; } }).finally(() => { pendingHeaders--; });
+        }).catch(() => { if (!stopped) { row.headerSource = "readback_failed"; } });
       }
     },
     async finish(semanticObservation: GpcOptOutObservation | undefined, listener: { callbacks: number; dropped: number; registered: boolean } | undefined, aborted: boolean) {
@@ -84,10 +95,26 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
       if (!listener) limitations.push("semantic_monitor_unavailable");
       if (listener?.dropped) limitations.push("semantic_monitor_overflow");
       if (requestsDropped) limitations.push("request_capture_overflow");
-      if (pendingHeaders || failedHeaders) limitations.push("request_header_readback_incomplete");
+      // Playwright 1.58.2 forwards Chromium's blockedReason on this exact Request
+      // when there is no network errorText. No URL/timing correlation is used.
+      for (const row of requests) {
+        const request = requestHandles.get(row.eventId);
+        if (row.secGpc !== null || !request) continue;
+        try {
+          const reason = verifiedGpcPreTransmissionBlock({ failureText: request.failure()?.errorText, secGpc: row.secGpc,
+            timing: request.timing(), responseReceived: responses.has(request), serviceWorker: request.serviceWorker() !== null,
+            mainFrame: request.frame() === page.mainFrame(), requestLoader: requestLoaders.get(row.eventId), committedLoader: commit?.loader });
+          if (reason && commit) {
+            row.preTransmissionBlock = { reason, documentToken: commit.loader, secGpcHeaderRetained: false, source: "same_playwright_request_failure", observedAtMs: now(),
+              responseReceived: false, networkTimingAvailable: false, serviceWorker: false };
+          }
+        } catch { /* Unknown failure timing is not proof of a pre-transmission block. */ }
+      }
+      if (requests.some(r => !r.preTransmissionBlock && (r.headerSource === "readback_pending" || r.headerSource === "readback_failed")))
+        limitations.push("request_header_readback_incomplete");
       stopped = true;
       const packet = gpcObservationSessionSchema.parse({
-        contractVersion: "certscore.gpc-observation-session.v1", scanId: input.scanId, captureId: input.captureId,
+        contractVersion: "certscore.gpc-observation-session.v2", scanId: input.scanId, captureId: input.captureId,
         observationScope: "main_document_and_retained_http_requests", captureStartedAtMs, captureEndedAtMs: now(),
         terminal: aborted ? "aborted" : limitations.length ? "incomplete" : "completed",
         mainDocument: limitations.includes("terminal_document_unverified") || !commit || !delivered ? null : {
@@ -100,6 +127,6 @@ export async function startGpcObservationSession(input: { page: Page; scanId: st
       });
       return packet;
     },
-    async close() { stopped = true; requestDiagnostics.close(); await cdp.detach().catch(() => {}); },
+    async close() { stopped = true; requestHandles.clear(); requestLoaders.clear(); responses.clear(); page.off("response", onResponse); requestDiagnostics.close(); await cdp.detach().catch(() => {}); },
   };
 }

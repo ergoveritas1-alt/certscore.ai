@@ -1,3 +1,4 @@
+import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.js";
 import { apiV2Disclaimer, CERTSCORE_API_V2_SCHEMA_VERSION } from "./api-v2.js";
 import { runtimeEvidenceGraphOpenApiSchemas } from "./runtime-evidence-graph-openapi.js";
 
@@ -849,7 +850,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
           additionalProperties: false,
           required: ["status", "findingTitle", "summary", "scoreEffect", "legalInterpretation", "comparison", "californiaPolicy", "evidenceUrl"],
           properties: {
-            contractVersion: { type: "string", enum: ["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2"], description: "V2 separates verified signal delivery, comparison coverage and observed response. Legacy records are not upgraded on read." },
+            observation: gpcBoundedObservationOpenApi,
+            contractVersion: { type: "string", enum: ["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2", "certscore.gpc-response-assessment.v3"], description: "V3 additionally retains independent bounded observation, CMP-recorded sale/sharing state and direct request facts. Completion does not mean GPC was honored. Historical records retain their original versions." },
             status: { type: "string", enum: ["responsive", "no_observable_response", "indeterminate"] },
             findingTitle: { type: "string", enum: ["GPC response", "No observable GPC response"] },
             summary: { type: "string", minLength: 1, maxLength: 2000 },

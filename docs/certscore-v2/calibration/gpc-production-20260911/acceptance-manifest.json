@@ -1,0 +1,1843 @@
+{
+  "manifestVersion": "certscore.gpc_completion.central_selector_manifest.v1",
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "internalOnly": true,
+  "artifactOnly": true,
+  "selectionStage": "selection_frozen_before_contact",
+  "eligibilityLedger": "docs/certscore-v2/calibration/gpc-production-20260911/acceptance-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
+  },
+  "targets": [
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://no-ip.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://firetvcaptiveportal.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://cleanspark.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://surveymonkey.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://theatlantic.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.fino.lk/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ubnt.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://nginx.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://skysports.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://manhwaweb.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://beehiiv.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://rustdesk.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ecnavi.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://publicnode.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://vimeo.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://alza.cz/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://typeform.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kunlunaq.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://supercell.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://routedlogic.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://footmercato.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://fda.gov/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://stheadline.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://browser-intake-datadoghq.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://travelaudience.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://calculator.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://index.hu/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://truecaller.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://horoscope.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://stapa.cz/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://fifa.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://linkedin.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mevblocker.io/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://cmbchina.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://dailymotion.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://missav.live/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://livescore.cz/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tbank.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mdpr.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ad-contents.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mundodeportivo.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://duckduckgo.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://lathampool.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://comix.to/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://trendmicro.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://slideshare.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://otomoto.pl/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xham.live/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://goal.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://newscientist.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://nintendo.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tandfonline.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ilmeteo.it/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mega.nz/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://sozcu.com.tr/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://asurascans.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://haberler.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://postgresql.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://nbcuni.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://amemv.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.sealedair.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ca.gov/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://bidmachine.io/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://adrta.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://swatch.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://asus.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://3lift.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://wikihow.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://joinroot.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xn--42cf7cgd7gxbd4m7c.cc/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://bentley.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mux.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://vmware.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://google.nl/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://hln.be/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://meteored.cl/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://sondakika.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://iskur.gov.tr/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://webmd.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kemkes.go.id/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://visma.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://yango.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://uol.com.br/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://craigslist.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://delish.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://fapello.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://zeplin.io/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://pricecharting.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.dealeron.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://sattamatkano1.me/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kooora.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://geeksforgeeks.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tbs.co.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://drmgms.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://playrix.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://smadex.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://gsmarena.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://wordpress.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://launchdarkly.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://atcpulsa.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://videoamp.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ouest-france.fr/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://jecontacte.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://useinsider.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://redhat.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://farmersmarketla.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://liftoff.io/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://bcv.org.ve/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://emc.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://venturebeat.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://livejournal.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mechacomic.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.m-files.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tax.gov.ir/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://klikbca.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://actify.nl/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://dashboard.reviewbird.io/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://360.cn/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kir2kos.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://globo.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mncdn.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kontur.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://sciencedaily.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://sefan.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://garena.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://javwow.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kolkataff.tv/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://puravidabracelets.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://1c.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://pki.goog/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://intercom.io/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://govinfo.gov/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mediafire.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xhwide.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tobesure.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://halodoc.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://canada.ca/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://bikewale.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://eurekalert.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://adinaeden.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.timberland.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://onetag-sys.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://afribaba.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://lsrelayaccess.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://googlevideo.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tjk.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://vice.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://fb.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://jsdelivr.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://definingchaoslabs.ca/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://outlook.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://jable.tv/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://serpro.gov.br/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xnxx.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tinyurl.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ottadvisors.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://photoacompanhantes.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://oxfordjournals.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://afip.gob.ar/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kettledroopingcontinuation.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ukdevilz.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://aliyun.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ys7.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xpvid.cc/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://administracionelectronica.gob.es/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://castbox.fm/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://pcmax.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://goodreturns.in/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.vivatv.com.tw/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://lululemon.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://googleadservices.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://behance.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.diesellaptops.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://dzen.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://nexusmods.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://app-analytics-services-att.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://trello.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://hs-sites.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://irs.gov/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://getyourguide.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://hentai.name/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ack.de/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kv.no/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xserver.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://meteociel.fr/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://achmea.nl/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://python.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://meethue.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://gao.gov/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ensonhaber.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ntp.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://account.apple.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://bugsnag.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://255md.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://washingtontimes.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://facebook.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://conreri.de/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://dropmms.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://stackexchange.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://realgoodfoods.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://nasa.gov/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://usercontent.goog/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xhspot.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://samsungknox.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://bpexch.live/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xhtv.today/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.kendrascott.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ptt.cc/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://namasha.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://vegacrypt.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://digitallocker.gov.in/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xhamster1.desi/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://pinimg.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://spectrum.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://lithiachevroletredding.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://manchestereveningnews.co.uk/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://rule34video.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ioh.co.id/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://threads.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://nsone.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://kingoftime.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://dol.gov/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://1984.is/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://deepl.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://emojidb.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xnhau.you/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://jd.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://heytapmobi.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://sexemodel.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://anime-sama.to/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://yahoo.co.jp/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://yr.no/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://xhwebsite.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://scan-manga.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://skipthegames.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://therapservices.net/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://bund.de/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://datadome.co/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://staging.joobix.co/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://google-analytics.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://razer.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://us.oneill.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://urbanremedy.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.gov.br/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://quickconnect.to/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://g.page/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://proton.me/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://hp.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://cookiedatabase.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://tripadvisor.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mangosip.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ring.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://yandex.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://travelandleisure.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://ok.xxx/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://wb.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://genius.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://lge.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://max.ru/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://rtve.es/"
+    }
+  ]
+}

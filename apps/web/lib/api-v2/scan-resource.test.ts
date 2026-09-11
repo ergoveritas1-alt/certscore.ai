@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { gpcProductionRuntimeFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-production";
+import { buildGpcProductionAssessment } from "../../../../packages/certscore-scan-core/src/gpc-production-observation";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
@@ -1681,4 +1684,37 @@ test("known incomplete scans retain their status and same-ID polling guidance", 
       assert.ok((status.retryAfterSeconds ?? 0) > 0);
     }
   }
+});
+
+
+test("GPC v3 independent observation survives actual persisted report hydration and public resource/status projection", () => {
+  const gpc = gpcProductionRuntimeFixture();
+  gpc.gpcSignalObservation!.workerCount = 1;
+  const bytes = Buffer.from(JSON.stringify(gpc));
+  const pointer = { uri: "s3://fixture/gpc.json", sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length };
+  const comparison = buildGpcResponseAssessment({ baseline: gpcRuntimeFixture({ enabled: false }), baselineArtifact: pointer, gpc, gpcArtifact: pointer });
+  const assessment = buildGpcProductionAssessment({ scanId: gpc.scanId, source: { bytes, pointer }, comparison });
+  const runtimeArtifacts = buildGpcResponseRuntimeProjection({ ...gpc, gpcResponseAssessment: assessment });
+  const concerns = buildNormalizedConcerns({ reviewFindingCandidates: [], validationFindings: [], runtimeArtifacts });
+  const findings = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(), runtimeArtifacts });
+  const record = gpcCanonicalFixture() as ScanDetailResponse & { canonicalReportProjection: Record<string, unknown> };
+  record.runtimeArtifacts = runtimeArtifacts;
+  record.canonicalReportProjection = { ...record.canonicalReportProjection!, normalizedConcerns: concerns, globalUnifiedFindings: findings, ownerUnifiedFindings: findings };
+  const persisted = buildPersistedScanReportProjection(record);
+  const snapshot = { report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+    report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+    report_projection_computed_at: new Date().toISOString() };
+  const hydrated = readPersistedScanReportProjection({ scan: record.scan, snapshot });
+  assert.ok(hydrated);
+  const publicRecord = { ...record, ...hydrated, scan: record.scan };
+  const resource = buildApiV2ScanResource(publicRecord);
+  const response = apiV2GpcResponseSchema.parse(resource.gpcResponse);
+  assert.equal(response.contractVersion, "certscore.gpc-response-assessment.v3");
+  assert.equal(response.observation?.status, "complete");
+  assert.equal(response.status, "indeterminate");
+  assert.deepEqual(response.californiaPolicy, { applied: false, deductionPoints: 0 });
+  assert.deepEqual(buildApiV2ScanStatus(publicRecord, { canonicalScan: resource }).gpcResponse, response);
+  assert.doesNotMatch(JSON.stringify(response), /s3:\/\/|prototype|requestDiagnostics/);
+  assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, observation: undefined }).success, false);
+  assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, observation: { ...response.observation, sourceSha256: "0".repeat(64) } }).success, false);
 });

@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromiumProxyOptions } from "../packages/certscore-scan-core/src/playwright-runtime";
 import { runScan } from "../packages/certscore-scan-core/src/index";
 import { canonicalEvidenceBundleSchema, retainedGpcObservationSessionSchema, type GpcObservationSession } from "@certscore/contracts";
+import { buildGpcProductionObservation } from "../packages/certscore-scan-core/src/gpc-production-observation";
 import { assessGpcObservationCompletion } from "../packages/certscore-scan-core/src/gpc-observation-completion";
 import { evaluateGpcObservationCompletionGate, type GpcObservationCompletionRow } from "./lib/gpc-observation-completion-gate";
 import { publicTestContactHoldForUrl } from "../packages/certscore-scan-core/src/public-test-contact-holds";
@@ -25,7 +26,7 @@ export async function retainLocalGpcCanonicalSource(outDir: string, scanId: stri
 /** Local artifact-only runner. Selection and verified egress are mandatory for
  * public targets; no retry or target replacement after seeing an outcome. */
 export async function runLocalGpcCalibration(input: {
-  selectionPath: string; egressPath: string; out: string; runKey: string;
+  selectionPath: string; egressPath: string; out: string; runKey: string; productionCapture?: boolean;
 }) {
   const selectionBytes = await readFile(input.selectionPath), egressBytes = await readFile(input.egressPath);
   const selection = JSON.parse(selectionBytes.toString()), egress = JSON.parse(egressBytes.toString());
@@ -42,13 +43,15 @@ export async function runLocalGpcCalibration(input: {
   const implementationFiles = ["scripts/run-gpc-observation-local.ts", "scripts/lib/gpc-observation-completion-gate.ts",
     "packages/certscore-scan-core/src/gpc-observation-completion.ts", "packages/certscore-scan-core/src/gpc-observation-session.ts",
     "packages/certscore-scan-core/src/gpc-request-diagnostics.ts",
+    "packages/certscore-scan-core/src/gpc-production-observation.ts", "packages/certscore-scan-core/src/gpc-pre-transmission-block.ts",
+    "packages/certscore-contracts/src/gpc-bounded-observation.ts",
     "packages/certscore-scan-core/src/gpc-semantic-monitor.ts", "packages/certscore-scan-core/src/gpc-gpp-parser.ts",
     "packages/certscore-scan-core/src/gpc-opt-out-capture.ts", "packages/certscore-scan-core/src/index.ts",
     "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts", "packages/certscore-contracts/src/gpc-opt-out-prototype.ts",
     "packages/certscore-contracts/src/gpc-observation-session.ts", "packages/certscore-contracts/src/gpc-observation.ts", "packages/certscore-contracts/src/index.ts"];
   const implementationHashes = Object.fromEntries(await Promise.all(implementationFiles.map(async file => [file, digest(await readFile(path.join(root, file)))])));
   const manifest = { implementationHashes, contractVersion: "certscore.gpc-completion-calibration.v1", runKey: input.runKey,
-    frozenAt: new Date().toISOString(), selectionSha256: digest(selectionBytes), egressSha256: digest(egressBytes),
+    productionCapture: input.productionCapture === true, frozenAt: new Date().toISOString(), selectionSha256: digest(selectionBytes), egressSha256: digest(egressBytes),
     sourceRevision: process.env.GPC_CALIBRATION_SOURCE_REVISION ?? "working_tree", urls: urls.map((u: URL) => u.href),
     target: 0.95, observationScope: "main_document_and_retained_http_requests", noDeployment: true };
   await writeFile(path.join(input.out, "Manifest.json"), JSON.stringify(manifest, null, 2));
@@ -60,9 +63,11 @@ export async function runLocalGpcCalibration(input: {
     let assessment = assessGpcObservationCompletion({ scanId });
     let access: GpcObservationCompletionRow["representativeAccess"] = "unknown";
     let canonicalVerified = false;
+    let productionObservation: ReturnType<typeof buildGpcProductionObservation> | undefined;
     let status = "failed", error: string | undefined;
     try {
       await runScan({ scanId, url: url.href, profile: "standard", region: "us-west-1", outDir,
+        retainGpcObservation: input.productionCapture === true,
         evidenceLane: "gpc_observation", preConsentScreenshotMode: "never",
         onGpcObservationSession: packet => { session = packet; } });
       const { bundle, source } = await retainLocalGpcCanonicalSource(outDir, scanId);
@@ -79,6 +84,10 @@ export async function runLocalGpcCalibration(input: {
       // the new GPC completion result. Unknown remains in the audit denominator.
       access = bundle.scanNoGoAssessment?.decision === "no_go" || bundle.scanEvidenceLaneAssessment?.outcome === "no_go" ? "non_representative" :
         bundle.scanEvidenceLaneAssessment?.lanes.homepageRuntime === "usable" ? "representative" : "unknown";
+      if (input.productionCapture) {
+        productionObservation = buildGpcProductionObservation({ scanId, source });
+        if ((productionObservation.status === "complete") !== (assessment.completed && access === "representative")) throw Error("Production/local completion disagreement");
+      }
       status = "completed";
     } catch (e) { error = e instanceof Error ? e.message.slice(0, 200) : "capture_failed"; }
     const row: GpcObservationCompletionRow = { scanId, observationScope: "main_document_and_retained_http_requests", manifestEligible: true,
@@ -88,20 +97,20 @@ export async function runLocalGpcCalibration(input: {
       requestCapture: { ...assessment.requestCapture, ended: assessment.requestCapture.complete }, observedFactsDirect: assessment.sourceVerified };
     rows.push(row);
     results.push({ scanId, url: selection.selected[index].url, status, startedAt, completedAt: new Date().toISOString(), scannerRuntimeStarted: true, representativeAccess: access,
-      runtime: { noGoCandidate: access === "non_representative", noGoReasons: access === "non_representative" ? ["canonical_no_go"] : [] }, error, assessment });
+      runtime: { noGoCandidate: access === "non_representative", noGoReasons: access === "non_representative" ? ["canonical_no_go"] : [] }, error, assessment, productionObservation });
     await writeFile(path.join(input.out, "Results.json"), JSON.stringify({ generatedAt: new Date().toISOString(), results }, null, 2));
     await writeFile(path.join(input.out, "CompletionRows.json"), JSON.stringify(rows, null, 2));
-    await writeFile(path.join(input.out, "CompletionGate.json"), JSON.stringify(evaluateGpcObservationCompletionGate(rows), null, 2));
+    await writeFile(path.join(input.out, "CompletionGate.json"), JSON.stringify(evaluateGpcObservationCompletionGate(rows, { minimumRepresentativeRows: input.productionCapture ? 200 : 100 }), null, 2));
     console.log(JSON.stringify({ scanId, domain: url.hostname, access, completed: assessment.completed, limits: assessment.limitations }));
   }
-  return evaluateGpcObservationCompletionGate(rows);
+  return evaluateGpcObservationCompletionGate(rows, { minimumRepresentativeRows: input.productionCapture ? 200 : 100 });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const args = new Map<string, string>();
   for (let i = 2; i < process.argv.length; i += 2) {
-    if (!["--selection", "--egress", "--out", "--run-key"].includes(process.argv[i]!) || !process.argv[i + 1]) throw Error("Use --selection FILE --egress FILE --out NEW_DIRECTORY --run-key KEY");
+    if (!["--selection", "--egress", "--out", "--run-key", "--production-capture"].includes(process.argv[i]!) || !process.argv[i + 1]) throw Error("Use --selection FILE --egress FILE --out NEW_DIRECTORY --run-key KEY");
     args.set(process.argv[i]!, process.argv[i + 1]!);
   }
-  if (args.size !== 4) throw Error("Explicit selection, egress, output and run key required");
-  void runLocalGpcCalibration({ selectionPath: args.get("--selection")!, egressPath: args.get("--egress")!, out: args.get("--out")!, runKey: args.get("--run-key")! }).catch(error => { console.error(error); process.exitCode = 1; });
+  if (args.size !== 4 && args.size !== 5) throw Error("Explicit selection, egress, output and run key required");
+  void runLocalGpcCalibration({ productionCapture: args.get("--production-capture") === "true", selectionPath: args.get("--selection")!, egressPath: args.get("--egress")!, out: args.get("--out")!, runKey: args.get("--run-key")! }).catch(error => { console.error(error); process.exitCode = 1; });
 }

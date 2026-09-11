@@ -1,0 +1,357 @@
+{
+  "version": "certscore.gpc-production-strict-retained-audit.v1",
+  "auditedAt": "2026-09-11T16:12:47.442Z",
+  "originalCanonicalPointers": 260,
+  "originalSessionPointers": 249,
+  "allOriginalChecksumsValid": true,
+  "allSidecarAssessmentsReplayExactly": true,
+  "allAccessClassificationsIndependentlyRecomputed": true,
+  "allFinalProductionProjectionsMatchExactExpected": true,
+  "unexpectedDifferences": 0,
+  "sourceHashesVerified": true,
+  "unchangedCaptureHashes": true,
+  "postFreezeImplementationDrift": [
+    {
+      "file": "scripts/run-gpc-observation-local.ts",
+      "before": "a5ac936f2c62aea2f025bb50e2109ef214e4f7f37014d08eee9ae0260059a484",
+      "after": "e1f471c039d9094c1eee6dac746b3a0068b406f6376ba4b18a7c010ae748119c"
+    },
+    {
+      "file": "packages/certscore-scan-core/src/gpc-production-observation.ts",
+      "before": "9b410e2fd2437bd50336e547820c1b50610a184fda37f28e999c465332e19071",
+      "after": "99f4331e25dc70cb1dfd6b2b670f2e8965f07486447087c42924adc6b5eb0768"
+    }
+  ],
+  "expectedTransitions": [
+    {
+      "scanId": "gpc-production-acceptance-20260911-2",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-16",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-18",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-22",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-24",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-36",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-44",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-52",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-65",
+      "access": "unknown",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-102",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-110",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-114",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-121",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-141",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-142",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-143",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-144",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-149",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-157",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-158",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-160",
+      "access": "unknown",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-164",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-171",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-176",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-202",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-214",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-234",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-238",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-246",
+      "access": "unknown",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-249",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-250",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-251",
+      "access": "non_representative",
+      "from": "unavailable",
+      "to": "unavailable",
+      "addedLimitation": "representative_access_not_verified"
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-257",
+      "access": "non_representative",
+      "from": "complete",
+      "to": "limited",
+      "addedLimitation": "representative_access_not_verified"
+    }
+  ],
+  "gate": {
+    "diagnosticOnly": true,
+    "productionEligible": false,
+    "targetRate": 0.95,
+    "minimumRepresentativeRows": 200,
+    "confidenceLevel": 0.95,
+    "allSubmittedCount": 260,
+    "uniqueSubmittedCount": 260,
+    "duplicateScanIds": [],
+    "excludedNonRepresentativeCount": 30,
+    "excludedCanaryCount": 0,
+    "excludedUnverifiedCohortCount": 0,
+    "accessCounts": {
+      "representative": 227,
+      "nonRepresentative": 30,
+      "unknown": 3
+    },
+    "includedNonRepresentativeFailureCount": 0,
+    "representativeDenominator": 230,
+    "completedRepresentativeCount": 225,
+    "fullContextVerifiedCount": 128,
+    "fullContextRate": 0.5565217391304348,
+    "completionRate": 0.9782608695652174,
+    "confidenceInterval": {
+      "lower": 0.9501282146821269,
+      "upper": 0.9906795799959799
+    },
+    "pointEstimateAboveTarget": true,
+    "confidenceBoundAboveTarget": true,
+    "targetAchieved": true,
+    "allAttemptCompletedCount": 225,
+    "allAttemptCompletionRate": 0.8653846153846154,
+    "failedRepresentativeRows": [
+      {
+        "scanId": "gpc-production-acceptance-20260911-27",
+        "reasons": [
+          "semantic_probe_incomplete",
+          "semantic_probe_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-production-acceptance-20260911-65",
+        "reasons": [
+          "representative_access_not_verified",
+          "main_document_binding_unverified",
+          "http_delivery_not_retained",
+          "main_navigator_readback_not_retained",
+          "semantic_probe_incomplete",
+          "semantic_probe_not_started",
+          "semantic_probe_not_ended",
+          "request_capture_not_started",
+          "request_capture_not_ended",
+          "request_capture_drops_or_unknown",
+          "observed_facts_not_direct"
+        ]
+      },
+      {
+        "scanId": "gpc-production-acceptance-20260911-160",
+        "reasons": [
+          "representative_access_not_verified",
+          "main_document_binding_unverified",
+          "http_delivery_not_retained",
+          "main_navigator_readback_not_retained",
+          "semantic_probe_incomplete",
+          "semantic_probe_not_started",
+          "semantic_probe_not_ended",
+          "request_capture_not_started",
+          "request_capture_not_ended",
+          "request_capture_drops_or_unknown",
+          "observed_facts_not_direct"
+        ]
+      },
+      {
+        "scanId": "gpc-production-acceptance-20260911-183",
+        "reasons": [
+          "request_capture_not_ended"
+        ]
+      },
+      {
+        "scanId": "gpc-production-acceptance-20260911-246",
+        "reasons": [
+          "representative_access_not_verified",
+          "main_document_binding_unverified",
+          "http_delivery_not_retained",
+          "main_navigator_readback_not_retained",
+          "semantic_probe_incomplete",
+          "semantic_probe_not_started",
+          "semantic_probe_not_ended",
+          "request_capture_not_started",
+          "request_capture_not_ended",
+          "request_capture_drops_or_unknown",
+          "observed_facts_not_direct"
+        ]
+      }
+    ],
+    "gateReasons": [],
+    "recommendation": "Hold out a preregistered representative cohort and repeat this gate before any product decision; this result is not an internet-wide reliability estimate."
+  },
+  "retainedPointerListSha256": "2a3ce82cb4771cf1c0cf1b20800c4ca21f22bd4edddb76a51747d96cd934275b"
+}

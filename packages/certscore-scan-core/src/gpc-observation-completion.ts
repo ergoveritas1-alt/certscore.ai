@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { canonicalEvidenceBundleSchema, retainedGpcObservationSessionSchema } from "@certscore/contracts";
+import { canonicalEvidenceBundleSchema, retainedGpcObservationSessionSchema, type CanonicalEvidenceBundle, type GpcObservationSession } from "@certscore/contracts";
 import type { GpcPrototypeArtifact } from "./gpc-opt-out-assessment.js";
 const hash = (value: Uint8Array | string) => createHash("sha256").update(value).digest("hex");
 function verified(source: GpcPrototypeArtifact) {
@@ -9,15 +9,23 @@ function verified(source: GpcPrototypeArtifact) {
 /** Evaluates completion of the declared bounded observation, not GPC compliance.
  * Historical packets lacking direct coverage proof cannot enter this gate. */
 export function assessGpcObservationCompletion(input: { scanId: string; bundle?: GpcPrototypeArtifact; session?: GpcPrototypeArtifact }) {
-  const limits: string[] = [];
   const bundle = (() => { try { return input.bundle ? canonicalEvidenceBundleSchema.parse(verified(input.bundle)) : null; } catch { return null; } })();
   const retained = (() => { try { return input.session ? retainedGpcObservationSessionSchema.parse(verified(input.session)) : null; } catch { return null; } })();
-  const p = retained?.session;
+  return evaluateGpcObservationSession({ scanId: input.scanId, bundle, session: retained?.session,
+    sourceBound: Boolean(retained && retained.gpcArtifactSha256 === input.bundle?.pointer.sha256),
+    evidenceRefs: input.bundle && input.session ? [input.bundle.pointer, input.session.pointer] : [] });
+}
+/** Caller must verify the original retained worker bytes before evaluating an inline session. */
+export function evaluateGpcObservationSession(input: { scanId: string; bundle: CanonicalEvidenceBundle | null;
+  session?: GpcObservationSession; sourceBound: boolean; evidenceRefs: GpcPrototypeArtifact["pointer"][] }) {
+  const limits: string[] = [];
+  const bundle = input.bundle;
+  const p = input.session;
   const binding = bundle?.gpcPrototypeSessionBinding ?? (bundle?.gpcSignalObservation?.prototypeCaptureBinding ? {
     ...bundle.gpcSignalObservation.prototypeCaptureBinding, sessionSha256: bundle.gpcSignalObservation.prototypeSessionSha256,
     documentUrlSha256: bundle.gpcSignalObservation.documentUrlSha256,
   } : null);
-  const sourceVerified = Boolean(bundle && p && bundle.scanId === input.scanId && p.scanId === input.scanId && retained!.gpcArtifactSha256 === input.bundle!.pointer.sha256 &&
+  const sourceVerified = Boolean(bundle && p && bundle.scanId === input.scanId && p.scanId === input.scanId && input.sourceBound &&
     p.captureEndedAtMs <= Date.parse(bundle.completedAt) - Date.parse(bundle.startedAt) &&
     binding?.sessionSha256 === hash(JSON.stringify(p)) && binding.captureId === p.captureId &&
     binding.documentToken === p.mainDocument?.documentToken && binding.documentUrlSha256 === p.mainDocument?.documentUrlSha256);
@@ -39,7 +47,7 @@ export function assessGpcObservationCompletion(input: { scanId: string; bundle?:
   if (!semanticComplete) limits.push("semantic_probe_incomplete");
   const requestComplete = Boolean(sourceVerified && p!.terminal === "completed" && p!.limitationKeys.length === 0 && p!.requestsDropped === 0 && p!.listener.dropped === 0 &&
     p!.captureEndedAtMs - Math.max(p!.captureStartedAtMs, main?.committedAtMs ?? p!.captureEndedAtMs) >= 250 &&
-    p!.requests.every(r => r.secGpc === "1"));
+    p!.requests.every(r => r.secGpc === "1" || (p!.contractVersion === "certscore.gpc-observation-session.v2" && r.preTransmissionBlock !== undefined)));
   if (!requestComplete) limits.push("bounded_request_capture_incomplete");
   const terminalStateKnown = Boolean(state && state.saleNotice === 1 && state.sharingNotice === 1 && [1, 2].includes(state.saleOptOut) && [1, 2].includes(state.sharingOptOut));
   const fullProof = bundle?.gpcSignalObservation;
@@ -47,18 +55,18 @@ export function assessGpcObservationCompletion(input: { scanId: string; bundle?:
     fullProof.prototypeCaptureBinding.documentToken === main?.documentToken && fullProof.workerCount === 0 && fullProof.limitationKeys.length === 0 &&
     fullProof.frames.length === fullProof.frameCount && fullProof.frames.length > 0 && fullProof.frames.every(f => f.navigatorValue === true));
   return {
-    contractVersion: "certscore.gpc-observation-completion.v1" as const,
+    contractVersion: p?.contractVersion === "certscore.gpc-observation-session.v2" ? "certscore.gpc-observation-completion.v2" as const : "certscore.gpc-observation-completion.v1" as const,
     mode: "internal_only" as const, productionProjectable: false as const, scoreEffect: "none" as const,
     observationScope: "main_document_and_retained_http_requests" as const,
     scanId: input.scanId, completed: limits.length === 0, sourceVerified, documentBound: bound,
     delivery: { httpHeaderRetained: header, mainNavigatorReadbackRetained: navigator, fullContextVerified },
     semanticProbe: { terminalStatus: semantic?.gppStatus ?? "incomplete", started: Boolean(semantic), ended: Boolean(semantic), complete: semanticComplete },
     requestCapture: { started: sourceVerified, ended: sourceVerified && p!.terminal === "completed", noDrops: sourceVerified && p!.requestsDropped === 0, complete: requestComplete,
-      count: sourceVerified ? p!.requestsObserved : 0, fromMs: sourceVerified ? p!.captureStartedAtMs : null, documentCommittedAtMs: main?.committedAtMs ?? null, throughMs: sourceVerified ? p!.captureEndedAtMs : null },
+      count: sourceVerified ? p!.requestsObserved : 0, blockedBeforeTransmissionCount: sourceVerified ? p!.requests.filter(r => r.preTransmissionBlock).length : 0, fromMs: sourceVerified ? p!.captureStartedAtMs : null, documentCommittedAtMs: main?.committedAtMs ?? null, throughMs: sourceVerified ? p!.captureEndedAtMs : null },
     currentSaleSharingState: state ?? null, terminalStateKnown, causedByGpc: "not_established" as const,
     acknowledgmentObserved: Boolean(semantic?.acknowledgment.length),
     acknowledgmentCaptureComplete: semantic?.acknowledgmentCaptureComplete === true,
     limitations: limits,
-    evidenceRefs: sourceVerified ? [input.bundle!.pointer, input.session!.pointer] : [],
+    evidenceRefs: sourceVerified ? input.evidenceRefs : [],
   };
 }

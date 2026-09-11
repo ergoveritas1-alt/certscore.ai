@@ -1,0 +1,16 @@
+{
+  "entries": {
+    "https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:37:43.145Z",
+      "lastContactAt": "2026-09-11T15:37:43.145Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-09-11T16:00:18.189Z"
+}

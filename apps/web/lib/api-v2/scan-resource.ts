@@ -955,6 +955,7 @@ export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2Sca
   const assessment = projection.assessment;
   return {
     contractVersion: assessment.contractVersion,
+    ...(assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? { observation: assessment.observation } : {}),
     status: assessment.status,
     findingTitle: assessment.findingTitle,
     summary: projection.summary,
@@ -976,7 +977,7 @@ export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2Sca
       enabledProof: assessment.comparison.enabledProof,
       deltas: assessment.comparison.deltas,
       limitationKeys: assessment.comparison.limitationKeys,
-      ...(assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? {
+      ...(assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? {
         delivery: { status: assessment.comparison.delivery.status },
         coverage: assessment.comparison.coverage,
         responseBasis: assessment.comparison.responseBasis,

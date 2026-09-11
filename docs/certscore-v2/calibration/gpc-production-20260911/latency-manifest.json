@@ -1,0 +1,93 @@
+{
+  "manifestVersion": "certscore.gpc_completion.central_selector_manifest.v1",
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "internalOnly": true,
+  "artifactOnly": true,
+  "selectionStage": "selection_frozen_before_contact",
+  "eligibilityLedger": "docs/certscore-v2/calibration/gpc-production-20260911/latency-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
+  },
+  "targets": [
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mixpanel.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://mit.edu/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://wpguardian.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://un.org/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://www.virtualpro.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://google.com.sa/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://cntraveler.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://expresso.pt/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://sinsay.com/"
+    },
+    {
+      "lanes": [
+        "gpc_observation"
+      ],
+      "role": "unclassified",
+      "url": "https://drom.ru/"
+    }
+  ]
+}

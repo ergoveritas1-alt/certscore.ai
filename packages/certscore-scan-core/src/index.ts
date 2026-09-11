@@ -1,3 +1,4 @@
+export { buildGpcProductionAssessment, buildGpcProductionObservation } from "./gpc-production-observation.js";
 import { createHash } from "node:crypto";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots";
 import { inventoryConfiguration, inventoryHash } from "./full-site-inventory";
@@ -201,6 +202,8 @@ export {
 } from "./consent-geometry-visual-review.js";
 
 export interface RunScanInput {
+  /** Server-owned production capture; only takes effect in the isolated GPC lane. */
+  retainGpcObservation?: boolean;
   /** In-process local calibration callback; never exposed by Lambda/public dispatch. */
   onGpcObservationSession?: (packet: import("@certscore/contracts").GpcObservationSession) => void;
   /** Coordinator-owned identity shared by isolated evidence lanes. */
@@ -542,7 +545,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
-        gpcOptOutPrototype: evidenceLane === "gpc_observation" && typeof input.onGpcObservationSession === "function" ? { scanId } : undefined,
+        gpcOptOutPrototype: evidenceLane === "gpc_observation" && (input.retainGpcObservation === true || typeof input.onGpcObservationSession === "function") ? { scanId } : undefined,
         onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
           const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
           resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
@@ -658,7 +661,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
             ? "runtime_evidence"
             : "combined",
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
-        gpcOptOutPrototype: evidenceLane === "gpc_observation" && typeof input.onGpcObservationSession === "function" ? { scanId } : undefined,
+        gpcOptOutPrototype: evidenceLane === "gpc_observation" && (input.retainGpcObservation === true || typeof input.onGpcObservationSession === "function") ? { scanId } : undefined,
         onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
           const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
           resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
@@ -1340,6 +1343,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     automatedAccessObservation: preConsentResult.automatedAccessObservation,
     siteResourceSizeSummary: summarizeSiteResourceSizes(networkResponseEvents),
     gpcSignalObservation: preConsentResult.gpcSignalObservation,
+    ...(input.retainGpcObservation && preConsentResult.gpcObservationSession ? { gpcObservationSession: preConsentResult.gpcObservationSession } : {}),
     ...(preConsentResult.gpcObservationSession ? { gpcPrototypeSessionBinding: {
       contractVersion: "certscore.gpc-prototype-session-binding.v1" as const,
       captureId: preConsentResult.gpcObservationSession.captureId,

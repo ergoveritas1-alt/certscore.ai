@@ -59,6 +59,7 @@ import {
   chromiumLaunchOptions,
   buildScanEvidenceLaneAssessment,
   buildGpcResponseAssessment,
+  buildGpcProductionAssessment,
   buildCanonicalPostAcceptActionRecipes,
   buildPostAcceptCmpActionRecipe,
   buildCanonicalPostRefusalActionRecipes,
@@ -1324,6 +1325,7 @@ async function runLocalV2DagLambdaScanBundle(
         allowRuntimeEvidenceFinalizationAfterAbort: options.allowRuntimeEvidenceFinalizationAfterAbort,
         browserReuseMode: "per_module",
         evidenceLane,
+        retainGpcObservation: evidenceLane === "gpc_observation",
         outDir: options.artifactRoot,
         onPreConsentScreenshotCaptured: options.screenshotSafetyReviewCoordinator.schedule,
         formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
@@ -2654,12 +2656,18 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         ...gpcGraphs.graphs,
       ],
       runtimeEvidenceGraphDiagnostics: [...(bundle.runtimeEvidenceGraphDiagnostics ?? []), ...gpcGraphs.diagnostics],
-      gpcResponseAssessment: buildGpcResponseAssessment({
+      gpcResponseAssessment: buildGpcProductionAssessment({
+        scanId: payload.scanId,
+        source: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
+          bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
+        } : undefined,
+        comparison: buildGpcResponseAssessment({
         baseline: runtimeEvidenceBundle,
         baselineArtifact: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
         gpc: verifiedGpc,
         gpcArtifact: verifiedGpc && gpcResult ? verifiedWorkerArtifact(gpcResult, "gpc_observation") : undefined,
         failureReason: gpcResult?.failureReason ?? (!verifiedGpc ? "gpc_worker_failed" : undefined),
+        }),
       }),
     });
   }
@@ -3745,6 +3753,9 @@ export async function readLocalV2DagLambdaWorkerBundle(
   }
 }
 
+// Verified original bytes are retained only for the coordinator lifetime; no extra S3 read.
+const verifiedGpcWorkerBytes = new WeakMap<CanonicalEvidenceBundle, Buffer>();
+
 async function readWorkerBundleFromArtifactResult(
   result: LocalV2DagLambdaShardResult,
   options: { awsRegion?: LocalV2DagLambdaAwsRegion; s3GetClient?: S3GetClient }
@@ -3773,6 +3784,7 @@ async function readWorkerBundleFromArtifactResult(
   if (result.workerLane === "gpc_observation" && bundle.scanId !== result.scanId) {
     throw new Error("GPC worker bundle does not retain its parent scan identity.");
   }
+  if (result.workerLane === "gpc_observation") verifiedGpcWorkerBytes.set(bundle, body);
   return bundle;
 }
 

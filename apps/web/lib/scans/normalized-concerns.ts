@@ -1,3 +1,4 @@
+import { describeGpcBoundedObservation } from "@certscore/contracts";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import { assessRejectClickTracking, readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import {
@@ -3698,7 +3699,9 @@ function buildGpcResponseConcerns(
   ]).slice(0, 32);
   return [buildConcernFromSharedInput({
     categoryId: "privacy",
-    description: assessment.contractVersion === "certscore.gpc-response-assessment.v2"
+    description: assessment.contractVersion === "certscore.gpc-response-assessment.v3"
+      ? `${describeGpcBoundedObservation(assessment.observation)} Paired activity comparison: ${assessment.status.replaceAll("_", " ")}.`
+      : assessment.contractVersion === "certscore.gpc-response-assessment.v2"
       ? assessment.status === "responsive"
         ? "Less canonically classified tracking activity was observed within the matched passive GPC window, with verified signal delivery. This bounded comparison does not establish causation or legal compliance."
         : assessment.status === "no_observable_response"

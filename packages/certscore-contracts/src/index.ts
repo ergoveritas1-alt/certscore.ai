@@ -1,4 +1,4 @@
-import { gpcPrototypeSessionBindingSchema } from "./gpc-observation-session";
+import { gpcObservationSessionSchema, type GpcObservationSession, gpcPrototypeSessionBindingSchema } from "./gpc-observation-session";
 import { FIELD_REVIEW_CATEGORIES } from "./collection-field-review";
 export * from "./collection-field-review";
 import { siteMetadataSchema } from "./site-metadata";
@@ -63,6 +63,8 @@ export * from "./post-action-dispatch";
 export * from "./gpc-observation";
 export * from "./gpc-opt-out-prototype";
 export * from "./gpc-observation-session";
+export * from "./gpc-bounded-observation";
+const canonicalGpcSessionSchema: z.ZodType<GpcObservationSession> = gpcObservationSessionSchema;
 
 const canonicalBundleGpcSignalObservationSchema: z.ZodType<import("./gpc-observation").GpcSignalObservation> = gpcSignalObservationSchema;
 const canonicalBundleGpcResponseAssessmentSchema: z.ZodType<GpcResponseAssessment> =
@@ -3382,6 +3384,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   gpcSignalObservation: canonicalBundleGpcSignalObservationSchema.optional(),
   gpcPrototypeSessionBinding: gpcPrototypeSessionBindingSchema.optional(),
+  gpcObservationSession: canonicalGpcSessionSchema.optional(),
   runtimeTimeline: z.array(runtimeEvidenceEventSchema),
   networkEvents: z.array(networkEventSchema),
   networkResponseEvents: z.array(networkResponseEventSchema).default([]),

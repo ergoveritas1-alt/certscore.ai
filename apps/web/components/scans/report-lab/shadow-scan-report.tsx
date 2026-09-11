@@ -499,7 +499,9 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
               <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-800">
-                  {getGpcSnapshotLabel(report.gpcResponse.assessment.status)}
+                  {report.gpcResponse.assessment.contractVersion === "certscore.gpc-response-assessment.v3"
+                    ? `Observation ${report.gpcResponse.assessment.observation.status}`
+                    : getGpcSnapshotLabel(report.gpcResponse.assessment.status)}
                 </span>
                 {report.gpcResponse.californiaDeductionPoints > 0 ? (
                   <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
@@ -510,10 +512,11 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
               </span>
             </summary>
             <div className="mt-3 space-y-2.5">
+              <p className="text-xs leading-5 text-zinc-600">{report.gpcResponse.summary}</p>
               <p className="text-xs leading-5 text-zinc-600">
                 <span className="font-semibold text-zinc-800">Sec-GPC request evidence:</span> {report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc} retained request{report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc === 1 ? "" : "s"}; main-document browser property: {report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl === null ? "unverified" : String(report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl)}.
               </p>
-              {report.gpcResponse.assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? (
+              {report.gpcResponse.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? (
                 <p className="text-xs leading-5 text-zinc-600">Signal delivery: {report.gpcResponse.assessment.comparison.delivery.status}. Comparison coverage: {report.gpcResponse.assessment.comparison.coverage.status}.</p>
               ) : null}
               <GpcComparisonGrid projection={report.gpcResponse} />
@@ -1443,8 +1446,8 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase text-zinc-500">GPC comparison</p>
-          <h3 className="mt-1 whitespace-nowrap text-lg font-semibold text-zinc-950">{projection.assessment.findingTitle}</h3>
+          <p className="text-xs font-semibold uppercase text-zinc-500">GPC observation and comparison</p>
+          <h3 className="mt-1 whitespace-nowrap text-lg font-semibold text-zinc-950">{projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? `Observation ${projection.assessment.observation.status}` : projection.assessment.findingTitle}</h3>
         </div>
         <span className="flex shrink-0 items-center">
           <DisclosureChevron className="text-zinc-400 group-open/gpc:rotate-180" />
@@ -1452,10 +1455,16 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
       </summary>
       <div className="mt-5 space-y-5">
         <p className="max-w-3xl text-sm leading-6 text-zinc-600">{projection.summary}</p>
+        {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? (
+          <div className="grid gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-700 sm:grid-cols-2">
+            <p><strong>Bounded observation:</strong> {projection.assessment.observation.status}. {projection.assessment.observation.requests.count} retained request attempts; {projection.assessment.observation.requests.blockedBeforeTransmissionCount} blocked before transmission. Scope: main document and retained HTTP requests.</p>
+            <p><strong>CMP GPC signal:</strong> {projection.assessment.observation.registration.cmpGpcSignal.replaceAll("_", " ")}. <strong>Visible acknowledgment:</strong> {projection.assessment.observation.acknowledgment.observed ? "observed" : projection.assessment.observation.acknowledgment.captureComplete ? "not observed in the supported search" : "search limited"}.</p>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-2 text-[0.68rem] font-semibold text-zinc-700">
           <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">Sec-GPC: {proof.secGpcHeaderValue ?? "unverified"}</span>
           <span className="rounded-md border border-sky-200 bg-sky-50 px-2 py-1">Main-document navigator.globalPrivacyControl: {proof.navigatorGlobalPrivacyControl === null ? "unverified" : String(proof.navigatorGlobalPrivacyControl)}</span>
-          {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? <span className="rounded-md border border-zinc-200 px-2 py-1">Delivery: {projection.assessment.comparison.delivery.status} · Coverage: {projection.assessment.comparison.coverage.status}</span> : null}
+          {projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? <span className="rounded-md border border-zinc-200 px-2 py-1">Delivery: {projection.assessment.comparison.delivery.status} · Coverage: {projection.assessment.comparison.coverage.status}</span> : null}
           <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1">{proof.requestsWithSecGpc} retained request proof{proof.requestsWithSecGpc === 1 ? "" : "s"}</span>
           {projection.californiaDeductionPoints > 0 ? (
             <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-800">CA policy · −{projection.californiaDeductionPoints} points</span>
@@ -1496,7 +1505,7 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
             </tbody>
           </table>
         </div> : <GpcComparisonGrid projection={projection} />}
-        {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v2" ? (
+        {projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? (
           <p className="text-xs leading-5 text-zinc-600">Cookie/storage and CMP identity differences are descriptive snapshots. The response uses classified activity within the matched window, not an inferred consent decision.</p>
         ) : null}
         {projection.assessment.comparison.limitationKeys.length > 0 ? (

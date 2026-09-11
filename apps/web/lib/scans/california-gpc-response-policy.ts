@@ -72,7 +72,7 @@ export function deriveCaliforniaGpcResponsePolicy(
 
   const advertising = assessment.comparison.deltas.advertisingOrMeasurementActivity;
   const trackers = assessment.comparison.deltas.trackers;
-  const completeActivity = assessment.contractVersion === "certscore.gpc-response-assessment.v2"
+  const completeActivity = assessment.contractVersion !== "certscore.gpc-response-assessment.v1"
     ? assessment.comparison.deltas.advertisingOrMarketingActivity : null;
   const suppressedUnderGpc = completeActivity?.baselineOnly ?? qualifyingIdentities([
     ...advertising.baselineOnly,

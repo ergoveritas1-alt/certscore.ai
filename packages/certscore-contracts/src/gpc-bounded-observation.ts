@@ -1,0 +1,49 @@
+import { z } from "zod";
+const count = z.number().int().nonnegative();
+const axis = z.enum(["opted_out", "not_opted_out", "unknown"]);
+/** Facts within a retained window. Completion is never an opt-out or compliance decision. */
+export const gpcBoundedObservationSchema = z.object({
+  contractVersion: z.literal("certscore.gpc-bounded-observation.v1"),
+  scope: z.literal("main_document_and_retained_http_requests"),
+  status: z.enum(["complete", "limited", "unavailable"]),
+  sourceSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  sessionSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  documentUrlSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  delivery: z.object({ httpHeaderRetained: z.boolean(), mainNavigatorReadbackRetained: z.boolean(), fullContextVerified: z.boolean() }).strict(),
+  semanticProbe: z.enum(["observed", "unsupported", "unavailable", "not_ready", "invalid", "incomplete"]),
+  registration: z.object({ basis: z.literal("current_recorded_state"), sale: axis, sharing: axis,
+    cmpGpcSignal: z.enum(["received", "not_received", "unknown"]), causedByGpc: z.literal("not_established") }).strict(),
+  acknowledgment: z.object({ observed: z.boolean(), captureComplete: z.boolean() }).strict(),
+  requests: z.object({ count, blockedBeforeTransmissionCount: count, complete: z.boolean(), fromMs: count.nullable(), documentCommittedAtMs: count.nullable(), throughMs: count.nullable(),
+    classifiedCount: count, collectionCount: count, evidenceIds: z.array(z.string().min(1).max(160)).max(100), samplesTruncated: z.boolean() }).strict(),
+  limitationKeys: z.array(z.string().min(1).max(160)).max(32),
+  scoreEffect: z.literal("none"), legalInterpretation: z.literal("not_assessed"),
+}).strict().superRefine((o, ctx) => {
+  if ((o.status === "complete" && (!o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 ||
+      !o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained || !o.requests.complete ||
+      !["observed", "unsupported", "unavailable"].includes(o.semanticProbe) || o.limitationKeys.length > 0 ||
+      o.requests.throughMs === null || o.requests.documentCommittedAtMs === null || o.requests.fromMs === null ||
+      o.requests.throughMs - Math.max(o.requests.fromMs, o.requests.documentCommittedAtMs) < 250)) ||
+    o.requests.blockedBeforeTransmissionCount > o.requests.count ||
+    o.requests.collectionCount > o.requests.classifiedCount || o.requests.classifiedCount > o.requests.count - o.requests.blockedBeforeTransmissionCount ||
+    o.requests.evidenceIds.length !== Math.min(100, o.requests.classifiedCount) ||
+    new Set(o.requests.evidenceIds).size !== o.requests.evidenceIds.length ||
+    o.requests.samplesTruncated !== (o.requests.classifiedCount > 100) ||
+    (o.semanticProbe !== "observed" && (o.registration.sale !== "unknown" || o.registration.sharing !== "unknown" || o.registration.cmpGpcSignal !== "unknown"))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Bounded GPC observations require consistent retained facts and coverage." });
+  }
+});
+export type GpcBoundedObservation = z.infer<typeof gpcBoundedObservationSchema>;
+
+export function describeGpcBoundedObservation(o: GpcBoundedObservation): string {
+  const delivery = o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained
+    ? "GPC was observed on the main-document request and browser property."
+    : "Main-document GPC delivery was not fully verified.";
+  const state = o.registration.sale === "unknown" && o.registration.sharing === "unknown"
+    ? "The CMP's sale/sharing opt-out state was unavailable."
+    : `CMP-recorded sale state: ${o.registration.sale.replaceAll("_", " ")}; sharing state: ${o.registration.sharing.replaceAll("_", " ")}. GPC causation is not established.`;
+  const activity = o.requests.classifiedCount > 0
+    ? `${o.requests.classifiedCount} classified advertising, marketing, analytics or replay requests were observed with GPC, including ${o.requests.collectionCount} collection requests.`
+    : o.requests.complete ? "No qualifying classified requests were observed in this bounded capture." : "Request coverage was limited.";
+  return `${o.status === "complete" ? "Bounded GPC observation completed." : "Bounded GPC observation was limited."} ${delivery} ${state} ${activity}`;
+}

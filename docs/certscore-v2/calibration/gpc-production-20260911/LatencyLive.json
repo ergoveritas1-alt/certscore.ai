@@ -1,0 +1,347 @@
+{
+  "pairs": 10,
+  "pairedDeltaP50Ms": -12.441167000011774,
+  "pairedDeltaP95Ms": 1409.893624999997,
+  "meanDeltaMs": 127.48197109999974,
+  "deltas": [
+    -376.8747919999996,
+    14.730499999999665,
+    138.40904200000296,
+    -21.98941599999671,
+    -215.36245699999563,
+    -28.308874000002106,
+    -12.441167000011774,
+    111.89562500000466,
+    254.86762499999895,
+    1409.893624999997
+  ],
+  "rows": [
+    {
+      "pair": 0,
+      "enabled": false,
+      "url": "https://mixpanel.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:12.202Z",
+      "completedAt": "2026-09-11T15:43:18.632Z",
+      "durationMs": 6430.733791999999,
+      "artifactBytes": 601060,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 0,
+      "enabled": true,
+      "url": "https://mixpanel.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:18.633Z",
+      "completedAt": "2026-09-11T15:43:24.686Z",
+      "durationMs": 6053.8589999999995,
+      "artifactBytes": 625436,
+      "sessionBytes": 16538,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 1,
+      "enabled": true,
+      "url": "https://mit.edu/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:24.687Z",
+      "completedAt": "2026-09-11T15:43:26.481Z",
+      "durationMs": 1794.1862499999988,
+      "artifactBytes": 178989,
+      "sessionBytes": 6235,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 1,
+      "enabled": false,
+      "url": "https://mit.edu/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:26.481Z",
+      "completedAt": "2026-09-11T15:43:28.260Z",
+      "durationMs": 1779.4557499999992,
+      "artifactBytes": 168991,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 2,
+      "enabled": false,
+      "url": "https://wpguardian.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:28.260Z",
+      "completedAt": "2026-09-11T15:43:30.705Z",
+      "durationMs": 2444.4532499999987,
+      "artifactBytes": 565941,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 2,
+      "enabled": true,
+      "url": "https://wpguardian.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:30.705Z",
+      "completedAt": "2026-09-11T15:43:33.288Z",
+      "durationMs": 2582.8622920000016,
+      "artifactBytes": 588503,
+      "sessionBytes": 15112,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 3,
+      "enabled": true,
+      "url": "https://un.org/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:33.288Z",
+      "completedAt": "2026-09-11T15:43:35.585Z",
+      "durationMs": 2296.9457920000023,
+      "artifactBytes": 383432,
+      "sessionBytes": 6595,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 3,
+      "enabled": false,
+      "url": "https://un.org/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:35.585Z",
+      "completedAt": "2026-09-11T15:43:37.904Z",
+      "durationMs": 2318.935207999999,
+      "artifactBytes": 378144,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 4,
+      "enabled": false,
+      "url": "https://www.virtualpro.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:37.904Z",
+      "completedAt": "2026-09-11T15:43:43.693Z",
+      "durationMs": 5788.790165999999,
+      "artifactBytes": 1687150,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 4,
+      "enabled": true,
+      "url": "https://www.virtualpro.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:43.693Z",
+      "completedAt": "2026-09-11T15:43:49.267Z",
+      "durationMs": 5573.427709000003,
+      "artifactBytes": 1735089,
+      "sessionBytes": 27525,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 5,
+      "enabled": true,
+      "url": "https://google.com.sa/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:43:49.267Z",
+      "completedAt": "2026-09-11T15:44:05.872Z",
+      "durationMs": 16605.670291999995,
+      "artifactBytes": 718812,
+      "sessionBytes": 8163,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 5,
+      "enabled": false,
+      "url": "https://google.com.sa/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:05.873Z",
+      "completedAt": "2026-09-11T15:44:22.507Z",
+      "durationMs": 16633.979165999997,
+      "artifactBytes": 750454,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 6,
+      "enabled": false,
+      "url": "https://cntraveler.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:22.507Z",
+      "completedAt": "2026-09-11T15:44:28.603Z",
+      "durationMs": 6096.330458000011,
+      "artifactBytes": 3953245,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 6,
+      "enabled": true,
+      "url": "https://cntraveler.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:28.604Z",
+      "completedAt": "2026-09-11T15:44:34.688Z",
+      "durationMs": 6083.8892909999995,
+      "artifactBytes": 3911251,
+      "sessionBytes": 39658,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 7,
+      "enabled": true,
+      "url": "https://expresso.pt/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:34.688Z",
+      "completedAt": "2026-09-11T15:44:37.810Z",
+      "durationMs": 3121.924874999997,
+      "artifactBytes": 77011,
+      "sessionBytes": 2908,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "captcha_or_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "pair": 7,
+      "enabled": false,
+      "url": "https://expresso.pt/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:37.810Z",
+      "completedAt": "2026-09-11T15:44:40.820Z",
+      "durationMs": 3010.0292499999923,
+      "artifactBytes": 71948,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "captcha_or_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "pair": 8,
+      "enabled": false,
+      "url": "https://sinsay.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:40.820Z",
+      "completedAt": "2026-09-11T15:44:43.136Z",
+      "durationMs": 2316.2128749999974,
+      "artifactBytes": 180095,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 8,
+      "enabled": true,
+      "url": "https://sinsay.com/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:43.136Z",
+      "completedAt": "2026-09-11T15:44:45.707Z",
+      "durationMs": 2571.0804999999964,
+      "artifactBytes": 188605,
+      "sessionBytes": 4761,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 9,
+      "enabled": true,
+      "url": "https://drom.ru/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:45.708Z",
+      "completedAt": "2026-09-11T15:44:55.168Z",
+      "durationMs": 9460.310457999993,
+      "artifactBytes": 490827,
+      "sessionBytes": 19044,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "pair": 9,
+      "enabled": false,
+      "url": "https://drom.ru/",
+      "status": "completed",
+      "startedAt": "2026-09-11T15:44:55.168Z",
+      "completedAt": "2026-09-11T15:45:03.218Z",
+      "durationMs": 8050.416832999996,
+      "artifactBytes": 465642,
+      "sessionBytes": 0,
+      "scannerRuntimeStarted": true,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ],
+  "scope": "local isolated GPC lane; same budgets and California proxy; full sharded wall time not measured; concurrent acceptance on host"
+}

@@ -214,7 +214,8 @@ export interface GpcComparisonDelta {
 }
 
 export interface GpcResponse {
-  contractVersion?: "certscore.gpc-response-assessment.v1" | "certscore.gpc-response-assessment.v2";
+  observation?: import("./gpc-bounded-observation.js").GpcBoundedObservation;
+  contractVersion?: "certscore.gpc-response-assessment.v1" | "certscore.gpc-response-assessment.v2" | "certscore.gpc-response-assessment.v3";
   status: "responsive" | "no_observable_response" | "indeterminate";
   findingTitle: "GPC response" | "No observable GPC response";
   summary: string;

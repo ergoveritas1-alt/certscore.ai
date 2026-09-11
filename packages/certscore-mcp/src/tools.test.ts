@@ -1866,3 +1866,32 @@ test("DNS reason codes survive MCP errors and terminal guidance identifies new-s
     assert.match(result.error!.recommendedNextAction, /Support reference: 00000000/);
   }
 });
+
+test("GPC v3 MCP text preserves completed bounded findings alongside an indeterminate paired comparison", async () => {
+  const { gpcProductionRuntimeFixture } = await import("../../certscore-contracts/src/test-fixtures/gpc-production");
+  const { gpcRuntimeFixture } = await import("../../certscore-contracts/src/test-fixtures/gpc-runtime");
+  const { buildGpcResponseAssessment } = await import("../../certscore-scan-core/src/gpc-response-assessment");
+  const { buildGpcProductionAssessment } = await import("../../certscore-scan-core/src/gpc-production-observation");
+  const { describeGpcBoundedObservation } = await import("../../certscore-contracts/src/gpc-bounded-observation");
+  const { createHash } = await import("node:crypto");
+  const gpc = gpcProductionRuntimeFixture(); gpc.gpcSignalObservation!.workerCount = 1;
+  const bytes = Buffer.from(JSON.stringify(gpc));
+  const pointer = { uri: "s3://fixture/gpc.json", sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length };
+  const comparison = buildGpcResponseAssessment({ baseline: gpcRuntimeFixture({ enabled: false }), baselineArtifact: pointer, gpc, gpcArtifact: pointer });
+  const assessment = buildGpcProductionAssessment({ scanId: gpc.scanId, source: { bytes, pointer }, comparison });
+  const { baselineArtifact, gpcArtifact, delivery, evidenceRefs, ...rest } = assessment.comparison;
+  const safePointer = { sha256: pointer.sha256, sizeBytes: pointer.sizeBytes };
+  const { generatedAt, ...publicAssessment } = assessment;
+  const gpcResponse = { ...publicAssessment, summary: describeGpcBoundedObservation(assessment.observation), comparison: { ...rest,
+    baselineArtifact: { ...safePointer, lane: "runtime_evidence" }, gpcArtifact: { ...safePointer, lane: "gpc_observation" }, delivery: { status: delivery.status } },
+    californiaPolicy: { applied: false, deductionPoints: 0 }, evidenceUrl: "https://certscore.ai/evidence" };
+  const bundle = buildScanBundle({ detail: "summary", report, findings: { type: "certscore_finding_list", scanId: gpc.scanId, findings: [] },
+    preConsentCookiesTrackers: null, scan: { type: "certscore_scan", scanId: gpc.scanId, domain: "example.test", status: "completed", score: 42, gpcResponse } } as any);
+  const text = scanBundleText(bundle);
+  assert.match(text, /GPC observation: Bounded GPC observation completed/);
+  assert.match(text, /1 classified/);
+  assert.match(text, /status=indeterminate/);
+  assert.equal(bundle.gpcResponse.observation.registration.sale, "unknown");
+  assert.match(bundle.interpretationGuidance.statement, /completion does not mean GPC was honored/);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});

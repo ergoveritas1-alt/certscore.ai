@@ -19,7 +19,7 @@ const cdpDiagnostic = z.object({ requestId: z.string().min(1).max(160), loaderId
   extraInfoStatus: z.enum(["single_request_single_extra_info", "unavailable", "ambiguous_redirect_or_extra_info"]),
 }).strict();
 export const gpcObservationSessionSchema = z.object({
-  contractVersion: z.literal("certscore.gpc-observation-session.v1"),
+  contractVersion: z.enum(["certscore.gpc-observation-session.v1", "certscore.gpc-observation-session.v2"]),
   scanId: z.string().min(1).max(200), captureId: z.string().uuid(),
   observationScope: z.literal("main_document_and_retained_http_requests"),
   captureStartedAtMs: time, captureEndedAtMs: time,
@@ -33,7 +33,12 @@ export const gpcObservationSessionSchema = z.object({
   requests: z.array(z.object({ eventId: z.string().min(1).max(160), timestampMs: time,
     urlSha256: hash, secGpc: z.string().max(8).nullable(),
     headerSource: z.enum(["request_snapshot", "all_headers_readback", "readback_pending", "readback_failed"]).optional(),
-    headerReadbackAtMs: time.optional() }).strict()).max(5000),
+    headerReadbackAtMs: time.optional(),
+    preTransmissionBlock: z.object({ reason: z.enum(["csp", "mixed-content"]),
+      source: z.literal("same_playwright_request_failure"), observedAtMs: time,
+      documentToken: z.string().min(1).max(160), secGpcHeaderRetained: z.literal(false),
+      responseReceived: z.literal(false), networkTimingAvailable: z.literal(false), serviceWorker: z.literal(false),
+    }).strict().optional() }).strict()).max(5000),
   requestsObserved: time, requestsDropped: time,
   listener: z.object({ callbacks: time, dropped: time, registered: z.boolean() }).strict(),
   /** Correlation aids only. These never replace the request's original header proof. */
@@ -64,6 +69,9 @@ export const gpcObservationSessionSchema = z.object({
     (p.mainDocument && (p.mainDocument.requestAtMs > p.mainDocument.committedAtMs || p.mainDocument.committedAtMs > p.captureEndedAtMs))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "GPC session coverage requires consistent retained identities and intervals." });
   }
+  if (p.requests.some(r => r.preTransmissionBlock && (p.contractVersion !== "certscore.gpc-observation-session.v2" ||
+    r.secGpc !== null || !p.mainDocument || r.preTransmissionBlock.documentToken !== p.mainDocument.documentToken || r.preTransmissionBlock.observedAtMs < r.timestampMs || r.preTransmissionBlock.observedAtMs > p.captureEndedAtMs)))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Pre-transmission blocks require v2, unchanged missing header and same-request bounded readback." });
   if (p.requestDiagnostics?.missingHeaders.some(d => {
     const request = p.requests.find(r => r.eventId === d.eventId);
     return !request || request.urlSha256 !== d.urlSha256 || request.secGpc === "1" ||
@@ -75,7 +83,7 @@ export const retainedGpcObservationSessionSchema = z.object({
   contractVersion: z.literal("certscore.retained-gpc-observation-session.v1"),
   gpcArtifactSha256: hash, session: gpcObservationSessionSchema,
 }).strict();
-export type GpcObservationSession = z.infer<typeof gpcObservationSessionSchema>;
+export interface GpcObservationSession extends z.infer<typeof gpcObservationSessionSchema> {}
 
 /** Producer-owned binding independent of the legacy all-frame snapshot. */
 export const gpcPrototypeSessionBindingSchema = z.object({

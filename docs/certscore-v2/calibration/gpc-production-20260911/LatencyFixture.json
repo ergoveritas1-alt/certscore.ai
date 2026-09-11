@@ -1,0 +1,109 @@
+{
+  "scope": "local static browser fixture; production inline session capture; concurrent public calibration on this host; not production latency",
+  "pairs": 10,
+  "warmupPairs": 1,
+  "rows": [
+    {
+      "pair": 0,
+      "enabled": false,
+      "durationMs": 403.24599999999987
+    },
+    {
+      "pair": 0,
+      "enabled": true,
+      "durationMs": 392.32837500000005
+    },
+    {
+      "pair": 1,
+      "enabled": true,
+      "durationMs": 405.767875
+    },
+    {
+      "pair": 1,
+      "enabled": false,
+      "durationMs": 403.2454160000002
+    },
+    {
+      "pair": 2,
+      "enabled": false,
+      "durationMs": 396.4590840000001
+    },
+    {
+      "pair": 2,
+      "enabled": true,
+      "durationMs": 442.86041699999987
+    },
+    {
+      "pair": 3,
+      "enabled": true,
+      "durationMs": 411.0105000000003
+    },
+    {
+      "pair": 3,
+      "enabled": false,
+      "durationMs": 399.77170900000056
+    },
+    {
+      "pair": 4,
+      "enabled": false,
+      "durationMs": 388.7844580000001
+    },
+    {
+      "pair": 4,
+      "enabled": true,
+      "durationMs": 405.1570410000004
+    },
+    {
+      "pair": 5,
+      "enabled": true,
+      "durationMs": 398.6569589999999
+    },
+    {
+      "pair": 5,
+      "enabled": false,
+      "durationMs": 395.8483749999996
+    },
+    {
+      "pair": 6,
+      "enabled": false,
+      "durationMs": 395.8164999999999
+    },
+    {
+      "pair": 6,
+      "enabled": true,
+      "durationMs": 400.5547919999999
+    },
+    {
+      "pair": 7,
+      "enabled": true,
+      "durationMs": 402.85720800000036
+    },
+    {
+      "pair": 7,
+      "enabled": false,
+      "durationMs": 401.3334169999998
+    },
+    {
+      "pair": 8,
+      "enabled": false,
+      "durationMs": 401.52379199999996
+    },
+    {
+      "pair": 8,
+      "enabled": true,
+      "durationMs": 411.8649580000001
+    },
+    {
+      "pair": 9,
+      "enabled": true,
+      "durationMs": 396.3670829999992
+    },
+    {
+      "pair": 9,
+      "enabled": false,
+      "durationMs": 409.1956659999996
+    }
+  ],
+  "pairedDeltaP50Ms": 2.8085840000003373,
+  "pairedDeltaP95Ms": 46.401332999999795
+}

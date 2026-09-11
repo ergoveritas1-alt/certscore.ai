@@ -7,13 +7,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { runScan } from "./index";
+import { buildGpcProductionObservation } from "./gpc-production-observation";
 import { assessGpcObservationCompletion } from "./gpc-observation-completion";
 import { retainedGpcObservationSessionSchema, type GpcObservationSession } from "@certscore/contracts";
 const source = (bytes: Uint8Array) => ({ bytes, pointer: { uri: "local-fixture.json", sizeBytes: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") } });
 
 test("fresh browser → retained bytes → completion includes empty, late GPP and SPA observations, without legal conclusions", async t => {
-  for (const scenario of ["absent", "late_usnat", "spa", "long_request", "unready", "flat_usnat", "flat_usca", "ack_truncated"]) await t.test(scenario, async () => {
+  for (const scenario of ["absent", "late_usnat", "spa", "long_request", "unready", "flat_usnat", "flat_usca", "ack_truncated", "csp"]) await t.test(scenario, async () => {
+    let blockedReceipts = 0;
     const server = createServer((req, res) => {
+      if (req.url === "/blocked") blockedReceipts++;
+      if (scenario === "csp") res.setHeader("Content-Security-Policy", "script-src 'unsafe-inline'");
       if (req.url === "/hanging") return;
       if (req.url === "/resource") { res.end("observed"); return; }
       res.setHeader("Content-Type", "text/html");
@@ -25,6 +29,7 @@ test("fresh browser → retained bytes → completion includes empty, late GPP a
       res.end(`<!doctype html><html><head><title>Public product information</title></head><body><h1>Product information</h1><p>${"Public information about products and services. ".repeat(30)}</p><script>
         ${["late_usnat", "unready"].includes(scenario) ? api : ""}
         ${["flat_usnat", "flat_usca"].includes(scenario) ? "window.__gpp=(command,fn)=>{if(command==='ping')fn({gppVersion:'1.1',cmpStatus:'loaded',signalStatus:'ready',applicableSections:[7],sectionList:[7],parsedSections:{usnat:{Version:1,SaleOptOutNotice:1,SharingOptOutNotice:1,SaleOptOut:1,SharingOptOut:2,Gpc:true,GpcSegmentType:1}}},true)};".replaceAll("[7]", scenario === "flat_usca" ? "[8]" : "[7]").replace("usnat:", scenario === "flat_usca" ? "usca:" : "usnat:") : ""}
+        ${scenario === "csp" ? "setTimeout(() => { const s = document.createElement('script'); s.src='/blocked'; document.body.append(s); }, 50);" : ""}
         ${scenario === "spa" ? "history.replaceState(null,'','/current?route=public');" : ""}
         ${scenario === "long_request" ? "fetch('/hanging');" : ""}
       </script>${scenario === "ack_truncated" ? '<div id="onetrust-banner-sdk">' + '<div role="status">Public unrelated status</div>'.repeat(40) + '</div>' : ""}</body></html>`);
@@ -35,7 +40,7 @@ test("fresh browser → retained bytes → completion includes empty, late GPP a
       const address = server.address() as { port: number };
       let session: GpcObservationSession | undefined;
       const bundle = await runScan({ scanId: `completion-${scenario}`, url: `http://127.0.0.1:${address.port}/`, outDir,
-        evidenceLane: "gpc_observation", profile: "standard", preConsentScreenshotMode: "never",
+        retainGpcObservation: true, evidenceLane: "gpc_observation", profile: "standard", preConsentScreenshotMode: "never",
         onGpcObservationSession: value => { session = value; } });
       assert.ok(session, "sidecar finalized before browser teardown");
       const b = source(await readFile(path.join(outDir, "CanonicalEvidenceBundle.json")));
@@ -43,6 +48,33 @@ test("fresh browser → retained bytes → completion includes empty, late GPP a
       const raw = Buffer.from(JSON.stringify(packet));
       const result = assessGpcObservationCompletion({ scanId: bundle.scanId, bundle: b, session: source(raw) });
       assert.equal(result.completed, scenario !== "unready", JSON.stringify(result));
+      const production = buildGpcProductionObservation({ scanId: bundle.scanId, source: b });
+      assert.equal(production.status, scenario === "unready" ? "limited" : "complete", JSON.stringify(production));
+      assert.equal(production.registration.causedByGpc, "not_established");
+      assert.equal(production.scoreEffect, "none");
+      assert.equal(production.sourceSha256, b.pointer.sha256);
+      if (scenario === "csp") {
+        assert.equal(blockedReceipts, 0, "blocked request never reaches the local server");
+        assert.ok(session.requests.some(r => r.preTransmissionBlock?.reason === "csp"), JSON.stringify(session));
+        assert.equal(production.requests.blockedBeforeTransmissionCount, 1);
+        assert.equal(session.requests.find(r => r.preTransmissionBlock)?.secGpc, null);
+      }
+      for (const defect of ["checksum", "session_hash", "loader", "missing_producer_binding", "missing_access", "blocked_access", "old_version_block"]) {
+        const altered = JSON.parse(Buffer.from(b.bytes).toString());
+        if (defect === "missing_access") delete altered.scanEvidenceLaneAssessment;
+        if (defect === "blocked_access") altered.scanEvidenceLaneAssessment.outcome = "no_go";
+        if (defect === "session_hash") altered.gpcPrototypeSessionBinding.sessionSha256 = "0".repeat(64);
+        if (defect === "loader") altered.gpcObservationSession.mainDocument.documentToken = "other";
+        if (defect === "missing_producer_binding") {
+          altered.gpcSignalObservation.prototypeSessionSha256 = altered.gpcPrototypeSessionBinding.sessionSha256;
+          altered.gpcSignalObservation.prototypeCaptureBinding = altered.gpcObservationSession.semanticObservation.captureBinding;
+          delete altered.gpcPrototypeSessionBinding;
+        }
+        if (defect === "old_version_block" && scenario === "csp") altered.gpcObservationSession.contractVersion = "certscore.gpc-observation-session.v1";
+        const rawSource = source(Buffer.from(JSON.stringify(altered)));
+        if (defect === "checksum") rawSource.pointer.sha256 = "0".repeat(64);
+        if (defect !== "old_version_block" || scenario === "csp") assert.notEqual(buildGpcProductionObservation({ scanId: bundle.scanId, source: rawSource }).status, "complete");
+      }
       assert.equal(result.productionProjectable, false); assert.equal(result.causedByGpc, "not_established");
       if (scenario === "late_usnat") { assert.equal(result.terminalStateKnown, true); assert.ok(session.listener.callbacks >= 2); assert.ok(session.semanticObservation?.stateTransitions?.some(row => row.status === "observed")); }
       if (scenario === "flat_usca") { assert.equal(result.terminalStateKnown, true); assert.equal(session.semanticObservation?.gppDiagnostics?.reason, "ready_usca_flat_object"); }
@@ -82,7 +114,7 @@ test("fresh browser → retained bytes → completion includes empty, late GPP a
       noFullFrame.gpcPrototypeSessionBinding.captureId = "00000000-0000-4000-8000-000000000000";
       const wrongBinding = source(Buffer.from(JSON.stringify(noFullFrame)));
       assert.equal(assessGpcObservationCompletion({ scanId: bundle.scanId, bundle: wrongBinding, session: source(Buffer.from(JSON.stringify({ ...packet, gpcArtifactSha256: wrongBinding.pointer.sha256 }))) }).completed, false);
-      assert.equal("gpcObservationSession" in bundle, false, "raw sidecar does not leak into canonical persistence");
+      assert.ok(bundle.gpcObservationSession, "production retains the producer-bound session inside its existing artifact");
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(outDir, { recursive: true, force: true }); }
   });
 });

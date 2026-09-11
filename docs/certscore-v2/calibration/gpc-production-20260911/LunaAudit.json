@@ -1,0 +1,52 @@
+{
+  "auditVersion": "certscore.gpc-production-retained-audit.v1",
+  "auditedAt": "2026-09-11T16:11:05.468Z",
+  "frozenSelection": {
+    "selectedCount": 260,
+    "uniqueCount": 260,
+    "sourcePoolMembershipFailures": [],
+    "acceptanceOrderMatchesSelection": true
+  },
+  "cohort": {
+    "submitted": 260,
+    "gateDenominator": 230,
+    "completedGateRows": 225,
+    "usableCompletionRate": 0.9782608695652174,
+    "rawRepresentativeRows": 227,
+    "rawRepresentativeCompleted": 225,
+    "nonRepresentativeExcluded": 30,
+    "unknownAccess": 3,
+    "failedGateRows": 5,
+    "allAttemptCompleted": 246,
+    "allAttemptRate": 0.9461538461538461
+  },
+  "facets": {
+    "semanticTerminalStatuses": {
+      "unavailable": 229,
+      "observed": 18,
+      "incomplete": 12,
+      "invalid": 1
+    },
+    "fullContextVerified": 128,
+    "blockedBeforeTransmissionRows": 2
+  },
+  "verdict": {
+    "strictWilsonLowerBound": 0.9501282146821269,
+    "strictWilsonLowerBoundPass": true,
+    "strictWilsonLowerBoundMustBeReadFromFinalGate": true,
+    "productionUsableCount": 225,
+    "productionEligible": false,
+    "scoreEffect": "none",
+    "gpcHonoredNotMeasured": true
+  },
+  "evidence": {
+    "allPointersValid": true,
+    "expectedPostFreezeTransitions": 33,
+    "unexpectedReplayMismatches": 0,
+    "implementationSha256": {
+      "productionBuilder": "99f4331e25dc70cb1dfd6b2b670f2e8965f07486447087c42924adc6b5eb0768",
+      "runner": "e1f471c039d9094c1eee6dac746b3a0068b406f6376ba4b18a7c010ae748119c",
+      "sessionContract": "36b3ffbd0b6f6096a5f5f2017b7a506aa5e5179842cc2c6940e10281ed497076"
+    }
+  }
+}

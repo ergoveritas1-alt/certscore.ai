@@ -25,7 +25,7 @@ export default function DeveloperQuickstartPage() {
 
         <Section eyebrow="Choice-path results" title="Treat coverage before outcome">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Completed resources can include <code>postAcceptObservation</code>, <code>postRefusalObservation</code>, and <code>gpcResponse</code>. Read each observation&apos;s status before its verdict: a non-confirmed status is limited coverage and must not be reported as clean. Post-Accept activity is a score-neutral baseline.
+            Completed resources can include <code>postAcceptObservation</code>, <code>postRefusalObservation</code>, and <code>gpcResponse</code>. For GPC v3, read <code>gpcResponse.observation</code> for independently captured findings and <code>gpcResponse.status</code> for the paired comparison. The observation can complete while CMP state or comparison remains unknown; completion does not mean GPC was honored. Post-Accept activity is a score-neutral baseline.
           </p>
         </Section>
 

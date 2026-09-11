@@ -296,7 +296,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(runtimeIndex >= 0);
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(gpcCardIndex < transportIndex);
-  assert.match(source, />GPC comparison</);
+  assert.match(source, />GPC observation and comparison</);
   assert.match(source, /Typed comparison evidence/);
   assert.match(source, /"Advertising \/ measurement"/);
   assert.match(source, /"Consent \/ CMP"/);

@@ -1,0 +1,98 @@
+{
+  "diagnosticOnly": true,
+  "productionEligible": false,
+  "targetRate": 0.95,
+  "minimumRepresentativeRows": 200,
+  "confidenceLevel": 0.95,
+  "allSubmittedCount": 260,
+  "uniqueSubmittedCount": 260,
+  "duplicateScanIds": [],
+  "excludedNonRepresentativeCount": 30,
+  "excludedCanaryCount": 0,
+  "excludedUnverifiedCohortCount": 0,
+  "accessCounts": {
+    "representative": 227,
+    "nonRepresentative": 30,
+    "unknown": 3
+  },
+  "includedNonRepresentativeFailureCount": 0,
+  "representativeDenominator": 230,
+  "completedRepresentativeCount": 225,
+  "fullContextVerifiedCount": 128,
+  "fullContextRate": 0.5565217391304348,
+  "completionRate": 0.9782608695652174,
+  "confidenceInterval": {
+    "lower": 0.9501282146821269,
+    "upper": 0.9906795799959799
+  },
+  "pointEstimateAboveTarget": true,
+  "confidenceBoundAboveTarget": true,
+  "targetAchieved": true,
+  "allAttemptCompletedCount": 225,
+  "allAttemptCompletionRate": 0.8653846153846154,
+  "failedRepresentativeRows": [
+    {
+      "scanId": "gpc-production-acceptance-20260911-27",
+      "reasons": [
+        "semantic_probe_incomplete",
+        "semantic_probe_not_ended"
+      ]
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-65",
+      "reasons": [
+        "representative_access_not_verified",
+        "main_document_binding_unverified",
+        "http_delivery_not_retained",
+        "main_navigator_readback_not_retained",
+        "semantic_probe_incomplete",
+        "semantic_probe_not_started",
+        "semantic_probe_not_ended",
+        "request_capture_not_started",
+        "request_capture_not_ended",
+        "request_capture_drops_or_unknown",
+        "observed_facts_not_direct"
+      ]
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-160",
+      "reasons": [
+        "representative_access_not_verified",
+        "main_document_binding_unverified",
+        "http_delivery_not_retained",
+        "main_navigator_readback_not_retained",
+        "semantic_probe_incomplete",
+        "semantic_probe_not_started",
+        "semantic_probe_not_ended",
+        "request_capture_not_started",
+        "request_capture_not_ended",
+        "request_capture_drops_or_unknown",
+        "observed_facts_not_direct"
+      ]
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-183",
+      "reasons": [
+        "request_capture_not_ended"
+      ]
+    },
+    {
+      "scanId": "gpc-production-acceptance-20260911-246",
+      "reasons": [
+        "representative_access_not_verified",
+        "main_document_binding_unverified",
+        "http_delivery_not_retained",
+        "main_navigator_readback_not_retained",
+        "semantic_probe_incomplete",
+        "semantic_probe_not_started",
+        "semantic_probe_not_ended",
+        "request_capture_not_started",
+        "request_capture_not_ended",
+        "request_capture_drops_or_unknown",
+        "observed_facts_not_direct"
+      ]
+    }
+  ],
+  "gateReasons": [],
+  "recommendation": "Hold out a preregistered representative cohort and repeat this gate before any product decision; this result is not an internet-wide reliability estimate."
+}

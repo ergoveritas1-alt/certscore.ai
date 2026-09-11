@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gpcBoundedObservationSchema } from "./gpc-bounded-observation";
 
 export const GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION =
   "certscore.gpc-observation-dispatch.v1" as const;
@@ -212,11 +213,23 @@ export const gpcResponseAssessmentV2Schema = z.object({
 });
 
 // Stored v1 evidence is preserved on read, never silently upgraded to v2 proof.
-export const gpcResponseAssessmentSchema = z.union([gpcResponseAssessmentV2Schema, legacyGpcResponseAssessmentSchema]);
+export const gpcResponseAssessmentV3Schema = gpcResponseAssessmentV2Schema.innerType().extend({
+  contractVersion: z.literal("certscore.gpc-response-assessment.v3"),
+  observation: gpcBoundedObservationSchema,
+}).strict().superRefine((assessment, ctx) => {
+  const { observation, ...comparison } = assessment;
+  const parsed = gpcResponseAssessmentV2Schema.safeParse({ ...comparison, contractVersion: GPC_RESPONSE_ASSESSMENT_CONTRACT_VERSION });
+  if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue(issue);
+  if (observation.sourceSha256 !== (assessment.comparison.gpcArtifact?.sha256 ?? null))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Observation must retain the verified GPC worker source hash." });
+});
+export const gpcResponseAssessmentSchema = z.union([gpcResponseAssessmentV3Schema, gpcResponseAssessmentV2Schema, legacyGpcResponseAssessmentSchema]);
 // Named interface keeps the large canonical bundle declaration bounded; runtime validation is unchanged.
 export interface GpcSignalObservation extends z.infer<typeof gpcSignalObservationSchema> {}
 export type GpcCompleteComparisonDelta = z.infer<typeof gpcCompleteComparisonDeltaSchema>;
-export type GpcResponseAssessmentV2 = z.infer<typeof gpcResponseAssessmentV2Schema>;
+export interface GpcResponseAssessmentV2 extends z.infer<typeof gpcResponseAssessmentV2Schema> {}
 export type GpcObservationDispatchConfig = z.infer<typeof gpcObservationDispatchConfigSchema>;
 export type GpcComparisonDelta = z.infer<typeof gpcComparisonDeltaSchema>;
-export type GpcResponseAssessment = z.infer<typeof gpcResponseAssessmentSchema>;
+export interface GpcResponseAssessmentV3 extends z.infer<typeof gpcResponseAssessmentV3Schema> {}
+export interface LegacyGpcResponseAssessment extends z.infer<typeof legacyGpcResponseAssessmentSchema> {}
+export type GpcResponseAssessment = GpcResponseAssessmentV3 | GpcResponseAssessmentV2 | LegacyGpcResponseAssessment;

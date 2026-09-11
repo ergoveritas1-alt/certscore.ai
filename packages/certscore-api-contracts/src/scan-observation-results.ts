@@ -1,3 +1,4 @@
+import { gpcBoundedObservationSchema } from "./gpc-bounded-observation.js";
 import { z } from "zod";
 
 export const apiV2PostRefusalObservationSchema = z.object({
@@ -84,7 +85,8 @@ export const apiV2GpcComparisonDeltaSchema = z.object({
 }).strict();
 
 const apiV2GpcResponseObjectSchema = z.object({
-  contractVersion: z.enum(["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2"]).optional(),
+  observation: gpcBoundedObservationSchema.optional(),
+  contractVersion: z.enum(["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2", "certscore.gpc-response-assessment.v3"]).optional(),
   status: z.enum(["responsive", "no_observable_response", "indeterminate"]),
   findingTitle: z.enum(["GPC response", "No observable GPC response"]),
   summary: z.string().min(1).max(2_000),
@@ -133,7 +135,11 @@ const apiV2GpcResponseObjectSchema = z.object({
 // otherwise exceeds TypeScript's declaration-serialization limit.
 export type ApiV2GpcResponse = z.infer<typeof apiV2GpcResponseObjectSchema>;
 export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcResponseObjectSchema.superRefine((response, context) => {
-  if (response.contractVersion === "certscore.gpc-response-assessment.v2") {
+  if (response.observation && response.contractVersion !== "certscore.gpc-response-assessment.v3")
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Legacy responses cannot acquire a new bounded observation." });
+  if (response.contractVersion === "certscore.gpc-response-assessment.v3" && (!response.observation ||
+    response.observation.sourceSha256 !== (response.comparison.gpcArtifact?.sha256 ?? null))) context.addIssue({ code: z.ZodIssueCode.custom, message: "GPC v3 requires source-bound observation." });
+  if (response.contractVersion === "certscore.gpc-response-assessment.v2" || response.contractVersion === "certscore.gpc-response-assessment.v3") {
     const c = response.comparison;
     const determinate = response.status !== "indeterminate";
     if (!c.delivery || !c.coverage || !c.responseBasis || !c.deltas.webStorage || !c.deltas.advertisingOrMarketingActivity ||

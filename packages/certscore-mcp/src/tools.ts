@@ -1,6 +1,12 @@
+import { apiV2GpcResponseSchema } from "@certscore/api-contracts";
 import { withResponseCapture, transferResponseCapture } from "./response-capture.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getCertScoreErrorContext, CertScoreError, type FindingList, type JobStatus, type PreConsentCookiesTrackers, type PulseDetail, type PulseFormat, type PulseResult, type ScanResource, type TopFinding } from "@certscore/sdk";
+
+function canonicalGpcObservationSummary(value: unknown): string | null {
+  const parsed = apiV2GpcResponseSchema.safeParse(value);
+  return parsed.success && parsed.data.contractVersion === "certscore.gpc-response-assessment.v3" ? parsed.data.summary : null;
+}
 
 const MAX_ERROR_RESPONSE_BODY_CHARS = 2_000;
 export const MAX_EVIDENCE_PACKET_CHARS = 250_000;
@@ -1196,6 +1202,8 @@ function terminalLaneResultTextLines(value: Record<string, any>) {
     ? value.gpcResponse as Record<string, any>
     : null;
   if (gpcResponse) {
+    const observationSummary = canonicalGpcObservationSummary(gpcResponse);
+    if (observationSummary) lines.push(`GPC observation: ${observationSummary}`);
     lines.push(`GPC response: ${gpcResponse.findingTitle ?? "GPC response"}; status=${gpcResponse.status ?? "indeterminate"}; Sec-GPC: 1 proof retained on ${gpcResponse.comparison?.enabledProof?.requestsWithSecGpc ?? 0} request(s).`);
   }
   for (const [field, label] of [["postAcceptObservation", "Accept Path"], ["postRefusalObservation", "Reject Path"]] as const) {
@@ -1447,6 +1455,8 @@ export function scanBundleText(bundle: Record<string, any>) {
     ? bundle.gpcResponse as Record<string, any>
     : null;
   if (gpcResponse) {
+    const observationSummary = canonicalGpcObservationSummary(gpcResponse);
+    if (observationSummary) append(`GPC observation: ${observationSummary}`);
     const proof = gpcResponse.comparison?.enabledProof;
     const californiaPolicy = gpcResponse.californiaPolicy;
     append(`GPC response: ${gpcResponse.findingTitle ?? "GPC response"}; status=${gpcResponse.status ?? "indeterminate"}; Sec-GPC: 1 proof retained on ${proof?.requestsWithSecGpc ?? 0} request(s).`);
@@ -1692,7 +1702,9 @@ export function buildScanBundle(input: {
     postAcceptObservation: input.scan.postAcceptObservation ?? null,
     postRefusalObservation: input.scan.postRefusalObservation ?? null,
     provenance: scanProvenance(input.scan as unknown as Record<string, any>, "existing_scan_retrieved"),
-    interpretationGuidance: interpretationGuidance(SCAN_BUNDLE_INTERPRETATION_STATEMENT),
+    interpretationGuidance: interpretationGuidance(input.scan.gpcResponse?.contractVersion === "certscore.gpc-response-assessment.v3"
+      ? SCAN_BUNDLE_INTERPRETATION_STATEMENT.replace("For gpcResponse,", "For the paired gpcResponse.status,") + " Report the separate bounded observation, CMP-recorded state and directly observed requests. Observation completion does not mean GPC was honored."
+      : SCAN_BUNDLE_INTERPRETATION_STATEMENT),
     resultDisposition: input.scan.resultDisposition ?? null,
     noGo: input.scan.noGo ?? null,
     coverage: input.scan.coverage ?? null,

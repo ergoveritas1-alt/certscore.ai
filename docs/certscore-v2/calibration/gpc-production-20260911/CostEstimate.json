@@ -1,0 +1,23 @@
+{
+  "scansPerMonth": 100000,
+  "retentionDays": 30,
+  "inlineSessionBytes": {
+    "mean": 22979.388461538463,
+    "p95": 67348,
+    "max": 121740
+  },
+  "meanLivePairedDeltaMs": 127.48197109999974,
+  "computePlanningUsd": 0.6241429661200856,
+  "rawIncrementalGbAt100k": 2.2979388461538464,
+  "planningRangeUsdPerMonth": [
+    1,
+    3
+  ],
+  "ownerApprovedCapUsdPerMonth": 5,
+  "assumptions": [
+    "One retained inline session per existing GPC lane; no new object, request, lane, timeout or model call.",
+    "Planning envelope includes bounded projection/database metadata and a margin above measured mean compute.",
+    "Existing rate assumptions are for planning, not a billing quote; ten live pairs do not establish Lambda tail latency.",
+    "Full six-lane scan wall-clock latency has not been measured by this local GPC-lane benchmark."
+  ]
+}

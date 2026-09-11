@@ -134,6 +134,20 @@ publication; no retries, extended waits, late refresh, or extra browser runs
 are authorized by this policy. Preserve v1 records as v1, without silently
 upgrading their proof. The California-only 15-point policy is unchanged.
 
+On September 11, 2026, the owner approved production GPC bounded observation in
+`certscore.gpc-response-assessment.v3`, with up to $5/month incremental compute
+and evidence storage at 100,000 scans/month. See
+`docs/certscore-v2/gpc-production-observation-policy.md`. Preserve the v2 paired
+comparison and California-only scoring independently. A completed observation
+is not GPC honoring. Retain actual main-document delivery, terminal semantic
+readback and producer-bound session evidence in the existing GPC worker artifact;
+verify original bytes before canonical assessment/persistence. Session/completion
+v2 may separately retain exact same-Request CSP/mixed-content pre-transmission
+blocks with absent network timing/response and matching main-document loader;
+never invent their missing Sec-GPC header or promote diagnostic correlations.
+Keep historical v1/v2 response records unchanged and add no lane, retry, model
+call, timeout increase or later publication.
+
 Start `reject_observation` 500 milliseconds after the four passive lanes to
 avoid an immediate six-browser burst when both action lanes are enabled. Do
 not publish a primary result before

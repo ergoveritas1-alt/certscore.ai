@@ -2626,12 +2626,12 @@ export function deriveConcernPolicy(input: {
           reasonCode: californiaPolicy.reasonCode,
         }]
       : [];
-    const validAssessment =
+    const validAssessment = typedAssessment !== null && typedAssessment.status === status &&
       (status === "responsive" || status === "no_observable_response" || status === "indeterminate") &&
       getFirstString(input.rawEvidence, ["scoreEffect"]) === "none" &&
       getFirstString(input.rawEvidence, ["legalInterpretation"]) === "not_assessed";
     return {
-      allowedNarrativeTier: validAssessment && status !== "indeterminate" ? "moderate" : "weak",
+      allowedNarrativeTier: validAssessment && (status !== "indeterminate" || (typedAssessment?.contractVersion === "certscore.gpc-response-assessment.v3" && typedAssessment.observation.status === "complete")) ? "moderate" : "weak",
       externalSurfacingEligibility: validAssessment ? "eligible" : "suppress",
       negativeEvidenceFlags: [],
       promotionEligibility: validAssessment ? "eligible" : "blocked",

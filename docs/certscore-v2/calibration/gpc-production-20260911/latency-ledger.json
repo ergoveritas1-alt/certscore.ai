@@ -1,0 +1,109 @@
+{
+  "entries": {
+    "https://mixpanel.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:43:24.686Z",
+      "lastContactAt": "2026-09-11T15:43:24.686Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mixpanel.com/"
+    },
+    "https://mit.edu/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:43:28.260Z",
+      "lastContactAt": "2026-09-11T15:43:28.260Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mit.edu/"
+    },
+    "https://wpguardian.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:43:33.288Z",
+      "lastContactAt": "2026-09-11T15:43:33.288Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://wpguardian.com/"
+    },
+    "https://un.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:43:37.904Z",
+      "lastContactAt": "2026-09-11T15:43:37.904Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://un.org/"
+    },
+    "https://www.virtualpro.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:43:49.267Z",
+      "lastContactAt": "2026-09-11T15:43:49.267Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.virtualpro.com/"
+    },
+    "https://google.com.sa/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:44:22.507Z",
+      "lastContactAt": "2026-09-11T15:44:22.507Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://google.com.sa/"
+    },
+    "https://cntraveler.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:44:34.688Z",
+      "lastContactAt": "2026-09-11T15:44:34.688Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://cntraveler.com/"
+    },
+    "https://expresso.pt/": {
+      "consecutiveNoGoCount": 2,
+      "cooldownUntil": "2026-10-09T15:44:40.820Z",
+      "lastContactAt": "2026-09-11T15:44:40.820Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "captcha_or_challenge",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "do_not_calibrate",
+      "url": "https://expresso.pt/"
+    },
+    "https://sinsay.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:44:45.707Z",
+      "lastContactAt": "2026-09-11T15:44:45.707Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sinsay.com/"
+    },
+    "https://drom.ru/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T15:45:03.218Z",
+      "lastContactAt": "2026-09-11T15:45:03.218Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://drom.ru/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-09-11T16:00:17.627Z"
+}

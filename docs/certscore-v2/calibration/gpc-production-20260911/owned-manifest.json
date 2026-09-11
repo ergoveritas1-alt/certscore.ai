@@ -1,0 +1,30 @@
+{
+  "manifestVersion": "certscore.gpc_completion.central_selector_manifest.v1",
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "internalOnly": true,
+  "artifactOnly": true,
+  "selectionStage": "selection_frozen_before_contact",
+  "eligibilityLedger": "docs/certscore-v2/calibration/gpc-production-20260911/owned-ledger.json",
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
+  },
+  "targets": [
+    {
+      "url": "https://ergoveritas.com/.well-known/certscore-canary/runtime/storage.html",
+      "role": "owned_canary",
+      "lanes": [
+        "gpc_observation"
+      ]
+    }
+  ]
+}

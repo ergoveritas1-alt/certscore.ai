@@ -6,3 +6,5 @@ export * from "./openapi-v2.js";
 export * from "./pulse-v1.js";
 export * from "./scan-no-go.js";
 export * from "./runtime-evidence-graph.js";
+
+export type { GpcBoundedObservation } from "./gpc-bounded-observation.js";
