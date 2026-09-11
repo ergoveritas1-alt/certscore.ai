@@ -155,6 +155,15 @@ const ROOT_FULL_CHECKS: Check[] = [
 
 const TARGETS: Target[] = [
   {
+    key: "mcp-http", label: "MCP public contracts and HTTP transport",
+    matches: file => file.startsWith("apps/mcp/") || file.startsWith("packages/certscore-mcp/") ||
+      file.startsWith("packages/certscore-api-contracts/") || file.startsWith("packages/certscore-sdk/"),
+    checks: [
+      { key: "mcp-http-typecheck", label: "MCP dependency build and HTTP typecheck", command: ["pnpm", "--filter", "@certscore/mcp-http", "typecheck"] },
+      { key: "mcp-http-tests", label: "MCP HTTP integration and telemetry", command: ["pnpm", "--filter", "@certscore/mcp-http", "test"] },
+    ],
+  },
+  {
     key: "consent-action-semantics",
     label: "consent action semantics and dispatch",
     matches: file => file.startsWith("packages/certscore-contracts/src/") ||
