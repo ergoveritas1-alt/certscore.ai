@@ -48,12 +48,16 @@ test("pending workspace displays retained checkpoint observations before its fir
     fullSite: { maxPages: 1, concurrency: 1, waitSeconds: 1 },
     initialPreConsentPreview: runtimePreviewFixture,
   });
-  assert.match(html, /Early page observations/);
-  assert.match(html, /Google Fonts/);
-  assert.match(html, /Google Maps embed/);
-  assert.match(html, /not findings or final totals/);
+  assert.doesNotMatch(html, /Early page observations|What we’ve observed so far|Preliminary resource inventory/);
+  assert.match(html, /Preliminary · third-party requests only/);
+  assert.match(html, /≥4/);
   assert.match(html, /role="progressbar"/);
-  assert.doesNotMatch(html, /Loading inventory|0 priority issues|Executive overview/);
+  assert.match(html, /data-full-site-report/);
+  assert.match(html, /Executive overview/);
+  assert.match(html, /Resources &amp; services/);
+  assert.match(html, /Assessment in progress/);
+  assert.match(html, /aria-label="Inventory summary"/);
+  assert.doesNotMatch(html, /0 priority issues|aria-label="Sitewide priority review"/);
 });
 
 test("workspace without a retained checkpoint does not invent early observations", () => {

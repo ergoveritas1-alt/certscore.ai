@@ -15,3 +15,9 @@ test("failed pages explain the retained main-document status without changing th
   for (const status of ["completed", "cancelled", "queued"])
     assert.equal(describeFullSitePageFailure({ status, httpStatus: 500 }), null);
 });
+
+test("worker failures stay distinct from website responses", () => {
+  assert.equal(describeFullSitePageFailure({ status: "failed", limitation: "worker_lease_expired" }), "Worker result not received before deadline; capture unavailable");
+  assert.equal(describeFullSitePageFailure({ status: "failed", limitation: "dispatch_admission_timeout" }), "Worker did not start before deadline; capture unavailable");
+  assert.equal(describeFullSitePageFailure({ status: "failed", limitation: "worker_lease_expired", httpStatus: 403 }), "HTTP 403");
+});

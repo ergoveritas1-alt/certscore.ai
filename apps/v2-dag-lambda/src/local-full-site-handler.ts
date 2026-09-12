@@ -1,6 +1,7 @@
 /** Isolated development runner using the canonical inventory collector. */
 import { S3Client } from "@aws-sdk/client-s3";
 import { z } from "zod";
+import { createLocalInventoryArtifacts } from "./local-full-site-artifacts";
 import { runFullSitePage } from "./full-site-page";
 const request = z.object({
   message: z.object({ contractVersion: z.literal("certscore.full-site-page-dispatch.v1"), pageId: z.string().uuid(), attemptId: z.string().uuid(), token: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
@@ -16,15 +17,9 @@ export async function handler(event: unknown) {
     process.env[`CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_${suffix}`]=value ?? "";
     delete process.env[`CERTSCORE_CHROMIUM_${suffix}`];
   }
-  const artifacts: Array<{key:string;body:string}> = [];
-  let bytes=0;
+  const { artifacts, send } = createLocalInventoryArtifacts(`${grant.artifactPrefix}/${grant.pageId}/${grant.attemptId}`);
   let finish: Record<string,unknown> | undefined;
-  const s3Client = {send: async (command: {input:{Key:string;Body:string}}) => {
-    const {Key:key,Body:body}=command.input;
-    bytes+=Buffer.byteLength(body);
-    if(bytes>2*1024*1024) throw new Error("Local inventory response exceeds limit");
-    artifacts.push({key,body});return {};
-  }} as unknown as S3Client;
+  const s3Client = { send } as unknown as S3Client;
   await runFullSitePage(message, {s3Client,control:async body => {
     if(body.operation === "claim") return {grant};
     finish=body; return {};

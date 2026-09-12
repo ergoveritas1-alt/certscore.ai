@@ -677,6 +677,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     evidence: classifyInventoryEvidence(row),
     evidenceJson: {
       attributionSignatures: row.attributionSignatures,
+      storageDetails: row.storageDetails,
       canonicalEntity: row.canonicalEntity,
       cookieDetails: row.cookieDetails,
       embedDetails: row.embedDetails,
@@ -703,7 +704,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     requestNames: [...row.cookieNames, ...(row.requestDetails ?? []).flatMap((request) => request.path ? [request.path] : [])].slice(0, 8).join(", ") || "Not retained",
     serverLocation: row.dataFlows[0]?.networkDestination.country ?? row.dataFlows[0]?.networkDestination.label ?? "Location not retained",
     transferMechanism: row.dataFlows[0]?.transferMechanism.basis ?? "Unknown",
-    type: row.type === "embed" ? "Embed / iframe" : row.type === "cookie" ? "Cookie / storage" : "Tracker / request",
+    type: row.type === "embed" ? "Embed / iframe" : row.type === "storage" ? "Browser storage" : row.type === "cookie" ? "Cookie / storage" : "Tracker / request",
     vendor: row.vendor,
     recordCount: row.observedRecordCount,
     requestCount: row.requestCount,

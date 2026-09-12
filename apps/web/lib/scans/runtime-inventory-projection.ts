@@ -1,3 +1,6 @@
+import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
+import { preConsentBrowserStorageProjectionSchema } from "@certscore/contracts";
+import { INVENTORY_METRIC_LABELS, inventoryMetricFamily } from "./inventory-resource-semantics";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
 import { z } from "zod";
@@ -5,6 +8,7 @@ import {
   isCanonicalIdSyncEndpoint,
   resolveCanonicalServicePurpose,
   resolveCanonicalVendorLabel,
+  resolveCanonicalResourceRole,
   resolveCanonicalVendorLegalContext
 } from "@certscore/vendor-resolver";
 import {
@@ -66,6 +70,7 @@ export type PreConsentDataFlow = {
 };
 
 export type SanitizedRequestEvidenceRow = {
+  resourceRole?: "video_ad_sdk";
   cookieNamesSent: string[];
   essentiality: "non_essential" | "unknown";
   hostname: string | null;
@@ -166,7 +171,8 @@ export type InventoryGroupRow = {
   setByThirdPartyScript: boolean;
   syncedIdentifiers?: string[];
   timingEvidence?: RuntimeCookieEvidenceRow["timingEvidence"] | "mixed";
-  type: "cookie" | "tracker" | "embed";
+  type: "cookie" | "tracker" | "embed" | "storage";
+  storageDetails?: { storageType: "localStorage" | "sessionStorage"; key: string; origin: string | null; identityBasis: "retained_scan_type_key" | "origin_type_key"; sourceHash: string; evidenceRefs: string[] };
   embedDetails?: Array<{ frameUrl: string; firstSeenMs: number; source: string }>;
   vendor: string;
 };
@@ -286,7 +292,10 @@ export function buildSanitizedRequestEvidenceRows(
   return getObjectArray(
     hybridRuntimeEvidence?.requestPurposeClassificationConfidence ??
     hybridRuntimeEvidence?.request_purpose_classification_confidence
-  ).slice(0, 50).map((row) => ({
+  ).slice(0, 50).map((row): SanitizedRequestEvidenceRow => {
+    const resourceRole = resolveCanonicalResourceRole({ type: "request", url: getOptionalString(row, "requestUrl") ?? undefined });
+    return {
+    ...(resourceRole ? { resourceRole } : {}),
     cookieNamesSent: getRecordStringArray(row, "cookieNamesSent").slice(0, 24),
     essentiality: row.essentiality === "non_essential" ? "non_essential" : "unknown",
     hostname: normalizeInventoryHostname(getOptionalString(row, "hostname") ?? getOptionalString(row, "requestUrl")),
@@ -298,7 +307,8 @@ export function buildSanitizedRequestEvidenceRows(
     responseObserved: row.responseObserved === true,
     responseStorageAttempted: row.responseStorageAttempted === true,
     vendor: getOptionalString(row, "vendor") ?? getOptionalString(row, "vendorName"),
-  }));
+    };
+  });
 }
 
 export function buildPreConsentDataFlows(
@@ -994,6 +1004,7 @@ export function classifyInventoryEvidence(
 ): InventoryEvidenceClassification {
   // An observed frame is not proof of tracking, storage, or necessity.
   if (row.type === "embed") return "Contextual";
+  if (row.type === "storage") return "Review";
   const cookieEssentiality = new Set(
     (row.cookieDetails ?? []).map((cookie) => cookie.essentiality ?? "unknown")
   );
@@ -1056,20 +1067,35 @@ export function buildNonEssentialInventoryTallies(rows: InventoryGroupRow[]) {
   }, { cookiesStorage: 0, requests: 0 });
 }
 
-/** Count retained inventory units, using the canonical classification for every row. */
-export function buildReportInventorySummary(rows: InventoryGroupRow[]) {
+export const retainedNetworkSummarySchema = z.object({
+  metricBasis: z.literal("retained_unique_request_events"),
+  preConsentRequestCount: z.number().int().nonnegative(),
+  retainedRequestEventCount: z.number().int().nonnegative(),
+  totalRequestCount: z.number().int().nonnegative(),
+}).refine(summary => summary.preConsentRequestCount <= summary.retainedRequestEventCount &&
+  summary.retainedRequestEventCount === summary.totalRequestCount);
+
+/** Keep retained request-event totals independent of vendor-presence inventory rows. */
+export function buildReportInventorySummary(rows: InventoryGroupRow[], networkSummary?: unknown) {
+  const retainedNetwork = retainedNetworkSummarySchema.safeParse(networkSummary);
   return ([
-    { label: "Cookies & browser storage", type: "cookie" },
-    { label: "Network requests", type: "tracker" },
-    { label: "Embedded content", type: "embed" },
+    { label: INVENTORY_METRIC_LABELS.storage, type: "cookie" },
+    { label: INVENTORY_METRIC_LABELS.requests, type: "tracker" },
+    { label: INVENTORY_METRIC_LABELS.frames, type: "embed" },
   ] as const).map(({ label, type }) => {
     const counts = { nonEssential: 0, review: 0, contextual: 0, essential: 0 };
-    // Legacy script/service observations can establish presence without retaining
-    // a request count. Keep that unknown rather than presenting a false zero.
-    if (type === "tracker" && rows.some(row => row.type === type && row.requestCount === null)) {
-      return { label, value: null, counts: undefined };
+    // A service signature is not a request count or a classification of every
+    // retained request. Never let it erase a separately retained event total.
+    if (type === "tracker" && retainedNetwork.success) {
+      return {
+        label, value: retainedNetwork.data.preConsentRequestCount, counts: undefined,
+
+      };
     }
-    for (const row of rows.filter(row => row.type === type)) {
+    if (type === "tracker" && rows.some(row => row.type === type && row.requestCount === null)) {
+      return { label, value: null, counts: undefined, note: "Request counts were not retained for all service observations." };
+    }
+    for (const row of rows.filter(row => inventoryMetricFamily(row.type) === inventoryMetricFamily(type))) {
       // A script-only service observation is not a network request event.
       const count = type === "tracker" ? row.requestCount ?? 0 : row.observedRecordCount;
       const key = { "Non-essential": "nonEssential", "Review": "review", "Contextual": "contextual", "Essential": "essential" }[classifyInventoryEvidence(row)] as keyof typeof counts;
@@ -1661,6 +1687,28 @@ export function buildIframeInventoryRows(hybridRuntimeEvidence: unknown, firstPa
   return [...rows.values()];
 }
 
+/** Consume only the persisted typed storage projection. V1 retains names but no
+ * origin: preserve that limitation rather than manufacture an exact origin or
+ * infer a storage write/necessity finding from a snapshot. */
+export function buildBrowserStorageInventoryRows(projection: unknown, scanId: string): InventoryGroupRow[] {
+  const parsed = preConsentBrowserStorageProjectionSchema.safeParse(projection);
+  if (!parsed.success || parsed.data.scanId !== scanId || parsed.data.assessmentStatus !== "observed") return [];
+  const data = parsed.data;
+  const entries = data.contractVersion === "certscore.pre-consent-browser-storage-projection.v2" ? data.entries :
+    (["localStorage", "sessionStorage"] as const).flatMap(storageType => [...new Set(data[`${storageType}Keys`])].map(key => ({ storageType, key, origin: null, capturedAtMs: data.storageFirstObservedAtMs, evidenceRefs: data.evidenceRefs })));
+  return entries.map(({ storageType, key, origin, capturedAtMs, evidenceRefs }) => ({
+      type: "storage" as const, vendor: "Unattributed browser storage", canonicalEntity: null,
+      attributionSignatures: [], confidence: "low" as const, cookieDetails: [], cookieNames: [],
+      dataFlows: [], domains: origin ? [new URL(origin).hostname] : [], firstSeenMs: capturedAtMs,
+      macroCategory: "Review" as const, observedRecordCount: 1, party: "unknown" as const,
+      siteRelationship: "unknown" as const, entityRelationship: "unknown" as const,
+      preConsent: true, priority: "review_needed" as const, purpose: "Unknown purpose", purposes: ["Unknown purpose"],
+      rawProducts: [key], regulatoryRelevance: [], requestCount: null, setByThirdPartyScript: false,
+      storageDetails: { storageType, key, origin, identityBasis: origin ? "origin_type_key" as const : "retained_scan_type_key" as const,
+        sourceHash: data.sourceHash, evidenceRefs },
+    }));
+}
+
 export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailResponse) {
   const runtimeArtifacts = scanRecord.runtimeArtifacts;
   const graphProjection = apiRuntimeEvidenceGraphProjectionSchema.safeParse(runtimeArtifacts?.runtimeEvidenceGraphProjection);
@@ -1695,6 +1743,13 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
   const requestRows = buildSanitizedRequestEvidenceRows(hybridRuntimeEvidence);
   const embedRows = buildIframeInventoryRows(hybridRuntimeEvidence, scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost);
 
+  const storageRows = buildBrowserStorageInventoryRows(getPersistedCanonicalReportProjection(scanRecord)?.preConsentBrowserStorageProjection, scanRecord.scan.id);
+  const ungroupedRows = [...buildRuntimeInventoryUngroupedRows({
+    cookieRows, dataFlows,
+    firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
+    requestRows, trackerRows,
+  }), ...embedRows, ...storageRows];
+
   return {
     runtimeEvidenceGraph: graphProjection.success && graphProjection.data.scanId === scanRecord.scan.id ? graphProjection.data : undefined,
     cookieRows,
@@ -1703,19 +1758,15 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
     trackerRows,
     vendorSurfaceProjection,
     embedRows,
+    storageRows,
     groupedRows: [...buildRuntimeInventoryGroupRows({
       cookieRows,
       dataFlows,
       firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
       requestRows,
       trackerRows
-    }), ...embedRows],
-    ungroupedRows: [...buildRuntimeInventoryUngroupedRows({
-      cookieRows,
-      dataFlows,
-      firstPartyDomain: scanRecord.scan.domainHostname ?? certScoreSummary.requestedHost,
-      requestRows,
-      trackerRows
-    }), ...embedRows]
+    }), ...embedRows, ...storageRows],
+    ungroupedRows,
+    inventorySummary: buildReportInventorySummary(ungroupedRows, hybridRuntimeEvidence?.networkSummary),
   };
 }

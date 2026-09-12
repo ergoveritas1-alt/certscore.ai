@@ -47,8 +47,12 @@ function PolicyDisclosureEvidence({ context }: { context: Context }) {
 }
 export function PolicyDisclosure({ context, label }: { context: Context; label: string }) {
   const id = useId();
+  const hasLookupProof = context.policy.reviewed.length > 0 || context.policy.mentions.length > 0;
   const tone = context.policy.status === "mentioned" ? "!border-emerald-200 !bg-emerald-50 !text-emerald-800" : context.policy.status === "not_found" ? "!border-amber-200 !bg-amber-50 !text-amber-900" : "!border-slate-200 !bg-slate-100 !text-slate-600";
-  return <><button type="button" popoverTarget={id} aria-label={`Policy disclosure for ${label}: ${policyDisclosureLabel(context.policy.status)}`} className={`whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium hover:brightness-95 ${tone}`}>{policyDisclosureLabel(context.policy.status)}</button>
+  return <><button type="button" popoverTarget={id} aria-label={`Policy disclosure for ${label}: ${policyDisclosureLabel(context.policy.status)}`} title={hasLookupProof ? "View retained policy lookup evidence" : "View policy lookup coverage"} className={`inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2 py-1 text-xs font-medium shadow-sm transition-[box-shadow,filter] hover:brightness-95 hover:shadow active:shadow-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${tone}`}>
+      {policyDisclosureLabel(context.policy.status)}
+      {hasLookupProof ? <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-75"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg> : null}
+    </button>
     <div id={id} popover="auto" aria-label={`Policy disclosure for ${label}`} className="m-auto w-[min(36rem,calc(100vw-2rem))] max-h-[80vh] overflow-auto rounded-xl border border-slate-200 bg-white p-5 shadow-xl">
       <div className="mb-3 flex items-start justify-between gap-4"><div><h3 className="font-semibold text-slate-900">Policy disclosure · {policyDisclosureLabel(context.policy.status)}</h3><p className="mt-1 break-all text-xs text-slate-600">{label}</p></div><button type="button" popoverTarget={id} popoverTargetAction="hide" aria-label="Close policy disclosure">Close</button></div>
       <PolicyDisclosureEvidence context={context} />

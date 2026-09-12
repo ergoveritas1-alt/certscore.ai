@@ -1,11 +1,13 @@
 "use client";
+import { INVENTORY_METRIC_LABELS } from "../../lib/scans/inventory-resource-semantics";
+import { ReportCoverageTiming } from "./report-coverage-timing";
 import { useFullSiteReportContinuity } from "./full-site-report-continuity";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
 import { describeSiteTechnology, type SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
 import { ReportInventorySummary } from "./report-inventory-summary";
-import { PreConsentRuntimePreviewCard } from "./pre-consent-runtime-preview-card";
+import { preliminarySiteInventoryMetrics } from "./preliminary-site-inventory-metrics";
 import { SitePriorityReview } from "./site-priority-review";
 import type { ShadowFinding } from "./report-lab/shadow-report-data";
 import { CopyJsonButton } from "./copy-json-button";
@@ -65,7 +67,7 @@ const initialFilters: Filters = {
 };
 const sortKeys: Record<string, string> = { Priority: "priority", Vendor: "vendor", Name: "label", Purpose: "purpose", "Policy disclosure": "policy", Location: "transfer", "First seen": "time", Page: "page" };
 const units = {
-  cookie: "Cookies & browser storage",
+  cookie: "Cookies & storage",
   request: "Network requests",
   embed: "Embeds",
 };
@@ -358,29 +360,26 @@ export function FullSiteWorkspace({
       ...(data?.discovery.widespread ?? []),
     ].find((r) => r.key === resource);
   const technology = describeSiteTechnology(siteMetadata?.observation);
-  const timing = (
-        <details className="text-xs text-zinc-600 sm:relative">
-          <summary className="cursor-pointer font-medium">
-            Coverage & timing ·{" "}
-            {duration(
-              Number.isFinite(startTime) && timingEnd !== null
-                ? Math.max(0, Math.floor((timingEnd - startTime) / 1000) * 1000)
-                : null,
-            )}
-          </summary>
-          <div className="absolute left-4 right-4 z-20 mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-zinc-200 bg-white p-3 shadow-lg sm:left-0 sm:right-auto sm:top-full sm:w-[min(38rem,85vw)]">
-            <dl className="mb-3 grid gap-2 border-b border-zinc-200 pb-3 text-xs sm:grid-cols-2">
-              <div className="flex items-baseline justify-between gap-3"><dt className="text-zinc-500">CMS / generator</dt><dd className="text-right font-medium text-zinc-800">{technology.platform}</dd></div>
-              <div className="flex items-baseline justify-between gap-3"><dt className="text-zinc-500">Declared version</dt><dd className="text-right font-medium tabular-nums text-zinc-800">{technology.version === "Unknown" ? "Not available" : technology.version}</dd></div>
-            </dl>
-            <div className="grid gap-4 sm:grid-cols-2">
-              {[
-                { title: "Coverage", rows: [
-                  ["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
+  const captureLimitations = failedPages.length ? <details className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-sm">
+          <summary className="cursor-pointer font-medium text-amber-950">{failedPages.length} pages with capture limitations — view reasons</summary>
+          <p className="mt-2 text-xs text-slate-600">These are page capture outcomes. A page can return an HTTP error even when some content renders.</p>
+          <ul className="mt-2 max-h-60 space-y-2 overflow-auto" aria-label="Page capture limitations">
+            {failedPages.slice(0, 50).map(page => <li key={page.id} className="flex flex-wrap justify-between gap-1 border-t border-amber-100 pt-2">
+              <span className="min-w-0 break-all text-xs text-slate-700">{page.url}</span>
+              <strong className="text-xs font-medium text-amber-950">{describeFullSitePageFailure(page)}</strong>
+            </li>)}
+          </ul>
+          {failedPages.length > 50 ? <p className="mt-2 text-xs text-slate-600">Showing the first 50 of {failedPages.length} affected pages.</p> : null}
+        </details> : null;
+  const timing = <ReportCoverageTiming
+    duration={duration(Number.isFinite(startTime) && timingEnd !== null ? Math.max(0, Math.floor((timingEnd - startTime) / 1000) * 1000) : null)}
+    technology={technology}
+    groups={[{ title: "Coverage", rows: [["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
                   ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
                   ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],
                   ...(data?.coverage?.unknown ? [["Robots not verified", data.coverage.unknown]] : []),
                   ["Page limit", requested.maxPages],
+                  ["Pages with capture limitations", data ? failedPages.length : "Loading…"],
                   ["Excluded links", counts?.excluded ?? 0],
                   ["Stop reason", state?.stopReason === "max_pages" ? "Page limit reached" : state?.stopReason?.replaceAll("_", " ") ?? (running ? "In progress" : "Not stopped")],
                   ["Worker limit", state?.effective.concurrency ?? requested.concurrency],
@@ -396,36 +395,16 @@ export function FullSiteWorkspace({
                   ["Page samples", s?.timing.sampleCount ?? 0],
                   ["Backoff", duration(state?.pauseMs)],
                 ] },
-              ].map(group => (
-                <div key={group.title}>
-                  <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{group.title}</h3>
-                  <dl className="divide-y divide-zinc-100">
-                    {group.rows.map(([label, value]) => (
-                      <div key={label} className="flex items-baseline justify-between gap-3 py-1.5 text-xs leading-4">
-                        <dt className="text-zinc-500">{label}</dt>
-                        <dd className="text-right font-medium tabular-nums text-zinc-800" title={value === "Unavailable" ? "Unavailable" : undefined}>{value === "Unavailable" ? "-" : value}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              ))}
-            </div>
-            <dl className="mt-2 border-t border-zinc-200 pt-2 text-[11px] leading-4">
-              {[["Started", timestamp(state?.startedAt)], ["Completed", timestamp(state?.completedAt)]].map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-3 py-0.5">
-                  <dt className="text-zinc-500">{label}</dt>
-                  <dd className="text-right tabular-nums text-zinc-600">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </details>
-  );
+              ]}
+    started={timestamp(state?.startedAt)} completed={timestamp(state?.completedAt)}
+  />;
   const reportStatus = running ? progressLabel : !state ? "Loading report…" : retainedAssessment ? "Homepage completed · Crawl limited" : robotsLimited ? "Crawl limited" : state?.status === "cancelled" ? "Cancelled" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" && (counts?.blockedFailed || counts?.partial) ? "Completed with limitations" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading";
-  const inventorySummary = <ReportInventorySummary updating={valuesUpdating} metrics={[
-          { label: "Cookies & browser storage", value: s ? s.totals.cookies + s.totals.storage : null, group: "cookies" },
-          { label: "Network requests", value: s?.totals.requestEvents, group: "requests" },
-          { label: "Embedded content", value: s?.totals.embedInstances, group: "embeds" },
+  const previewMetrics = initialPending && valuesUpdating && !data?.score && (scannedPages ?? 0) === 0
+    ? preliminarySiteInventoryMetrics(preConsentPreview) : null;
+  const inventorySummary = <ReportInventorySummary updating={valuesUpdating} metrics={previewMetrics ?? [
+          { label: INVENTORY_METRIC_LABELS.storage, value: s ? s.totals.cookies + s.totals.storage : null, group: "cookies" },
+          { label: INVENTORY_METRIC_LABELS.requests, value: s?.totals.requestEvents, group: "requests" },
+          { label: INVENTORY_METRIC_LABELS.frames, value: s?.totals.embedInstances, group: "embeds" },
         ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], note: metric.group === "cookies" && data?.storageReconciliation?.unmatched ? `${data.storageReconciliation.unmatched} assessed items lack an exact inventory match.` : undefined }))} />;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
@@ -448,17 +427,8 @@ export function FullSiteWorkspace({
         {state?.status === "cancelled" ? <p role="status" className="mt-3 text-sm text-slate-600">
           Site crawl cancelled. Captured evidence is preserved.{running ? " Active page visits are finishing; no additional visits will start." : ""}
         </p> : null}
-        {failedPages.length ? <details className="mt-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-sm">
-          <summary className="cursor-pointer font-medium text-amber-950">{failedPages.length} pages with capture limitations — view reasons</summary>
-          <p className="mt-2 text-xs text-slate-600">These are page capture outcomes. A page can return an HTTP error even when some content renders.</p>
-          <ul className="mt-2 max-h-60 space-y-2 overflow-auto" aria-label="Page capture limitations">
-            {failedPages.slice(0, 50).map(page => <li key={page.id} className="flex flex-wrap justify-between gap-1 border-t border-amber-100 pt-2">
-              <span className="min-w-0 break-all text-xs text-slate-700">{page.url}</span>
-              <strong className="text-xs font-medium text-amber-950">{describeFullSitePageFailure(page)}</strong>
-            </li>)}
-          </ul>
-          {failedPages.length > 50 ? <p className="mt-2 text-xs text-slate-600">Showing the first 50 of {failedPages.length} affected pages.</p> : null}
-        </details> : null}
+
+        {captureLimitations}
         {stopError ? <p role="alert" className="mt-3 text-sm text-rose-700">{stopError}</p> : null}
         {state?.status === "stopped" ? <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200/70 bg-amber-50/50 px-4 py-3">
           <div className="min-w-0 text-sm">
@@ -510,17 +480,11 @@ export function FullSiteWorkspace({
           </p>
         ) : null}
       </header>
-      {initialPending && preConsentPreview && !data?.score && (scannedPages ?? 0) === 0 ? (
-        <PreConsentRuntimePreviewCard
-          preview={preConsentPreview}
-          startedAt={initialStartedAt ?? null}
-          heading="Early page observations"
-        />
-      ) : tab !== "homepage" ? (
+      {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
           <FullSiteExecutiveSummary actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} inventorySummary={inventorySummary} score={data?.score} pending={!data || valuesUpdating} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} />
-          <SitePriorityReview scannedPages={scannedPages} findings={data?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!data || valuesUpdating} sitewideAvailable={Boolean(data?.score)} />
+          {!(initialPending && !data?.score) ? <SitePriorityReview scannedPages={scannedPages} findings={data?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!data || valuesUpdating} sitewideAvailable={Boolean(data?.score)} /> : null}
           {homepageTimeline ? <section aria-label="Homepage event timeline" className="my-3 border-y border-zinc-200 bg-white py-2">
             <h2 className="text-xl font-semibold">Homepage event timeline</h2>
             <div className="mt-1">{homepageTimeline}</div>

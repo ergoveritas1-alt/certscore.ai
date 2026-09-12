@@ -1323,3 +1323,21 @@ test("corporate Cloudflare label uses the retained analytics host, never a guess
   const ambiguous = buildTrackerInventoryGroupRows([{ ...row, domains: [] }]);
   assert.equal(ambiguous[0]?.vendor, "Cloudflare");
 });
+
+test("retained request totals survive missing vendor-row counts without invented classifications", () => {
+  const retained = { metricBasis: "retained_unique_request_events", preConsentRequestCount: 80,
+    retainedRequestEventCount: 83, totalRequestCount: 83 };
+  // Vendor presence and bounded display samples are not the request-event inventory.
+  const rows = [{ type: "tracker", requestCount: null }] as Parameters<typeof buildReportInventorySummary>[0];
+  const metric = buildReportInventorySummary(rows, retained)[1]!;
+  assert.equal(metric.value, 80);
+  assert.equal(metric.counts, undefined);
+  assert.equal(metric.note, undefined);
+  assert.equal(buildReportInventorySummary([], retained)[1]!.value, 80);
+  assert.equal(buildReportInventorySummary(rows, { ...retained, preConsentRequestCount: 0 })[1]!.value, 0);
+  for (const invalid of [undefined, {}, { ...retained, metricBasis: "raw_requests" },
+    { ...retained, preConsentRequestCount: -1 }, { ...retained, preConsentRequestCount: 84 },
+    { ...retained, totalRequestCount: 90 }]) {
+    assert.equal(buildReportInventorySummary(rows, invalid)[1]!.value, null);
+  }
+});

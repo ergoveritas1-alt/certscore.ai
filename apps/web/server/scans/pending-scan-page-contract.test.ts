@@ -14,7 +14,7 @@ test("refreshed public report consumes the persisted projection and preserves th
   assert.match(source, /variant="timeline"/);
   assert.match(source, /\/scano\//);
   assert.match(source, /loadPersistedScanReportProjection/);
-  assert.match(source, /buildTimelineReportModel\(persistedReportProjection\)/);
+  assert.match(source, /buildVerifiedTimelineReportModel\(persistedReportProjection\)/);
   assert.match(source, /isPendingScanStatus\(statusProjection\.status\)/);
 });
 
@@ -25,7 +25,7 @@ test("refreshed authenticated report preserves scoped access and the scanso comp
   assert.match(source, /getOrganizationScanStatusProjection\(\{ organizationId: organization\.id, scanId \}\)/);
   assert.match(source, /loadPersistedScanReportProjection\(\{/);
   assert.match(source, /organizationId: isPlatformAdmin \? null : organization\.id/);
-  assert.match(source, /buildTimelineReportModel\(persistedReportProjection\)/);
+  assert.match(source, /buildVerifiedTimelineReportModel\(persistedReportProjection\)/);
   assert.match(source, /mode="authenticated"/);
   assert.match(source, /\/app\/scanso\//);
   assert.match(comparisonRoute, /scans\/\[scanId\]\/legacy-page/);

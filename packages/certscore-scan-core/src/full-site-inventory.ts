@@ -164,6 +164,7 @@ export function projectFullSiteInventory(input: {
       eventCount: 1,
       evidenceRefs: [data.id],
       ...data,
+      details: { ...data.details, ...(resolved?.status === "resolved" && resolved.resourceRole ? { resourceRole: resolved.resourceRole } : {}) },
     };
     occurrences.push(row);
     if (serviceId) {
@@ -326,8 +327,8 @@ export function projectFullSiteInventory(input: {
   for (const snapshot of evidence.storageSnapshots.filter(baseline))
     for (const type of ["localStorage", "sessionStorage"] as const) {
       for (const key of snapshot[`${type}Keys`]) {
-        const origin = new URL(snapshot.url).origin,
-          identity = inventoryHash([origin, type, key]);
+        const origin = snapshot.captureContext?.origin ?? null,
+          identity = inventoryHash(origin ? [origin, type, key] : [input.pageJobId, type, key]);
         if (storageIds.has(identity)) continue;
         storageIds.add(identity);
         add({
@@ -337,10 +338,10 @@ export function projectFullSiteInventory(input: {
           label: key || "(empty storage key)",
           graphNodeRefs: evidence.runtimeEvidenceGraph?.nodes.filter(node => node.kind === "storage" && node.name === key && node.url === origin && node.storageType === type).map(node => node.id).slice(0, 20),
           firstSeenMs: snapshot.capturedAtMs,
-          domain: new URL(origin).hostname,
+          domain: origin ? new URL(origin).hostname : null,
           resourceType: type,
-          relationship: classifyParty(origin, finalUrl),
-          details: { origin, type, valuesRedacted: true },
+          relationship: origin ? classifyParty(origin, finalUrl) : "unknown",
+          details: { origin, type, key, identityBasis: origin ? "origin_type_key" : "retained_scan_type_key", sourceHash: input.sourceHash, valuesRedacted: true },
         });
       }
     }

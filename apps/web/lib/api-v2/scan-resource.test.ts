@@ -1654,6 +1654,7 @@ test("buildApiV2PreConsentCookiesTrackers returns a valid empty response", () =>
       review: 0,
     },
     cookieCount: 0,
+    storageCount: 0,
     requestCount: 0,
     vendorCount: 0,
     domainCount: 0

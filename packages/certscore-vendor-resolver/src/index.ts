@@ -163,6 +163,7 @@ export function findCanonicalVendorMention(text: string, identity: Pick<Normaliz
 }
 
 interface VendorRule {
+  resourceRole?: "video_ad_sdk";
   /** Frozen identifiers: preserve through label changes; never regenerate at runtime. */
   identity: VendorRegistryIdentity;
   review?: {
@@ -473,6 +474,7 @@ const rules: VendorRule[] = [
     hostPatterns: [/^imasdk\.googleapis\.com$/i],
     urlPatterns: [/\/js\/sdkloader\/ima3(?:_dai)?\.js\b/i],
     basisLabel: "google_ima_sdk",
+    resourceRole: "video_ad_sdk",
   },
   {
     identity: {"entityId":"ent_7509263a9ab6","vendorId":"ven_b460db2a4c04","serviceId":"svc_cc54feb7bf93"},
@@ -5125,7 +5127,7 @@ export function getCanonicalVendorRegistryManifest() {
 }
 
 export type CanonicalVendorResolution =
-  | { status: "resolved"; observation: NormalizedVendorObservation }
+  | { status: "resolved"; observation: NormalizedVendorObservation; resourceRole?: "video_ad_sdk" }
   | { status: "ambiguous" | "unrecognized"; observation: null };
 
 const matchStrength: Record<VendorRegistryAttribution["matchKind"], number> = {
@@ -5141,9 +5143,19 @@ export function resolveCanonicalVendor(input: VendorResolverInput): CanonicalVen
   const strength = (row: NormalizedVendorObservation) => matchStrength[row.registryAttribution!.matchKind];
   const maximum = Math.max(...candidates.map(strength));
   const strongest = candidates.filter(row => strength(row) === maximum);
-  return strongest.length === 1
-    ? { status: "resolved", observation: strongest[0]! }
-    : { status: "ambiguous", observation: null };
+  if (strongest.length !== 1) return { status: "ambiguous", observation: null };
+  const observation = strongest[0]!;
+  // A service/hostname match cannot prove that a particular resource is an SDK.
+  const resourceRole = ["request", "script"].includes(input.type) && observation.registryAttribution?.matchKind === "endpoint"
+    ? rules.find(rule => observation.registryAttribution?.ruleIds.includes(rule.basisLabel) && rule.resourceRole && rule.urlPatterns?.some(pattern => pattern.test(input.url ?? "")))?.resourceRole
+    : undefined;
+  return { status: "resolved", observation, ...(resourceRole ? { resourceRole } : {}) };
+}
+
+/** Resource role is independent of its observed technical type and purpose. */
+export function resolveCanonicalResourceRole(input: VendorResolverInput): "video_ad_sdk" | undefined {
+  const result = resolveCanonicalVendor(input);
+  return result.status === "resolved" ? result.resourceRole : undefined;
 }
 
 /** Resolve a precise service identity, including retained pre-v1 observations.

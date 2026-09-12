@@ -26,6 +26,7 @@ import {
   type SetCookieMetadata,
   type ScriptEvent,
   type StorageSnapshot,
+  storageCaptureContextSchema,
   type TransportSecurityObservation,
   type ConsentUiObservation,
   type VisualCaptureSummary,
@@ -4852,6 +4853,11 @@ type ConsolidatedPageEvidenceSnapshot = {
   domText: string;
   frames: Array<{ name?: string; src?: string }>;
   localStorageEntries: Record<string, string>;
+  localStorageKeys: string[];
+  sessionStorageKeys: string[];
+  storageOrigin: string;
+  localStorageReadComplete: boolean;
+  sessionStorageReadComplete: boolean;
   pageUrl: string;
   links: Array<{
     documentLanguage?: string;
@@ -5119,19 +5125,23 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
     globalWithNameHelper.__name ??= function(target) {
       return target;
     };
-    const localStorageEntries: Record<string, string> = {};
-    const sessionStorageEntries: Record<string, string> = {};
+    const localStorageEntries: Record<string, string> = Object.create(null);
+    const sessionStorageEntries: Record<string, string> = Object.create(null);
+    let localStorageReadComplete = false;
+    let sessionStorageReadComplete = false;
     try {
       for (let index = 0; index < window.localStorage.length; index += 1) {
         const key = window.localStorage.key(index);
-        if (key) localStorageEntries[key] = "[redacted]";
+        if (key !== null) localStorageEntries[key] = "[redacted]";
       }
+      localStorageReadComplete = true;
     } catch {}
     try {
       for (let index = 0; index < window.sessionStorage.length; index += 1) {
         const key = window.sessionStorage.key(index);
-        if (key) sessionStorageEntries[key] = "[redacted]";
+        if (key !== null) sessionStorageEntries[key] = "[redacted]";
       }
+      sessionStorageReadComplete = true;
     } catch {}
     const allFieldCandidates = document.querySelectorAll('input, textarea, select, [role="checkbox"], [role="switch"]');
     const inspectedFieldCandidates = Array.from(
@@ -5223,7 +5233,9 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
         groupKey: groupRefFor(element),
         structure: nativeForm ? "native_form" as const : roleForm ? "role_form" as const : "unassociated_controls" as const,
         title: titleFor(group),
-        method: nativeForm?.getAttribute("method") ?? undefined,
+        // Read the native reflected method, including HTML's missing/invalid GET
+        // default. The prototype getter avoids named controls shadowing form.method.
+        method: nativeForm ? Object.getOwnPropertyDescriptor(HTMLFormElement.prototype, "method")?.get?.call(nativeForm) : undefined,
         actionHostname,
         elementType: (["input", "textarea", "select"].includes(element.tagName.toLowerCase()) ? element.tagName.toLowerCase() : "custom_control") as "input" | "textarea" | "select" | "custom_control",
         inputType: type || element.tagName.toLowerCase(),
@@ -5294,6 +5306,10 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page): Promise<Cons
         name: frame.name || undefined,
       })),
       localStorageEntries,
+      localStorageKeys: Object.keys(localStorageEntries),
+      sessionStorageKeys: Object.keys(sessionStorageEntries),
+      storageOrigin: window.location.origin,
+      localStorageReadComplete, sessionStorageReadComplete,
       pageUrl: window.location.href,
       links: renderedLinks,
       scripts: [...document.scripts].map((script) => ({
@@ -5318,11 +5334,12 @@ function consolidatedPageEvidenceFromSnapshot(
     artifactId: "storage_snapshot_pre_consent",
     capturedAtMs: elapsed(input.scanStartedAtMs),
     consentStateAtTime: "pre_consent",
-    url: input.normalizedUrl,
+    url: snapshot.pageUrl,
+    captureContext: storageCaptureContextSchema.safeParse({ contractVersion: "storage-capture-context.v1", origin: snapshot.storageOrigin, localStorageReadComplete: snapshot.localStorageReadComplete, sessionStorageReadComplete: snapshot.sessionStorageReadComplete }).data,
     localStorage: snapshot.localStorageEntries,
     sessionStorage: snapshot.sessionStorageEntries,
-    localStorageKeys: Object.keys(snapshot.localStorageEntries),
-    sessionStorageKeys: Object.keys(snapshot.sessionStorageEntries),
+    localStorageKeys: snapshot.localStorageKeys,
+    sessionStorageKeys: snapshot.sessionStorageKeys,
     valuesRedacted: true,
     evidenceRefs: [],
   };
@@ -5435,32 +5452,33 @@ async function captureStorageSnapshot(
   url: string,
 ): Promise<StorageSnapshot> {
   const storage = await page.evaluate(() => {
-    const localStorageEntries: Record<string, string> = {};
-    const sessionStorageEntries: Record<string, string> = {};
+    const localStorageEntries: Record<string, string> = Object.create(null);
+    const sessionStorageEntries: Record<string, string> = Object.create(null);
     for (let index = 0; index < window.localStorage.length; index += 1) {
       const key = window.localStorage.key(index);
-      if (key) {
+      if (key !== null) {
         localStorageEntries[key] = "[redacted]";
       }
     }
     for (let index = 0; index < window.sessionStorage.length; index += 1) {
       const key = window.sessionStorage.key(index);
-      if (key) {
+      if (key !== null) {
         sessionStorageEntries[key] = "[redacted]";
       }
     }
-    return { localStorageEntries, sessionStorageEntries };
-  }).catch(() => ({ localStorageEntries: {}, sessionStorageEntries: {} }));
+    return { localStorageEntries, sessionStorageEntries, localStorageKeys: Object.keys(localStorageEntries), sessionStorageKeys: Object.keys(sessionStorageEntries), pageUrl: window.location.href, storageOrigin: window.location.origin };
+  }).catch(() => ({ localStorageEntries: {}, sessionStorageEntries: {}, localStorageKeys: [] as string[], sessionStorageKeys: [] as string[], pageUrl: url, storageOrigin: null }));
 
   return {
     artifactId: "storage_snapshot_pre_consent",
     capturedAtMs: elapsed(scanStartedAtMs),
     consentStateAtTime: "pre_consent",
-    url,
+    url: storage.pageUrl,
+    captureContext: storageCaptureContextSchema.safeParse({ contractVersion: "storage-capture-context.v1", origin: storage.storageOrigin, localStorageReadComplete: true, sessionStorageReadComplete: true }).data,
     localStorage: storage.localStorageEntries,
     sessionStorage: storage.sessionStorageEntries,
-    localStorageKeys: Object.keys(storage.localStorageEntries),
-    sessionStorageKeys: Object.keys(storage.sessionStorageEntries),
+    localStorageKeys: storage.localStorageKeys,
+    sessionStorageKeys: storage.sessionStorageKeys,
     valuesRedacted: true,
     evidenceRefs: [],
   };

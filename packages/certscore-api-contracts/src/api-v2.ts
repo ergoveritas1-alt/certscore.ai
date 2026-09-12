@@ -536,6 +536,7 @@ export const apiV2PreConsentCookiesTrackersRowSchema = z
       initiatorChain: z.array(z.string()),
     }).strict()).optional(),
     requestDetails: z.array(z.object({
+      resourceRole: z.literal("video_ad_sdk").optional(),
       cookieNamesSent: z.array(z.string().max(256)).max(24),
       essentiality: z.enum(["non_essential", "unknown"]),
       hostname: z.string().max(253).nullable(),
@@ -552,6 +553,11 @@ export const apiV2PreConsentCookiesTrackersRowSchema = z
     purposes: z.array(z.string()).optional(),
     domains: z.array(z.string()).optional(),
     products: z.array(z.string()).optional(),
+    storageDetails: z.object({
+      storageType: z.enum(["localStorage", "sessionStorage"]), key: z.string().max(4096), origin: z.string().url().nullable(),
+      identityBasis: z.enum(["retained_scan_type_key", "origin_type_key"]), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+      evidenceRefs: z.array(z.string()).max(8),
+    }).strict().optional(),
     dataFlows: z.array(z.object({
       endpoint: z.string(),
       idSync: z.boolean(),
@@ -595,6 +601,7 @@ export const apiV2PreConsentCookiesTrackersSummarySchema = z
       review: z.number().int().min(0),
     }).strict().optional(),
     cookieCount: z.number().int().min(0),
+    storageCount: z.number().int().min(0).optional(),
     requestCount: z.number().int().min(0),
     vendorCount: z.number().int().min(0).default(0),
     domainCount: z.number().int().min(0).default(0)

@@ -10,7 +10,7 @@ import {
   SHADOW_REPORT,
   SHADOW_REPORT_SCAN_ID,
 } from "../../../../components/scans/report-lab/shadow-report-data";
-import { buildTimelineReportModel } from "../../../../components/scans/report-lab/timeline-report-model";
+import { buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
 import { absoluteUrl } from "../../../../lib/seo";
 import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
 import {
@@ -109,7 +109,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const projectionLoadMs = Math.round(performance.now() - projectionStartedAt);
   if (readyReport) {
     const modelStartedAt = performance.now();
-    const report = buildTimelineReportModel(readyReport);
+    const report = await buildVerifiedTimelineReportModel(readyReport);
     console.info("[public-scan-report] ready projection rendered", {
       modelBuildMs: Math.round(performance.now() - modelStartedAt),
       projectionLoadMs,
@@ -149,7 +149,7 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     return pendingReport(statusProjection, true);
   }
 
-  const report = buildTimelineReportModel(persistedReportProjection);
+  const report = await buildVerifiedTimelineReportModel(persistedReportProjection);
   console.info("[public-scan-report] fallback projection rendered", {
     projectionLoadMs,
     routeElapsedMs: Math.round(performance.now() - routeStartedAt),

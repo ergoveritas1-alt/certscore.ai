@@ -590,7 +590,18 @@ export const cookieSnapshotSchema = z.object({
   evidenceRefs: z.array(evidenceRefSchema).default([]),
 });
 
+export const storageCaptureContextSchema = z.object({
+  contractVersion: z.literal("storage-capture-context.v1"),
+  origin: z.string().refine(value => {
+    try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && url.origin === value; }
+    catch { return false; }
+  }),
+  localStorageReadComplete: z.boolean(),
+  sessionStorageReadComplete: z.boolean(),
+});
+
 export const storageSnapshotSchema = z.object({
+  captureContext: storageCaptureContextSchema.optional(),
   artifactId: z.string(),
   capturedAtMs: z.number().int().nonnegative(),
   consentStateAtTime: consentStateSchema,

@@ -230,3 +230,60 @@ test(
     }
   },
 );
+
+test("storage capture binds exact keys to the redirected document origin in one browser read", { timeout: 45000 }, async () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/redirect") {
+      const address = server.address(); assert.ok(address && typeof address !== "string");
+      res.writeHead(302, { Location: `http://localhost:${address.port}/final` }); res.end(); return;
+    }
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<main>Storage identity fixture</main><script>localStorage.setItem('', 'secret');localStorage.setItem(' key ', 'secret');localStorage.setItem('__proto__', 'secret');sessionStorage.setItem('', 'secret');</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const outDir = await mkdtemp(join(tmpdir(), "storage-origin-"));
+  try {
+    const requestedUrl = `http://127.0.0.1:${address.port}/redirect`;
+    const result = await runInventoryOnly({ url: requestedUrl, hosts: ["localhost", "127.0.0.1"], region: "eu-west-1", profile: "tiny",
+      configurationHash: inventoryHash(inventoryConfiguration("eu-west-1", "tiny")), outDir, signal: AbortSignal.timeout(35000) });
+    const snapshot = result.evidence.storageSnapshots[0]; assert.ok(snapshot);
+    assert.equal(snapshot.captureContext?.origin, `http://localhost:${address.port}`);
+    assert.equal(snapshot.url, `http://localhost:${address.port}/final`);
+    assert.deepEqual(snapshot.localStorageKeys.sort(), ["", " key ", "__proto__"].sort());
+    assert.deepEqual(snapshot.sessionStorageKeys, [""]);
+    assert.ok(!JSON.stringify(snapshot).includes("secret"));
+    const input = { ...result, parentScanId: randomUUID(), pageJobId: randomUUID(), attemptId: randomUUID(),
+      configurationHash: inventoryHash(inventoryConfiguration("eu-west-1", "tiny")), requestedUrl,
+      profile: "inventory_only" as const, sourceHash: inventoryHash(result.evidence), status: "completed" as const, limitations: [] };
+    const rows = projectFullSiteInventory(input).occurrences.filter(row => row.kind === "storage");
+    assert.equal(rows.length, 4);
+    assert.ok(rows.every(row => row.details.identityBasis === "origin_type_key"));
+    assert.equal(rows.find(row => row.resourceType === "localStorage" && row.details.key === "")?.identity, inventoryHash([snapshot.captureContext!.origin, "localStorage", ""]));
+    const legacy = projectFullSiteInventory({ ...input, evidence: { ...result.evidence, storageSnapshots: [{ ...snapshot, captureContext: undefined, url: requestedUrl }] } });
+    assert.ok(legacy.occurrences.filter(row => row.kind === "storage").every(row => row.domain === null && row.details.origin === null));
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); await rm(outDir, { recursive: true, force: true }); }
+});
+
+test("form methods retain browser defaults without assuming methods for non-native forms", { timeout: 45000 }, async () => {
+  const server = createServer((_req, res) => {
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<main>Public form configuration fixture</main>
+      <form aria-label="Default method"><input aria-label="Search"></form>
+      <form method="invalid" aria-label="Invalid method"><input aria-label="Search"></form>
+      <form method="POST" aria-label="Post method"><input aria-label="Search"></form>
+      <form method="dialog" aria-label="Dialog method"><input aria-label="Search"></form>
+      <form method="post" aria-label="Shadowed method"><input name="method" aria-label="Search"></form>
+      <div role="form" aria-label="Custom form"><input aria-label="Search"></div>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const outDir = await mkdtemp(join(tmpdir(), "form-method-"));
+  try {
+    const result = await runInventoryOnly({ url: `http://127.0.0.1:${address.port}/`, hosts: ["127.0.0.1"], region: "eu-west-1", profile: "tiny",
+      configurationHash: inventoryHash(inventoryConfiguration("eu-west-1", "tiny")), outDir, signal: AbortSignal.timeout(35000) });
+    const forms = result.evidence.collectionSurfaceInventory?.forms ?? [];
+    assert.equal(forms.length, 6);
+    assert.deepEqual(forms.map(form => form.method), ["get", "get", "post", "dialog", "post", "unknown"]);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); await rm(outDir, { recursive: true, force: true }); }
+});

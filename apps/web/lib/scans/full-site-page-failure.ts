@@ -1,5 +1,5 @@
 /** Describe persisted capture outcomes without changing their eligibility or score. */
-export function describeFullSitePageFailure(page: { status: string; httpStatus?: number | null }) {
+export function describeFullSitePageFailure(page: { status: string; httpStatus?: number | null; limitation?: string | null }) {
   if (page.status === "partial") {
     const httpStatus = page.httpStatus;
     return typeof httpStatus === "number" && Number.isInteger(httpStatus) && httpStatus >= 400 && httpStatus <= 599
@@ -12,5 +12,11 @@ export function describeFullSitePageFailure(page: { status: string; httpStatus?:
     return `HTTP ${httpStatus}`;
   if (typeof httpStatus === "number" && Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus < 400)
     return `Capture could not be assessed (HTTP ${httpStatus})`;
+  if (page.limitation === "worker_lease_expired")
+    return "Worker result not received before deadline; capture unavailable";
+  if (page.limitation === "dispatch_admission_timeout")
+    return "Worker did not start before deadline; capture unavailable";
+  if (page.limitation === "collection_failure")
+    return "Capture collection failed; HTTP status not retained";
   return "Capture unavailable; HTTP status not retained";
 }

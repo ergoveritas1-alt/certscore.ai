@@ -2,14 +2,15 @@
 import { ScanLiveValue } from "./scan-live-value";
 
 export type InventoryAssessmentCounts = { nonEssential: number; review: number; contextual: number; essential: number };
-export type ReportInventoryMetric = { label: string; value: number | null | undefined; counts?: InventoryAssessmentCounts; note?: string };
+export type ReportInventoryMetric = { label: string; value: number | null | undefined; lowerBound?: boolean; counts?: InventoryAssessmentCounts; note?: string };
 
 /** Shared presentation only: counts and classifications are supplied by canonical projections. */
 export function ReportInventorySummary({ metrics, updating = false }: { metrics: ReportInventoryMetric[]; updating?: boolean }) {
   return <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-zinc-200 bg-zinc-200 sm:grid-cols-3" aria-label="Inventory summary">
     {metrics.map(metric => <div key={metric.label} className="flex min-w-0 flex-col bg-white px-3 py-3">
       <span className="text-xs font-medium text-slate-500">{metric.label}</span>
-      <strong className="my-1 block text-2xl font-semibold tracking-tight text-slate-950 tabular-nums"><ScanLiveValue value={metric.value} active={updating} /></strong>
+      <div className="mt-auto pt-1">
+      <strong className="my-1 block text-2xl font-semibold tracking-tight text-slate-950 tabular-nums"><ScanLiveValue value={metric.lowerBound && metric.value != null ? `≥${metric.value.toLocaleString()}` : metric.value} active={updating} /></strong>
       <dl className="space-y-0.5 text-xs leading-4 tabular-nums" aria-label="Inventory classifications">
         {([
           ["Non-essential", "nonEssential", "bg-rose-500"], ["Needs review", "review", "bg-amber-500"],
@@ -20,6 +21,7 @@ export function ReportInventorySummary({ metrics, updating = false }: { metrics:
         </div>)}
       </dl>
       {metric.note ? <p className="mt-1 text-[10px] text-amber-800">{metric.note}</p> : null}
+      </div>
     </div>)}
   </div>;
 }

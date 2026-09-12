@@ -444,7 +444,7 @@ export function DomainScanForm({
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
   const [showExtensionInstructions, setShowExtensionInstructions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [freshRescan, setFreshRescan] = useState(false);
+  const [freshRescan, setFreshRescan] = useState(true);
   const [hasRecentReusableScan, setHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [localV2RunViaLambda, setLocalV2RunViaLambda] = useState(true);
@@ -613,12 +613,12 @@ export function DomainScanForm({
   useEffect(() => {
     if (mode !== "full" || scanFrom === "local_extension" || !effectiveSubmitDomain) {
       setHasRecentReusableScan(false);
-      setFreshRescan(false);
+      setFreshRescan(true);
       return;
     }
 
     setHasRecentReusableScan(false);
-    setFreshRescan(false);
+    setFreshRescan(true);
 
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
@@ -639,7 +639,7 @@ export function DomainScanForm({
         .then((nextHasRecentReusableScan) => {
           setHasRecentReusableScan(nextHasRecentReusableScan);
           if (!nextHasRecentReusableScan) {
-            setFreshRescan(false);
+            setFreshRescan(true);
           }
         })
         .catch((error) => {
@@ -647,7 +647,7 @@ export function DomainScanForm({
             return;
           }
           setHasRecentReusableScan(false);
-          setFreshRescan(false);
+          setFreshRescan(true);
         });
     }, RECENT_SCAN_AVAILABILITY_CHECK_DELAY_MS);
 

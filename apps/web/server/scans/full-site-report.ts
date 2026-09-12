@@ -448,7 +448,7 @@ export async function loadFullSiteReport(
     },
     pageChoices: pageRows
       .filter((p) => !["excluded", "cancelled"].includes(p.status))
-      .map((p) => { const observation = pages.find(page => page.id === p.id)?.observation; return { id: p.id, url: p.url, source: p.source, status: p.status, httpStatus: p.httpStatus, graphSource: observation?.runtimeGraph && observation.configurationHash === state.configurationHash ? { href: `/api/scans/${scanId}/full-site?graphPage=${p.id}`, scanId: p.id, sha256: observation.sourceHash } : undefined }; }),
+      .map((p) => { const observation = pages.find(page => page.id === p.id)?.observation; return { id: p.id, url: p.url, source: p.source, status: p.status, limitation: p.limitation, httpStatus: p.httpStatus, graphSource: observation?.runtimeGraph && observation.configurationHash === state.configurationHash ? { href: `/api/scans/${scanId}/full-site?graphPage=${p.id}`, scanId: p.id, sha256: observation.sourceHash } : undefined }; }),
     facets: {
       purposes: [
         ...new Set(

@@ -13,6 +13,7 @@ import {
 } from "@certscore/scan-core";
 import {
   crawlDisplayUrl,
+  FULL_SITE_ARTIFACT_LIMITS,
   FULL_SITE_CONDITION,
   FULL_SITE_CONTRACT,
   type RobotsPolicy,
@@ -236,8 +237,8 @@ export async function runFullSitePage(event: unknown, options: { s3Client?: S3Cl
   const prefix = `${grant.artifactPrefix}/${grant.pageId}/${grant.attemptId}`;
   const body = JSON.stringify(packet);
   if (
-    Buffer.byteLength(body) > 16 * 1024 * 1024 ||
-    Buffer.byteLength(evidenceBody) > 64 * 1024 * 1024
+    Buffer.byteLength(body) > FULL_SITE_ARTIFACT_LIMITS.inventory ||
+    Buffer.byteLength(evidenceBody) > FULL_SITE_ARTIFACT_LIMITS.evidence
   )
     throw new Error("Inventory artifact exceeds retained byte limit.");
   await Promise.all(

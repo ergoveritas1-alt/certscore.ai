@@ -8,6 +8,7 @@ import {
   readFullSiteArtifact,
 } from "@website-signal-risk-scanner/db";
 import {
+  FULL_SITE_ARTIFACT_LIMITS,
   crawlObservationSchema,
   compactCrawlObservation,
 } from "@website-signal-risk-scanner/shared";
@@ -28,13 +29,13 @@ const schema = z
       .number()
       .int()
       .positive()
-      .max(16 * 1024 * 1024)
+      .max(FULL_SITE_ARTIFACT_LIMITS.inventory)
       .optional(),
     evidenceSizeBytes: z
       .number()
       .int()
       .positive()
-      .max(64 * 1024 * 1024)
+      .max(FULL_SITE_ARTIFACT_LIMITS.evidence)
       .optional(),
   })
   .strict();
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
       region: row.region,
       sha256: data.sha256,
       sizeBytes: data.sizeBytes,
+      maxBytes: FULL_SITE_ARTIFACT_LIMITS.inventory,
     }),
   );
   if (
@@ -121,7 +123,7 @@ export async function POST(request: Request) {
     region: row.region,
     sha256: packet.sourceHash,
     sizeBytes: data.evidenceSizeBytes,
-    maxBytes: 64 * 1024 * 1024,
+    maxBytes: FULL_SITE_ARTIFACT_LIMITS.evidence,
   });
   if (packet.collectionSurfaces) {
     const raw = rawEvidence as { collectionSurfaceInventory?: unknown; collectionSurfaceSnapshots?: unknown[] };
@@ -164,6 +166,7 @@ export async function POST(request: Request) {
       key: `${prefix}/inventory.json`,
       sha256: data.sha256,
       sizeBytes: data.sizeBytes,
+      maxBytes: FULL_SITE_ARTIFACT_LIMITS.inventory,
       evidenceKey: `${prefix}/evidence.json`,
       sourceHash: packet.sourceHash,
     },

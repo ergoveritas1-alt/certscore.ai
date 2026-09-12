@@ -7,11 +7,11 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import { readProjectedPolicyTextArtifact } from "./local-v2-dag-report";
 import type { ReviewedPolicy } from "../../lib/scans/full-site-resource-context";
 const cache = new Map<string, Promise<ReviewedPolicy[]>>();
-export async function loadFullSiteReviewedPolicies(scanId: string) {
+export async function loadScanReviewedPolicies(scanId: string) {
   const { rows: [snapshot] } = await query<Record<string, unknown>>("select report_projection_payload,report_projection_payload_sha256,report_projection_payload_size_bytes,report_projection_status,report_projection_version,report_projection_computed_at from scan_snapshots where scan_id=$1", [scanId]);
   if (!snapshot) return [];
   const home = readPersistedScanReportProjection({ scan: { id: scanId, status: "completed" } as ScanDetailResponse["scan"], snapshot });
-  const summary = home?.runtimeArtifacts?.policy_disclosure_summary as Record<string, unknown> | undefined;
+  const summary = (home?.runtimeArtifacts?.policy_disclosure_summary ?? home?.runtimeArtifacts?.policyDisclosureSummary) as Record<string, unknown> | undefined;
   const parsed = policyTextEvidenceProjectionSchema.safeParse(summary?.policyTextEvidenceProjection ?? summary?.policy_text_evidence_projection);
   if (!parsed.success || parsed.data.scanId !== scanId || parsed.data.sourceBundle.verificationStatus !== "verified") return [];
   const key = `${scanId}:${snapshot.report_projection_payload_sha256}`;
@@ -35,3 +35,6 @@ export async function loadFullSiteReviewedPolicies(scanId: string) {
   cache.set(key, task); if (cache.size > 16) cache.delete(cache.keys().next().value!);
   return task;
 }
+
+// Compatibility alias: both report scopes use the same verified artifact loader.
+export const loadFullSiteReviewedPolicies = loadScanReviewedPolicies;

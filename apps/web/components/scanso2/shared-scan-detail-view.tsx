@@ -529,7 +529,8 @@ function InventoryConfidenceCell({ confidence }: { confidence: InventoryConfiden
   );
 }
 
-function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean; type: "cookie" | "tracker" | "embed" }) {
+function InventoryTypeIcon({ emphasized = false, type }: { emphasized?: boolean; type: "cookie" | "tracker" | "embed" | "storage" }) {
+  if (type === "storage") return <span aria-label="Browser storage" title="Browser storage" className="text-sky-700">▤</span>;
   if (type === "embed") return <span aria-label="Embed or iframe" title="Embed or iframe" className="inline-flex h-5 w-5 items-center justify-center text-violet-700">▣</span>;
   if (type === "cookie") {
     return (
@@ -853,7 +854,7 @@ function buildRuntimeInventoryCopyPayload(rows: InventoryGroupRow[]) {
   const copyRows = [
     ["Type", "Vendor", "Name", "Purpose", "Evidence", "First seen", "Requests", "Domain", "Destination", "Confidence", "Relationship", "Category", "Priority"],
     ...rows.map((row) => [
-      row.type === "embed" ? "Embed / iframe" : row.type === "cookie" ? "Cookie" : "Tracker",
+      row.type === "embed" ? "Embedded frame" : row.type === "storage" ? "Browser storage" : row.type === "cookie" ? "Cookie" : "Tracker",
       row.vendor,
       getInventoryObservationNames(row).join(", ") || "—",
       getInventoryPurposeLabel(row),
@@ -1049,7 +1050,7 @@ function InventoryEvidenceSegmentation({ rows }: { rows: InventoryGroupRow[] }) 
 function inventoryResourceProps(row: InventoryGroupRow) {
   return {
     identity: { cookieRefs: row.cookieDetails.flatMap(cookie => cookie.evidenceRefs ?? []), products: row.rawProducts, requests: (row.requestDetails ?? []).map(request => ({ hostname: request.hostname, path: request.path, method: request.method })) },
-    facts: { vendor: row.vendor, names: row.cookieNames, products: row.rawProducts, domains: row.domains, purpose: row.purpose, classification: classifyInventoryEvidence(row), firstSeenMs: row.firstSeenMs, timingEvidence: row.timingEvidence, requestCount: row.requestCount, confidence: row.confidence, priority: row.priority, siteRelationship: row.siteRelationship, entityRelationship: row.entityRelationship, cookieDetails: row.cookieDetails, requestDetails: row.requestDetails, dataFlows: row.dataFlows },
+    facts: { storageDetails: row.storageDetails, vendor: row.vendor, names: row.cookieNames, products: row.rawProducts, domains: row.domains, purpose: row.purpose, classification: classifyInventoryEvidence(row), firstSeenMs: row.firstSeenMs, timingEvidence: row.timingEvidence, requestCount: row.requestCount, confidence: row.confidence, priority: row.priority, siteRelationship: row.siteRelationship, entityRelationship: row.entityRelationship, cookieDetails: row.cookieDetails, requestDetails: row.requestDetails, dataFlows: row.dataFlows },
   };
 }
 
@@ -1114,7 +1115,7 @@ export function RuntimeInventoryTable({
                   <div className="min-w-0 text-right text-slate-700"><InventoryNameCell row={row} /></div>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-500">
-                  <span>{row.type === "embed" ? "Embed / iframe" : row.type === "cookie" ? "Cookie" : "Tracker"}</span>
+                  <span>{row.type === "embed" ? "Embedded frame" : row.type === "storage" ? "Browser storage" : row.type === "cookie" ? "Cookie" : "Tracker"}</span>
                   <span className="text-right"><InventoryEvidenceCell row={row} /></span>
                   <span>{formatInventoryTiming(row)}</span>
                   <span className="text-right">Req. {row.requestCount ?? "—"}</span>

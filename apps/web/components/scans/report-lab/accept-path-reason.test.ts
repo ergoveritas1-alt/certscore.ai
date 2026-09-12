@@ -10,7 +10,7 @@ test("unverified Accept explains bounded after-click facts without claiming regi
     requestIds: ["r1", "r2"] };
   const copy = acceptPathIncompleteReason({ afterActionCapture: capture });
   assert.match(copy, /During 3s.*2 requests.*1 main-document storage write/);
-  assert.match(copy, /bst_dsgvo_cookie/);
+  assert.doesNotMatch(copy, /bst_dsgvo_cookie/);
   assert.doesNotMatch(copy, /could not be verified|not proof|granted consent/);
   assert.match(copy, /tracking classifications are shown in the findings/);
   assert.equal(acceptAfterClickSummary({}), "");

@@ -5,7 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { PendingScanStartedEvent } from "../../../../components/analytics/data-layer-events";
 import { PendingScanDetailView } from "../../../../components/scans/pending-scan-detail-view";
 import { ShadowScanReport } from "../../../../components/scans/report-lab/shadow-scan-report";
-import { buildTimelineReportModel } from "../../../../components/scans/report-lab/timeline-report-model";
+import { buildVerifiedTimelineReportModel } from "../../../../server/scans/verified-timeline-report-model";
 import { ScanProgressReportVisible } from "../../../../components/scans/scan-progress-report-visible";
 import { isPlatformAdminEmail } from "../../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../../server/auth";
@@ -110,7 +110,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
 
   let report;
   try {
-    report = buildTimelineReportModel(persistedReportProjection);
+    report = await buildVerifiedTimelineReportModel(persistedReportProjection);
   } catch {
     redirect(legacyScanHref(scanId));
   }

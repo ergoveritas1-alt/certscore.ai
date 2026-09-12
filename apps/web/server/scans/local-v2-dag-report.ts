@@ -1,3 +1,4 @@
+import { projectOriginBoundBrowserStorage } from "./pre-consent-browser-storage-projection";
 import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
 import { projectSiteMetadata } from "./site-metadata-projection";
 import "server-only";
@@ -5887,6 +5888,9 @@ function buildMaterializedLocalV2Detail(
     sessionReplayEvidenceSummary,
     session_replay_evidence_summary: sessionReplayEvidenceSummary,
     storageSummary: {
+      originBoundProjection: options.policyTextEvidenceContext?.sourceBundle.verificationStatus === "verified" && options.policyTextEvidenceContext.sourceBundle.sha256
+        ? projectOriginBoundBrowserStorage({ snapshots: bundle.storageSnapshots ?? [], scanId: scanRecord.scan.id,
+            sourceHash: options.policyTextEvidenceContext.sourceBundle.sha256 }) : undefined,
       metricBasis: "unique_cookie_domain_path_name_identity",
       cookiesBeforeConsentCount,
       cookiesSeenCount: cookieIdentityCount,

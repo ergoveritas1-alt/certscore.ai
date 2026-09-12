@@ -157,9 +157,11 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
     presentationStatus: presentation.status,
     presentationMessage: presentation.message,
     summary: {
+      inventoryMetrics: projection.inventorySummary,
       totalRows: projection.ungroupedRows.length,
       includedRows: retainedRows.length,
       omittedRows: Math.max(0, projection.ungroupedRows.length - retainedRows.length),
+      storageRows: projection.storageRows.length,
       cookieRows: projection.ungroupedRows.filter((row) => row.type === "cookie").length,
       trackerRows: projection.ungroupedRows.filter((row) => row.type === "tracker").length,
       groupedEntities: projection.groupedRows.length,
@@ -174,6 +176,8 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
       evidenceClassification: classifyInventoryEvidence(row),
       firstSeenMs: row.firstSeenMs,
       preConsent: row.preConsent,
+      storageDetails: row.storageDetails,
+      resourceNames: row.type === "cookie" ? row.cookieNames : row.rawProducts,
       cookieNames: row.cookieNames.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
       domains: row.domains.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
       confidence: row.confidence,
@@ -191,6 +195,7 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
       attributionSignatures: row.attributionSignatures.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
       regulatoryRelevance: row.regulatoryRelevance.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
       requestDetails: (row.requestDetails ?? []).slice(0, 20).map((request) => ({
+        ...(request.resourceRole ? { resourceRole: request.resourceRole } : {}),
         method: request.method,
         hostname: request.hostname,
         path: request.path,

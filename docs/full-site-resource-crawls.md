@@ -622,3 +622,115 @@ a five-second successful acknowledgment, rejected acceptance, and a shorter
 remaining invocation deadline. Successful finish acknowledgments also emit bounded
 page/attempt and elapsed-time diagnostics. The combined incremental cost remains
 below the current-volume $0.25/month estimate above.
+
+### Shared inventory reconciliation (September 12, 2026)
+
+Homepage and site inventory summaries distinguish cookies/browser storage,
+network request events, and actual embedded frames. An embedded SDK loaded by
+script remains a network resource; it is not an additional frame. An existing
+embedded-service finding may cite that SDK without implying that an iframe was
+observed. The inventory card therefore uses `Embedded frames`. Resource mixes
+count retained resource identities, whereas network summary totals count request
+events; repeated requests can make those totals differ.
+
+The homepage shared inventory consumes browser storage from the persisted typed
+`preConsentBrowserStorageProjection`, bound to the scan ID. Its rows feed report
+views, service/resource grouping, the canonical report export, and the v2
+cookies/trackers API (whose kind enum already supports `storage`). API
+`storageCount` is separate from `cookieCount`; `storageDetails` preserves storage
+type, key, evidence references, source hash, and identity basis. API request totals
+prefer the validated retained event total rather than a bounded vendor sample.
+
+Historical storage projection v1 retains type/key names without origins. These
+are deduplicated within scan and storage type, never merged with cookies or
+across local/session storage, and carry `origin: null` and
+`identityBasis: retained_scan_type_key`. They do not claim exact cross-origin
+identity. Missing/malformed/mismatched projections are not reconstructed from
+loose runtime labels. Inventory classification remains Review: snapshot presence
+does not establish a write, tracking, necessity, or a new finding. Full-site
+observations that already retain exact origin/type/key identity continue to use
+that stronger identity without downgrading it to historical v1 scope.
+
+These changes add no browser invocation, model call, persistence, scoring effect,
+or recurring paid-service cost. All concern and finding derivation remains in
+the canonical assessment and concern-policy pipeline.
+
+### Origin-bound storage capture and SDK roles
+
+New runtime snapshots retain `storage-capture-context.v1`: actual document origin
+and per-storage-type read completion from the same browser evaluation that reads
+the keys. The retained key arrays are captured before browser serialization, so
+empty, whitespace and special object-property keys remain exact. Values stay
+redacted. A requested URL (including a URL that redirects) is never origin proof.
+
+At the verified bundle boundary, WC01 builds
+`certscore.pre-consent-browser-storage-projection.v2`, binding origin/type/exact
+key, observation time and retained snapshot reference to the original bundle
+SHA-256. Single-page inventory, API and export consume the persisted projection;
+site inventory uses the same origin/type/key identity from verified snapshots.
+Failed reads and bounded truncation retain explicit limitations. Historical v1
+packets remain v1. Historical snapshots without same-document capture context
+cannot be upgraded from their URL or a later document URL; a fresh capture is
+required. Existing stored reports are not rewritten on read.
+
+Resource role is independent of resource type and purpose. The canonical vendor
+registry labels a matched IMA SDK endpoint `video_ad_sdk`; hostname-only or other
+endpoints do not acquire this role. It remains an observed request/script with
+advertising purpose. Shared resource tables, copied occurrence evidence, API
+request details and exports expose this role without adding another resource or
+changing findings, score, or actual embedded-frame counts. Frame relationships
+remain dependent on retained graph ancestry; SDK presence alone creates none.
+
+Estimated incremental cost: below $1/month at 100,000 scans and 30-day retention
+for bounded origin/provenance metadata; no added scan, browser lane, model call,
+retry or timeout. Local Chromium fixtures incur no paid-service usage.
+
+### Shared policy disclosure lookup
+
+Authenticated single-page and public shared reports now use the same verified
+retained-policy loader as site reports. The server adapter passes reviewed
+policy text into shared resource/service construction; only excerpts, match
+scope, URLs, completeness and evidence hashes enter the rendered model.
+A mention is a literal canonical service/vendor/entity lookup, not a disclosure
+adequacy finding. An unmatched service becomes `not_found` only with complete
+verified document coverage; missing, partial or unverifiable text stays unknown.
+The existing source-bundle binding, artifact size/hash checks, text checksum,
+ownership filtering and bounded cache remain shared. No findings or score effects
+are added. Estimated extra retained-artifact reads: below $1/month at 100,000
+report loads; no new scanner or model invocation.
+
+Form method capture reads the native HTMLFormElement method getter in the same
+DOM snapshot as the fields. Missing or invalid native method attributes resolve
+to GET; POST and dialog remain explicit, including forms with a control named
+`method`. Non-native role forms keep unknown. This is passive form configuration,
+not observed submission behavior; JavaScript handlers and submitter overrides
+are not exercised. Stored historical unknown values are not rewritten on read.
+No additional browser work, retention, model calls or infrastructure cost.
+
+### Local capture artifact transport parity (September 12, 2026)
+
+CNN crawl `a8e5d5be-c4d4-449b-8c10-be6cb7fbb562` lost Audio,
+Business, and Election captures at the development bridge's combined 2 MiB
+response guard. Worker logs record `Local inventory response exceeds limit`;
+each page subsequently exhausted two attempts as `worker_lease_expired`. This
+was a transport failure, not evidence of an HTTP refusal or missing content.
+
+`FULL_SITE_ARTIFACT_LIMITS` now owns the existing per-artifact bounds (16 MiB
+inventory, 64 MiB evidence) for the collector, local bridge, schemas, and
+verified ingestion. The local bridge retains original bytes and permits only
+one inventory and one evidence artifact under the admitted attempt prefix.
+Complete and partial captures both traverse the existing hash/identity-verified
+publication path. HTTP 403/challenge exclusions, partial-capture scoring rules,
+worker deadlines, retry counts, and single publication semantics are unchanged.
+This does not make a failed browser capture complete or invent missing stages.
+
+Report page choices now retain the persisted limitation code. Shared failure
+copy distinguishes an unreturned worker result from an HTTP response; historical
+expired leases are not retroactively relabeled as transport-size failures.
+Historical missing artifacts remain unavailable. A fresh capture is required
+to replace their coverage; existing completed reports are not rewritten.
+
+Cost: $0/month incremental production infrastructure or API usage. Development
+runs can retain up to the existing 80 MiB combined per-attempt bounds on local
+storage instead of discarding results above 2 MiB. No additional visit, retry,
+model call, retention period, or wait is introduced.

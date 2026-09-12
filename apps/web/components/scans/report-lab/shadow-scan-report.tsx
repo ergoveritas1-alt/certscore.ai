@@ -1,3 +1,5 @@
+import { ReportCoverageTiming } from "../report-coverage-timing";
+import { SinglePageResourceInventory } from "../single-page-resource-inventory";
 import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
@@ -1274,17 +1276,22 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
       <div className="mt-1 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-x-4 lg:gap-x-6 sm:[&>div:first-child]:contents sm:[&>div:first-child>header]:contents sm:[&>div:first-child>header>div:last-child]:col-span-full">
         <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url} createdAt={report.scan.createdAt} visualEvidenceHref={report.scan.visualEvidenceHref}
           region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned from {report.scan.origin}</span>}
-          timing={<span>Observation window · {report.scan.duration}</span>} /></div>
+          timing={<ReportCoverageTiming duration={report.scan.duration} technology={describeSiteTechnology(report.siteMetadata?.observation)}
+            groups={[
+              { title: "Coverage", rows: [["Scan scope", "Single page"], ["Pages scanned", 1], ["Scan region", report.scan.origin]] },
+              { title: "Timing", rows: [["Observation window", report.scan.duration]] },
+            ]}
+            started={report.scan.startedAt ?? "Not available"} completed={report.scan.completedAt ?? "Not available"} />} /></div>
         <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
       </div>
     </header>
     <FullSiteExecutiveSummary score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1} statusLabel="Completed"
-      actions={<ShadowReportShareMenu reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
+      actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview report={report} />} homepageVerdict={report.verdict}
-      inventorySummary={<ReportInventorySummary metrics={report.inventorySummary ?? [{ label: "Cookies & browser storage", value: null }, { label: "Network requests", value: null }, { label: "Embedded content", value: null }]} />} />
+      inventorySummary={<ReportInventorySummary metrics={report.inventorySummary ?? [{ label: "Cookies & storage", value: null }, { label: "Network requests", value: null }, { label: "Embedded frames", value: null }]} />} />
     <SitePriorityReview findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
     <section aria-label="Page event timeline" className="my-3 border-y border-zinc-200 bg-white py-2"><h2 className="text-xl font-semibold">Page event timeline</h2><div className="mt-1"><RuntimeObservationTimeline dominant compact events={report.timeline} /></div></section>
-    <RuntimeInventoryTable report={report} heading="Resources & services" />
+    {report.resourceInventory ? <SinglePageResourceInventory inventory={report.resourceInventory} report={report}/> : <RuntimeInventoryTable report={report} heading="Resources & services" />}
     <CollectionSurfacesTable rows={report.collectionTableRows ?? []} loading={false} pagesWithoutInventory={report.collectionTableRows ? 0 : 1} />
     <EvidenceDirectory compact report={report} />
   </div>;
@@ -1798,10 +1805,13 @@ export function ShadowScanReport({
 
   const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<RuntimeObservationTimeline dominant compact events={report.timeline} />} executiveSnapshot={<SignalSnapshot siteOverview report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
+  const reportDisclaimer = <p className="mx-auto mt-6 px-5 pb-6 text-center text-xs text-zinc-500">CertScore.ai can make mistakes. Verify all findings.</p>;
+
   if (mode === "authenticated") {
     return (
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
         {reportContent}
+        {reportDisclaimer}
       </div>
     );
   }
@@ -1810,6 +1820,7 @@ export function ShadowScanReport({
     <div className="min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950">
       <SiteHeader mobilePrimaryAction="sign-in" wide />
       {reportContent}
+      {reportDisclaimer}
       <SiteFooter hideDisclaimer wide />
     </div>
   );

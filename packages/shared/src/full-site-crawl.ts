@@ -1,6 +1,12 @@
 import { networkDestinationSchema, collectionSurfaceInventorySchema, collectionSurfaceSnapshotMetadataSchema, MAX_COLLECTION_SURFACE_FORMS } from "@certscore/contracts";
 import { z } from "zod";
 
+// Shared by collection, local transport, and verified artifact ingestion.
+export const FULL_SITE_ARTIFACT_LIMITS = {
+  inventory: 16 * 1024 * 1024,
+  evidence: 64 * 1024 * 1024,
+} as const;
+
 export const FULL_SITE_CONTRACT = "certscore.full-site-inventory.v1" as const;
 export const FULL_SITE_CONDITION = "Fresh visit, no consent action." as const;
 
@@ -165,14 +171,14 @@ export const crawlObservationSchema = z
     limitations: z.array(text).max(50),
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
     runtimeGraph: z.object({
-      sourceSizeBytes: z.number().int().positive().max(64 * 1024 * 1024),
+      sourceSizeBytes: z.number().int().positive().max(FULL_SITE_ARTIFACT_LIMITS.evidence),
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
       nodeCount: z.number().int().nonnegative().max(1000),
       edgeCount: z.number().int().nonnegative().max(2000),
     }).strict().optional(),
     collectionSurfaces: z.object({
       inventory: collectionSurfaceInventorySchema,
-      sourceSizeBytes: z.number().int().positive().max(64 * 1024 * 1024).optional(),
+      sourceSizeBytes: z.number().int().positive().max(FULL_SITE_ARTIFACT_LIMITS.evidence).optional(),
       snapshots: z.array(collectionSurfaceSnapshotMetadataSchema).max(MAX_COLLECTION_SURFACE_FORMS),
     }).strict().optional(),
     occurrences: z.array(crawlOccurrenceSchema).max(30000),

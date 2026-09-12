@@ -34,6 +34,11 @@ export function buildPreConsentBrowserStorageProjection(input: {
 }): PreConsentBrowserStorageProjection {
   const artifacts = record(input.runtimeArtifacts);
   const storageSummary = record(artifacts?.storageSummary) ?? record(artifacts?.storage_summary);
+  if (storageSummary?.originBoundProjection !== undefined) {
+    const projection = preConsentBrowserStorageProjectionSchema.parse(storageSummary.originBoundProjection);
+    if (projection.scanId !== input.scanId || projection.contractVersion !== "certscore.pre-consent-browser-storage-projection.v2") throw new Error("Invalid origin-bound storage projection");
+    return projection;
+  }
   const retainedStorageSnapshotCountCandidate = finiteNumber(
     storageSummary?.retainedStorageSnapshotCount ??
     storageSummary?.retained_storage_snapshot_count
@@ -93,4 +98,46 @@ export function buildPreConsentBrowserStorageProjection(input: {
   };
 
   return preConsentBrowserStorageProjectionSchema.parse(projection);
+}
+
+/** Called only at the verified retained-bundle boundary. Legacy URLs are request
+ * URLs, not storage-origin proof; never promote them into exact identities. */
+export function projectOriginBoundBrowserStorage(input: {
+  snapshots: import("@certscore/contracts").StorageSnapshot[];
+  scanId: string;
+  sourceHash: string;
+}): PreConsentBrowserStorageProjection | undefined {
+  const snapshots = input.snapshots.map((snapshot, index) => ({ snapshot, index }))
+    .filter(({ snapshot }) => snapshot.consentStateAtTime === "pre_consent");
+  if (!snapshots.length || snapshots.some(({ snapshot }) => !snapshot.captureContext)) return undefined;
+  const entries: Array<{ origin: string; storageType: "localStorage" | "sessionStorage"; key: string; capturedAtMs: number; evidenceRefs: string[] }> = [];
+  const limitations = new Set<string>();
+  const identities = new Set<string>();
+  for (const { snapshot, index } of snapshots) {
+    const context = snapshot.captureContext!;
+    for (const storageType of ["localStorage", "sessionStorage"] as const) {
+      if (!context[`${storageType}ReadComplete`]) limitations.add(`${storageType}_read_incomplete`);
+      for (const key of snapshot[`${storageType}Keys`]) {
+        const identity = JSON.stringify([context.origin, storageType, key]);
+        if (identities.has(identity)) continue;
+        if (key.length > 4096 || entries.filter(entry => entry.storageType === storageType).length >= 100) {
+          limitations.add("storage_identity_limit_reached"); continue;
+        }
+        identities.add(identity);
+        entries.push({ origin: context.origin, storageType, key, capturedAtMs: snapshot.capturedAtMs,
+          evidenceRefs: [`CanonicalEvidenceBundle.json#storageSnapshots/${index}`] });
+      }
+    }
+  }
+  return preConsentBrowserStorageProjectionSchema.parse({
+    contractVersion: "certscore.pre-consent-browser-storage-projection.v2",
+    scanId: input.scanId, sourceHash: input.sourceHash, sourceLane: "runtime_evidence",
+    consentState: "pre_interaction", valuesRedacted: true,
+    assessmentStatus: entries.length ? "observed" : limitations.size ? "not_testable" : "not_observed",
+    entries, localStorageKeys: [...new Set(entries.filter(entry => entry.storageType === "localStorage").map(entry => entry.key))],
+    sessionStorageKeys: [...new Set(entries.filter(entry => entry.storageType === "sessionStorage").map(entry => entry.key))],
+    retainedStorageSnapshotCount: snapshots.length,
+    storageFirstObservedAtMs: Math.min(...snapshots.map(({ snapshot }) => snapshot.capturedAtMs)),
+    evidenceRefs: ["CanonicalEvidenceBundle.json#storageSnapshots"], limitationKeys: [...limitations],
+  });
 }

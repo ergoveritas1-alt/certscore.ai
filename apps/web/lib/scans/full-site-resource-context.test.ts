@@ -31,3 +31,17 @@ test('HQ enrichment uses exact provider identity and leaves policy and transfer 
  assert.equal(regional.headquarters,null);
  assert.equal(regional.transfer,null);
 });
+
+test('single-page resources and services share verified policy lookup semantics', async () => {
+ const { buildSinglePageResourceInventory } = await import('./single-page-resource-inventory');
+ const request = { ...row('https://www.google-analytics.com/g/collect'), id:'request', identity:'request', eventCount:1, firstSeenMs:10, purpose:'analytics', relationship:'third_party', confidence:'0.99', assessment:'Not assessed', evidenceRefs:[], details:{}, resourceType:'script', serviceId:null, vendor:'Google' } as CrawlOccurrence;
+ const document={url:'https://example.com/privacy',text:'We use Google Analytics to measure traffic.',sha256:'a'.repeat(64),complete:true,capturedAt:'2026-09-07'};
+ for (const [documents, status] of [[[], 'unknown'], [[document], 'mentioned'], [[{...document,text:'We explain our practices.'}], 'not_found'], [[{...document,text:'We explain our practices.',complete:false}], 'unknown']] as const) {
+   const inventory=buildSinglePageResourceInventory('scan',[],[request],[...documents]);
+   assert.equal(inventory.resources[0]!.context.policy.status,status);
+   assert.equal(inventory.services[0]!.context.policy.status,status);
+   assert.equal(inventory.resources.length,1);
+   assert.equal(inventory.resources[0]!.inventoryEvidence,'Non-essential');
+   assert.equal('text' in (inventory.resources[0]!.context.policy.reviewed[0] ?? {}),false);
+ }
+});

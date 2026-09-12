@@ -1451,6 +1451,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
                   }
                 },
                 cookieCount: { type: "integer", minimum: 0 },
+                storageCount: { type: "integer", minimum: 0, description: "Retained browser-storage type/key identities, separate from cookies." },
                 requestCount: { type: "integer", minimum: 0 }
               }
             },
@@ -1470,6 +1471,36 @@ export function buildCertScoreApiV2OpenApiDocument() {
           properties: {
             id: { type: "string" },
             kind: { type: "string", enum: ["cookie", "tracker", "request", "storage", "unknown"] },
+            requestDetails: {
+              type: "array", maxItems: 50, items: {
+                type: "object", additionalProperties: false,
+                required: ["cookieNamesSent", "essentiality", "hostname", "identifierParameterNames", "initiatorUrl", "method", "path", "responseCookieNamesSet", "responseObserved", "responseStorageAttempted", "vendor"],
+                properties: {
+                  resourceRole: { type: "string", enum: ["video_ad_sdk"], description: "Registered SDK endpoint role; independent of resource type and frame evidence." },
+                  cookieNamesSent: { type: "array", maxItems: 24, items: { type: "string", maxLength: 256 } },
+                  essentiality: { type: "string", enum: ["non_essential", "unknown"] },
+                  hostname: { type: ["string", "null"], maxLength: 253 },
+                  identifierParameterNames: { type: "array", maxItems: 24, items: { type: "string", maxLength: 256 } },
+                  initiatorUrl: { type: ["string", "null"], maxLength: 500 },
+                  method: { type: ["string", "null"], maxLength: 24 },
+                  path: { type: ["string", "null"], maxLength: 2000 },
+                  responseCookieNamesSet: { type: "array", maxItems: 24, items: { type: "string", maxLength: 256 } },
+                  responseObserved: { type: "boolean" }, responseStorageAttempted: { type: "boolean" },
+                  vendor: { type: ["string", "null"], maxLength: 160 },
+                },
+              },
+            },
+            storageDetails: {
+              type: "object", additionalProperties: false,
+              required: ["storageType", "key", "origin", "identityBasis", "sourceHash", "evidenceRefs"],
+              properties: {
+                storageType: { type: "string", enum: ["localStorage", "sessionStorage"] },
+                key: { type: "string", maxLength: 4096 }, origin: { type: ["string", "null"], format: "uri" },
+                identityBasis: { type: "string", enum: ["retained_scan_type_key", "origin_type_key"], description: "Origin/type/key identity requires verified same-document capture. Historical keys retain unknown origin." },
+                sourceHash: { type: "string", pattern: "^[a-f0-9]{64}$" },
+                evidenceRefs: { type: "array", maxItems: 8, items: { type: "string" } },
+              },
+            },
             name: { type: "string" },
             vendor: { type: ["string", "null"] },
             host: { type: ["string", "null"], description: "Host only; full URLs and query strings are not exposed." },

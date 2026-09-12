@@ -23,7 +23,7 @@ test("ScanFromSelect always submits core local v2 profile and Lambda option fiel
   assert.doesNotMatch(html, />Tiny</);
 });
 
-test("ScanFromSelect defaults Lambda on and fresh re-scan off", () => {
+test("ScanFromSelect defaults Lambda and fresh re-scan on", () => {
   const html = renderToStaticMarkup(
     createElement(ScanFromSelect, {
       includeFreshRescanOption: true,
@@ -34,7 +34,7 @@ test("ScanFromSelect defaults Lambda on and fresh re-scan off", () => {
   );
 
   assert.match(html, /<input[^>]*name="localV2RunViaLambda"[^>]*value="true"/);
-  assert.doesNotMatch(html, /<input[^>]*name="forceNewScan"[^>]*value="true"/);
+  assert.match(html, /<input[^>]*name="forceNewScan"[^>]*value="true"/);
   assert.doesNotMatch(html, /name="gpcObservation"/);
 });
 

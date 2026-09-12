@@ -1,3 +1,6 @@
+import type { ReviewedPolicy } from "../../../lib/scans/full-site-resource-context";
+import { buildRetainedRequestInventory } from "../../../lib/scans/retained-request-inventory";
+import { buildSinglePageResourceInventory } from "../../../lib/scans/single-page-resource-inventory";
 import { afterClickCoverage } from "../after-action-summary";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
 import { siteMetadataProjectionSchema, consentControlAssessmentSchema } from "@certscore/contracts";
@@ -18,7 +21,6 @@ import type { CertScoreFinding } from "../../../lib/scans/finding-registry";
 import { getHybridRuntimeEvidence } from "../../../lib/scans/hybrid-runtime-evidence";
 import {
   buildNonEssentialInventoryTallies,
-  buildReportInventorySummary,
   buildRuntimeInventoryProjectionFromScan,
   classifyInventoryEvidence,
   getInventoryObservationNames,
@@ -615,6 +617,8 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
   return {
     benchmark: scanRecord.domainBenchmark?.industry ?? "Comparable public websites",
     createdAt: formatTimestamp(scanRecord.scan.createdAt),
+    startedAt: formatTimestamp(scanRecord.scan.startedAt),
+    completedAt: formatTimestamp(scanRecord.scan.completedAt),
     duration: formatHeaderDuration(retainedScanDurationMs(scanRecord)),
     host: scanRecord.scan.domainHostname ?? "Public website",
     id: scanRecord.scan.id,
@@ -629,7 +633,7 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
   };
 }
 
-export function buildTimelineReportModel(scanRecord: ScanDetailResponse): TimelineReportData {
+export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewedPolicies: ReviewedPolicy[] = []): TimelineReportData {
   const noGo = projectScanReportNoGo(scanRecord);
   if (noGo) {
     return { ...noGo, scan: buildReportIdentity(scanRecord), score: { label: "Not scored" as const, value: null } };
@@ -662,6 +666,10 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     ...executiveUnifiedFindings,
   ]).map((finding, index) => mapChecklistFinding(finding, index + 1, evidenceRows));
   const inventoryProjection = buildRuntimeInventoryProjectionFromScan(scanRecord);
+  const retainedRequests = buildRetainedRequestInventory(getHybridRuntimeEvidence(scanRecord.runtimeArtifacts));
+  const resourceInventory = buildSinglePageResourceInventory(scanRecord.scan.id, inventoryProjection.ungroupedRows, retainedRequests, reviewedPolicies);
+  const inventorySummary = inventoryProjection.inventorySummary.map(metric =>
+    metric.label === "Network requests" && resourceInventory.requestMetric ? resourceInventory.requestMetric : metric);
   const inventory = inventoryProjection.ungroupedRows.map((row) => ({
     category: row.macroCategory,
     confidence: row.confidence.replace(/_/g, " "),
@@ -670,6 +678,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     evidence: classifyInventoryEvidence(row),
     evidenceJson: {
       attributionSignatures: row.attributionSignatures,
+      storageDetails: row.storageDetails,
       canonicalEntity: row.canonicalEntity,
       cookieDetails: row.cookieDetails,
       embedDetails: row.embedDetails,
@@ -696,7 +705,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     requestNames: [...row.cookieNames, ...(row.requestDetails ?? []).flatMap((request) => request.path ? [request.path] : [])].slice(0, 8).join(", ") || "Not retained",
     serverLocation: row.dataFlows[0]?.networkDestination.country ?? row.dataFlows[0]?.networkDestination.label ?? "Location not retained",
     transferMechanism: row.dataFlows[0]?.transferMechanism.basis ?? "Unknown",
-    type: row.type === "embed" ? "Embed / iframe" : row.type === "cookie" ? "Cookie / storage" : "Tracker / request",
+    type: row.type === "embed" ? "Embed / iframe" : row.type === "storage" ? "Browser storage" : row.type === "cookie" ? "Cookie / storage" : "Tracker / request",
     vendor: row.vendor,
     recordCount: row.observedRecordCount,
     requestCount: row.requestCount,
@@ -839,7 +848,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     executiveHeadline: "Executive overview",
     gdprTransparencyRows: privacyRows,
     inventory,
-    inventorySummary: buildReportInventorySummary(inventoryProjection.ungroupedRows),
+    inventorySummary,
+    resourceInventory,
     collectionTableRows: forms.map(form => ({ id: form.formRef, form, capturedAt: "", snapshot: { status: "unavailable" as const } })),
     metrics: {
       domains: vendorSurface.thirdPartyDomains.length,

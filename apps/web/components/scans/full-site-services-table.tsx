@@ -4,7 +4,7 @@ import { InventoryResourceProvider } from "./inventory-resource-details";
 import { ExpandRowsButton, ServiceResourceRows } from "./service-resource-rows";
 import type { ComponentProps } from "react";
 import type { ApiRuntimeEvidenceGraph } from "@certscore/api-contracts";
-import { Fragment, useId, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 import { PageCountDisclosure, PolicyDisclosure, DataTransferDisclosure, destinationLabel } from "./full-site-resource-context";
 import { VendorBrandIcon } from "./vendor-brand-chip";
@@ -53,8 +53,9 @@ function ServiceDomains({ domains }: { domains: string[] }) {
   return <div className="flex max-w-40 items-center gap-1"><span className="truncate" title={domains[0]}>{domains[0]}</span>{domains.length > 1 ? <><button type="button" popoverTarget={id} aria-label={`Show all ${domains.length} domains`} className="shrink-0 rounded border border-slate-200 px-1.5 py-1 text-[10px] text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">+{domains.length - 1}</button><div id={id} popover="auto" role="dialog" aria-label="Service domains" className="m-auto max-h-[70vh] w-80 overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-xl"><div className="mb-3 flex justify-between"><strong>Service domains</strong><button type="button" popoverTarget={id} popoverTargetAction="hide">Close</button></div><ul className="space-y-2 text-xs">{domains.map(domain => <li className="break-all" key={domain}>{domain}</li>)}</ul></div></> : null}</div>;
 }
 
-export function FullSiteServices({ services, pageName, pageChoices, homepageGraph, scenario = "pre_consent" }: { scenario?: ApiRuntimeEvidenceGraph["scenario"]; services: Service[]; pageName: (id: string) => string; pageChoices: FullSiteReportResponse["pageChoices"]; homepageGraph?: ComponentProps<typeof InventoryResourceProvider>["projection"] }) {
+export function FullSiteServices({ collapseVersion = 0, services, pageName, pageChoices, homepageGraph, scenario = "pre_consent" }: { collapseVersion?: number; scenario?: ApiRuntimeEvidenceGraph["scenario"]; services: Service[]; pageName: (id: string) => string; pageChoices: FullSiteReportResponse["pageChoices"]; homepageGraph?: ComponentProps<typeof InventoryResourceProvider>["projection"] }) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "priority", desc: false });
   const compare = (a: ServiceBranch, b: ServiceBranch) => {
     const left = sortValue(a.service, sort.key), right = sortValue(b.service, sort.key);
@@ -63,6 +64,7 @@ export function FullSiteServices({ services, pageName, pageChoices, homepageGrap
   };
   const unattributedHelpId = useId();
   const [unattributedOpen, setUnattributedOpen] = useState(false);
+  useEffect(() => { setExpanded(new Set()); setUnattributedOpen(false); }, [collapseVersion]);
   const hierarchy = buildServiceHierarchy(services);
   const rows = hierarchy.filter(branch => !branch.collection).sort(compare);
   const unattributed = hierarchy.find(branch => branch.collection);
@@ -96,7 +98,7 @@ export function FullSiteServices({ services, pageName, pageChoices, homepageGrap
             {open ? [...branch.children].sort(compare).map(child => renderBranch(child, [...path, service.key], Boolean(branch.collection))) : null}
             {open ? branch.ownResources.map(row => {
               const page = pageChoices.find(page => page.id === row.pageIds[0]);
-              return <InventoryResourceProvider preload key={row.key} source={page?.source === "homepage" ? undefined : page?.graphSource} projection={page?.source === "homepage" ? homepageGraph : undefined}><ServiceResourceRows row={row} serviceContext={row.context ?? service.context} nested nestingDepth={path.length + 1} scenario={scenario} pageName={pageName}/></InventoryResourceProvider>;
+              return <InventoryResourceProvider preload key={row.key} source={page?.source === "homepage" ? undefined : page?.graphSource} projection={page?.source === "homepage" ? homepageGraph : undefined}><ServiceResourceRows collapseVersion={collapseVersion} row={row} serviceContext={row.context ?? service.context} nested nestingDepth={path.length + 1} scenario={scenario} pageName={pageName}/></InventoryResourceProvider>;
             }) : null}
           </Fragment>;
   };
@@ -113,7 +115,7 @@ export function FullSiteServices({ services, pageName, pageChoices, homepageGrap
         <tbody>{visibleRows.map(branch => renderBranch(branch, [], showUnattributedInline))}</tbody>
       </table>
       {!visibleRows.length ? <p className="p-5 text-sm text-slate-500">{unattributed ? "Loading origins could not be verified. Resources are available below." : "No services match the current filters."}</p> : null}
-      {unattributed && !showUnattributedInline ? <details className="border-t border-zinc-100" onToggle={event => setUnattributedOpen(event.currentTarget.open)}>
+      {unattributed && !showUnattributedInline ? <details open={unattributedOpen} className="border-t border-zinc-100" onToggle={event => setUnattributedOpen(event.currentTarget.open)}>
         <summary className="cursor-pointer px-3 py-3 text-xs text-slate-500 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">Unattributed resources ({unattributed.service.resources.length})<button type="button" popoverTarget={unattributedHelpId} onClick={event => event.stopPropagation()} aria-label="Explain unattributed resources" title="About unattributed resources" className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded align-middle text-slate-500 hover:bg-sky-100 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5M10 6v.01"/></svg></button></summary>
         {unattributedOpen ? <>
           <p className="px-3 pb-3 text-xs text-slate-500">Grouped by service; loading origins are not fully verified.</p>

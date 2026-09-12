@@ -1699,7 +1699,7 @@ function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | n
     : null;
 
   return {
-    id: stableInventoryRowId(row, host),
+    id: row.storageDetails ? `${stableInventoryRowId(row, host)}:${row.storageDetails.origin ? `${encodeURIComponent(row.storageDetails.origin)}:` : ""}${row.storageDetails.storageType}:${encodeURIComponent(row.storageDetails.key)}` : stableInventoryRowId(row, host),
     kind: row.type,
     name: compactApiText(row.vendor),
     vendor: compactApiText(row.vendor),
@@ -1714,6 +1714,7 @@ function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | n
     purposes: row.purposes,
     domains: row.domains.map(sanitizeHost).filter((value): value is string => Boolean(value)),
     products: row.rawProducts,
+    storageDetails: row.storageDetails,
     dataFlows: row.dataFlows,
     setByThirdPartyScript: row.setByThirdPartyScript,
     set_by_third_party_script: row.setByThirdPartyScript,
@@ -1737,6 +1738,7 @@ function buildApiV2PreConsentRow(row: InventoryGroupRow, pageUrlHost: string | n
       initiatorChain: (cookie.initiatorChain ?? []).map(safeInventoryScriptUrl).filter((value): value is string => Boolean(value)).slice(0, 12)
     })),
     requestDetails: (row.requestDetails ?? []).slice(0, 50).map((request) => ({
+      ...(request.resourceRole ? { resourceRole: request.resourceRole } : {}),
       cookieNamesSent: request.cookieNamesSent.slice(0, 24).map((value) => value.slice(0, 256)),
       essentiality: request.essentiality,
       hostname: request.hostname?.slice(0, 253) ?? null,
@@ -1797,7 +1799,8 @@ export function buildApiV2PreConsentCookiesTrackers(scanRecord: ScanDetailRespon
       trackerCountScope: "canonical_inventory_rows_including_operational" as const,
       trackerCategoryCounts,
       cookieCount: uniqueCookieKeys.size,
-      requestCount: rows.reduce((total, row) => total + (row.requestCount ?? 0), 0),
+      storageCount: projection.storageRows.length,
+      requestCount: projection.inventorySummary[1]?.value ?? rows.reduce((total, row) => total + (row.requestCount ?? 0), 0),
       vendorCount: rows.length,
       domainCount: uniqueDomains.size
     },

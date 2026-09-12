@@ -141,6 +141,7 @@ export type ShadowReportData = {
   resultDisposition?: never;
   siteMetadata?: import("@certscore/contracts").SiteMetadataProjection | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
+  resourceInventory?: import("../../../lib/scans/single-page-resource-inventory").SinglePageResourceInventory;
   runtimeEvidenceGraph?: import("@certscore/api-contracts").ApiRuntimeEvidenceGraphProjection;
   inventorySummary?: import("../report-inventory-summary").ReportInventoryMetric[];
   collectionTableRows?: import("../collection-surfaces-table").CollectionSurfaceTableRow[];
@@ -148,6 +149,8 @@ export type ShadowReportData = {
     benchmark: string;
     createdAt: string;
     duration: string;
+    startedAt?: string;
+    completedAt?: string;
     host: string;
     id: string;
     observedWindow: string;
