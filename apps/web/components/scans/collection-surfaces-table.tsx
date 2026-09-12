@@ -1,5 +1,7 @@
 "use client";
+import { CopyJsonButton } from "./copy-json-button";
 
+import { useTableRowLimit } from "./use-table-row-limit";
 import { ScanLiveValue } from "./scan-live-value";
 
 import { InspectButton } from "./inventory-resource-details";
@@ -115,16 +117,20 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
   pagesWithoutInventory?: number;
   limitedPages?: number;
 }) {
+  const rowLimit = useTableRowLimit(3);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const prefix = useId();
   const [snapshot, setSnapshot] = useState<{ title: string; url: string } | null>(null);
   const [sort, setSort] = useState<{ key: FormSortKey; direction: "asc" | "desc" }>({ key: "page", direction: "asc" });
   const sortedRows = useMemo(() => sortCollectionSurfaces(rows, sort.key, sort.direction), [rows, sort]);
+  if (!loading && rows.length === 0) return <section aria-label="Forms & fields" className="border-b border-zinc-200 bg-white py-3 text-sm text-zinc-600">
+    {scanning ? "Forms: none observed yet; scan in progress." : pagesWithoutInventory > 0 || limitedPages > 0 ? "Forms: no retained rows; form coverage is incomplete." : "Forms: no forms observed on the scanned pages."}
+  </section>;
   return (
-    <section aria-labelledby={`${prefix}-title`} className="min-w-0 border-b border-zinc-200 bg-white py-5">
+    <section aria-labelledby={`${prefix}-title`} className="min-w-0 border-b border-zinc-200 bg-white py-4">
       <div className="mb-2 flex items-baseline justify-between gap-3">
-        <h2 id={`${prefix}-title`} className="text-xl font-semibold">Collection surfaces (forms)</h2>
-        <span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.length === 1 ? "form" : "forms"}`} /></span>
+        <h2 id={`${prefix}-title`} className="text-xl font-semibold">Forms & fields</h2>
+        <div className="flex items-center gap-2"><span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.length === 1 ? "form" : "forms"}`} /></span>{!loading ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire forms table with all fields and evidence as JSON" payload={JSON.stringify(rows, null, 2)} /> : null}</div>
       </div>
       <p className="mb-4 text-xs text-zinc-600">Forms and fields observed on scanned pages. Expand a form to inspect its fields; submitted values are not included.</p>
       {pagesWithoutInventory > 0 || limitedPages > 0 ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
@@ -133,11 +139,11 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
       </p> : null}
       {loading ? <p role="status" className="py-4 text-sm text-zinc-500">Loading form inventory…</p> : rows.length === 0 ?
         <p className="py-4 text-sm text-zinc-500">{scanning ? "Form inventory will appear as pages finish scanning." : pagesWithoutInventory > 0 || limitedPages > 0 ? "No form rows are available in the retained evidence." : "No forms were observed on the inventoried pages."}</p> :
-        <div className="max-h-[560px] overflow-auto" tabIndex={0} aria-label="Scrollable collection surfaces">
+        <div ref={rowLimit.ref} style={rowLimit.style} className="max-h-[240px] overflow-auto" tabIndex={0} aria-label="Scrollable collection surfaces">
           <table className="w-full text-left text-xs">
             <caption className="sr-only">One row per captured form, with expandable field details</caption>
             <thead className="sticky top-0 z-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
-              <tr>{columns.map(column => column.key === "form" ? <th key={column.key} scope="col" className="w-10 border-b p-3"><span className="sr-only">View details</span></th> : <th key={column.key} scope="col" aria-sort={sort.key === column.key ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="whitespace-nowrap border-b p-3">
+              <tr>{columns.map(column => column.key === "form" ? <th key={column.key} scope="col" className="w-10 border-b px-3 py-2"><span className="sr-only">View details</span></th> : <th key={column.key} scope="col" aria-sort={sort.key === column.key ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="whitespace-nowrap border-b px-3 py-2">
                 <button type="button" className="flex items-center gap-1 uppercase tracking-wider hover:text-sky-700" onClick={() => setSort(current => ({ key: column.key, direction: current.key === column.key && current.direction === "asc" ? "desc" : "asc" }))}>
                   {column.label}<span aria-hidden="true">{sort.key === column.key ? sort.direction === "asc" ? "↑" : "↓" : "↕"}</span>
                 </button>
@@ -151,28 +157,32 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
                 const detailId = `${prefix}-fields-${row.id}`;
                 return <Fragment key={row.id}>
                   <tr className="border-b border-zinc-100">
-                    <th scope="row" className="w-10 p-3 font-medium"><InspectButton open={open} controls={detailId} name={title} onClick={() => setExpanded(current => {
+                    <th scope="row" className="w-10 px-3 py-2 font-medium"><InspectButton open={open} controls={detailId} name={title} onClick={() => setExpanded(current => {
                       const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next;
                     })} /></th>
-                    <td className="p-3 capitalize">{label(form.surfaceType)}</td>
-                    <td className="p-3 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
-                    <td className="p-3">{controlsSummary(form.fields)}{form.fields.some(f=>f.review?.preselectedMarketing) ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Expand to review preselected marketing controls" className="ml-1 text-amber-700">⚠</span> : null}{form.fieldsTruncated ? <span className="block text-zinc-500">Partial inventory</span> : null}</td>
-                    <td className="p-3">{form.fields.length ? <FieldReview field={[...form.fields].sort((a,b)=>reviewRank(b)-reviewRank(a))[0]!}/> : "—"}</td>
-                    <td className="p-3 uppercase">{form.method}</td>
-                    <td className="p-3"><span className="block max-w-52 truncate" title={form.actionHostname}>{form.actionHostname ?? label(form.actionRelationship)}</span>{form.actionHostname ? <span className="block text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
-                    <td className="p-3"><a className="block max-w-64 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl}</a></td>
-                    <td className="whitespace-nowrap p-3">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-2 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500">{row.snapshot.status === "pending" ? "Snapshot pending" : row.snapshot.status === "withheld" ? "Snapshot withheld" : "Snapshot unavailable"}</span>}</td>
+                    <td className="px-3 py-2 capitalize">{label(form.surfaceType)}</td>
+                    <td className="px-3 py-2 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
+                    <td className="px-3 py-2">{controlsSummary(form.fields)}{form.fields.some(f=>f.review?.preselectedMarketing) ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Expand to review preselected marketing controls" className="ml-1 text-amber-700">⚠</span> : null}{form.fieldsTruncated ? <span className="block text-zinc-500">Partial inventory</span> : null}</td>
+                    <td className="px-3 py-2">{form.fields.length ? <FieldReview field={[...form.fields].sort((a,b)=>reviewRank(b)-reviewRank(a))[0]!}/> : "—"}</td>
+                    <td className="px-3 py-2 uppercase">{form.method}</td>
+                    <td className="px-3 py-2"><span className="block max-w-52 truncate" title={form.actionHostname}>{form.actionHostname ?? label(form.actionRelationship)}</span>{form.actionHostname ? <span className="block text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
+                    <td className="px-3 py-2"><a className="block max-w-64 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl}</a></td>
+                    <td className="whitespace-nowrap px-3 py-2">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-1.5 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500">{row.snapshot.status === "pending" ? "Snapshot pending" : row.snapshot.status === "withheld" ? "Snapshot withheld" : "Snapshot unavailable"}</span>}</td>
                   </tr>
-                  <tr id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={columns.length} className="p-4">
+                  <tr data-expanded-details id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={columns.length} className="p-4">
                     <h3 className="mb-2 font-semibold">{title}</h3>
-                    <p className="mb-3 text-zinc-500">{label(form.structure)} · Captured {row.capturedAt}</p>
+                    <p className="mb-3 text-zinc-500">{label(form.structure)} · {row.capturedAt ? `Captured ${row.capturedAt}` : "Capture time not retained"}</p>
+                    <dl className="mb-3 grid gap-2 text-xs sm:grid-cols-2">
+                      <div><dt className="text-zinc-500">Form confidence</dt><dd>{Math.round(form.confidence * 100)}% · {form.directVsInferred}</dd></div>
+                      <div><dt className="text-zinc-500">Evidence references</dt><dd className="break-all">{form.evidenceRefs.length ? JSON.stringify(form.evidenceRefs) : "Not retained"}</dd></div>
+                    </dl>
                     {form.fields.length ? <table className="w-full text-left text-xs">
                       <caption className="sr-only">Fields in {title}</caption>
-                      <thead><tr>{["Field", "Element", "Input type", "Category", "Field review", "Required", "Selection", "State", "Autocomplete"].map(h => <th key={h} scope="col" className="border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>
+                      <thead><tr>{["Field", "Element", "Input type", "Category", "Field review", "Required", "Selection", "State", "Autocomplete", "Confidence", "Evidence refs"].map(h => <th key={h} scope="col" className="border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>
                       <tbody>{fieldsInPageOrder(form.fields).map(field => <tr key={field.fieldRef} className="border-b border-slate-100">
                         <th scope="row" className="px-2 py-2 font-medium">{field.label ?? field.fieldRef}</th>
                         <td className="px-2 py-2">{field.elementType}</td><td className="px-2 py-2">{field.controlKind ?? field.inputType}</td><td className="px-2 py-2 capitalize">{label(field.semanticCategory)}</td>
-                        <td className="px-2 py-2"><FieldReview field={field}/></td><td className="px-2 py-2">{field.required ? "Yes" : "No"}</td><td className="px-2 py-2"><ControlState field={field}/></td><td className="px-2 py-2">{[field.disabled ? "Disabled" : "", field.readOnly ? "Read only" : ""].filter(Boolean).join(", ") || "Enabled"}</td><td className="px-2 py-2">{field.autocompleteToken ?? "Not specified"}</td>
+                        <td className="px-2 py-2"><FieldReview field={field}/></td><td className="px-2 py-2">{field.required ? "Yes" : "No"}</td><td className="px-2 py-2"><ControlState field={field}/></td><td className="px-2 py-2">{[field.disabled ? "Disabled" : "", field.readOnly ? "Read only" : ""].filter(Boolean).join(", ") || "Enabled"}</td><td className="px-2 py-2">{field.autocompleteToken ?? "Not specified"}</td><td className="px-2 py-2">{Math.round(field.confidence * 100)}% · {field.directVsInferred}</td><td className="max-w-64 break-all px-2 py-2">{field.evidenceRefs.length ? JSON.stringify(field.evidenceRefs) : "Not retained"}</td>
                       </tr>)}</tbody>
                     </table> : <p>No field details were retained.</p>}
                     {form.fieldsTruncated ? <p className="mt-3 text-amber-800">{form.candidateFieldCount - form.retainedFieldCount} field(s) were omitted by the capture limit.</p> : null}
@@ -182,6 +192,7 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
             </tbody>
           </table>
         </div>}
+      {rows.length > 3 ? <p className="mt-2 text-xs text-zinc-500">{rows.length} forms · 3 visible at a time. Scroll within the table for more.</p> : null}
       {snapshot ? <FormSnapshotDialog key={snapshot.url} {...snapshot} onClose={() => setSnapshot(null)} /> : null}
     </section>
   );

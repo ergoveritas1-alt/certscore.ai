@@ -1,4 +1,5 @@
 import { CERT_SCORE_FINDING_REGISTRY, type CertScoreFinding } from "./finding-registry";
+import { readChecklistRemediation } from "./checklist-remediation";
 
 export type RegulatoryGapTopFindingRow = {
   assessmentDirection?: string;
@@ -61,6 +62,8 @@ const REGULATORY_GAP_REMEDIATION_BY_ROW_ID: Partial<Record<string, string>> = {
 };
 
 function getRegulatoryGapRemediation(row: RegulatoryGapTopFindingRow) {
+  const retained = readChecklistRemediation(row.criticalEvidence?.retainedEvidence?.remediation);
+  if (retained?.steps.length) return retained.steps.join(" ");
   const projectedFindings = row.criticalEvidence?.projectedFindings;
   if (Array.isArray(projectedFindings)) {
     for (const projectedFinding of projectedFindings) {
@@ -295,6 +298,11 @@ function isPotentialConcernCoverageRow(row: RegulatoryGapTopFindingRow) {
 }
 
 function getRegulatoryTopFindingConcernKind(row: RegulatoryGapTopFindingRow): RegulatoryTopFindingConcernKind | null {
+  // Inventory-only coverage cannot create an executive finding. The owning
+  // normalized concern/policy must first establish projectable evidence.
+  if (row.criticalEvidence?.pipeline?.projectionStage === "coverage_fallback" &&
+      row.criticalEvidence?.pipeline?.ws01EvidenceRole === "retained_pre_consent_tracker_inventory") return null;
+
   if (isArticle13ExtractionLimitedRow(row)) {
     return null;
   }

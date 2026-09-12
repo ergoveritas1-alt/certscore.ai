@@ -1307,10 +1307,7 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
       `${row.purpose} ${(row.regulatoryRelevance ?? []).join(" ")}`
     )
   );
-  const classifiedConcernInventory =
-    !serviceConnectionOnly &&
-    !contextualInfrastructureOnly &&
-    (selectedPriority === "high" || selectedPriority === "medium");
+
 
   return {
     criticalEvidence: {
@@ -1344,9 +1341,10 @@ function synthesizePreconsentThirdPartyTrackingOutcome(
         contextualInfrastructureOnly,
         serviceConnectionOnly,
         tagManagerOnly: serviceConnectionOnly && thirdPartyRows.every((row) => /tag management|tag_manager/i.test(row.purpose)),
+        scoreEffect: "none",
         trackingEvidenceAssessment: {
           result: "not_confirmed_from_grouped_inventory",
-          scoreEffect: classifiedConcernInventory ? "review" : "none"
+          scoreEffect: "none"
         },
         trackerPriority: selectedPriority,
         trackerPriorityLabel: priorityLabel
@@ -2406,6 +2404,12 @@ function specializeChecklistRow(input: {
       label: input.definition.label,
       status: "Observed" as const
     };
+  }
+
+  if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Not testable" &&
+      input.coverageOutcome?.criticalEvidence.retainedEvidence.productionPosture === "limited_independent_reject_action") {
+    return { evidenceRefs: input.evidenceRefs, explanation: input.coverageOutcome.limitation,
+      label: input.definition.label, status: "Not testable" as const };
   }
 
   if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Gap observed") {
@@ -3523,6 +3527,7 @@ export function deriveGdprEprivacyCoverageChecklist(
     if (
       coverageOutcome &&
       (
+        Boolean(canonicalPreconsentStorageOutcome) ||
         shouldPreferCoverageOutcomeForMissingReject(definition.id, coverageOutcome) ||
         shouldPreferCoverageOutcomeForConsentChoiceQuality(definition.id, coverageOutcome) ||
         shouldPreferCoverageOutcomeForContextualInfrastructure(definition.id, coverageOutcome) ||

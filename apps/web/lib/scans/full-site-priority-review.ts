@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readChecklistRemediation } from "./checklist-remediation";
 import { buildChecklistConcernTopFindings, selectCanonicalHighPriorityFindings } from "./checklist-concern-top-findings";
 import type { CertScoreFinding } from "./finding-registry";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
@@ -22,13 +23,14 @@ export function buildSitePriorityReview(rows: GdprEprivacyCoverageChecklistItem[
     const rowIds = [String(rowId ?? finding.id), ...grouped.flatMap(item => item && typeof item === "object" && "id" in item && typeof item.id === "string" ? [item.id] : [])];
     const evidenceRows = rows.filter(item => rowIds.includes(item.id));
     const affected = pages.filter(page => page.findingIds.some(id => rowIds.includes(id)));
+    const correctionSteps = [...new Set(evidenceRows.flatMap(row => readChecklistRemediation(row.criticalEvidence.retainedEvidence?.remediation)?.steps ?? []))];
     return {
       id: finding.id, rank: index + 1, title: finding.label,
       summary: finding.shortSummary,
-      status: policy?.regulatoryConcernKind === "partial_rating" || finding.id === "acceptance_signal_contradicts_action" ? "Partial concern" : "Potential gap",
+      status: (evidenceRows.length > 0 && !evidenceRows.some(row => row.assessmentStatus === "gap_observed") && evidenceRows.some(row => row.assessmentStatus === "review_signal")) || policy?.regulatoryConcernKind === "partial_rating" || finding.id === "acceptance_signal_contradicts_action" ? "Partial concern" : "Potential gap",
       evidence: finding.evidencePreview,
       evidenceJson: { findingId: finding.id, evidenceRefs: finding.evidenceRefs, criticalEvidence: evidenceRows.map(row => ({ rowId: row.id, ...row.criticalEvidence })), pages: affected },
-      correctionSteps: [finding.remediation],
+      correctionSteps: correctionSteps.length ? correctionSteps : [finding.remediation],
       pages: affected.map(({ id, url, homepage }) => ({ id, url, homepage })),
     };
   });

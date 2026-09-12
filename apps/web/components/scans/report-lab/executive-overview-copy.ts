@@ -99,7 +99,7 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
           ? input.rejectPath.afterClickCoverage
             ? rejectIncompleteReason || "The Reject control was clicked and subsequent observations were recorded."
             : rejectIncompleteReason
-            ? `Reject-path testing did not complete. ${rejectIncompleteReason}`
+            ? rejectIncompleteReason
             : "Reject-path testing did not complete."
           : null;
   const limitation = (() => {
@@ -150,7 +150,7 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
         ? "Cookies/storage"
         : null;
   const activity = activityLabel
-    ? `${activityLabel} also appeared before the first consent surface${consentEvent ? ` at ${consentEvent.at}` : ""}.`
+    ? `${activityLabel} also appeared ${consentEvent ? `before the first consent surface at ${consentEvent.at}` : "before any recorded consent action"}.`
     : null;
   const positive = input.transportPositiveCount > 0
     ? "Transport security checks were observed."

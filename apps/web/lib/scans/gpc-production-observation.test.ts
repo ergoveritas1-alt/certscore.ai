@@ -27,6 +27,8 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
     runtimeArtifacts: { gpcResponseAssessment: persisted } });
   const projection = buildCanonicalGpcResponseProjection(findings);
   assert.ok(projection);
+  assert.equal(projection.headline, "Observation complete");
+  assert.equal(projection.comparisonHeadline, "Comparison incomplete");
   assert.equal(projection.californiaDeductionPoints, 0);
   assert.match(projection.summary, /observation completed/);
   assert.match(projection.summary, /1 classified/);
@@ -40,4 +42,34 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
       gpcArtifact: { lane: "gpc_observation", sha256: pointer.sha256, sizeBytes: pointer.sizeBytes }, delivery: { status: delivery.status } },
     californiaPolicy: { applied: false, deductionPoints: 0 }, evidenceUrl: "https://example.test/evidence" });
   assert.equal(publicResult.observation?.status, "complete");
+});
+
+test("quiet-window limits do not downgrade a verified observation, and observation failures never become completion", () => {
+  const gpc = gpcProductionRuntimeFixture();
+  const baseline = gpcRuntimeFixture({ enabled: false });
+  for (const bundle of [baseline, gpc]) {
+    const quiet = bundle.modulesRun.find(module => module.moduleName === "preConsentRuntimeScanner")!
+      .timingBreakdown!.find(timing => timing.label === "passive evidence quiet wait")!;
+    quiet.outcome = "timed_out";
+  }
+  const bytes = Buffer.from(JSON.stringify(gpc));
+  const pointer = { uri: "s3://fixture/gpc.json", sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length };
+  const comparison = buildGpcResponseAssessment({ baseline, baselineArtifact: { ...pointer, uri: "s3://fixture/base.json" }, gpc, gpcArtifact: pointer });
+  const assessment = buildGpcProductionAssessment({ scanId: gpc.scanId, source: { bytes, pointer }, comparison });
+  assert.deepEqual(assessment.comparison.limitationKeys, ["baseline_settle_not_completed", "gpc_settle_not_completed"]);
+  assert.equal(assessment.observation.status, "complete");
+
+  for (const status of ["complete", "limited", "unavailable"] as const) {
+    const persisted = gpcResponseAssessmentSchema.parse({ ...assessment, observation: { ...assessment.observation, status,
+      limitationKeys: status === "complete" ? [] : ["source_unverified"] } });
+    const findings = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+      runtimeArtifacts: { gpcResponseAssessment: persisted } });
+    const projection = buildGpcResponseReportProjection(findings);
+    assert.ok(projection);
+    assert.equal(projection.headline, `Observation ${status}`);
+    assert.equal(projection.comparisonHeadline, "Signal verified · Comparison incomplete");
+    assert.equal(projection.assessment.status, "indeterminate");
+    assert.equal(projection.californiaDeductionPoints, 0);
+    assert.deepEqual(projection.assessment, persisted);
+  }
 });

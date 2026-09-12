@@ -109,7 +109,7 @@ test("executive overview describes Reject outcomes without disclosing scoring tr
   });
 
   assert.match(reviewCopy, /Reject path retained evidence requiring review/i);
-  assert.match(incompleteCopy, /Reject-path testing did not complete/i);
+  assert.match(incompleteCopy, /The deterministic control could not be verified/i);
   assert.doesNotMatch(`${reviewCopy} ${incompleteCopy}`, /score-neutral|affect(?:s|ed)? (?:the )?score|score effect|deduct|partial credit/i);
 });
 

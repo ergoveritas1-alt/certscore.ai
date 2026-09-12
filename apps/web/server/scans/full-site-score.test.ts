@@ -1,10 +1,11 @@
+import { projectSitewideEvidencePage, sitewideEvidencePageSchema } from "../../lib/scans/sitewide-evidence-index";
 import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 (require.cache as Record<string, unknown>)[require.resolve("server-only")] = { exports: {}, loaded: true };
-const { isFullSiteScoringCaptureComplete, mergeSiteChecklistRows, projectFullSiteScoringEvidence } = require("./full-site-score") as typeof import("./full-site-score");
+const { countAssessedNonEssentialStorage, isFullSiteScoringCaptureComplete, mergeSiteChecklistRows, projectFullSiteScoringEvidence } = require("./full-site-score") as typeof import("./full-site-score");
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
 
@@ -160,4 +161,45 @@ test("site priority does not promote additional-page consent or unavailable evid
   const inventedConsentGap = baseline().map(row => ({...row, assessmentStatus: "gap_observed" as const}));
   const merged = mergeSiteChecklistRows(unassessed, inventedConsentGap.filter(row => row.id === "reject_all_path_availability"));
   assert.deepEqual(buildSitePriorityReview(merged, []), buildSitePriorityReview(unassessed, []));
+});
+
+test("overview storage count uses merged canonical evidence and preserves unknown", () => {
+  assert.equal(countAssessedNonEssentialStorage([]), null);
+  assert.equal(countAssessedNonEssentialStorage(storage([])), 0);
+  assert.equal(countAssessedNonEssentialStorage(mergeSiteChecklistRows(storage(["a", "b"]), storage(["b", "c"]))), 3);
+});
+
+test("sitewide evidence index preserves canonical page status and provenance without importing homepage-only checks", () => {
+  const rows = storage(["additional-page-cookie"]);
+  const page = projectSitewideEvidencePage({pageId: "page-2", url: "https://example.test/second", sourceHash: "a".repeat(64), homepage: false}, rows);
+  assert.ok(sitewideEvidencePageSchema.safeParse(page).success);
+  assert.equal(page.pageId, "page-2");
+  assert.equal(page.homepage, false);
+  const storageRow = page.rows.find(row => row.id === "pre_consent_cookies_storage")!;
+  assert.equal(storageRow.assessmentStatus, "gap_observed");
+  assert.equal(storageRow.status, "Gap observed");
+  assert.deepEqual(storageRow.evidenceRefs, rows.find(row => row.id === storageRow.id)!.evidenceRefs);
+  assert.ok(!page.rows.some(row => row.id === "reject_all_path_availability"));
+  const limited = projectSitewideEvidencePage({...page, homepage: true}, baseline());
+  assert.ok(limited.rows.every(row => row.assessmentStatus !== "gap_observed"));
+});
+
+test("sitewide displayed status follows canonical assessment rather than legacy checklist label", () => {
+  const rows = storage(["cookie"]).map(row => row.id === "pre_consent_cookies_storage" ? {...row, status: "Not confirmed" as const} : row);
+  const result = projectSitewideEvidencePage({pageId: "page", url: "https://example.test/", sourceHash: "a".repeat(64), homepage: true}, rows);
+  assert.equal(result.rows.find(row => row.id === "pre_consent_cookies_storage")?.status, "Gap observed");
+});
+
+test("verified browser scope survives concern policy and reconciles without changing scoring", () => {
+  const event = { eventId: "cookie-scope", eventType: "cookie", timestampMs: 1000, sourceScanner: "preConsentRuntimeScanner", scenario: "fresh_pre_consent", consentStateAtTime: "pre_consent", pagePhase: "network_idle", confidence: 1, directVsInferred: "direct", operation: "set_cookie_header", cookieName: "_ga", cookieDomain: "example.test", cookiePath: "/", cookiePurpose: "analytics", cookieEssentiality: "non_essential" };
+  const cookie = {name: "_ga", domain: ".example.test", path: "/"};
+  const project = (cookies: unknown[], phase = "pre_consent") => projectFullSiteScoringEvidence({cookieEvents: [event], networkEvents: [], cookieSnapshots: [{artifactId: "snapshot", capturedAtMs: 1500, consentStateAtTime: phase, cookies}]}, "page", "a".repeat(64))!;
+  const getIdentity = (rows: ReturnType<typeof project>) => (rows.find(row => row.id === "pre_consent_cookies_storage")!.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows as Record<string, unknown>[])[0]?.exactStorageIdentity;
+  const exact = project([cookie]);
+  assert.equal(getIdentity(exact), JSON.stringify(["_ga", ".example.test", "/", null]));
+  assert.equal(score(exact), score(project([])));
+  assert.equal(getIdentity(project([{...cookie,path: "/other"}])), undefined);
+  assert.equal(getIdentity(project([cookie], "post_accept")), undefined);
+  assert.equal(getIdentity(project([cookie,{...cookie,partitionKey: "https://other.test"}])), undefined);
+  assert.equal(getIdentity(project([cookie,{...cookie,domain: "example.test"}])), undefined);
 });

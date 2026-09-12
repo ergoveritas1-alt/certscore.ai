@@ -14,11 +14,14 @@ export function buildGpcResponseReportProjection(
   return {
     assessment,
     californiaDeductionPoints: projection.californiaDeductionPoints,
+    comparisonHeadline: projection.comparisonHeadline,
+    coverageSummary: projection.coverageSummary,
     evidenceRefs: [
       assessment.comparison.baselineArtifact?.uri ?? "",
       assessment.comparison.gpcArtifact?.uri ?? "",
       ...assessment.comparison.evidenceRefs,
     ].filter((value, index, values) => Boolean(value) && values.indexOf(value) === index).slice(0, 32),
+    headline: projection.headline,
     summary: projection.summary,
   };
 }

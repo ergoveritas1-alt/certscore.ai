@@ -1,3 +1,4 @@
+import { reconcileStorageInventory } from "../../lib/scans/storage-inventory-reconciliation";
 import { fullSiteFinalizationStartedAt } from "../../lib/scans/full-site-finalization";
 import { serviceEvidencePageIds } from "../../lib/scans/service-evidence-pages";
 import { serviceIntegrationGroup, groupedOrigin } from "../../lib/scans/service-integration-group";
@@ -8,6 +9,7 @@ import { identifyCrawlService, describeCrawlService } from "../../lib/scans/full
 import { loadFullSiteReviewedPolicies } from "./full-site-reviewed-policies";
 import { loadFullSiteRelationshipCounts } from "./full-site-relationship-counts";
 import { loadFullSiteScore } from "./full-site-score";
+import { wasPageNotScannedForRobots } from "../../lib/scans/full-site-crawl-limitation";
 import { classifyCrawlInventoryResource } from "../../lib/scans/full-site-inventory-classification";
 import {
   aggregateFullSite,
@@ -76,16 +78,21 @@ export async function loadFullSiteReport(
         ? `sitemap:${crawlDisplayUrl(source.slice(8))}`
         : source,
     ),
-    status: row.status as CrawlPage["status"],
-    limitation: row.limitation,
+    status: wasPageNotScannedForRobots(crawl, row)
+      ? "excluded" : row.status as CrawlPage["status"],
+    limitation: wasPageNotScannedForRobots(crawl, row)
+      ? "not_scanned_crawl_permission_unverified" : row.limitation,
     attemptCount: row.attempt_count,
     observation: row.compact_json
       ? crawlObservationSchema.parse(row.compact_json)
       : null,
   }));
   const aggregate = aggregateFullSite(state, pages);
+  const score = await loadFullSiteScore(crawl, pages);
+  const storageReconciliation = reconcileStorageInventory(score?.assessedStorageRecords ?? [], aggregate.resources);
   const additionalServiceIds = new Set(aggregate.resources.filter(row => row.occurrence.kind === "service" && row.homepage === "not_observed").map(row => row.occurrence.serviceId).filter(Boolean));
   const inventoryClassification = (row: (typeof aggregate.resources)[number]) =>
+    ["cookie", "storage"].includes(row.occurrence.kind) && storageReconciliation.matched.has(row.occurrence.identity) ? "Non-essential" :
     row.occurrence.kind !== "embed" && row.purposes.length > 1 ? "Review" : classifyCrawlInventoryResource(row.occurrence);
   const kind = (params.get("kind") ?? "service") as CrawlOccurrence["kind"] | "all";
   const q = (params.get("q") ?? "").toLowerCase().slice(0, 200),
@@ -117,7 +124,7 @@ export async function loadFullSiteReport(
       matchesCategory(inventoryPurposeGroups(row.purposes, row.relationships), params.get("purpose") ? inventoryPurposeGroups([params.get("purpose")!], [])[0]! : null) &&
       matchesCategory(row.relationships, params.get("relationship")) &&
       (!params.get("assessment") ||
-        row.assessments.includes(params.get("assessment")!)) &&
+        inventoryClassification(row) === params.get("assessment")!) &&
       (!params.get("confidence") ||
         row.confidences.includes(params.get("confidence")!)) &&
       (!params.get("persistence") ||
@@ -414,15 +421,16 @@ export async function loadFullSiteReport(
       }),
     })).sort((a,b) => a.name.localeCompare(b.name)),
     collectionSurfaces,
-    score: await loadFullSiteScore(crawl, pages),
+    score,
+    storageReconciliation: { matched: storageReconciliation.matched.size, unmatched: storageReconciliation.unmatched },
     summary: { ...aggregate, resources: undefined },
-    priorityTotals: Object.fromEntries((["cookies", "requests"] as const).map(group => {
+    priorityTotals: Object.fromEntries((["cookies", "requests", "embeds"] as const).map(group => {
       const rows = aggregate.resources.filter(row => group === "cookies"
         ? ["cookie", "storage"].includes(row.occurrence.kind)
-        : row.occurrence.kind === "request");
+        : row.occurrence.kind === (group === "requests" ? "request" : "embed"));
       const count = (priority: string) => rows.reduce((total, row) => total +
-        (inventoryClassification(row) === priority ? group === "requests" ? row.eventCount : 1 : 0), 0);
-      return [group, { nonEssential: count("Non-essential"), review: count("Review") }];
+        (inventoryClassification(row) === priority ? group !== "cookies" ? row.eventCount : 1 : 0), 0);
+      return [group, { nonEssential: count("Non-essential"), review: count("Review"), contextual: count("Contextual"), essential: count("Essential") }];
     })),
     resources: {
       rows: displayedResources.map(row => ({ ...row, relationshipCount: relationshipCounts.get(row.pageIds[0] ?? "")?.get(row.occurrence.id)?.count, context: resourceContext(row).context, ...destinationSummary(row), inventoryEvidence: inventoryClassification(row), serviceOnlyAdditional: !!row.occurrence.serviceId && additionalServiceIds.has(row.occurrence.serviceId) })),
@@ -464,7 +472,7 @@ export async function loadFullSiteReport(
         ...new Set(aggregate.resources.flatMap((r) => r.confidences)),
       ].sort(),
       assessments: [
-        ...new Set(aggregate.resources.flatMap((r) => r.assessments)),
+        ...new Set(aggregate.resources.map((r) => inventoryClassification(r))),
       ].sort(),
       resourceTypes: [
         ...new Set(

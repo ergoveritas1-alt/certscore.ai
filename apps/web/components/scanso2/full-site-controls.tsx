@@ -1,0 +1,158 @@
+"use client";
+import { useEffect, useId, useState } from "react";
+import {
+  validateFullSiteRequest,
+  type FullSitePolicy,
+  type CrawlOptions,
+} from "@website-signal-risk-scanner/shared/full-site-crawl";
+
+export type FullSiteFormValue =
+  | { fullSite: true; crawlOptions: CrawlOptions }
+  | undefined;
+const fields = [
+  ["maxPages", "Max pages"],
+  ["concurrency", "Concurrency"],
+  ["waitSeconds", "Scan lag (sec)"],
+] as const;
+export function FullSiteControls({
+  onChange,
+  active = false,
+}: {
+  onChange?: (value: FullSiteFormValue) => void;
+  active?: boolean;
+}) {
+  const id = useId();
+  const [policy, setPolicy] = useState<FullSitePolicy | null>(null);
+  const [availability, setAvailability] = useState<"loading" | "denied" | "error">("loading");
+  const [retry, setRetry] = useState(0);
+  const [selected, setSelected] = useState(false);
+  const [values, setValues] = useState({
+    maxPages: "10",
+    concurrency: "4",
+    waitSeconds: "5",
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (policy) return;
+    let disposed = false;
+    const controller = new AbortController();
+    setAvailability("loading");
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    void fetch("/api/full-scan/options", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then((r) => { if (!r.ok) throw new Error("Options unavailable"); return r.json(); })
+      .then((data) => {
+        if (disposed) return;
+        if (data?.allowed) {
+          setPolicy(data.policy);
+          setValues(
+            Object.fromEntries(
+              fields.map(([key]) => [key, String(data.policy[key].default)]),
+            ) as typeof values,
+          );
+        } else { setAvailability("denied"); }
+      })
+      .catch(() => { if (!disposed) setAvailability("error"); })
+      .finally(() => clearTimeout(timeout));
+    return () => { disposed = true; clearTimeout(timeout); controller.abort(); };
+  }, [retry, active, policy]);
+  function update(enabled: boolean, next = values) {
+    setSelected(enabled);
+    setValues(next);
+    if (!enabled || !policy) {
+      setErrors({});
+      onChange?.(undefined);
+      return;
+    }
+    const options = Object.fromEntries(
+      fields.map(([key]) => [key, next[key].trim() ? Number(next[key]) : NaN]),
+    ) as CrawlOptions;
+    try {
+      const valid = validateFullSiteRequest(
+        { fullSite: true, crawlOptions: options },
+        true,
+        policy,
+      );
+      setErrors({});
+      if (valid.fullSite) onChange?.(valid);
+    } catch (error) {
+      onChange?.({ fullSite: true, crawlOptions: options });
+      setErrors({
+        [(error as { field?: string }).field ?? "fullSite"]: (error as Error)
+          .message,
+      });
+    }
+  }
+  if (!policy) return availability === "denied" ? null : (
+    <div className="px-3 py-2 text-sm text-slate-600" role="status">
+      <span className="text-sm font-semibold text-slate-700">Full site</span>
+      {availability === "loading" ? <span className="ml-2">Loading…</span> : <><span className="ml-2">Could not load.</span><button type="button" className="ml-2 text-sky-700 underline" onClick={() => setRetry(value => value + 1)}>Retry</button></>}
+    </div>
+  );
+  return (
+    <fieldset className="border-b border-slate-100 bg-white px-3 py-2 text-left text-slate-900">
+      <label
+        className="flex cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-slate-700"
+        htmlFor={`${id}-enabled`}
+      >
+        Full site
+        <span className="relative inline-flex">
+          <input
+            id={`${id}-enabled`}
+            className="peer sr-only"
+            type="checkbox"
+            role="switch"
+            value="true"
+            checked={selected}
+            onChange={(event) => update(event.target.checked)}
+          />
+          <span aria-hidden="true" className={`h-5 w-9 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-sky-500 peer-focus-visible:ring-offset-2 ${selected ? "bg-sky-500" : "bg-slate-200"}`} />
+          <span aria-hidden="true" className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${selected ? "translate-x-4" : "translate-x-0"}`} />
+        </span>
+      </label>
+      {selected ? (
+        <div className="mt-3 grid gap-2 pl-3">
+          {fields.map(([key, label]) => (
+            <div key={key} className="grid grid-cols-[1fr_5rem] items-center gap-x-3 gap-y-1">
+              <label
+                className="block text-sm font-medium"
+                htmlFor={`${id}-${key}`}
+              >
+                {label}
+              </label>
+              <input
+                className="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                id={`${id}-${key}`}
+
+                type="number"
+                min={policy[key].min}
+                max={policy[key].max}
+                step={key === "waitSeconds" ? "any" : 1}
+                required
+                value={values[key]}
+                aria-invalid={!!errors[key]}
+                aria-describedby={errors[key] ? `${id}-${key}-error` : undefined}
+                onChange={(event) =>
+                  update(true, { ...values, [key]: event.target.value })
+                }
+                onInvalid={(event) =>
+                  setErrors((previous) => ({
+                    ...previous,
+                    [key]: event.currentTarget.validationMessage,
+                  }))
+                }
+              />
+              {errors[key] ? (
+                <p id={`${id}-${key}-error`} role="alert" className="col-span-full text-xs text-red-700">
+                  {errors[key]}
+                </p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </fieldset>
+  );
+}

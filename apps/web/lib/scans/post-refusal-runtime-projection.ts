@@ -36,10 +36,10 @@ export function buildPostRefusalRuntimeProjection(
       };
     }
     const limitationMessage = coverageProjection.limitationCode === "reject_path_timeout"
-      ? "Reject Path did not complete within the configured post-primary allowance."
+      ? "The independent Reject test did not finish within the scan window. Post-Reject behavior was not assessed."
       : coverageProjection.limitationCode === "reject_path_incomplete_at_passive_barrier"
-        ? "The independent Reject Path did not complete by the passive-lane barrier; control absence is not established in that session."
-      : "Reject Path worker failed before verified evidence could be joined.";
+        ? "The independent Reject test did not finish within the scan window. Post-Reject behavior was not assessed; initial control inspection is reported separately."
+      : "The independent Reject test could not retain verified evidence. Post-Reject behavior was not assessed.";
     const unavailableReductionEvidence = {
       concretePostRejectNonEssentialDetailsRetained: false,
       postRejectNonEssentialActivityRetained: false,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { ScanUpdatingIndicator } from "./scan-updating-indicator";
 
 /** Highlight changed evidence counts without fading the text or animating initial data. */

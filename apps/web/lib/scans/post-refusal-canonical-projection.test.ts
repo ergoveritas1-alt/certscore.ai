@@ -688,7 +688,7 @@ test("timed-out Reject Path is retained as a score-neutral coverage limitation",
   const postRejectRow = checklist.find((row) => row.id === "post_reject_tracking_reduction");
   assert.ok(postRejectRow);
   assert.notEqual(postRejectRow.status, "Gap observed");
-  assert.match(JSON.stringify(postRejectRow), /configured post-primary allowance/);
+  assert.match(JSON.stringify(postRejectRow), /independent Reject test did not finish within the scan window/);
 });
 
 test("complete no-Reject inventory makes Reject Path non-applicable without a coverage warning", () => {

@@ -3,9 +3,11 @@ import { withScanReportDisposition } from "../../lib/scans/scan-report-dispositi
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 
-export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v24";
+export const SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v26";
 export const READABLE_SCAN_REPORT_PROJECTION_VERSIONS = [
   "scan-report-projection-v19",
+  "scan-report-projection-v24",
+  "scan-report-projection-v25",
   SCAN_REPORT_PROJECTION_VERSION,
 ] as const;
 export const REPORT_PROJECTION_READY_WARNING_MS = 15_000;

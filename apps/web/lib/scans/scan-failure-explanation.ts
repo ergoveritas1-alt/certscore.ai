@@ -1,5 +1,14 @@
 /** Translate known execution failures without exposing internal error payloads. */
 export function scanFailureExplanation(error: string | null | undefined) {
+  if (error === "robots_unavailable_or_blocked" || error === "robots_delay_exceeds_crawl_budget") {
+    return {
+      title: "Additional crawling unavailable",
+      detail: error === "robots_delay_exceeds_crawl_budget"
+        ? "The site’s robots.txt requires a delay beyond this scan’s limit. Captured page results are retained; additional pages were not scanned."
+        : "The scanner could not verify the site’s robots.txt. Captured page results are retained; additional pages were not scanned.",
+      nextStep: "Review the retained results. A new crawl can be attempted after robots.txt is accessible and permits crawling within the scan limits.",
+    };
+  }
   if (error === "dispatch_queue_unavailable") {
     return {
       title: "Additional page scans could not start",

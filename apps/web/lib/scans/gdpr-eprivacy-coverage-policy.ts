@@ -1,8 +1,11 @@
+import { checklistRemediation } from "./checklist-remediation";
 import { getRuntimeVendorDisclosureEvidence } from "./runtime-vendor-disclosure";
 import { readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 import {
   classifyConsentControlLabel,
+  classifyGdprTransparencyTopics,
+  extractPolicyUpdateDateText,
   collectionSurfaceAssessmentSchema,
   consentControlAssessmentSchema,
   evaluateLegalFrameworkValidity,
@@ -1775,7 +1778,8 @@ function makeOutcome(
       projectedFindings: [],
       retainedEvidence: compactRecord({
         evidenceRefs: [...new Set(evidenceRefs)].slice(0, 6),
-        ...(criticalEvidence?.retainedEvidence ?? {})
+        ...(criticalEvidence?.retainedEvidence ?? {}),
+        remediation: checklistRemediation({ rowId, status }),
       }),
       statusBasis: limitation
     },
@@ -2092,7 +2096,9 @@ function deriveConsentSurfaceOutcome(input: GdprEprivacyCoveragePolicyInput) {
       documentIdentityStatus === "matched" &&
       scanNoGo === false;
 
-    if (!complete || surfaceState === "unknown") {
+    const verifiedObservedSurface = surfaceState === "observed_actionable" &&
+      documentIdentityStatus === "matched" && scanNoGo === false;
+    if ((!complete && !verifiedObservedSurface) || surfaceState === "unknown") {
       return makeOutcome(
         "consent_surface_observed",
         "Not confirmed",
@@ -4913,6 +4919,12 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
     }
     const inventoryEvidence = controlInventoryConcern.evidenceBundle.rawEvidence ?? {};
     const optionsState = getString(inventoryEvidence, ["firstLayerOptionsState", "first_layer_options_state"]);
+    if (optionsState === "observed" && !prominenceConcern) {
+      return makeOutcome("options_settings_preferences_control", "Observed",
+        "An options, settings, or preferences control was verified in the retained first-layer inventory. Prominence and preference behavior were not established.",
+        controlInventoryConcern.evidenceBundle.runtimeArtifacts,
+        { retainedEvidence: { consentControlInventoryConcern: { canonicalConcernKey: controlInventoryConcern.canonicalConcernKey }, optionsControlObserved: true } });
+    }
     const acceptState = getString(inventoryEvidence, ["firstLayerAcceptState", "first_layer_accept_state"]);
     const rejectState = getString(inventoryEvidence, ["firstLayerRejectState", "first_layer_reject_state"]);
     if (
@@ -5091,6 +5103,13 @@ function deriveOptionsSettingsPreferencesControlOutcome(input: GdprEprivacyCover
         concernEvidenceRefs,
         { retainedEvidence }
       );
+    }
+
+    if (optionsState === "observed") {
+      return makeOutcome("options_settings_preferences_control", "Observed",
+        "An options, settings, or preferences control was verified in the retained first-layer inventory. Overall inventory coverage or prominence remains limited.",
+        controlInventoryConcern.evidenceBundle.runtimeArtifacts,
+        { retainedEvidence: { ...retainedEvidence, optionsControlObserved: true } });
     }
 
     const incompleteAssessmentOutcome = makeIncompleteConsentSurfaceInspectionOutcome(
@@ -6360,7 +6379,8 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const completeFirstLayerInventoryWithoutReject =
     firstLayerChoiceEvidence.assessment?.assessmentStatus === "complete" &&
     firstLayerChoiceEvidence.rejectControlObserved === false;
-  if (completeFirstLayerInventoryWithoutReject) {
+  const independentRejectActionIncomplete = ["reject_path_incomplete_at_passive_barrier", "reject_path_timeout", "reject_path_worker_failed"].includes(rejectInteractionFailureClass ?? "");
+  if (completeFirstLayerInventoryWithoutReject && !independentRejectActionIncomplete && !rejectInteractionSucceeded) {
     return makeOutcome(
       "post_reject_tracking_reduction",
       "Not testable",
@@ -6376,6 +6396,12 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
         }
       }
     );
+  }
+
+  if (independentRejectActionIncomplete && !rejectInteractionSucceeded) {
+    return makeOutcome("post_reject_tracking_reduction", "Not testable",
+      rejectInteractionFailureReason ?? "The independent Reject test did not complete; post-Reject behavior could not be assessed.",
+      reductionEvidenceRefs, { retainedEvidence: { ...postRejectRetainedEvidence, productionPosture: "limited_independent_reject_action", scoreEffect: "none" } });
   }
 
   if (
@@ -7284,6 +7310,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
       productionCredit: rawEvidence.productionCredit,
       productionCreditProfile: rawEvidence.productionCreditProfile,
       selectedPolicySectionUrl: sourceUrl,
+      selectedPolicySectionHeading: rawEvidence.selectedPolicySectionHeading,
       selectedEvidenceStrength: rawEvidence.selectedEvidenceStrength,
       source: "normalized_concern",
       surfaceUrl: sourceUrl,
@@ -9437,30 +9464,16 @@ function calibratePolicyDisclosureOutcome(outcome: GdprEprivacyCoverageOutcome) 
   }
 
   if (outcome.rowId === "dpo_contact_point_disclosure") {
-    const formalDpoDesignationConfirmed = /\b(?:data protection officer|dpo)\b/i.test(evidenceText);
-    const privacyContactPointConfirmed =
-      formalDpoDesignationConfirmed ||
-      /\b(?:privacy officer|chief privacy officer|privacy office|privacy contact|privacy team|data protection contact)\b/i.test(evidenceText);
-    if (
-      privacyContactPointConfirmed &&
-      (outcome.status === "Observed" || outcome.status === "Review signal")
-    ) {
-      return makeOutcome(
-        outcome.rowId,
-        "Observed",
-        formalDpoDesignationConfirmed
-          ? "A privacy contact point and an explicit Data Protection Officer or DPO designation were retained."
-          : "A privacy contact point was retained. The wording does not establish a formal GDPR Data Protection Officer designation.",
-        outcome.evidenceRefs,
-        {
-          retainedEvidence: {
-            ...outcome.criticalEvidence.retainedEvidence,
-            formalDpoDesignationConfirmed,
-            privacyContactPointConfirmed: true,
-            signalObserved: true
-          }
-        }
-      );
+    const formalDpoDesignationConfirmed = classifyGdprTransparencyTopics({ text: evidenceText })
+      .matches.some((match) => match.topic === "dpo_contact");
+    if (!formalDpoDesignationConfirmed) {
+      return makeOutcome(outcome.rowId, "Not confirmed",
+        "The retained excerpt does not establish a designated Data Protection Officer. A generic privacy contact does not satisfy this check; DPO applicability requires separate review.",
+        outcome.evidenceRefs, { retainedEvidence: {
+          ...outcome.criticalEvidence.retainedEvidence,
+          formalDpoDesignationConfirmed: false,
+          signalObserved: "not_confirmed_row_specific_extraction",
+        } });
     }
   }
 
@@ -9543,7 +9556,7 @@ function attachPolicyEvidenceProjection(
   const document = documents.find((candidate) => {
     const url = getString(candidate, ["sourceUrl", "source_url"]);
     return Boolean(sectionUrl && url && url === sectionUrl);
-  }) ?? documents[0] ?? null;
+  }) ?? (!sectionUrl && documents.length === 1 ? documents[0] : null) ?? null;
   const sourceUrl = sectionUrl
     ?? getString(document, ["sourceUrl", "source_url"])
     ?? getStringArray(summary, ["privacyPolicyUrls", "privacy_policy_urls"])[0]
@@ -9562,14 +9575,12 @@ function attachPolicyEvidenceProjection(
       : null,
     discoveryMethod: getString(document, ["discoveryMethod", "discovery_method"]),
     documentOwnerEntity: getString(document, ["documentOwnerEntity", "document_owner_entity"]),
+    documentHeading: getString(document, ["documentHeading"]),
     effectiveDate: getString(document, ["effectiveDate", "effective_date"]),
-    lastUpdatedText: getString(document, ["lastUpdatedText", "last_updated_text"])
-      ?? getStringArray(summary, ["policyLastUpdatedTexts", "policy_last_updated_texts"])[0]
-      ?? null,
+    lastUpdatedText: extractPolicyUpdateDateText(getString(document, ["lastUpdatedText", "last_updated_text"])) ?? null,
     ownershipConfidence: getNumber(document, ["ownershipConfidence", "ownership_confidence"]),
     policyTitle: getString(document, ["policyTitle", "policy_title"]),
-    retrievalTimestamp: getString(document, ["retrievalTimestamp", "retrieval_timestamp"])
-      ?? getString(summary, ["scanStartedAt", "scan_started_at"]),
+    retrievalTimestamp: getString(document, ["retrievalTimestamp", "retrieval_timestamp"]),
     sectionHeading,
     sourceUrl,
     targetRelationship: getString(document, ["targetRelationship", "target_relationship"]),

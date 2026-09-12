@@ -27,7 +27,8 @@ function inventoryPurposeClasses(purpose: string) {
 }
 
 export function InventoryPurposeChip({ purpose, relationships = [] }: { purpose: string; relationships?: readonly string[] }) {
-  const label = inventoryPurposeLabel(purpose, relationships).replaceAll("_", " ");
+  const originalLabel = inventoryPurposeLabel(purpose, relationships).replaceAll("_", " ");
+  const label = originalLabel.toLowerCase().startsWith("unknown") ? "Unknown purpose" : originalLabel;
   return (
     <span
       className={`inline-flex h-6 max-w-full min-w-0 items-center rounded-md px-2 text-[0.67rem] font-semibold ${inventoryPurposeClasses(purpose)}`}

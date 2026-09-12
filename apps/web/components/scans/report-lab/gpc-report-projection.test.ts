@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { GpcResponseAssessment } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "../../../lib/scans/unified-findings";
+import { describeCanonicalGpcResponse } from "../../../lib/scans/gpc-response-projection";
 import { buildGpcResponseReportProjection } from "./gpc-report-projection";
 
 function gpcFinding(input: {
@@ -71,10 +73,38 @@ test("projects a surfaced typed GPC finding with proof, deltas, and the exact Ca
   assert.equal(projection?.assessment.comparison.enabledProof.secGpcHeaderValue, "1");
   assert.equal(projection?.assessment.comparison.deltas.trackers.shared.length, 1);
   assert.equal(projection?.californiaDeductionPoints, 15);
+  assert.equal(projection?.headline, "No observable response");
+  assert.match(projection?.coverageSummary ?? "", /did not observe a qualifying reduction/i);
   assert.deepEqual(projection?.evidenceRefs, [
     "s3://evidence/baseline.json",
     "s3://evidence/gpc.json",
   ]);
+});
+
+test("separates verified GPC delivery from an incomplete baseline comparison", () => {
+  const finding = gpcFinding() as unknown as {
+    details: { assessment: Record<string, unknown> };
+  } & UnifiedFindingDisplayPacket;
+  const assessment = {
+    ...(finding.details.assessment as object),
+    contractVersion: "certscore.gpc-response-assessment.v2",
+    status: "indeterminate",
+    findingTitle: "GPC response",
+    comparison: {
+      ...((finding.details.assessment as { comparison: object }).comparison),
+      comparable: false,
+      coverage: { status: "limited", comparedThroughMs: 1331 },
+      delivery: { status: "verified", baseline: null, gpc: null },
+      responseBasis: "insufficient_evidence",
+      limitationKeys: ["baseline_settle_not_completed"],
+    },
+  } as unknown as GpcResponseAssessment;
+
+  const presentation = describeCanonicalGpcResponse(assessment);
+
+  assert.equal(presentation.headline, "Signal verified · Comparison incomplete");
+  assert.match(presentation.coverageSummary, /baseline lane did not reach the required 250 ms quiet period/i);
+  assert.doesNotMatch(presentation.coverageSummary, /baseline_settle_not_completed/);
 });
 
 test("fails closed for non-surfaced packets and malformed score effects", () => {

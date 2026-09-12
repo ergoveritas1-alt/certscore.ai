@@ -363,7 +363,9 @@ function makeGdprTransparencyArticle13Signal(input: {
   const evidenceText = input.evidenceText ?? (
     input.disclosureType === "processing_purposes"
       ? "Die Zwecke der Verarbeitung personenbezogener Daten umfassen die Bereitstellung angeforderter Dienste und die Beantwortung von Anfragen."
-      : "Localized bounded Article 13 evidence about personal data processing."
+      : input.disclosureType === "dpo_contact"
+        ? "Unser Datenschutzbeauftragter ist unter dpo@example.test erreichbar."
+        : "Localized bounded Article 13 evidence about personal data processing."
   );
   return {
     classifierProvenance: "gdpr_transparency_topic_classifier.v1",
@@ -7187,4 +7189,52 @@ test("no-go canonical consent assessment stays unknown despite conflicting compa
   assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
   assert.notEqual(outcomes.options_settings_preferences_control?.status, "Gap observed");
   assert.notEqual(outcomes.consent_choice_quality?.status, "Gap observed");
+});
+
+test("independent incomplete Reject action is not relabeled inapplicable by passive absence", () => {
+  const assessment = makeCanonicalConsentAssessment({ controls: [] });
+  const policyInput = makeCanonicalConsentPolicyInput(assessment);
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase, ...policyInput,
+    runtimeArtifacts: {...policyInput.runtimeArtifacts, postRejectTrackingReductionEvidence: {productionProjectable: false, rejectInteractionConfirmed: false, rejectInteractionFailureClass: "reject_path_incomplete_at_passive_barrier", reductionEvaluationStatus: "not_testable"}, postRefusalObservationCoverage: {status: "limited", completedAt: "2026-09-12T00:47:38.735Z", maxTailWaitMs: 8000, evidenceJoined: false, limitationCode: "reject_path_incomplete_at_passive_barrier"}},
+  });
+  assert.notEqual(outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.productionPosture, "not_applicable_no_reject_control");
+  assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+});
+
+test("verified positive controls survive limited inventory through normalized concerns and policy", () => {
+  const assessment = makeCanonicalConsentAssessment({ coverage: "limited", controls: [
+    { intent: "accept", label: "Accept", actionType: "accept_all" }, { intent: "reject", label: "Reject", actionType: "reject_all" },
+    { intent: "options", label: "Settings", actionType: "manage_preferences", presentationType: "dedicated_button" },
+  ] });
+  assert.equal(assessment.controls.options.state, "observed");
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ ...completedInputBase, ...makeCanonicalConsentPolicyInput(assessment) });
+  assert.equal(outcomes.options_settings_preferences_control?.status, "Observed");
+  assert.equal(outcomes.consent_surface_observed?.status, "Observed");
+  assert.notEqual(outcomes.consent_choice_quality?.status, "Observed");
+});
+
+test("historical approved generic privacy contact fails DPO topic validation before policy credit", () => {
+  const concerns = makeGdprTransparencyConcerns([makeGdprTransparencyArticle13Signal({
+    disclosureType: "dpo_contact", evidenceText: "Privacy Contact Point: contact privacy@example.test for privacy-related questions and rights requests.",
+  })]);
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ ...completedInputBase, normalizedConcerns: concerns, runtimeArtifacts: {}, snapshot: {} });
+  assert.equal(outcomes.dpo_contact_point_disclosure?.status, "Not confirmed");
+  assert.ok(concerns.some((concern) => concern.evidenceBundle.rawEvidence?.dpoDesignationConfirmed === false));
+});
+
+test("policy provenance never borrows another document's title or update date", () => {
+  const signal = { ...makeGdprTransparencyArticle13Signal({ disclosureType: "legal_basis", selectedPolicySectionUrl: "https://example.test/supplement" }), selectedPolicySectionHeading: "Legal bases" };
+  const runtimeArtifacts = { policyDisclosureSummary: {
+    article13DisclosureSignals: [signal], gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+    gdprTransparencyProductionEvidenceEnabled: true, privacyPolicyPresent: true,
+    policyDocumentProvenance: [{ sourceUrl: "https://example.test/privacy", policyTitle: "Different document", lastUpdatedText: "Updated January 2026" }],
+  } };
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ ...completedInputBase, runtimeArtifacts,
+    normalizedConcerns: buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] }) });
+  const provenance = outcomes.legal_basis_disclosure_observed!.criticalEvidence.retainedEvidence.policyEvidenceProvenance as Record<string, unknown>;
+  assert.equal(provenance.sourceUrl, "https://example.test/supplement");
+  assert.equal(provenance.sectionHeading, "Legal bases");
+  assert.equal(provenance.policyTitle, undefined);
+  assert.equal(provenance.lastUpdatedText, undefined);
 });

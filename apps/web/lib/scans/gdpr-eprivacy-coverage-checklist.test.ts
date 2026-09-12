@@ -268,7 +268,6 @@ test("CertScore privacy policy evidence projects every GDPR Transparency row thr
     "controller_contact",
     "data_retention",
     "data_subject_rights",
-    "dpo_contact",
     "international_transfers",
     "legal_basis",
     "processing_purposes",
@@ -281,8 +280,8 @@ test("CertScore privacy policy evidence projects every GDPR Transparency row thr
     /controller/i,
   );
   assert.equal(
-    classification.matches.find((match) => match.topic === "dpo_contact")?.variant,
-    "privacy_contact_point",
+    classification.matches.find((match) => match.topic === "dpo_contact"),
+    undefined,
   );
 
   assert.deepEqual(
@@ -333,7 +332,6 @@ test("CertScore privacy policy evidence projects every GDPR Transparency row thr
     "automated_decision_making_profiling_disclosure",
     "controller_contact_disclosure",
     "data_subject_rights_disclosure",
-    "dpo_contact_point_disclosure",
     "international_transfers_disclosure",
     "legal_basis_disclosure_observed",
     "processing_purposes_disclosure",
@@ -347,6 +345,7 @@ test("CertScore privacy policy evidence projects every GDPR Transparency row thr
     assert.equal(row.status, "Observed", rowId);
     assert.equal(row.criticalEvidence.projectedFindings.length, 0, rowId);
   }
+  assert.equal(byId(items, "dpo_contact_point_disclosure").status, "Not confirmed");
 });
 
 test("retained German clinic policy evidence projects nine of eleven transparency rows", () => {
@@ -505,7 +504,7 @@ test("checklist projects retained privacy contact evidence through normalized co
   const privacyContact = byId(items, "dpo_contact_point_disclosure");
 
   assert.equal(controllerContact.status, "Observed");
-  assert.equal(privacyContact.status, "Observed");
+  assert.equal(privacyContact.status, "Not confirmed");
   assert.equal(controllerContact.criticalEvidence.projectedFindings.length, 0);
   assert.equal(privacyContact.criticalEvidence.projectedFindings.length, 0);
 });
@@ -1421,7 +1420,7 @@ test("deriveGdprEprivacyCoverageChecklist lets medium cookie inventory override 
   assert.match(row.explanation, /Quantcast - Analytics \(1.19s\)/);
 });
 
-test("deriveGdprEprivacyCoverageChecklist projects classified high-priority tracker inventory as a partial concern", () => {
+test("deriveGdprEprivacyCoverageChecklist projects classified high-priority tracker inventory as score-neutral unconfirmed coverage", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -1446,8 +1445,8 @@ test("deriveGdprEprivacyCoverageChecklist projects classified high-priority trac
 
   const row = byId(items, "pre_consent_third_party_tracking");
   assert.equal(row.status, "Not confirmed");
-  assert.equal(row.assessmentStatus, "review_signal");
-  assert.equal(getEvidenceLabel(row), "Partial concern");
+  assert.equal(row.assessmentStatus, "coverage_limitation");
+  assert.equal(getEvidenceLabel(row), "Not testable");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "high");
   assert.equal(row.criticalEvidence.missingOrIncompleteSourceSignals.length, 1);
   assert.equal(row.criticalEvidence.retainedEvidence.preconsentThirdPartyTrackerGroupCount, 2);
@@ -1457,9 +1456,10 @@ test("deriveGdprEprivacyCoverageChecklist projects classified high-priority trac
   );
   assert.match(row.explanation, /Google Ads \/ DoubleClick - Advertising \(0.386s\)/);
   assert.match(row.criticalEvidence.statusBasis, /High priority.*Advertising/);
+  assert.equal(row.criticalEvidence.retainedEvidence.scoreEffect, "none");
 });
 
-test("deriveGdprEprivacyCoverageChecklist projects classified medium tracker inventory as a partial concern", () => {
+test("deriveGdprEprivacyCoverageChecklist projects classified medium tracker inventory as score-neutral unconfirmed coverage", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,
     runtimeTrackerPriorityRows: [
@@ -1477,11 +1477,12 @@ test("deriveGdprEprivacyCoverageChecklist projects classified medium tracker inv
 
   const row = byId(items, "pre_consent_third_party_tracking");
   assert.equal(row.status, "Not confirmed");
-  assert.equal(row.assessmentStatus, "review_signal");
-  assert.equal(getEvidenceLabel(row), "Partial concern");
+  assert.equal(row.assessmentStatus, "coverage_limitation");
+  assert.equal(getEvidenceLabel(row), "Not testable");
   assert.equal(row.criticalEvidence.retainedEvidence.trackerPriority, "medium");
   assert.match(row.explanation, /Optimizely - A\/B Testing \(2.10s\)/);
   assert.match(row.criticalEvidence.statusBasis, /Medium priority.*A\/B Testing/);
+  assert.equal(row.criticalEvidence.retainedEvidence.scoreEffect, "none");
 });
 
 test("deriveGdprEprivacyCoverageChecklist does not relabel a standalone GTM bootstrap as tracking", () => {
@@ -4051,4 +4052,11 @@ test("deriveGdprEprivacyReviewSummary excludes invalid 404 and footer excerpts f
 
   const summary = deriveGdprEprivacyReviewSummary(items);
   assert.match(summary.coverageText, /^27 of 38 in-scope rows had usable automated evidence\./);
+});
+
+test("canonical storage assessment retains item identities ahead of a legacy executive finding", () => {
+  const record = { name: "CLID", storageType: "cookie", exactStorageIdentity: '["CLID","www.clarity.ms","/",null]' };
+  const outcome = { rowId: "pre_consent_cookies_storage", status: "Gap observed", limitation: "Retained storage", evidenceRefs: ["cookie-1"], criticalEvidence: { ...deriveGdprEprivacyCoverageChecklist({scanCompleted: false, coverageLimited: true, unifiedFindings: []})[0]!.criticalEvidence, status: "Gap observed", missingOrIncompleteSourceSignals: [], retainedEvidence: {preConsentStorageAssessmentStatus: "classified_nonessential_observed", eligiblePreconsentCookieStorageRows: [record]} } } as GdprEprivacyCoverageOutcome;
+  const rows = deriveGdprEprivacyCoverageChecklist({scanCompleted: true, coverageLimited: false, unifiedFindings: [], coverageOutcomes: {pre_consent_cookies_storage: outcome}, projectedFindings: [{id: "analytics_cookie_pre_consent", label: "Analytics cookies before consent", evidencePreview: ["Legacy summary"]}] as any});
+  assert.deepEqual(rows.find(row => row.id === "pre_consent_cookies_storage")?.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows, [record]);
 });

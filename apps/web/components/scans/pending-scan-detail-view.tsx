@@ -1,5 +1,6 @@
 "use client";
 
+import { FullSiteIdentity } from "./full-site-identity";
 import { FullSiteWorkspace } from "./full-site-workspace";
 import { LiveFullSiteScanNotice } from "../dashboard/live-full-site-scan-notice";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
@@ -32,6 +33,7 @@ export function getProgressHandoffValue(input: { hasSubmissionHandoff: boolean; 
 
 export function PendingScanDetailView({
   fullSite,
+  fullSiteClassName,
   fullSiteNotice,
   createdAt,
   domainHostname,
@@ -43,6 +45,7 @@ export function PendingScanDetailView({
   startedAt,
   status,
 }: {
+  fullSiteClassName?: string;
   fullSiteNotice?: FullSiteScanNoticeData | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   createdAt: string;
@@ -146,18 +149,19 @@ export function PendingScanDetailView({
 
   if (fullSite) {
     return (
-      <>
+      <div className={fullSiteClassName}>
         <FullSiteWorkspace
           scanId={scanId}
           requested={fullSite}
+          initialNotice={fullSiteNotice}
+          initialPending
+          preConsentPreview={progress.preConsentPreview}
           initialStartedAt={startedAt ?? createdAt}
-          identity={
-            <div>
-              <p className="text-xs text-zinc-500">{fullSiteNotice?.region === "Local" ? "Scanned locally" : "Full site scan"}</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">{domainHostname ?? pageUrl ?? "Website"}</h2>
-              <p className="mt-1 break-all font-mono text-xs text-zinc-500">{pageUrl}</p>
-            </div>
-          }
+          identity={<FullSiteIdentity
+            scanId={scanId} host={domainHostname ?? pageUrl ?? "Website"} url={pageUrl}
+            createdAt={new Intl.DateTimeFormat("en-US", { day: "numeric", hour: "numeric", minute: "2-digit", month: "short", second: "2-digit", timeZoneName: "short", year: "numeric" }).format(new Date(createdAt))}
+            region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">{fullSiteNotice?.region ? `Scanned from ${fullSiteNotice.region}` : "Full site scan"}</span>}
+          />}
         >
           <p role="status" className="py-6 text-sm text-zinc-600">The homepage report will appear here when its assessment is ready.</p>
         </FullSiteWorkspace>
@@ -170,7 +174,7 @@ export function PendingScanDetailView({
           status={status}
           terminalNavigationDelayMs={TERMINAL_NAVIGATION_DELAY_MS}
         />
-      </>
+      </div>
     );
   }
 

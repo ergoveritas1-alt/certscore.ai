@@ -8,6 +8,7 @@ import {
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
+  hasUnsupportedGenericPrivacyContact,
   policyModelReviewArtifactSchema,
   gpcResponseAssessmentSchema,
 } from "@certscore/contracts";
@@ -2652,11 +2653,17 @@ function buildGdprTransparencyArticle13Concerns(
         classifyGdprTransparencyTopics({
           text: evidenceText ?? "",
         }).matches.some((match) => match.topic === "processing_purposes");
+      // Revalidate retained topic evidence, including historical adapter signals.
+      // A privacy mailbox is controller contact, not a DPO designation.
+      const dpoDesignationConfirmed = topic !== "dpo_contact" ||
+        classifyGdprTransparencyTopics({ text: evidenceText ?? "" }).matches.some((match) => match.topic === "dpo_contact");
+      const controllerContactConfirmed = topic !== "controller_contact" ||
+        !hasUnsupportedGenericPrivacyContact(evidenceText ?? "");
       const extractedState = getGdprTransparencyArticle13ConcernState(signal);
       const state =
         extractedState === "sufficient" && (!evidenceText || !sourceUrl)
           ? "ambiguous"
-          : !processingPurposesEvidenceSubstantive && extractedState === "sufficient"
+          : (!processingPurposesEvidenceSubstantive || !dpoDesignationConfirmed || !controllerContactConfirmed) && extractedState === "sufficient"
           ? "ambiguous"
           : staleLegalFrameworkReferenceObserved && topic === "international_transfers"
             ? "partial"
@@ -2686,6 +2693,7 @@ function buildGdprTransparencyArticle13Concerns(
           matchStrength: getStringValue(signal.matchStrength ?? signal.match_strength),
           matchedLocale: locale,
           matchedTerm: getStringValue(signal.matchedTerm ?? signal.matched_term),
+          selectedPolicySectionHeading: getStringValue(signal.selectedPolicySectionHeading ?? signal.selected_policy_section_heading),
           pageType: "privacy_policy",
           policyIsPrimarySource: true,
           productionCredit: true,
@@ -2696,6 +2704,8 @@ function buildGdprTransparencyArticle13Concerns(
           sourceUrls: sourceUrl ? [sourceUrl] : [],
           policySnippets: evidenceText ? [evidenceText] : [],
           processingPurposesEvidenceSubstantive,
+          dpoDesignationConfirmed,
+          controllerContactConfirmed,
           staleLegalFrameworkReferenceObserved
         },
         severity: "low",
@@ -3307,8 +3317,9 @@ function buildConsentSurfaceAssessmentConcerns(
   if (!assessment) return [];
 
   const assessmentUsable =
-    assessment.assessmentStatus === "complete" &&
-    assessment.coverage.status === "complete" &&
+    ((assessment.assessmentStatus === "complete" && assessment.coverage.status === "complete") ||
+      (assessment.surface.status === "observed_actionable" &&
+        [assessment.controls.accept, assessment.controls.reject, assessment.controls.options].some((control) => control.state === "observed"))) &&
     assessment.document.identityStatus === "matched" &&
     assessment.scan.noGo === false;
   const privacyChoiceOnly =

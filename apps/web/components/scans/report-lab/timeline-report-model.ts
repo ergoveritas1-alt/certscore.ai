@@ -1,6 +1,6 @@
 import { afterClickCoverage } from "../after-action-summary";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
-import { siteMetadataProjectionSchema } from "@certscore/contracts";
+import { siteMetadataProjectionSchema, consentControlAssessmentSchema } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { acceptPathIncompleteReason } from "./accept-path-reason";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -18,6 +18,7 @@ import type { CertScoreFinding } from "../../../lib/scans/finding-registry";
 import { getHybridRuntimeEvidence } from "../../../lib/scans/hybrid-runtime-evidence";
 import {
   buildNonEssentialInventoryTallies,
+  buildReportInventorySummary,
   buildRuntimeInventoryProjectionFromScan,
   classifyInventoryEvidence,
   getInventoryObservationNames,
@@ -450,14 +451,9 @@ function scoreLabel(score: number) {
   return "Strong";
 }
 
-function projectedControlLabel(
-  rows: ShadowEvidenceRow[],
-  rowId: "accept_consent_control" | "options_settings_preferences_control" | "reject_all_path_availability",
-) {
-  const status = rows.find((row) => row.id === rowId)?.status;
-  if (status === "Observed") return "Observed";
-  if (status === "Not observed" || status === "Potential gap") return "Not observed";
-  return "Unknown";
+export function projectedConsentControlLabels(controls?: Record<"accept" | "reject" | "options", { state: "observed" | "not_observed" | "unknown" }>) {
+  const label = (key: "accept" | "reject" | "options") => controls?.[key].state === "observed" ? "Observed" : controls?.[key].state === "not_observed" ? "Not observed" : "Unknown";
+  return { accept: label("accept"), reject: label("reject"), options: label("options") };
 }
 
 function siteRelationshipLabel(value: "same_site" | "cross_site" | "mixed" | "unknown") {
@@ -517,27 +513,18 @@ function formatPostAcceptActivity(row: Record<string, unknown>) {
   };
 }
 
-function buildAcceptPathProjection(
+export function buildAcceptPathProjection(
   runtimeArtifacts: Record<string, unknown> | null,
   ownerUnifiedFindings: NonNullable<ReturnType<typeof getPersistedCanonicalReportProjection>>["ownerUnifiedFindings"],
 ): ShadowReportData["acceptPath"] {
   const projection = record(runtimeArtifacts?.postAcceptEvidenceProjection);
-  const coverage = record(runtimeArtifacts?.postAcceptObservationCoverage);
-  if (!projection) {
-    if (coverage?.status !== "limited") return null;
-    return {
-      evidenceRows: [],
-      label: "Accept path limited",
-      note: acceptPathIncompleteReason(coverage),
-      observationWindowMs: null,
-      resolverMethod: null,
-      scoreEffect: "none",
-      state: "incomplete",
-      timelineEvents: [],
-    };
-  }
+  // Coverage-only outcomes do not establish that an Accept interaction occurred.
+  // Keep them in retained diagnostics, not the After Accept report projection.
+  if (!projection) return null;
 
   const captureCoverage = afterClickCoverage(projection, "accept");
+  const click = record(record(projection.interactionDiagnostics)?.click);
+  if (!captureCoverage && click?.outcome !== "completed" && projection.acceptanceExercised !== true) return null;
   const registrationConfirmed = projection.registrationStatus === "confirmed" &&
     projection.acceptanceExercised === true &&
     projection.productionProjectable === true;
@@ -655,11 +642,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
   const reportableChecklistRows = getReportableGdprEprivacyCoverageItems(checklistRows);
   const capturedAt = formatTimestamp(scanRecord.scan.completedAt ?? scanRecord.scan.createdAt);
   const evidenceRows = reportableChecklistRows.map((item) => mapChecklistRow(item, capturedAt));
-  const controls = {
-    accept: projectedControlLabel(evidenceRows, "accept_consent_control"),
-    options: projectedControlLabel(evidenceRows, "options_settings_preferences_control"),
-    reject: projectedControlLabel(evidenceRows, "reject_all_path_availability"),
-  };
+  const assessment = consentControlAssessmentSchema.safeParse(scanRecord.snapshot?.consent_control_assessment ?? scanRecord.runtimeArtifacts?.consentControlAssessment ?? scanRecord.runtimeArtifacts?.consent_control_assessment);
+  const controls = projectedConsentControlLabels(assessment.success ? assessment.data.controls : undefined);
   const executiveUnifiedFindings = projectExecutiveFindingsFromUnifiedPackets(
     canonical.ownerUnifiedFindings.filter(
       (finding) => finding.unifiedFindingId === "acceptance_signal_contradicts_action",
@@ -847,6 +831,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     executiveHeadline: "Executive overview",
     gdprTransparencyRows: privacyRows,
     inventory,
+    inventorySummary: buildReportInventorySummary(inventoryProjection.ungroupedRows),
+    collectionTableRows: forms.map(form => ({ id: form.formRef, form, capturedAt: "", snapshot: { status: "unavailable" as const } })),
     metrics: {
       domains: vendorSurface.thirdPartyDomains.length,
       fields: countFormFields(forms),

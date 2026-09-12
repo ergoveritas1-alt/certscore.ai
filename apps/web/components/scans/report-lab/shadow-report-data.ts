@@ -130,7 +130,10 @@ export type ChoicePathComparison = {
 export type GpcResponseReportProjection = {
   assessment: GpcResponseAssessment;
   californiaDeductionPoints: 0 | 15;
+  comparisonHeadline: string;
+  coverageSummary: string;
   evidenceRefs: string[];
+  headline: string;
   summary: string;
 };
 
@@ -139,6 +142,8 @@ export type ShadowReportData = {
   siteMetadata?: import("@certscore/contracts").SiteMetadataProjection | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   runtimeEvidenceGraph?: import("@certscore/api-contracts").ApiRuntimeEvidenceGraphProjection;
+  inventorySummary?: import("../report-inventory-summary").ReportInventoryMetric[];
+  collectionTableRows?: import("../collection-surfaces-table").CollectionSurfaceTableRow[];
   scan: {
     benchmark: string;
     createdAt: string;

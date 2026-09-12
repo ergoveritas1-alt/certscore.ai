@@ -1,5 +1,6 @@
 import {
   type ArtifactRef,
+  extractPolicyUpdateDateText,
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
   assessArticle13PolicyTextQuality,
   canonicalPolicyDocumentBrandRelationship,
@@ -10202,7 +10203,7 @@ function surroundingText(
 }
 
 function lastUpdatedText(text: string): string | undefined {
-  return /(last updated|effective date|updated):?\s+([A-Za-z0-9, .-]{4,40})/i.exec(text)?.[0]?.slice(0, 80);
+  return extractPolicyUpdateDateText(text);
 }
 
 function effectiveDateText(text: string): string | undefined {

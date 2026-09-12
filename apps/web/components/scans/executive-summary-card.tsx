@@ -1461,19 +1461,23 @@ export function buildRegulatoryLenses(
     unifiedContext?: UnifiedRegulatoryContext | null;
   }
 ): RegulatoryLens[] {
-  const findingIds = new Set(findings.map((finding) => finding.id));
+  const regulatoryFindings = findings.filter((finding) => {
+    if (finding.id !== "reject_tracking_persists_after_reject") return true;
+    return finding.evidenceDetails?.evidenceFlags?.includes("reject_evidence_confirmed") === true;
+  });
+  const findingIds = new Set(regulatoryFindings.map((finding) => finding.id));
   const trackingFinding =
-    findings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
-    findings.find((finding) => finding.id === "rtb_cookie_sync_observed") ??
-    findings.find((finding) => finding.id === "reject_tracking_persists_after_reject") ??
-    findings.find((finding) => finding.id === "third_party_tracking_pre_consent") ??
-    findings.find((finding) => finding.id === "third_party_cookie_pre_consent") ??
-    findings.find((finding) => finding.id === "analytics_cookie_pre_consent") ??
-    findings.find((finding) => finding.id === "adtech_cookie_pre_consent") ??
-    findings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
+    regulatoryFindings.find((finding) => finding.id === "pre_consent_tracking_detected") ??
+    regulatoryFindings.find((finding) => finding.id === "rtb_cookie_sync_observed") ??
+    regulatoryFindings.find((finding) => finding.id === "reject_tracking_persists_after_reject") ??
+    regulatoryFindings.find((finding) => finding.id === "third_party_tracking_pre_consent") ??
+    regulatoryFindings.find((finding) => finding.id === "third_party_cookie_pre_consent") ??
+    regulatoryFindings.find((finding) => finding.id === "analytics_cookie_pre_consent") ??
+    regulatoryFindings.find((finding) => finding.id === "adtech_cookie_pre_consent") ??
+    regulatoryFindings.find((finding) => /pre[- ]consent|before consent/i.test(`${finding.label} ${finding.shortSummary}`));
   const sensitiveTrackingFinding =
-    findings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
-    findings.find((finding) => finding.id === "possible_session_replay_on_sensitive_input_surface");
+    regulatoryFindings.find((finding) => finding.id === "sensitive_data_collection_with_third_party_tracking_present") ??
+    regulatoryFindings.find((finding) => finding.id === "possible_session_replay_on_sensitive_input_surface");
   const hasTrackingConcern =
     options?.unifiedContext?.hasTrackingConcern ??
     (findingIds.has("pre_consent_tracking_detected") ||
@@ -1515,7 +1519,7 @@ export function buildRegulatoryLenses(
     ...buildMappedRegulatoryLensFindings({
       context: { lens: "GDPR / ePrivacy", reason: "mapped_regulatory_finding" },
       findingIds: gdprRegulatoryFindingIds,
-      findings
+      findings: regulatoryFindings
     }),
     beforeConsentCookieCount > 0
         ? buildObservedCountLensFinding({
@@ -2356,6 +2360,12 @@ function formatRejectResolverMethod(resolverMethod: string) {
 export function CompactRejectPathCard(input: {
   projection?: ExecutiveRejectPathProjection | null;
 }) {
+  if (input.projection?.state === "incomplete" && !input.projection.afterClickCoverage) {
+    return <div className="rounded-md border border-zinc-200 p-3 text-xs text-zinc-600" data-reject-path-state="incomplete" data-testid="executive-reject-path-card">
+      <p className="font-semibold text-zinc-900">Independent Reject test · Incomplete</p>
+      <p className="mt-1">Post-Reject behavior was not assessed. This test does not establish whether a control was present in the initial inspection.</p>
+    </div>;
+  }
   if (
     !input.projection
     || (input.projection.state === "incomplete" && !input.projection.afterClickCoverage)
@@ -2439,8 +2449,9 @@ function ExecutiveSignalSnapshotPane(input: {
       ? `${input.beforeConsentCookieCount} classified non-essential storage ${input.beforeConsentCookieCount === 1 ? "identity was" : "identities were"} observed before consent; no tracking-classified third-party vendor or domain was resolved for this scan.`
       : null;
   const consentSurfaceStatus = input.consentSurfaceStatus ?? "Not determined";
+  const cmpTechnologyName = input.cmpDisplayName.replace(/\s+(?:(?:consent|cookie)\s+banner|banner|cmp)$/i, "");
   const cmpDetectedLabel = input.cmpVendorName
-    ? `${input.cmpDisplayName.replace(/\s+(?:banner|cmp)$/i, "")} CMP detected`
+    ? `${cmpTechnologyName} CMP detected`
     : null;
   const consentSurfaceLabel =
     consentSurfaceStatus === "Observed"
@@ -2454,7 +2465,7 @@ function ExecutiveSignalSnapshotPane(input: {
     input.cmpVendorName && consentSurfaceStatus === "Not observed"
       ? `${input.cmpDisplayName} technology was observed, but no visible consent banner was retained in this scan context.`
       : input.cmpVendorName && (consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable")
-        ? `${input.cmpDisplayName} CMP technology was observed, but visible banner presence could not be determined because consent inspection was incomplete or not representative.`
+        ? `${input.cmpDisplayName} technology was observed, but visible banner presence could not be determined because consent inspection was incomplete or not representative.`
         : consentSurfaceStatus === "Not determined" || consentSurfaceStatus === "Not testable"
           ? "Consent inspection was incomplete or not representative; banner presence was not determined."
           : null;

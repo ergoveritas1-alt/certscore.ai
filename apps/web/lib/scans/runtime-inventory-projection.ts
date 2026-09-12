@@ -473,8 +473,10 @@ function canonicalTrackerGroupLabel(value: string, purpose: string, domains: str
   if (/^jsdelivr(?: cdn)?$/.test(normalized)) {
     return "jsDelivr CDN";
   }
-  if (/^cloudflare(?: bot management)?$/.test(normalized)) {
-    return "Cloudflare Bot Management";
+  if (normalized === "cloudflare") {
+    const products = uniqueStrings(domains.map((domain) => findRuntimeEntityOwner(domain)?.product));
+    // A corporate name is not a product identity. Use exact retained hosts only.
+    return products.length === 1 ? products[0]! : value;
   }
   if (/^(?:google publisher tag|google ads \/ doubleclick|doubleclick|google ads)$/.test(normalized) && /advertising/i.test(purpose)) {
     return "Google Ads / DoubleClick";
@@ -1052,6 +1054,29 @@ export function buildNonEssentialInventoryTallies(rows: InventoryGroupRow[]) {
     }
     return tallies;
   }, { cookiesStorage: 0, requests: 0 });
+}
+
+/** Count retained inventory units, using the canonical classification for every row. */
+export function buildReportInventorySummary(rows: InventoryGroupRow[]) {
+  return ([
+    { label: "Cookies & browser storage", type: "cookie" },
+    { label: "Network requests", type: "tracker" },
+    { label: "Embedded content", type: "embed" },
+  ] as const).map(({ label, type }) => {
+    const counts = { nonEssential: 0, review: 0, contextual: 0, essential: 0 };
+    // Legacy script/service observations can establish presence without retaining
+    // a request count. Keep that unknown rather than presenting a false zero.
+    if (type === "tracker" && rows.some(row => row.type === type && row.requestCount === null)) {
+      return { label, value: null, counts: undefined };
+    }
+    for (const row of rows.filter(row => row.type === type)) {
+      // A script-only service observation is not a network request event.
+      const count = type === "tracker" ? row.requestCount ?? 0 : row.observedRecordCount;
+      const key = { "Non-essential": "nonEssential", "Review": "review", "Contextual": "contextual", "Essential": "essential" }[classifyInventoryEvidence(row)] as keyof typeof counts;
+      counts[key] += count;
+    }
+    return { label, value: Object.values(counts).reduce((sum, count) => sum + count, 0), counts };
+  });
 }
 
 export function getTrackerConsentReviewPriority(row: TrackerInventoryRow): ConsentReviewPriority {

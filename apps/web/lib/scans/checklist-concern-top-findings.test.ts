@@ -131,3 +131,10 @@ test("canonical checklist concerns promote a production-projectable post-Reject 
 test("canonical high-priority selection has no standalone runtime-finding input", () => {
   assert.deepEqual(selectCanonicalHighPriorityFindings([]), []);
 });
+
+test("unconfirmed grouped inventory cannot produce an executive finding", () => {
+  const item = row({id: "pre_consent_third_party_tracking", label: "Pre-consent tracking", status: "Not confirmed"});
+  item.criticalEvidence.pipeline.projectionStage = "coverage_fallback";
+  item.criticalEvidence.pipeline.ws01EvidenceRole = "retained_pre_consent_tracker_inventory";
+  assert.deepEqual(buildChecklistConcernTopFindings([item]), []);
+});

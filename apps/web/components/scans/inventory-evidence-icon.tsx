@@ -13,7 +13,7 @@ export function InventoryEvidenceIcon({ evidence, legend = false, description: d
   }
   const label = evidence as keyof typeof statuses;
   const status = statuses[label];
-  const description = detail ?? label;
+  const description = (detail ?? label).replace(/\bReview\b/g, "Needs review");
   return <span role="img" aria-label={description} title={description} tabIndex={legend ? undefined : 0} className={`inline-flex shrink-0 items-center justify-center rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 ${status.color}`}>
     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={status.path}/></svg>
   </span>;
@@ -21,6 +21,6 @@ export function InventoryEvidenceIcon({ evidence, legend = false, description: d
 
 export function InventoryEvidenceLegend() {
   return <span aria-label="Evidence classification legend" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-normal text-slate-600">
-    {Object.keys(statuses).map(label => <span key={label} className="inline-flex items-center gap-1.5"><InventoryEvidenceIcon evidence={label} legend />{label}</span>)}
+    {Object.keys(statuses).map(label => <span key={label} className="inline-flex items-center gap-1.5"><InventoryEvidenceIcon evidence={label} legend />{label === "Review" ? "Needs review" : label}</span>)}
   </span>;
 }

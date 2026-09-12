@@ -1,3 +1,6 @@
+import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
+import { canAssessRetainedCrawl } from "../../lib/scans/full-site-crawl-limitation";
+import { projectSitewideEvidencePage, sitewideEvidencePageSchema, type SitewideEvidencePage } from "../../lib/scans/sitewide-evidence-index";
 import { projectScanReportNoGo } from "../../lib/scans/scan-report-disposition";
 import "server-only";
 import { createHash } from "node:crypto";
@@ -23,11 +26,14 @@ import { buildSitePriorityReview, sitePriorityFindingSchema, type SitePriorityFi
 import { buildChecklistConcernTopFindings } from "../../lib/scans/checklist-concern-top-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
-const PRIORITY_VERSION = "site-priority-review.v3";
+const PRIORITY_VERSION = "site-priority-review.v10";
 const persistedScoreSchema = z.object({
   version: z.literal(VERSION), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
   priorityReview: z.array(sitePriorityFindingSchema),
+  evidencePages: z.array(sitewideEvidencePageSchema),
+  assessedStorageRecords: z.array(z.record(z.unknown())),
+  assessedNonEssentialStorage: z.number().int().nonnegative().nullable(),
   sources: z.array(z.object({pageId: z.string(), sourceHash: z.string().regex(/^[a-f0-9]{64}$/), findingIds: z.array(z.string())})),
 });
 const additionalRuntimeSchema = z.object({
@@ -44,8 +50,17 @@ export type FullSiteScore = {
   limitedPages: number;
   scope: string;
   priorityReview: SitePriorityFinding[];
+  evidencePages?: SitewideEvidencePage[];
+  assessedNonEssentialStorage: number | null;
+  assessedStorageRecords?: Record<string, unknown>[];
   sources: Array<{ pageId: string; sourceHash: string; findingIds: string[] }>;
 };
+
+/** Count the same deduplicated canonical evidence used by the site priority finding. */
+export function countAssessedNonEssentialStorage(rows: GdprEprivacyCoverageChecklistItem[]) {
+  const evidence = rows.find(row => row.id === "pre_consent_cookies_storage")?.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows;
+  return Array.isArray(evidence) ? evidence.length : null;
+}
 
 /** Merge only canonical checklist projections. Repeated identities retain one deduction. */
 export function mergeSiteChecklistRows(home: GdprEprivacyCoverageChecklistItem[], additional: GdprEprivacyCoverageChecklistItem[]) {
@@ -106,7 +121,7 @@ export function isFullSiteScoringCaptureComplete(page: {
 }
 
 export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPage[]): Promise<FullSiteScore | null> {
-  if (!crawl.completed_at || crawl.status !== "completed") return null;
+  if (!canAssessRetainedCrawl(crawl)) return null;
   const { rows: [snapshot] } = await query<Record<string, unknown>>(
     "select report_projection_payload,report_projection_payload_sha256,report_projection_payload_size_bytes,report_projection_status,report_projection_version,report_projection_computed_at from scan_snapshots where scan_id=$1", [crawl.scan_id]);
   if (!snapshot) return null;
@@ -123,6 +138,12 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
   const existing = cache.get(key);
   if (existing && existing.expiresAt > Date.now()) return existing.result;
   const pending = (async () => {
+    const homePageEvidence = pages.find(page => page.source === "homepage");
+    const evidencePages: SitewideEvidencePage[] = [projectSitewideEvidencePage({
+      pageId: homePageEvidence?.id ?? crawl.scan_id,
+      url: homePageEvidence?.finalUrl ?? homePageEvidence?.url ?? "",
+      sourceHash: String(snapshot.report_projection_payload_sha256), homepage: true,
+    }, canonical.checklistRows)];
     const projected: GdprEprivacyCoverageChecklistItem[] = [];
     const sources: FullSiteScore["sources"] = [];
     let scoredPages = 1, limitedPages = 0;
@@ -139,6 +160,10 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
         const runtimeCoverage = additionalRuntimeSchema.safeParse(evidence);
         if (!runtimeCoverage.success || runtimeCoverage.data.moduleRun.status !== "completed") limitedPages++;
         projected.push(...pageRows);
+        evidencePages.push(projectSitewideEvidencePage({
+          pageId: page.id, url: page.finalUrl ?? page.url,
+          sourceHash: observation.sourceHash, homepage: false,
+        }, pageRows));
         sources.push({ pageId: page.id, sourceHash: observation.sourceHash, findingIds: pageRows.filter(row => SCORING_RULE_BY_ID.get(row.id)?.siteWide && getGdprEprivacyRowDeduction(row) > 0).map(row => row.id) });
         scoredPages++;
       } catch { limitedPages++; }
@@ -151,7 +176,9 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       ...(homePage ? [{ id: homePage.id, url: homePage.finalUrl ?? homePage.url, homepage: true, findingIds: [...homeFindingIds, ...executive.map(finding => finding.id)] }] : []),
       ...sources.map(source => { const page = pages.find(page => page.id === source.pageId)!; return { id: page.id, url: page.finalUrl ?? page.url, homepage: false, findingIds: source.findingIds }; }),
     ], executive);
-    const result = { version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ scanRecord: home, checklistRows, unifiedFindings: canonical.globalUnifiedFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface and embed evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
+    const assessedNonEssentialStorage = countAssessedNonEssentialStorage(checklistRows);
+    const assessedStorageRecords = (checklistRows.find(row => row.id === "pre_consent_cookies_storage")?.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows ?? []) as Record<string, unknown>[];
+    const result = { assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ scanRecord: home, checklistRows, unifiedFindings: canonical.globalUnifiedFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface and embed evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
     // Persist the versioned, evidence-bound result once; table filtering and downloads reuse it.
     if (!limitedPages) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
     return result;
@@ -169,6 +196,7 @@ export function projectFullSiteScoringEvidence(evidence: Record<string, unknown>
         const cookieWriteObservations = parsed.data.filter(e => e.consentStateAtTime === "pre_consent" && (!e.scenario || e.scenario === "fresh_pre_consent")).map(e => ({
           cookieName: e.cookieName, domain: e.cookieDomain, cookiePath: e.cookiePath,
           partitionKey: e.partitionKey, category: e.cookiePurpose,
+          exactStorageIdentity: retainedCookieInventoryIdentity(e, evidence.cookieSnapshots),
           essentiality: e.cookieEssentiality, essentialityConfidence: e.cookieEssentialityConfidence,
           beforeConsent: true, timestampMs: e.timestampMs, firstObservedAtMs: e.timestampMs,
           setMethod: e.operation, setAtMs: /snapshot/.test(e.operation ?? "") ? null : e.timestampMs,

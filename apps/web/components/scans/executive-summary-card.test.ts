@@ -127,7 +127,7 @@ test("compact Reject-path card renders canonical outcome, bounded evidence, and 
   assert.match(html, /data-reject-path-state="issue_observed"/);
 });
 
-test("compact Reject-path card presents persistence evidence without scoring treatment and hides incomplete coverage", () => {
+test("compact Reject-path card separates incomplete action coverage from initial control inspection", () => {
   const persistenceHtml = renderToStaticMarkup(createElement(CompactRejectPathCard, {
     projection: {
       evidenceRows: [{ detail: "Example Analytics · cookie", label: "_analytics" }],
@@ -152,9 +152,11 @@ test("compact Reject-path card presents persistence evidence without scoring tre
   }));
 
   assert.match(persistenceHtml, /Review signal/);
-  assert.doesNotMatch(persistenceHtml, /Stored presence alone does not establish active use/);
+  assert.match(persistenceHtml, /Stored presence alone does not establish active use/);
   assert.doesNotMatch(persistenceHtml, /score effect|included in score|deduct/i);
-  assert.equal(incompleteHtml, "");
+  assert.match(incompleteHtml, /Independent Reject test · Incomplete/);
+  assert.match(incompleteHtml, /Post-Reject behavior was not assessed/);
+  assert.match(incompleteHtml, /does not establish whether a control was present/);
 });
 
 test("compact Reject-path card appears after the persisted A/R/O control card", () => {
@@ -3350,7 +3352,7 @@ test("ExecutiveSummaryCard distinguishes a CMP signal from an unconfirmed banner
   }));
 
   assert.match(html, /HubSpot CMP detected/);
-  assert.match(html, /HubSpot Banner CMP technology was observed/);
+  assert.match(html, /HubSpot Consent Banner technology was observed/);
   assert.doesNotMatch(html, /Consent banner not determined/);
 });
 

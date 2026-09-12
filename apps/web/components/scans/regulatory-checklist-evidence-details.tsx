@@ -1,4 +1,5 @@
 import React from "react";
+import { checklistRemediation, readChecklistRemediation } from "../../lib/scans/checklist-remediation";
 import { EvidenceJsonBlock } from "./evidence-json-block";
 import { VendorBrandChip } from "./vendor-brand-chip";
 
@@ -479,7 +480,8 @@ function getPolicyProvenanceRows(jsonPayload: string) {
   const effectiveDate = getString(provenance.effectiveDate);
   const sectionHeading = getString(provenance.sectionHeading);
   return [
-    `${policyTitle}${sourceUrl ? ` — ${sourceUrl}` : " — URL not retained"}`,
+    `Captured page title: ${policyTitle}${sourceUrl ? ` — ${sourceUrl}` : " — URL not retained"}`,
+    ...(getString(provenance.documentHeading) ? [`Document heading: ${getString(provenance.documentHeading)}`] : []),
     `Source policy language: ${detectedLanguage}; banner/page language: ${bannerLanguage}; translation applied: ${translationApplied === null ? "Unknown" : translationApplied ? "Yes" : "No"}.`,
     `Policy reached through: ${discoveryMethod ? humanizeTraceToken(discoveryMethod) : "Unknown"}; directly linked from scanned page: ${directlyLinked === null ? "Unknown" : directlyLinked ? "Yes" : "No"}${retrievalTimestamp ? `; retrieved during scan: ${retrievalTimestamp}` : ""}.`,
     [
@@ -917,6 +919,11 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
   if (!parsed) {
     return { kind: "none", steps: [] };
   }
+  const canonicalGuidance = readChecklistRemediation(getRetainedEvidence(jsonPayload)?.remediation) ?? checklistRemediation({
+    rowId: getString(parsed.checklistItemId) ?? getString(parsed.rowId) ?? "",
+    status: getString(parsed.status) ?? getString(parsed.statusLabel) ?? "Unknown",
+  });
+  if (canonicalGuidance) return canonicalGuidance;
   const coverageArea = getString(parsed.coverageArea) ?? "this coverage area";
   const normalizedCoverageArea = coverageArea.toLowerCase();
   const assessmentStatus = getString(parsed.assessmentStatus);
@@ -959,7 +966,7 @@ function getCorrectionGuidance(jsonPayload: string): CorrectionGuidance {
     };
   }
 
-  if (isPolicyDisclosureNotConfirmed(parsed, retainedEvidence)) {
+  if (policyEvidenceAssessment && isPolicyDisclosureNotConfirmed(parsed, retainedEvidence)) {
     return {
       kind: "steps",
       steps: [
@@ -1283,6 +1290,12 @@ export function RegulatoryChecklistActiveTrace({
 export function RegulatoryChecklistEvidenceDetails(input: RegulatoryChecklistEvidenceDetailsProps) {
   const evidenceSummaryRows = getEvidenceSummaryRows(input);
   const policyProvenanceRows = getPolicyProvenanceRows(input.jsonPayload);
+  const retained = getRetainedEvidence(input.jsonPayload);
+  const provenance = getRecord(retained?.policyEvidenceProvenance);
+  const sourceUrl = getString(provenance?.sourceUrl);
+  const signal = getRecord(retained?.article13Signal);
+  const section = getRecord(retained?.rowSpecificSectionEvidence);
+  const excerpt = getString(retained?.selectedPolicySectionExcerpt) ?? getString(section?.selectedPolicySectionExcerpt) ?? getString(signal?.selectedPolicySectionExcerpt) ?? getString(signal?.evidenceText);
 
   return (
     <>
@@ -1293,6 +1306,8 @@ export function RegulatoryChecklistEvidenceDetails(input: RegulatoryChecklistEvi
             {policyProvenanceRows.map((row, index) => (
               <p key={`${index}:${row}`}>{row}</p>
             ))}
+            {sourceUrl && /^https?:\/\//i.test(sourceUrl) ? <a className="break-all text-sky-700 underline" href={sourceUrl} target="_blank" rel="noreferrer">Open policy source</a> : null}
+            {excerpt ? <blockquote className="mt-2 border-l-2 border-slate-300 pl-3 text-xs whitespace-pre-wrap">{excerpt}</blockquote> : null}
           </div>
         </div>
       ) : null}

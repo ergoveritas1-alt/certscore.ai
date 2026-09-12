@@ -3,6 +3,8 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { runtimePreviewFixture } from "./pre-consent-runtime-preview-fixture";
+import { FullSiteWorkspace } from "./full-site-workspace";
 import {
   getProgressHandoffValue,
   getProgressHandoffStage,
@@ -39,6 +41,39 @@ const baseProps = {
   startedAt: "2026-07-29T23:00:01.000Z",
   status: "running"
 };
+
+test("pending workspace displays retained checkpoint observations before its first page completes", () => {
+  const html = renderPendingScanDetailView({
+    ...baseProps,
+    fullSite: { maxPages: 1, concurrency: 1, waitSeconds: 1 },
+    initialPreConsentPreview: runtimePreviewFixture,
+  });
+  assert.match(html, /Early page observations/);
+  assert.match(html, /Google Fonts/);
+  assert.match(html, /Google Maps embed/);
+  assert.match(html, /not findings or final totals/);
+  assert.match(html, /role="progressbar"/);
+  assert.doesNotMatch(html, /Loading inventory|0 priority issues|Executive overview/);
+});
+
+test("workspace without a retained checkpoint does not invent early observations", () => {
+  const html = renderPendingScanDetailView({
+    ...baseProps,
+    fullSite: { maxPages: 1, concurrency: 1, waitSeconds: 1 },
+  });
+  assert.doesNotMatch(html, /Early page observations|Google Maps embed/);
+  assert.match(html, /Assessment in progress/);
+});
+
+test("completed report rendering does not reuse a preliminary checkpoint", () => {
+  const html = renderToStaticMarkup(<FullSiteWorkspace
+    scanId={baseProps.scanId}
+    requested={{ maxPages: 1, concurrency: 1, waitSeconds: 1 }}
+    preConsentPreview={runtimePreviewFixture}
+  >Completed homepage assessment</FullSiteWorkspace>);
+  assert.doesNotMatch(html, /Early page observations|Google Maps embed/);
+  assert.match(html, /Executive overview/);
+});
 
 test("fresh submission handoff immediately reflects the authoritative stage and value", () => {
   assert.equal(getProgressHandoffStage({ hasSubmissionHandoff: true, serverStage: "scan" }), "scan");
@@ -132,14 +167,14 @@ test("active scans render the report-consistent preliminary runtime sections", (
   assert.match(html, /min-w-\[58rem\] relative pt-6/);
   assert.match(html, /top-\[2\.55rem\]/);
   assert.doesNotMatch(html, /top-\[4\.2rem\]/);
-  assert.match(html, /Preliminary cookie and tracker inventory/);
+  assert.match(html, /Preliminary resource inventory/);
   assert.match(html, /What we’ve observed so far/);
   assert.doesNotMatch(html, /View checkpoint examples/);
   assert.doesNotMatch(html, /These are bounded examples returned by the preliminary runtime checkpoint/);
   assert.doesNotMatch(html, /The early runtime checkpoint has partial coverage/);
   assert.match(html, /Google Analytics/);
   assert.match(html, /Checkpoint observations are not findings or final totals/);
-  assert.match(html, /aria-label="Preliminary cookies and trackers"[^>]*data-scrollable="false"/);
+  assert.match(html, /aria-label="Preliminary resource details"[^>]*data-scrollable="false"/);
   assert.doesNotMatch(html, /max-h-\[22rem\] overflow-y-auto/);
 });
 
@@ -178,7 +213,7 @@ test("preliminary runtime inventory scrolls only after six rows", () => {
     },
   });
 
-  assert.match(html, /aria-label="Preliminary cookies and trackers"[^>]*max-h-\[22rem\] overflow-y-auto[^>]*data-scrollable="true"/);
+  assert.match(html, /aria-label="Preliminary resource details"[^>]*max-h-\[22rem\] overflow-y-auto[^>]*data-scrollable="true"/);
 });
 
 test("full-site scans open the results workspace before homepage readiness", () => {
@@ -187,9 +222,14 @@ test("full-site scans open the results workspace before homepage readiness", () 
     fullSite: { maxPages: 14, concurrency: 2, waitSeconds: 1 },
   });
   assert.match(html, /data-full-site-report/);
-  assert.match(html, /Site scan results/);
+  assert.match(html, /Executive overview/);
+  assert.match(html, /Coverage &amp; timing/);
+  assert.match(html, /Jul 29, 2026/);
+  assert.doesNotMatch(html, /Loading report…/);
   assert.match(html, /data-full-site-progress/);
   assert.match(html, /Full site scan page progress/);
+  assert.match(html, /0 \/ 14 pages processed/);
+  assert.doesNotMatch(html, /0 \/ 1 pages processed/);
   assert.match(html, /s elapsed/);
   assert.match(html, /up to <!-- -->14<!-- --> pages|up to 14 pages/);
   assert.doesNotMatch(html, />Prepare</);

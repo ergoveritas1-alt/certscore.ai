@@ -1,5 +1,7 @@
+import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
 import { projectSiteMetadata } from "./site-metadata-projection";
 import "server-only";
+import { retainedPolicySectionHeading } from "../../lib/scans/retained-policy-source";
 import { projectRuntimeEvidenceGraphs } from "./runtime-evidence-graph-projection";
 
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
@@ -2904,7 +2906,7 @@ export function summarizePolicySurfaces(
   }));
   const gdprTransparencyProductionEvidenceDiagnostics =
     gdprTransparencyAdapterDiagnostics(gdprTransparencyAdapterResults);
-  const gdprTransparencyAcceptedArticle13Signals = gdprTransparencyAdapterResults.flatMap(({ result }) =>
+  const gdprTransparencyAcceptedArticle13Signals = gdprTransparencyAdapterResults.flatMap(({ result, row }) =>
     result.acceptedProductionSignals.map((signal) => ({
       classifierProvenance: signal.classifierProvenance,
       classifierReasonCodes: signal.classifierReasonCodes,
@@ -2919,7 +2921,7 @@ export function summarizePolicySurfaces(
       productionCreditProfile: signal.productionCreditProfile,
       selectedEvidenceStrength: signal.selectedEvidenceStrength,
       selectedPolicySectionExcerpt: signal.selectedPolicySectionExcerpt,
-      selectedPolicySectionHeading: "GDPR Transparency topic classifier evidence",
+      selectedPolicySectionHeading: retainedPolicySectionHeading(signal.selectedPolicySectionExcerpt, row.surface.retainedPolicySections),
       selectedPolicySectionUrl: signal.selectedPolicySectionUrl,
       source: signal.source,
       sourceCandidateProductionCredit: signal.sourceCandidateProductionCredit,
@@ -3225,12 +3227,13 @@ export function summarizePolicySurfaces(
       directlyLinkedFromScannedPage: row.surface.directlyLinkedFromScannedPage ?? directlyLinkedFromScannedPage,
       discoveryMethod: row.surface.discoveryMethod,
       documentOwnerEntity: firstString(row.surface.documentOwnerEntity),
+      documentHeading: row.surface.retainedPolicySections?.find(section => section.extractionMethod === "html_heading_hierarchy")?.heading,
       effectiveDate: firstString(row.surface.effectiveDate),
       lastUpdatedText: firstString(row.surface.lastUpdatedText),
       observationId: row.surface.observationId,
       ownershipConfidence: row.surface.ownershipConfidence ?? null,
       policyTitle: firstString(row.surface.title, row.surface.linkText),
-      retrievalTimestamp: firstString(row.surface.retrievedAt, options.scanStartedAt),
+      retrievalTimestamp: firstString(row.surface.retrievedAt),
       sourceUrl: documentUrl,
       targetRelationship: row.surface.targetRelationship ?? "unknown",
       translationApplied: row.surface.translationApplied ?? false,
@@ -5757,6 +5760,8 @@ function buildMaterializedLocalV2Detail(
       category,
       cookieName: event.cookieName,
       cookiePath: event.cookiePath ?? "/",
+      exactStorageIdentity: retainedCookieInventoryIdentity(event, bundle.cookieSnapshots),
+      partitionKey: event.partitionKey,
       partitionContext: "unpartitioned_or_unknown",
       evidenceRefs: [event.eventId],
       domain: (event.cookieDomain ?? event.hostname)?.replace(/^\.+/, ""),
@@ -6454,7 +6459,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v17";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v20";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

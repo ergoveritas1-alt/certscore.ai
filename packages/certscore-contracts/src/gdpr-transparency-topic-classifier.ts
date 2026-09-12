@@ -600,9 +600,6 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("dpo_contact", "contact our dpo"),
     equivalent("dpo_contact", "data privacy officer"),
     equivalent("dpo_contact", "office of the data privacy officer"),
-    equivalent("dpo_contact", "privacy counsel"),
-    equivalent("dpo_contact", "privacy manager", "requires_privacy_context"),
-    equivalent("dpo_contact", "privacy contact point", "privacy_contact_point"),
     direct("processing_purposes", "purposes of processing personal data"),
     direct("processing_purposes", "why we process personal data"),
     direct("processing_purposes", "use your personal data"),
@@ -1946,6 +1943,9 @@ export function classifyGdprTransparencyTopics(
     .map((index) => NORMALIZED_GDPR_TRANSPARENCY_TOPIC_PHRASES[index])
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
     .filter(({ term }) => localeHints.size === 0 || localeHints.has(term.locale))
+    .filter(({ term }) => term.topic !== "controller_contact" ||
+      !/^(?:privacy contact|privacy office|contact us)$/i.test(term.phrase) ||
+      hasRetainedContactEndpoint(sourceText))
     .filter(({ normalizedPhrase, term }) => !dpoDesignationIsExplicitlyNegated({
       normalizedPhrase,
       normalizedText,
@@ -1969,6 +1969,10 @@ export function classifyGdprTransparencyTopics(
   const normalizedSectionHeading = normalizeGdprTransparencyText(input.section?.heading);
   const normalizedSectionBody = normalizeGdprTransparencyText(input.section?.body);
   const semanticMatches = GDPR_TRANSPARENCY_SEMANTIC_RULES
+    .filter((rule) => rule.topic !== "dpo_contact" || rule.locale !== "en" ||
+      ["data protection officer", "data privacy officer", "dpo"].some((normalizedPhrase) =>
+        normalizedText.includes(normalizedPhrase) &&
+        !dpoDesignationIsExplicitlyNegated({ normalizedPhrase, normalizedText, term: rule })))
     .filter((rule) => localeHints.size === 0 || localeHints.has(rule.locale))
     .filter(() =>
       input.section != null ||
@@ -2218,17 +2222,17 @@ function phraseScore(input: {
 function dpoDesignationIsExplicitlyNegated(input: {
   normalizedPhrase: string;
   normalizedText: string;
-  term: GdprTransparencyTopicPhrase;
+  term: Pick<GdprTransparencyTopicPhrase, "locale" | "topic">;
 }) {
   if (
     input.term.locale !== "en" ||
     input.term.topic !== "dpo_contact" ||
-    !/\b(?:data protection officer|dpo)\b/i.test(input.normalizedPhrase)
+    !/\b(?:data protection officer|data privacy officer|dpo)\b/i.test(input.normalizedPhrase)
   ) {
     return false;
   }
 
-  const rolePattern = "(?:data protection officer|dpo)";
+  const rolePattern = "(?:data protection officer|data privacy officer|dpo)";
   const negationPatterns = [
     new RegExp(`\\b(?:do|does|did) not(?: currently)? (?:have|appoint|designate|name|publish|employ)\\b.{0,80}\\b${rolePattern}\\b`, "i"),
     new RegExp(`\\b(?:have|has|had) not(?: currently)? (?:appointed|designated|named|published|employed)\\b.{0,80}\\b${rolePattern}\\b`, "i"),
@@ -2252,6 +2256,18 @@ function dpoDesignationIsExplicitlyNegated(input: {
     );
   }
   return true;
+}
+
+/** Generic contact labels need an actual retained route, not navigation text. */
+function hasRetainedContactEndpoint(text: string) {
+  return /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}|https?:\/\/[^\s<>]+(?:contact|privacy)[^\s<>]*|(?:tel(?:ephone)?|phone)\s*:?\s*\+?[\d ()-]{7,}|\b\d{1,6}\s+[\p{L} .'-]+\s(?:street|road|avenue|lane|drive|way|boulevard)\b/iu.test(text);
+}
+
+/** A generic privacy-contact label alone is not a retained identity or contact route. */
+export function hasUnsupportedGenericPrivacyContact(text: string) {
+  return /\b(?:privacy contact|privacy office|contact us)\b/i.test(text) &&
+    !hasRetainedContactEndpoint(text) &&
+    !/\b(?:data controller|is the controller|controller is|controller of)\b/i.test(text);
 }
 
 function hasRequiredTopicContext(

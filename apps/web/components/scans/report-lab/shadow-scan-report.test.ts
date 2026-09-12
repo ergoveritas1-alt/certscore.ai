@@ -98,8 +98,8 @@ test("evidence section headings distinguish review, observed, and total check co
     "utf8"
   );
 
-  assert.match(source, /\{trackingExternalReviewCount\} requiring review · \{report\.trackingExternalRows\.length\} checks/);
-  assert.match(source, /\{preConsentRuntimeReviewCount\} requiring review · \{report\.preConsentRuntimeRows\.length\} checks/);
+  assert.match(source, /\{trackingExternalReviewCount\} checks need review · \{report\.trackingExternalRows\.length\} checks/);
+  assert.match(source, /\{preConsentRuntimeReviewCount\} checks need review · \{report\.preConsentRuntimeRows\.length\} checks/);
   assert.match(source, /\{observedGdprTransparencyRows\} observed · \{report\.gdprTransparencyRows\.length\} checks/);
   assert.match(source, /positive · \{report\.transportRows\.length\} checks/);
 });
@@ -246,7 +246,7 @@ test("report header actions and section spacing match the compact report treatme
   assert.match(choicePathSource, /mt-3 border-t border-zinc-300 pt-2\.5/);
   assert.match(choicePathSource, /mt-1\.5 grid items-start gap-2 sm:grid-cols-2/);
   assert.match(evidenceDirectorySource, /px-5 py-8 lg:px-10 lg:py-10/);
-  assert.match(evidenceDirectorySource, /mt-6 grid items-start/);
+  assert.match(evidenceDirectorySource, /grid items-start/);
 });
 
 test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comparison", async () => {
@@ -276,9 +276,9 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   const gpcIndex = snapshotSource.indexOf(">Global Privacy Control (GPC)<");
   const trackerFootprintIndex = snapshotSource.indexOf(">Tracker footprint<");
   const transportSecurityIndex = snapshotSource.indexOf(">HTTPS / TLS<");
-  const runtimeIndex = evidenceDirectorySource.indexOf(">Pre-consent runtime<");
+  const runtimeIndex = evidenceDirectorySource.indexOf(">Storage &amp; tracking techniques{");
   const gpcCardIndex = evidenceDirectorySource.indexOf("<GpcEvidenceIndexCard");
-  const transportIndex = evidenceDirectorySource.indexOf(">Transport security<");
+  const transportIndex = evidenceDirectorySource.indexOf(">Transport security{");
 
   assert.ok(consentPlatformIndex >= 0);
   assert.ok(consentPlatformIndex < consentControlsIndex);
@@ -286,17 +286,19 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(trackerFootprintIndex < transportSecurityIndex);
   assert.ok(transportSecurityIndex < gpcIndex);
   assert.match(snapshotSource, /<VendorBrandLogo label=\{consentVendor\} \/>/);
-  assert.match(snapshotSource, /getGpcSnapshotLabel\(report\.gpcResponse\.assessment\.status\)/);
+  assert.match(snapshotSource, /report\.gpcResponse\.headline/);
+  assert.match(snapshotSource, /report\.gpcResponse\.coverageSummary/);
   assert.doesNotMatch(snapshotSource, /<GpcStatusBadge/);
   assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /href="#gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
-  assert.match(gpcEvidenceCardSource, /whitespace-nowrap text-lg/);
+  assert.match(gpcEvidenceCardSource, /projection\.headline/);
+  assert.match(gpcEvidenceCardSource, /projection\.coverageSummary/);
   assert.doesNotMatch(gpcEvidenceCardSource, /<GpcStatusBadge/);
   assert.ok(runtimeIndex >= 0);
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(gpcCardIndex < transportIndex);
-  assert.match(source, />GPC observation and comparison</);
+  assert.match(source, />GPC observation and comparison\{/);
   assert.match(source, /Typed comparison evidence/);
   assert.match(source, /"Advertising \/ measurement"/);
   assert.match(source, /"Consent \/ CMP"/);
@@ -334,7 +336,8 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
   assert.match(runtimeSectionSource, /Show details/);
   assert.match(runtimeSectionSource, /Hide details/);
   assert.doesNotMatch(source, /Every retained cookie, storage, tracker, and request group from the canonical runtime inventory is available below/);
-  assert.match(source, /heading="Cookies, storage, requests, and embeds"/);
+  assert.match(source, /heading = "Cookies, storage, requests, and embeds"/);
+  assert.match(source, /heading=\{heading\}/);
   assert.doesNotMatch(source, /heading="Every retained vendor and request group"/);
   assert.match(source, /label="Copy entire cookies and trackers table"/);
   assert.match(source, /payload=\{copyPayload\}/);
@@ -392,7 +395,14 @@ test("preview and final reports share the vertically compressed timeline", async
   );
 
   assert.match(source, /data-density="compact"/);
-  assert.match(source, /relative pt-6/);
+  assert.match(source, /compact \? "pt-2" : "pt-6"/);
   assert.match(source, /top-\[2\.55rem\]/);
   assert.doesNotMatch(source, /top-\[4\.2rem\]/);
+});
+
+import { projectedConsentControlLabels } from "./timeline-report-model";
+test("control labels use typed inventory state independently of review or action outcomes", () => {
+  assert.deepEqual(projectedConsentControlLabels({accept: {state: "not_observed"}, reject: {state: "not_observed"}, options: {state: "not_observed"}}), {accept: "Not observed", reject: "Not observed", options: "Not observed"});
+  assert.equal(projectedConsentControlLabels({accept: {state: "observed"}, reject: {state: "unknown"}, options: {state: "not_observed"}}).reject, "Unknown");
+  assert.equal(projectedConsentControlLabels().reject, "Unknown");
 });

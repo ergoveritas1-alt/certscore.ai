@@ -11,7 +11,8 @@ const row: CollectionSurfaceTableRow = {
 };
 test("form rows expose page provenance, collapsed field details, and retained snapshot links", () => {
   const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[row, { ...row, id: "other-page:form", form: { ...row.form, pageUrl: "https://example.test/other" } }]} />);
-  assert.match(html, /Collection surfaces \(forms\)/); assert.match(html, /2 forms/);
+  assert.match(html, /Form confidence/); assert.match(html, /100% · direct/); assert.match(html, /Evidence references/);
+  assert.match(html, /Forms &amp; fields/); assert.match(html, /2 forms/);
   assert.match(html, /aria-expanded="false"/); assert.match(html, /hidden=""/);
   assert.match(html, /Your email/); assert.match(html, /https:\/\/example.test\/other/); assert.match(html, /View form: Contact us/);
 });
@@ -21,7 +22,7 @@ test("missing, withheld, and unsafe snapshot URLs never become usable links", ()
     assert.doesNotMatch(html, /View form:|javascript:/);
   }
   const limited = renderToStaticMarkup(<CollectionSurfacesTable rows={[]} pagesWithoutInventory={2} limitedPages={1} />);
-  assert.match(limited, /Missing evidence does not establish/); assert.doesNotMatch(limited, /No forms were observed/);
+  assert.match(limited, /form coverage is incomplete/); assert.doesNotMatch(limited, /No forms were observed/);
 });
 
 test("key columns sort both ways without mutating input or sorting field counts as text", () => {
@@ -63,4 +64,10 @@ test("retained toggle state and field warnings display without treating legacy m
  const form={...row.form,fields:[field,{...field,fieldRef:"legacy",controlKind:"checkbox" as const,checkedState:undefined,review:undefined}]};
  const html=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form}]}/>);
  assert.match(html,/Checkboxes \/ toggles/);assert.match(html,/Preselected marketing opt-in/);assert.match(html,/>On</);assert.match(html,/Not captured/);
+});
+
+test("complete zero-form inventory renders only a single line", () => {
+  const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[]} />);
+  assert.match(html, /Forms: no forms observed on the scanned pages/);
+  assert.doesNotMatch(html, /<table|<h2|Expand a form|0 forms/);
 });

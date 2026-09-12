@@ -1,3 +1,10 @@
+import { SitewideEvidenceCard } from "../sitewide-evidence-card";
+import { FullSiteIdentity } from "../full-site-identity";
+import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
+import { ReportInventorySummary } from "../report-inventory-summary";
+import { SitePriorityReview } from "../site-priority-review";
+import { CollectionSurfacesTable } from "../collection-surfaces-table";
+import type { FullSiteScanNoticeData } from "../../dashboard/full-site-scan-notice";
 import { afterClickCoverageLabel } from "../after-action-summary";
 import { DisclosureChevron, StatusBadge, JsonEvidence, EvidenceTools, FindingRow } from "../report-finding-row";
 import { describeSiteTechnology } from "@certscore/contracts";
@@ -49,6 +56,7 @@ import {
 } from "./shadow-report-data";
 
 type ShadowScanReportProps = {
+  fullSiteNotice?: FullSiteScanNoticeData | null;
   allowRestrictedScanOptions?: boolean;
   defaultScanFrom?: ServerScanFrom;
   mode?: "authenticated" | "public";
@@ -146,9 +154,15 @@ function ReportIdentity({
 }) {
   if (report.fullSite && !workspaceIdentity) return null;
   const visualEvidence = report.scan.visualEvidenceHref ?? null;
+  if (workspaceIdentity) return <FullSiteIdentity
+    scanId={report.scan.id} host={report.scan.host} url={report.scan.url}
+    createdAt={report.scan.createdAt} visualEvidenceHref={visualEvidence}
+    region={<span className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-2 py-1"><ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />Scanned from {report.scan.origin}</span>}
+    actions={hideShare ? null : <ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
+  />;
   return (
     <header className={compact ? "space-y-2" : "space-y-4"}>
-      <div className={`flex flex-col gap-3 ${enhancedActions ? "lg:flex-row lg:items-center lg:justify-between" : ""}`}>
+      <div className={`flex flex-col gap-3 ${enhancedActions ? "sm:grid sm:grid-cols-2 sm:items-center sm:gap-x-4" : ""}`}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-medium text-zinc-500">
           {enhancedActions ? (
             <div className="[&_.app-raised-button]:!h-[1.625rem] [&_.app-raised-button]:!rounded-md [&_.app-raised-button]:!border [&_.app-raised-button]:!border-zinc-300 [&_.app-raised-button]:!bg-white [&_.app-raised-button]:!text-zinc-600 [&_.app-raised-button]:!shadow-none [&_.app-raised-button]:hover:!border-zinc-500 [&_.app-raised-button]:hover:!text-zinc-950">
@@ -210,7 +224,7 @@ function ReportIdentity({
 
 function ReportScanNext({ allowRestrictedScanOptions = false, defaultScanFrom, mode = "public", report }: { allowRestrictedScanOptions?: boolean; defaultScanFrom?: ServerScanFrom; mode?: "authenticated" | "public"; report: Pick<ShadowReportData, "scan" | "fullSite"> }) {
   return (
-    <div className="shadow-scan-next w-full lg:max-w-[31rem] [&_.scan-report-button]:!rounded-md [&_.scan-report-button]:!border-zinc-300 [&_.scan-report-button]:!bg-white [&_.scan-report-button]:!text-zinc-700 [&_.scan-report-button]:!shadow-none [&_.ui-button]:!rounded-md [&_.ui-button]:!border-sky-700 [&_.ui-button]:!bg-none [&_.ui-button]:!bg-sky-600 [&_.ui-button]:!text-white [&_.ui-button]:!shadow-[0_4px_12px_rgba(2,132,199,0.22)] [&_.ui-button]:disabled:!border-sky-300 [&_.ui-button]:disabled:!bg-sky-100 [&_.ui-button]:disabled:!text-sky-700 [&_.ui-button]:disabled:!opacity-100 [&_input]:!h-10 [&_input]:!rounded-md [&_input]:!border [&_input]:!border-zinc-300 [&_input]:!bg-white [&_input]:!pl-3 [&_input]:!text-sm [&_input]:!shadow-none [&_input]:focus:!border-zinc-500 [&_input]:focus:!ring-1 [&_input]:focus:!ring-zinc-200">
+    <div className="shadow-scan-next w-full sm:max-w-[31rem] sm:justify-self-end [&_.scan-report-button]:!rounded-md [&_.scan-report-button]:!border-zinc-300 [&_.scan-report-button]:!bg-white [&_.scan-report-button]:!text-zinc-700 [&_.scan-report-button]:!shadow-none [&_.ui-button]:!rounded-md [&_.ui-button]:!border-sky-700 [&_.ui-button]:!bg-none [&_.ui-button]:!bg-sky-600 [&_.ui-button]:!text-white [&_.ui-button]:!shadow-[0_4px_12px_rgba(2,132,199,0.22)] [&_.ui-button]:disabled:!border-sky-300 [&_.ui-button]:disabled:!bg-sky-100 [&_.ui-button]:disabled:!text-sky-700 [&_.ui-button]:disabled:!opacity-100 [&_input]:!h-10 [&_input]:!rounded-md [&_input]:!border [&_input]:!border-zinc-300 [&_input]:!bg-white [&_input]:!pl-3 [&_input]:!text-sm [&_input]:!shadow-none [&_input]:focus:!border-zinc-500 [&_input]:focus:!ring-1 [&_input]:focus:!ring-zinc-200">
       <DomainScanForm
         allowLocalExtensionScan={mode === "authenticated"}
         allowRestrictedScanOptions={allowRestrictedScanOptions}
@@ -298,12 +312,12 @@ function CoverageBar({ detailed = false, report }: { detailed?: boolean; report:
   );
 }
 
-function RatingMix({ report }: { report: ShadowReportData }) {
+function RatingMix({ report, homepage = false }: { report: ShadowReportData; homepage?: boolean }) {
   const coverage = report.coverage;
   const segments = [
     { label: "concern", value: coverage.concern, color: "#e11d48" },
     { label: "partial", value: coverage.partial, color: "#d97706" },
-    { label: "review", value: coverage.review, color: "#f59e0b" },
+    { label: "Needs review", value: coverage.review, color: "#f59e0b" },
     { label: "positive", value: coverage.positive, color: "#10b981" },
     { label: "contextual", value: coverage.contextual, color: "#0ea5e9" },
     { label: "limited", value: coverage.limited, color: "#94a3b8" }
@@ -316,7 +330,7 @@ function RatingMix({ report }: { report: ShadowReportData }) {
       className="w-full max-w-[43rem] border-y border-zinc-200 py-3 lg:ml-auto"
     >
       <div className="flex items-baseline justify-between gap-4">
-        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">Rating mix</p>
+        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{homepage ? "Evidence Ratings" : "Rating mix"}{homepage ? <span className="ml-2 font-normal normal-case text-zinc-400">Homepage</span> : null}</p>
         <p className={`${monoClass} text-xs font-semibold text-zinc-800`}>{coverage.rows} rows</p>
       </div>
       <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-zinc-100" role="img">
@@ -385,14 +399,14 @@ function ControlStatusGrid({ compact = false, report }: { compact?: boolean; rep
             </span>
             <span className={`${compact ? "text-[0.68rem]" : "text-sm"} font-semibold text-zinc-900`}>{control.label}</span>
           </div>
-          {!compact ? <p className={`mt-3 text-xs font-medium ${observed ? "text-emerald-700" : "text-zinc-500"}`}>{control.value}</p> : null}
+          <p className={`${compact ? "mt-2 text-[10px]" : "mt-3 text-xs"} font-medium ${observed ? "text-emerald-700" : "text-zinc-500"}`}>{control.value}</p>
         </div>
       )})}
     </div>
   );
 }
 
-function SignalSnapshot({ report }: { report: ShadowReportData }) {
+function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReportData; siteOverview?: boolean }) {
   const consentControlSummary = getConsentControlSummaryLabel(report.controls);
   const consentCoverageLimited = Object.values(report.controls).some((value) => value === "Unknown");
   const consentVendor = report.consentVendor ?? (consentCoverageLimited ? "Not determined" : "Not identified");
@@ -414,7 +428,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
   const signalSummaryClass = "flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4 [&::-webkit-details-marker]:hidden";
   return (
     <div className="border-t border-zinc-950" data-testid="executive-signal-snapshot">
-      <p className="py-2 text-xs font-semibold uppercase text-zinc-500">Signal snapshot</p>
+      <p className="py-2 text-xs font-semibold uppercase text-zinc-500">Signal Snapshot{siteOverview ? <span className="ml-2 text-[10px] font-normal normal-case text-zinc-400">Homepage</span> : null}</p>
       <div className="border-t border-zinc-200">
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
@@ -435,7 +449,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             <span className="text-xs font-medium text-zinc-500">Consent controls</span>
             <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{consentControlSummary} <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
           </summary>
-          <div className="mt-3"><ControlStatusGrid compact report={report} /></div>
+          <div className="mt-3"><p className="mb-2 text-xs font-semibold text-zinc-600">Initial control inspection</p><ControlStatusGrid compact report={report} /></div>
           {report.acceptPath ? (
             <div className="mt-3" data-testid="timeline-accept-path-card">
               <CompactAcceptPathCard projection={report.acceptPath} />
@@ -493,15 +507,13 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
             ))}
           </ul>
         </details>
-        {report.gpcResponse ? (
+        {!siteOverview && (report.gpcResponse ? (
           <details className={signalRowClass} data-testid="executive-gpc-snapshot">
             <summary className={signalSummaryClass}>
               <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-800">
-                  {report.gpcResponse.assessment.contractVersion === "certscore.gpc-response-assessment.v3"
-                    ? `Observation ${report.gpcResponse.assessment.observation.status}`
-                    : getGpcSnapshotLabel(report.gpcResponse.assessment.status)}
+                  {report.gpcResponse.headline}
                 </span>
                 {report.gpcResponse.californiaDeductionPoints > 0 ? (
                   <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
@@ -519,6 +531,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
               {report.gpcResponse.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? (
                 <p className="text-xs leading-5 text-zinc-600">Signal delivery: {report.gpcResponse.assessment.comparison.delivery.status}. Comparison coverage: {report.gpcResponse.assessment.comparison.coverage.status}.</p>
               ) : null}
+              <p className="text-xs leading-5 text-zinc-600"><strong>Site response:</strong> {report.gpcResponse.comparisonHeadline}. {report.gpcResponse.coverageSummary}</p>
               <GpcComparisonGrid projection={report.gpcResponse} />
               <div className="flex flex-wrap items-center justify-between gap-2 text-[0.68rem] leading-4 text-zinc-500">
                 <span>
@@ -526,7 +539,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
                     ? `California policy applied −${report.gpcResponse.californiaDeductionPoints} points to the overall score.`
                     : "Jurisdiction-neutral comparison; no score effect was attached here."}
                 </span>
-                <a className="font-semibold text-sky-700 hover:text-sky-900" href="#gpc-evidence">Evidence index ↓</a>
+                <a className="font-semibold text-sky-700 hover:text-sky-900" href="#gpc-evidence">Detailed evidence ↓</a>
               </div>
             </div>
           </details>
@@ -545,7 +558,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
                 : "This result predates always-on GPC coverage or did not run through eligible sharded Lambda orchestration."}
             </p>
           </details>
-        )}
+        ))}
         {report.metrics.forms > 0 ? (
           <details className={signalRowClass}>
             <summary className={signalSummaryClass}>
@@ -560,7 +573,7 @@ function SignalSnapshot({ report }: { report: ShadowReportData }) {
   );
 }
 
-function BenchmarkComparison({ report }: { report: ShadowReportData }) {
+function BenchmarkComparison({ report, compact = false }: { report: ShadowReportData; compact?: boolean }) {
   const benchmarkLabel = report.scan.benchmark.replace(/\s+\(likely [^)]+\)\s*$/i, "");
   const benchmark = getIndustryBenchmark(report.scan.benchmark);
   const rows = [
@@ -575,6 +588,14 @@ function BenchmarkComparison({ report }: { report: ShadowReportData }) {
       site: report.metrics.nonEssentialCookiesStorage,
     },
   ];
+
+  if (compact) return <div data-testid="compact-homepage-benchmark">
+    <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-800" title={benchmarkLabel}>Homepage benchmark <span className="font-normal normal-case text-zinc-500">· non-essential</span></p>
+    <div className="mt-2 grid grid-cols-2 gap-3">{rows.map(row => <div key={row.label}>
+      <div className="flex items-baseline justify-between gap-2 text-[11px]"><span className="text-zinc-600">{row.label === "Non-essential requests" ? "Requests" : "Storage"}</span><span className="shrink-0 tabular-nums text-zinc-900"><strong>{row.site}</strong><span className="text-zinc-500"> / {row.average?.toFixed(1) ?? "—"} avg</span></span></div>
+      <div className="relative mt-1 h-1 rounded-full bg-zinc-100" aria-hidden="true"><span className="absolute inset-y-0 left-0 rounded-full bg-sky-500" style={{width: `${row.site / (Math.max(row.site, row.average ?? 0, 1) * 1.1) * 100}%`}} />{row.average !== null ? <span className="absolute -top-0.5 h-2 w-px bg-zinc-700" style={{left:`${row.average / (Math.max(row.site,row.average,1)*1.1)*100}%`}} /> : null}</div>
+    </div>)}</div>
+  </div>;
 
   return (
     <div className="border-l-4 border-sky-500 pl-4" data-testid="industry-benchmark-comparison">
@@ -1002,7 +1023,7 @@ function inventoryResourceIdentity(value: unknown, product: string) {
   return { cookieRefs, products: [product], requests, nodeRefs };
 }
 
-export function RuntimeInventoryTable({ report, initiallyOpen = true }: { report: ShadowReportData; initiallyOpen?: boolean }) {
+export function RuntimeInventoryTable({ report, initiallyOpen = true, heading = "Cookies, storage, requests, and embeds" }: { report: ShadowReportData; initiallyOpen?: boolean; heading?: string }) {
   const inventoryRows = consolidateInventoryServices(report.inventory);
   const hasRelationshipEvidence = Boolean(report.runtimeEvidenceGraph?.details || report.runtimeEvidenceGraph?.graphs.some(graph => graph.scenario === "pre_consent" && graph.edges.length > 0));
   const inventoryIsScrollable = report.inventory.length > INVENTORY_VISIBLE_ROW_LIMIT;
@@ -1024,7 +1045,7 @@ export function RuntimeInventoryTable({ report, initiallyOpen = true }: { report
       detailsHint={<InventoryEvidenceLegend />}
       detailsLabel="Resource details"
       eyebrow="Resource inventory"
-      heading="Cookies, storage, requests, and embeds"
+      heading={heading}
       inventory={report.inventory}
     >
         <InventoryResourceProvider projection={report.runtimeEvidenceGraph}>
@@ -1245,7 +1266,31 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
   );
 }
 
-function TimelineVariant({
+function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, mode }: Pick<ShadowScanReportProps, "allowRestrictedScanOptions" | "defaultScanFrom" | "mode"> & { report: ShadowReportData }) {
+  if (report.fullSite) return <HomepageTimelineVariant report={report} allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} />;
+  const priorityReview = report.findings.map(finding => ({ ...finding, pages: [{ id: report.scan.id, url: report.scan.url, homepage: true }] }));
+  return <div className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6" data-single-page-report>
+    <header className="pb-1">
+      <div className="mt-1 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-x-4 lg:gap-x-6 sm:[&>div:first-child]:contents sm:[&>div:first-child>header]:contents sm:[&>div:first-child>header>div:last-child]:col-span-full">
+        <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url} createdAt={report.scan.createdAt} visualEvidenceHref={report.scan.visualEvidenceHref}
+          region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned from {report.scan.origin}</span>}
+          timing={<span>Observation window · {report.scan.duration}</span>} /></div>
+        <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
+      </div>
+    </header>
+    <FullSiteExecutiveSummary score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1} statusLabel="Completed"
+      actions={<ShadowReportShareMenu reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
+      snapshot={<SignalSnapshot siteOverview report={report} />} homepageVerdict={report.verdict}
+      inventorySummary={<ReportInventorySummary metrics={report.inventorySummary ?? [{ label: "Cookies & browser storage", value: null }, { label: "Network requests", value: null }, { label: "Embedded content", value: null }]} />} />
+    <SitePriorityReview findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
+    <section aria-label="Page event timeline" className="my-3 border-y border-zinc-200 bg-white py-2"><h2 className="text-xl font-semibold">Page event timeline</h2><div className="mt-1"><RuntimeObservationTimeline dominant compact events={report.timeline} /></div></section>
+    <RuntimeInventoryTable report={report} heading="Resources & services" />
+    <CollectionSurfacesTable rows={report.collectionTableRows ?? []} loading={false} pagesWithoutInventory={report.collectionTableRows ? 0 : 1} />
+    <EvidenceDirectory compact report={report} />
+  </div>;
+}
+
+function HomepageTimelineVariant({
   allowRestrictedScanOptions,
   defaultScanFrom,
   mode,
@@ -1431,7 +1476,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
   );
 }
 
-function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportProjection }) {
+function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: GpcResponseReportProjection; homepage?: boolean }) {
   const proof = projection.assessment.comparison.enabledProof;
   const evidenceJson: Record<string, unknown> = {
     assessment: projection.assessment,
@@ -1446,8 +1491,8 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase text-zinc-500">GPC observation and comparison</p>
-          <h3 className="mt-1 whitespace-nowrap text-lg font-semibold text-zinc-950">{projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? `Observation ${projection.assessment.observation.status}` : projection.assessment.findingTitle}</h3>
+          <p className="text-xs font-semibold uppercase text-zinc-500">GPC observation and comparison{homepage ? " · Homepage" : ""}</p>
+          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{projection.headline}</h3>
         </div>
         <span className="flex shrink-0 items-center">
           <DisclosureChevron className="text-zinc-400 group-open/gpc:rotate-180" />
@@ -1455,6 +1500,7 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
       </summary>
       <div className="mt-5 space-y-5">
         <p className="max-w-3xl text-sm leading-6 text-zinc-600">{projection.summary}</p>
+        <p className="max-w-3xl text-sm leading-6 text-zinc-700"><strong>Site response:</strong> {projection.comparisonHeadline}. {projection.coverageSummary}</p>
         {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? (
           <div className="grid gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-700 sm:grid-cols-2">
             <p><strong>Bounded observation:</strong> {projection.assessment.observation.status}. {projection.assessment.observation.requests.count} retained request attempts; {projection.assessment.observation.requests.blockedBeforeTransmissionCount} blocked before transmission. Scope: main document and retained HTTP requests.</p>
@@ -1508,11 +1554,6 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
         {projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? (
           <p className="text-xs leading-5 text-zinc-600">Cookie/storage and CMP identity differences are descriptive snapshots. The response uses classified activity within the matched window, not an inferred consent decision.</p>
         ) : null}
-        {projection.assessment.comparison.limitationKeys.length > 0 ? (
-          <p className="text-xs leading-5 text-amber-800">
-            Coverage limits: {projection.assessment.comparison.limitationKeys.join(", ")}.
-          </p>
-        ) : null}
         <details className="group/gpc-json border border-zinc-200 p-4">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
             Typed comparison evidence
@@ -1525,7 +1566,7 @@ function GpcEvidenceIndexCard({ projection }: { projection: GpcResponseReportPro
   );
 }
 
-function EvidenceDirectory({ report }: { report: ShadowReportData }) {
+export function EvidenceDirectory({ report, compact = false }: { report: ShadowReportData; compact?: boolean }) {
   const technology = describeSiteTechnology(report.siteMetadata?.observation);
   const metadataFields = [
     ["Platform", technology.platform],
@@ -1539,25 +1580,22 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
   const trackingExternalReviewCount = countRowsRequiringReview(report.trackingExternalRows);
   const preConsentRuntimeReviewCount = countRowsRequiringReview(report.preConsentRuntimeRows);
   return (
-    <section className="border-t border-zinc-200 bg-white" id="evidence">
-      <div className="mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-10">
+    <section className={`border-t border-zinc-200 bg-white ${compact ? "[&_.p-5]:!px-3 [&_.p-5]:!py-2 [&_.mt-5]:!mt-2.5 [&_.py-3]:!py-1.5 [&_h3]:!text-sm [&_summary]:min-h-8" : ""}`} id="evidence">
+      <div className={compact ? "py-4" : "mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-10"}>
         <div className="grid gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(32rem,1.2fr)] lg:items-end">
           <div>
-            <h2 className={reportSectionTitle}>Evidence index</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-600">
-              Consent, tracking &amp; external services, pre-consent runtime{report.gpcResponse ? ", GPC comparison" : ""}, GDPR Transparency, transport security and collection details.
-            </p>
+            <h2 className={compact ? "text-xl font-semibold" : reportSectionTitle}>Detailed evidence</h2>
           </div>
-          <RatingMix report={report} />
+          <RatingMix report={report} homepage={compact} />
         </div>
-        <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]">
+        <div className={`${compact ? "mt-3 gap-3" : "mt-6 gap-6"} grid items-start lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]`}>
           <div className="border-l border-t border-zinc-200">
             <details className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface</p><h3 className={`mt-1 ${reportCardTitle}`}>Controls and CMP context</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface{compact ? " · Homepage" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>Controls and CMP context</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/consent:rotate-180" />
               </summary>
-              <div className="mt-5"><ControlStatusGrid report={report} /></div>
+              <div className="mt-5"><p className="mb-2 text-xs font-semibold text-zinc-600">Initial control inspection</p><ControlStatusGrid report={report} /></div>
               <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4">
                 <VendorBrandChip label={consentVendor} showMeta={false} />
                 <p className="text-sm leading-6 text-zinc-600">CMP identity and control context are retained in the canonical consent projection.</p>
@@ -1570,16 +1608,16 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
               ) : null}
               <EvidenceIndexRows rows={report.consentRows} />
             </details>
-            <details className="group/tracking border-b border-r border-zinc-200 p-5">
+            {compact && report.fullSite ? <SitewideEvidenceCard group="tracking"><EvidenceIndexRows rows={report.trackingExternalRows} /></SitewideEvidenceCard> : <details className="group/tracking border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; external services</p><h3 className={`mt-1 ${reportCardTitle}`}>{trackingExternalReviewCount} requiring review · {report.trackingExternalRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; embedded content{compact ? " · Homepage" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{trackingExternalReviewCount} checks need review · {report.trackingExternalRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/tracking:rotate-180" />
               </summary>
               <EvidenceIndexRows rows={report.trackingExternalRows} />
-            </details>
+            </details>}
             <details className="group/policy border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency</p><h3 className={`mt-1 ${reportCardTitle}`}>{observedGdprTransparencyRows} observed · {report.gdprTransparencyRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency{compact ? " · Homepage" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{observedGdprTransparencyRows} observed · {report.gdprTransparencyRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/policy:rotate-180" />
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
@@ -1606,7 +1644,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                 ))}
               </div>
             </details>
-            <details aria-label="Site metadata" className="group/metadata border-b border-r border-zinc-200 p-5">
+            {!compact ? <details aria-label="Site metadata" className="group/metadata border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Site metadata</p><h3 className={`mt-1 ${reportCardTitle}`}>{metadataFields.length} details</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/metadata:rotate-180" />
@@ -1614,20 +1652,20 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
               <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-zinc-200 pt-4 text-sm">
                 {metadataFields.map(([label, value]) => <div key={label}><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-0.5 break-words font-medium">{value}</dd></div>)}
               </dl>
-            </details>
+            </details> : null}
           </div>
           <div className="border-l border-t border-zinc-200">
-            <details className="group/runtime border-b border-r border-zinc-200 p-5">
+            {compact && report.fullSite ? <SitewideEvidenceCard group="runtime"><EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools /></SitewideEvidenceCard> : <details className="group/runtime border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Pre-consent runtime</p><h3 className={`mt-1 ${reportCardTitle}`}>{preConsentRuntimeReviewCount} requiring review · {report.preConsentRuntimeRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Storage &amp; tracking techniques{compact ? " · Homepage" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{preConsentRuntimeReviewCount} checks need review · {report.preConsentRuntimeRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/runtime:rotate-180" />
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
-            </details>
-            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} /> : null}
+            </details>}
+            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : null}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security{compact ? " · Homepage" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/transport:rotate-180" />
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
@@ -1642,7 +1680,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
                 ))}
               </div>
             </details>
-            {report.metrics.forms > 0 ? (
+            {!compact && report.metrics.forms > 0 ? (
               <details className="group/collection border-b border-r border-zinc-200 p-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                   <div><p className="text-xs font-semibold uppercase text-zinc-500">Collection surfaces</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</h3></div>
@@ -1690,6 +1728,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
             ) : null}
           </div>
         </div>
+        {!compact ? <>
         <div className="mt-10 [&_section]:!rounded-md [&_section]:!border-zinc-200 [&_section]:!bg-zinc-50/70 [&_.scan-report-button]:!h-9 [&_.scan-report-button]:!w-9 [&_.scan-report-button]:!rounded-md [&_.scan-report-button]:!border-zinc-300 [&_.scan-report-button]:!bg-white [&_.scan-report-button]:!text-zinc-600 [&_.scan-report-button]:!shadow-none [&_.scan-report-button]:hover:!border-zinc-500 [&_.scan-report-button]:hover:!text-zinc-950">
           <AgentSummaryActions domainLabel={report.scan.host} scanId={report.scan.id} />
         </div>
@@ -1697,6 +1736,7 @@ function EvidenceDirectory({ report }: { report: ShadowReportData }) {
           <p className="max-w-3xl">CertScore.ai can make mistakes. Automated observations can contain errors; verify findings before relying on them. Findings describe retained scan evidence and are not legal certification or legal advice.</p>
           <p className={`${monoClass} shrink-0`}>scan_id: {report.scan.id}</p>
         </footer>
+        </> : null}
       </div>
     </section>
   );
@@ -1724,6 +1764,7 @@ function VariantBody({
 }
 
 export function ShadowScanReport({
+  fullSiteNotice,
   allowRestrictedScanOptions,
   defaultScanFrom,
   mode = "public",
@@ -1751,11 +1792,11 @@ export function ShadowScanReport({
         report={report}
         variant={variant}
       />
-      <EvidenceDirectory report={report} />
+      {!report.fullSite && variant !== "timeline" ? <EvidenceDirectory report={report} /> : null}
     </>
   );
 
-  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<RuntimeObservationTimeline dominant compact events={report.timeline} />} executiveSnapshot={<SignalSnapshot siteOverview report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   if (mode === "authenticated") {
     return (

@@ -209,6 +209,7 @@ test("RegulatoryChecklistCorrectionSteps gives reviewer guidance for not-confirm
   const html = renderToStaticMarkup(
     createElement(RegulatoryChecklistCorrectionSteps, {
       jsonPayload: JSON.stringify({
+        checklistItemId: "legal_basis_disclosure_observed",
         assessmentStatus: "review_signal",
         coverageArea: "Legal basis disclosure",
         evidenceState: "observed",
@@ -223,9 +224,9 @@ test("RegulatoryChecklistCorrectionSteps gives reviewer guidance for not-confirm
     })
   );
 
-  assert.match(html, /Review the privacy policy for the disclosure described in this result/);
-  assert.match(html, /review why the scan did not identify it/);
-  assert.match(html, /update the privacy notice or internal review record/);
+  assert.match(html, /legal basis stated for each processing purpose/);
+  assert.match(html, /investigate extraction coverage/);
+  assert.match(html, /Unconfirmed evidence alone does not establish a missing disclosure/);
   assert.doesNotMatch(html, /Update the affected consent, policy, tag-manager/);
 });
 
@@ -451,6 +452,7 @@ test("RegulatoryChecklistEvidenceDetails exposes canonical policy provenance", (
             discoveryMethod: "footer_link",
             lastUpdatedText: "Last updated: June 2026",
             policyTitle: "Amazon Privacy Notice",
+            documentHeading: "Privacy notice for customers",
             retrievalTimestamp: "2026-08-01T18:00:00.000Z",
             sectionHeading: "Legal bases",
             sourceUrl: "https://www.amazon.de/privacy",
@@ -468,4 +470,19 @@ test("RegulatoryChecklistEvidenceDetails exposes canonical policy provenance", (
   assert.match(html, /translation applied: No/);
   assert.match(html, /directly linked from scanned page: Yes/);
   assert.match(html, /Section: Legal bases/);
+  assert.match(html, /Document heading: Privacy notice for customers/);
+  assert.match(html, /href="https:\/\/www.amazon.de\/privacy"/);
+  assert.match(html, /<details[^>]* open="">/);
+});
+
+test("correction steps consume the persisted canonical guidance before legacy fallback", () => {
+  const html = renderToStaticMarkup(createElement(RegulatoryChecklistCorrectionSteps, {
+    defaultOpen: true,
+    jsonPayload: JSON.stringify({
+      checklistItemId: "controller_contact_disclosure", status: "Not confirmed",
+      retainedEvidence: { remediation: { kind: "steps", steps: ["Retain the reviewed source passage and repeat the documented scenario."] } },
+    }),
+  }));
+  assert.match(html, /Retain the reviewed source passage/);
+  assert.doesNotMatch(html, /Review the governing policy section/);
 });

@@ -1,10 +1,12 @@
 "use client";
 
-import { useId } from "react";
 import { InventoryEvidenceLegend } from "./inventory-evidence-icon";
 
 export function InventoryPriorityHelp({ service = false }: { service?: boolean }) {
-  const id = useId();
+  // This component appears once in each inventory table. A semantic ID stays
+  // stable when a pending report is replaced by its server-rendered result;
+  // useId is positional and can otherwise change across that transition.
+  const id = service ? "service-priority-legend" : "resource-priority-legend";
   return <>
     <button type="button" popoverTarget={id} aria-label={service ? "Explain service priority" : "Explain resource priority"} title="Priority legend" className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-sky-100 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">
       <svg aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5M10 6v.01"/></svg>

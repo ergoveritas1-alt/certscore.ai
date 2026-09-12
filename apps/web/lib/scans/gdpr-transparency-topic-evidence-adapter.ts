@@ -1,4 +1,5 @@
 import {
+  hasUnsupportedGenericPrivacyContact,
   article13DisclosureRejectReason,
   looksLikeArticle13CodeOrConfigText,
   looksLikeArticle13PageChrome,
@@ -38,6 +39,7 @@ export type GdprTransparencyProductionArticle13Evidence = {
   productionCreditProfile: typeof GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE;
   selectedEvidenceStrength: "strong";
   selectedPolicySectionExcerpt: string;
+  selectedPolicySectionHeading?: string;
   selectedPolicySectionUrl?: string;
   source: "deterministic";
   sourceCandidateProductionCredit: false;
@@ -200,6 +202,7 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
       productionCreditProfile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
       selectedEvidenceStrength: "strong",
       selectedPolicySectionExcerpt: evidenceText,
+      ...(retainedSignal?.selectedPolicySectionHeading ? { selectedPolicySectionHeading: retainedSignal.selectedPolicySectionHeading } : {}),
       ...(resolvedSurfaceUrl(input) ? { selectedPolicySectionUrl: resolvedSurfaceUrl(input), sourceUrl: resolvedSurfaceUrl(input) } : {}),
       source: "deterministic",
       sourceCandidateProductionCredit: false,
@@ -291,6 +294,7 @@ function rejectReasonForCandidate(
   const article13RejectReason = article13DisclosureRejectReason(candidate.evidenceText, candidate.topic, {
     mode: "multilingual_classifier",
   });
+  if (article13RejectReason === "page_chrome_or_navigation") return article13RejectReason;
   if (candidateMatchesKnownCrossTopicFalsePositive(candidate)) {
     return "candidate_topic_invariants_failed";
   }
@@ -322,6 +326,7 @@ function candidateMatchesKnownCrossTopicFalsePositive(candidate: GdprTransparenc
   switch (candidate.topic) {
     case "controller_contact":
       return (
+        hasUnsupportedGenericPrivacyContact(text) ||
         (candidate.matchedLocale === "en" &&
           /^(?:data controller|data controller contact|controller operator of data|controller of data|questions about this privacy policy|questions about this policy please contact us|if you have questions about this policy please contact us|you can contact us at)$/i.test(candidate.matchedTerm) &&
           !(

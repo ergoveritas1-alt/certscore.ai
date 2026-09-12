@@ -2515,6 +2515,20 @@ test("off-topic Privacy Shield wording receives no processing-purposes checklist
   );
 });
 
+test("legacy approved privacy navigation cannot become observed controller contact", () => {
+  const concerns = buildNormalizedConcerns({
+    reviewFindingCandidates: [], validationFindings: [],
+    runtimeArtifacts: { policyDisclosureSummary: makeGdprTransparencyPolicyDisclosureSummary({ signals: [makeApprovedGdprTransparencyArticle13Signal({
+      disclosureType: "controller_contact", evidenceText: "Privacy contact Facebook Instagram Twitter Shop Parts Privacy Contact Us Affiliate Disclosure. All rights reserved.",
+    })] }) },
+  });
+  const concern = concerns.find(item => item.originKey === "gdpr_transparency.article13.controller_contact");
+  assert.ok(concern);
+  assert.equal(concern.regulatoryChecklistEligibility, "none");
+  assert.equal(concern.evidenceBundle.rawEvidence?.controllerContactConfirmed, false);
+  assert.equal(concern.evidenceBundle.rawEvidence?.gdprTransparencyArticle13ConcernState, "ambiguous");
+});
+
 test("missing GDPR Transparency classifier evidence alone does not create Article 13 gaps", () => {
   const concerns = buildNormalizedConcerns({
     reviewFindingCandidates: [],

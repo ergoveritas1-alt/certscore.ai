@@ -13,6 +13,7 @@ import {
   buildTrackerInventoryRows,
   classifyInventoryEvidence,
   buildNonEssentialInventoryTallies,
+  buildReportInventorySummary,
   deriveInventoryMacroCategory,
   deriveRuntimeInventoryPresentationState,
   getInventoryGroupRowRenderKey,
@@ -1048,6 +1049,15 @@ test("benchmark tallies use the same ungrouped non-essential rows as the invento
   ]);
 
   assert.deepEqual(tallies, { cookiesStorage: 1, requests: 1 });
+  const summary = buildReportInventorySummary([
+    { ...base, type: "tracker", requestCount: 8 },
+    { ...base, type: "cookie", requestCount: null, observedRecordCount: 3, cookieDetails: [{ essentiality: "non_essential" } as never] },
+    { ...base, type: "embed", requestCount: null, observedRecordCount: 2, priority: "contextual" },
+  ]);
+  assert.deepEqual(summary.map(metric => metric.value), [3, 8, 2]);
+  for (const metric of summary) assert.equal(Object.values(metric.counts!).reduce((sum, count) => sum + count, 0), metric.value);
+  assert.equal(summary[0]?.counts?.nonEssential, 3);
+  assert.equal(buildReportInventorySummary([{ ...base, type: "tracker", requestCount: null }])[1]?.value, null);
 });
 
 test("consolidates common runtime aliases and suppresses unsupported CMP identities", () => {
@@ -1303,4 +1313,13 @@ test("deduplicates Daily vendor aliases while retaining product labels", () => {
   assert.deepEqual(grouped.find((row) => row.vendor === "Teads Video Advertising")?.rawProducts.sort(), ["Teads", "Teads Video Advertising"]);
   assert.deepEqual(grouped.find((row) => row.vendor === "Microsoft Clarity")?.rawProducts.sort(), ["Microsoft", "Microsoft Clarity"]);
   assert.deepEqual(grouped.find((row) => row.vendor === "ID5 Identity")?.rawProducts.sort(), ["ID5", "ID5 Identity"]);
+});
+
+test("corporate Cloudflare label uses the retained analytics host, never a guessed bot product", () => {
+  const row = { ...serviceTracker("Cloudflare Web Analytics"), label: "Cloudflare", domains: ["static.cloudflareinsights.com"] };
+  const grouped = buildTrackerInventoryGroupRows([row]);
+  assert.equal(grouped[0]?.vendor, "Cloudflare Web Analytics");
+  assert.equal(grouped[0]?.purpose, "Audience measurement");
+  const ambiguous = buildTrackerInventoryGroupRows([{ ...row, domains: [] }]);
+  assert.equal(ambiguous[0]?.vendor, "Cloudflare");
 });

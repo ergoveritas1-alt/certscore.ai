@@ -591,7 +591,6 @@ test("policySurfaceScanner retains a material GDPR supplement linked from a subs
       "legal_basis",
       "data_retention",
       "data_subject_rights",
-      "dpo_contact",
       "international_transfers",
       "supervisory_authority",
       "automated_decision_making_or_profiling",
@@ -602,6 +601,7 @@ test("policySurfaceScanner retains a material GDPR supplement linked from a subs
         `${topic}; retained topics: ${[...topics].join(", ")}`,
       );
     }
+    assert.equal(topics.has("dpo_contact"), false, "a Privacy Manager must not be represented as a DPO");
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
@@ -3024,7 +3024,7 @@ test("compact English policy sections retain purpose and service-provider GDPR T
   assert.equal(candidates.every((candidate) => candidate.productionCredit === false), true);
 });
 
-test("retained CertScore policy sections produce typed candidates for every GDPR Transparency topic", () => {
+test("retained CertScore policy sections keep a generic privacy contact separate from DPO evidence", () => {
   const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([
     {
       heading: "Controller and contact",
@@ -3070,13 +3070,13 @@ test("retained CertScore policy sections produce typed candidates for every GDPR
     "controller_contact",
     "data_retention",
     "data_subject_rights",
-    "dpo_contact",
     "international_transfers",
     "legal_basis",
     "processing_purposes",
     "recipients_or_vendor_categories",
     "supervisory_authority",
   ]));
+  assert.equal(topics.has("dpo_contact"), false);
   assert.equal(candidates.every((candidate) =>
     candidate.status === "diagnostic_only" && candidate.productionCredit === false
   ), true);

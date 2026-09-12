@@ -60,8 +60,8 @@ test("report projection writer stays current while readiness uses the bounded re
     readFile(statusProjectionPath, "utf8")
   ]);
 
-  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v24");
-  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v24"/);
+  assert.equal(SCAN_REPORT_PROJECTION_VERSION, "scan-report-projection-v26");
+  assert.match(contractSource, /SCAN_REPORT_PROJECTION_VERSION = "scan-report-projection-v26"/);
   assert.match(projectionSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(statusSource, /from "\.\/scan-report-projection-contract"/);
   assert.match(

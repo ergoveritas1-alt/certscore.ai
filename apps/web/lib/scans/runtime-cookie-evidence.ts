@@ -1,3 +1,4 @@
+import { verifiedCookieInventoryIdentity } from "./retained-cookie-inventory-identity";
 import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import {
@@ -7,6 +8,7 @@ import {
 } from "./runtime-vendor-ownership";
 
 export type RuntimeCookieEvidenceRow = {
+  exactStorageIdentity?: string;
   category: string;
   cookieName: string;
   cookiePath?: string;
@@ -63,6 +65,7 @@ export type PreConsentStorageReconciliationStatus =
   | "aggregate_unavailable";
 
 export type PreConsentStorageAssessmentEvidenceRow = {
+  exactStorageIdentity?: string;
   category: string;
   domain: string | null;
   essentiality: "essential" | "non_essential" | "unknown";
@@ -766,6 +769,9 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   return {
     category,
     cookieName,
+    exactStorageIdentity: verifiedCookieInventoryIdentity(row) ?? (typeof row.cookieName === "string" && typeof row.domain === "string" &&
+      typeof row.cookiePath === "string" && (row.partitionKey === null || typeof row.partitionKey === "string")
+        ? JSON.stringify([row.cookieName, row.domain, row.cookiePath, row.partitionKey]) : undefined),
     cookiePath: getString(row.cookiePath ?? row.cookie_path ?? row.path) ?? "/",
     partitionContext: getString(row.partitionContext ?? row.partition_context ?? row.partitionKey ?? row.partition_key) ??
       (getBoolean(row.partitioned) === true ? "partitioned_unspecified" : "unpartitioned_or_unknown"),
@@ -1162,6 +1168,7 @@ export function buildPreConsentStorageAssessment(input: {
     name: row.cookieName,
     party: row.party,
     storageType: "cookie" as const,
+    ...(row.exactStorageIdentity ? { exactStorageIdentity: row.exactStorageIdentity } : {}),
     timingEvidence: mapPreConsentStorageTimingEvidence(row)
   }));
 

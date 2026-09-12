@@ -1,0 +1,219 @@
+"use client";
+
+import { FullSiteIdentity } from "./full-site-identity";
+import { FullSiteWorkspace } from "./full-site-workspace";
+import { LiveFullSiteScanNotice } from "../dashboard/live-full-site-scan-notice";
+import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
+import type { ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { readActiveScanSession } from "../../lib/scans/active-scan-session";
+import { getScanProgressRuntime, recordScanDuration } from "../../lib/scans/scan-progress-timing";
+import { type PolledScanProgress, ScanStatusAutoRefresh } from "./scan-status-auto-refresh";
+import { LocalV2DagScanProgressCard } from "./scan-submit-progress";
+import { PreConsentRuntimePreviewCard } from "./pre-consent-runtime-preview-card";
+
+export const TERMINAL_NAVIGATION_DELAY_MS = 0;
+export const TERMINAL_REFRESH_FALLBACK_MS = 20_000;
+
+export function shouldRapidlyCompleteProgress(progress: PolledScanProgress) {
+  return progress.reportReady;
+}
+
+export function getProgressHandoffStage(input: {
+  hasSubmissionHandoff: boolean;
+  serverStage: PolledScanProgress["stage"];
+}) {
+  return input.serverStage;
+}
+
+export function getProgressHandoffValue(input: { hasSubmissionHandoff: boolean; progressValue?: number }) {
+  return input.hasSubmissionHandoff && typeof input.progressValue === "number" ? input.progressValue : null;
+}
+
+export function PendingScanDetailView({
+  fullSite,
+  fullSiteClassName,
+  fullSiteNotice,
+  createdAt,
+  domainHostname,
+  initialPreConsentPreview = null,
+  pageUrl,
+  pendingPostCompletionWork = false,
+  profile,
+  scanId,
+  startedAt,
+  status,
+}: {
+  fullSiteClassName?: string;
+  fullSiteNotice?: FullSiteScanNoticeData | null;
+  fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
+  createdAt: string;
+  domainHostname: string | null;
+  initialPreConsentPreview?: ApiV2PreConsentRuntimePreview | null;
+  pageUrl?: string | null;
+  pendingPostCompletionWork?: boolean;
+  profile: string;
+  scanId: string;
+  startedAt: string | null;
+  status: string;
+}) {
+  const router = useRouter();
+  const initialStage: PolledScanProgress["stage"] = pendingPostCompletionWork
+    ? "review"
+    : status === "queued" ? "prepare" : status === "running" ? "scan" : "review";
+  const [progress, setProgress] = useState<PolledScanProgress>({
+    preConsentPreview: initialPreConsentPreview,
+    reportReady: false,
+    stage: initialStage,
+    status
+  });
+  const [progressHandoff, setProgressHandoff] = useState<{ loaded: boolean; startedAtMs: number | null; value: number | null }>({
+    loaded: false,
+    startedAtMs: null,
+    value: null
+  });
+  const progressRef = useRef(progress);
+  const terminalRefreshFallbackRef = useRef<number | null>(null);
+  const handoffScanIdRef = useRef<string | null>(null);
+  useEffect(() => () => {
+    if (terminalRefreshFallbackRef.current !== null) {
+      window.clearTimeout(terminalRefreshFallbackRef.current);
+    }
+  }, []);
+  const handleTerminalNavigation = useCallback(() => {
+    // Preserve the completed progress view while Next.js fetches the report
+    // tree. A hard reload immediately swaps it for the app-wide skeleton and
+    // makes report rendering feel like a second opaque wait.
+    router.refresh();
+    terminalRefreshFallbackRef.current = window.setTimeout(() => {
+      window.location.reload();
+    }, TERMINAL_REFRESH_FALLBACK_MS);
+  }, [router]);
+  const handleProgress = useCallback((nextProgress: PolledScanProgress) => {
+    const retainedProgress = {
+      ...nextProgress,
+      preConsentPreview: nextProgress.preConsentPreview ?? progressRef.current.preConsentPreview,
+    };
+    if (retainedProgress.reportReady && !progressRef.current.reportReady && typeof window !== "undefined") {
+      const activeScanSession = readActiveScanSession();
+      if (activeScanSession?.scanId === scanId) {
+        try {
+          recordScanDuration({
+            durationMs: Date.now() - activeScanSession.startedAtMs,
+            profileValue: profile,
+            runtime: getScanProgressRuntime(window.location.hostname),
+            storage: window.localStorage,
+            target: domainHostname ?? activeScanSession.domain
+          });
+        } catch {
+          // Learning progress timing is best effort and must not affect navigation.
+        }
+      }
+    }
+    progressRef.current = retainedProgress;
+    setProgress(retainedProgress);
+  }, [domainHostname, profile, scanId]);
+  useEffect(() => {
+    if (handoffScanIdRef.current === scanId) {
+      return;
+    }
+    handoffScanIdRef.current = scanId;
+
+    const activeScanSession = readActiveScanSession();
+    const hasSubmissionHandoff = activeScanSession?.scanId === scanId &&
+      typeof activeScanSession.progressValue === "number";
+    const handoffValue = getProgressHandoffValue({
+      hasSubmissionHandoff,
+      progressValue: activeScanSession?.progressValue
+    });
+    const handoffStage = getProgressHandoffStage({
+      hasSubmissionHandoff,
+      serverStage: initialStage
+    });
+
+    if (handoffStage !== progressRef.current.stage) {
+      const handoffProgress = {
+        ...progressRef.current,
+        stage: handoffStage
+      };
+      progressRef.current = handoffProgress;
+      setProgress(handoffProgress);
+    }
+    setProgressHandoff({
+      loaded: true,
+      startedAtMs: hasSubmissionHandoff ? activeScanSession?.startedAtMs ?? null : null,
+      value: handoffValue
+    });
+  }, [handleProgress, initialStage, scanId, status]);
+
+  if (fullSite) {
+    return (
+      <div className={fullSiteClassName}>
+        <FullSiteWorkspace
+          scanId={scanId}
+          requested={fullSite}
+          initialNotice={fullSiteNotice}
+          initialPending
+          initialStartedAt={startedAt ?? createdAt}
+          identity={<FullSiteIdentity
+            scanId={scanId} host={domainHostname ?? pageUrl ?? "Website"} url={pageUrl}
+            createdAt={new Intl.DateTimeFormat("en-US", { day: "numeric", hour: "numeric", minute: "2-digit", month: "short", second: "2-digit", timeZoneName: "short", year: "numeric" }).format(new Date(createdAt))}
+            region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">{fullSiteNotice?.region ? `Scanned from ${fullSiteNotice.region}` : "Full site scan"}</span>}
+          />}
+        >
+          <p role="status" className="py-6 text-sm text-zinc-600">The homepage report will appear here when its assessment is ready.</p>
+        </FullSiteWorkspace>
+        <ScanStatusAutoRefresh
+          onTerminalNavigation={handleTerminalNavigation}
+          onProgress={handleProgress}
+          pendingPostCompletionWork={pendingPostCompletionWork}
+          scanId={scanId}
+          silent
+          status={status}
+          terminalNavigationDelayMs={TERMINAL_NAVIGATION_DELAY_MS}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4" data-density="compact">
+      {fullSiteNotice ? <LiveFullSiteScanNotice scan={fullSiteNotice} reportPage /> : <>
+      <div>
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">CertScore.ai scan</p>
+        <h1 className="mt-1 flex min-w-0 max-w-full items-baseline gap-2 text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-3xl">
+          <span className="shrink-0">Scan:</span>
+          <span className="min-w-0 truncate" title={pageUrl?.trim() || domainHostname?.trim() || "website"}>
+            {pageUrl?.trim() || domainHostname?.trim() || "website"}
+          </span>
+        </h1>
+      </div>
+      <LocalV2DagScanProgressCard
+        createdAt={createdAt}
+        initialProgressValue={progressHandoff.value}
+        profileValue={profile}
+        progressStage={progress.stage}
+        reportReady={progress.reportReady}
+        revealProgress={progressHandoff.loaded}
+        scanStatus={progress.status ?? status}
+        startedAt={startedAt}
+        startedAtMs={progressHandoff.startedAtMs}
+        targetLabel={domainHostname ?? pageUrl ?? ""}
+      />
+      </>}
+      {progress.preConsentPreview ? (
+        <PreConsentRuntimePreviewCard heading={fullSite ? "Early preview results from home page" : undefined} preview={progress.preConsentPreview} startedAt={startedAt} />
+      ) : null}
+      <ScanStatusAutoRefresh
+        onTerminalNavigation={handleTerminalNavigation}
+        onProgress={handleProgress}
+        pendingPostCompletionWork={pendingPostCompletionWork}
+        scanId={scanId}
+        silent
+        status={status}
+        terminalNavigationDelayMs={TERMINAL_NAVIGATION_DELAY_MS}
+      />
+    </div>
+  );
+}

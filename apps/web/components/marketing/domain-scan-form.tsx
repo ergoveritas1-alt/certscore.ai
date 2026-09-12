@@ -897,7 +897,6 @@ export function DomainScanForm({
         isSubmittingRef.current = false;
         setIsSubmitting(false);
         router.push(`/app/scans/${payload.scanId}`);
-        router.refresh();
         return;
       }
       const nextDestination = appendRecentScanReuseParam(destination, payload.reusedExistingScan);

@@ -1,3 +1,4 @@
+import { FullSiteReportContinuity } from "../../../../components/scans/full-site-report-continuity";
 import { loadFullSiteNotice } from "../../../../server/scans/full-site-notice";
 import { readFullSiteOptions } from "../../../../server/scans/full-site-options";
 import { notFound, redirect } from "next/navigation";
@@ -48,9 +49,10 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
     !statusProjection.reportReady;
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
-      <>
+      <FullSiteReportContinuity scanId={scanId}>
         <PendingScanStartedEvent />
         <PendingScanDetailView
+          fullSiteClassName="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10"
           fullSiteNotice={fullSiteNotice}
           fullSite={(await readFullSiteOptions()).allowed ? statusProjection.fullSite : undefined}
           createdAt={statusProjection.createdAt}
@@ -63,7 +65,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
           startedAt={statusProjection.startedAt}
           status={waitingForReportProjection ? "processing" : statusProjection.status}
         />
-      </>
+      </FullSiteReportContinuity>
     );
   }
 
@@ -87,19 +89,22 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   if (!persistedReportProjection) {
     if (!statusProjection.reportProjectionRequired) redirect(legacyScanHref(scanId));
     return (
-      <PendingScanDetailView
+      <FullSiteReportContinuity scanId={scanId}>
+        <PendingScanDetailView
+          fullSiteClassName="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10"
           fullSiteNotice={fullSiteNotice}
           fullSite={(await readFullSiteOptions()).allowed ? statusProjection.fullSite : undefined}
-        createdAt={statusProjection.createdAt}
-        domainHostname={statusProjection.domainHostname}
-        initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
-        pageUrl={statusProjection.pageUrl}
-        pendingPostCompletionWork
-        profile={statusProjection.profile}
-        scanId={statusProjection.id}
-        startedAt={statusProjection.startedAt}
-        status="processing"
-      />
+          createdAt={statusProjection.createdAt}
+          domainHostname={statusProjection.domainHostname}
+          initialPreConsentPreview={statusProjection.preConsentPreview ?? null}
+          pageUrl={statusProjection.pageUrl}
+          pendingPostCompletionWork
+          profile={statusProjection.profile}
+          scanId={statusProjection.id}
+          startedAt={statusProjection.startedAt}
+          status="processing"
+        />
+      </FullSiteReportContinuity>
     );
   }
 
@@ -111,10 +116,11 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
   }
 
   return (
-    <>
+    <FullSiteReportContinuity scanId={scanId}>
       <PendingScanStartedEvent />
       <ScanProgressReportVisible scanId={scanId} />
       <ShadowScanReport
+        fullSiteNotice={fullSiteNotice}
         allowRestrictedScanOptions={canUseRestrictedScanOptions({
           membershipRole: membership.role,
           userEmail: user.email,
@@ -124,6 +130,6 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
         report={(await readFullSiteOptions()).allowed ? report : { ...report, fullSite: undefined }}
         variant="timeline"
       />
-    </>
+    </FullSiteReportContinuity>
   );
 }

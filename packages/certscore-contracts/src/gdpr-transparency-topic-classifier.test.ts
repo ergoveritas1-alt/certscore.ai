@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { article13DisclosureRejectReason } from "./article13-disclosure-rejection";
 import {
   classifyGdprSupplementLink,
   classifyGdprTransparencyTopics,
@@ -8,6 +9,16 @@ import {
   SUPPORTED_GDPR_TRANSPARENCY_LOCALES,
   type GdprTransparencyTopic,
 } from "./index.js";
+
+test("generic privacy-contact navigation does not establish controller/contact disclosure", () => {
+  const footer = "privacy contact Facebook Instagram Twitter Shop Parts Keyboard Finder Buying Guides Saved Parts Keyboards & Kits Cases PCBs Plates Stabilizers Switches Keycaps Cables Legal Terms Privacy Contact Us Affiliate Disclosure © 2026 Example. All rights reserved.";
+  assert.equal(classifyGdprTransparencyTopics({ text: footer }).matches.some(match => match.topic === "controller_contact"), false);
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+    assert.notEqual(article13DisclosureRejectReason(footer, "controller_contact", { mode }), null);
+  }
+  const substantive = "Privacy contact: contact us at privacy@example.test with questions about processing your personal data.";
+  assert.equal(classifyGdprTransparencyTopics({ text: substantive }).matches.some(match => match.topic === "controller_contact"), true);
+});
 
 test("canonical English policy variants cover a complete GDPR transparency notice", () => {
   const text = [
@@ -1598,8 +1609,7 @@ test("classifies retained publisher privacy-counsel and E.U. complaint contacts"
   });
   const byTopic = new Map(result.matches.map((match) => [match.topic, match]));
 
-  assert.equal(byTopic.get("dpo_contact")?.matchStrength, "equivalent");
-  assert.match(byTopic.get("dpo_contact")?.evidenceExcerpt ?? "", /privacy counsel/i);
+  assert.equal(byTopic.has("dpo_contact"), false, "privacy counsel does not establish DPO designation");
   assert.equal(byTopic.get("supervisory_authority")?.matchStrength, "equivalent");
   assert.match(byTopic.get("supervisory_authority")?.evidenceExcerpt ?? "", /e\.u\. data protection authority/i);
 });
@@ -2215,13 +2225,13 @@ test("classifies Caltech-shaped main-notice and linked GDPR-supplement disclosur
     "legal_basis",
     "data_retention",
     "data_subject_rights",
-    "dpo_contact",
     "international_transfers",
     "supervisory_authority",
     "automated_decision_making_or_profiling",
   ] satisfies GdprTransparencyTopic[]) {
     assert.equal(supplementTopics.has(topic), true, topic);
   }
+  assert.equal(supplementTopics.has("dpo_contact"), false);
 });
 
 test("Caltech-shaped purpose and transfer phrases require privacy disclosure context", () => {
@@ -2337,8 +2347,7 @@ test("keeps a negated DPO designation separate from an observed privacy contact 
   });
   const privacyContact = contactPoint.matches.find((match) => match.topic === "dpo_contact");
 
-  assert.ok(privacyContact);
-  assert.equal(privacyContact.variant, "privacy_contact_point");
+  assert.equal(privacyContact, undefined, "a generic privacy contact must not establish a DPO designation");
 });
 
 test("classifies retained Article 4 and Article 6 policy wording without semantic-review fallback", () => {
