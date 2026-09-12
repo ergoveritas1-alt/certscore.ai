@@ -130,6 +130,51 @@ Expected behavior:
 - `certscore_get_report` runs when a stable `scanId` is available.
 - If the scan is still async, `certscore_get_scan_status` returns the public-safe job status.
 
+## Hosted OAuth Session Refresh
+
+The authenticated `/mcp` transport validates the bearer token on every request.
+A refreshed token may reuse the existing `Mcp-Session-Id` when issuer, audience,
+subject, OAuth client, organization, user, and both OAuth and integration scope
+sets are unchanged. Scope ordering and duplicate scope entries do not matter.
+Token-instance fields (`jti`, `iat`, `exp`) do not bind the session; expired or
+invalid tokens are still rejected. Identity or scope changes require a new
+session. Sessions cannot move between OAuth, anonymous, Light, and Microsoft
+endpoints.
+
+Every tool uses its request's validated credential for upstream API calls,
+including concurrent bundle requests and retries. A missing request credential
+fails closed instead of falling back to the initialization token. Rejected
+requests do not renew the session's idle timeout.
+
+`mcp_http.auth_failed` retains the `session_token_mismatch` reason for binding
+failures and adds a bounded `bindingMismatch` field name and allowlisted
+`rpcMethod`. It contains no token or identity values. Additional log storage is
+estimated below $0.01/month at 100,000 rejected requests; this change introduces
+no new scan, model call, or infrastructure resource.
+
+Local verification uses a loopback mock API and creates no real scans:
+
+```bash
+pnpm --filter @certscore/mcp-http run build:deps
+pnpm --filter @certscore/mcp-http test
+pnpm --filter @certscore/mcp test
+pnpm exec tsc --noEmit -p apps/mcp/tsconfig.json
+pnpm --filter @certscore/mcp typecheck
+pnpm exec tsc -p apps/mcp/tsconfig.json
+MCP_TEST_COMPILED_RUNTIME=1 node --import tsx --test apps/mcp/src/token-refresh.test.ts
+```
+
+The September 12, 2026 local verification passed 39 HTTP tests and 113 package
+tests, including replacement-token forwarding through all 12 tools, expired
+original tokens, concurrent bundle isolation, GET/DELETE, identity/scope and
+endpoint rejection, and idle-timeout behavior. Both type checks passed. These
+results describe local changes; they do not establish production rollout.
+
+Release verification repeated the HTTP suite from an isolated worktree and also
+passed all 47 API-contract, SDK, and OAuth-auth tests (199 tests total). The
+refresh regression separately passed against the compiled `dist/index.js`
+runtime used by the production image.
+
 ## Deploy Verification
 
 After the web deploy completes, verify:

@@ -13,6 +13,8 @@ import { boundEvidencePacket, buildScanBundle, exportFindings, findingListText, 
 
 export interface CertScoreMcpOptions {
   apiKey?: string;
+  /** Trusted host callback providing the current request's validated credential. */
+  resolveApiKey?: () => string;
   baseUrl?: string;
   forwardedClientIp?: string | null;
   resolveForwardedClientIp?: (headers: RequestInfo["headers"]) => string | null;
@@ -383,9 +385,10 @@ function observeToolInvocation(
 export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   const createClient = (
     forwardedClientIp: string | null | undefined,
-    anonymousRequesterSession?: string | null
+    anonymousRequesterSession?: string | null,
+    apiKey = options.apiKey
   ) => new CertScoreClient({
-    apiKey: options.apiKey,
+    apiKey,
     baseUrl: options.baseUrl,
     clientName: "mcp",
     forwardedClientIp,
@@ -395,12 +398,18 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
     timeout: options.timeout
   });
   const client = createClient(options.forwardedClientIp, options.resolveAnonymousRequesterSession?.());
-  const clientForRequest = (extra: { requestInfo?: RequestInfo }) => options.resolveForwardedClientIp
-    ? createClient(
-        options.resolveForwardedClientIp(extra.requestInfo?.headers ?? {}),
-        options.resolveAnonymousRequesterSession?.()
-      )
-    : client;
+  const clientForRequest = (extra: { requestInfo?: RequestInfo }) => {
+    if (!options.resolveApiKey && !options.resolveForwardedClientIp) return client;
+    const apiKey = options.resolveApiKey ? options.resolveApiKey() : options.apiKey;
+    if (options.resolveApiKey && !apiKey?.trim()) {
+      throw new Error("Validated MCP request credential is unavailable.");
+    }
+    return createClient(
+      options.resolveForwardedClientIp ? options.resolveForwardedClientIp(extra.requestInfo?.headers ?? {}) : options.forwardedClientIp,
+      options.resolveAnonymousRequesterSession?.(),
+      apiKey
+    );
+  };
 
   const server = new McpServer({
     name: "certscore",
@@ -625,7 +634,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_scan",
     toolContract("certscore_get_scan"),
-    async ({ scanId }: GetScanInput) => {
+    async ({ scanId }: GetScanInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         return toToolResult(await client.scans.get(scanId));
       } catch (error) {
@@ -657,7 +667,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_report",
     toolContract("certscore_get_report"),
-    async ({ scanId, detail, format }: GetReportInput) => {
+    async ({ scanId, detail, format }: GetReportInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const normalizedFormat = normalizeFormat(format);
         const result =
@@ -689,7 +700,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_evidence",
     toolContract("certscore_get_evidence"),
-    async ({ scanId }: GetEvidenceInput) => {
+    async ({ scanId }: GetEvidenceInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const bounded = boundEvidencePacket(
           await client.getScan(scanId, { detail: "evidence", format: "json" }),
@@ -766,7 +778,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_export_findings",
     toolContract("certscore_export_findings"),
-    async ({ scanId }: ExportFindingsInput) => {
+    async ({ scanId }: ExportFindingsInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const report = await client.getScan(scanId, { detail: "full", format: "json" });
         const guided = withMcpAgentGuidance(exportFindings(report), "existing_scan_retrieved");
@@ -780,7 +793,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_list_findings",
     toolContract("certscore_list_findings"),
-    async ({ limit, offset, scanId }: ListFindingsInput) => {
+    async ({ limit, offset, scanId }: ListFindingsInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const guided = withMcpAgentGuidance(
           paginateFindingList(await client.findings.list(scanId), { limit, offset }),
@@ -796,7 +810,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_pre_consent_cookies_trackers",
     toolContract("certscore_get_pre_consent_cookies_trackers"),
-    async ({ maxRows, scanId }: GetPreConsentCookiesTrackersInput) => {
+    async ({ maxRows, scanId }: GetPreConsentCookiesTrackersInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const guided = withMcpAgentGuidance(
           limitPreConsentRows(await client.scans.preConsentCookiesTrackers(scanId), { maxRows }),
@@ -812,7 +827,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_explain_finding",
     toolContract("certscore_explain_finding"),
-    async ({ scanId, findingId }: ExplainFindingInput) => {
+    async ({ scanId, findingId }: ExplainFindingInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         return toToolResult(await client.findings.explain(scanId, findingId));
       } catch (error) {
@@ -824,7 +840,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_latest_domain_scan",
     toolContract("certscore_get_latest_domain_scan"),
-    async ({ domain, scanFrom }: GetLatestDomainScanInput) => {
+    async ({ domain, scanFrom }: GetLatestDomainScanInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         return toToolResult(await client.domains.latest(domain, { scanFrom }));
       } catch (error) {
@@ -836,7 +853,8 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_latest_domain_pre_consent_cookies_trackers",
     toolContract("certscore_get_latest_domain_pre_consent_cookies_trackers"),
-    async ({ domain, maxRows, scanFrom }: GetLatestDomainPreConsentCookiesTrackersInput) => {
+    async ({ domain, maxRows, scanFrom }: GetLatestDomainPreConsentCookiesTrackersInput, extra: McpRequestExtra) => {
+      const client = clientForRequest(extra);
       try {
         const guided = withMcpAgentGuidance(
           limitPreConsentRows(await client.domains.latestPreConsentCookiesTrackers(domain, { scanFrom }), { maxRows }),

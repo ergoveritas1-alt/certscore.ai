@@ -82,6 +82,21 @@ function parseToolJson(result: Awaited<ReturnType<Client["callTool"]>>) {
   return JSON.parse(first.text) as Record<string, unknown>;
 }
 
+test("request credential failures never fall back to the initialization credential", async () => {
+  const mock = installFetch([]);
+  try {
+    for (const resolveApiKey of [() => "", () => { throw new Error("Request context missing"); }]) {
+      await withMcpClient(async client => {
+        const result = await client.callTool({ name: "certscore_get_scan_status", arguments: {
+          scanId: "00000000-0000-4000-8000-000000000123",
+        } });
+        assert.equal(result.isError, true);
+        assert.equal(mock.calls.length, 0, "no request uses the stale static credential");
+      }, { apiKey: "stale-initialization-credential", resolveApiKey });
+    }
+  } finally { mock.restore(); }
+});
+
 function assertToolOutputSchema(name: (typeof certScoreMcpToolContracts)[number]["name"], payload: Record<string, unknown>) {
   const contract = certScoreMcpToolContracts.find((candidate) => candidate.name === name);
   assert.ok(contract);

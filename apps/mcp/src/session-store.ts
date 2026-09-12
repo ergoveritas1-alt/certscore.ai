@@ -4,12 +4,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { HostedMcpObservationContext } from "./telemetry.js";
 import type { McpRequestDetails } from "@website-signal-risk-scanner/shared";
+import type { OAuthSessionIdentity } from "./session-identity.js";
 
 export type McpHttpSession = {
   expiresAt: number;
   lastSeenAt: number;
   server: McpServer;
   tokenHash: string;
+  surface: "oauth" | "anonymous" | "light" | "microsoft";
+  oauthIdentity?: OAuthSessionIdentity;
   transport: StreamableHTTPServerTransport;
   telemetry?: {
     observationContext(): HostedMcpObservationContext;
@@ -50,9 +53,20 @@ export class McpHttpSessionStore {
       this.delete(sessionId);
       return null;
     }
-    session.lastSeenAt = Date.now();
-    session.expiresAt = session.lastSeenAt + this.options.ttlSeconds * 1000;
     return session;
+  }
+
+  // Lookup must not renew a session before its requester has been authorized.
+  touch(sessionId: string) {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    const now = Date.now();
+    if (session.expiresAt <= now) {
+      this.delete(sessionId);
+      return;
+    }
+    session.lastSeenAt = now;
+    session.expiresAt = session.lastSeenAt + this.options.ttlSeconds * 1000;
   }
 
   set(sessionId: string, session: Omit<McpHttpSession, "expiresAt" | "lastSeenAt">) {
