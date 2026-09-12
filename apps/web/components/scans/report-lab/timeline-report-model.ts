@@ -639,7 +639,15 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     throw new Error(`Canonical persisted report projection is unavailable for scan ${scanRecord.scan.id}`);
   }
   const checklistRows = hydrateChecklistPolicyEvidence(canonical.checklistRows, canonical.evidenceIndex);
-  const reportableChecklistRows = getReportableGdprEprivacyCoverageItems(checklistRows);
+  const reportableChecklistRows = getReportableGdprEprivacyCoverageItems(checklistRows, {
+    consentControlAssessment:
+      scanRecord.snapshot?.consentControlAssessment ??
+      scanRecord.snapshot?.consent_control_assessment ??
+      scanRecord.runtimeArtifacts?.consentControlAssessment ??
+      scanRecord.runtimeArtifacts?.consent_control_assessment ??
+      (scanRecord.runtimeArtifacts?.hybridRuntimeEvidence as Record<string, unknown> | undefined)?.consentControlAssessment ??
+      (scanRecord.runtimeArtifacts?.hybrid_runtime_evidence as Record<string, unknown> | undefined)?.consent_control_assessment,
+  });
   const capturedAt = formatTimestamp(scanRecord.scan.completedAt ?? scanRecord.scan.createdAt);
   const evidenceRows = reportableChecklistRows.map((item) => mapChecklistRow(item, capturedAt));
   const assessment = consentControlAssessmentSchema.safeParse(scanRecord.snapshot?.consent_control_assessment ?? scanRecord.runtimeArtifacts?.consentControlAssessment ?? scanRecord.runtimeArtifacts?.consent_control_assessment);
@@ -650,7 +658,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     ),
   ).topFindings;
   const findings = selectCanonicalHighPriorityFindings([
-    ...buildChecklistConcernTopFindings(checklistRows),
+    ...buildChecklistConcernTopFindings(reportableChecklistRows),
     ...executiveUnifiedFindings,
   ]).map((finding, index) => mapChecklistFinding(finding, index + 1, evidenceRows));
   const inventoryProjection = buildRuntimeInventoryProjectionFromScan(scanRecord);
@@ -704,7 +712,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     surfacedFinding(canonical.ownerUnifiedFindings, "acceptance_signal_contradicts_action"),
   );
   const rejectPath = buildExecutiveRejectPathProjection(
-    checklistRows.find((item) => item.id === "post_reject_tracking_reduction"),
+    reportableChecklistRows.find((item) => item.id === "post_reject_tracking_reduction"),
   );
   const choicePathComparison = buildChoicePathComparison(
     acceptPath,
@@ -759,7 +767,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     controls,
     findings,
     limitedCount: summaryCounts.technical_limitation,
-    limitedItems: checklistRows.filter((row) => checklistStatus(row) === "Limited").map((row) => row.label),
+    limitedItems: reportableChecklistRows.filter((row) => checklistStatus(row) === "Limited").map((row) => row.label),
     positiveCount: summaryCounts.positive_signal,
     rejectPath,
     timeline,

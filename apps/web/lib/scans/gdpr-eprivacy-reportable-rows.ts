@@ -1,3 +1,5 @@
+import { consentControlAssessmentSchema } from "@certscore/contracts";
+
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 
 const DEFERRED_NON_PRODUCTION_ROW_IDS = new Set([
@@ -19,6 +21,34 @@ export function isReportableGdprEprivacyCoverageRowId(id: string) {
   return !DEFERRED_NON_PRODUCTION_ROW_IDS.has(id);
 }
 
-export function getReportableGdprEprivacyCoverageItems(items: GdprEprivacyCoverageChecklistItem[]) {
-  return items.filter((item) => isReportableGdprEprivacyCoverageRowId(item.id));
+type GdprEprivacyReportabilityContext = {
+  consentControlAssessment?: unknown;
+};
+
+function hasCompleteFirstLayerInventoryWithoutReject(candidate: unknown) {
+  const parsed = consentControlAssessmentSchema.safeParse(candidate);
+  return parsed.success &&
+    parsed.data.assessmentStatus === "complete" &&
+    parsed.data.coverage.status === "complete" &&
+    parsed.data.controls.reject.state === "not_observed";
+}
+
+function isIrrelevantPostRejectAssessment(
+  item: GdprEprivacyCoverageChecklistItem,
+  context?: GdprEprivacyReportabilityContext,
+) {
+  if (item.id !== "post_reject_tracking_reduction") return false;
+  const retained = item.criticalEvidence.retainedEvidence;
+  return retained.reportPresentation === "omit_no_actionable_reject_control" ||
+    hasCompleteFirstLayerInventoryWithoutReject(context?.consentControlAssessment);
+}
+
+export function getReportableGdprEprivacyCoverageItems(
+  items: GdprEprivacyCoverageChecklistItem[],
+  context?: GdprEprivacyReportabilityContext,
+) {
+  return items.filter((item) =>
+    isReportableGdprEprivacyCoverageRowId(item.id) &&
+    !isIrrelevantPostRejectAssessment(item, context)
+  );
 }

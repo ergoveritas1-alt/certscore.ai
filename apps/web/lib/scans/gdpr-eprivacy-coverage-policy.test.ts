@@ -7200,6 +7200,10 @@ test("independent incomplete Reject action is not relabeled inapplicable by pass
   });
   assert.notEqual(outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.productionPosture, "not_applicable_no_reject_control");
   assert.equal(outcomes.post_reject_tracking_reduction?.status, "Not testable");
+  assert.equal(
+    outcomes.post_reject_tracking_reduction?.criticalEvidence.retainedEvidence.reportPresentation,
+    "omit_no_actionable_reject_control",
+  );
 });
 
 test("verified positive controls survive limited inventory through normalized concerns and policy", () => {

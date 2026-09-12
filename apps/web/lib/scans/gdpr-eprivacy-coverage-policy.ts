@@ -6401,7 +6401,14 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
   if (independentRejectActionIncomplete && !rejectInteractionSucceeded) {
     return makeOutcome("post_reject_tracking_reduction", "Not testable",
       rejectInteractionFailureReason ?? "The independent Reject test did not complete; post-Reject behavior could not be assessed.",
-      reductionEvidenceRefs, { retainedEvidence: { ...postRejectRetainedEvidence, productionPosture: "limited_independent_reject_action", scoreEffect: "none" } });
+      reductionEvidenceRefs, { retainedEvidence: {
+        ...postRejectRetainedEvidence,
+        productionPosture: "limited_independent_reject_action",
+        reportPresentation: completeFirstLayerInventoryWithoutReject
+          ? "omit_no_actionable_reject_control"
+          : "show",
+        scoreEffect: "none"
+      } });
   }
 
   if (

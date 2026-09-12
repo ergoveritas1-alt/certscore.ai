@@ -409,7 +409,15 @@ function buildPulseReportSurface(input: {
       unifiedFindings: unifiedFindingPackets
     });
       })();
-  const reportableGdprRows = getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist).map((item) => {
+  const reportableGdprRows = getReportableGdprEprivacyCoverageItems(gdprEprivacyChecklist, {
+    consentControlAssessment:
+      scanRecord.snapshot?.consentControlAssessment ??
+      scanRecord.snapshot?.consent_control_assessment ??
+      scanRecord.runtimeArtifacts?.consentControlAssessment ??
+      scanRecord.runtimeArtifacts?.consent_control_assessment ??
+      (scanRecord.runtimeArtifacts?.hybridRuntimeEvidence as Record<string, unknown> | undefined)?.consentControlAssessment ??
+      (scanRecord.runtimeArtifacts?.hybrid_runtime_evidence as Record<string, unknown> | undefined)?.consent_control_assessment,
+  }).map((item) => {
     const statusBasis = deriveGdprEprivacyCoverageChecklistRowRationale(item);
     return {
       ...item,

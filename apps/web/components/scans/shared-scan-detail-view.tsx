@@ -7896,7 +7896,18 @@ export async function SharedScanDetailView({
     snapshot,
     unifiedFindings: findingEvidenceDiagnostics
   });
-  const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(gdprEprivacyCoverageChecklist);
+  const reportableGdprEprivacyCoverageChecklist = getReportableGdprEprivacyCoverageItems(
+    gdprEprivacyCoverageChecklist,
+    {
+      consentControlAssessment:
+        snapshot?.consentControlAssessment ??
+        snapshot?.consent_control_assessment ??
+        runtimeArtifacts?.consentControlAssessment ??
+        runtimeArtifacts?.consent_control_assessment ??
+        hybridRuntimeEvidence?.consentControlAssessment ??
+        hybridRuntimeEvidence?.consent_control_assessment,
+    },
+  );
   const checklistPresentation =
     persistedCanonicalProjection?.checklistPresentation ?? null;
   const lazyChecklistDetailsAvailable = Boolean(
@@ -7911,7 +7922,7 @@ export async function SharedScanDetailView({
     scanRecord.scan.domainHostname
   );
   const consentSurfaceCoverageItem = gdprEprivacyCoverageChecklist.find((item) => item.id === "consent_surface_observed");
-  const postRejectTrackingReductionItem = gdprEprivacyCoverageChecklist.find(
+  const postRejectTrackingReductionItem = reportableGdprEprivacyCoverageChecklist.find(
     (item) => item.id === "post_reject_tracking_reduction"
   );
   const executiveRejectPath = buildExecutiveRejectPathProjection(postRejectTrackingReductionItem);
@@ -7942,7 +7953,7 @@ export async function SharedScanDetailView({
     ? resolveScanReportScore(scanRecord, persistedCanonicalOverallScore ?? canonicalOverallScore)
     : null;
   const regulatoryGapTopFindings = buildChecklistConcernTopFindings(
-    gdprEprivacyCoverageChecklist
+    reportableGdprEprivacyCoverageChecklist
   );
   const regulatoryGapTopFindingIds = new Set(regulatoryGapTopFindings.map((finding) => finding.id));
   const allExecutiveFindingsWithRegulatoryGaps = executiveAccessLimitationNotice
