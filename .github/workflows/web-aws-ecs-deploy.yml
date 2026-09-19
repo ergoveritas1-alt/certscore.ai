@@ -16,6 +16,7 @@ on:
       - "packages/validation-shared/**"
       - "scripts/apply-db-migrations.mjs"
       - "scripts/assert-forward-web-deploy.ts"
+      - "scripts/configure-marketplace-light.ts"
       - "scripts/insert-integration-api-key.mjs"
       - "package.json"
       - "pnpm-lock.yaml"
@@ -29,6 +30,11 @@ on:
       - "!apps/web/scripts/**"
   workflow_dispatch:
     inputs:
+      marketplace_light:
+        description: "Marketplace Light API-key access (owner-approved integration)"
+        type: choice
+        default: preserve
+        options: [preserve, enable, disable]
       allow_non_descendant_deploy:
         description: "Emergency only: permit a web revision that does not contain the currently live revision"
         required: false
@@ -189,6 +195,13 @@ jobs:
       - name: Typecheck web
         run: pnpm --filter @website-signal-risk-scanner/web typecheck
 
+      - name: Test Marketplace Light security contracts
+        run: |
+          node --import tsx --test \
+            apps/web/server/marketplace/contracts.test.ts \
+            apps/web/server/marketplace/sns.test.ts \
+            scripts/configure-marketplace-light.test.ts
+
       - name: Validate certscore web runtime contract
         run: |
           APP_FLAVOR=certscore \
@@ -315,6 +328,7 @@ jobs:
                   ]
               )
           ' current-task-definition.json > target-task-definition.json
+          node --import tsx scripts/configure-marketplace-light.ts target-task-definition.json "${{ inputs.marketplace_light || 'preserve' }}"
 
           TARGET_TASK_DEFINITION="$(aws ecs register-task-definition \
             --cli-input-json file://target-task-definition.json \

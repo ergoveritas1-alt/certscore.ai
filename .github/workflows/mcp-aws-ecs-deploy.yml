@@ -16,6 +16,7 @@ on:
       - "scripts/smoke-certscore-mcp-http-tools-diff.ts"
       - "scripts/verify-mcp-source-tracked.ts"
       - "scripts/configure-microsoft-mcp-pilot*.ts"
+      - "scripts/configure-marketplace-light.ts"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -23,6 +24,11 @@ on:
       - "turbo.json"
   workflow_dispatch:
     inputs:
+      marketplace_light:
+        description: "Marketplace Light API-key access (owner-approved integration)"
+        type: choice
+        default: preserve
+        options: [preserve, enable, disable]
       microsoft_delegated_pilot:
         description: "Tenant-restricted Microsoft delegated pilot (requires owner approval)"
         type: choice
@@ -87,6 +93,7 @@ jobs:
         run: |
           pnpm ops:check:mcp-source
           node --import tsx --test scripts/configure-microsoft-mcp-pilot.test.ts
+          node --import tsx --test scripts/configure-marketplace-light.test.ts
           pnpm --filter @certscore/mcp-http build:deps
           pnpm --filter @certscore/api-contracts test
           pnpm --filter @certscore/sdk test
@@ -185,6 +192,7 @@ jobs:
         run: |
           aws ecs describe-task-definition --task-definition "${PREVIOUS_TASK_DEFINITION_ARN}" | jq '.taskDefinition | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy) | .containerDefinitions = (.containerDefinitions | map(if .name == env.ECS_CONTAINER_NAME then .image = "\(env.MCP_IMAGE):\(env.GITHUB_SHA)" else . end))' > /tmp/mcp-task-definition.json
           node --import tsx scripts/configure-microsoft-mcp-pilot.ts /tmp/mcp-task-definition.json "${MICROSOFT_DELEGATED_PILOT}"
+          node --import tsx scripts/configure-marketplace-light.ts /tmp/mcp-task-definition.json "${{ inputs.marketplace_light || 'preserve' }}"
           task_definition_arn="$(aws ecs register-task-definition --cli-input-json file:///tmp/mcp-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)"
           echo "MCP_TASK_DEFINITION_ARN=${task_definition_arn}" >> "${GITHUB_ENV}"
 

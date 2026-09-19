@@ -18,6 +18,7 @@ const envSchema = z.object({
   CERTSCORE_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
   CERTSCORE_MCP_INITIAL_PRECONSENT_PREVIEW_WAIT_MS: z.coerce.number().int().min(0).max(10000).default(10000),
   CERTSCORE_MICROSOFT_MCP_ENABLED: z.enum(["0", "1"]).default("0"),
+  CERTSCORE_MARKETPLACE_LIGHT_ENABLED: z.enum(["0", "1"]).default("0"),
   CERTSCORE_MICROSOFT_DELEGATED_ENABLED: z.enum(["0", "1"]).default("0"),
   CERTSCORE_MICROSOFT_DELEGATED_CLIENT_ID: optionalUuid,
   CERTSCORE_MICROSOFT_DELEGATED_SCOPE: z.string().regex(/^[A-Za-z][A-Za-z0-9._-]*$/).optional(),

@@ -14,6 +14,7 @@ import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } fr
 import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 import { createHostedMcpTelemetry } from "./telemetry.js";
 import { createMicrosoftEntraTokenValidator, microsoftEntraSessionBinding } from "./microsoft-entra-auth.js";
+import { admitMarketplaceAuth, validateMarketplaceCredential } from "./marketplace-auth.js";
 import type { McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 
 const OPENAI_APPS_CHALLENGE_TOKEN = "RVujVoFeQNvwzz4Upt8IPh_f2Xm3qf2Uqa_-tr3VTeQ";
@@ -341,7 +342,7 @@ function transportReason(res: ServerResponse): McpObservationReason | null {
   return res.statusCode === 406 ? "accept_not_supported" : "other";
 }
 
-async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean, light = false, microsoft = false) {
+async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: boolean, light = false, microsoft = false, marketplace = false) {
   const requestStartedAt = Date.now();
   if (!hostAllowed(req)) {
     json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
@@ -362,7 +363,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   const clientIp = requestSource.ip;
   let token: string | undefined;
   let tokenHash: string;
-  const sessionSurface = microsoft ? "microsoft" : light ? "light" : anonymous ? "anonymous" : "oauth";
+  const sessionSurface = marketplace ? "marketplace" : microsoft ? "microsoft" : light ? "light" : anonymous ? "anonymous" : "oauth";
   let oauthIdentity: OAuthSessionIdentity | undefined;
   let authenticatedCallerHash: string | null = null;
   let authenticatedActorId: string | null = null;
@@ -370,7 +371,21 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   let authenticatedUserId: string | null = null;
   let grantedOAuthScopes: string[] | undefined;
   let microsoftIdentity: { clientId: string; tenantId: string } | null = null;
-  if (microsoft) {
+  if (marketplace) {
+    if (!admitMarketplaceAuth(clientIp ?? "unknown")) {
+      return json(res, 429, { error: "rate_limited" }, { ...corsHeaders(req), "Retry-After": "60" });
+    }
+    const credential = bearerToken(req);
+    const decision = await validateMarketplaceCredential({ token: credential, baseUrl: env.CERTSCORE_BASE_URL, secret: env.jwtSecret });
+    if (decision !== "valid") {
+      return json(res, decision === "invalid" ? 401 : 503,
+        { error: decision === "invalid" ? "unauthorized" : "temporarily_unavailable", error_description: "An active AWS Marketplace Light API key is required. Manage keys at https://certscore.ai/marketplace/light." },
+        { ...corsHeaders(req), "WWW-Authenticate": 'Bearer realm="CertScore Marketplace Light"' });
+    }
+    tokenHash = sessions.hashToken(credential!);
+    authenticatedCallerHash = tokenHash;
+    // Do not forward this credential to the workspace API. Light remains public-scope.
+  } else if (microsoft) {
     const auth = await authenticateMicrosoft(req);
     if (!auth.ok) {
       if (auth.reason === "missing_role" || auth.reason === "missing_scope") {
@@ -569,7 +584,8 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       : null;
   // Hosted MCP clients may distribute one anonymous Light session across egress addresses.
   // The opaque session ID remains authoritative; other surfaces retain requester binding.
-  if (identityMismatch || (sessionSurface !== "oauth" && session.tokenHash !== tokenHash && (!light || microsoft))) {
+  if (identityMismatch || (sessionSurface !== "oauth" && session.tokenHash !== tokenHash && (!light || microsoft || marketplace))) {
+    if (marketplace) return json(res, 401, { error: "session_token_mismatch", error_description: "Initialize a new session with this Marketplace key." }, corsHeaders(req));
     if (microsoft) {
       return microsoftUnauthorized(res, req, "session_token_mismatch");
     }
@@ -598,7 +614,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   if (sessionId) sessions.touch(sessionId);
   const readCalls = mcpReadCallsFromJsonRpc(parsedBody);
   for (const readCall of readCalls) {
-    const publicLight = light && !microsoft;
+    const publicLight = light && !microsoft && !marketplace;
     const caller = publicLight && anonymousRequester?.network === "anthropic" && sessionId
       ? sessions.hashToken(`anonymous-session:${sessionId}`)
       : microsoft
@@ -777,10 +793,11 @@ const server = createServer(async (req, res) => {
   if (url.pathname === "/.well-known/oauth-protected-resource/mcp" && req.method === "GET") {
     return json(res, 200, publicMetadata(), corsHeaders(req));
   }
-  if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light" || (env.microsoftMcpEnabled && url.pathname === "/mcp/microsoft")) && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
+  if ((url.pathname === "/mcp" || url.pathname === "/mcp/anonymous" || url.pathname === "/mcp/light" || (env.CERTSCORE_MARKETPLACE_LIGHT_ENABLED === "1" && url.pathname === "/mcp/marketplace/light") || (env.microsoftMcpEnabled && url.pathname === "/mcp/microsoft")) && (req.method === "GET" || req.method === "POST" || req.method === "DELETE")) {
     const anonymous = url.pathname !== "/mcp";
     const microsoft = url.pathname === "/mcp/microsoft";
-    return requestCorrelation.run(transportRequestId(req), () => handleMcp(req, res, anonymous, url.pathname === "/mcp/light" || microsoft, microsoft)).catch((error) => {
+    const marketplace = url.pathname === "/mcp/marketplace/light";
+    return requestCorrelation.run(transportRequestId(req), () => handleMcp(req, res, anonymous, url.pathname === "/mcp/light" || microsoft || marketplace, microsoft, marketplace)).catch((error) => {
       console.error(JSON.stringify({
         event: "mcp_http.request_failed",
         timestamp: new Date().toISOString(),

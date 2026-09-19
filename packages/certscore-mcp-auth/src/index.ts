@@ -200,3 +200,4 @@ export function verifyCertScoreAccessToken(input: {
   }
   return { ok: true as const, claims };
 }
+export { marketplaceKeyProof, verifyMarketplaceKeyProof } from "./marketplace-proof.js";

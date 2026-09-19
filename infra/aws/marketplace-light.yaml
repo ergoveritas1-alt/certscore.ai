@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Free MCP Light Marketplace lifecycle delivery; no additional compute capacity.
+Parameters:
+  WebTaskRoleName:
+    Type: String
+  ProductCode:
+    Type: String
+    Default: a3p2vfccdufqnuhyn5r8lsx0q
+  ProductId:
+    Type: String
+    Default: prod-eagvxckgntmxc
+Resources:
+  EventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: certscore-marketplace-light-events
+      SignatureVersion: '2'
+  EventsDeadLetters:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: certscore-marketplace-light-events-dlq
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+  DeadLetterPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues: [!Ref EventsDeadLetters]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: sns.amazonaws.com}
+            Action: sqs:SendMessage
+            Resource: !GetAtt EventsDeadLetters.Arn
+            Condition:
+              ArnEquals: {aws:SourceArn: !Ref EventsTopic}
+  LifecycleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: certscore-marketplace-light-licenses
+      EventPattern:
+        source: [aws.agreement-marketplace]
+        account: [!Ref AWS::AccountId]
+        detail-type: [License Updated - Manufacturer, License Deprovisioned - Manufacturer]
+        detail:
+          product:
+            code: [!Ref ProductCode]
+            id: [!Ref ProductId]
+      Targets:
+        - Id: marketplace-light-sns
+          Arn: !Ref EventsTopic
+          RoleArn: !GetAtt EventDeliveryRole.Arn
+  EventDeliveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: events.amazonaws.com}
+            Action: sts:AssumeRole
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/certscore-marketplace-light-licenses
+      Policies:
+        - PolicyName: publish-marketplace-light
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref EventsTopic
+  WebSubscription:
+    Type: AWS::SNS::Subscription
+    DependsOn: [DeadLetterPolicy, WebMarketplaceAccess]
+    Properties:
+      Protocol: https
+      Endpoint: https://certscore.ai/api/marketplace/light/events
+      TopicArn: !Ref EventsTopic
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt EventsDeadLetters.Arn
+  WebMarketplaceAccess:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: certscore-marketplace-light
+      Roles: [!Ref WebTaskRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [aws-marketplace:ResolveCustomer, aws-marketplace:DescribeAgreement]
+            Resource: '*'
+          - Effect: Allow
+            Action: sns:ConfirmSubscription
+            Resource: !Ref EventsTopic
+Outputs:
+  TopicArn:
+    Value: !Ref EventsTopic
+  DeadLetterQueueUrl:
+    Value: !Ref EventsDeadLetters

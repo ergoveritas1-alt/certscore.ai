@@ -11,7 +11,7 @@ export type McpHttpSession = {
   lastSeenAt: number;
   server: McpServer;
   tokenHash: string;
-  surface: "oauth" | "anonymous" | "light" | "microsoft";
+  surface: "oauth" | "anonymous" | "light" | "microsoft" | "marketplace";
   oauthIdentity?: OAuthSessionIdentity;
   transport: StreamableHTTPServerTransport;
   telemetry?: {
