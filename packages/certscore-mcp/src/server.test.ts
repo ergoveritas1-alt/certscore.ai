@@ -950,6 +950,7 @@ test("MCP Light certscore_scan_site falls back to the unchanged scanId when the 
         assert.equal(mock.requestHeaders[1]?.get("x-certscore-mcp-internal-operation"), "scan_site_wait");
       }
     }, {
+      anonymousRequesterSecret: "test-secret-at-least-16-characters",
       initialPreConsentPreviewWaitMs: 20,
       toolProfile: "light",
     });
