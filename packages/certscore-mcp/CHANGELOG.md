@@ -1,12 +1,18 @@
 # certscore-mcp
 
-## 0.2.22
-
-- Report canonical completed Accept/Reject paths independently of confirmation or optional afterAction summaries.
-
 ## Unreleased
 
 - Prepare Cursor integration `1.0.4` with query-first cookie, tracker, consent, GDPR, CCPA, ePrivacy, privacy-risk, and website-scanner discovery metadata while preserving the `CertScore.ai` no-auth Light endpoint.
+
+## 0.2.23
+
+- Distinguish observed external domains from classified tracker vendors in concise scan bundles.
+- Include bounded retained external-request examples and policy-surface candidates in evidence detail, including scans with no findings.
+- State the public-page assessment scope in the default answer and guide agents to the existing report-evidence reader for deeper sources.
+
+## 0.2.22
+
+- Report canonical completed Accept/Reject paths independently of confirmation or optional afterAction summaries.
 
 ## 0.2.21
 
