@@ -105,6 +105,7 @@ export const pulseCoverageInterruptionSchema = z
 export const pulseCoverageSchema = z
   .object({
     status: z.string().optional(),
+    scopeSummary: z.string().optional(),
     homepageObserved: z.boolean().optional(),
     interruptionCount: z.number().int().optional(),
     summary: z.string().optional(),

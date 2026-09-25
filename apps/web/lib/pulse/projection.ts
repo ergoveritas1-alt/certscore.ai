@@ -790,6 +790,8 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
       : []),
   ];
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
+  const observedPageCount = Math.max(0, scanRecord.scan.pagesScanned ?? 0);
+  const scopeSummary = `${observedPageCount} public page${observedPageCount === 1 ? "" : "s"} scanned. Signed-in behavior was not assessed.`;
   const limited =
     scanRecord.scan.status !== "completed" ||
     scanRecord.scan.pagesScanned < Math.max(1, scanRecord.scan.pagesRequested) ||
@@ -808,6 +810,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
 
   return {
     status,
+    scopeSummary,
     homepageObserved,
     interruptionCount: interruptions.length,
     summary,
@@ -1946,6 +1949,7 @@ function buildEvidenceArtifact(input: {
     executiveSummary: input.base.executiveSummary,
     surfacedResults: input.base.surfacedResults,
     transportSecurity: input.base.transportSecurity,
+    coverage: input.standard.coverage ?? input.base.coverage,
     evidenceSafetyNotes: [
       "This packet contains bounded structured evidence for human and agentic review, not raw browser capture.",
       "Raw cookie values, raw request/response bodies, sensitive payloads, full DOM, raw Nano reasoning, and unredacted query values are not included.",
