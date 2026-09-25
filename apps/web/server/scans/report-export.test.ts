@@ -310,3 +310,43 @@ test("projects GDPR Transparency and retained collection assessments into separa
   assert.match(pdf, /pharmacy.example/);
   assert.equal(readPersistedScanReportProjection({ scan: scan.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);
 });
+
+test("bounded GPC measurements survive checked persistence, both report focuses and PDF without altering scores", async () => {
+  const { gpcRuntimeFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const { gpcActivityComparisonFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
+  const { buildGpcResponseAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-response-assessment");
+  const scan = scanRecord();
+  const pointer = { uri: "s3://fixture/source.json", sha256: "a".repeat(64), sizeBytes: 100 };
+  const assessment = buildGpcResponseAssessment({ baseline: gpcRuntimeFixture({ enabled: false }), gpc: gpcRuntimeFixture({ enabled: true }),
+    baselineArtifact: pointer, gpcArtifact: { ...pointer, sha256: "b".repeat(64) } });
+  const activityComparison = gpcActivityComparisonFixture({ scanId: scan.scan.id });
+  const project = (includeActivity: boolean) => buildUnifiedFindingDisplayPackets({
+    runtimeArtifacts: { gpcResponseAssessment: assessment, ...(includeActivity ? { gpcActivityComparison: activityComparison } : {}) },
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+  });
+  const packets = project(true);
+  assert.deepEqual(packets.map(finding => finding.scoreEffects), project(false).map(finding => finding.scoreEffects));
+  const canonical = (scan as unknown as { canonicalReportProjection: PersistedCanonicalReportProjection }).canonicalReportProjection;
+  canonical.ownerUnifiedFindings = packets;
+  canonical.globalUnifiedFindings = packets;
+  const persisted = buildPersistedScanReportProjection(scan);
+  const restored = readPersistedScanReportProjection({ scan: scan.scan, snapshot: {
+    report_projection_computed_at: "2026-09-25T00:00:00.000Z", report_projection_payload: JSON.parse(persisted.serialized),
+    report_projection_payload_sha256: persisted.sha256, report_projection_payload_size_bytes: persisted.sizeBytes,
+    report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+  } });
+  assert.ok(restored);
+  const eu = buildCanonicalReportExport(restored, undefined, "gdpr_eprivacy")!;
+  const ca = buildCanonicalReportExport(restored, undefined, "ccpa_cpra")!;
+  assert.deepEqual(eu.gpcResponse?.activityComparison, activityComparison);
+  assert.deepEqual(ca.gpcResponse, eu.gpcResponse);
+  assert.equal(eu.gpcResponse?.status, assessment.status);
+  const { renderPulseMarkdown } = await import("../../lib/pulse/markdown");
+  const markdown = renderPulseMarkdown({ domain: "example.test", scanId: scan.scan.id, scanStatus: "completed", gpcResponse: ca.gpcResponse, topFindings: [], links: {}, summary: {} });
+  assert.match(markdown, /Baseline -> GPC, first 1000 ms/);
+  const pdf = renderCanonicalReportPdf(ca).toString("latin1");
+  assert.match(pdf, /Baseline -> GPC, first 1000 ms/);
+  assert.match(pdf, /advertising\/marketing requests 2 -> 1/);
+  const foreign = { ...restored, scan: { ...restored.scan, id: "foreign-scan" } };
+  assert.equal(buildCanonicalReportExport(foreign), null, "a report cannot be rebound to a different scan");
+});

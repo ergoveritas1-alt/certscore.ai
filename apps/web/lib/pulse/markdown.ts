@@ -1,4 +1,5 @@
 import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "./constants";
+import { apiV2GpcResponseSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 
 type PulseMarkdownInput = Record<string, any>;
@@ -123,6 +124,8 @@ function compactConsentLaneResults(pulse: PulseMarkdownInput) {
   const results: string[] = [];
   const gpc = pulse.gpcResponse;
   if (gpc && typeof gpc === "object") {
+    const activity = apiV2GpcResponseSchema.safeParse(gpc);
+    if (activity.success && activity.data.activityComparison) results.push(`- ${describeGpcActivityComparison(activity.data.activityComparison)}`);
     const proofCount = gpc.comparison?.enabledProof?.requestsWithSecGpc;
     const summary = `${line(gpc.findingTitle)}; status: ${formatLabel(gpc.status)}` +
       (typeof proofCount === "number" ? `; Sec-GPC: 1 proof retained on ${proofCount} request(s)` : "");

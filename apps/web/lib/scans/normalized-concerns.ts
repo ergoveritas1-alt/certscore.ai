@@ -3,6 +3,7 @@ import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, 
 import { projectConsentControlBehavior } from "./consent-control-behavior";
 import { siteIntegrityProjectionSchema, SITE_INTEGRITY_FINDING_ID, SITE_INTEGRITY_SIGNAL, SITE_INTEGRITY_COPY, SITE_INTEGRITY_POLICY_VERSION, SITE_INTEGRITY_SEVERITY } from "@certscore/contracts";
 import { describeGpcBoundedObservation } from "@certscore/contracts";
+import { readGpcActivityComparison } from "./gpc-activity-comparison";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import { assessRejectClickTracking, readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import {
@@ -3757,6 +3758,7 @@ function buildGpcResponseConcerns(
     originType: "runtime_artifact",
     rawEvidence: {
       gpcResponseAssessment: assessment,
+      gpcActivityComparison: readGpcActivityComparison(runtimeArtifacts?.gpcActivityComparison, assessment),
       gpcResponseAssessmentContractVersion: assessment.contractVersion,
       gpcResponseStatus: assessment.status,
       gpcComparisonComparable: assessment.comparison.comparable,

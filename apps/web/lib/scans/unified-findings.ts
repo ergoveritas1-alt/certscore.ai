@@ -2,6 +2,7 @@ import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type Form
 import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityProjection } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID, siteIntegrityProjectionSchema, type SiteIntegrityProjection } from "@certscore/contracts";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
+import { readGpcActivityComparison } from "./gpc-activity-comparison";
 import {
   type MergedSignalRecord,
   getReportUnifiedFinding,
@@ -159,6 +160,7 @@ export type UnifiedFindingDetails =
   | {
       family: "privacy_signal";
       kind: "gpc_response";
+      activityComparison?: import("@certscore/contracts").GpcActivityComparison;
       assessment: Pick<
         GpcResponseAssessment,
         "contractVersion" | "generatedAt" | "status" | "findingTitle" | "scoreEffect" | "legalInterpretation" | "comparison"
@@ -1878,6 +1880,7 @@ function buildUnifiedFindingDetails(input: {
       family,
       kind: "gpc_response",
       assessment: parsedAssessment.data,
+      activityComparison: readGpcActivityComparison(input.fallbackEvidence?.gpcActivityComparison, parsedAssessment.data),
     } satisfies UnifiedFindingDetails;
   }
 

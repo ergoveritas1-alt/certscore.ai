@@ -2200,6 +2200,7 @@ function makeScanRecord(overrides: Partial<ScanDetailResponse> = {}): ScanDetail
 }
 
 test("GPC response projection preserves the typed assessment without legal reinterpretation", async () => {
+  const { gpcActivityComparisonFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
   const { buildGpcResponseRuntimeProjection } = await loadLocalV2DagReport();
   const unchangedDelta = {
     baselineCount: 1,
@@ -2238,6 +2239,12 @@ test("GPC response projection preserves the typed assessment without legal reint
     gpcResponseAssessment: assessment,
     gpc_response_assessment: assessment,
   });
+  const comparison = gpcActivityComparisonFixture();
+  const input = { scanId: comparison.scanId, gpcResponseAssessment: assessment, gpcActivityComparison: comparison };
+  assert.deepEqual(buildGpcResponseRuntimeProjection(input).gpcActivityComparison, comparison);
+  assert.equal(buildGpcResponseRuntimeProjection({ ...input, scanId: "other-scan" }).gpcActivityComparison, undefined);
+  assert.equal(buildGpcResponseRuntimeProjection({ ...input, gpcActivityComparison: { ...comparison,
+    sourceHashes: { baseline: "c".repeat(64), gpc: "b".repeat(64) } } }).gpcActivityComparison, undefined);
 });
 
 function completedConsentGeometryFixture(input: {

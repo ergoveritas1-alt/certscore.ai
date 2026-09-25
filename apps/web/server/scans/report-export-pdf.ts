@@ -1,5 +1,6 @@
 import { siteIntegrityScoreDescription } from "../../lib/scans/site-integrity-score-policy";
 import { describeGpcObservedFacts } from "../../lib/scans/gpc-observed-facts";
+import { describeGpcActivityComparison } from "@certscore/contracts";
 import { consentInspectionNotice } from "../../lib/scans/consent-inspection-presentation";
 import type { CanonicalReportExport } from "./report-export";
 import { deflateSync, inflateSync } from "node:zlib";
@@ -352,6 +353,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     const gpc = report.gpcResponse;
     const facts = describeGpcObservedFacts(gpc.observation);
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
+    if (gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
     lines.push(...wrappedLines(`Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpc.summary}`, { size: facts.length ? 9 : 10 }));
     lines.push(...wrappedLines(`Comparable capture: ${gpc.comparison.comparable ? "yes" : "no"}. Signal delivery: ${gpc.comparison.delivery?.status ?? "See retained proof"}. California policy deduction: ${gpc.californiaPolicy.deductionPoints}.`, { size: 9 }));
     lines.push(...wrappedLines(`Evidence: ${gpc.evidenceUrl}. Full delivery proof and comparison deltas are available in the JSON workpaper.`, { size: 9 }));

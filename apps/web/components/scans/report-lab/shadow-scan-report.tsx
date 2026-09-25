@@ -1,6 +1,7 @@
 import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { GpcObservedFacts } from "../gpc-observed-facts";
+import { GpcActivityComparison } from "../gpc-activity-comparison";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
@@ -531,6 +532,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             </summary>
             <div className="mt-3 space-y-2.5">
               <GpcObservedFacts facts={report.gpcResponse.observedFacts} />
+              <GpcActivityComparison comparison={report.gpcResponse.activityComparison} />
               <details className="text-xs text-zinc-600">
                 <summary className="cursor-pointer font-semibold">Comparison details</summary>
               <p className="text-xs leading-5 text-zinc-600">{report.gpcResponse.summary}</p>
@@ -1517,6 +1519,7 @@ function GpcEvidenceIndexCard({ projection, homepage = false, expanded = false }
       </summary>
       <div className="mt-5 space-y-5">
         <GpcObservedFacts facts={projection.observedFacts} />
+        <GpcActivityComparison comparison={projection.activityComparison} />
         {projection.californiaDeductionPoints > 0 ? <p className="text-sm font-semibold text-rose-800">California policy · −{projection.californiaDeductionPoints} points</p> : null}
         <details className="text-sm text-zinc-600">
           <summary className="cursor-pointer font-semibold">Comparison details</summary>

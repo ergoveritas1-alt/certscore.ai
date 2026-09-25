@@ -62,6 +62,7 @@ import {
   buildScanEvidenceLaneAssessment,
   buildGpcResponseAssessment,
   buildGpcProductionAssessment,
+  buildGpcActivityComparison,
   buildCanonicalPostAcceptActionRecipes,
   buildPostAcceptCmpActionRecipe,
   buildCanonicalPostRefusalActionRecipes,
@@ -2690,6 +2691,15 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         ...gpcGraphs.graphs,
       ],
       runtimeEvidenceGraphDiagnostics: [...(bundle.runtimeEvidenceGraphDiagnostics ?? []), ...gpcGraphs.diagnostics],
+      gpcActivityComparison: buildGpcActivityComparison({
+        scanId: payload.scanId,
+        baseline: verifiedGpcWorkerBytes.has(runtimeEvidenceBundle) ? {
+          bytes: verifiedGpcWorkerBytes.get(runtimeEvidenceBundle)!, pointer: verifiedWorkerArtifact(baselineResult, "runtime_evidence"),
+        } : undefined,
+        gpc: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
+          bytes: verifiedGpcWorkerBytes.get(verifiedGpc)!, pointer: verifiedWorkerArtifact(gpcResult, "gpc_observation"),
+        } : undefined,
+      }),
       gpcResponseAssessment: buildGpcProductionAssessment({
         scanId: payload.scanId,
         source: verifiedGpc && gpcResult && verifiedGpcWorkerBytes.has(verifiedGpc) ? {
@@ -3843,7 +3853,7 @@ async function readWorkerBundleFromArtifactResult(
   if (result.workerLane === "gpc_observation" && bundle.scanId !== result.scanId) {
     throw new Error("GPC worker bundle does not retain its parent scan identity.");
   }
-  if (result.workerLane === "gpc_observation") verifiedGpcWorkerBytes.set(bundle, body);
+  if (result.workerLane === "gpc_observation" || result.workerLane === "runtime_evidence") verifiedGpcWorkerBytes.set(bundle, body);
   return bundle;
 }
 

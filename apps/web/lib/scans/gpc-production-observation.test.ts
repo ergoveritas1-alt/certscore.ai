@@ -11,6 +11,7 @@ import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { buildCanonicalGpcResponseProjection } from "./gpc-response-projection";
 import { buildGpcResponseReportProjection } from "../../components/scans/report-lab/gpc-report-projection";
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
+import { gpcActivityComparisonFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison";
 
 test("verified bytes → typed persisted v3 → normalized concern/policy → unified report/API preserves complete observation with indeterminate comparison and no score", () => {
   const gpc = gpcProductionRuntimeFixture();
@@ -54,6 +55,22 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
   assert.equal(review.gpcOutcome, "indeterminate");
   assert.equal(review.existingGpcPolicy?.deductionPoints, 0);
   assert.equal(review.score, null);
+
+  const activityComparison = gpcActivityComparisonFixture({ scanId: gpc.scanId,
+    sourceHashes: { baseline: pointer.sha256, gpc: pointer.sha256 } });
+  const withActivity = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+    runtimeArtifacts: { gpcResponseAssessment: persisted, gpcActivityComparison: activityComparison } });
+  const projectedActivity = buildCanonicalGpcResponseProjection(withActivity);
+  assert.deepEqual(projectedActivity?.activityComparison, activityComparison);
+  assert.equal(projectedActivity?.californiaDeductionPoints, 0);
+  assert.equal(projectedActivity?.assessment.status, "indeterminate");
+  assert.deepEqual(withActivity.map(f => f.scoreEffects), findings.map(f => f.scoreEffects));
+  assert.deepEqual(apiV2GpcResponseSchema.parse({ ...publicResult, activityComparison }).activityComparison, activityComparison);
+  assert.equal(apiV2GpcResponseSchema.safeParse({ ...publicResult, activityComparison: { ...activityComparison,
+    sourceHashes: { baseline: "d".repeat(64), gpc: pointer.sha256 } } }).success, false);
+  const wrongPair = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+    runtimeArtifacts: { gpcResponseAssessment: persisted, gpcActivityComparison: { ...activityComparison, sourceHashes: { baseline: "d".repeat(64), gpc: pointer.sha256 } } } });
+  assert.equal(buildCanonicalGpcResponseProjection(wrongPair)?.activityComparison, undefined);
 });
 
 test("quiet-window limits do not downgrade a verified observation, and observation failures never become completion", () => {

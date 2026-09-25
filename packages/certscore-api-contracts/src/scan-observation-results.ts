@@ -1,4 +1,5 @@
 import { gpcBoundedObservationSchema } from "./gpc-bounded-observation.js";
+import { gpcActivityComparisonSchema } from "./gpc-activity-comparison.js";
 import { z } from "zod";
 
 /** Completed action path; consent confirmation is an independent enhancement. */
@@ -116,6 +117,7 @@ export const apiV2GpcComparisonDeltaSchema = z.object({
 }).strict();
 
 const apiV2GpcResponseObjectSchema = z.object({
+  activityComparison: gpcActivityComparisonSchema.optional(),
   observation: gpcBoundedObservationSchema.optional(),
   contractVersion: z.enum(["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2", "certscore.gpc-response-assessment.v3"]).optional(),
   status: z.enum(["responsive", "no_observable_response", "indeterminate"]),
@@ -166,6 +168,10 @@ const apiV2GpcResponseObjectSchema = z.object({
 // otherwise exceeds TypeScript's declaration-serialization limit.
 export type ApiV2GpcResponse = z.infer<typeof apiV2GpcResponseObjectSchema>;
 export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcResponseObjectSchema.superRefine((response, context) => {
+  if (response.activityComparison && (response.activityComparison.sourceHashes.baseline !== response.comparison.baselineArtifact?.sha256 ||
+    response.activityComparison.sourceHashes.gpc !== response.comparison.gpcArtifact?.sha256)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Activity comparison must retain the same original source pair." });
+  }
   if (response.observation && response.contractVersion !== "certscore.gpc-response-assessment.v3")
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Legacy responses cannot acquire a new bounded observation." });
   if (response.contractVersion === "certscore.gpc-response-assessment.v3" && (!response.observation ||

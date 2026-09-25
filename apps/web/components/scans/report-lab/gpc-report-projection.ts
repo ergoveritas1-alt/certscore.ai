@@ -24,5 +24,6 @@ export function buildGpcResponseReportProjection(
     headline: projection.headline,
     summary: projection.summary,
     observedFacts: projection.observedFacts,
+    activityComparison: projection.activityComparison,
   };
 }

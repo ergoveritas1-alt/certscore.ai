@@ -197,6 +197,7 @@ test("packaged declarations expose API v2 scan timing fields", () => {
   assert.match(declarations, /scanTimeSeconds\?: number \| null;/);
   assert.match(declarations, /evidenceExcerpt\?: string;/);
   assert.match(declarations, /export interface GpcResponse/);
+  assert.match(declarations, /activityComparison\?: import\(".\/gpc-activity-comparison.js"\).GpcActivityComparison/);
   assert.match(declarations, /observation\?: import\(".\/gpc-bounded-observation.js"\).GpcBoundedObservation/);
   assert.match(declarations, /afterAction\?: AfterActionSummary/);
   assert.match(declarations, /gpcResponse\?: GpcResponse \| null;/);

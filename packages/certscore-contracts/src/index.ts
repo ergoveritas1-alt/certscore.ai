@@ -4,6 +4,9 @@ export * from "./site-integrity";
 export * from "./policy-date-evidence";
 import { gpcObservationSessionSchema, type GpcObservationSession, gpcPrototypeSessionBindingSchema } from "./gpc-observation-session";
 import { gpcImpactCaptureSchema } from "./gpc-impact";
+import { gpcActivityComparisonSchema, type GpcActivityComparison } from "./gpc-activity-comparison";
+export * from "./gpc-activity-comparison";
+const canonicalGpcActivityComparisonSchema: z.ZodType<GpcActivityComparison> = gpcActivityComparisonSchema;
 import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
 export { terminalLaneEvidenceSchema, type TerminalLaneEvidence } from "./terminal-lane-evidence";
 export * from "./gpc-impact";
@@ -3455,6 +3458,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   postRefusalEvidence: canonicalPostRefusalPacketSchema.optional(),
   postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
+  gpcActivityComparison: canonicalGpcActivityComparisonSchema.optional(),
   gpcSignalObservation: canonicalBundleGpcSignalObservationSchema.optional(),
   gpcPrototypeSessionBinding: gpcPrototypeSessionBindingSchema.optional(),
   gpcObservationSession: canonicalGpcSessionSchema.optional(),

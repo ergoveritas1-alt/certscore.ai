@@ -1,7 +1,13 @@
-import { apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema } from "@certscore/api-contracts";
+import { apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
+
 import { withResponseCapture, transferResponseCapture } from "./response-capture.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getCertScoreErrorContext, CertScoreError, type FindingList, type JobStatus, type PreConsentCookiesTrackers, type PulseDetail, type PulseFormat, type PulseResult, type ScanResource, type TopFinding } from "@certscore/sdk";
+
+function canonicalGpcActivitySummary(value: unknown): string | null {
+  const parsed = apiV2GpcResponseSchema.safeParse(value);
+  return parsed.success && parsed.data.activityComparison ? describeGpcActivityComparison(parsed.data.activityComparison) : null;
+}
 
 function canonicalGpcObservationSummary(value: unknown): string | null {
   const parsed = apiV2GpcResponseSchema.safeParse(value);
@@ -1248,6 +1254,8 @@ function terminalLaneResultTextLines(value: Record<string, any>) {
   if (gpcResponse) {
     const observationSummary = canonicalGpcObservationSummary(gpcResponse);
     if (observationSummary) lines.push(`GPC observation: ${observationSummary}`);
+    const activitySummary = canonicalGpcActivitySummary(gpcResponse);
+    if (activitySummary) lines.push(activitySummary);
     lines.push(`GPC response: ${gpcResponse.findingTitle ?? "GPC response"}; status=${gpcResponse.status ?? "indeterminate"}; Sec-GPC: 1 proof retained on ${gpcResponse.comparison?.enabledProof?.requestsWithSecGpc ?? 0} request(s).`);
   }
   for (const [field, label] of [["postAcceptObservation", "Accept Path"], ["postRefusalObservation", "Reject Path"]] as const) {
@@ -1521,6 +1529,8 @@ export function scanBundleText(bundle: Record<string, any>, options: { lightTria
   if (gpcResponse) {
     const observationSummary = canonicalGpcObservationSummary(gpcResponse);
     if (observationSummary) append(`GPC observation: ${observationSummary}`);
+    const activitySummary = canonicalGpcActivitySummary(gpcResponse);
+    if (activitySummary) append(activitySummary);
     const proof = gpcResponse.comparison?.enabledProof;
     const californiaPolicy = gpcResponse.californiaPolicy;
     append(`GPC response: ${gpcResponse.findingTitle ?? "GPC response"}; status=${gpcResponse.status ?? "indeterminate"}; Sec-GPC: 1 proof retained on ${proof?.requestsWithSecGpc ?? 0} request(s).`);

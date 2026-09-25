@@ -1916,7 +1916,9 @@ test("GPC v3 MCP text preserves completed bounded findings alongside an indeterm
   const { baselineArtifact, gpcArtifact, delivery, evidenceRefs, ...rest } = assessment.comparison;
   const safePointer = { sha256: pointer.sha256, sizeBytes: pointer.sizeBytes };
   const { generatedAt, ...publicAssessment } = assessment;
-  const gpcResponse = { ...publicAssessment, summary: describeGpcBoundedObservation(assessment.observation), comparison: { ...rest,
+  const { gpcActivityComparisonFixture } = await import("../../certscore-contracts/src/test-fixtures/gpc-activity-comparison");
+  const activityComparison = gpcActivityComparisonFixture({ scanId: gpc.scanId, sourceHashes: { baseline: pointer.sha256, gpc: pointer.sha256 } });
+  const gpcResponse = { ...publicAssessment, activityComparison, summary: describeGpcBoundedObservation(assessment.observation), comparison: { ...rest,
     baselineArtifact: { ...safePointer, lane: "runtime_evidence" }, gpcArtifact: { ...safePointer, lane: "gpc_observation" }, delivery: { status: delivery.status } },
     californiaPolicy: { applied: false, deductionPoints: 0 }, evidenceUrl: "https://certscore.ai/evidence" };
   const bundle = buildScanBundle({ detail: "summary", report, findings: { type: "certscore_finding_list", scanId: gpc.scanId, findings: [] },
@@ -1924,6 +1926,8 @@ test("GPC v3 MCP text preserves completed bounded findings alongside an indeterm
   const text = scanBundleText(bundle);
   assert.match(text, /GPC observation: Bounded GPC observation completed/);
   assert.match(text, /1 classified/);
+  assert.match(text, /Baseline -> GPC, first 1000 ms: advertising\/marketing requests 2 -> 1/);
+  assert.deepEqual(bundle.gpcResponse.activityComparison, activityComparison);
   assert.match(text, /status=indeterminate/);
   assert.equal(bundle.gpcResponse.observation.registration.sale, "unknown");
   assert.match(bundle.interpretationGuidance.statement, /completion does not mean GPC was honored/);

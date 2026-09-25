@@ -1,6 +1,6 @@
 # Surface existing bounded GPC comparisons
 
-September 25, 2026. Review complete; customer-facing integration proposed.
+September 25, 2026. Owner approved the proposed integration; implemented locally, not deployed.
 
 ## Result
 
@@ -22,9 +22,9 @@ the longer stored comparison. Keep the full GPC-session observations prominent;
 the short comparison supplements them. Do not replace longer-window facts with
 an early zero or call it suppression.
 
-## Small integration to approve
+## Approved integration
 
-Add a **Baseline vs GPC** row to the existing GPC workpaper:
+Added a **Baseline → GPC** table to the existing GPC workpaper:
 
 | Example result | Display |
 | --- | --- |
@@ -83,6 +83,27 @@ a continuously busy page, a controlled baseline-only request and readable
 sale/sharing state changes. No public sites were contacted. This assessment
 adds no recurring cost and made no production changes.
 
-AGENTS.md requires explicit approval before internal comparison artifacts enter
-production reports. This proposal requests that narrow integration only; it
-does not request deployment or new scoring weights.
+The owner approved this narrow integration after reviewing the proposal.
+Deployment and new scoring weights are outside this approval.
+
+The production contract is `certscore.gpc-activity-comparison.v1`. The coordinator
+reuses original verified baseline/GPC worker bytes to create the compact result.
+WC01 binds it to the scan ID and response source hashes at materialization, then
+persists it through the normalized concern and existing unified GPC finding.
+Reports, API/Pulse, SDK/MCP, JSON and PDF share that projection. Missing or
+unverified measurements are omitted; historical responses are not reconstructed.
+The internal impact assessment retains its original internal-only flags.
+
+Estimated incremental cost remains below $1/month at 100,000 scans and 30-day
+retention; no new object fetch, browser work, invocation or model use is added.
+Compatible consumers must ship before the producer in a separately approved release.
+
+Integration verification: the 137-test focused report/API/SDK/MCP suite passed;
+the separate 70-test policy/report/MCP regression suite passed, including a
+short-window zero that leaves the existing 15-point California deduction intact.
+Nine coordinator verification cases, the materialization boundary case, and a
+real localhost browser pair also passed. Contract generation drift checks,
+contracts/API/SDK/MCP builds, and web/scan-core/Lambda/MCP typechecks passed.
+The broader materialization suite has an unrelated IMOU policy-fragment failure;
+the same assertion fails with the unmodified HEAD test and implementation. It
+was not changed by this integration. No deployment or public scans were run.

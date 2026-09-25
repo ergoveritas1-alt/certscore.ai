@@ -1,4 +1,5 @@
 import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
+import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
 import { projectFormDestinations } from "./form-destination-projection";
 import { projectCmsSecurity } from "./cms-security-projection";
 import { projectSiteIntegrity } from "./site-integrity-projection";
@@ -6494,12 +6495,19 @@ function buildMaterializedLocalV2Detail(
 }
 
 export function buildGpcResponseRuntimeProjection(
-  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment">,
-) {
+  bundle: Pick<CanonicalEvidenceBundle, "gpcResponseAssessment" | "gpcActivityComparison"> & Partial<Pick<CanonicalEvidenceBundle, "scanId">>,
+): {
+  gpcResponseAssessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
+  gpc_response_assessment?: CanonicalEvidenceBundle["gpcResponseAssessment"];
+  gpcActivityComparison?: CanonicalEvidenceBundle["gpcActivityComparison"];
+} {
+  const activityComparison = bundle.gpcResponseAssessment && bundle.scanId
+    ? readGpcActivityComparison(bundle.gpcActivityComparison, bundle.gpcResponseAssessment, bundle.scanId) : undefined;
   return bundle.gpcResponseAssessment
     ? {
         gpcResponseAssessment: bundle.gpcResponseAssessment,
         gpc_response_assessment: bundle.gpcResponseAssessment,
+        ...(activityComparison ? { gpcActivityComparison: activityComparison } : {}),
       }
     : {};
 }
@@ -6508,7 +6516,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v20";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v21";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

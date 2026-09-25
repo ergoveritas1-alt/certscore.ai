@@ -75,3 +75,4 @@ export type {
 } from "./types.js";
 
 export type { GpcBoundedObservation } from "./gpc-bounded-observation.js";
+export type { GpcActivityComparison } from "./gpc-activity-comparison.js";

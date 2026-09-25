@@ -6,6 +6,7 @@ import {
 } from "./california-gpc-response-policy";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { describeGpcObservedFacts } from "./gpc-observed-facts";
+import { readGpcActivityComparison } from "./gpc-activity-comparison";
 
 export type CanonicalGpcResponseProjection = {
   assessment: GpcResponseAssessment;
@@ -15,6 +16,7 @@ export type CanonicalGpcResponseProjection = {
   headline: string;
   summary: string;
   observedFacts: ReturnType<typeof describeGpcObservedFacts>;
+  activityComparison?: import("@certscore/contracts").GpcActivityComparison;
 };
 
 function comparisonCoverageSummary(assessment: GpcResponseAssessment) {
@@ -126,5 +128,6 @@ export function buildCanonicalGpcResponseProjection(
     headline: presentation.headline,
     summary: finding.summary,
     observedFacts,
+    activityComparison: readGpcActivityComparison(finding.details.activityComparison, parsedAssessment.data),
   };
 }

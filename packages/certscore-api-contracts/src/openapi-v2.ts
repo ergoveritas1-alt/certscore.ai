@@ -1,4 +1,5 @@
 import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.js";
+import { gpcActivityComparisonOpenApi } from "./gpc-activity-comparison-openapi.js";
 import { apiV2Disclaimer, CERTSCORE_API_V2_SCHEMA_VERSION } from "./api-v2.js";
 import { runtimeEvidenceGraphOpenApiSchemas } from "./runtime-evidence-graph-openapi.js";
 import { privacyAuditEvidenceOpenApi } from "./privacy-audit-openapi.js";
@@ -883,6 +884,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           required: ["status", "findingTitle", "summary", "scoreEffect", "legalInterpretation", "comparison", "californiaPolicy", "evidenceUrl"],
           properties: {
             observation: gpcBoundedObservationOpenApi,
+            activityComparison: gpcActivityComparisonOpenApi,
             contractVersion: { type: "string", enum: ["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2", "certscore.gpc-response-assessment.v3"], description: "V3 additionally retains independent bounded observation, CMP-recorded sale/sharing state and direct request facts. Completion does not mean GPC was honored. Historical records retain their original versions." },
             status: { type: "string", enum: ["responsive", "no_observable_response", "indeterminate"] },
             findingTitle: { type: "string", enum: ["GPC response", "No observable GPC response"] },

@@ -117,3 +117,17 @@ test("fails closed for non-surfaced packets and malformed score effects", () => 
     0,
   );
 });
+
+test("a short-window measurement preserves the independent California deduction and stored response", async () => {
+  const { gpcActivityComparisonFixture } = await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
+  const finding = gpcFinding({ deductionPoints: 15 });
+  assert.ok(finding.details?.family === "privacy_signal" && finding.details.kind === "gpc_response");
+  const before = structuredClone(finding);
+  const zero = { baselineRequests: 0, gpcRequests: 0, baselineServices: 0, gpcServices: 0 };
+  finding.details.activityComparison = gpcActivityComparisonFixture({ durationMs: 250, activity: { advertisingMarketing: zero, analyticsReplay: zero } });
+  const result = buildGpcResponseReportProjection([finding]);
+  assert.equal(result?.activityComparison?.durationMs, 250);
+  assert.equal(result?.californiaDeductionPoints, 15);
+  assert.deepEqual(result?.assessment, buildGpcResponseReportProjection([before])?.assessment);
+  assert.deepEqual(finding.scoreEffects, before.scoreEffects);
+});

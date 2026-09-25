@@ -1,5 +1,6 @@
 export { buildGpcProductionAssessment, buildGpcProductionObservation } from "./gpc-production-observation.js";
 export { buildGpcImpactAssessment } from "./gpc-impact-assessment.js";
+export { buildGpcActivityComparison } from "./gpc-activity-comparison.js";
 import { createHash } from "node:crypto";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots";
 import { inventoryConfiguration, inventoryHash } from "./full-site-inventory";

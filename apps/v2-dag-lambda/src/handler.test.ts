@@ -2121,10 +2121,11 @@ async function runCoordinatorFixture(input: {
   action: "none" | "hang" | "late" | "completed";
   dispatchDelayMs: number;
   actionLane?: "accept" | "reject";
+  gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
 }) {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
-  const passiveBundles = new Map([
+  const passiveBundles = new Map<string, CanonicalEvidenceBundle>([
     ["consent_proof", input.consentBundle],
     ["runtime_evidence", canonicalBundleFixture(input.scanId, {
       scanLaneRuns: [laneRunFixture("runtime_evidence", "fixture-runtime")],
@@ -2148,6 +2149,10 @@ async function runCoordinatorFixture(input: {
       scanLaneRuns: [laneRunFixture("policy_evidence", "fixture-policy")],
     })],
   ] as const);
+  if (input.gpcPair) {
+    passiveBundles.set("runtime_evidence", input.gpcPair.baseline);
+    passiveBundles.set("gpc_observation", input.gpcPair.gpc);
+  }
   const pointers = new Map<string, { uri: string; body: Buffer; sha256: string; sizeBytes: number }>();
   for (const [lane, bundle] of passiveBundles) {
     const body = Buffer.from(JSON.stringify(bundle));
@@ -2161,6 +2166,7 @@ async function runCoordinatorFixture(input: {
     orchestrationMode: "sharded",
     scanId: input.scanId,
     callbackCorrelationId: input.scanId,
+    ...(input.gpcPair ? { gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
     ...(actionLane === "accept"
       ? { postAcceptObservation: coordinatorPostAcceptConfig(input.dispatchDelayMs) }
       : { postRefusalObservation: coordinatorPostRefusalConfig(input.dispatchDelayMs) }),
@@ -2244,7 +2250,7 @@ async function runCoordinatorFixture(input: {
           })),
         };
       }
-      const bundle = passiveBundles.get(lane as keyof typeof passiveBundles);
+      const bundle = passiveBundles.get(lane);
       if (!bundle) throw new Error(`unexpected worker lane ${lane}`);
       const uri = [...pointers.values()].find((candidate) => candidate.uri.includes(`/${lane}/`))!;
       return {
@@ -2252,6 +2258,7 @@ async function runCoordinatorFixture(input: {
         Payload: Buffer.from(JSON.stringify({
           artifactMetadata: { scanArtifactUri: { sha256: uri.sha256, sizeBytes: uri.sizeBytes } },
           artifactPointers: { scanArtifactUri: uri.uri },
+          ...(lane === "gpc_observation" ? { parentDispatchSha256: workerPayload.parentDispatchSha256 } : {}),
           ...(lane === "consent_proof" ? { consentRejectAvailability: deriveConsentActionAvailability(bundle) } : {}),
           completedAt: bundle.completedAt,
           scanId: payload.scanId,
@@ -4751,4 +4758,47 @@ test("runtime site metadata survives lane merge without entering consent DOM evi
   assert.equal(merged.runtimeMetadataSnapshots?.[0]?.siteMetadata?.generators[0], "WordPress 6.8.2");
   assert.deepEqual(merged.domSnapshots, []);
   assert.deepEqual(merged.consentUiObservations, []);
+});
+
+test("GPC coordinator publishes bounded comparison from the original verified worker pair", async () => {
+  const { createGpcImpactCapture } = await import("../../../packages/certscore-scan-core/src/gpc-impact-capture");
+  const scanId = "bounded-gpc-coordinator";
+  const pair = [false, true].map(enabled => {
+    const bundle = gpcRuntimeFixture({ enabled }); bundle.scanId = scanId;
+    let now = 0;
+    const capture = createGpcImpactCapture({ expectedEnabled: enabled, now: () => now });
+    capture.documentRequested({ type: "Document", frameId: "main", loaderId: "loader", request: { url: bundle.url, headers: enabled ? { "Sec-GPC": "1" } : {} } }, "main");
+    capture.recordRequest(bundle.networkEvents[0]!);
+    now = 1; capture.documentCommitted({ loaderId: "loader", url: bundle.url });
+    for (const event of bundle.networkEvents.slice(1)) capture.recordRequest(event);
+    now = 1500;
+    bundle.gpcSignalObservation!.capturedAtMs = now;
+    capture.bindReadback("loader");
+    bundle.gpcImpactCapture = capture.finish(bundle.gpcSignalObservation);
+    bundle.completedAt = "2026-09-05T12:00:02.000Z";
+    bundle.modulesRun[0]!.timingBreakdown![0]!.outcome = "timed_out";
+    return bundle;
+  });
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  let artifactRoot: string | undefined;
+  try {
+    const outcome = await runCoordinatorFixture({ scanId, action: "none", dispatchDelayMs: 1000,
+      consentBundle: coordinatorConsentBundle(scanId, { inspectionCompleted: true, acceptControlObserved: false }),
+      gpcPair: { baseline: pair[0]!, gpc: pair[1]! } });
+    artifactRoot = outcome.artifactRoot;
+    const comparison = outcome.bundle.gpcActivityComparison;
+    assert.equal(comparison?.status, "measured");
+    assert.equal(comparison.durationMs, 1000);
+    assert.equal(comparison.scanId, scanId);
+    assert.equal(comparison.scoreEffect, "none");
+    assert.equal(comparison.sourceHashes.baseline, createHash("sha256").update(JSON.stringify(pair[0])).digest("hex"));
+    assert.equal(comparison.sourceHashes.gpc, outcome.bundle.gpcResponseAssessment.comparison.gpcArtifact.sha256);
+    assert.equal(outcome.bundle.gpcResponseAssessment.status, "indeterminate");
+    assert.equal(outcome.actionCalls.length, 0);
+  } finally {
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+    if (artifactRoot) await rm(artifactRoot, { recursive: true, force: true });
+  }
 });

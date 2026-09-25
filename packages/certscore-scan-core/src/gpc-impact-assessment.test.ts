@@ -6,6 +6,7 @@ import { gpcRuntimeFixture } from "../../certscore-contracts/src/test-fixtures/g
 import { gpcProductionRuntimeFixture } from "../../certscore-contracts/src/test-fixtures/gpc-production";
 import { createGpcImpactCapture } from "./gpc-impact-capture";
 import { buildGpcImpactAssessment } from "./gpc-impact-assessment";
+import { buildGpcActivityComparison } from "./gpc-activity-comparison";
 import { buildGpcResponseAssessment } from "./gpc-response-assessment";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import { gpcEndpointEvidence } from "./gpc-vendor-evidence";
@@ -93,6 +94,7 @@ test("frame-change diagnostics preserve insufficient paired delivery and neutral
     assert.equal(result.status, "insufficient_evidence");
     assert.deepEqual(result.delivery, { baselineVerified: false, gpcVerified: false });
     assert.equal(result.scoreEffect, "none");
+    assert.equal(buildGpcActivityComparison({ scanId: baseline.scanId, baseline: source(baseline), gpc: source(gpc) }), undefined);
   }
 });
 
@@ -115,6 +117,14 @@ test("busy matched windows measure both directions without changing the legacy r
     assert.equal(result.activity!.trackers.relativeReduction, baselineNames.length ? (baselineNames.length - gpcNames.length) / baselineNames.length : null);
     assert.equal(result.productionProjectable, false);
     assert.equal(result.scoreEffect, "none");
+    const production = buildGpcActivityComparison({ scanId: baseline.scanId, baseline: source(baseline), gpc: source(gpc) });
+    assert.equal(production?.contractVersion, "certscore.gpc-activity-comparison.v1");
+    assert.deepEqual(production?.sourceHashes, result.sourceHashes);
+    assert.equal(production?.durationMs, 1000);
+    assert.equal(production?.activity.advertisingMarketing.baselineRequests, result.activity!.advertisingMarketing.baselineRequests);
+    assert.equal(production?.activity.advertisingMarketing.gpcRequests, result.activity!.advertisingMarketing.gpcRequests);
+    assert.equal(production?.scoreEffect, "none");
+    assert.equal(production?.causedByGpc, "not_established");
     const legacy = buildGpcResponseAssessment({ baseline, baselineArtifact: source(baseline).pointer, gpc, gpcArtifact: source(gpc).pointer });
     assert.equal(legacy.status, "indeterminate");
     assert.ok(legacy.comparison.limitationKeys.includes("gpc_settle_not_completed"));
@@ -157,6 +167,7 @@ test("missing, changed or incomplete retained evidence cannot become a measured 
     const result = buildGpcImpactAssessment({ scanId: baseline.scanId, baseline: source(baseline), gpc: gs });
     assert.equal(result.status, 'insufficient_evidence', defect);
     assert.equal(result.activity, null, defect);
+    assert.equal(buildGpcActivityComparison({ scanId: baseline.scanId, baseline: source(baseline), gpc: gs }), undefined, defect);
   }
 });
 

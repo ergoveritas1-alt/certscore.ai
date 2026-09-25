@@ -116,3 +116,7 @@ Comparison diagnostics remain in an expandable section; PDF exports also put
 the observed facts first. Existing canonical findings, comparison outcomes,
 historical evidence and scoring remain unchanged. This presentation change adds
 no capture work, model call, persistence or recurring cost ($0/month).
+
+### Bounded GPC comparison
+
+The approved `certscore.gpc-activity-comparison.v1` supplement shows Baseline → GPC advertising/marketing and analytics/replay request counts with the matched 250, 500 or 1,000 ms duration. Both report focuses use the same persisted unified GPC evidence, as do API/Pulse, SDK/MCP and JSON/PDF exports. Full-session observations remain first. The original response assessment and California deduction are unchanged; short-window zeros do not become suppression or honoring claims. Historical records remain unchanged. See [the approved integration](scoring/gpc-bounded-comparison-proposal.md).
