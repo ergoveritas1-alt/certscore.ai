@@ -150,6 +150,11 @@ test("Pulse evidence preserves canonical cookie, request, and policy provenance 
     waitSeconds: 0
   }) as Record<string, unknown>;
   pulseResponseSchema.parse(pulse);
+  const coverage = pulse.coverage as Record<string, unknown>;
+  assert.equal(coverage.status, "complete");
+  assert.equal(coverage.scopeSummary, "1 public page scanned. Signed-in behavior was not assessed.");
+  assert.ok((coverage.limitations as string[]).some((limitation) =>
+    limitation.includes("Absence of findings should not be interpreted as absence of risk.")));
 
   const cookies = (pulse.cookieStorageInventory as { items: Array<Record<string, unknown>> }).items;
   assert.equal(cookies[0]?.essentiality, "unknown");
@@ -170,6 +175,52 @@ test("Pulse evidence preserves canonical cookie, request, and policy provenance 
   assert.equal(provenance?.bannerLanguage, "fr");
   assert.equal(provenance?.directlyLinkedFromScannedPage, true);
   assert.equal(provenance?.translationApplied, false);
+});
+
+test("Pulse evidence preserves partial and no-go coverage as limitations", () => {
+  const scan = {
+    completedAt: "2026-08-01T20:00:20.000Z",
+    createdAt: "2026-08-01T20:00:00.000Z",
+    domainHostname: "example.fr",
+    id: "00000000-0000-4000-8000-000000000123",
+    pagesRequested: 5,
+    pagesScanned: 1,
+    startedAt: "2026-08-01T20:00:01.000Z",
+    status: "completed"
+  };
+  const project = (scanRecord: ReturnType<typeof pulseScanRecord>) => buildPulseProjection({
+    detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "coverage-fixture",
+    requestedUrl: "https://example.fr/", resolutionMode: "test", scanRecord, waitSeconds: 0
+  }) as Record<string, any>;
+
+  const partial = project(pulseScanRecord({
+    accessPostureSummary: { homepageFetchStatus: "ok" },
+    scan,
+    snapshot: { certscore_overall: 100 }
+  }));
+  pulseResponseSchema.parse(partial);
+  assert.equal(partial.coverage.status, "partial");
+  assert.equal(partial.coverage.scopeSummary, "1 public page scanned. Signed-in behavior was not assessed.");
+  assert.equal(partial.summary.score, 100);
+
+  const reasonCode = "site_not_ready";
+  const presentation = SCAN_NO_GO_REASON_PRESENTATIONS[reasonCode];
+  const noGo = project(pulseScanRecord({
+    accessPostureSummary: { homepageFetchStatus: null, stopReason: reasonCode },
+    runtimeArtifacts: {
+      scan_no_go_assessment: { decision: "no_go", reasonCodes: [reasonCode] },
+      visual_access_review: { page_state: presentation.pageState, reason_code: reasonCode }
+    },
+    scan: { ...scan, pagesScanned: 0 },
+    snapshot: {}
+  }));
+  pulseResponseSchema.parse(noGo);
+  assert.equal(noGo.resultDisposition, "no_go");
+  assert.equal(noGo.coverage.status, noGo.noGo.limitationKind);
+  assert.equal(noGo.coverage.summary, noGo.noGo.summary);
+  assert.deepEqual(noGo.coverage.limitations, [noGo.noGo.explanation]);
+  assert.equal(noGo.coverage.scopeSummary, undefined);
+  assert.equal(noGo.summary.score, null);
 });
 
 test("Pulse keeps an unclassified external request visible without calling it tracking", () => {
