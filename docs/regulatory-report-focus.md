@@ -95,3 +95,9 @@ retained examples, decide the minimum evidence required, and approve calibrated
 weights. Do not turn unknown evidence into a pass or reuse the legacy California
 score. The current review explicitly records the unassessed behavior and notice
 checks, so a high number cannot conceal them.
+
+The [September 25 retained-evidence review](scoring/ccpa-scoring-calibration-2026-09-25.md)
+tested that decision against 306 completed historical scans. Only two had a
+determinate comparison with qualifying advertising/marketing activity. It
+recommends retaining the four evidence checks and existing GPC rule, with no
+standalone numeric CCPA score until the missing behavior can be assessed.

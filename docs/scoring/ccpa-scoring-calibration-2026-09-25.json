@@ -1,0 +1,117 @@
+{
+  "artifactVersion": "ccpa-scoring-calibration-review.v1",
+  "internalOnly": true,
+  "productionProjectable": false,
+  "scoreEffect": "none",
+  "source": {
+    "path": "outputs/scan-evidence-review-2026-09-14/cohort.json",
+    "sha256": "539e9a5995eb121af6474e4c21a4093b865ec6ffb536150d7ed691131d3c5be8",
+    "verificationManifestSha256": "ccc460493bd9560ec695fd65b505ad549870030e0c420c0e21586af5f3e63790",
+    "verificationManifestPath": "outputs/scan-evidence-review-2026-09-14/retained-verification.json"
+  },
+  "scope": "Historical persisted assessment replay; no current production claim, no human calibration labels, no new scans.",
+  "summary": {
+    "totalRows": 307,
+    "completed": 306,
+    "uniqueCompletedHostnames": 235,
+    "contractValidation": {
+      "valid": 306
+    },
+    "observation": {
+      "complete": 253,
+      "limited": 28,
+      "unavailable": 25
+    },
+    "comparison": {
+      "indeterminate": 212,
+      "no_observable_response": 93,
+      "responsive": 1
+    },
+    "noGo": {
+      "continue_with_diagnostics": 20,
+      "no_go": 51,
+      "unavailable": 235
+    },
+    "existingPolicyReasons": {
+      "comparable_gpc_no_qualifying_suppression": 1,
+      "comparable_gpc_qualifying_activity_suppressed": 1,
+      "gpc_comparison_not_determinate": 212,
+      "no_qualifying_sale_share_activity_observed": 92
+    },
+    "existingDeductionPoints": {
+      "0": 305,
+      "15": 1
+    },
+    "completedObservationIndeterminateComparison": 159,
+    "retainedWorkerFiles": 56,
+    "retainedWorkerFilesVerified": 56,
+    "retainedWorkerPairsVerified": 28
+  },
+  "method": {
+    "contract": "gpcResponseAssessmentSchema",
+    "policy": "deriveCaliforniaGpcResponsePolicy",
+    "productionScoreApplied": false,
+    "independentHumanLabels": 0,
+    "historicalCohort": true
+  },
+  "candidateRejected": {
+    "formula": "100 - existing GPC deduction",
+    "allCompleted": {
+      "100": 305,
+      "85": 1
+    },
+    "knownNoGoWithheld": {
+      "100": 254,
+      "85": 1,
+      "withheld": 51
+    },
+    "reason": "Neutral or missing evidence cannot establish a CCPA pass."
+  },
+  "qualifyingExamples": [
+    {
+      "scanId": "907d15a1-bec9-4265-af65-d42fe2d726bf",
+      "hostname": "ergoveritas.com",
+      "comparison": "responsive",
+      "policyReason": "comparable_gpc_qualifying_activity_suppressed",
+      "sourceGpcHash": "da4a17ce38d2410c31e292ac456cb4dd6753a4eb99e4bd384523a434fb3ccfc7"
+    },
+    {
+      "scanId": "38937457-1c70-446d-801b-289595f6df9b",
+      "hostname": "steadfast.com.bd",
+      "comparison": "no_observable_response",
+      "policyReason": "comparable_gpc_no_qualifying_suppression",
+      "sourceGpcHash": "effa64c1ce2f12e1820a1f5ad49f19eae6e44b9d8bd4a3934b2f0ef4530caea3"
+    }
+  ],
+  "privacyCalibration": {
+    "usableCurrentCohort": false,
+    "effectivenessAssessed": false,
+    "noticeAdequacyAssessed": false,
+    "weightsCalibrated": false
+  },
+  "retainedReportCheck": {
+    "source": "tmp/cnn-review/report.json",
+    "sha256": "754c3d3ecdab840e670e4ada33c14c06b84480e2499bf67c1077b2a8bef2e5f5",
+    "scanId": "6686be82-75b1-4d1d-8cab-b441defbd935",
+    "origin": "eu_ie",
+    "gpcComparison": "indeterminate",
+    "privacyEvidence": "unavailable",
+    "optOutEffectiveness": "not_assessed"
+  },
+  "settlingCandidateReview": {
+    "population": "completed GPC observation with indeterminate comparison",
+    "total": 159,
+    "anySettlingLimitation": 150,
+    "settlingOnlyLimitation": 71,
+    "settlingOnlyVerifiedDelivery": 71,
+    "settlingOnlyBaselineAdvertisingMarketingActive": 23,
+    "settlingOnlyNoBaselineAdvertisingMarketing": 48,
+    "settlingOnlySharedWindowMs": {
+      "min": 1738,
+      "max": 11523
+    },
+    "otherBlockersRemain": 88,
+    "newlyEligibleFindings": 0,
+    "recommendation": "Evaluate a versioned bounded matched-window criterion; preserve delivery and identity requirements, and do not upgrade historical results."
+  }
+}
