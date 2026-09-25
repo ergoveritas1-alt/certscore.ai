@@ -1,4 +1,6 @@
 import type { FullSiteReportExport } from "./full-site-report";
+import { deriveApiV2GpcResponse, deriveApiV2PostAcceptObservation, deriveApiV2PostRefusalObservation } from "../../lib/api-v2/scan-resource";
+import { readPrivacyAuditEvidence, resolveReportReviewFocus, reviewFocusScopeNote, REVIEW_FOCUS_LABELS } from "../../lib/scans/report-review-focus";
 import {
   consentControlAssessmentSchema,
   SITE_INTEGRITY_FINDING_ID,
@@ -14,7 +16,7 @@ import { getPersistedCanonicalReportProjection } from "./persisted-canonical-rep
 import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
 import { selectSiteIntegrityFinding } from "../../lib/scans/site-integrity-report";
 
-export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v5" as const;
+export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v6" as const;
 const MAX_APPENDIX_INVENTORY_ROWS = 500;
 const MAX_APPENDIX_ARRAY_ITEMS = 50;
 
@@ -174,6 +176,8 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
       rowNumber: index + 1,
       type: row.type,
       vendor: row.vendor,
+      products: row.rawProducts.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
+      evidenceRefs: [...new Set([...(row.storageDetails?.evidenceRefs ?? []), ...row.cookieDetails.flatMap(cookie => cookie.evidenceRefs ?? [])])].slice(0, MAX_APPENDIX_ARRAY_ITEMS),
       purpose: row.purposes.length > 0 ? row.purposes : [row.purpose],
       evidenceClassification: classifyInventoryEvidence(row),
       firstSeenMs: row.firstSeenMs,
@@ -299,19 +303,39 @@ function buildDataCollectionSurfacesAppendix(
   };
 }
 
-export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullSite?: FullSiteReportExport) {
+export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullSite?: FullSiteReportExport, requestedFocus?: unknown) {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
   const assessment = consentAssessment(scanRecord);
   const findings = canonical.ownerUnifiedFindings as Array<Record<string, unknown>>;
   const siteIntegrity = selectSiteIntegrityFinding(canonical.ownerUnifiedFindings);
   const normalizedConcerns = canonical.normalizedConcerns as Array<Record<string, unknown>>;
+  const focus = resolveReportReviewFocus(requestedFocus, scanRecord.scan.scanFromValue);
+  const privacyAuditEvidence = readPrivacyAuditEvidence(scanRecord.runtimeArtifacts, scanRecord.scan.id);
+  const postAcceptObservation = deriveApiV2PostAcceptObservation(scanRecord);
+  const postRefusalObservation = deriveApiV2PostRefusalObservation(scanRecord);
+  const gpcResponse = deriveApiV2GpcResponse(scanRecord);
+  const executiveSummary = buildExecutiveSummary({ assessment, checklistPresentation: canonical.checklistPresentation,
+    findings: findings.filter(finding => finding.unifiedFindingId !== SITE_INTEGRITY_FINDING_ID) });
+  if (focus === "ccpa_cpra") executiveSummary.sentences = [
+    "CCPA/CPRA review focuses on GPC response, observed privacy choices, retained notices and tracking inventory.",
+    privacyAuditEvidence ? `${privacyAuditEvidence.controls.length} privacy-choice/settings surfaces and ${privacyAuditEvidence.notices.length} notice documents are retained in the bounded workpaper. Presence does not establish a working opt-out or adequate disclosure.`
+      : "Verified California privacy-choice and notice evidence is unavailable; absence and disclosure adequacy remain unknown.",
+    "Existing technical findings are retained. A separate CCPA/CPRA score is not available; the overall score must not be interpreted as a CCPA/CPRA compliance score.",
+  ];
 
   return {
     ...(fullSite ? { fullSite } : {}),
     artifactType: "certscore_canonical_report_export",
     artifactVersion: CANONICAL_REPORT_EXPORT_VERSION,
     generatedAt: new Date().toISOString(),
+    reviewFocus: focus,
+    reviewFocusLabel: REVIEW_FOCUS_LABELS[focus],
+    reviewScope: reviewFocusScopeNote(focus, scanRecord.scan.scanFromValue),
+    privacyAuditEvidence,
+    gpcResponse: gpcResponse ?? null,
+    ...(postAcceptObservation ? { postAcceptObservation } : {}),
+    ...(postRefusalObservation ? { postRefusalObservation } : {}),
     scan: {
       id: scanRecord.scan.id,
       domainHostname: scanRecord.scan.domainHostname,
@@ -325,11 +349,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       pagesRequested: scanRecord.scan.pagesRequested,
       pagesScanned: scanRecord.scan.pagesScanned,
     },
-    executiveSummary: buildExecutiveSummary({
-      assessment,
-      checklistPresentation: canonical.checklistPresentation,
-      findings: findings.filter(finding => finding.unifiedFindingId !== SITE_INTEGRITY_FINDING_ID),
-    }),
+    executiveSummary,
     gdprEprivacyReview: canonical.checklistPresentation
       ? {
           checklistScore: canonical.checklistPresentation.checklistScore,
@@ -351,12 +371,12 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     consentControlAssessment: assessment,
     limitations: [
       {
-        code: "pre_interaction_observation_only",
-        detail: "The scan did not click Accept, Reject, Options, Save, or other consent controls.",
+        code: "bounded_observation_scope",
+        detail: "Observations cover the retained pages, origin and capture windows. Missing evidence does not establish absence.",
       },
       {
-        code: "post_choice_effectiveness_not_tested",
-        detail: "Post-choice blocking, withdrawal, and consent-control effectiveness were not tested.",
+        code: "privacy_opt_out_execution_not_tested",
+        detail: "Do Not Sell/Share opt-out execution and notice placement at collection points were not assessed. Retained choice outcomes describe only their verified bounded scope.",
       },
       ...(assessment?.limitations ?? []).map((limitation) => ({
         code: limitation.code,

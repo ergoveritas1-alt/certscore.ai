@@ -10,6 +10,8 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import { buildCanonicalReportExport } from "./report-export";
 import { renderCanonicalReportPdf } from "./report-export-pdf";
 import { aggregateFullSite } from "@website-signal-risk-scanner/shared";
+import { completedActionProjection } from "../../lib/scans/test-fixtures/action-execution-projection";
+import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
 
 function scanRecord(): ScanDetailResponse {
   const scanId = "00000000-0000-0000-0000-000000000001";
@@ -41,8 +43,67 @@ function scanRecord(): ScanDetailResponse {
       rawDisplayOnlyFinding: "must-not-be-exported",
     },
     trackerVendors: [],
+    events: [],
   } as unknown as ScanDetailResponse;
 }
+
+test("review focus changes presentation without changing evidence, findings or scoring inputs", () => {
+  const record = scanRecord();
+  const before = structuredClone(record);
+  const eu = buildCanonicalReportExport(record, undefined, "gdpr_eprivacy")!;
+  const ca = buildCanonicalReportExport(record, undefined, "ccpa_cpra")!;
+  assert.deepEqual(ca.projection, eu.projection);
+  assert.deepEqual(ca.gdprEprivacyReview, eu.gdprEprivacyReview);
+  assert.deepEqual(ca.appendix, eu.appendix);
+  assert.deepEqual(ca.gpcResponse, eu.gpcResponse);
+  assert.deepEqual(record, before);
+  assert.equal(ca.reviewFocusLabel, "CCPA/CPRA");
+  assert.match(ca.reviewScope, /California visitor behavior was not tested/);
+  assert.match(renderCanonicalReportPdf(ca).toString("latin1"), /CCPA\/CPRA evidence report/);
+  assert.equal(ca.postAcceptObservation, undefined);
+  assert.equal(ca.postRefusalObservation, undefined);
+});
+
+test("exports omit speculative action lanes but preserve independently verified clicks", () => {
+  const record = scanRecord();
+  record.runtimeArtifacts = {
+    postAcceptEvidenceProjection: completedActionProjection("accept"),
+    postRefusalEvidenceProjection: completedActionProjection("reject"),
+  };
+  const report = buildCanonicalReportExport(record)!;
+  assert.ok(report.postAcceptObservation);
+  assert.ok(report.postRefusalObservation);
+  assert.doesNotMatch(JSON.stringify(report.limitations), /did not click|no consent action|post_choice_effectiveness_not_tested/);
+});
+
+test("tracking workpaper preserves coverage even when empty and never infers sale, sharing or honoring", () => {
+  const report = buildCanonicalReportExport(scanRecord())!;
+  const empty = renderTrackingWorkpaperCsv(report);
+  assert.match(empty, /"manifest"/);
+  assert.match(empty, /"scan_gpc_response"/);
+  // Empty manifest columns still align with the header (no embedded commas).
+  assert.equal(empty.split("\r\n")[0]?.split('","').length, 30);
+  assert.equal(empty.split("\r\n")[1]?.split('","').length, 30);
+  assert.equal(empty.trim().split("\r\n").length, 2);
+  const inventory = report.appendix.cookieAndTrackerInventory;
+  inventory.rows = [{ rowNumber: 1, vendor: '=HYPERLINK("https://attacker.test")', products: ["Product, with comma"],
+    type: "cookie", resourceNames: ["_ga"], purpose: "Analytics", relationship: { party: "first_party" },
+    domains: ["example.test"], firstSeenMs: 15, preConsent: true, evidenceClassification: "observed", confidence: 0.99,
+    evidenceRefs: ["cookie:fixture"],
+  }] as unknown as typeof inventory.rows;
+  inventory.summary = { ...inventory.summary, totalRows: 501, includedRows: 1, omittedRows: 500 };
+  const workpaper = buildTrackingWorkpaper(report);
+  assert.equal(workpaper.rows[0]?.saleAssessment, "not_assessed");
+  assert.equal(workpaper.rows[0]?.shareAssessment, "not_assessed");
+  assert.equal(workpaper.rows[0]?.vendorGpcHonoring, "not_assessed");
+  assert.equal(workpaper.completeness.omittedRows, 500);
+  const csv = renderTrackingWorkpaperCsv(report);
+  assert.ok(csv.includes('"\'=HYPERLINK(""https://attacker.test"")"'));
+  assert.ok(csv.includes('"Product, with comma"'));
+  assert.ok(csv.includes('"501","1","500"'));
+  assert.ok(csv.includes('"cookie:fixture"'));
+  assert.equal(csv.trim().split("\r\n").length, 3);
+});
 
 test("full-site JSON and PDF retain scope while homepage projection and score inputs stay unchanged",()=>{
   const record=scanRecord(), baseline=buildCanonicalReportExport(record)!;
@@ -73,7 +134,7 @@ test("builds downloads from the persisted canonical projection only", () => {
   const report = buildCanonicalReportExport(scanRecord());
 
   assert.ok(report);
-  assert.equal(report.artifactVersion, "canonical-report-export-v5");
+  assert.equal(report.artifactVersion, "canonical-report-export-v6");
   assert.equal(report.scan.domainHostname, "example.test");
   assert.equal(report.executiveSummary.sentences.length, 3);
   assert.match(report.executiveSummary.sentences[2] ?? "", /not a determination of legal compliance/i);
@@ -83,7 +144,7 @@ test("builds downloads from the persisted canonical projection only", () => {
   assert.equal(report.appendix.dataCollectionSurfaces.assessmentStatus, "unavailable");
   assert.equal(report.appendix.gdprTransparency.summary.totalRows, 0);
   assert.doesNotMatch(JSON.stringify(report), /rawDisplayOnlyFinding|must-not-be-exported/);
-  assert.ok(report.limitations.some((limitation) => limitation.code === "post_choice_effectiveness_not_tested"));
+  assert.ok(report.limitations.some((limitation) => limitation.code === "privacy_opt_out_execution_not_tested"));
 });
 
 test("fails closed when a canonical persisted projection is unavailable", () => {
@@ -239,8 +300,8 @@ test("projects GDPR Transparency and retained collection assessments into separa
   assert.doesNotMatch(report.executiveSummary.sentences.join(" "), /separate site-integrity observation/);
   const pdf = renderCanonicalReportPdf(report).toString("latin1");
   assert.match(pdf, /Site integrity - High priority/);
-  assert.match(pdf, /20-point score deduction/);
-  assert.equal(report.appendix.siteIntegrity?.scoreEffects?.[0]?.deductionPoints, 20);
+  assert.match(pdf, /27-point score deduction/);
+  assert.equal(report.appendix.siteIntegrity?.scoreEffects?.[0]?.deductionPoints, 27);
   assert.match(pdf, /pharmacy.example/);
   assert.equal(readPersistedScanReportProjection({ scan: scan.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);
 });

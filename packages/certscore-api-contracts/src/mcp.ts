@@ -10,6 +10,7 @@ import {
   apiV2PreConsentRuntimePreviewSchema,
   apiV2ScanFromSchema,
   apiV2ScanResourceSchema,
+  type ApiV2ScanResource,
   apiV2ScanStatusSchema
 } from "./api-v2.js";
 import { pulseAgentInterpretationSchema, pulseResponseSchema, pulseStatusSchema, pulseTransportSecuritySchema } from "./pulse-v1.js";
@@ -518,6 +519,10 @@ export const mcpPreConsentCookiesTrackersOutputSchema = apiV2PreConsentCookiesTr
   ...mcpRetrievedGuidanceShape
 });
 
+// Keep the named public resource type instead of expanding its entire Zod shape
+// again in the declaration for the tool registry. Runtime validation is unchanged.
+const mcpGetScanOutputSchema: z.ZodType<ApiV2ScanResource> = apiV2ScanResourceSchema;
+
 export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_connection_status",
@@ -540,7 +545,7 @@ export const certScoreMcpToolContracts = [
     title: "Get CertScore scan",
     description: "Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.",
     inputSchema: mcpGetScanInputSchema,
-    outputSchema: apiV2ScanResourceSchema,
+    outputSchema: mcpGetScanOutputSchema,
     annotations: { title: "Get CertScore scan", ...readOnlyOpenWorldAnnotations }
   },
   {

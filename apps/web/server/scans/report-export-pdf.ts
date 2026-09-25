@@ -315,12 +315,13 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     !isGdprTransparencyReportRowId(row.id) && !isTransportSecurityRowId(row.id)
   ) ?? [];
   const lines: PdfLine[] = [
-    { text: report.fullSite ? "Website scan report" : "GDPR / ePrivacy evidence report", size: 21, bold: true, gapAfter: 5, kind: "coverTitle" },
+    { text: report.fullSite ? "Website scan report" : `${report.reviewFocusLabel} evidence report`, size: 21, bold: true, gapAfter: 5, kind: "coverTitle" },
     { text: report.scan.domainHostname ?? "Website scan", size: 14, bold: true, gapAfter: 8, kind: "coverDomain" },
     { text: `Scan ID: ${report.scan.id}`, size: 8, kind: "coverMeta" },
     { text: `Completed: ${report.scan.completedAt ?? "Not available"}`, size: 8, gapAfter: 35, kind: "coverMeta" },
     { text: `Scan region: ${report.scan.scanFrom || "Not retained"}  |  Duration: ${formatDuration(report.scan.durationMs)}`, size: 9, kind: "caption" },
     { text: `Report generated: ${report.generatedAt}`, size: 9, kind: "caption", gapAfter: image ? 6 : 11 },
+    ...wrappedLines(`${report.reviewFocusLabel} focus. ${report.reviewScope}`, { size: 9, gapAfter: 5 }),
     ...(image
       ? [
           { text: "Captured page evidence", size: 9, bold: true, kind: "caption" as const, gapAfter: 3 },
@@ -331,6 +332,30 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     { text: `Evidence-based posture: ${titleCase(report.executiveSummary.posture)}`, size: 11, bold: true, gapAfter: 4, kind: "summary" },
     ...report.executiveSummary.sentences.flatMap((sentence) => wrappedLines(sentence, { size: 10, gapAfter: 4, kind: "summary" })),
   ];
+
+  lines.push(sectionHeading("Privacy choices and notices"));
+  if (!report.privacyAuditEvidence) lines.push(...wrappedLines("Unknown: verified privacy-choice and notice evidence was not retained. This does not establish absence."));
+  else {
+    const audit = report.privacyAuditEvidence;
+    lines.push(...wrappedLines("Starting-page observations only. Opt-out execution and notice placement at collection points were not assessed. Topic passages are evidence aids, not disclosure-adequacy assessments."));
+    for (const control of audit.controls) lines.push(...wrappedLines(`${control.kind.replaceAll("_", " ")}: ${control.label}. ${control.placement.replaceAll("_", " ")}. Destination: ${control.destinationUrl ?? "not retained"}. Evidence: ${control.evidenceRef}`));
+    if (!audit.controls.length) lines.push(...wrappedLines("No verified privacy-choice surface retained; control absence remains unknown."));
+    for (const notice of audit.notices) {
+      lines.push(...wrappedLines(`${notice.kind}: ${notice.url}. Text coverage: ${notice.coverage}. Evidence: ${notice.evidenceRef}`));
+      for (const passage of notice.passages) lines.push(...wrappedLines(`${passage.topic.replaceAll("_", " ")} - passage for review: ${passage.excerpt}`, { size: 9 }));
+    }
+    if (audit.truncated) lines.push(...wrappedLines("Privacy workpaper display limits apply."));
+  }
+  lines.push(sectionHeading("GPC observation and comparison"));
+  if (report.gpcResponse) {
+    const gpc = report.gpcResponse;
+    lines.push(...wrappedLines(`${gpc.status.replaceAll("_", " ")}: ${gpc.summary}`));
+    lines.push(...wrappedLines(`Comparable capture: ${gpc.comparison.comparable ? "yes" : "no"}. Signal delivery: ${gpc.comparison.delivery?.status ?? "See retained proof"}. California policy deduction: ${gpc.californiaPolicy.deductionPoints}.`, { size: 9 }));
+    lines.push(...wrappedLines(`Evidence: ${gpc.evidenceUrl}. Full delivery proof and comparison deltas are available in the JSON workpaper.`, { size: 9 }));
+  } else lines.push(...wrappedLines("No verified GPC assessment available; response remains unknown."));
+  for (const [label, observation] of [["Accept", report.postAcceptObservation], ["Reject", report.postRefusalObservation]] as const) {
+    if (observation) lines.push(sectionHeading(`${label} observation`), ...wrappedLines(observation.interpretation ?? "See the typed JSON export for the retained outcome."));
+  }
 
   if(report.fullSite) {
     const f=report.fullSite, {state,counts,totals,timing}=f.summary;
@@ -848,7 +873,7 @@ export function renderCanonicalReportPdf(
       "0.973 0.98 0.988 rg 0 0 612 842 re f",
       pageIndex === 0
         ? "0.035 0.078 0.176 rg 0 690 612 152 re f\n0.055 0.647 0.914 rg 0 686 612 4 re f\nBT /F2 9 Tf 0.733 0.894 0.976 rg 485 814 Td (CERTSCORE.AI) Tj ET"
-        : "0.035 0.078 0.176 rg 0 812 612 30 re f\n0.055 0.647 0.914 rg 0 809 612 3 re f\nBT /F2 8 Tf 1 1 1 rg 50 823 Td (CERTSCORE.AI  -  GDPR / ePrivacy evidence report) Tj ET",
+        : `0.035 0.078 0.176 rg 0 812 612 30 re f\n0.055 0.647 0.914 rg 0 809 612 3 re f\nBT /F2 8 Tf 1 1 1 rg 50 823 Td (CERTSCORE.AI  -  ${pdfString(report.reviewFocusLabel)} evidence report) Tj ET`,
     ];
     if (pageIndex === 0 && brandLogo) {
       commands.push(brandLogoCommand(brandLogo));

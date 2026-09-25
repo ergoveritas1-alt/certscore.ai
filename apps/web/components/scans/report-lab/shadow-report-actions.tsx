@@ -13,9 +13,11 @@ const menuItemClass =
   "flex w-full items-center justify-between gap-4 rounded-md px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500";
 
 export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite = false }: ShadowReportActionsProps) {
+  const requestedFocus = new URL(reportUrl, "https://certscore.ai").searchParams.get("reviewFocus");
+  const focusQuery = requestedFocus === "gdpr_eprivacy" || requestedFocus === "ccpa_cpra" ? `&reviewFocus=${requestedFocus}` : "";
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const emailSubject = `CertScore scan report for ${siteLabel}`;
-  const emailBody = `Review the CertScore scan report for ${siteLabel}:\n\n${reportUrl}`;
+  const emailBody = `Review the CertScore scan report for ${siteLabel}:\n\n${new URL(reportUrl, "https://certscore.ai").toString()}`;
 
   async function copyReportLink() {
     try {
@@ -53,7 +55,7 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
         <a
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf${fullSite ? "&scope=full-site" : ""}`}
+          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf${focusQuery}${fullSite ? "&scope=full-site" : ""}`}
         >
           <span>{fullSite ? "Download full-site PDF" : "Download PDF report"}</span>
           <span aria-hidden="true" className="text-zinc-400">↓</span>
@@ -61,11 +63,13 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
         <a
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json${fullSite ? "&scope=full-site" : ""}`}
+          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json${focusQuery}${fullSite ? "&scope=full-site" : ""}`}
         >
           <span>{fullSite ? "Download full-site JSON" : "Download JSON report"}</span>
           <span aria-hidden="true" className="font-mono text-xs text-zinc-400">{'{}'}</span>
         </a>
+        <a className={menuItemClass} download href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=csv${focusQuery}`}><span>Download tracking CSV{fullSite ? " (starting page)" : ""}</span><span aria-hidden="true">↓</span></a>
+        <a className={menuItemClass} download href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=json&workpaper=tracking${focusQuery}`}><span>Download tracking JSON{fullSite ? " (starting page)" : ""}</span><span aria-hidden="true">↓</span></a>
       </div>
     </details>
   );

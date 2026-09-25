@@ -3762,3 +3762,4 @@ export * from "./terminal-consent-decision";
 export * from "./cms-security";
 
 export * from "./form-destination-trace";
+export * from "./california-notice-passages";

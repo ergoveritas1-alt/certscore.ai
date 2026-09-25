@@ -3,6 +3,8 @@ import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
+import { RegulatoryReviewFocus, CaliforniaPrivacyWorkpaper } from "../regulatory-review-focus";
+import { resolveReportReviewFocus, reportUrlWithFocus } from "../../../lib/scans/report-review-focus";
 import { consentInspectionNotice } from "../../../lib/scans/consent-inspection-presentation";
 import { ReportCoverageTiming } from "../report-coverage-timing";
 import { SinglePageResourceInventory } from "../single-page-resource-inventory";
@@ -65,6 +67,7 @@ import {
 } from "./shadow-report-data";
 
 type ShadowScanReportProps = {
+  reviewFocus?: unknown;
   fullSiteNotice?: FullSiteScanNoticeData | null;
   allowRestrictedScanOptions?: boolean;
   defaultScanFrom?: ServerScanFrom;
@@ -1488,7 +1491,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
   );
 }
 
-function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: GpcResponseReportProjection; homepage?: boolean }) {
+function GpcEvidenceIndexCard({ projection, homepage = false, expanded = false }: { projection: GpcResponseReportProjection; homepage?: boolean; expanded?: boolean }) {
   const proof = projection.assessment.comparison.enabledProof;
   const evidenceJson: Record<string, unknown> = {
     assessment: projection.assessment,
@@ -1500,7 +1503,7 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
   };
 
   return (
-    <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
+    <details open={expanded} className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-zinc-500">GPC observation and comparison{homepage ? " · Starting page" : ""}</p>
@@ -1605,7 +1608,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
         <div className={`${compact ? "mt-3 gap-3" : "mt-6 gap-6"} grid items-start lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]`}>
           <div className="border-l border-t border-zinc-200">
             {additionalEvidence}
-            <details className="group/consent border-b border-r border-zinc-200 p-5">
+            <details id="consent-review-evidence" className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>Controls and CMP context</h3></div>
                 <DisclosureChevron className="text-zinc-400 group-open/consent:rotate-180" />
@@ -1677,7 +1680,8 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>}
-            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : null}
+            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} expanded={report.reviewFocus === "ccpa_cpra"} /> : <div id="gpc-evidence" className="border-b border-r border-zinc-200 p-5"><h3 className="font-semibold">GPC evidence</h3><p className="mt-2 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></div>}
+            <CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} expanded={report.reviewFocus === "ccpa_cpra"} />
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
@@ -1779,13 +1783,18 @@ function VariantBody({
 }
 
 export function ShadowScanReport({
+  reviewFocus,
   fullSiteNotice,
   allowRestrictedScanOptions,
   defaultScanFrom,
   mode = "public",
-  report = SHADOW_REPORT,
+  report: sourceReport = SHADOW_REPORT,
   variant,
 }: ShadowScanReportProps) {
+  const focus = resolveReportReviewFocus(reviewFocus, sourceReport.scan.originCode);
+  const report = sourceReport.resultDisposition === "no_go" ? sourceReport : { ...sourceReport, reviewFocus: focus,
+    scan: { ...sourceReport.scan, reportUrl: reportUrlWithFocus(sourceReport.scan.reportUrl ?? `/scan/${sourceReport.scan.id}`, focus) } };
+  const focusControl = report.resultDisposition === "no_go" ? null : <RegulatoryReviewFocus focus={focus} scanFrom={report.scan.originCode} gpcSummary={report.gpcResponse?.comparisonHeadline} />;
   const homepageContent = report.resultDisposition === "no_go" ? (
     <main className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-10">
       <ReportIdentity enhancedActions allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
@@ -1818,6 +1827,7 @@ export function ShadowScanReport({
   if (mode === "authenticated") {
     return (
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
+        {focusControl}
         {reportContent}
         {reportDisclaimer}
       </div>
@@ -1827,6 +1837,7 @@ export function ShadowScanReport({
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950">
       <SiteHeader mobilePrimaryAction="sign-in" wide />
+      {focusControl}
       {reportContent}
       {reportDisclaimer}
       <SiteFooter hideDisclaimer wide />

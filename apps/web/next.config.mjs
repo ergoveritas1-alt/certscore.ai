@@ -142,6 +142,8 @@ const nextConfig = {
     resolveAlias: {
       "@certscore/api-contracts": "../../packages/certscore-api-contracts/src/index.ts",
       "./api-v2.js": "../../packages/certscore-api-contracts/src/api-v2.ts",
+      "./privacy-audit.js": "../../packages/certscore-api-contracts/src/privacy-audit.ts",
+      "./privacy-audit-openapi.js": "../../packages/certscore-api-contracts/src/privacy-audit-openapi.ts",
       "./mcp.js": "../../packages/certscore-api-contracts/src/mcp.ts",
       "./openapi.js": "../../packages/certscore-api-contracts/src/openapi.ts",
       "./openapi-chatgpt.js":

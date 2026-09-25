@@ -1,3 +1,4 @@
+import { readPrivacyAuditEvidence } from "../../../lib/scans/report-review-focus";
 import { projectFormDestinationPriority } from "../../../lib/scans/form-destination-report";
 import { formDestinationProjectionSchema } from "@certscore/contracts";
 import { projectCmsSecurityPriority } from "../../../lib/scans/cms-security-report";
@@ -875,6 +876,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     policySurfaceLinkObserved: getPolicySurfaceLinkObserved(runtimeArtifacts),
     gpcResponse,
     gpcLaneStatus,
+    privacyAuditEvidence: readPrivacyAuditEvidence(runtimeArtifacts, scanRecord.scan.id),
     acceptPath,
     choicePathComparison,
     consentRows: [

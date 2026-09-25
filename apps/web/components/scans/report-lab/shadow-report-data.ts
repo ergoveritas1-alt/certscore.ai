@@ -142,6 +142,8 @@ export type GpcResponseReportProjection = {
 };
 
 export type ShadowReportData = {
+  reviewFocus?: import("@certscore/api-contracts").ReportReviewFocus;
+  privacyAuditEvidence?: import("@certscore/api-contracts").PrivacyAuditEvidence | null;
   executiveRuntimeCards?: import("../../../lib/scans/executive-runtime-cards").ExecutiveRuntimeCard[];
   siteIntegrity?: SiteIntegrityReportFinding | null;
   siteIntegritySummary?: import("../../../lib/scans/site-integrity-report").SiteIntegritySiteReport;

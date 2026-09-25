@@ -36,6 +36,8 @@ import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { RuntimeEvidenceGraphBuilder } from "../../../../packages/certscore-scan-core/src/runtime-evidence-graph";
 import { projectRuntimeEvidenceGraphs, applyRuntimeGraphPresentationSwitch } from "../../server/scans/runtime-evidence-graph-projection";
 import { buildPersistedScanReportProjection, readPersistedScanReportProjection, SCAN_REPORT_PROJECTION_VERSION } from "../../server/scans/scan-report-projection-contract";
+import { projectPrivacyAuditEvidence } from "../../server/scans/privacy-audit-projection";
+import { apiV2ScanResourceSchema } from "@certscore/api-contracts";
 const require = createRequire(import.meta.url);
 const serverOnlyPath = require.resolve("server-only");
 (require.cache as Record<string, unknown>)[serverOnlyPath] = { exports: {}, loaded: true };
@@ -125,6 +127,28 @@ test("retained graph survives verified artifact/reference persistence through in
   const disabled = { ...record, runtimeArtifacts: applyRuntimeGraphPresentationSwitch(record.runtimeArtifacts, { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "off" }) };
   assert.equal(buildApiV2PreConsentCookiesTrackers(disabled).runtimeEvidenceGraph, undefined);
   assert.ok(record.runtimeArtifacts?.runtimeEvidenceGraphProjection, "presentation kill switch must not mutate retained evidence");
+});
+
+test("privacy workpaper survives canonical persistence and public API without score or finding effects", () => {
+  const record = fixture();
+  const baseline = buildApiV2ScanResource(record);
+  const audit = projectPrivacyAuditEvidence({ scanId: record.scan.id, completedAt: record.scan.completedAt, policySurfaceObservations: [] } as unknown as CanonicalEvidenceBundle,
+    { verificationStatus: "verified", sha256: "a".repeat(64) }, "https://example.com/");
+  assert.ok(audit);
+  record.runtimeArtifacts = { privacyAuditEvidence: audit };
+  const persisted = buildPersistedScanReportProjection(record);
+  const restored = readPersistedScanReportProjection({ scan: record.scan, snapshot: {
+    report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+    report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+    report_projection_computed_at: new Date().toISOString(),
+  } });
+  assert.ok(restored);
+  const result = buildApiV2ScanResource({ ...record, runtimeArtifacts: restored.runtimeArtifacts });
+  assert.deepEqual(apiV2ScanResourceSchema.parse(result).privacyAuditEvidence, audit);
+  assert.equal(result.score, baseline.score);
+  assert.deepEqual(result.findings, baseline.findings);
+  assert.equal(buildApiV2ScanResource({ ...record, runtimeArtifacts: { privacyAuditEvidence: { ...audit, scanId: "other" } } }).privacyAuditEvidence, null);
+  assert.equal(buildApiV2ScanResource({ ...record, scan: { ...record.scan, status: "running" } }).privacyAuditEvidence, null);
 });
 
 function gpcCanonicalFixture() {

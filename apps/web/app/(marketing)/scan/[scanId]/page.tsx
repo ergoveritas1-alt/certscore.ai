@@ -95,13 +95,13 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
   const routeStartedAt = performance.now();
   const [{ scanId }, resolvedSearchParams] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({}),
+    searchParams ?? Promise.resolve({} as Record<string, string | string[] | undefined>),
   ]);
 
   // The retained fixture keeps the approved report reviewable on localhost,
   // where this production scan is not present in the local database.
   if (process.env.NODE_ENV !== "production" && scanId === SHADOW_REPORT_SCAN_ID) {
-    return <ShadowScanReport report={SHADOW_REPORT} variant="timeline" />;
+    return <ShadowScanReport reviewFocus={resolvedSearchParams.reviewFocus} report={SHADOW_REPORT} variant="timeline" />;
   }
 
   const projectionStartedAt = performance.now();
@@ -118,8 +118,8 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
       scanId,
       sourceHash: readyReport.snapshot?.report_projection_source_hash ?? null,
     });
-    if (report.fullSite && (await readFullSiteOptions()).allowed) redirect(`/app/scans/${scanId}`);
-    return <ShadowScanReport report={{ ...report, fullSite: undefined }} variant="timeline" />;
+    if (report.fullSite && (await readFullSiteOptions()).allowed) redirect(`/app/scans/${scanId}${typeof resolvedSearchParams.reviewFocus === "string" ? `?reviewFocus=${encodeURIComponent(resolvedSearchParams.reviewFocus)}` : ""}`);
+    return <ShadowScanReport reviewFocus={resolvedSearchParams.reviewFocus} report={{ ...report, fullSite: undefined }} variant="timeline" />;
   }
 
   const statusStartedAt = performance.now();
@@ -156,6 +156,6 @@ export default async function PublicScanDetailPage({ params, searchParams }: Pub
     scanId,
     statusLoadMs,
   });
-  if (report.fullSite && (await readFullSiteOptions()).allowed) redirect(`/app/scans/${scanId}`);
-    return <ShadowScanReport report={{ ...report, fullSite: undefined }} variant="timeline" />;
+  if (report.fullSite && (await readFullSiteOptions()).allowed) redirect(`/app/scans/${scanId}${typeof resolvedSearchParams.reviewFocus === "string" ? `?reviewFocus=${encodeURIComponent(resolvedSearchParams.reviewFocus)}` : ""}`);
+  return <ShadowScanReport reviewFocus={resolvedSearchParams.reviewFocus} report={{ ...report, fullSite: undefined }} variant="timeline" />;
 }

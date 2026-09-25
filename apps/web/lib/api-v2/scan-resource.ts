@@ -1,3 +1,4 @@
+import { readPrivacyAuditEvidence } from "../scans/report-review-focus";
 import { isAfterActionReportEligible, retainedConsentAssessment, retainedActionProjection } from "../scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../scans/choice-path-execution";
 import { deriveAfterActionSummary, afterActionInterpretation } from "./after-action-summary";
@@ -1035,6 +1036,7 @@ export function buildApiV2ScanResource(
     : null;
   const resource = {
     type: "certscore_scan",
+    privacyAuditEvidence: noGoProjection || canonicalResultState !== "final" ? null : readPrivacyAuditEvidence(scanRecord.runtimeArtifacts, scan.id),
     scanId: scan.id,
     domain,
     // Preserve the caller's exact page URL when the resource is returned from

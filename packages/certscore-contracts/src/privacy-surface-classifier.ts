@@ -89,6 +89,7 @@ const CORE_PRIVACY_SURFACE_PHRASE_OVERRIDES: PrivacySurfacePhrase[] = [
     direct("consent_preferences", "privacy settings"),
     direct("consent_preferences", "consent settings"),
     direct("your_privacy_choices", "your privacy choices"),
+    direct("your_privacy_choices", "your california privacy choices"),
     direct("your_privacy_choices", "privacy choices"),
     direct("your_privacy_choices", "ad choices"),
     equivalent("your_privacy_choices", "your choices"),

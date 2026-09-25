@@ -22,13 +22,15 @@ import { getOrganizationSettings } from "../../../../server/settings/get-organiz
 
 type ScanDetailPageProps = {
   params: Promise<{ scanId: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 function legacyScanHref(scanId: string) {
   return `/app/scanso/${encodeURIComponent(scanId)}`;
 }
 
-export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
+export default async function ScanDetailPage({ params, searchParams }: ScanDetailPageProps) {
+  const requestedFocus = (await searchParams)?.reviewFocus;
   const [{ scanId }, { membership, organization, user }] = await Promise.all([
     params,
     withServerTiming("app.scan_detail.context", () => getDashboardContext()),
@@ -120,6 +122,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       <PendingScanStartedEvent />
       <ScanProgressReportVisible scanId={scanId} />
       <ShadowScanReport
+        reviewFocus={requestedFocus}
         fullSiteNotice={fullSiteNotice}
         allowRestrictedScanOptions={canUseRestrictedScanOptions({
           membershipRole: membership.role,

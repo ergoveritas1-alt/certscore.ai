@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { privacyAuditEvidenceSchema, type PrivacyAuditEvidence } from "./privacy-audit.js";
+const apiPrivacyAuditEvidenceSchema: z.ZodType<PrivacyAuditEvidence> = privacyAuditEvidenceSchema;
 import { apiRuntimeEvidenceGraphProjectionSchema, type ApiRuntimeEvidenceGraphProjection } from "./runtime-evidence-graph.js";
 const apiGraphProjectionSchema: z.ZodType<ApiRuntimeEvidenceGraphProjection> = apiRuntimeEvidenceGraphProjectionSchema;
 import { pulseResponseSchema } from "./pulse-v1.js";
@@ -281,6 +283,7 @@ export const apiV2ScanJobSchema = z
 
 export const apiV2ScanResourceSchema = z
   .object({
+    privacyAuditEvidence: apiPrivacyAuditEvidenceSchema.nullable().optional(),
     type: z.literal("certscore_scan"),
     scanId: z.string(),
     domain: z.string(),

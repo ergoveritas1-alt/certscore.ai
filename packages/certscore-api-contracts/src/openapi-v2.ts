@@ -1,6 +1,7 @@
 import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.js";
 import { apiV2Disclaimer, CERTSCORE_API_V2_SCHEMA_VERSION } from "./api-v2.js";
 import { runtimeEvidenceGraphOpenApiSchemas } from "./runtime-evidence-graph-openapi.js";
+import { privacyAuditEvidenceOpenApi } from "./privacy-audit-openapi.js";
 
 const choicePathExecutionOpenApi = {
   type: "object", additionalProperties: false,
@@ -1146,12 +1147,14 @@ export function buildCertScoreApiV2OpenApiDocument() {
             disclaimer: { type: "string" }
           }
         },
+        PrivacyAuditEvidence: privacyAuditEvidenceOpenApi,
         Scan: {
           type: "object",
           additionalProperties: true,
           required: ["type", "scanId", "domain", "status"],
           properties: {
             type: { type: "string", const: "certscore_scan" },
+            privacyAuditEvidence: { $ref: "#/components/schemas/PrivacyAuditEvidence" },
             scanId: { type: "string" },
             domain: { type: "string" },
             url: { type: ["string", "null"] },

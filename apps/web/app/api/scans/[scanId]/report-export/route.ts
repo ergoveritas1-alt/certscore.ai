@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { getVisualEvidenceArtifacts } from "../../../../../lib/scans/visual-evidence";
 import { buildCanonicalReportExport } from "../../../../../server/scans/report-export";
+import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "../../../../../server/scans/tracking-workpaper";
 import { renderCanonicalReportPdf } from "../../../../../server/scans/report-export-pdf";
 import { loadPersistedScanReportProjection } from "../../../../../server/scans/scan-report-projection";
 import { getPublicScanStatusProjection } from "../../../../../server/scans/scan-status-projection";
@@ -41,7 +42,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
   const { scanId } = await context.params;
   if (!/^[a-f0-9-]{36}$/i.test(scanId)) return error(400, "Invalid scan ID.");
   const format = request.nextUrl.searchParams.get("format") ?? "json";
-  if (format !== "json" && format !== "pdf") return error(400, "Format must be json or pdf.");
+  if (format !== "json" && format !== "pdf" && format !== "csv") return error(400, "Format must be json, pdf or csv.");
+  const focus = request.nextUrl.searchParams.get("reviewFocus");
+  if (focus !== null && focus !== "gdpr_eprivacy" && focus !== "ccpa_cpra") return error(400, "Invalid review focus.");
+  const trackingWorkpaper = format === "csv" || (format === "json" && request.nextUrl.searchParams.get("workpaper") === "tracking");
+  if (trackingWorkpaper && request.nextUrl.searchParams.get("scope") === "full-site") return error(400, "Tracking workpapers cover the starting page; use the full-site JSON export for additional pages.");
 
   const status = await getPublicScanStatusProjection(scanId);
   if (!status?.reportReady) return error(404, "The completed report is not available.");
@@ -50,14 +55,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
     scanId,
   });
   if (!scanRecord) return error(404, "The persisted report projection is not available.");
-  const fullSite = scanRecord.scan.scanConfigJson?.fullSite === true && (await readFullSiteOptions()).allowed ? await loadFullSiteExport(scanId) : undefined;
+  const fullSite = !trackingWorkpaper && scanRecord.scan.scanConfigJson?.fullSite === true && (await readFullSiteOptions()).allowed ? await loadFullSiteExport(scanId) : undefined;
   if (request.nextUrl.searchParams.get("scope") === "full-site" && !fullSite) {
     return error(409, "The full-site report is not available for download.");
   }
-  const report = buildCanonicalReportExport(scanRecord, fullSite);
+  const report = buildCanonicalReportExport(scanRecord, fullSite, focus);
   if (!report) return error(409, "The canonical report projection is unavailable for this scan.");
 
   const safeHost = (report.scan.domainHostname ?? "scan-report").replace(/[^a-z0-9.-]+/gi, "-").slice(0, 80);
+  if (format === "csv") return new NextResponse(renderTrackingWorkpaperCsv(report), {
+    headers: {
+      "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="certscore-${safeHost}-tracking.csv"`,
+    },
+  });
   if (format === "pdf") {
     const brandLogo = await loadReportBrandLogo();
     const visualArtifact = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
@@ -79,7 +91,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       },
     });
   }
-  return new NextResponse(`${JSON.stringify(report, null, 2)}\n`, {
+  return new NextResponse(`${JSON.stringify(request.nextUrl.searchParams.get("workpaper") === "tracking" ? buildTrackingWorkpaper(report) : report, null, 2)}\n`, {
     headers: {
       "Cache-Control": "private, no-store",
       "Content-Disposition": `attachment; filename="certscore-${safeHost}.json"`,

@@ -10,5 +10,6 @@ export * from "./runtime-evidence-graph.js";
 export type { GpcBoundedObservation } from "./gpc-bounded-observation.js";
 
 export * from "./report-page.js";
+export * from "./privacy-audit.js";
 
 export { apiV2ChoicePathExecutionSchema } from "./scan-observation-results.js";

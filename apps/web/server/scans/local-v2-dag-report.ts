@@ -1,3 +1,4 @@
+import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
 import { projectFormDestinations } from "./form-destination-projection";
 import { projectCmsSecurity } from "./cms-security-projection";
 import { projectSiteIntegrity } from "./site-integrity-projection";
@@ -6035,6 +6036,7 @@ function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
+    privacyAuditEvidence: runtimeEvidenceReportable ? projectPrivacyAuditEvidence(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
     formSnapshots: verifiedFormSnapshots(bundle).map(({ snapshot: { data: _data, ...metadata } }) => metadata),
     siteIntegrity: runtimeEvidenceReportable ? projectSiteIntegrity(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
     formDestinations: runtimeEvidenceReportable ? projectFormDestinations(bundle, options.policyTextEvidenceContext?.sourceBundle) : null,

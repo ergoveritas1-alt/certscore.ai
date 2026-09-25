@@ -6,7 +6,12 @@ import type { CanonicalReportExport } from "./report-export";
 test("renders a multi-section canonical report as a valid bounded PDF", () => {
   const report = {
     artifactType: "certscore_canonical_report_export",
-    artifactVersion: "canonical-report-export-v5",
+    artifactVersion: "canonical-report-export-v6",
+    reviewFocus: "gdpr_eprivacy",
+    reviewFocusLabel: "GDPR/ePrivacy",
+    reviewScope: "Observed from Ireland. Changing review focus uses the same evidence.",
+    privacyAuditEvidence: null,
+    gpcResponse: null,
     generatedAt: "2026-08-24T00:00:00.000Z",
     scan: {
       id: "00000000-0000-0000-0000-000000000001",
