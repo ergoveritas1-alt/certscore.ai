@@ -12,6 +12,7 @@ import { renderCanonicalReportPdf } from "./report-export-pdf";
 import { aggregateFullSite } from "@website-signal-risk-scanner/shared";
 import { completedActionProjection } from "../../lib/scans/test-fixtures/action-execution-projection";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
+import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 
 function scanRecord(): ScanDetailResponse {
   const scanId = "00000000-0000-0000-0000-000000000001";
@@ -62,6 +63,10 @@ test("review focus changes presentation without changing evidence, findings or s
   assert.match(renderCanonicalReportPdf(ca).toString("latin1"), /CCPA\/CPRA evidence report/);
   assert.equal(ca.postAcceptObservation, undefined);
   assert.equal(ca.postRefusalObservation, undefined);
+  const review = reviewCcpaScoring(JSON.parse(JSON.stringify(ca)));
+  assert.equal(review.source.scanId, record.scan.id);
+  assert.equal(review.source.scanFrom, "eu_ie");
+  assert.equal(review.score, null);
 });
 
 test("exports omit speculative action lanes but preserve independently verified clicks", () => {

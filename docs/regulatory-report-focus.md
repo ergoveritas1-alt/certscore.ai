@@ -67,3 +67,31 @@ is part of this change.
 Separate jurisdictional scoring, executed DNS flows, new coverage/absence
 findings, additional-page policy analysis, and forced paired geographies remain
 outside this implementation.
+
+## Internal CCPA scoring review
+
+Run this offline against a downloaded canonical report JSON (v6):
+
+```bash
+pnpm exec tsx --tsconfig apps/web/tsconfig.test.json apps/web/scripts/review-ccpa-scoring.ts /path/to/report.json
+```
+
+It emits `certscore.ccpa-scoring-review.v1` with four checks: GPC response,
+sale/share choice surface, sale/share opt-out effectiveness, and notice evidence.
+`observed` means evidence exists, not that a requirement passed. Missing,
+malformed, historical or incomplete evidence remains explicitly limited;
+untested behavior stays `not_assessed`. Cookie Settings and cookie Reject cannot
+stand in for a sale/share opt-out. Notice excerpts do not establish adequacy.
+
+The review copies the existing GPC policy result for context and never applies
+it again. It produces no numeric score, findings, persisted changes or customer
+output. Source versions, hashes, origin and evidence references are retained;
+the tool trusts the downloaded export and does not reverify original source
+bytes. Use trusted exports only. No scan, network, model or database calls are
+made; incremental recurring infrastructure cost is $0/month.
+
+Before introducing a separate public score, review these four checks against
+retained examples, decide the minimum evidence required, and approve calibrated
+weights. Do not turn unknown evidence into a pass or reuse the legacy California
+score. The current review explicitly records the unassessed behavior and notice
+checks, so a high number cannot conceal them.

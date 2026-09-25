@@ -10,6 +10,7 @@ import { apiV2GpcResponseSchema } from "../../../../packages/certscore-api-contr
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
 import { buildCanonicalGpcResponseProjection } from "./gpc-response-projection";
 import { buildGpcResponseReportProjection } from "../../components/scans/report-lab/gpc-report-projection";
+import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 
 test("verified bytes → typed persisted v3 → normalized concern/policy → unified report/API preserves complete observation with indeterminate comparison and no score", () => {
   const gpc = gpcProductionRuntimeFixture();
@@ -42,6 +43,14 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
       gpcArtifact: { lane: "gpc_observation", sha256: pointer.sha256, sizeBytes: pointer.sizeBytes }, delivery: { status: delivery.status } },
     californiaPolicy: { applied: false, deductionPoints: 0 }, evidenceUrl: "https://example.test/evidence" });
   assert.equal(publicResult.observation?.status, "complete");
+  const review = reviewCcpaScoring({ artifactType: "certscore_canonical_report_export",
+    artifactVersion: "canonical-report-export-v6", generatedAt: "2026-09-25T00:00:00.000Z",
+    scan: { id: gpc.scanId, status: "completed", scanFrom: "us_ca" },
+    privacyAuditEvidence: null, gpcResponse: publicResult });
+  assert.equal(review.checks.gpc_response.status, "limited");
+  assert.equal(review.gpcOutcome, "indeterminate");
+  assert.equal(review.existingGpcPolicy?.deductionPoints, 0);
+  assert.equal(review.score, null);
 });
 
 test("quiet-window limits do not downgrade a verified observation, and observation failures never become completion", () => {
