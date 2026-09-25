@@ -317,6 +317,8 @@ def mcp_scan(url, loc, secret):
     # Exercise the authenticated Streamable HTTP MCP lane so scheduled monitoring
     # is not constrained by the anonymous daily allowance.
     headers = {"authorization": "Bearer " + jwt(secret), "content-type": "application/json", "accept": "application/json, text/event-stream", "mcp-protocol-version": "2025-03-26"}
+    class InvalidSession(Exception):
+        pass
     def decode_mcp_response(raw, content_type):
         if not raw or not raw.strip():
             return {}
@@ -348,14 +350,48 @@ def mcp_scan(url, loc, secret):
                 with urllib.request.urlopen(req, timeout=840) as r:
                     raw = r.read().decode(errors="replace")
                     return decode_mcp_response(raw, r.headers.get("content-type")), r.headers.get("mcp-session-id") or session
+            except urllib.error.HTTPError as e:
+                try:
+                    body = e.read().decode(errors="replace")[:700]
+                finally:
+                    e.close()
+                try:
+                    error = json.loads(body)
+                except json.JSONDecodeError:
+                    error = None
+                if e.code == 404 and session and isinstance(error, dict) and error.get("error") == "invalid_session":
+                    # The server rejects an unknown session before dispatching any tool.
+                    # This can happen while two ECS tasks serve a rolling deployment.
+                    raise InvalidSession()
+                raise RuntimeError(f"MCP HTTP {e.code} during {payload.get('method')}: {body}") from e
             except (urllib.error.URLError, RuntimeError) as e:
                 if attempt == attempts - 1:
                     raise
                 time.sleep(2 * (attempt + 1))
-    init, session = mcp_post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "ergoveritas-sentinel-monitor", "version": "1.0"}}})
-    # Bind the follow-up messages to the Streamable HTTP session.
-    mcp_post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, session)
-    call, _ = mcp_post({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "certscore_scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, session, retry_safe=False)
+    def open_session():
+        for attempt in range(8):
+            _, new_session = mcp_post({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "ergoveritas-sentinel-monitor", "version": "1.0"}}})
+            if not new_session:
+                raise RuntimeError("MCP initialize returned no session id")
+            try:
+                mcp_post({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}, new_session)
+                return new_session
+            except InvalidSession:
+                if attempt == 7:
+                    raise RuntimeError("MCP session was lost during initialization after 8 attempts")
+        raise RuntimeError("MCP session initialization failed")
+    session = open_session()
+    def tool_call(payload, retry_safe=True):
+        nonlocal session
+        for attempt in range(8):
+            try:
+                return mcp_post(payload, session, retry_safe=retry_safe)[0]
+            except InvalidSession:
+                if attempt == 7:
+                    raise RuntimeError("MCP session was lost before tool execution after 8 attempts")
+                session = open_session()
+        raise RuntimeError("MCP tool call failed")
+    call = tool_call({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "certscore_scan_site", "arguments": {"url": url, "freshness": "refresh", "scanFrom": loc, "waitForCompletion": True}}}, retry_safe=False)
     result, payload = mcp_tool_payload(call)
     sid = stable_scan_id(payload if isinstance(payload, dict) else result)
     if not sid:
@@ -380,7 +416,7 @@ def mcp_scan(url, loc, secret):
         # below the canonical 30-unit/10-minute caller+scan status allowance.
         time.sleep(max(20, min(30, delay)))
         polled_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        status_call, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "certscore_get_scan_status", "arguments": {"scanId": sid}}}, session)
+        status_call = tool_call({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "certscore_get_scan_status", "arguments": {"scanId": sid}}})
         next_call_id += 1
         status_result, status_payload = mcp_tool_payload(status_call)
         candidate = status_payload if isinstance(status_payload, dict) else status_result
@@ -395,7 +431,7 @@ def mcp_scan(url, loc, secret):
         current = {**current, "sentinelPollCount": poll_count, "sentinelFirstPollAt": first_poll_at, "sentinelLastPollAt": last_poll_at}
     evidence = {}
     if status(current) in USABLE_SCAN_STATUSES:
-        evidence, _ = mcp_post({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "certscore_get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}}, session)
+        evidence = tool_call({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "certscore_get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}})
     return sid, current, {"scan": current, "evidence": evidence}, created
 
 def signals(value):

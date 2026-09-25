@@ -1,4 +1,6 @@
 import importlib.util
+import io
+import json
 import os
 import pathlib
 import sys
@@ -240,8 +242,85 @@ class McpIdentityTests(unittest.TestCase):
         mcp_scan_source = source.split("def mcp_scan", 1)[1].split("def signals", 1)[0]
 
         self.assertEqual(mcp_scan_source.count('"name": "certscore_scan_site"'), 1)
-        self.assertIn('session, retry_safe=False)', mcp_scan_source)
+        self.assertIn('retry_safe=False)', mcp_scan_source)
         self.assertIn("not resubmitting", mcp_scan_source)
+
+    def test_mcp_scan_reopens_only_an_explicitly_rejected_session(self):
+        calls = []
+        responses = [
+            ({"result": {}}, {"mcp-session-id": "session-old"}),
+            ({}, {}),
+            (404, {"error": "invalid_session"}),
+            ({"result": {}}, {"mcp-session-id": "session-new"}),
+            ({}, {}),
+            ({"result": {"structuredContent": {"scanId": "scan-123", "status": "failed"}}}, {}),
+        ]
+
+        class FakeResponse:
+            def __init__(self, body, response_headers):
+                self.body = body
+                self.headers = response_headers
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(self.body).encode()
+
+        def fake_urlopen(request, timeout):
+            payload = json.loads(request.data.decode())
+            calls.append((payload.get("params", {}).get("name") or payload.get("method"), request.get_header("Mcp-session-id")))
+            body, response_headers = responses.pop(0)
+            if body == 404:
+                raise handler.urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, io.BytesIO(json.dumps(response_headers).encode()))
+            return FakeResponse(body, response_headers)
+
+        with mock.patch.object(handler.urllib.request, "urlopen", side_effect=fake_urlopen):
+            scan_id, scan_status, _, _ = handler.mcp_scan("https://example.com/canary", "california", "test-secret")
+
+        self.assertEqual(scan_id, "scan-123")
+        self.assertEqual(scan_status["status"], "failed")
+        self.assertEqual([name for name, _ in calls].count("certscore_scan_site"), 2)
+        self.assertEqual([session for name, session in calls if name == "certscore_scan_site"], ["session-old", "session-new"])
+
+    def test_mcp_scan_does_not_retry_other_404_responses(self):
+        calls = []
+        responses = [
+            ({"result": {}}, {"mcp-session-id": "session-1"}),
+            ({}, {}),
+            (404, {"error": "not_found"}),
+        ]
+
+        class FakeResponse:
+            def __init__(self, body, response_headers):
+                self.body = body
+                self.headers = response_headers
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps(self.body).encode()
+
+        def fake_urlopen(request, timeout):
+            payload = json.loads(request.data.decode())
+            calls.append(payload.get("params", {}).get("name") or payload.get("method"))
+            body, response_headers = responses.pop(0)
+            if body == 404:
+                raise handler.urllib.error.HTTPError(request.full_url, 404, "Not Found", {}, io.BytesIO(json.dumps(response_headers).encode()))
+            return FakeResponse(body, response_headers)
+
+        with mock.patch.object(handler.urllib.request, "urlopen", side_effect=fake_urlopen):
+            with self.assertRaisesRegex(RuntimeError, "MCP HTTP 404"):
+                handler.mcp_scan("https://example.com/canary", "california", "test-secret")
+
+        self.assertEqual(calls.count("certscore_scan_site"), 1)
 
     def test_mcp_scan_polls_active_scan_before_requesting_bundle(self):
         calls = []
