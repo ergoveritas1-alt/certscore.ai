@@ -1927,6 +1927,66 @@ test("complete no-surface inspection projects initial-load tracking without CMP 
   assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
 });
 
+test("partial-scan tracking certainty agrees across concern policy, headline, executive and checklist", () => {
+  // Regression shape from fox32chicago dd4bb96e and sovet.group 194a124c:
+  // vendor/request inventory must not override an incomplete consent sequence.
+  for (const proof of ["inventory_only", "ambiguous_sequence", "complete_sequence", "complete_no_surface"] as const) {
+    const strong = proof === "complete_sequence" || proof === "complete_no_surface";
+    const requestUrl = "https://analytics.example.test/collect";
+    const state = buildPreconsentRuntimeState({
+      ...(proof === "inventory_only" ? {} : {
+        consent_timeline: {
+          firstNonEssentialRequestMs: 250,
+          firstCmpVisibleMs: proof === "complete_sequence" ? 1000 : null,
+          firstConsentActionMs: null,
+          timelineConfidence: strong ? "high" : "low"
+        }
+      }),
+      ...(proof === "complete_no_surface" ? {
+        consent_surface_inspection: {
+          outcome: "no_surface_observed_complete_coverage",
+          coverageStatus: "complete",
+          inspectionCompleted: true,
+          inspectedPreInteraction: true,
+          observedAtMs: 250
+        }
+      } : {}),
+      hybrid_runtime_evidence: {
+        requestPurposeClassificationConfidence: [{
+          category: "analytics",
+          collectionEndpointObserved: true,
+          confidence: 0.95,
+          essentiality: "non_essential",
+          hostname: "analytics.example.test",
+          requestUrl,
+          runtimePhase: "pre_consent",
+          tsMs: 250,
+          vendor: "Example Analytics"
+        }]
+      }
+    }, { scan_outcome: "completed_partial", pages_scanned: 0 });
+    const packet = state.globalUnifiedFindings.find((finding) => finding.unifiedFindingId === "preconsent_tracking");
+    const executive = projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings);
+    const checklist = deriveGdprEprivacyCoverageChecklist({
+      coverageLimited: false,
+      coverageOutcomes: {},
+      projectedFindings: executive.findings,
+      scanCompleted: true,
+      unifiedFindings: state.globalUnifiedFindings,
+      runtimeTrackerPriorityRows: [{
+        vendor: "Example Analytics", party: "3rd", purpose: "analytics",
+        priority: "high", firstSeenMs: 250, domains: ["analytics.example.test"]
+      }]
+    });
+    const row = checklist.find((item) => item.id === "pre_consent_third_party_tracking");
+
+    assert.equal(packet?.surfacingDecision.decisionState === "confirmed", strong, proof);
+    assert.equal(executive.findings.some((finding) => finding.id === "pre_consent_tracking_detected"), strong, proof);
+    assert.equal(row?.status === "Gap observed", strong, proof);
+    assert.equal(packet?.concernContext?.promotionEligibilities.includes("eligible") === true, strong, proof);
+  }
+});
+
 test("request-only preconsent violation rows do not synthesize analytics cookie findings", () => {
   const state = debugBuildScanReportUnifiedFindingStateForScan({
     accessibilityRuleCounts: [],

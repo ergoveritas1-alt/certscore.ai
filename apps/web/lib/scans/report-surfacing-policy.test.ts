@@ -262,7 +262,7 @@ test("keeps audit-only pre-consent tracking out of main surfacing", () => {
   assert.equal(decision?.reportLane, "suppressed");
 });
 
-test("pre-consent packet evidence can promote stale audit-only concern context", () => {
+test("pre-consent packet fields cannot override an audit-only concern", () => {
   const requestUrl = "https://tags-eu.tiqcdn.com/utag/example/prod/utag.js";
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
@@ -325,12 +325,12 @@ test("pre-consent packet evidence can promote stale audit-only concern context",
   });
 
   const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "preconsent_tracking");
-  assert.equal(decision?.decisionState, "confirmed");
-  assert.equal(decision?.reportLane, "main");
-  assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+  assert.equal(decision?.decisionState, "suppressed");
+  assert.equal(decision?.reportLane, "suppressed");
+  assert.ok(!decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
 });
 
-test("pre-consent packet evidence recognizes canonical preconsent tracker vendor entities", () => {
+test("pre-consent tracker vendor entities cannot override an audit-only concern", () => {
   const requestUrl = "https://cms.quantserve.com/pixel/example";
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
@@ -391,9 +391,9 @@ test("pre-consent packet evidence recognizes canonical preconsent tracker vendor
   });
 
   const decision = evaluation.debugDecisions.find((entry) => entry.unifiedFindingId === "preconsent_tracking");
-  assert.equal(decision?.decisionState, "confirmed");
-  assert.equal(decision?.reportLane, "main");
-  assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+  assert.equal(decision?.decisionState, "suppressed");
+  assert.equal(decision?.reportLane, "suppressed");
+  assert.ok(!decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
 });
 
 test("blocking overlay stays support-only and supports stronger consent findings", () => {
@@ -1965,7 +1965,7 @@ test("policy version and debug decisions are stable in evaluation output", () =>
   });
 });
 
-test("pre-consent tracking confirms with direct runtime vendor and URL evidence", () => {
+test("pre-consent vendor and URL inventory stays review-level without strong sequence proof", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
       makePacket("preconsent_tracking", {
@@ -1984,11 +1984,11 @@ test("pre-consent tracking confirms with direct runtime vendor and URL evidence"
   });
 
   const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "confirmed");
-  assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+  assert.equal(decision?.decisionState, "review");
+  assert.ok(!decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
 });
 
-test("pre-consent tracking confirms with non-essential cookie timing evidence", () => {
+test("legacy cookie timing labels cannot bypass the canonical pre-consent contract", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
       makePacket("preconsent_tracking", {
@@ -2019,8 +2019,8 @@ test("pre-consent tracking confirms with non-essential cookie timing evidence", 
   });
 
   const decision = evaluation.debugDecisions[0];
-  assert.equal(decision?.decisionState, "confirmed");
-  assert.ok(decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
+  assert.equal(decision?.decisionState, "review");
+  assert.ok(!decision?.appliedRules.includes("evidence.preconsent.confirmed_when_validation_and_runtime_artifacts"));
 });
 
 test("pre-consent tracking stays review-level for cookie names without before-consent write timing", () => {

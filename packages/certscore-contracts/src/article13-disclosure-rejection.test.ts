@@ -54,6 +54,17 @@ test("retained-report policy quality rejects mixed-page text with a delayed poli
   assert.equal(assessment.reason, "low_quality_non_policy_text");
 });
 
+test("a late privacy heading does not discard substantive disclosure topics", () => {
+  const serviceIntroduction = "Housing support navigation explains the available public services and account features. ".repeat(12);
+  const policy = [
+    "Privacy policy. The data controller is Example Services Ltd at 10 Example Street, London.",
+    "We process account and saved progress data to provide the requested service under contract.",
+    "You may request access, rectification and erasure, and complain to the Information Commissioner's Office."
+  ].join(" ");
+  const assessment = assessArticle13PolicyTextQuality(`${serviceIntroduction} ${policy}`, { mode: "scan_core" });
+  assert.equal(assessment.usable, true);
+});
+
 const rejectionModes: Article13DisclosureRejectionMode[] = [
   "scan_core",
   "retained_report",

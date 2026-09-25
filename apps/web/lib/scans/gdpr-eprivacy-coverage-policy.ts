@@ -1549,7 +1549,11 @@ function getExplicitFirstLayerGdprConsentBannerConfirmed(input: GdprEprivacyCove
       assessment.surface.status === "observed_actionable" ||
       assessment.surface.status === "observed_non_actionable"
     ) {
-      return true;
+      // The surface classifier can identify an informational cookie notice.
+      // A typed decision control is needed before it is treated as a
+      // first-layer GDPR/ePrivacy consent choice for Reject-path scoring.
+      return [assessment.controls.accept.state, assessment.controls.reject.state,
+        assessment.controls.options.state].includes("observed") ? true : null;
     }
     if (
       assessment.surface.status === "not_observed" &&

@@ -2,6 +2,7 @@ import { siteIntegrityDeduction } from "../../lib/scans/site-integrity-score-pol
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { SCORE_FLOOR } from "../../lib/scans/scoring-policy";
 import { projectScanReportNoGo, type ScanReportAccessContext } from "../../lib/scans/scan-report-disposition";
+import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
 import {
@@ -43,5 +44,6 @@ export function deriveCanonicalOverallScoreForReport(input: {
   const integrityEffects = input.unifiedFindings
     .filter(finding => finding.unifiedFindingId === SITE_INTEGRITY_FINDING_ID)
     .flatMap(finding => finding.scoreEffects ?? []);
-  return Math.max(SCORE_FLOOR, postureScore - californiaGpcDeduction(input.unifiedFindings) - siteIntegrityDeduction(integrityEffects));
+  return resolveScanReportScore(input.scanRecord,
+    Math.max(SCORE_FLOOR, postureScore - californiaGpcDeduction(input.unifiedFindings) - siteIntegrityDeduction(integrityEffects)));
 }

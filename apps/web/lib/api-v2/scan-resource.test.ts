@@ -703,6 +703,7 @@ test("buildApiV2ScanResource marks partial coverage without exposing raw evidenc
   const resource = buildApiV2ScanResource(fixture({ pagesRequested: 4, pagesScanned: 1 }));
 
   assert.equal(resource.coverage?.status, "partial");
+  assert.equal(resource.coverage?.scopeSummary, "1 public page scanned. Signed-in behavior was not assessed.");
   assert.deepEqual(resource.coverage?.limitations, ["Automated public-web scan only."]);
   assert.equal("rawEvidence" in resource, false);
 });

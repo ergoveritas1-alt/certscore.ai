@@ -753,6 +753,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
     equivalent("international_transfers", "personal information is transferred across borders", "requires_privacy_context"),
     direct("international_transfers", "data transfers to third countries"),
     direct("supervisory_authority", "right to lodge a complaint with a supervisory authority"),
+    direct("supervisory_authority", "complain to the information commissioner's office"),
     direct("supervisory_authority", "lodge a complaint with a supervisory authority"),
     equivalent("supervisory_authority", "lodge a complaint with the national supervisory authority"),
     equivalent("supervisory_authority", "right to complain to your data protection authority"),

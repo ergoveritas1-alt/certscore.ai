@@ -57,7 +57,7 @@ Canonical Light workflow:
 5. Poll `certscore_get_scan_status` using `scanId` only. Never poll until `scanId` exists.
 6. Stop polling at any terminal status. At `completed` or `completed_limited`, call `certscore_get_scan_bundle` before reporting full scan results, and use its final returned tally, canonical findings, and limitations; for other terminal states, follow the returned error guidance.
 7. Use `detail=findings` for a compact finding review.
-8. Use `detail=evidence` for evidence digests and references.
+8. Use `detail=evidence` for finding digests, bounded external-request examples, policy-surface candidates, and references, including when no finding was projected. A request for an external script does not by itself establish tracking; use `certscore_get_report_evidence_page` for deeper retained report evidence.
 9. If truncated, follow `recommendedNextAction` or increase `maxBytes`.
 10. Summarize findings together with coverage limitations and the report URL.
 

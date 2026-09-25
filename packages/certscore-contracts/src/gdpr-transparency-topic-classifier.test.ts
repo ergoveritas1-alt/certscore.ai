@@ -1616,6 +1616,16 @@ test("classifies a possessive data-protection-authority complaint right", () => 
   assert.match(match.evidenceExcerpt, /complain to your data protection authority/i);
 });
 
+test("classifies a direct ICO complaint right with a curly apostrophe", () => {
+  const result = classifyGdprTransparencyTopics({
+    localeHints: ["en"],
+    text: "Privacy notice. You can also complain to the Information Commissioner’s Office about how we handle your personal data.",
+  });
+  const match = result.matches.find((candidate) => candidate.topic === "supervisory_authority");
+  assert.equal(match?.matchStrength, "direct");
+  assert.match(match?.evidenceExcerpt ?? "", /complain to the Information Commissioner['’]s Office/i);
+});
+
 test("classifies retained publisher privacy-counsel and E.U. complaint contacts", () => {
   const result = classifyGdprTransparencyTopics({
     localeHints: ["en"],

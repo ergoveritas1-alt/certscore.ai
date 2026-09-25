@@ -5,13 +5,25 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Versions: `gdpr-eprivacy-posture.v14`, `overall-posture.v5`, and
+Versions: `gdpr-eprivacy-posture.v15`, `overall-posture.v5`, and
 `full-site-distinct-findings.v4`. The California GPC evidence policy remains v1;
 its existing eligible 15-point effect is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
 and stops at 0. Insufficient evidence can withhold a score; it does not imply a
 zero score. Scores are risk signals, not legal certification.
+
+A dismissible cookie information notice alone does not establish an applicable
+Accept/Reject consent choice. A missing Reject finding requires a verified
+choice control or independently classified non-essential activity through the
+canonical concern and checklist path. An incomplete first-layer inspection is
+a coverage limit, not a scored absence.
+
+The canonical report withholds its numeric score when retained runtime or
+critical-coverage confidence is `withheld_incomplete_runtime_coverage` or
+`withheld_incomplete_critical_coverage`. Independently supported findings remain
+visible. Administrative score summaries use the same eligibility rule; older
+retained assessment evidence is not rewritten.
 
 Storage and tracking use 8 for the first eligible identity/vendor, 4 for the
 second, and 2 for each additional, capped independently at 40. Session replay

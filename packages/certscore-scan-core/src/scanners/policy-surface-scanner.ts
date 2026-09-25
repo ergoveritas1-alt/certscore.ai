@@ -2675,7 +2675,7 @@ async function processPolicyCandidate({
   }
   const excerpt = boundedExcerpt(analysisVisibleText, prioritizedExcerptKeywords(deterministic));
   const nanoAnalysisExcerpt = textQuality.usable ? boundedPolicyAnalysisExcerpt(analysisVisibleText) : "";
-  const excerptId = `policy_excerpt_${stableHash(effectiveCandidate.normalizedUrl)}`;
+  const excerptId = `policy_excerpt_${stableHash(effectiveCandidate.normalizedUrl)}_${stableHash(excerpt)}`;
   throwIfAborted(input.signal);
   if (processingProgress) {
     processingProgress.retentionStarted = true;
@@ -3700,7 +3700,10 @@ async function writePolicySurfaceTextArtifact(input: {
     input.policySurfaceTextArtifactBudget.remainingChars - retainedText.length,
   );
 
-  const artifactId = `policy_surface_text_${stableHash(input.candidate.normalizedUrl)}`;
+  // The same URL can be inspected more than once in a bounded policy pass.
+  // Bind the filename to its bytes so a later shell cannot overwrite a
+  // substantive document while the earlier observation retains its pointer.
+  const artifactId = `policy_surface_text_${stableHash(input.candidate.normalizedUrl)}_${stableHash(retainedText)}`;
   const path = await input.artifactWriter.writeTextArtifact(`${artifactId}.txt`, retainedText);
   return {
     artifactRef: {
@@ -6901,7 +6904,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
     disclosureType: "supervisory_authority",
     headingPatterns: [/compliance (?:and|&) cooperation with regulators/i, /regulators/i, /complaints?/i],
     textPatterns: [/formal written complaints?/i, /complaints?/i, /regulatory authorities/i, /local data protection authorities/i, /supervisory authority/i, /data protection authority/i, /unresolved complaints?/i, /resolve/i],
-    observedPattern: /lodge a complaint|complain to (?:a )?(?:supervisory|data protection) authority|supervisory authority|data protection authority/i,
+    observedPattern: /lodge a complaint|complain to (?:a )?(?:supervisory|data protection) authority|complain to (?:the )?information commissioner['’]s office|supervisory authority|data protection authority/i,
     partialPattern: /formal written complaints?|regulatory authorities|local data protection authorities|unresolved complaints?|resolve/i,
   },
   {
@@ -7096,9 +7099,9 @@ function article13SignalsFromText(text: string): Pick<PolicyFacts, "article13Dis
     },
     {
       disclosureType: "supervisory_authority",
-      pattern: /(?:(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)|complain to (?:a )?(?:regulator|authority)|supervisory authority|data protection authority|\bico\b|\bcnil\b|\bdpc\b)/i,
+      pattern: /(?:(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)|complain to (?:a )?(?:regulator|authority)|complain to (?:the )?information commissioner['’]s office|supervisory authority|data protection authority|\bico\b|\bcnil\b|\bdpc\b)/i,
       partialPattern: /(?:compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)|formal written complaints|regulatory authorities|local data protection authorities|unresolved complaints?|regulators?.{0,120}(?:complaints?|authorities|resolve))/i,
-      excerptPatterns: [/(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)/i, /complain to (?:a )?(?:regulator|authority)/i, /compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)/i, /formal written complaints/i, /regulatory authorities/i, /local data protection authorities/i, /unresolved complaints?/i, /supervisory authority/i, /data protection authority/i, /\bico\b/i, /\bcnil\b/i, /\bdpc\b/i],
+      excerptPatterns: [/(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)/i, /complain to (?:the )?information commissioner['’]s office/i, /complain to (?:a )?(?:regulator|authority)/i, /compliance (?:and|&) cooperation with regulators.{0,320}(?:complaints?|regulatory authorities|local data protection authorities|resolve)/i, /formal written complaints/i, /regulatory authorities/i, /local data protection authorities/i, /unresolved complaints?/i, /supervisory authority/i, /data protection authority/i, /\bico\b/i, /\bcnil\b/i, /\bdpc\b/i],
     },
     {
       disclosureType: "automated_decision_making_or_profiling",
@@ -7195,7 +7198,7 @@ function confidenceForArticle13DisclosureSignal(
       if (/\b(?:data protection officer|\bdpo\b)\b/i.test(text)) return 0.9;
       return 0.78;
     case "supervisory_authority":
-      if (/\b(?:(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)|complain to (?:a )?(?:supervisory|data protection) authority|supervisory authority|data protection authority|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text)) return 0.9;
+      if (/\b(?:(?:lodge|file|submit|make) a complaint.{0,160}(?:supervisory authority|data protection authority|information commissioner['’]s office|regulator|authority)|complain to (?:a )?(?:supervisory|data protection) authority|complain to (?:the )?information commissioner['’]s office|supervisory authority|data protection authority|\bico\b|\bcnil\b|\bdpc\b)\b/i.test(text)) return 0.9;
       return 0.66;
     case "automated_decision_making_or_profiling":
       if (/\b(?:solely automated|automated decision(?:-making| making)?.{0,160}(?:legal or similarly significant effects|meaningful information about the logic involved))\b/i.test(text)) return 0.9;

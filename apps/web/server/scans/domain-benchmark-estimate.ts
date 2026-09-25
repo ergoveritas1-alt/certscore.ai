@@ -239,6 +239,19 @@ export function normalizeDomainBenchmarkEstimate(value: unknown): DomainBenchmar
     return null;
   }
 
+  // Domain-only estimates have no page-content provenance. Do not publish a
+  // sensitive site classification or its category-specific tracking priors.
+  if (/\b(?:adult|nsfw|pornograph(?:y|ic)|sexually explicit)\b/i.test(industry)) {
+    return {
+      confidence: "low",
+      estimatedRankLabel: "Unclassified",
+      expectedCookiesBeforeConsent: 2,
+      expectedThirdPartyRequests: 24,
+      industry: "Unclassified public website",
+      rationale: "The domain-only estimate did not establish a verifiable site category."
+    };
+  }
+
   const normalizedCookieEstimate =
     expectedCookiesBeforeConsent === 0 && !shouldAllowZeroCookieEstimate({ industry, rationale })
       ? 2

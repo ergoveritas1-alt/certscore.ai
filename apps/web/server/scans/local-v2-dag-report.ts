@@ -894,6 +894,12 @@ function isReportablePolicySurface(surface: LocalV2PolicySurface) {
 
   if (surface.status === "fetched") {
     const retainedText = firstString(surface.textExcerpt)?.replace(/\s+/g, " ").trim() ?? "";
+    if (surface.surfaceType === "cookie_policy" &&
+      (surface.governingPolicyBodyAssessment?.state === "insufficient" ||
+        (retainedText.length < 120 && (surface.policyCookieDisclosures ?? []).length === 0))) {
+      // A fetched route or site-title shell is not a retained cookie policy.
+      return false;
+    }
     return retainedText.length > 0 ||
       (surface.observedTopics ?? []).length > 0 ||
       (surface.article13DisclosureSignals ?? []).length > 0 ||
@@ -1237,6 +1243,16 @@ function resolvePolicySurfaceTextEvidence(
   }
   const retained = context?.artifactsById?.get(reference.artifactId);
   if (retained) {
+    const expectedChars = surface.documentTextCoverage?.retainedTextChars;
+    if (retained.text !== undefined && expectedChars !== undefined &&
+      retained.text.length !== expectedChars) {
+      return {
+        ...retained,
+        text: undefined,
+        verificationStatus: "verification_failed",
+        failureReason: "policy_text_artifact_length_mismatch",
+      };
+    }
     return retained;
   }
   const resolved = resolvePolicyTextArtifactPath(reference.artifactPath, context?.localOutDir);
