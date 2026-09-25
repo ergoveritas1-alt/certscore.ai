@@ -23,5 +23,6 @@ export function buildGpcResponseReportProjection(
     ].filter((value, index, values) => Boolean(value) && values.indexOf(value) === index).slice(0, 32),
     headline: projection.headline,
     summary: projection.summary,
+    observedFacts: projection.observedFacts,
   };
 }

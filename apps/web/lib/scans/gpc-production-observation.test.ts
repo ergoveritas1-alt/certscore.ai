@@ -31,6 +31,9 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
   assert.equal(projection.headline, "Observation complete");
   assert.equal(projection.comparisonHeadline, "Comparison incomplete");
   assert.equal(projection.californiaDeductionPoints, 0);
+  assert.equal(projection.observedFacts[0]?.value, "1 tracking request observed with GPC");
+  assert.equal(projection.assessment.status, "indeterminate");
+  assert.deepEqual(buildGpcResponseReportProjection(findings)?.observedFacts, projection.observedFacts);
   assert.match(projection.summary, /observation completed/);
   assert.match(projection.summary, /1 classified/);
   assert.doesNotMatch(projection.summary, /honored|compliant|violation/i);

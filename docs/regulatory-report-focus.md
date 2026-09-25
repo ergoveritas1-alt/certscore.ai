@@ -101,3 +101,18 @@ tested that decision against 306 completed historical scans. Only two had a
 determinate comparison with qualifying advertising/marketing activity. It
 recommends retaining the four evidence checks and existing GPC rule, with no
 standalone numeric CCPA score until the missing behavior can be assessed.
+
+## GPC results presentation
+
+Lead with facts from the existing canonical GPC observation: classified tracking
+requests, page/browser signal delivery, readable site-recorded sale/sharing
+opt-out states, GPC receipt and visible acknowledgment. Unknown fields do not
+become repetitive result cards. Positive retained facts remain visible when the
+paired comparison is indeterminate; a zero-request statement requires complete
+observation coverage. Recorded opt-out state does not imply that GPC caused it.
+
+The report headline, CCPA focus link and evidence card use those observations.
+Comparison diagnostics remain in an expandable section; PDF exports also put
+the observed facts first. Existing canonical findings, comparison outcomes,
+historical evidence and scoring remain unchanged. This presentation change adds
+no capture work, model call, persistence or recurring cost ($0/month).

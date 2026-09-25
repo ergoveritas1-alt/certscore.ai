@@ -1,5 +1,6 @@
 import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
+import { GpcObservedFacts } from "../gpc-observed-facts";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
@@ -518,10 +519,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
               <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-800">
-                  {report.gpcResponse.headline}
-                  {report.gpcResponse.assessment.contractVersion === "certscore.gpc-response-assessment.v3"
-                    ? ` · ${report.gpcResponse.comparisonHeadline}`
-                    : ""}
+                  {report.gpcResponse.observedFacts[0]?.value ?? report.gpcResponse.headline}
                 </span>
                 {report.gpcResponse.californiaDeductionPoints > 0 ? (
                   <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
@@ -532,6 +530,9 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
               </span>
             </summary>
             <div className="mt-3 space-y-2.5">
+              <GpcObservedFacts facts={report.gpcResponse.observedFacts} />
+              <details className="text-xs text-zinc-600">
+                <summary className="cursor-pointer font-semibold">Comparison details</summary>
               <p className="text-xs leading-5 text-zinc-600">{report.gpcResponse.summary}</p>
               <p className="text-xs leading-5 text-zinc-600">
                 <span className="font-semibold text-zinc-800">Sec-GPC request evidence:</span> {report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc} retained request{report.gpcResponse.assessment.comparison.enabledProof.requestsWithSecGpc === 1 ? "" : "s"}; main-document browser property: {report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl === null ? "unverified" : String(report.gpcResponse.assessment.comparison.enabledProof.navigatorGlobalPrivacyControl)}.
@@ -541,6 +542,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
               ) : null}
               <p className="text-xs leading-5 text-zinc-600"><strong>Site response:</strong> {report.gpcResponse.comparisonHeadline}. {report.gpcResponse.coverageSummary}</p>
               <GpcComparisonGrid projection={report.gpcResponse} />
+              </details>
               <div className="flex flex-wrap items-center justify-between gap-2 text-[0.68rem] leading-4 text-zinc-500">
                 <span>
                   {report.gpcResponse.californiaDeductionPoints > 0
@@ -1507,13 +1509,18 @@ function GpcEvidenceIndexCard({ projection, homepage = false, expanded = false }
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-zinc-500">GPC observation and comparison{homepage ? " · Starting page" : ""}</p>
-          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{projection.headline}</h3>
+          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{projection.observedFacts[0]?.value ?? projection.headline}</h3>
         </div>
         <span className="flex shrink-0 items-center">
           <DisclosureChevron className="text-zinc-400 group-open/gpc:rotate-180" />
         </span>
       </summary>
       <div className="mt-5 space-y-5">
+        <GpcObservedFacts facts={projection.observedFacts} />
+        {projection.californiaDeductionPoints > 0 ? <p className="text-sm font-semibold text-rose-800">California policy · −{projection.californiaDeductionPoints} points</p> : null}
+        <details className="text-sm text-zinc-600">
+          <summary className="cursor-pointer font-semibold">Comparison details</summary>
+          <div className="mt-4 space-y-5">
         <p className="max-w-3xl text-sm leading-6 text-zinc-600">{projection.summary}</p>
         <p className="max-w-3xl text-sm leading-6 text-zinc-700"><strong>Site response:</strong> {projection.comparisonHeadline}. {projection.coverageSummary}</p>
         {projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? (
@@ -1569,6 +1576,8 @@ function GpcEvidenceIndexCard({ projection, homepage = false, expanded = false }
         {projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v1" ? (
           <p className="text-xs leading-5 text-zinc-600">Cookie/storage and CMP identity differences are descriptive snapshots. The response uses classified activity within the matched window, not an inferred consent decision.</p>
         ) : null}
+          </div>
+        </details>
         <details className="group/gpc-json border border-zinc-200 p-4">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
             Typed comparison evidence
@@ -1794,7 +1803,7 @@ export function ShadowScanReport({
   const focus = resolveReportReviewFocus(reviewFocus, sourceReport.scan.originCode);
   const report = sourceReport.resultDisposition === "no_go" ? sourceReport : { ...sourceReport, reviewFocus: focus,
     scan: { ...sourceReport.scan, reportUrl: reportUrlWithFocus(sourceReport.scan.reportUrl ?? `/scan/${sourceReport.scan.id}`, focus) } };
-  const focusControl = report.resultDisposition === "no_go" ? null : <RegulatoryReviewFocus focus={focus} scanFrom={report.scan.originCode} gpcSummary={report.gpcResponse?.comparisonHeadline} />;
+  const focusControl = report.resultDisposition === "no_go" ? null : <RegulatoryReviewFocus focus={focus} scanFrom={report.scan.originCode} gpcSummary={report.gpcResponse?.observedFacts[0]?.value ?? report.gpcResponse?.headline} />;
   const homepageContent = report.resultDisposition === "no_go" ? (
     <main className="mx-auto max-w-7xl space-y-8 px-5 py-10 lg:px-10">
       <ReportIdentity enhancedActions allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />
