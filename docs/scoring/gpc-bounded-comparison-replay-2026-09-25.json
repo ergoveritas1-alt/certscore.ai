@@ -1,0 +1,679 @@
+{
+  "artifactVersion": "certscore.gpc-bounded-replay-review.v1",
+  "internalOnly": true,
+  "productionProjectable": false,
+  "scoreEffect": "none",
+  "cohortSha256": "539e9a5995eb121af6474e4c21a4093b865ec6ffb536150d7ed691131d3c5be8",
+  "manifestSha256": "9235f701c1036695015b8884e3312ee47014982da6455cf05a626f7e72a88f3d",
+  "replaySha256": "1c92bb620c19aa8f9f43abafc7bfdc1f9cedac4ab7733a974f57644346aae4e4",
+  "summary": {
+    "submittedRows": 307,
+    "locallyRetainedPairs": 28,
+    "missingLocalPairs": 279,
+    "measured": 12,
+    "availableButUnmeasured": 16,
+    "previouslyIndeterminateNowMeasured": 7,
+    "publicMeasured": 11,
+    "ownedCanaryMeasured": 1,
+    "recoveredOutcomes": {
+      "no_activity_observed": 5,
+      "unchanged": 2
+    }
+  },
+  "measurements": [
+    {
+      "scanId": "203c263a-1f68-493c-92c3-b23c26bdd326",
+      "hostname": "scoopzapp.com",
+      "storedResponse": "indeterminate",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "e120f31b01a9e0bec54d9972890c3202d88075cb25d4da065b1164b8a0168af9",
+        "gpc": "33aab21758a016af9c0851296efc059ab629034a4382633112bb7e9b94b13020"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "81615e66-d805-44f0-bb3d-7f0574d77cc2",
+      "hostname": "pawns.app",
+      "storedResponse": "indeterminate",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "8811e8ba13d53e08ca1a1674d227e99b5cc677d9f4486453e8aa64488d68c6ea",
+        "gpc": "523649cb9f415b337abb2ed736686e720daff507456927ae6f99685443166079"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "294625c5-a595-4886-a83c-aced2b614f44",
+      "hostname": "cdp.net",
+      "storedResponse": "indeterminate",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "23419d02ba23a73a8bd44d8c7750ee0374da90eed4727df23483f82d2d75a94f",
+        "gpc": "bf7dec1dd6acf8f71eaad0af16064b3d4dfccceddd56090b7c7f405b93f686cf"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "dbcd475b-421f-45f3-b9c7-9bc6302242bc",
+      "hostname": "doxycare.shop",
+      "storedResponse": "no_observable_response",
+      "durationMs": 500,
+      "sourceHashes": {
+        "baseline": "b5f44c5ef77ab8ad66a4c1128dabdbb565223fa7eb407ee59b4629ed4dd8e582",
+        "gpc": "585f72ed8caa500d385eff86c0c9393cb7091a762b5f46b2370b29a2ff17dcda"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 1,
+          "gpcCount": 1,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 1,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 1,
+          "gpcRequests": 1,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 1,
+          "gpcCount": 1,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 1,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 1,
+          "gpcRequests": 1,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "0b314613-f99a-4056-ad49-990a2a2532e7",
+      "hostname": "secured-internet.com",
+      "storedResponse": "no_observable_response",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "fbb04e37eca133e1d3e729b5d919c550ca642a787f8a4fe817e8746f015309e6",
+        "gpc": "26999762d2bbbfde5125e1a7c8654505c1a99e2ea2d4dce9b34e535bcbb6f797"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "bffe489f-6d41-4f22-9169-878f9ecebcb3",
+      "hostname": "antgain.app",
+      "storedResponse": "indeterminate",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "9c98340a63e5c24365c9e4c58391cae863bea922d7b111258f291b184ceb9f32",
+        "gpc": "9d99f66bf6f37bae8966213f388bf03654e2b5da0dcfdc39f6cedd0aa2afd188"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "560836f8-0152-4b44-b17d-68347ead4729",
+      "hostname": "mynewsdesk.com",
+      "storedResponse": "no_observable_response",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "6469e1bb09ec31db3cebbbf424b7dfc3d72787bef06ec9bcfbce003b1a420245",
+        "gpc": "c713eb33c07de4cc4cbd544308974cb9655821017588c3fef4eb741b8a3eb5a0"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "907d15a1-bec9-4265-af65-d42fe2d726bf",
+      "hostname": "ergoveritas.com",
+      "storedResponse": "responsive",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "45126273d54a3af307ace6c4811d0361ce4ed13839f2fe95e2dea3fbfbf7e3fe",
+        "gpc": "da4a17ce38d2410c31e292ac456cb4dd6753a4eb99e4bd384523a434fb3ccfc7"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 2,
+          "gpcCount": 2,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 2,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 3,
+          "gpcRequests": 3,
+          "baselineCollectionRequests": 3,
+          "gpcCollectionRequests": 3
+        },
+        "trackers": {
+          "baselineCount": 2,
+          "gpcCount": 2,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 2,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 3,
+          "gpcRequests": 3,
+          "baselineCollectionRequests": 3,
+          "gpcCollectionRequests": 3
+        }
+      }
+    },
+    {
+      "scanId": "855c2806-ee28-4d3a-a344-f6775b829bfe",
+      "hostname": "wilhelm-erl.de",
+      "storedResponse": "no_observable_response",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "7b17a102c69ab17d94df180fe9bd704283dca2847c82a00e43d1dd19d21a2c96",
+        "gpc": "3ab81e9d8965e7fd8bb6cd741ba945f5d2943b81abf2e3d20cf804e6d3a95f2a"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "c9bcaece-dbb7-4b3a-a565-a42041cafde5",
+      "hostname": "chartink.com",
+      "storedResponse": "indeterminate",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "3c9c1d8bfe1e9e6b8d760c8a062bd9c7ebf78cc45509c9d6c8d5bbd5faf188e5",
+        "gpc": "eed5d63fec7e62817d992f0b97260933f6f7afa4c21b75f13772d76638227b50"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    },
+    {
+      "scanId": "e70dcc81-8ef2-49c3-81e1-2fbfc70bb621",
+      "hostname": "trenitalia.com",
+      "storedResponse": "indeterminate",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "fef6c6e3cd2fb3ef447bc4b1b14af505cb4ec507842fe16b8b300cb5bf258823",
+        "gpc": "8c732a03266009eca78c0e94d3d6393364920d35ab08a47342d8482879f7353b"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 1,
+          "gpcCount": 1,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 1,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 1,
+          "gpcRequests": 1,
+          "baselineCollectionRequests": 1,
+          "gpcCollectionRequests": 1
+        },
+        "analyticsReplay": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 1,
+          "gpcCount": 1,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 1,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 1,
+          "gpcRequests": 1,
+          "baselineCollectionRequests": 1,
+          "gpcCollectionRequests": 1
+        }
+      }
+    },
+    {
+      "scanId": "ca2093f1-e4ba-4f53-9880-efcfe05bc8a8",
+      "hostname": "ourworldindata.org",
+      "storedResponse": "indeterminate",
+      "durationMs": 1000,
+      "sourceHashes": {
+        "baseline": "03ea004c38f19ed22568c051eadd661064ff7607c522712a5665f6e5c45ede08",
+        "gpc": "38b24a4f5dc8f68c82d68c48d4d5eec2ee504ffb0474086d6cf4d31b5460b138"
+      },
+      "activity": {
+        "advertisingMarketing": {
+          "baselineCount": 0,
+          "gpcCount": 0,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 0,
+          "netChange": 0,
+          "relativeReduction": null,
+          "outcome": "no_activity_observed",
+          "baselineRequests": 0,
+          "gpcRequests": 0,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "analyticsReplay": {
+          "baselineCount": 1,
+          "gpcCount": 1,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 1,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 1,
+          "gpcRequests": 1,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        },
+        "trackers": {
+          "baselineCount": 1,
+          "gpcCount": 1,
+          "removedCount": 0,
+          "newCount": 0,
+          "sharedCount": 1,
+          "netChange": 0,
+          "relativeReduction": 0,
+          "outcome": "unchanged",
+          "baselineRequests": 1,
+          "gpcRequests": 1,
+          "baselineCollectionRequests": 0,
+          "gpcCollectionRequests": 0
+        }
+      }
+    }
+  ],
+  "verification": {
+    "focusedTestsPassed": 17,
+    "localBusyPageBrowserTestPassed": true,
+    "publicScansRun": 0,
+    "productionChanged": false
+  }
+}

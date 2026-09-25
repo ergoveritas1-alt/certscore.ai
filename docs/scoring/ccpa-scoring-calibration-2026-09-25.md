@@ -79,6 +79,11 @@ Those are not recoverable by relaxing settling alone. The existing policy also
 notes that old quiet-gate timeout metadata cannot prove in-flight completion;
 elapsed time alone must not be treated as proof that the page settled.
 
+The [bounded-comparison follow-up](gpc-bounded-comparison-proposal.md) verified
+that the existing internal comparator already avoids the quiet gate. It recovered
+seven measurements from the 28 available retained pairs. Its short windows should
+supplement full-session observations, not replace them.
+
 ## Small rubric to use now
 
 | Check | Keep visible | Scoring treatment |
