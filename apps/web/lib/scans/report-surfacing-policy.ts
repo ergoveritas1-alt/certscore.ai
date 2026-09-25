@@ -10,7 +10,8 @@ import {
   REJECT_TRACKING_CONFIRMATION_MIN_MS_LABEL
 } from "./reject-tracking-policy";
 import {
-  evaluateFindingEvidenceContractForPacket
+  evaluateFindingEvidenceContractForPacket,
+  isFindingProjectionEligible
 } from "./finding-evidence-contracts";
 import {
   deriveFingerprintEvidenceTier,
@@ -1454,54 +1455,10 @@ function hasSpecificPreconsentEvidence(packet: UnifiedFindingPacket) {
   if (packet.unifiedFindingId !== "preconsent_tracking" || packet.details?.family !== "consent_tracking") {
     return false;
   }
-
-  const hasBeforeConsentCookieWriteEvidence =
-    (packet.evidence?.entities?.preconsent_cookie_timing_evidence ?? []).some((value) =>
-      value === "before_consent_cookie_write"
-    ) ||
-    (packet.evidence?.entities?.preconsentCookieTimingEvidence ?? []).some((value) =>
-      value === "before_consent_cookie_write"
-    );
-  const hasPreconsentCookieEvidence =
-    hasBeforeConsentCookieWriteEvidence &&
-    (
-      (packet.evidence?.entities?.preconsent_nonessential_cookie_names?.length ?? 0) > 0 ||
-      (packet.evidence?.entities?.preconsentNonessentialCookieNames?.length ?? 0) > 0 ||
-      (
-        ((packet.evidence?.entities?.preconsent_cookie_names?.length ?? 0) > 0 ||
-          (packet.evidence?.entities?.preconsentCookieNames?.length ?? 0) > 0) &&
-        ((packet.evidence?.entities?.preconsent_cookie_categories ?? []).some((value) =>
-          /analytics|advertising|marketing|retargeting|session_replay/i.test(value)
-        ) ||
-          (packet.evidence?.entities?.preconsentCookieCategories ?? []).some((value) =>
-            /analytics|advertising|marketing|retargeting|session_replay/i.test(value)
-          ))
-      )
-    );
-  const retainedRuntimeVendors = getEvidenceEntityValuesForKeys(packet, [
-    "runtimeVendors",
-    "runtime_vendors",
-    "preconsent_tracker_vendors",
-    "preconsentTrackerVendors"
-  ]);
-  const retainedRuntimeUrls = getEvidenceEntityValuesForKeys(packet, [
-    "runtimeRequestUrls",
-    "runtime_request_urls",
-    "preconsent_tracker_evidence_urls",
-    "preconsentTrackerEvidenceUrls"
-  ]);
-  const hasVendors = (packet.details.vendors ?? []).some((value) => typeof value === "string" && value.trim().length > 0) ||
-    retainedRuntimeVendors.length > 0;
-  const hasUrls = (packet.details.requestUrls ?? []).some(isConcreteHttpEvidenceUrl) ||
-    retainedRuntimeUrls.some(isConcreteHttpEvidenceUrl);
-  const hasRuntimeOrValidationBacking =
-    packet.confidenceInputs.hasDirectRuntimeEvidence || packet.confidenceInputs.hasStructuredValidationEvidence;
-  const hasRetainedPreconsentSequence =
-    packet.concernContext?.negativeEvidenceFlags?.includes("missing_preconsent_sequence_evidence") !== true ||
-    (packet.evidence?.entities?.consentTimeline?.length ?? 0) > 0 ||
-    (packet.evidence?.entities?.requestPurposeClassificationConfidence?.length ?? 0) > 0;
-
-  return hasRuntimeOrValidationBacking && ((hasVendors && hasUrls && hasRetainedPreconsentSequence) || hasPreconsentCookieEvidence);
+  // Use the same canonical contract as executive/checklist projection. Vendor
+  // URLs, serialized timeline fields, or absent negative flags must not bypass
+  // an audit-only concern or the contract's required strong evidence tier.
+  return isFindingProjectionEligible({ lane: "executive", packet });
 }
 
 function hasSpecificConsentGatedRuntimeEvidence(packet: UnifiedFindingPacket) {

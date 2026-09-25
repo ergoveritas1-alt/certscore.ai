@@ -3,8 +3,23 @@ import test from "node:test";
 import {
   buildDomainBenchmarkEstimateFromMacroEnrichment,
   getDomainBenchmarkEstimateOverride,
+  normalizeDomainBenchmarkEstimate,
   shouldPreferMacroBenchmarkEstimate
 } from "./domain-benchmark-estimate";
+
+test("domain-only sensitive classification fails closed to neutral benchmark context", () => {
+  assert.deepEqual(normalizeDomainBenchmarkEstimate({
+    industry: "Adult/NSFW content or adult community (likely hosted subpage)",
+    rationale: "The name backroom suggests adult content.", confidence: "medium",
+    estimatedRankLabel: "Top 1M", expectedThirdPartyRequests: 35,
+    expectedCookiesBeforeConsent: 3
+  }), {
+    confidence: "low", estimatedRankLabel: "Unclassified",
+    expectedCookiesBeforeConsent: 2, expectedThirdPartyRequests: 24,
+    industry: "Unclassified public website",
+    rationale: "The domain-only estimate did not establish a verifiable site category."
+  });
+});
 
 test("buildDomainBenchmarkEstimateFromMacroEnrichment maps ABC-style media publishers", () => {
   const estimate = buildDomainBenchmarkEstimateFromMacroEnrichment({

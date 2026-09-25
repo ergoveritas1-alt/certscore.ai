@@ -3313,6 +3313,18 @@ test("policy section graph uses the same typed extraction path for English and F
   }
 });
 
+test("a named ICO complaint right survives section evidence extraction", () => {
+  const sourceUrl = "https://example.test/privacy";
+  const sentence = "You can also complain to the Information Commissioner’s Office about our handling of your personal data.";
+  const sections = extractPolicySections({
+    locale: "en", sourceUrl,
+    html: `<main><h2>Your rights</h2><p>${sentence}</p></main>`,
+    visibleText: `Privacy policy. Your rights. ${sentence}`,
+  });
+  const evidence = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl);
+  assert.equal(evidence.find((row) => row.coverageArea === "supervisory_authority")?.signalObserved, "observed");
+});
+
 test("policy section graph prefers a substantive repeated flat-text section over an earlier contents label", () => {
   const phrase = "Base juridique du traitement des données personnelles";
   const visibleText = [

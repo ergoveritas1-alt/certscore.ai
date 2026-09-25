@@ -313,6 +313,43 @@ export function buildSanitizedRequestEvidenceRows(
   });
 }
 
+/** Request facts that remain useful when no purpose classification was retained. */
+export function buildUnclassifiedExternalRequestRows(
+  hybridRuntimeEvidence: Record<string, unknown> | null | undefined
+) {
+  const classified = new Set(getObjectArray(
+    hybridRuntimeEvidence?.requestPurposeClassificationConfidence ??
+    hybridRuntimeEvidence?.request_purpose_classification_confidence
+  ).map(row => {
+    const url = sanitizedEvidenceUrl(getOptionalString(row, "requestUrl"));
+    const host = normalizeInventoryHostname(url ?? getOptionalString(row, "hostname"));
+    const path = url ? new URL(url).pathname : getOptionalString(row, "pathSample");
+    return `${host ?? ""}|${path ?? ""}`;
+  }));
+  return getObjectArray(
+    hybridRuntimeEvidence?.requestObservations ?? hybridRuntimeEvidence?.request_observations
+  ).filter(row => row.thirdParty === true).flatMap(row => {
+    const requestUrl = getOptionalString(row, "requestUrl") ?? getOptionalString(row, "url");
+    const sanitized = sanitizedEvidenceUrl(requestUrl);
+    if (!sanitized) return [];
+    const endpoint = new URL(sanitized);
+    if (endpoint.protocol !== "https:" && endpoint.protocol !== "http:") return [];
+    const hostname = normalizeInventoryHostname(sanitized);
+    if (!hostname) return [];
+    // Only expose a short static resource name from otherwise unclassified URLs.
+    // Arbitrary path segments can contain account IDs or access tokens.
+    const path = /^\/[a-z][a-z0-9._-]{0,60}\.(?:js|css|png|svg|woff2?)$/i.test(endpoint.pathname)
+      ? endpoint.pathname : null;
+    if (classified.has(`${hostname}|${endpoint.pathname}`)) return [];
+    return [{
+      hostname,
+      path,
+      resourceType: getOptionalString(row, "resourceType"),
+      observedAtMs: getOptionalNumber(row, "timestampMs"),
+    }];
+  });
+}
+
 export function buildPreConsentDataFlows(
   hybridRuntimeEvidence: Record<string, unknown> | null | undefined
 ): PreConsentDataFlow[] {

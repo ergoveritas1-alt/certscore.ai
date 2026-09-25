@@ -986,7 +986,7 @@ test("canonical consent-control flow projects UniConsent accept/options evidence
   assert.match(story.rejectRow.limitation ?? "", /no same-layer reject/i);
 });
 
-test("canonical consent-control flow projects dismiss-only evidence through every policy boundary", () => {
+test("an informational dismiss-only notice does not produce a refusal finding", () => {
   const story = projectConsentStory({
     firstLayerControls: [{
       actionType: "other",
@@ -1008,13 +1008,24 @@ test("canonical consent-control flow projects dismiss-only evidence through ever
   assert.equal(story.assessment.controls.accept.state, "not_observed");
   assert.equal(story.assessment.controls.reject.state, "not_observed");
   assert.equal(story.assessment.controls.options.state, "not_observed");
+  assert.equal(dismissConcern, undefined);
+  assert.equal(unifiedCandidates.length, 0);
+  assert.notEqual(story.rejectRow.status, "Gap observed");
+  assert.equal(story.rejectScore.score, 100);
+});
+
+test("a verified accept choice with dismissal and no reject remains reviewable", () => {
+  const story = projectConsentStory({
+    firstLayerControls: [
+      { actionType: "accept_all", label: "Accept all" },
+      { actionType: "other", classifierReasonCodes: ["matched_dismiss", "match_strength_direct"], label: "Close", matchedTerm: "close", semanticRole: "dismiss" }
+    ]
+  });
+  const dismissConcern = story.normalizedConcerns.find((concern) =>
+    concern.originKey === "consent.dismiss_without_reject.complete_first_layer"
+  );
   assert.ok(dismissConcern);
   assert.equal(dismissConcern.regulatoryChecklistEligibility, "review_signal");
-  assert.equal(dismissConcern.promotionEligibility, "eligible");
-  assert.equal(
-    unifiedCandidates[0]?.normalizedConcern.suggestedUnifiedFindingId,
-    "dismiss_without_reject"
-  );
   assert.equal(story.rejectRow.status, "Review signal");
 });
 

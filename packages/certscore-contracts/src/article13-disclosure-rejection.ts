@@ -523,7 +523,7 @@ function assessPolicyTextQuality(
     reason = "low_quality_extracted_code_or_config";
   } else if (normalized.length >= 500 && alphabeticWordRatio < 0.42) {
     reason = "low_quality_extracted_code_or_config";
-  } else if (normalized.length >= 500 && hasDelayedCanonicalPolicyLabel) {
+  } else if (normalized.length >= 500 && hasDelayedCanonicalPolicyLabel && gdprTransparencyTopicMatchCount < 2) {
     reason = "low_quality_non_policy_text";
   } else if (
     normalized.length >= 500 &&

@@ -2587,7 +2587,7 @@ test("keeps RTB sync request URLs out of scanned page context", () => {
   assert.equal(JSON.parse(packet?.evidence?.entities?.rtbCookieSyncEvidence?.[0] ?? "{}").scannedPageUrl, "https://www.eonline.com/");
 });
 
-test("retains pre-consent cookie timing evidence on unified finding packets", () => {
+test("retains legacy cookie timing evidence without bypassing canonical tracking eligibility", () => {
   const [packet] = buildUnifiedFindingDisplayPackets({
     reviewFindingCandidates: [
       {
@@ -2652,7 +2652,7 @@ test("retains pre-consent cookie timing evidence on unified finding packets", ()
     "https://www.google-analytics.com/analytics.js"
   ]);
   assert.deepEqual(packet?.evidence?.entities?.preconsent_cookie_timing_evidence, ["before_consent_cookie_write"]);
-  assert.equal(packet?.surfacingDecision.decisionState, "confirmed");
+  assert.equal(packet?.surfacingDecision.decisionState, "suppressed");
 });
 
 test("keeps blocked contact-path evidence audit-only and strips interstitial snippets", () => {

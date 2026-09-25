@@ -2448,6 +2448,7 @@ function getConsentDismissWithoutRejectChecklistEligibility(input: {
   return ((input.rawEvidence?.consentControlAssessmentStatus === "complete" && input.rawEvidence?.consentControlCoverageStatus === "complete") ||
       (input.rawEvidence?.consentControlAssessmentContractVersion === "2.2" && input.rawEvidence?.consentRejectInspectionComplete === true)) &&
     input.rawEvidence?.firstLayerRejectState === "not_observed" &&
+    input.rawEvidence?.firstLayerAcceptState === "observed" &&
     input.rawEvidence?.dismiss_without_reject === true
       ? "review_signal"
       : "none";
@@ -3959,7 +3960,10 @@ export function deriveConcernPolicy(input: {
     const hasStrongConsentTimingEvidence = consentSurfaceObserved === true && consentActionableChoiceObserved === true;
 
     return {
-      allowedNarrativeTier: hasStrongConsentTimingEvidence ? "strong" : "moderate",
+      // Preserve the contract's proof for a complete no-surface inspection too;
+      // a visible CMP is not required when the retained sequence is strong.
+      allowedNarrativeTier: findingEvidenceContractDecision?.allowedNarrativeTier ??
+        (hasStrongConsentTimingEvidence ? "strong" : "moderate"),
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "eligible"

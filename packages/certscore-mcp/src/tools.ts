@@ -681,6 +681,18 @@ function bundleEvidenceSummary(
   links: Record<string, unknown>,
   includeDiagnostics: boolean
 ) {
+  const inventory = evidence.unclassifiedExternalRequests;
+  const requestRows = Array.isArray(inventory)
+    ? inventory
+    : inventory && typeof inventory === "object" && Array.isArray((inventory as Record<string, unknown>).items)
+      ? (inventory as { items: unknown[] }).items
+      : [];
+  const externalRequests = requestRows.filter((value): value is Record<string, unknown> =>
+    Boolean(value) && typeof value === "object" && !Array.isArray(value) && typeof value.hostname === "string");
+  const policyInventory = evidence.policySurfaceCoverage;
+  const policyRows = policyInventory && typeof policyInventory === "object" && Array.isArray((policyInventory as Record<string, unknown>).items)
+    ? (policyInventory as { items: unknown[] }).items
+    : [];
   const digests = findings.slice(0, 3).map((finding) => {
     const findingEvidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
       ? finding.evidence as Record<string, unknown>
@@ -701,7 +713,19 @@ function bundleEvidenceSummary(
   });
   return {
     digests,
-    evidenceAvailable: digests.length > 0 || Object.keys(evidence).length > 0,
+    evidenceAvailable: digests.length > 0 || externalRequests.length > 0 || policyRows.length > 0 || Object.keys(evidence).length > 0,
+    ...(externalRequests.length ? { externalRequestSample: externalRequests.slice(0, 3).map(row => ({
+      host: row.hostname ?? null,
+      path: row.path ?? null,
+      resourceType: row.resourceType ?? null,
+      observedAtMs: row.observedAtMs ?? null,
+      interpretation: "External request observed; purpose and data transmission not established by this row."
+    })), externalRequestSampleTotal: externalRequests.length } : {}),
+    ...(policyRows.length ? { policySurfaceCandidates: policyRows.slice(0, 3).flatMap(value => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+      const row = value as Record<string, unknown>;
+      return typeof row.url === "string" ? [{ type: row.type ?? null, url: row.url }] : [];
+    }), policyEvidenceNextStep: "For a policy passage, use certscore_get_report_evidence_page with this scanId and inspect the report's retained policy evidence." } : {}),
     evidenceSafetyNotes: Array.isArray(evidence.evidenceSafetyNotes)
       ? evidence.evidenceSafetyNotes.slice(0, 3).map((note) => boundedText(note, 300))
       : [],
@@ -1478,7 +1502,18 @@ export function scanBundleText(bundle: Record<string, any>, options: { lightTria
     ? bundle.coverage as Record<string, unknown>
     : null;
   if (coverage) {
-    append(`Coverage: status=${coverage.status ?? "unknown"}; ${coverage.summary ?? "Review limitations before interpreting absence."}`);
+    append(`Coverage: ${coverage.scopeSummary ?? coverage.summary ?? "Review limitations before interpreting absence."}`);
+  }
+  const counts = bundle.summary?.counts;
+  if (counts && typeof counts === "object" && Number.isInteger(counts.thirdPartyDomainsObserved) && Number.isInteger(counts.classifiedTrackerVendors)) {
+    append(`Observed external domains: ${counts.thirdPartyDomainsObserved}; classified tracker vendors: ${counts.classifiedTrackerVendors}. External contact alone does not establish tracking.`);
+  }
+  if (bundle.detail === "evidence" || bundle.detail === "full") {
+    const sample = bundle.evidenceSummary?.externalRequestSample;
+    if (Array.isArray(sample) && sample.length > 0) {
+      const first = sample[0];
+      append(`Retained external request: ${first.host ?? "unknown host"}${first.path ?? ""}${first.resourceType ? ` (${first.resourceType})` : ""}. Purpose was not established by this request.`);
+    }
   }
   const gpcResponse = bundle.gpcResponse && typeof bundle.gpcResponse === "object" && !Array.isArray(bundle.gpcResponse)
     ? bundle.gpcResponse as Record<string, any>

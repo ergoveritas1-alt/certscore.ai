@@ -7172,7 +7172,7 @@ test("canonical A/R/O checklist rows fail closed when the normalized inventory c
   assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /normalized control-inventory concern/i);
 });
 
-test("complete dismiss-only assessment projects reject as a partial concern", () => {
+test("complete dismiss-only notice leaves Reject applicability unresolved", () => {
   const assessment = makeCanonicalConsentAssessment({
     controls: [{ actionType: "other", intent: "dismiss", label: "Close" }],
   });
@@ -7191,12 +7191,8 @@ test("complete dismiss-only assessment projects reject as a partial concern", ()
   assert.equal(assessment.controls.accept.state, "not_observed");
   assert.equal(assessment.controls.reject.state, "not_observed");
   assert.equal(assessment.controls.options.state, "not_observed");
-  assert.ok(dismissConcern);
-  assert.equal(dismissConcern.suggestedUnifiedFindingId, "dismiss_without_reject");
-  assert.equal(dismissConcern.regulatoryChecklistEligibility, "review_signal");
-  assert.equal(dismissConcern.promotionEligibility, "eligible");
-  assert.equal(outcomes.reject_all_path_availability?.status, "Review signal");
-  assert.match(outcomes.reject_all_path_availability?.limitation ?? "", /dismissal control/i);
+  assert.equal(dismissConcern, undefined);
+  assert.notEqual(outcomes.reject_all_path_availability?.status, "Gap observed");
   assert.equal(outcomes.accept_consent_control?.status, "Not observed");
   assert.equal(outcomes.options_settings_preferences_control?.status, "Not observed");
 });

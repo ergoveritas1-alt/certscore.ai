@@ -10,6 +10,7 @@ import {
 } from "../../lib/scans/admin-evidence-matrix";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { hydrateChecklistPolicyEvidence } from "../../lib/scans/checklist-evidence-index";
+import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import { getAnonymousScanById, getScanById } from "../scans/get-scan-by-id";
 import type { PublicScanRecord } from "../scans/get-public-scan-record";
 import { trancoRankFromScanConfig } from "../scans/tranco-rank-metadata";
@@ -242,7 +243,10 @@ export async function persistAdminScanSummaryForPublishedRecord(
     scanOutcome:
       recordString(snapshot, "scan_outcome") ??
       (resultDisposition === "no_go" ? null : "completed_partial"),
-    score: noGo.isNoGo ? null : recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
+    score: resolveScanReportScore(
+      { runtimeArtifacts, snapshot },
+      noGo.isNoGo ? null : recordNumber(reportSummary, "score") ?? recordNumber(snapshot, "certscore_overall"),
+    ),
     topFindingIds: noGo.isNoGo ? [] : topFindingIds,
     topFindingCount: noGo.isNoGo ? 0 : topFindingIds.length
   };

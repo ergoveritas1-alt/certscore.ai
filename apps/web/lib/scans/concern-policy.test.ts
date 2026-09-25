@@ -3132,7 +3132,7 @@ test("deriveConcernPolicy promotes non-essential pre-consent cookie timing evide
     }
   });
 
-  assert.equal(policy.allowedNarrativeTier, "moderate");
+  assert.equal(policy.allowedNarrativeTier, "strong");
   assert.equal(policy.promotionEligibility, "eligible");
   assert.equal(policy.externalSurfacingEligibility, "eligible");
   assert.ok(!policy.negativeEvidenceFlags.includes("missing_preconsent_sequence_evidence"));

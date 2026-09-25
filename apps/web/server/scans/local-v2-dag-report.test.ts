@@ -9264,3 +9264,47 @@ test("cookie disclosure inside privacy policy is distinct from a dedicated cooki
   assert.equal(summary.dedicatedCookiePolicyPresent, false);
   assert.equal(summary.cookieDisclosurePresent, true);
 });
+
+test("verified policy artifact with mismatched retained length cannot support topics", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await import("./local-v2-dag-report");
+  const artifactId = "policy_surface_text_mismatch";
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "mismatched-policy", surfaceType: "privacy_policy",
+    url: "https://example.test/privacy", normalizedUrl: "https://example.test/privacy",
+    status: "fetched", documentFetchState: "fetched", documentEvaluationState: "usable",
+    documentRole: "policy_document", targetRelationship: "target_controller",
+    textExcerpt: "Privacy policy. We process account data for service delivery and explain your rights.",
+    documentTextCoverage: { status: "complete", sourceTextChars: 800, retainedTextChars: 800, limitationKeys: [] },
+    contentCoverage: { status: "complete", sourceTextChars: 800, extractedSectionCount: 1, retainedSectionCount: 1, retainedTableRowCount: 0, limitationKeys: [] },
+    artifactRefs: [{ artifactId, path: `/tmp/${artifactId}.txt`, label: "privacy_policy normalized text" }]
+  }] as never, "https://example.test/");
+  const debugMap = new Map([[artifactId, { artifactId, fileName: `${artifactId}.txt`,
+        text: "Privacy | Example", verificationStatus: "verified" as const }]]);
+  const summary = summarizePolicySurfaces(surfaces, "example.test", {
+    primaryLanguage: "en",
+    policyTextEvidenceContext: {
+      artifactsById: debugMap,
+      generatedAt: "2026-09-25T00:00:00.000Z", scanId: "length-mismatch",
+      sourceBundle: { schemaVersion: "certscore.v2.canonical-evidence-bundle.v1", verificationStatus: "verified" }
+    }
+  });
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.extractionStatus, "unavailable");
+  assert.equal(summary.policyTextEvidenceProjection.documents[0]?.limitationKeys.includes("policy_text_artifact_length_mismatch"), true);
+  assert.notEqual(summary.policyTextExtractionHealth.policyTextExtractionStatus, "ok");
+});
+
+test("title-only guessed cookie routes are not projected as dedicated policies", async () => {
+  const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
+  const surfaces = dedupePolicySurfaces([{
+    observationId: "cookie-shell", surfaceType: "cookie_policy", url: "https://example.test/cookie-policy", normalizedUrl: "https://example.test/cookie-policy",
+    confidence: 0.9, status: "fetched", documentEvaluationState: "usable",
+    governingPolicyBodyAssessment: {
+      contractVersion: "governing_policy_body_assessment.v1", state: "insufficient",
+      canonicalContextTermCount: 0, documentTextChars: 21, evidenceBoundObservedTopicCount: 0,
+      substantiveDisclosureSignalCount: 0, reasonCodes: ["no_substantive_disclosure"]
+    },
+    textExcerpt: "Example Site Home Page"
+  }] as never, "https://example.test/");
+  assert.equal(surfaces.length, 0);
+  assert.equal(summarizePolicySurfaces(surfaces, "example.test").cookiePolicyPresent, false);
+});

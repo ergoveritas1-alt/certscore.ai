@@ -53,6 +53,14 @@ test("canonical overall score rejects malformed or differently valued GPC score 
   }), 100);
 });
 
+test("critical coverage withholding also withholds the canonical score", () => {
+  assert.equal(deriveCanonicalOverallScoreForReport({
+    scanRecord: { runtimeArtifacts: { scoreConfidence: "withheld_incomplete_critical_coverage" } },
+    checklistRows: checkedChecklist,
+    unifiedFindings: []
+  }), null);
+});
+
 import { siteIntegrityProjectionFixture } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 

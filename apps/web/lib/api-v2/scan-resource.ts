@@ -915,6 +915,8 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     };
   }
   const posture = scanRecord.accessPostureSummary;
+  const observedPageCount = Math.max(0, scanRecord.scan.pagesScanned ?? 0);
+  const scopeSummary = `${observedPageCount} public page${observedPageCount === 1 ? "" : "s"} scanned. Signed-in behavior was not assessed.`;
   const runtimeArtifacts = plainRecord(scanRecord.runtimeArtifacts);
   const postRefusalCoverage = plainRecord(
     runtimeArtifacts?.postRefusalObservationCoverage ??
@@ -954,6 +956,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
 
   return {
     status,
+    scopeSummary,
     summary,
     limitations: [
       "Automated public-web scan only.",

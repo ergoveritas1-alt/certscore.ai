@@ -525,6 +525,35 @@ test("buildScanBundle implements materially distinct detail modes", () => {
   assert.equal(summary.preConsentCookiesTrackers.rows[0]?.evidenceClassification.basis, "public_report_projection");
 });
 
+test("zero-finding MCP evidence follow-up returns observed external activity and concise scope", () => {
+  const scan = {
+    type: "certscore_scan", scanId: "scan_123", domain: "example.com", status: "completed",
+    score: 100, scoreStatus: "final", coverage: {
+      status: "partial", scopeSummary: "1 public page scanned. Signed-in behavior was not assessed.",
+      summary: "Automated public-web scan completed with coverage limitations.",
+    },
+  } as any;
+  const reportWithEvidence = {
+    ...report,
+    topFindings: [],
+    counts: { thirdPartyDomainsObserved: 1, classifiedTrackerVendors: 0 },
+    unclassifiedExternalRequests: { items: [{
+      hostname: "cdn.example.net",
+      path: "/library.js", resourceType: "script", observedAtMs: 320,
+    }] },
+  } as any;
+  const bundle = buildScanBundle({
+    detail: "evidence", scan, report: reportWithEvidence, evidence: reportWithEvidence,
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+    responseCeilingBytes: 25_000, maxBytes: 8_000,
+  });
+  assert.equal(bundle.evidenceSummary.externalRequestSample[0]?.host, "cdn.example.net");
+  assert.equal(bundle.evidenceSummary.digests.length, 0);
+  assert.match(scanBundleText(bundle), /Observed external domains: 1; classified tracker vendors: 0/);
+  assert.match(scanBundleText(bundle), /1 public page scanned/);
+  assert.equal(mcpScanBundleOutputSchema.safeParse(bundle).success, true);
+});
+
 test("scan bundle exposes bounded canonical transport security across detail modes", () => {
   const transportSecurity = {
     status: "available",

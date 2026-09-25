@@ -172,6 +172,34 @@ test("Pulse evidence preserves canonical cookie, request, and policy provenance 
   assert.equal(provenance?.translationApplied, false);
 });
 
+test("Pulse keeps an unclassified external request visible without calling it tracking", () => {
+  const scanRecord = pulseScanRecord({
+    runtimeArtifacts: {
+      third_party_request_domains: ["cdn.example.net"],
+      networkSummary: { thirdPartyDomainCount: 1, thirdPartyRequestCount: 1 },
+      hybrid_runtime_evidence: {
+        requestObservations: [{
+          thirdParty: true,
+          requestUrl: "https://cdn.example.net/library.js?token=private",
+          resourceType: "script",
+          timestampMs: 320,
+        }],
+      },
+    },
+  });
+  const full = buildPulseProjection({
+    detail: "full", format: "json", freshnessMode: "latest", pulseRequestId: "external-request",
+    requestedUrl: "https://example.fr/", resolutionMode: "test", scanRecord, waitSeconds: 0,
+  }) as Record<string, any>;
+  assert.equal(full.counts.thirdPartyDomainsObserved, 1);
+  assert.equal(full.counts.classifiedTrackerVendors, 0);
+  assert.equal(full.unclassifiedExternalRequests[0]?.path, "/library.js");
+  assert.equal(full.unclassifiedExternalRequests[0]?.hostname, "cdn.example.net");
+  assert.doesNotMatch(JSON.stringify(full.unclassifiedExternalRequests), /token=private/);
+  assert.equal("responseObserved" in full.unclassifiedExternalRequests[0], false);
+  pulseResponseSchema.parse(full);
+});
+
 test("Pulse projects canonical transport-security rows with bounded detail semantics", () => {
   const scanRecord = pulseScanRecord({
     runtimeArtifacts: {

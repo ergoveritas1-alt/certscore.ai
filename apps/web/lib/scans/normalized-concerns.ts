@@ -3786,7 +3786,10 @@ function buildConsentDismissWithoutRejectConcerns(
     assessment.document.identityStatus !== "matched" ||
     assessment.scan.noGo !== false ||
     assessment.surface.status !== "observed_actionable" ||
-    assessment.controls.reject.state !== "not_observed"
+    assessment.controls.reject.state !== "not_observed" ||
+    // A dismissible information notice is not, by itself, proof that the
+    // visitor was offered optional processing requiring a refusal choice.
+    assessment.controls.accept.state !== "observed"
   ) {
     return [];
   }

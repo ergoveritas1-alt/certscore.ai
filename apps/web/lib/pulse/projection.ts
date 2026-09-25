@@ -34,6 +34,7 @@ import {
 } from "../scans/runtime-cookie-evidence";
 import {
   buildSanitizedRequestEvidenceRows,
+  buildUnclassifiedExternalRequestRows,
   buildTrackerInventoryGroupRows,
   buildTrackerInventoryRows,
   isInventoryDisplayHostname,
@@ -1581,11 +1582,17 @@ function buildEvidenceHighlights(
 ) {
   const snapshot = scanRecord.snapshot;
   const groupedTrackerRows = trackerRows ? buildTrackerInventoryGroupRows(trackerRows) : [];
-  const thirdPartyDomainsObserved = groupedTrackerRows.length > 0
-    ? uniqueStrings(groupedTrackerRows.flatMap((row) => row.domains)).length
-    : finiteNumber(recordValue(snapshot, "third_party_request_domain_count")) ??
-      finiteNumber(recordValue(snapshot, "third_party_domain_count")) ??
-      uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.scriptHost)).length;
+  const runtimeArtifacts = asRecord(scanRecord.runtimeArtifacts);
+  const networkSummary = asRecord(recordValue(runtimeArtifacts, "networkSummary")) ??
+    asRecord(recordValue(runtimeArtifacts, "network_summary")) ??
+    asRecord(recordValue(getHybridRuntimeEvidence(scanRecord.runtimeArtifacts), "networkSummary"));
+  const observedDomains = recordValue(runtimeArtifacts, "third_party_request_domains") ??
+    recordValue(runtimeArtifacts, "thirdPartyRequestDomains");
+  const thirdPartyDomainsObserved = finiteNumber(recordValue(networkSummary, "thirdPartyDomainCount")) ??
+    (Array.isArray(observedDomains) ? uniqueStrings(observedDomains.filter((value): value is string => typeof value === "string")).length : null) ??
+    finiteNumber(recordValue(snapshot, "third_party_request_domain_count")) ??
+    finiteNumber(recordValue(snapshot, "third_party_domain_count")) ??
+    uniqueStrings(groupedTrackerRows.flatMap((row) => row.domains)).length;
   const classifiedTrackerVendors = groupedTrackerRows.length > 0
     ? groupedTrackerRows.length
     : uniqueStrings(scanRecord.trackerVendors.map((vendor) => vendor.vendorName)).length;
@@ -2046,6 +2053,7 @@ function buildEvidenceArtifact(input: {
       ])
     },
     requestEvidenceInventory: capArray(sanitizedRequestEvidenceRows, 50),
+    unclassifiedExternalRequests: capArray(buildUnclassifiedExternalRequestRows(hybrid), 20),
     consentSurfaceEvidence: {
       firstLayerConsentChoices: safeRecordSubset(firstLayerConsentChoices, [
         "acceptControlObserved",
@@ -2628,6 +2636,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
         cap: { shown: surfaces.length, total: surfaces.length, truncated: false }
       };
     })(),
+    unclassifiedExternalRequests: buildUnclassifiedExternalRequestRows(getHybridRuntimeEvidence(hydratedScanRecord.runtimeArtifacts))
+      .slice(0, 20),
     coverageDiagnostics: {
       accessPosture: input.scanRecord.accessPostureSummary,
       interruptions: coverage.interruptions
