@@ -44,6 +44,13 @@ import {
 
 const routeFulfillers: FixtureRouteFulfiller[] = [
   {
+    // Consent fixture markup owns the controls; retain the CMP script request
+    // without making navigation depend on a live third-party CDN.
+    urlPattern: /^https:\/\/cdn\.cookielaw\.org\/scripttemplates\/otSDKStub\.js(?:\?|$)/i,
+    contentType: "application/javascript",
+    body: "window.__fixtureOneTrustLoaded = true;",
+  },
+  {
     urlPattern: /^https:\/\/www\.googletagmanager\.com\/gtm\.js\b/i,
     contentType: "application/javascript",
     body: "window.__fixtureGtmLoaded = true;",
