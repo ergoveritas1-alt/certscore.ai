@@ -12,7 +12,7 @@
       "name": "certscore-website-privacy-preflight",
       "source": "integrations/cursor/certscore-website-privacy-preflight",
       "description": "Free public-website privacy preflight for cookies, trackers, consent controls, jurisdiction-neutral GPC response comparisons, evidence-qualified Accept Path and Reject Path observations, policy review signals, and HTTPS/TLS through CertScore.ai MCP Light.",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "author": {
         "name": "CertScore.ai, LLC",
         "email": "support@certscore.ai"

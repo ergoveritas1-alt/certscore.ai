@@ -501,7 +501,7 @@ test("Cline and Kilo submission assets use their explicit Streamable HTTP schema
   assert.doesNotMatch(kilo, /Authorization|API_KEY|token|secret/i);
 });
 
-test("Claude Code Light plugin preserves the remote three-tool workflow", () => {
+test("Claude Code Light plugin preserves the remote scan workflow", () => {
   const plugin = JSON.parse(readFileSync(new URL("../../../integrations/claude-code/certscore-mcp-light/.claude-plugin/plugin.json", import.meta.url), "utf8")) as {
     name?: string;
     version?: string;
@@ -530,6 +530,26 @@ test("Claude Code Light plugin preserves the remote three-tool workflow", () => 
   assert.match(skill, /completed.*completed_limited.*failed.*expired.*rate_limited/s);
   assert.match(skill, /not legal advice, certification, or a compliance determination/i);
   assert.doesNotMatch(skill, /hook|autonomous/i);
+});
+
+test("packaged agent workflows retain factual GPC, independent execution and opt-in workpaper retrieval", () => {
+  for (const path of [
+    "claude-code/certscore-mcp-light/skills/privacy-scan/SKILL.md",
+    "cursor/certscore-website-privacy-preflight/skills/website-privacy-preflight/SKILL.md",
+    "openai/certscore-website-privacy-preflight/skills/website-privacy-preflight/SKILL.md",
+  ]) {
+    const skill = readFileSync(new URL(`../../../integrations/${path}`, import.meta.url), "utf8");
+    assert.match(skill, /existing scan ID.*skip scan creation/);
+    assert.match(skill, /gpcResponse.observation/);
+    assert.match(skill, /gpcResponse.activityComparison.*matched duration/);
+    assert.match(skill, /facts remain useful when.*indeterminate/);
+    assert.match(skill, /Both `succeeded` and `succeeded_with_confirmation`/);
+    assert.match(skill, /Report returned `afterAction` facts even when registration is unconfirmed/);
+    assert.match(skill, /without an automatic extra read/);
+    assert.match(skill, /Preserve `workpaper="tracking"` with every `pagination.nextCursor`/);
+    assert.match(skill, /download.csvUrl/);
+    assert.doesNotMatch(skill, /every non-confirmed observation status as limited coverage|use only the returned typed status/i);
+  }
 });
 
 test("Cursor and OpenAI plugin packages preserve independent release versions and the Light workflow", () => {
@@ -569,7 +589,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   const openAiSubmissionPacket = readFileSync(new URL("../../../docs/mcp-light-submission-packets.md", import.meta.url), "utf8");
 
   assert.equal(cursorPlugin.name, "certscore-website-privacy-preflight");
-  assert.equal(cursorPlugin.version, "1.0.4");
+  assert.equal(cursorPlugin.version, "1.0.5");
   assert.match(JSON.stringify(cursorPlugin), /GPC/i);
   assert.match(JSON.stringify(cursorPlugin), /Accept Path/i);
   assert.match(JSON.stringify(cursorPlugin), /Reject Path/i);
@@ -593,11 +613,11 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.deepEqual(cursorMarketplace.plugins?.filter(({ name }) => name === "certscore-website-privacy-preflight").map(({ name, source, version }) => ({ name, source, version })), [{
     name: "certscore-website-privacy-preflight",
     source: "integrations/cursor/certscore-website-privacy-preflight",
-    version: "1.0.4"
+    version: "1.0.5"
   }]);
 
   assert.equal(openAiPlugin.name, "certscore-website-privacy-preflight");
-  assert.equal(openAiPlugin.version, "2.0.0");
+  assert.equal(openAiPlugin.version, "2.0.1");
   assert.equal(openAiPlugin.skills, "./skills/");
   assert.equal(openAiPlugin.mcpServers, "./.mcp.json");
   assert.deepEqual(openAiMcp.mcpServers, {
@@ -615,7 +635,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.match(openAiSkill, /postAcceptObservation/);
   assert.match(openAiSkill, /postRefusalObservation/);
   assert.match(openAiSkill, /score-neutral behavior baseline/i);
-  assert.match(openAiSkill, /non-confirmed observation status as limited coverage rather than a pass/i);
+  assert.match(openAiSkill, /read `execution.status` independently of consent confirmation/i);
   assert.match(openAiSkill, /Do not independently browse the target or click its consent controls/i);
   assert.match(JSON.stringify(openAiPlugin), /preliminary cookie\/tracker/i);
   assert.match(openAiMetadata, /preliminary cookie and tracker evidence/i);
@@ -636,7 +656,7 @@ test("Cursor and OpenAI plugin packages preserve independent release versions an
   assert.match(openAiSubmissionPacket, /passive `Sec-GPC: 1` comparison/i);
   assert.match(openAiSubmissionPacket, /OpenAI review correction completed September 3, 2026/i);
   assert.doesNotMatch(openAiSubmissionPacket, /cannot accept consent/i);
-  assert.doesNotMatch(openAiSkill, /Claude|Cursor/);
+  assert.doesNotMatch(openAiSkill, /\bClaude\b|\bCursor\b/);
   for (const tool of ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]) {
     assert.match(openAiSkill, new RegExp(tool));
   }
@@ -1400,8 +1420,8 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
       assert.match(text, /automated public-web observations for human and agentic review/i);
       assert.match(text, /not legal advice, certification, or a compliance determination/i);
       assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
-      assert.match(text, /the scan does not establish what happens after that action/i);
-      assert.match(text, /observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior/i);
+      assert.match(text, /Omit after-action discussion when no corresponding control or verified action evidence was returned/i);
+      assert.match(text, /Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone/i);
       assert.match(text, /not regulatory criticality or legal exposure/i);
       assert.match(text, /observed privacy risk signal.*CertScore finding/i);
       assert.match(text, /legal violation from scores or findings/i);

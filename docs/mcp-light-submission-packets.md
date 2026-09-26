@@ -1,5 +1,7 @@
 # CertScore.ai MCP Light submission packets
 
+Repository release preparation (September 26, 2026): hosted/npm MCP `0.2.25`, Claude package `0.2.25`, Cursor package `1.0.5`, and OpenAI package `2.0.1`. These packaged guides surface factual GPC observations and activity counts, distinguish path execution from consent confirmation, and retrieve tracking workpapers on request. Hosted/npm deployment is independent of directory publication. The dated submission and approval records below remain historical; these new plugin versions have not been submitted or approved through third-party portals.
+
 September 14 update: production Light also exposes `certscore_get_report_evidence_page`. Earlier dated verification records below are historical, not current catalog assertions. Current catalog: https://certscore.ai/developers/mcp.
 
 These packets are the canonical copy and status reference for external directory submissions. Each platform section records whether publication is complete or still requires owner action.
@@ -395,9 +397,9 @@ Product-owner decision required: either keep Docker out of scope, or separately 
 
 - Deploy the discovery update and 400 × 400 icon through the repository-controlled AWS workflow.
 - Confirm the public icon returns an image response and is exactly 400 × 400.
-- Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.21`.
-- Confirm the Light endpoint requires no authentication and lists exactly `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
-- Confirm the Claude package is `0.2.21`, the Cursor package is `1.0.4`, and the OpenAI package is `2.0.0`.
+- Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.25`.
+- Confirm the Light endpoint requires no authentication and lists exactly `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, and `certscore_get_report_evidence_page`.
+- Confirm the Claude package is `0.2.25`, the Cursor package is `1.0.5`, and the OpenAI package is `2.0.1`.
 - Re-run the relevant official validator immediately before each submission.
 - Use the exact Light endpoint; do not substitute the authenticated or anonymous legacy endpoint.
 - Do not claim legal advice, certification, compliance determination, unlimited use, or a Docker image.

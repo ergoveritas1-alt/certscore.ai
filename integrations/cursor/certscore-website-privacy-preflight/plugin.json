@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "certscore-website-privacy-preflight",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Free public-website privacy scanner for cookies, trackers, consent controls, jurisdiction-neutral GPC response comparisons, evidence-qualified Accept Path and Reject Path observations, policy and regulatory review signals, and HTTPS/TLS.",
   "author": {
     "name": "CertScore.ai, LLC",

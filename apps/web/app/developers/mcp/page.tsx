@@ -1,3 +1,4 @@
+import { PUBLIC_CERTSCORE_MCP_VERSION } from "../../../lib/public-integration-versions";
 import { MCP_OAUTH_ELIGIBILITY, MCP_OAUTH_AUTHORIZATION, MCP_OAUTH_RECONNECT } from "../../../lib/mcp-public-copy";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -154,6 +155,17 @@ export default function DeveloperMcpPage() {
           </div>
         </Section>
 
+        <Section id="privacy-workpapers" eyebrow="Existing scans" title="Review CCPA evidence and export the inventory">
+          <p className="text-sm leading-7 text-slate-600">Use a completed scan ID to review retained evidence. The scan bundle includes <code>privacyAuditSummary</code> and GPC facts when available. For an inventory or export request, retrieve the tracking workpaper with the same scan ID.</p>
+          <CodeBlock>{`Review CertScore scan [SCAN_ID] with a CCPA/CPRA focus. Use the retained bundle. Lead with observed GPC delivery, site-recorded opt-out state and tracking activity where returned, including baseline/GPC request counts and their matched duration. Include observed Do Not Sell/Share controls and notice topics. Preserve the actual scan origin and existing score.`}</CodeBlock>
+          <CodeBlock>{`Export the tracking inventory for CertScore scan [SCAN_ID]. Use certscore_get_report_evidence_page with workpaper="tracking" and return its JSON and CSV download links. Use the existing scan; preserve workpaper="tracking" with any pagination cursor.`}</CodeBlock>
+          <p className="mt-3 text-sm leading-7 text-slate-600">The workpaper covers the starting page. <code>download.url</code> returns JSON and <code>download.csvUrl</code> returns the inventory CSV. Private links expire after five minutes; keep them confidential and request a fresh link after expiry. Existing workspace/public access rules and read quotas apply.</p>
+          <p className="mt-3 text-sm leading-7 text-slate-600">GPC facts can remain available when the paired comparison is indeterminate. Completed Accept/Reject execution and confirmed consent are separate results. Summarize returned after-click facts, and use canonical findings for score effects.</p>
+          <h3 className="mt-4 font-semibold">Refresh an older integration</h3>
+          <p className="mt-2 text-sm leading-7 text-slate-600">Hosted users keep the same endpoint. If the client still shows an older tool definition, refresh its tool list or reconnect the existing connection. Local npm users can update the package below and restart their MCP process. SDK users can follow the <Link href="/developers/sdk" className="text-sky-700 underline">SDK examples</Link>.</p>
+          <CodeBlock>{`npm install -g @certscore/mcp@${PUBLIC_CERTSCORE_MCP_VERSION}`}</CodeBlock>
+        </Section>
+
         <Section id="forms-evidence" eyebrow="Forms & fields" title="Retrieve retained forms and screenshots">
           <p className="text-sm leading-7 text-slate-600">Use <code>certscore_get_report_evidence_page</code> for the completed, authorized report. Follow <code>pagination.nextCursor</code> or use the returned JSON download link. Form rows retain field metadata, evidence references, coverage and snapshot status; resolve <code>reportContentRef</code> JSON pointers within the exported document. Full-site reports include their retained additional-page forms after the crawl finishes.</p>
           <p className="mt-3 text-sm leading-7 text-slate-600">The underlying API is <code>GET /api/v2/scans/&#123;scanId&#125;/report-evidence</code>. Available snapshots are separate JPEG links returned with the evidence, subject to the report’s access rules. Images are not embedded in MCP JSON. Unavailable or withheld images must remain unavailable; do not infer a finding from their absence. The scanner does not fill or submit forms.</p>
@@ -228,7 +240,7 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
             Reject results distinguish confirmed post-refusal evidence from retained after-click observations. Unsupported or unavailable capture remains explicitly limited. Any finding or scoring effect comes from canonical evidence policy.
           </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Scan bundles may include three typed results: <code>postAcceptObservation</code> is a score-neutral comparison baseline, <code>postRefusalObservation</code> is the only one that can support a choice-path finding, and <code>gpcResponse</code> is a jurisdiction-neutral comparison with <code>scoreEffect: none</code>. GPC v3 also includes <code>gpcResponse.observation</code>: bounded capture, current CMP-recorded sale/sharing state, and direct request findings. Its completion is independent of the paired comparison and does not mean GPC was honored. Count <code>execution.status</code> values <code>succeeded</code> and <code>succeeded_with_confirmation</code> as completed paths; report confirmation separately. Registered paths may omit <code>afterAction</code>. Accept/Reject <code>afterAction</code> summaries retain observed click and capture facts even when registration is unconfirmed. Request counts do not classify every request as tracking. A terminal scan status describes lifecycle only.
+            Scan bundles may include three typed results: <code>postAcceptObservation</code> provides an ordinarily score-neutral comparison baseline, <code>postRefusalObservation</code> reports bounded Reject evidence, and <code>gpcResponse</code> is a jurisdiction-neutral comparison with <code>scoreEffect: none</code>. GPC v3 also includes <code>gpcResponse.observation</code>: bounded capture, current CMP-recorded sale/sharing state, and direct request findings. Its completion is independent of the paired comparison and does not mean GPC was honored. Count <code>execution.status</code> values <code>succeeded</code> and <code>succeeded_with_confirmation</code> as completed paths; report confirmation separately. Registered paths may omit <code>afterAction</code>. Accept/Reject <code>afterAction</code> summaries retain observed click and capture facts even when registration is unconfirmed. Request counts do not classify every request as tracking. A terminal scan status describes lifecycle only.
           </p>
         </Section>
 

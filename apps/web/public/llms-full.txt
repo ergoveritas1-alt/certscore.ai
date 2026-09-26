@@ -46,7 +46,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.24`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.25`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 
@@ -241,7 +241,7 @@ Status: published. Install `@certscore/sdk@0.2.13` or newer for typed GPC, Accep
 
 Choice-path interpretation:
 
-- Read `status` before `verdict` for `postAcceptObservation` and `postRefusalObservation`; a non-confirmed status is limited coverage, not a clean result.
+- Read Accept/Reject `execution.status` independently of consent confirmation. Both `succeeded` and `succeeded_with_confirmation` are completed paths; report returned after-click facts even when registration is unconfirmed. Missing historical execution is unavailable. Use canonical findings for score effects.
 - `postAcceptObservation` is a score-neutral comparison baseline.
 - `postRefusalObservation` separates registered-refusal verdicts from `afterAction` facts. Canonical findings may also include independently verified Reject-click tracking under its separate policy; do not infer scoring from request counts.
 - The public methodology is https://certscore.ai/guides/consent-enforcement-testing and an authentic owned-sample report is https://certscore.ai/scan/f4362840-376e-4d8c-897a-34a220136ad4.
@@ -453,3 +453,9 @@ GPC v3: read gpcResponse.observation.status for bounded capture and gpcResponse.
 SDK 0.2.12 exports isSuccessfulChoicePath: count succeeded and succeeded_with_confirmation together. Consent confirmation remains separate. Historical missing execution is unavailable, not a failed path.
 
 Privacy workpapers: SDK 0.2.13 types ScanResource.privacyAuditEvidence and gpcResponse.activityComparison. MCP 0.2.24 scan bundles include privacyAuditSummary with observed controls and notice topics. For retained inventory and JSON/CSV downloads, use certscore_get_report_evidence_page with scanId and workpaper="tracking", or GET /api/v2/scans/{scanId}/report-evidence?workpaper=tracking. Preserve workpaper on cursor continuation. Existing workspace/public access and read quotas apply; private download links expire after five minutes. This is starting-page evidence; control presence does not establish opt-out effectiveness, and notice passages do not establish adequacy. No additional scan or separate CCPA score is created.
+
+Agent reporting: For GPC, lead with available `gpcResponse.observation` facts and `gpcResponse.activityComparison` request counts, preserving the matched duration. These facts remain useful when the paired `gpcResponse.status` is `indeterminate`. Use the returned paired status and finding title for that comparison: `GPC response`, `No observable GPC response`, or `indeterminate`. Keep any returned California scoring policy separate. Observation completion, recorded opt-out state and short-window request counts do not establish that GPC was honored.
+
+For inventory, CCPA/CPRA workpapers or export requests, use the existing `scanId` with `certscore_get_report_evidence_page` and `workpaper="tracking"` when advertised by the server. Ordinary summaries use `privacyAuditSummary` and the returned GPC facts without an automatic extra read. The workpaper provides retained starting-page inventory, privacy-choice controls, notice passages, and GPC evidence. Preserve `workpaper="tracking"` with every `pagination.nextCursor`; use `download.url` for JSON and `download.csvUrl` for CSV. Keep private download links confidential; request a fresh link after expiry. Missing evidence in a bounded bundle is not evidence of absence: inspect `mcpMetadata.omittedSections` and retrieve the workpaper when needed. If the tool or selector is missing, refresh the existing connection's tool list or update the local MCP package; do not start a replacement scan.
+
+Report observed Do Not Sell/Share controls and notice passages as evidence. Control presence does not establish opt-out effectiveness, and notice passages do not assess adequacy. Preserve the actual scan origin and existing CertScore score; the regulatory focus does not change the evidence or produce a separate CCPA score.

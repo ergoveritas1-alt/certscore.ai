@@ -138,3 +138,18 @@ only, including for scans with additional pages.
 No capture, findings, score, persistence, retention or capacity change. Estimated
 incremental bounded summary transfer is under $1/month at 100,000 reads; requested
 workpaper reads reuse existing quotas and substitute for larger report exports.
+
+## Agent guidance and examples (MCP 0.2.25)
+
+Packaged Cursor 1.0.5, OpenAI 2.0.1 and Claude Code 0.2.25 instructions lead with
+retained GPC observations and matched-window counts independently of paired status.
+They distinguish completed action execution from confirmed consent, use canonical
+findings for score effects, and retrieve existing scan workpapers only when relevant
+to the audit/export request. Public MCP/SDK pages include retained-scan examples,
+JSON/CSV downloads, selector-preserving pagination and integration refresh guidance.
+Plugin source versions are prepared in the repository; third-party portal submission
+and approval are separate from the hosted MCP and npm release.
+
+This is wording and documentation only: no capture, scoring, persistence or capacity
+changes. Extra bounded guidance traffic remains below $1/month at 100,000 reads;
+no automatic workpaper request is added.

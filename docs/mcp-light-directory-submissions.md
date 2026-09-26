@@ -1,5 +1,7 @@
 # CertScore.ai MCP Light directory submission copy
 
+Repository release preparation (September 26, 2026): hosted/npm MCP `0.2.25`, Claude package `0.2.25`, Cursor package `1.0.5`, and OpenAI package `2.0.1`. These packaged guides surface factual GPC observations and activity counts, distinguish path execution from consent confirmation, and retrieve tracking workpapers on request. Hosted/npm deployment is independent of directory publication. The dated submission and approval records below remain historical; these new plugin versions have not been submitted or approved through third-party portals.
+
 Use MCP Light as the recommended discovery entry in community directories: `CertScore.ai MCP Light`, registry name `ai.certscore/mcp-light`. Do not list the authenticated MCP as a second name for this product. Mention it only as an optional higher-volume CertScore service where a directory permits upgrade information.
 
 The legal owner and publisher name is `CertScore.ai, LLC` on every platform.

@@ -1101,8 +1101,8 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
   assert.match(text, /not legal advice, certification, or a compliance determination/i);
   assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/i);
   assert.match(text, /Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do/i);
-  assert.match(text, /the scan does not establish what happens after that action/i);
-  assert.match(text, /Do not speculate that an observed embed, vendor, or request may cause additional cookies, fingerprinting, tracking, or processing unless CertScore observed that behavior/i);
+  assert.match(text, /Omit after-action discussion when no corresponding control or verified action evidence was returned/i);
+  assert.match(text, /Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone/i);
   assert.match(text, /Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure/i);
   assert.match(text, /prefer ‘observed privacy risk signal’ or ‘CertScore finding’/i);
   assert.match(text, /Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings/i);
@@ -1221,7 +1221,7 @@ test("scan bundle surfaces the typed GPC response and keeps California scoring s
   assert.match(text, /GPC response: No observable GPC response; status=no_observable_response/);
   assert.match(text, /Sec-GPC: 1 proof retained on 2 request\(s\)/);
   assert.match(text, /California scoring policy: −15 points/);
-  assert.match(bundle.interpretationGuidance.statement, /do not call the result a GPC violation or say GPC was not honored/i);
+  assert.match(bundle.interpretationGuidance.statement, /do not call the result a GPC violation or claim GPC was honored or not honored/i);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 
@@ -1610,7 +1610,7 @@ test("scan bundle text remains bounded while preserving interpretation guidance"
   assert.match(text.split("\n")[0] ?? "", /^Response contract:/);
   assert.match(text, /additional returned pre-consent rows? .*omitted from TextContent/i);
   assert.match(text, /automated public-web observations for human and agentic review/i);
-  assert.match(text, /the scan does not establish what happens after that action/i);
+  assert.match(text, /Omit after-action discussion when no corresponding control or verified action evidence was returned/i);
   assert.match(text, /not regulatory criticality or legal exposure/i);
 });
 
@@ -1930,7 +1930,11 @@ test("GPC v3 MCP text preserves completed bounded findings alongside an indeterm
   assert.deepEqual(bundle.gpcResponse.activityComparison, activityComparison);
   assert.match(text, /status=indeterminate/);
   assert.equal(bundle.gpcResponse.observation.registration.sale, "unknown");
-  assert.match(bundle.interpretationGuidance.statement, /completion does not mean GPC was honored/);
+  for (const guidance of [text, bundle.interpretationGuidance.statement]) {
+    assert.match(guidance, /activityComparison request counts with their matched duration, even when the paired comparison is indeterminate/);
+    assert.match(guidance, /completion does not mean GPC was honored/);
+    assert.doesNotMatch(guidance, /For gpcResponse, use only/);
+  }
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });
 
@@ -2050,7 +2054,11 @@ test("MCP counts both execution successes including registered paths without aft
       assert.deepEqual(result?.execution, execution);
       assert.equal(result?.afterAction, undefined);
       assert.match(scanBundleText(bundle), new RegExp(`execution=${execution.status}; click completed=true; observation completed=true; consent confirmed=${confirmed}`));
-      assert.match(bundle.interpretationGuidance.statement, /Missing legacy execution remains unavailable/);
+      for (const guidance of [scanBundleText(bundle), bundle.interpretationGuidance.statement]) {
+        assert.match(guidance, /succeeded and succeeded_with_confirmation as successful paths/);
+        assert.match(guidance, /after-click observations even when registration is unconfirmed/);
+        assert.match(guidance, /Missing legacy execution remains unavailable/);
+      }
       assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
     }
   }
@@ -2075,7 +2083,7 @@ test("privacy workpaper stays factual, source-bound and available in compact and
   assert.equal(compact.privacyAuditSummary.sourceHash, privacyAuditFixture.sourceHash);
   assert.equal(compact.privacyAuditEvidence, undefined);
   assert.match(scanBundleText(compact), /Do Not Sell or Share/);
-  assert.match(scanBundleText(compact), /workpaper=tracking/);
+  assert.match(scanBundleText(compact), /For inventory or export requests, retrieve.*workpaper=tracking/);
   assert.match(scanBundleText(compact), /Controls were not exercised/);
   assert.deepEqual(build(privacyAuditFixture, "full").privacyAuditEvidence, privacyAuditFixture);
   for (const audit of [undefined, { ...privacyAuditFixture, scanId: "different" }, { ...privacyAuditFixture, scoreEffect: "deduct" }]) {

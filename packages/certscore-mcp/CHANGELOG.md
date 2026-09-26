@@ -1,5 +1,11 @@
 # certscore-mcp
 
+## 0.2.25
+
+- Lead GPC answers with returned observations and matched-window counts even when the paired comparison is indeterminate.
+- Align TextContent and structured guidance on completed Accept/Reject execution versus consent confirmation.
+- Refresh packaged agent workflows and show workpaper retrieval for relevant audit/export requests.
+
 ## 0.2.24
 
 - Include source-bound privacy-choice controls and notice topics in compact scan bundles, with full retained evidence in `detail=full`.
