@@ -2055,3 +2055,37 @@ test("MCP counts both execution successes including registered paths without aft
     }
   }
 });
+
+const privacyAuditFixture = {
+  contractVersion: "certscore.privacy-audit-evidence.v1", scanId: "scan_123", documentUrl: "https://example.com/",
+  capturedAt: "2026-09-25T12:00:00.000Z", sourceHash: "a".repeat(64), verificationStatus: "verified", scoreEffect: "none",
+  passagePolicy: "california_notice_passages.v1", negativeControlCoverage: "not_verified", collectionPointNoticeAssessment: "not_assessed", truncated: false,
+  controls: [{ kind: "do_not_sell_or_share", label: "Do Not Sell or Share", sourceUrl: "https://example.com/", destinationUrl: "https://example.com/choices", placement: "footer", evidenceRef: "control-1", retrieval: "not_attempted", interaction: "not_tested" }],
+  notices: [{ kind: "privacy_policy", url: "https://example.com/privacy", evidenceRef: "notice-1", directlyLinkedFromScannedPage: true, coverage: "partial", passages: [{ topic: "sale_sharing", excerpt: "You can opt out of sharing." }] }],
+};
+
+test("privacy workpaper stays factual, source-bound and available in compact and full bundles", () => {
+  const build = (audit: unknown, detail: "summary" | "full" = "summary", maxBytes = 50_000) => buildScanBundle({
+    detail, maxBytes, report, evidence: report, findings: [], preConsentCookiesTrackers: null,
+    scan: { type: "certscore_scan", scanId: "scan_123", domain: "example.com", status: "completed", score: 72, privacyAuditEvidence: audit },
+  } as any);
+  const compact = build(privacyAuditFixture);
+  assert.equal(compact.privacyAuditSummary.controls[0].kind, "do_not_sell_or_share");
+  assert.deepEqual(compact.privacyAuditSummary.notices[0].topics, ["sale_sharing"]);
+  assert.equal(compact.privacyAuditSummary.sourceHash, privacyAuditFixture.sourceHash);
+  assert.equal(compact.privacyAuditEvidence, undefined);
+  assert.match(scanBundleText(compact), /Do Not Sell or Share/);
+  assert.match(scanBundleText(compact), /workpaper=tracking/);
+  assert.match(scanBundleText(compact), /Controls were not exercised/);
+  assert.deepEqual(build(privacyAuditFixture, "full").privacyAuditEvidence, privacyAuditFixture);
+  for (const audit of [undefined, { ...privacyAuditFixture, scanId: "different" }, { ...privacyAuditFixture, scoreEffect: "deduct" }]) {
+    assert.equal(build(audit).privacyAuditSummary, undefined);
+  }
+  const big = { ...privacyAuditFixture, controls: Array.from({ length: 12 }, () => ({ ...privacyAuditFixture.controls[0], label: "x".repeat(200), sourceUrl: "https://example.com/" + "x".repeat(700), destinationUrl: "https://example.com/" + "y".repeat(700) })) };
+  const bounded = build(big, "full", 5_000);
+  assert.ok(bounded.mcpMetadata.actualBytes <= 5_000);
+  assert.ok(bounded.mcpMetadata.omittedSections.includes("privacyAuditSummary"));
+  assert.ok(bounded.mcpMetadata.omittedSections.includes("privacyAuditEvidence"));
+  assert.equal(bounded.score, 72);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bounded));
+});

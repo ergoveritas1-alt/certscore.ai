@@ -1,5 +1,11 @@
 # certscore-mcp
 
+## 0.2.24
+
+- Include source-bound privacy-choice controls and notice topics in compact scan bundles, with full retained evidence in `detail=full`.
+- Add `workpaper=tracking` to the existing report-evidence reader; preserve selection during pagination and return JSON/CSV downloads under existing access controls.
+- Surface bounded baseline/GPC activity comparisons alongside retained observation facts.
+
 ## Unreleased
 
 - Prepare Cursor integration `1.0.4` with query-first cookie, tracker, consent, GDPR, CCPA, ePrivacy, privacy-risk, and website-scanner discovery metadata while preserving the `CertScore.ai` no-auth Light endpoint.

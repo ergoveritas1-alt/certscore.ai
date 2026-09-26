@@ -1,3 +1,4 @@
+import { privacyAuditSummarySchema } from "./privacy-audit.js";
 import { z } from "zod";
 import { reportEvidencePageSchema } from "./report-page.js";
 import { mcpTaskContextSchema } from "@website-signal-risk-scanner/shared/dist/mcp-product-context.js";
@@ -385,6 +386,8 @@ export const mcpEvidenceOutputSchema = z
 export const mcpScanBundleOutputSchema: z.ZodType<Record<string, unknown>> = z
   .object({
     type: z.literal("certscore_scan_bundle"),
+    privacyAuditSummary: privacyAuditSummarySchema.optional(),
+    privacyAuditEvidence: apiV2ScanResourceSchema.shape.privacyAuditEvidence,
     detail: z.enum(["summary", "findings", "evidence", "full"]),
     scanId: z.string(),
     domain: z.string(),
@@ -575,15 +578,15 @@ export const certScoreMcpToolContracts = [
   {
     name: "certscore_get_report_evidence_page",
     title: "Get report evidence page",
-    description: "Retrieve scan report display content as paginated JSON, without internal diagnostic JSON downloads. The response also offers a single-file full JSON download; private JSON download links expire after five minutes and need no OAuth header; use pagination if your host blocks file downloads. Repeated display records use reportContentRef JSON Pointers. Includes including evidence tables, full-site page and resource inventories, all retained additional-page form fields, form snapshot download references, and retained limitations. Snapshot images are downloaded separately from the returned URLs, with OAuth bearer authentication for workspace scans. Available on OAuth and Light. Start with scanId; follow pagination.nextCursor until complete. Pages share a snapshot; restart if it changes. Each entry has a JSON Pointer path and value; oversized strings use numbered parts. Export completion is not complete observation coverage. Use the concise scan bundle for summaries; use this tool for exhaustive report evidence. No new scan is created.",
-    inputSchema: { scanId: z.string().uuid(), cursor: z.string().max(100).optional() },
+    description: "Use workpaper=tracking for the starting-page tracking inventory, privacy choices/notices and GPC evidence, with JSON and CSV downloads. The workpaper selector also applies to every continuation request. Otherwise retrieve scan report display content as paginated JSON, without internal diagnostic JSON downloads. The response also offers a single-file full JSON download; private JSON download links expire after five minutes and need no OAuth header; use pagination if your host blocks file downloads. Repeated display records use reportContentRef JSON Pointers. Includes evidence tables, full-site page and resource inventories, all retained additional-page form fields, form snapshot download references, and retained limitations. Snapshot images are downloaded separately from the returned URLs, with OAuth bearer authentication for workspace scans. Available on OAuth and Light. Start with scanId; follow pagination.nextCursor until complete. Pages share a snapshot; restart if it changes. Each entry has a JSON Pointer path and value; oversized strings use numbered parts. Export completion is not complete observation coverage. Use the concise scan bundle for summaries; use this tool for exhaustive report evidence. No new scan is created.",
+    inputSchema: { scanId: z.string().uuid(), cursor: z.string().max(100).optional(), workpaper: z.literal("tracking").optional() },
     outputSchema: reportEvidencePageSchema,
     annotations: { title: "Get report evidence page", ...accountedInternalReadAnnotations }
   },
   {
     name: "certscore_get_scan_bundle",
     title: "Get scan bundle",
-    description: "Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. The default summary distinguishes observed external domains from classified tracker vendors and states the public-page scope. Use detail=evidence to inspect bounded retained request examples and policy-surface candidates even when there are no findings; use certscore_get_report_evidence_page for deeper report evidence. Available sections also include canonical findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets report returned, total, truncated, and omitted-section metadata. Accept and Reject results distinguish registered decisions from retained after-click facts. Their execution reports succeeded for a completed click and bounded observation, and succeeded_with_confirmation when the consent decision is also verified. Optional afterAction summaries remain useful when registration is unconfirmed; absent or failed capture remains explicitly limited. Consume canonical findings for any scoring effect. Results are automated public-web observations, not legal advice, certification, or a compliance determination.",
+    description: "Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. The default summary distinguishes observed external domains from classified tracker vendors and states the public-page scope. Use detail=evidence to inspect bounded retained request examples and policy-surface candidates even when there are no findings; use certscore_get_report_evidence_page for deeper report evidence. Available sections also include retained privacy-choice controls and notice topics in privacyAuditSummary (full evidence in detail=full), canonical findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets report returned, total, truncated, and omitted-section metadata. Accept and Reject results distinguish registered decisions from retained after-click facts. Their execution reports succeeded for a completed click and bounded observation, and succeeded_with_confirmation when the consent decision is also verified. Optional afterAction summaries remain useful when registration is unconfirmed; absent or failed capture remains explicitly limited. Consume canonical findings for any scoring effect. Results are automated public-web observations, not legal advice, certification, or a compliance determination.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
     annotations: { title: "Get scan bundle", ...accountedInternalReadAnnotations }

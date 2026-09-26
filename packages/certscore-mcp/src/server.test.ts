@@ -1968,3 +1968,28 @@ test("new sessions announce their current tool catalog for cached hosts", async 
     } finally { await client.close(); await server.close(); }
   }
 });
+
+test("tracking workpaper retrieval preserves selection, downloads and continuation on OAuth and Light", async () => {
+  const scanId = "9ba99a8c-b1ad-44c1-985f-92cef760ab40";
+  const cursor = `v1.${"a".repeat(64)}.1`;
+  const page = { type: "certscore_report_evidence_page", version: 1, scanId, workpaper: "tracking", snapshot: "a".repeat(64), reportUrl: `https://certscore.ai/scan/${scanId}`,
+    entries: [{ path: "", value: { contractVersion: "certscore.tracking-workpaper.v1", rows: [] } }], pagination: { offset: 0, returned: 1, total: 2, complete: false, nextCursor: cursor },
+    coverage: { scope: "public_report_projection", exportTruncated: false, observationCompleteness: "see_report_coverage", exclusions: [] }, reconstruction: "JSON Pointer entries",
+    download: { url: `https://certscore.ai/api/v2/scans/${scanId}/report-evidence?workpaper=tracking&format=download`, csvUrl: `https://certscore.ai/api/v2/scans/${scanId}/report-evidence?workpaper=tracking&format=csv`, mediaType: "application/json", bytes: 123, authentication: "public", instructions: "Retained observations only." } };
+  for (const toolProfile of ["full", "light"] as const) {
+    const fetch = installFetch([{ status: 200, body: page }, { status: 200, body: { ...page, pagination: { offset: 1, returned: 1, total: 2, complete: true, nextCursor: null } } }]);
+    try {
+      await withMcpClient(async client => {
+        const first = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, workpaper: "tracking" } });
+        assert.equal(first.isError, undefined);
+        assert.deepEqual(first.structuredContent, page);
+        assert.match(JSON.stringify(first.content), /Tracking CSV/);
+        const next = (first._meta as any)["ai.certscore/responseGuidance"].nextAction.arguments;
+        assert.deepEqual(next, { scanId, cursor, workpaper: "tracking" });
+        await client.callTool({ name: "certscore_get_report_evidence_page", arguments: next });
+        assert.ok(fetch.calls.every(url => new URL(url).searchParams.get("workpaper") === "tracking"));
+        assert.equal(new URL(fetch.calls[1]).searchParams.get("cursor"), cursor);
+      }, { toolProfile });
+    } finally { fetch.restore(); }
+  }
+});

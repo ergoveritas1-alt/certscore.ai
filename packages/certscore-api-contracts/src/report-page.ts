@@ -6,8 +6,10 @@ export const reportEvidencePageSchema = z.object({
   scanId: z.string().uuid(),
   snapshot: z.string().regex(/^[a-f0-9]{64}$/),
   reportUrl: z.string(),
+  workpaper: z.literal("tracking").optional(),
   download: z.object({
     url: z.string().url(),
+    csvUrl: z.string().url().optional(),
     mediaType: z.literal("application/json"),
     expiresAt: z.string().datetime().optional(),
     bytes: z.number().int().nonnegative(),

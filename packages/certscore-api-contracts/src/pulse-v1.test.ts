@@ -529,7 +529,10 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.12");
+  assert.equal(document.info.version, "0.1.13");
+  assert.equal(document.paths["/api/v2/scans/{scanId}/report-evidence"].get.operationId, "getReportEvidencePage");
+  assert.equal(document.components.schemas.ReportEvidencePage.properties.workpaper.const, "tracking");
+  assert.ok(document.components.schemas.ReportEvidencePage.properties.download.properties.csvUrl);
   assert.ok(document.paths["/api/v2/keys/request"]);
   assert.ok(document.paths["/api/v2/auth/check"]);
   assert.ok(document.paths["/api/v2/scans"]);
@@ -592,6 +595,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
     "getApiV2Health",
     "getLatestDomainPreConsentCookiesTrackers",
     "getLatestDomainScan",
+    "getReportEvidencePage",
     "getScan",
     "getScanDiagnostics",
     "getScanFinding",

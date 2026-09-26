@@ -24,7 +24,7 @@
       "theme": "dark"
     }
   ],
-  "version": "0.2.23",
+  "version": "0.2.24",
   "remotes": [
     {
       "type": "streamable-http",

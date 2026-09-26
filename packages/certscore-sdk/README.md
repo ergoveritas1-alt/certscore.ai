@@ -322,3 +322,25 @@ This CI example fails only on critical automated review signals surfaced by Cert
 - HTTP 202 and 429 may include `Retry-After`; the SDK uses it for polling/retry timing.
 - Terminal usable statuses are `completed` and `completed_limited`.
 - Terminal edge statuses include `failed`, `expired`, and `rate_limited`.
+
+### Privacy audit workpapers (0.2.13)
+
+```ts
+const scan = await client.getScanResource(scanId);
+console.log(scan.privacyAuditEvidence?.controls); // observed DNS/Share, privacy choices, cookie settings
+console.log(scan.privacyAuditEvidence?.notices);  // retained notice passages
+console.log(scan.gpcResponse?.observation);      // retained GPC observation
+console.log(scan.gpcResponse?.activityComparison); // matched-window baseline/GPC request counts
+const page = await client.getReportEvidencePage(scanId, { workpaper: "tracking" });
+console.log(page.download?.url, page.download?.csvUrl);
+// For pagination, retain workpaper: "tracking" along with pagination.nextCursor.
+```
+
+The workpaper covers the starting page and uses the same evidence as the report.
+Private reports require the workspace credential; returned download links expire
+after five minutes and must be kept confidential. Public reads remain limited to
+eligible anonymous scans. Downloads and pages use existing read quotas.
+Historical records can omit these fields. Controls are observed, not exercised;
+notice passages are not an adequacy assessment. Per-vendor sale, sharing and GPC
+honoring remain `not_assessed`. GPC observation and activity comparison do not
+change the existing California scoring policy.

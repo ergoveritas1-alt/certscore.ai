@@ -1,4 +1,4 @@
-import { apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
+import { privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 
 import { withResponseCapture, transferResponseCapture } from "./response-capture.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -1523,6 +1523,16 @@ export function scanBundleText(bundle: Record<string, any>, options: { lightTria
       append(`Retained external request: ${first.host ?? "unknown host"}${first.path ?? ""}${first.resourceType ? ` (${first.resourceType})` : ""}. Purpose was not established by this request.`);
     }
   }
+  const audit = privacyAuditSummarySchema.safeParse(bundle.privacyAuditSummary);
+  if (audit.success) {
+    const facts = audit.data;
+    const controls = facts.controls.map(control => `${control.kind}: ${control.label}`).join("; ");
+    const topics = [...new Set(facts.notices.flatMap(notice => notice.topics))].join(", ");
+    append(`Privacy workpaper: ${facts.retainedControlCount} retained choice control(s), ${facts.retainedNoticeCount} notice document(s).${controls ? ` Observed: ${controls}.` : ""}${topics ? ` Notice topics: ${topics}.` : ""}${facts.truncated ? " Summary is partial." : ""} Controls were not exercised; notice passages do not assess adequacy.`);
+    append(`Retrieve the tracking workpaper with certscore_get_report_evidence_page, scanId=${bundle.scanId}, workpaper=tracking for retained inventory and JSON/CSV downloads.`);
+  } else if (bundle.mcpMetadata?.omittedSections?.includes("privacyAuditSummary")) {
+    append(`Privacy workpaper omitted to fit the byte limit. Retrieve it with certscore_get_report_evidence_page, scanId=${bundle.scanId}, workpaper=tracking.`);
+  }
   const gpcResponse = bundle.gpcResponse && typeof bundle.gpcResponse === "object" && !Array.isArray(bundle.gpcResponse)
     ? bundle.gpcResponse as Record<string, any>
     : null;
@@ -1759,9 +1769,22 @@ export function buildScanBundle(input: {
   if (allFindings.length > findings.length) intentionallyOmitted.add("additionalFindings");
   if ((detail === "summary" || detail === "findings") && (Object.keys(evidence).length > 0 || allFindings.length > 0)) intentionallyOmitted.add("evidence");
   if (detail !== "full" && Object.keys(report).length > 0) intentionallyOmitted.add("fullReport");
+  const auditResult = privacyAuditEvidenceSchema.safeParse(input.scan.privacyAuditEvidence);
+  const audit = auditResult.success && auditResult.data.scanId === input.scan.scanId ? auditResult.data : null;
+  const privacyAuditSummary = audit ? privacyAuditSummarySchema.parse({
+    contractVersion: audit.contractVersion, scanId: audit.scanId, capturedAt: audit.capturedAt,
+    sourceHash: audit.sourceHash, verificationStatus: audit.verificationStatus, scoreEffect: audit.scoreEffect,
+    negativeControlCoverage: audit.negativeControlCoverage, collectionPointNoticeAssessment: audit.collectionPointNoticeAssessment,
+    retainedControlCount: audit.controls.length, retainedNoticeCount: audit.notices.length,
+    controls: audit.controls.slice(0, 3),
+    notices: audit.notices.slice(0, 2).map(({ passages, ...notice }) => ({ ...notice, topics: [...new Set(passages.map(p => p.topic))] })),
+    truncated: audit.truncated || audit.controls.length > 3 || audit.notices.length > 2,
+  }) : null;
   const guidedScan = withMcpAgentGuidance(input.scan as unknown as Record<string, any>);
   const bundle: Record<string, any> = {
     type: "certscore_scan_bundle",
+    ...(privacyAuditSummary ? { privacyAuditSummary } : {}),
+    ...(audit && detail === "full" ? { privacyAuditEvidence: audit } : {}),
     detail,
     scanId: input.scan.scanId,
     domain: input.scan.domain,
@@ -1897,6 +1920,13 @@ export function buildScanBundle(input: {
   };
 
   captureFullPayloadBytes();
+  for (const section of ["privacyAuditEvidence", "privacyAuditSummary"]) {
+    if (bundle.mcpMetadata.actualBytes > maxBytes && bundle[section]) {
+      markBudgetOmitted(section, "privacy_workpaper_omitted_to_byte_limit");
+      delete bundle[section];
+      refresh();
+    }
+  }
   // Access disposition and its remedy outrank optional lane detail in a no-go envelope.
   // Retained evidence remains available through the reported content URLs.
   if (canonicalNoGo(bundle)) {
@@ -2045,6 +2075,8 @@ export function buildScanBundle(input: {
   if (bundle.mcpMetadata.actualBytes > maxBytes) {
     const minimal: Record<string, any> = {
       type: bundle.type,
+      ...(bundle.privacyAuditSummary ? { privacyAuditSummary: bundle.privacyAuditSummary } : {}),
+      ...(bundle.privacyAuditEvidence ? { privacyAuditEvidence: bundle.privacyAuditEvidence } : {}),
       detail: bundle.detail,
       scanId: bundle.scanId,
       domain: bundle.domain,

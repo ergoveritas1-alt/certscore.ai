@@ -1,5 +1,11 @@
 # @certscore/sdk
 
+## 0.2.13
+
+- Type retained privacy choices and notice passages as `ScanResource.privacyAuditEvidence`.
+- Expose bounded baseline/GPC activity comparisons through `gpcResponse.activityComparison`.
+- Retrieve tracking-workpaper pages with `getReportEvidencePage(scanId, { workpaper: "tracking" })`, including JSON/CSV download links.
+
 ## 0.2.12
 
 - Type canonical Accept/Reject `execution` outcomes and export `isSuccessfulChoicePath`.

@@ -76,3 +76,5 @@ export type {
 
 export type { GpcBoundedObservation } from "./gpc-bounded-observation.js";
 export type { GpcActivityComparison } from "./gpc-activity-comparison.js";
+
+export type { PrivacyAuditEvidence } from "./privacy-audit.js";

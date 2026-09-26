@@ -10,7 +10,7 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Tools | `certscore_scan_site` → `certscore_get_scan_status` → `certscore_get_scan_bundle` |
-| Current hosted version | `0.2.23` |
+| Current hosted version | `0.2.24` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 
@@ -465,3 +465,29 @@ and available snapshot links remain included. Image bytes are separate downloads
 The download uses the existing report read quota and creates no new scan or stored
 export artifact. Actual host download support must be tested separately; a returned
 URL is not proof that Cursor or Claude can retrieve it.
+
+### Privacy and tracking workpapers (0.2.24)
+
+`certscore_get_scan_bundle` includes `privacyAuditSummary` when verified retained
+evidence is available: observed privacy-choice controls, notice topics, source
+hash and retained counts. `detail=full` also includes `privacyAuditEvidence`.
+Byte-budget omissions are named in `mcpMetadata.omittedSections`; absence of a
+section is not evidence that a control or notice was absent.
+
+Use the existing reader for the starting-page inventory and workpaper:
+
+```json
+{"scanId":"00000000-0000-4000-8000-000000000123","workpaper":"tracking"}
+```
+
+Pass those arguments to `certscore_get_report_evidence_page`. It returns paginated
+JSON entries, `download.url` for the JSON workpaper and `download.csvUrl` for the
+inventory CSV. Preserve `workpaper` on every cursor continuation. This works on
+OAuth and Light with their existing workspace/public access boundaries and read
+quotas; no scan is created. Keep five-minute private download links confidential.
+
+Lead GPC summaries with returned observation facts and `gpcResponse.activityComparison`
+request counts when present. Keep the matched duration with those counts. Report
+Do Not Sell/Share control presence and retained notice passages as observations;
+do not infer opt-out effectiveness, notice adequacy, sale/sharing, or GPC honoring.
+Historical records remain unchanged and the score is the existing CertScore score.

@@ -46,7 +46,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.23`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.24`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 
@@ -237,7 +237,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.12` or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
+Status: published. Install `@certscore/sdk@0.2.13` or newer for typed GPC, Accept Path, and Reject Path results on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
 
 Choice-path interpretation:
 
@@ -451,3 +451,5 @@ GPC v3: read gpcResponse.observation.status for bounded capture and gpcResponse.
 - CCPA evidence review: https://certscore.ai/ccpa
 
 SDK 0.2.12 exports isSuccessfulChoicePath: count succeeded and succeeded_with_confirmation together. Consent confirmation remains separate. Historical missing execution is unavailable, not a failed path.
+
+Privacy workpapers: SDK 0.2.13 types ScanResource.privacyAuditEvidence and gpcResponse.activityComparison. MCP 0.2.24 scan bundles include privacyAuditSummary with observed controls and notice topics. For retained inventory and JSON/CSV downloads, use certscore_get_report_evidence_page with scanId and workpaper="tracking", or GET /api/v2/scans/{scanId}/report-evidence?workpaper=tracking. Preserve workpaper on cursor continuation. Existing workspace/public access and read quotas apply; private download links expire after five minutes. This is starting-page evidence; control presence does not establish opt-out effectiveness, and notice passages do not establish adequacy. No additional scan or separate CCPA score is created.

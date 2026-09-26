@@ -120,3 +120,21 @@ no capture work, model call, persistence or recurring cost ($0/month).
 ### Bounded GPC comparison
 
 The approved `certscore.gpc-activity-comparison.v1` supplement shows Baseline → GPC advertising/marketing and analytics/replay request counts with the matched 250, 500 or 1,000 ms duration. Both report focuses use the same persisted unified GPC evidence, as do API/Pulse, SDK/MCP and JSON/PDF exports. Full-session observations remain first. The original response assessment and California deduction are unchanged; short-window zeros do not become suppression or honoring claims. Historical records remain unchanged. See [the approved integration](scoring/gpc-bounded-comparison-proposal.md).
+
+## API, SDK and MCP workpaper parity
+
+API v2 `privacyAuditEvidence` is explicitly typed in SDK 0.2.13. MCP 0.2.24 exposes
+its source-bound compact controls/notice topics as `privacyAuditSummary`, with
+full evidence in `detail=full`; existing byte ceilings disclose omissions.
+
+`GET /api/v2/scans/{scanId}/report-evidence?workpaper=tracking` reuses the canonical
+tracking workpaper and existing workspace/public authorization, read throttles,
+snapshot-bound pagination and five-minute report download capabilities. Add
+`format=download` for JSON or `format=csv` for the inventory CSV. The same selector
+is available on the existing MCP report-evidence tool and SDK reader. Selection
+must be preserved during pagination. This export is explicitly starting-page
+only, including for scans with additional pages.
+
+No capture, findings, score, persistence, retention or capacity change. Estimated
+incremental bounded summary transfer is under $1/month at 100,000 reads; requested
+workpaper reads reuse existing quotas and substitute for larger report exports.

@@ -46,3 +46,18 @@ export const privacyAuditEvidenceSchema = z.object({
   truncated: z.boolean(),
 }).strict();
 export type PrivacyAuditEvidence = z.infer<typeof privacyAuditEvidenceSchema>;
+
+/** Compact factual view; counts and source references refer to the retained workpaper. */
+export const privacyAuditSummarySchema = privacyAuditEvidenceSchema.pick({
+  contractVersion: true, scanId: true, capturedAt: true, sourceHash: true,
+  verificationStatus: true, scoreEffect: true, negativeControlCoverage: true,
+  collectionPointNoticeAssessment: true,
+}).extend({
+  retainedControlCount: z.number().int().nonnegative(),
+  retainedNoticeCount: z.number().int().nonnegative(),
+  controls: privacyAuditEvidenceSchema.shape.controls.element.array().max(3),
+  notices: z.array(privacyAuditEvidenceSchema.shape.notices.element.omit({ passages: true }).extend({
+    topics: z.array(privacyAuditEvidenceSchema.shape.notices.element.shape.passages.element.shape.topic).max(5),
+  })).max(2),
+  truncated: z.boolean(),
+}).strict();

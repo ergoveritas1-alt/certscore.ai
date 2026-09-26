@@ -197,6 +197,7 @@ test("packaged declarations expose API v2 scan timing fields", () => {
   assert.match(declarations, /scanTimeSeconds\?: number \| null;/);
   assert.match(declarations, /evidenceExcerpt\?: string;/);
   assert.match(declarations, /export interface GpcResponse/);
+  assert.match(declarations, /privacyAuditEvidence\?: import\(".\/privacy-audit.js"\).PrivacyAuditEvidence/);
   assert.match(declarations, /activityComparison\?: import\(".\/gpc-activity-comparison.js"\).GpcActivityComparison/);
   assert.match(declarations, /observation\?: import\(".\/gpc-bounded-observation.js"\).GpcBoundedObservation/);
   assert.match(declarations, /afterAction\?: AfterActionSummary/);
@@ -793,4 +794,19 @@ test("connection diagnostics use one authenticated read and never submit a scan"
    assert.equal(new Headers(mock.callDetails[0]?.headers).get("authorization"),"Bearer test-credential");
    assert.notEqual(mock.callDetails[0]?.method,"POST");
  } finally {mock.restore();}
+});
+
+test("tracking workpaper retrieval forwards the workspace credential, selector and cursor without a scan", async () => {
+  const mock = installFetch([{ status: 200, body: { type: "certscore_report_evidence_page", workpaper: "tracking", entries: [] } }]);
+  try {
+    const client = new CertScoreClient({ apiKey: "test-key" });
+    const page = await client.getReportEvidencePage("scan_123", { workpaper: "tracking", cursor: "cursor" });
+    assert.equal(page.workpaper, "tracking");
+    assert.equal(mock.calls.length, 1);
+    const url = new URL(mock.calls[0]!);
+    assert.equal(url.pathname, "/api/v2/scans/scan_123/report-evidence");
+    assert.equal(url.searchParams.get("workpaper"), "tracking");
+    assert.equal(url.searchParams.get("cursor"), "cursor");
+    assert.equal(new Headers(mock.callDetails[0]!.headers).get("authorization"), "Bearer test-key");
+  } finally { mock.restore(); }
 });

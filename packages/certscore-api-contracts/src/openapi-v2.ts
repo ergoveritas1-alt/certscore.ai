@@ -1,3 +1,4 @@
+import { reportEvidencePageOpenApi } from "./report-page-openapi.js";
 import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.js";
 import { gpcActivityComparisonOpenApi } from "./gpc-activity-comparison-openapi.js";
 import { apiV2Disclaimer, CERTSCORE_API_V2_SCHEMA_VERSION } from "./api-v2.js";
@@ -621,6 +622,32 @@ export function buildCertScoreApiV2OpenApiDocument() {
           }
         }
       },
+      "/api/v2/scans/{scanId}/report-evidence": {
+        get: {
+          operationId: "getReportEvidencePage", tags: ["Scans", "Runtime Inventory"],
+          summary: "Retrieve retained report evidence or the tracking workpaper.",
+          description: "Use workpaper=tracking for the starting-page inventory, privacy choices/notices and GPC evidence. Default returns paginated JSON with download URLs; format=download returns one JSON document; format=csv requires workpaper=tracking. Preserve workpaper on cursor continuation. Workspace reports require an authorized read credential or a returned five-minute download capability. Anonymous access is limited to eligible public scans. Existing report-page read quotas apply; no scan is created. Inventory sale, sharing and vendor-specific GPC honoring remain not_assessed.",
+          security: [{ bearerAuth: [] }, {}],
+          parameters: [
+            { name: "scanId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            { name: "cursor", in: "query", schema: { type: "string" } },
+            { name: "workpaper", in: "query", schema: { type: "string", enum: ["tracking"] } },
+            { name: "format", in: "query", schema: { type: "string", enum: ["download", "csv"] } },
+            { name: "downloadTicket", in: "query", description: "Confidential report-scoped capability from download.url; downloads only.", schema: { type: "string" } },
+          ],
+          responses: {
+            "200": { description: "Evidence page by default, JSON attachment with format=download, or inventory CSV with format=csv.", content: {
+              "application/json": { schema: { anyOf: [{ $ref: "#/components/schemas/ReportEvidencePage" }, { type: "object", description: "Canonical report or tracking-workpaper download; selected by format=download." }] } },
+              "text/csv": { schema: { type: "string" } },
+            } },
+            "400": { description: "Invalid selection or cursor.", content: errorContent },
+            "403": { description: "Unauthorized or expired download link.", content: errorContent },
+            "404": { description: "Completed authorized report unavailable.", content: errorContent },
+            "409": { description: "Report snapshot changed; restart pagination.", content: errorContent },
+            "429": readRateLimitedResponse,
+          },
+        },
+      },
       "/api/v2/scans/{scanId}/pre-consent-cookies-trackers": {
         get: {
           operationId: "getScanPreConsentCookiesTrackers",
@@ -712,6 +739,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
         }
       },
       schemas: {
+        ReportEvidencePage: reportEvidencePageOpenApi,
         CreateScanRequest: {
           type: "object",
           additionalProperties: false,

@@ -286,6 +286,7 @@ export interface GpcResponse {
 }
 
 export interface ScanResource extends ScanCreationMetadata {
+  privacyAuditEvidence?: import("./privacy-audit.js").PrivacyAuditEvidence | null;
   type: "certscore_scan";
   scanId: string;
   domain: string;
@@ -973,6 +974,8 @@ export interface ReportEvidencePage {
   scanId: string;
   snapshot: string;
   reportUrl: string;
+  workpaper?: "tracking";
+  download?: { url: string; csvUrl?: string; mediaType: "application/json"; expiresAt?: string; bytes: number; authentication: "same_access_rules_as_mcp" | "short_lived_report_link" | "public"; instructions: string };
   entries: Array<{ path: string; value: unknown; stringPart?: number; stringParts?: number }>;
   pagination: { offset: number; returned: number; total: number; complete: boolean; nextCursor: string | null };
   coverage: { scope: "public_report_projection"; exportTruncated: false; observationCompleteness: "see_report_coverage"; exclusions: string[] };

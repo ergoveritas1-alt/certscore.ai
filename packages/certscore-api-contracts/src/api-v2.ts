@@ -24,7 +24,7 @@ export function isCanonicalScanId(value: unknown): value is string {
 }
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.12";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.13";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.";
