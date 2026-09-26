@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SiteFooter } from "../layout/site-footer";
 import { SiteHeader } from "../layout/site-header";
 import { AiVisibilityContent } from "./ai-visibility-content";
+import type { GuideScanPrompt } from "./guide-scan-cta";
 import {
   createBreadcrumbSchema,
   createPageMetadata,
@@ -20,6 +21,7 @@ type GrowthLink = {
 };
 
 export type GrowthContentPageConfig = {
+  scanPrompt?: GuideScanPrompt;
   badge: string;
   description: string;
   intro: string;
@@ -67,6 +69,7 @@ export function GrowthContentPage({ config }: { config: GrowthContentPageConfig 
   ];
   const content = (
     <AiVisibilityContent
+      scanPrompt={config.scanPrompt}
       badge={config.badge}
       intro={config.intro}
       path={config.path}

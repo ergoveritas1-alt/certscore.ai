@@ -39,6 +39,23 @@ Record the web release SHA/date and Search Console's recrawl dates before select
 
 Use the dated audit in `outputs/seo-audit-2026-09-14/seo-audit.md` as the initial snapshot, not a substitute for matching exports. Keep missing conversion data as unavailable rather than zero. Report totals and per-query changes together; changing query mix, seasonality and consent coverage prevent a clean causal claim from a simple before/after comparison.
 
+### Contextual guide scan forms (September 26, 2026)
+
+The GA/Meta before-consent, third-party cookie checker, and website consent audit
+checklist guides embed the existing preview scan form with topic-specific guidance.
+The closing action returns to that form and explains how to review another website
+after the first report. These prompts do not enable a specialized test or full-site
+coverage. Scan behavior, quotas, and per-scan cost remain unchanged; added fixed
+infrastructure cost is $0/month. Any additional user-requested scans retain their
+ordinary usage cost.
+
+Evaluate these three landing routes as a fixed cohort using permitted linked fresh
+starts and browser-observed completions, with canonical outcomes as a cross-check.
+Report second-domain milestones separately with the limitations below. Record the
+actual release date before starting a comparison; a source commit is not a release.
+At the observed traffic volume, treat changes as directional rather than a
+statistically established conversion lift.
+
 ### Scan journey measurement (September 26, 2026)
 
 The standard website URL form records a fresh accepted scan in bounded, tab-local

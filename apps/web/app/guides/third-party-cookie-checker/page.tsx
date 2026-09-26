@@ -12,9 +12,13 @@ const config: GrowthContentPageConfig = {
   intro:
     "A third-party cookie checker helps teams review whether cookies from outside the first-party site appear during public webpage loading and consent interactions.",
   path: "/guides/third-party-cookie-checker",
+  scanPrompt: {
+    title: "Check your website’s cookies before consent",
+    description: "Enter a public page URL, then review the report’s cookie domains, timing, and available consent context. A third-party request alone does not establish that a cookie was stored."
+  },
   relatedLinks: [
     { href: "/guides/check-third-party-cookies-before-consent", label: "Check third-party cookies before consent" },
-    { href: "/guides/check-third-party-cookies-before-consent", label: "Third-party cookies before consent" },
+    { href: "/solutions/cookie-consent-scanner", label: "Cookie consent scanner" },
     { href: "/guides/detect-tracking-before-consent", label: "Pre-consent tracking detection" },
     { href: "/methodology", label: "Methodology" }
   ],

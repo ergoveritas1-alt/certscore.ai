@@ -19,6 +19,10 @@ export const metadata: Metadata = {
 export default function WebsiteConsentAuditChecklistGuidePage() {
   return (
     <AiVisibilityContent
+      scanPrompt={{
+        title: "Start your consent review with a website scan",
+        description: "Enter a public page URL to gather observations for this checklist. Review visible controls, runtime activity, and available action evidence separately, then record unresolved questions in the worksheet."
+      }}
       showEvidenceExamples={false}
       badge={guide.badge}
       intro={guide.intro}

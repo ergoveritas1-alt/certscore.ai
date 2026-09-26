@@ -9,6 +9,7 @@ import {
   type SampleFindingJson
 } from "../../lib/marketing/sample-finding-json";
 import { EvidenceJsonBlock } from "../scans/evidence-json-block";
+import { GuideScanCta, GuideScanReturnCta, type GuideScanPrompt } from "./guide-scan-cta";
 
 export const STANDARD_AUTOMATED_FINDINGS_DISCLAIMER =
   "CertScore.ai automated findings may contain errors. Always review the underlying evidence. CertScore.ai does not provide legal advice, certification, or compliance determinations.";
@@ -25,6 +26,7 @@ type RelatedLink = {
 };
 
 type AiVisibilityContentProps = {
+  scanPrompt?: GuideScanPrompt;
   evidence?: ReactNode;
   badge: string;
   title: string;
@@ -73,6 +75,7 @@ export function DisclaimerBlock() {
 }
 
 export function AiVisibilityContent({
+  scanPrompt,
   aiSummary,
   evidence,
   badge,
@@ -113,7 +116,7 @@ export function AiVisibilityContent({
       </div>
 
       <div className="mt-8">
-        <WebsiteBehaviorScanCta />
+        {scanPrompt ? <GuideScanCta {...scanPrompt} /> : <WebsiteBehaviorScanCta />}
       </div>
 
       {evidence ? <div className="mt-8">{evidence}</div> : null}
@@ -211,7 +214,7 @@ export function AiVisibilityContent({
             </CardContent>
           </Card>
         ) : null}
-        <WebsiteBehaviorScanCta />
+        {scanPrompt ? <GuideScanReturnCta /> : <WebsiteBehaviorScanCta />}
         {showDisclaimer ? <DisclaimerBlock /> : null}
       </div>
     </section>
