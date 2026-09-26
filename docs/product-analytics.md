@@ -56,6 +56,21 @@ actual release date before starting a comparison; a source commit is not a relea
 At the observed traffic volume, treat changes as directional rather than a
 statistically established conversion lift.
 
+### Claude scan activation (September 26, 2026)
+
+The `/claude` landing page makes a user-supplied URL the primary copyable prompt
+and provides a separate next-website prompt. Both ask for the target before
+scanning and preserve existing limits and eligible result reuse. The controlled
+canary remains an optional connection check. Light public access and authenticated
+workspace access have separate setup guidance. Prompt copying is an intent signal,
+not a completed scan; continue to use canonical MCP outcomes for activation and
+keep connection initialization counts separate from users and scan requests.
+
+This is a copy/layout change with $0/month added fixed infrastructure cost and no
+change to per-scan cost, quotas, or automated scan volume. User-requested scans
+retain their ordinary usage cost. Record the production release date before
+comparing landing-page activity; the source change alone does not update the site.
+
 ### Scan journey measurement (September 26, 2026)
 
 The standard website URL form records a fresh accepted scan in bounded, tab-local
