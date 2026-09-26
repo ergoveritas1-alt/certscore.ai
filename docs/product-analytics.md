@@ -38,3 +38,35 @@ Record the web release SHA/date and Search Console's recrawl dates before select
 | Reject walkthrough and audit checklist | Pending export | Pending recrawl + 28 days | Pending | Pending | Unverified until funnel validation |
 
 Use the dated audit in `outputs/seo-audit-2026-09-14/seo-audit.md` as the initial snapshot, not a substitute for matching exports. Keep missing conversion data as unavailable rather than zero. Report totals and per-query changes together; changing query mix, seasonality and consent coverage prevent a clean causal claim from a simple before/after comparison.
+
+### Scan journey measurement (September 26, 2026)
+
+The standard website URL form records a fresh accepted scan in bounded, tab-local
+journey state (at most 20 scan IDs, expiring after 24 hours). A ready canonical
+report consumes that marker once to emit `scan_completed`; a full-site report
+waits for the existing full-site response to report completed with no active pages.
+This is a browser-observed completion funnel, not the authoritative total of server
+completions. Use canonical scan records for total outcomes, including users who
+leave before opening their report. Historical totals are not backfilled.
+
+Fresh submissions include the canonical scan ID on first-party `scan_started`
+events while retaining the landing route. Current public `/scan/:id` and legacy
+`/scano/:id` paths also resolve scan IDs. Existing stored campaign attribution is
+available on later first-party journey events; no new attribution storage is added.
+Authenticated operational events continue to omit optional campaign/session identity
+under the existing ingestion policy. Unknown audiences remain unknown.
+
+Sample/shared report views, reused results, repeated mounts, reloads, and stale or
+unmatched journeys do not count as fresh completions. Missing or inaccessible journey
+storage fails closed. Opt-out clears pending journey state and prevents new linkable
+conversion events. Google/Umami dispatch and campaign-domain milestones still require
+analytics consent. Domain milestones emit only when a new first or second domain
+is completed, not on repeated scans of the same domain. These remain campaign-linked,
+browser-local milestones, not lifetime account activation or a server retention metric.
+The separate extension flow and legacy server-action submission forms are not newly
+attributed by this standard-form journey marker.
+
+Cost estimate at the September 19–25 measured web volume (14 scans/week): fewer than
+150 additional bounded event rows/month, expected below $0.01/month using existing
+infrastructure and retention. No new scan, model call, polling request, service,
+capacity, or retention period is introduced. Reassess before a material volume expansion.

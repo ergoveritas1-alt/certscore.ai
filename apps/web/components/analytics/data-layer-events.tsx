@@ -16,9 +16,10 @@ import {
 } from "../../lib/analytics/data-layer";
 import {
   captureCampaignAttribution,
-  markCampaignLandingSeen,
-  recordCampaignCompletedDomain
+  markCampaignLandingSeen
 } from "../../lib/attribution/campaign-attribution";
+import { trackCompletedScan } from "../../lib/analytics/scan-conversions";
+import { extractScanIdFromPath } from "../../lib/product-analytics/contract";
 import { trackProductEvent } from "../../lib/product-analytics/client";
 
 const PENDING_SCAN_STARTED_KEY = "certscore:analytics:pending-scan-started";
@@ -259,38 +260,15 @@ export function PendingScanStartedEvent() {
   return null;
 }
 
-export function ScanCompletedEvent({
-  scanSource,
-  domain
-}: {
+export function ScanCompletedEvent({ domain, scanId }: {
+  scanId?: string;
   scanSource: Extract<ScanSource, "homepage" | "dashboard" | "unknown">;
   domain?: string | null;
 }) {
   const pathname = usePathname();
-
   useEffect(() => {
-    pushDataLayerEventOnce(`scan_completed:${pathname}`, {
-      event: "scan_completed",
-      scan_source: scanSource,
-      scan_status: "completed"
-    });
-    trackProductEvent({ eventName: "scan_completed", category: "scan", feature: `scan:${scanSource}`, outcome: "success", route: pathname });
-    if (domain) {
-      const ordinal = recordCampaignCompletedDomain(domain);
-      if (ordinal === 1) {
-        pushDataLayerEventOnce(`first_scan_completed:${pathname}`, {
-          event: "first_scan_completed",
-          scan_source: scanSource
-        });
-      } else if (ordinal === 2) {
-        pushDataLayerEventOnce(`second_distinct_domain_scanned:${pathname}`, {
-          event: "second_distinct_domain_scanned",
-          scan_source: scanSource
-        });
-      }
-    }
-  }, [domain, pathname, scanSource]);
-
+    trackCompletedScan(scanId ?? extractScanIdFromPath(pathname), domain);
+  }, [domain, pathname, scanId]);
   return null;
 }
 

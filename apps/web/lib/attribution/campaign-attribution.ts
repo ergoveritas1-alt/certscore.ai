@@ -1,3 +1,5 @@
+import { hasAnalyticsConsent } from "../analytics/consent";
+
 export const CAMPAIGN_ATTRIBUTION_STORAGE_KEY = "certscore:campaign-attribution:v1";
 const CAMPAIGN_LANDING_SEEN_KEY = "certscore:campaign-landing-seen:v1";
 const CAMPAIGN_COMPLETED_DOMAINS_KEY = "certscore:campaign-completed-domains:v1";
@@ -118,7 +120,7 @@ function hasSeenCampaignLanding() {
 }
 
 export function recordCampaignCompletedDomain(domain: string): 1 | 2 | null {
-  if (typeof window === "undefined" || !getStoredCampaignAttribution()) return null;
+  if (typeof window === "undefined" || !hasAnalyticsConsent() || !getStoredCampaignAttribution()) return null;
   const normalized = domain.trim().toLowerCase();
   if (!normalized) return null;
 
@@ -126,10 +128,9 @@ export function recordCampaignCompletedDomain(domain: string): 1 | 2 | null {
     const raw = window.localStorage.getItem(CAMPAIGN_COMPLETED_DOMAINS_KEY);
     const domains = raw ? JSON.parse(raw) : [];
     const existing = Array.isArray(domains) ? domains.filter((item): item is string => typeof item === "string") : [];
-    if (!existing.includes(normalized)) {
-      existing.push(normalized);
-      window.localStorage.setItem(CAMPAIGN_COMPLETED_DOMAINS_KEY, JSON.stringify(existing.slice(-20)));
-    }
+    if (existing.includes(normalized) || existing.length >= 2) return null;
+    existing.push(normalized);
+    window.localStorage.setItem(CAMPAIGN_COMPLETED_DOMAINS_KEY, JSON.stringify(existing));
     const position = existing.indexOf(normalized) + 1;
     return position === 1 || position === 2 ? position : null;
   } catch {

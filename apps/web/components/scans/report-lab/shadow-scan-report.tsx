@@ -1,3 +1,4 @@
+import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { GpcObservedFacts } from "../gpc-observed-facts";
@@ -1834,11 +1835,15 @@ export function ShadowScanReport({
 
   const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<RuntimeObservationTimeline dominant compact events={report.timeline} />} executiveSnapshot={<SignalSnapshot siteOverview report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
+  const completionEvent = report.resultDisposition !== "no_go" && !report.fullSite
+    ? <ScanCompletedEvent scanId={report.scan.id} scanSource={mode === "authenticated" ? "dashboard" : "homepage"} domain={report.scan.host} /> : null;
+
   const reportDisclaimer = <p className="mx-auto mt-6 px-5 pb-6 text-center text-xs text-zinc-500">CertScore.ai can make mistakes. Verify all findings.</p>;
 
   if (mode === "authenticated") {
     return (
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
+        {completionEvent}
         {focusControl}
         {reportContent}
         {reportDisclaimer}
@@ -1848,6 +1853,7 @@ export function ShadowScanReport({
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950">
+      {completionEvent}
       <SiteHeader mobilePrimaryAction="sign-in" wide />
       {focusControl}
       {reportContent}

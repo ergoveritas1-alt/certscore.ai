@@ -1,3 +1,4 @@
+import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
 import { consentInspectionNotice } from "../../../lib/scans/consent-inspection-presentation";
@@ -1788,9 +1789,13 @@ export function ShadowScanReport({
 
   const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<RuntimeObservationTimeline dominant compact events={report.timeline} />} executiveSnapshot={<SignalSnapshot siteOverview report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
+  const completionEvent = report.resultDisposition !== "no_go" && !report.fullSite
+    ? <ScanCompletedEvent scanId={report.scan.id} scanSource={mode === "authenticated" ? "dashboard" : "homepage"} domain={report.scan.host} /> : null;
+
   if (mode === "authenticated") {
     return (
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
+        {completionEvent}
         {reportContent}
       </div>
     );
@@ -1798,6 +1803,7 @@ export function ShadowScanReport({
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950">
+      {completionEvent}
       <SiteHeader mobilePrimaryAction="sign-in" wide />
       {reportContent}
       <SiteFooter hideDisclaimer wide />

@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           previewUrl: `/scan/${existingScan.id}`,
+          reusedExistingScan: false,
           scanId: existingScan.id,
           statusUrl: `/api/preview-scan/${existingScan.id}`
         },
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         previewUrl: `/scan/${preview.scan.id}`,
+        reusedExistingScan: false,
         scanId: preview.scan.id,
         statusUrl: `/api/preview-scan/${preview.scan.id}`
       },

@@ -6,6 +6,7 @@ import { Button, Input } from "@website-signal-risk-scanner/ui";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
+import { trackAcceptedScan } from "../../lib/analytics/scan-conversions";
 import { CERTSCORE_CHROME_EXTENSION_STORE_URL } from "../../lib/browser-extension";
 import { captureCampaignAttribution } from "../../lib/attribution/campaign-attribution";
 import {
@@ -893,11 +894,11 @@ function StandardDomainScanForm({
         return;
       }
 
-      await pushDataLayerEventBeforeNavigation({
-        event: "scan_started",
-        scan_source: scanSource,
-        scan_target_type: getScanTargetType(submittedDomain),
-        scan_status: "queued"
+      await trackAcceptedScan({
+        scanId: payload.scanId,
+        reusedExistingScan: payload.reusedExistingScan,
+        source: scanSource,
+        targetType: getScanTargetType(submittedDomain)
       });
       if (crawlInput?.fullSite && payload.scanId) {
         clearPendingScanSession(requestId);
@@ -969,7 +970,7 @@ function StandardDomainScanForm({
   }
 
   return (
-    <form className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
+    <form data-analytics-form="website-scan" className={compact ? "space-y-2" : "space-y-4"} onSubmit={(event) => void handleSubmit(event)}>
       <div className="space-y-2">
         <div className="relative z-30">
           <Input

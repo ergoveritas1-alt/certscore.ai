@@ -91,7 +91,7 @@ export function analyticsRouteIdentifier(prefix: string, value: string, maxLengt
 }
 
 export function extractScanIdFromPath(value: string) {
-  const match = value.match(/\/(?:scans|scanso|scanso2)\/([0-9a-f-]{36})(?:[/?#]|$)/i);
+  const match = value.match(/\/(?:scan|scans|scano|scanso|scanso2)\/([0-9a-f-]{36})(?:[/?#]|$)/i);
   const candidate = match?.[1];
   return candidate && UUID_PATTERN.test(candidate) ? candidate : undefined;
 }

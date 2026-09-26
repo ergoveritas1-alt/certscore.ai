@@ -1,4 +1,5 @@
 "use client";
+import { trackFullSiteCompletion } from "../../lib/analytics/scan-conversions";
 import { ReportInventorySummary } from "../scans/report-inventory-summary";
 import { useFullSiteReportContinuity } from "./full-site-report-continuity";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
@@ -206,6 +207,8 @@ export function FullSiteWorkspace({
         }
         const next = (await response.json()) as FullSiteReportResponse;
         if (controller.signal.aborted) return;
+        // Bind completion to this response and request, not stale component state after navigation.
+        trackFullSiteCompletion(scanId, next.summary, homepageUrl);
         if (retainedReport?.scanId === scanId && filters === initialFilters && !offset && !detailPage) {
           retainedReport.data = next;
         }

@@ -1,4 +1,5 @@
 "use client";
+import { trackFullSiteCompletion } from "../../lib/analytics/scan-conversions";
 import { flushSync } from "react-dom";
 import { ServicesSnapshotContext } from "./services-signal-snapshot";
 
@@ -217,6 +218,8 @@ export function FullSiteWorkspace({
         }
         const next = (await response.json()) as FullSiteReportResponse;
         if (controller.signal.aborted) return;
+        // Bind completion to this response and request, not stale component state after navigation.
+        trackFullSiteCompletion(scanId, next.summary, homepageUrl);
         if (retainedReport?.scanId === scanId && filters === initialFilters && !offset && !detailPage) {
           retainedReport.data = next;
         }

@@ -1,5 +1,7 @@
 "use client";
 
+import { SCAN_CONVERSION_STORAGE_KEY } from "./scan-conversion-state";
+
 import {
   ANALYTICS_CONSENT_CHANGE_EVENT,
   ANALYTICS_CONSENT_STORAGE_KEY,
@@ -73,6 +75,7 @@ export function saveAnalyticsConsent(choice: AnalyticsConsentChoice) {
     }
   } else {
     window.certscoreUmamiEventQueue = [];
+    try { window.sessionStorage.removeItem(SCAN_CONVERSION_STORAGE_KEY); } catch { /* Best-effort opt-out cleanup. */ }
   }
 
   window.dispatchEvent(new CustomEvent(ANALYTICS_CONSENT_CHANGE_EVENT, { detail: { choice } }));
