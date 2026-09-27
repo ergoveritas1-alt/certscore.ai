@@ -57,8 +57,8 @@ const definitions = [
     definition: "A public page or document that presents privacy, cookie, consent, or related disclosure information."
   },
   {
-    term: "Confirmed interaction",
-    definition: "Evidence that a consent action produced a verified state transition, established independently of the click itself. Required before activity qualifies on the Reject Path."
+    term: "Confirmed consent decision",
+    definition: "Evidence, separate from a click, that Accept registered a grant or Reject registered a refusal. Required for confirmed post-refusal findings; separately verified Reject-click tracking can support review without confirmed registration."
   },
   {
     term: "Confirmed clean",

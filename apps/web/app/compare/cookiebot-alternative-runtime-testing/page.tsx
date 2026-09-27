@@ -38,7 +38,7 @@ const config: GrowthContentPageConfig = {
     {
       title: "Read the action evidence separately",
       paragraphs: [
-        "On eligible scans, Accept and Reject use separate sessions. A completed click, confirmed choice, and after-choice activity are distinct facts. Accept is an ordinary score-neutral comparison; limited coverage is not a clean result.",
+        "On eligible scans, Accept and Reject use separate sessions. A completed click, confirmed choice, and after-action activity are distinct facts. Accept is an ordinary score-neutral comparison; limited coverage is not a clean result.",
         "For a confirmed refusal, inspect any qualifying later requests alongside timing and attribution limits. Separately verified tracking after a completed Reject click can be a review signal even when registration was not confirmed."
       ]
     }
