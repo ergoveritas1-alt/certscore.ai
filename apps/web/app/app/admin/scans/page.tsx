@@ -48,6 +48,17 @@ function CreatedViaCell({ scan }: { scan: AdminScanListItem }) {
   </td>;
 }
 
+function ClientChannelCell({ scan }: { scan: AdminScanListItem }) {
+  const client = scan.clientName || (scan.clientFamily && scan.clientFamily !== "unknown" ? formatFilterLabel(scan.clientFamily) : "Not recorded");
+  const channel = scan.executionChannel && scan.executionChannel !== "unknown"
+    ? formatFilterLabel(scan.executionChannel)
+    : SCAN_CREATION_SOURCES[scanCreationSource(scan.requestChannel)];
+  return <td className="px-2.5 py-1.5">
+    <p className="truncate font-semibold text-slate-700" title={client}>{client}</p>
+    <p className="mt-0.5 truncate text-[10px] text-slate-500" title={channel}>{channel}</p>
+  </td>;
+}
+
 const statuses = ["any", "no_go", "rejected", "failed", "running", "queued", "limited", "completed"] as const;
 const freshnesses = ["any", "fresh", "forced_fresh", "reused"] as const;
 const accessValues = ["any", "clear", "blocked", "captcha", "robots_limited", "limited", "unknown"] as const;
@@ -417,9 +428,9 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
           showPageJump
         />
         <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200">
-          <table className="w-[3477px] min-w-[3477px] table-fixed text-left text-xs">
+          <table className="w-[3647px] min-w-[3647px] table-fixed text-left text-xs">
             <colgroup>
-              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "173px" }} /><col style={{ width: "190px" }} />
+              <col style={{ width: "100px" }} /><col style={{ width: "165px" }} /><col style={{ width: "115px" }} /><col style={{ width: "173px" }} /><col style={{ width: "190px" }} /><col style={{ width: "170px" }} />
               <col style={{ width: "70px" }} /><col style={{ width: "60px" }} /><col style={{ width: "75px" }} /><col style={{ width: "156px" }} />
               <col style={{ width: "80px" }} /><col style={{ width: "205px" }} /><col style={{ width: "135px" }} /><col style={{ width: "145px" }} />
               <col style={{ width: "65px" }} /><col style={{ width: "75px" }} /><col style={{ width: "190px" }} />
@@ -430,7 +441,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
               <tr>
                 {[
                   { label: "Status", className: "sticky left-0 z-30 bg-slate-50" },
-                  { label: "Requester IP" }, { label: "Requested" }, { label: "Page" }, { label: "Created via" }, { label: "Tranco" },
+                  { label: "Requester IP" }, { label: "Requested" }, { label: "Page" }, { label: "Created via" }, { label: "Client / channel" }, { label: "Tranco" },
                   { label: "Score" }, { label: "Top" }, { label: "Privacy / CMP" },
                   { label: "A/R/O" }, { label: "Transparency" }, { label: "Transport" }, { label: "Runtime" }, { label: "# HL" }, { label: "# Forms" }, { label: "CMS" }, { label: "Size" }, { label: "Time" }, { label: "Outcome" }, { label: "From" }, { label: "Freshness" }, { label: "Language" }, { label: "Access" }, { label: "Industry" },
                   { label: "Scan ID" }, { label: "Scanner egress" },
@@ -465,6 +476,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
                       </div>
                     </td>
                     <CreatedViaCell scan={scan} />
+                    <ClientChannelCell scan={scan} />
                     <td className="px-2.5 py-1.5 font-medium text-slate-700">{scan.trancoRank ? `#${scan.trancoRank.toLocaleString()}` : "—"}</td>
                     <td className="px-2.5 py-1.5" title={[scan.scoreLabel, scan.scoreVersion, scan.scoreCoverageConfidence ? `${scan.scoreCoverageConfidence} coverage` : null, scan.scoreScoredAt ? `scored ${scan.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined}><span className="text-sm font-semibold text-slate-950">{scan.certscoreOverall ?? "—"}</span>{scan.certscoreOverall !== null ? <span className="text-slate-400">/100</span> : null}</td>
                     <td className="px-2.5 py-1.5"><span className="text-sm font-semibold text-slate-950">{scan.topFindingCount ?? "—"}</span></td>
@@ -506,7 +518,7 @@ async function AdminScansContent({ resolvedSearchParams }: { resolvedSearchParam
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="space-y-1">
           <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Scan Admin</h2>
-          <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Scanner egress identifies the outbound runtime that reached the target site.</p>
+          <p className="text-sm text-slate-500">Requester IP identifies who reached CertScore. Client names are recorded labels, not verified identities. Scanner egress identifies the outbound runtime that reached the target site.</p>
         </div>
         <AdminTrafficFilters basePath="/app/admin/scans" scope={trafficScope} searchParams={resolvedSearchParams} />
       </div>
