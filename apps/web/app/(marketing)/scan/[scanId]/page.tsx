@@ -85,7 +85,7 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
     alternates: { canonical: reportUrl },
     description,
     openGraph: { description, title, type: "website", url: reportUrl },
-    robots: { follow: false, index: false },
+    robots: { follow: true, index: false },
     title: { absolute: title },
     twitter: { card: "summary_large_image", description, title },
   };

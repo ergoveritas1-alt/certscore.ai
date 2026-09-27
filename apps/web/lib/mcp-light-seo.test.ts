@@ -28,7 +28,10 @@ test("MCP Light guide and contextual links preserve evidence and legal boundarie
   assert.match(guide, /25 of 25 cases/);
   assert.match(guide, /p95 of 4\.896 seconds/);
   assert.match(guide, /not a service-level guarantee/);
-  assert.match(guide, /only when an eligible scan confirms a deterministic refusal action/);
+  assert.match(guide, /Confirmed post-refusal findings require a verified refusal and qualifying later evidence/);
+  assert.match(guide, /separately verified Reject-click tracking signal/);
+  assert.match(guide, /certscore_get_report_evidence_page/);
+  assert.doesNotMatch(guide, /createFaqPageSchema/);
   assert.match(guide, /not legal advice, certification, or a compliance determination/);
   assert.match(lightPage, /identifier: "ai\.certscore\/mcp-light"/);
   assert.match(lightPage, /GPC/);

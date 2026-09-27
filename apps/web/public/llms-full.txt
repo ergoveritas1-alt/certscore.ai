@@ -351,7 +351,7 @@ Light MCP — no authentication (canonical beginner route):
 
 https://mcp.certscore.ai/mcp/light
 
-CertScore Light uses Streamable HTTP and exposes only certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle. It requires no signup, API key, bearer token, browser login, or OAuth and includes up to 50 genuinely new scans per UTC day across the public Light surface, with a 5-new-scan rolling 10-minute burst limit. Reused eligible results do not consume quota.
+CertScore Light uses Streamable HTTP and exposes certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, and certscore_get_report_evidence_page. It requires no signup, API key, bearer token, browser login, or OAuth and includes up to 50 genuinely new scans per UTC day across the public Light surface, with a 5-new-scan rolling 10-minute burst limit. Reused eligible results do not consume quota.
 
 Codex setup:
 
@@ -452,7 +452,7 @@ GPC v3: read gpcResponse.observation.status for bounded capture and gpcResponse.
 
 SDK 0.2.12 exports isSuccessfulChoicePath: count succeeded and succeeded_with_confirmation together. Consent confirmation remains separate. Historical missing execution is unavailable, not a failed path.
 
-Privacy workpapers: SDK 0.2.13 types ScanResource.privacyAuditEvidence and gpcResponse.activityComparison. MCP 0.2.24 scan bundles include privacyAuditSummary with observed controls and notice topics. For retained inventory and JSON/CSV downloads, use certscore_get_report_evidence_page with scanId and workpaper="tracking", or GET /api/v2/scans/{scanId}/report-evidence?workpaper=tracking. Preserve workpaper on cursor continuation. Existing workspace/public access and read quotas apply; private download links expire after five minutes. This is starting-page evidence; control presence does not establish opt-out effectiveness, and notice passages do not establish adequacy. No additional scan or separate CCPA score is created.
+Privacy workpapers: SDK 0.2.13 types ScanResource.privacyAuditEvidence and gpcResponse.activityComparison. MCP 0.2.25 scan bundles include privacyAuditSummary with observed controls and notice topics. For retained inventory and JSON/CSV downloads, use certscore_get_report_evidence_page with scanId and workpaper="tracking", or GET /api/v2/scans/{scanId}/report-evidence?workpaper=tracking. Preserve workpaper on cursor continuation. Existing workspace/public access and read quotas apply; private download links expire after five minutes. This is starting-page evidence; control presence does not establish opt-out effectiveness, and notice passages do not establish adequacy. No additional scan or separate CCPA score is created.
 
 Agent reporting: For GPC, lead with available `gpcResponse.observation` facts and `gpcResponse.activityComparison` request counts, preserving the matched duration. These facts remain useful when the paired `gpcResponse.status` is `indeterminate`. Use the returned paired status and finding title for that comparison: `GPC response`, `No observable GPC response`, or `indeterminate`. Keep any returned California scoring policy separate. Observation completion, recorded opt-out state and short-window request counts do not establish that GPC was honored.
 

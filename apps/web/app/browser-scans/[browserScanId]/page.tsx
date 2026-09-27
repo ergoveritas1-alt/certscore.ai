@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -7,6 +8,11 @@ import { isPublicAccountCreationEnabled } from "../../../server/access-control";
 import { getBrowserScanSessionById } from "../../../server/browser-scans/repository";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Browser evidence | CertScore.ai",
+  robots: { index: false, follow: true }
+};
 
 type BrowserScanPublicPageProps = {
   params: Promise<{

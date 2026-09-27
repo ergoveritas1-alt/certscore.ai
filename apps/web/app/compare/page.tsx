@@ -32,8 +32,8 @@ const comparisonPages = [
   },
   {
     href: "/compare/cookiebot-alternative-runtime-testing",
-    label: "Cookiebot runtime testing",
-    summary: "Review how runtime testing can add evidence around tags, cookies, and third-party requests."
+    label: "Cookiebot consent management and runtime testing",
+    summary: "Compare Cookiebot's cookie declaration with cookies and requests recorded in a specific visit."
   },
   {
     href: "/compare/onetrust-runtime-consent-testing",

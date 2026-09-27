@@ -5,7 +5,7 @@ import { MethodologyFeatureTour } from "../../components/marketing/methodology-f
 import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
-import { createPageMetadata } from "../../lib/seo";
+import { createPageMetadata, createPublicArticleSchema } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
   description:
@@ -57,8 +57,8 @@ const definitions = [
     definition: "A public page or document that presents privacy, cookie, consent, or related disclosure information."
   },
   {
-    term: "Confirmed interaction",
-    definition: "Evidence that a consent action produced a verified state transition, established independently of the click itself. Required before activity qualifies on the Reject Path."
+    term: "Confirmed consent decision",
+    definition: "Evidence, separate from a click, that Accept registered a grant or Reject registered a refusal. Required for confirmed post-refusal findings; separately verified Reject-click tracking can support review without confirmed registration."
   },
   {
     term: "Confirmed clean",
@@ -77,6 +77,12 @@ const definitions = [
 export default function MethodologyPage() {
   return (
     <main className="min-h-screen bg-white">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(createPublicArticleSchema({
+        title: "Real browser behavior. Evidence you can review.",
+        description: "See cookies, services, privacy signals, and supporting evidence together in one browser-based website report.",
+        path: "/methodology",
+        type: "TechArticle"
+      })) }} />
       <SiteHeader />
 
       <section className="relative isolate border-b border-sky-900 bg-[#071b32] text-white">
@@ -89,6 +95,9 @@ export default function MethodologyPage() {
             </h1>
             <p className="mt-6 max-w-xl text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">
               What loads before consent? What happens after Reject? See cookies, services, privacy signals, and supporting evidence together in one browser-based website report.
+            </p>
+            <p className="mt-4 max-w-xl text-sm leading-6 text-slate-300">
+              Each finding describes evidence observed during a visit to a public website. Read it with the report&apos;s scan time, region, and coverage; it is a point-in-time observation, not a legal determination or certification.
             </p>
             <div id="free-scan" className="[&_button[type=submit]]:!bg-sky-600 [&_button[type=submit]]:!bg-none [&_button[type=submit]]:!opacity-100 [&_button[type=submit]:hover]:!bg-sky-500 mt-8 scroll-mt-28 rounded-2xl border border-sky-300/25 bg-white/[0.05] p-4 sm:p-5">
               <h2 className="mb-3 text-sm font-semibold text-white">See the methodology in action. Start a free scan.</h2>
@@ -185,7 +194,7 @@ export default function MethodologyPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Evidence & scope</p>
             <h2 id="evidence-heading" className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Understand the finding.<br />Know its limits.</h2>
             <p className="mt-5 text-base leading-7 text-slate-600">Findings are tied to retained observations. A score summarizes supported findings; it does not replace the evidence behind them.</p>
-            <div className="mt-6 rounded-2xl bg-sky-50 p-5 text-sm leading-6 text-slate-700">Automated risk observations are not legal advice, certification, or proof of compliance.</div>
+            <div className="mt-6 rounded-2xl bg-sky-50 p-5 text-sm leading-6 text-slate-700">CertScore is not a certification service. It records website behavior and evidence for review, not legal compliance determinations.</div>
           </div>
           <div className="space-y-7">
             <div>
@@ -203,6 +212,7 @@ export default function MethodologyPage() {
             <div className="border-t border-slate-200 pt-6">
               <h3 className="text-lg font-semibold text-slate-950">Technical observations, bounded conclusions</h3>
               <p className="mt-2 text-sm leading-7 text-slate-600">CertScore measures observable technical states and runtime outcomes for privacy engineering and assurance. Legal compliance, processing purpose, and operator intent may require additional context.</p>
+              <Link className="mt-3 inline-block text-sm font-semibold text-sky-700 hover:underline" href="/guides/consent-report-example">Read an annotated retained report →</Link>
             </div>
           </div>
         </div>
