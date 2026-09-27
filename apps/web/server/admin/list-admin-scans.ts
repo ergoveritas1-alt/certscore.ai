@@ -82,8 +82,16 @@ function adminRequesterIpAttribution(values: RequesterIpAttribution[]) {
   return mergeRequesterIpAttributions(...values);
 }
 
+function retainedClientName(context: Record<string, unknown> | null | undefined) {
+  const value = context?.clientName ?? context?.client;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 export type AdminScanListItem = {
   createdVia?: ScanCreationAttribution;
+  clientName?: string | null;
+  clientFamily?: string | null;
+  executionChannel?: string | null;
   accessPostureClass: AccessPostureClass | null;
   adminSummaryGeneratedAt: string | null;
   activityAt: string;
@@ -313,6 +321,27 @@ export async function listAdminScansPage(
       loadAdminScanCreationAttributions(selectedScanIds)
     ])
   );
+  const mcpScanIds = creationAttributions
+    .filter((item) => item.kind === "mcp" || item.kind === "mcp_light" || item.kind === "mcp_authenticated")
+    .map((item) => item.scanId);
+  const mcpClientRows = mcpScanIds.length
+    ? (await query<{
+        scan_id: string;
+        client_name: string | null;
+        client_family: string;
+        execution_channel: string;
+      }>(
+        `select distinct on (scan_id) scan_id, client_name, client_family, execution_channel
+           from public.mcp_tool_invocation_events
+          where occurred_at >= now() - interval '90 days'
+            and scan_id = any($1::text[])
+            and scan_decision = 'new'
+          order by scan_id, occurred_at asc, event_id asc`,
+        [mcpScanIds],
+        { readOnly: true }
+      )).rows
+    : [];
+  const mcpClientMap = new Map(mcpClientRows.map((row) => [row.scan_id, row] as const));
   const {
     diagnosticEvents,
     domains,
@@ -366,6 +395,7 @@ export async function listAdminScansPage(
           provider: scan.egress_provider ?? overviewSnapshot?.egress_type ?? configEgress.provider
         };
     const linkedRequest = requestByLinkedScanId.get(scan.id) ?? null;
+    const mcpClient = mcpClientMap.get(scan.id) ?? null;
     const pulseAttribution = pulseAttributionMap.get(scan.id) ?? null;
     const domainHostname = scan.domain_id ? domainMap.get(scan.domain_id)?.hostname ?? null : null;
     const resolvedPageUrl = resolveAdminPageUrl({
@@ -438,6 +468,9 @@ export async function listAdminScansPage(
       activityId: `scan:${scan.id}`,
       adminSummaryGeneratedAt: overviewSnapshot?.admin_summary_generated_at ?? null,
       scanId: scan.id,
+      clientName: mcpClient?.client_name ?? retainedClientName(linkedRequest?.request_context) ?? null,
+      clientFamily: mcpClient?.client_family ?? null,
+      executionChannel: mcpClient?.execution_channel ?? null,
       rowKind: "scan",
       linkedScanId: scan.id,
       requestPublicId: linkedRequest?.public_id ?? pulseAttribution?.public_id ?? null,
@@ -596,6 +629,9 @@ function mapScanRequestRow(request: ScanRequestRow, linkedScan: AdminScanListIte
   });
 
   return {
+    clientName: retainedClientName(requestContext) ?? (request.resolution_mode === "reused_existing_scan" ? null : linkedScan?.clientName ?? null),
+    clientFamily: request.resolution_mode === "reused_existing_scan" ? null : linkedScan?.clientFamily ?? null,
+    executionChannel: request.resolution_mode === "reused_existing_scan" ? null : linkedScan?.executionChannel ?? null,
     accessPostureClass: linkedScan?.accessPostureClass ?? null,
     adminSummaryGeneratedAt: null,
     activityAt: request.requested_at,

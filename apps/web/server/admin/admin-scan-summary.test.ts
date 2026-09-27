@@ -167,7 +167,7 @@ test("Admin Scans separates requester identity from outbound scanner egress", as
 test("Admin Scans gives access outcomes room for at most two visible lines", async () => {
   const pageSource = await readFile("apps/web/app/app/admin/scans/page.tsx", "utf8");
 
-  assert.match(pageSource, /w-\[3477px\] min-w-\[3477px\] table-fixed/);
+  assert.match(pageSource, /w-\[3647px\] min-w-\[3647px\] table-fixed/);
   assert.match(pageSource, /<ScanSizeCell matrix=\{matrix\} \/>/);
   assert.match(pageSource, /Site load \{website \? `\$\{website\.megabytes\.toFixed\(2\)\} MB` : "—"\}/);
   assert.match(pageSource, /Policy \{policy\?\.compressedKilobytes/);
