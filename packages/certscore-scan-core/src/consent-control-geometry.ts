@@ -12,6 +12,7 @@ import {
   hasUnresolvedConsentDecision,
   UNRESOLVED_CONSENT_DECISION,
   consentControlTerms,
+  CONSENT_CONTROL_CONTEXT_REGISTRY,
   isProductionCreditworthySupplementalConsentControlClassification,
   isSupportedPrivacyEvidenceLocale,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
@@ -267,6 +268,8 @@ interface RawGeometryCandidate {
   };
   occlusion: ConsentControlOcclusionCheck;
   contextText: string;
+  scopeText?: string;
+  scopeKind?: "paragraph" | "dialog";
 }
 
 interface RawGeometryCapture {
@@ -294,14 +297,14 @@ const CONSENT_CONTEXT_PATTERN = canonicalPhrasePattern([
   "cookie", "cookies", "consent", "privacy", "tracking", "analytics", "advertising", "marketing",
   "optanon", "onetrust", "cmp", "trustarc", "didomi", "usercentrics", "cookiebot", "consentmanager",
   "drupal", "eu cookie compliance", "sliding popup",
-  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
+  ...CONSENT_CONTROL_CONTEXT_REGISTRY.flatMap((entry) => entry.contextHints),
 ]);
 const MULTILINGUAL_DIAGNOSTIC_CONSENT_CONTEXT_PATTERN = CONSENT_CONTEXT_PATTERN;
 const MULTILINGUAL_PREFERENCE_CONTEXT_PATTERN = canonicalPhrasePattern([
   ...consentControlTerms
     .filter((term) => term.intent === "options")
     .map((term) => term.phrase),
-  ...PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => entry.contextHints),
+  ...CONSENT_CONTROL_CONTEXT_REGISTRY.flatMap((entry) => entry.contextHints),
 ]);
 const POLICY_LINK_PATTERN = canonicalPhrasePattern(
   PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry) => [
@@ -931,12 +934,15 @@ function presentationTypeForCandidate(
 function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabelClassification {
   const input = {
     observationRecipe: knownCmpObservationRecipe(candidate.selectorHint, candidate.containerSelectorHint),
+    linkRole: candidate.role,
     linkDestination: candidate.linkHref !== undefined ? classifyConsentControlLinkDestination(candidate.linkHref, candidate.frameUrl) : undefined,
     label: candidate.label,
     ariaLabel: candidate.ariaLabel,
     title: candidate.title,
     value: candidate.value,
     contextText: candidate.contextText,
+    scopeText: candidate.scopeText,
+    scopeKind: candidate.scopeKind,
     hasConsentContext: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
     hasPreferenceContext:
       candidate.layer === "preference_center" ||
@@ -1054,6 +1060,9 @@ function diagnosticClassificationsForCandidate(candidate: RawGeometryCandidate):
     title: candidate.title,
     value: candidate.value,
     contextText: classifierContextText,
+    scopeText: candidate.scopeText,
+    scopeKind: candidate.scopeKind,
+    linkRole: candidate.role,
     linkDestination: candidate.linkHref !== undefined ? classifyConsentControlLinkDestination(candidate.linkHref, candidate.frameUrl) : undefined,
     classifierProfile: "multilingual_v1",
     hasConsentContext,
@@ -1583,6 +1592,8 @@ function collectConsentGeometryInPage(input: {
         : undefined,
       occlusion: occlusionFor(element, box),
       contextText: contextText.slice(0, 1_000),
+      scopeText: compactText(element.closest("p,li,[role=dialog],[role=alertdialog],dialog")?.textContent || "").slice(0, 2_000),
+      scopeKind: element.closest("p,li") ? "paragraph" : "dialog",
       linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
     };
   }
@@ -1729,6 +1740,7 @@ function collectConsentGeometryInPage(input: {
         textContextRootCache.set(element, current);
         return current;
       }
+      if (/^(?:dialog|alertdialog)$/i.test(current.getAttribute("role") || "") || current.tagName === "DIALOG") return undefined;
       current = parentElementOrHost(current);
     }
     return undefined;

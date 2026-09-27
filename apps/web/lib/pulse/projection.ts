@@ -1,4 +1,4 @@
-import { isAfterActionReportEligible, retainedConsentAssessment, retainedActionProjection } from "../scans/after-action-report-eligibility";
+import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { projectScanReportNoGo, resolveScanReportScore } from "../scans/scan-report-disposition";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
 import { deriveCertScoreFindings } from "../scans/derive-findings";
@@ -747,7 +747,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   const postRefusalLimitationCode = typeof postRefusalCoverage?.limitationCode === "string"
     ? postRefusalCoverage.limitationCode
     : null;
-  const postRefusalLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "reject", retainedActionProjection(scanRecord, "reject")) && postRefusalCoverage?.status === "limited"
+  const postRefusalLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "reject") && postRefusalCoverage?.status === "limited"
     ? postRefusalLimitationCode === "reject_path_timeout"
       ? "Reject Path did not complete within the six-second post-primary allowance."
       : "Reject Path worker failed before verified evidence could be joined."
@@ -759,7 +759,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
   const postAcceptLimitationCode = typeof postAcceptCoverage?.limitationCode === "string"
     ? postAcceptCoverage.limitationCode
     : null;
-  const postAcceptLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "accept", retainedActionProjection(scanRecord, "accept")) && postAcceptCoverage?.status === "limited"
+  const postAcceptLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "accept") && postAcceptCoverage?.status === "limited"
     ? postAcceptLimitationCode === "accept_path_timeout"
       ? "Accept Path did not complete within the six-second post-primary allowance."
       : postAcceptLimitationCode === "accept_observation_window_truncated"

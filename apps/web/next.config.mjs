@@ -150,6 +150,8 @@ const nextConfig = {
         "../../packages/certscore-api-contracts/src/openapi-chatgpt.ts",
       "./openapi-v2.js": "../../packages/certscore-api-contracts/src/openapi-v2.ts",
       "./report-page.js": "../../packages/certscore-api-contracts/src/report-page.ts",
+      "./report-page-openapi.js":
+        "../../packages/certscore-api-contracts/src/report-page-openapi.ts",
       "./pulse-v1.js": "../../packages/certscore-api-contracts/src/pulse-v1.ts",
       "./runtime-evidence-graph.js": "../../packages/certscore-api-contracts/src/runtime-evidence-graph.ts",
       "./runtime-evidence-graph-openapi.js": "../../packages/certscore-api-contracts/src/runtime-evidence-graph-openapi.ts",
@@ -157,6 +159,10 @@ const nextConfig = {
         "../../packages/certscore-api-contracts/src/gpc-bounded-observation.ts",
       "./gpc-bounded-observation-openapi.js":
         "../../packages/certscore-api-contracts/src/gpc-bounded-observation-openapi.ts",
+      "./gpc-activity-comparison.js":
+        "../../packages/certscore-api-contracts/src/gpc-activity-comparison.ts",
+      "./gpc-activity-comparison-openapi.js":
+        "../../packages/certscore-api-contracts/src/gpc-activity-comparison-openapi.ts",
       "./scan-observation-results.js":
         "../../packages/certscore-api-contracts/src/scan-observation-results.ts",
       "./scan-no-go.js": "../../packages/certscore-api-contracts/src/scan-no-go.ts"

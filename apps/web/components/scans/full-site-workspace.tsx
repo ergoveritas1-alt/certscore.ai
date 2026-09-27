@@ -6,6 +6,7 @@ import { ServicesSnapshotContext } from "./services-signal-snapshot";
 import { INVENTORY_METRIC_LABELS } from "../../lib/scans/inventory-resource-semantics";
 import { ReportCoverageTiming } from "./report-coverage-timing";
 import { useFullSiteReportContinuity } from "./full-site-report-continuity";
+import { isCompletedFullSiteReport, readFullSiteReportSessionCache, writeFullSiteReportSessionCache } from "./full-site-report-session-cache";
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
 import { describeSiteTechnology, type SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
@@ -98,6 +99,11 @@ const FullSiteTimingContext = createContext<ReactNode>(null);
 export function FullSiteTiming() {
   return useContext(FullSiteTimingContext);
 }
+const FullSiteScanDurationContext = createContext<string | null>(null);
+export function FullSiteScanDuration() {
+  const scanDuration = useContext(FullSiteScanDurationContext);
+  return scanDuration && scanDuration !== "Unavailable" ? <span className="ml-2 tabular-nums">({scanDuration} scan)</span> : null;
+}
 
 function CrawlResourceScope({ homepage, source, children }: { homepage: boolean; source?: InventoryGraphSource; children: ReactNode }) {
   return homepage ? children : <InventoryResourceProvider source={source} preload>{children}</InventoryResourceProvider>;
@@ -170,6 +176,22 @@ export function FullSiteWorkspace({
   const terminal = useRef(false);
   const detailRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
+    if (!retainedReport || retainedReport.scanId !== scanId || retainedReport.data) return;
+    let cached: FullSiteReportResponse | null = null;
+    try {
+      cached = readFullSiteReportSessionCache(window.sessionStorage, scanId, retainedReport.cacheScope);
+    } catch { /* Browser storage is optional; fresh report reads remain authoritative. */ }
+    if (cached) {
+      retainedReport.data = cached;
+      setData(previous => previous ?? cached);
+    }
+  }, [scanId, retainedReport]);
+  useEffect(() => {
+    if (!initialPending && filters === initialFilters && !offset && !detailPage && !refreshVersion &&
+      retainedReport?.scanId === scanId && retainedReport.data && isCompletedFullSiteReport(retainedReport.data)) {
+      terminal.current = true;
+      return;
+    }
     // This controller cancels report reads only; the background worker owns the crawl.
     const controller = new AbortController();
     terminal.current = false;
@@ -222,6 +244,9 @@ export function FullSiteWorkspace({
         trackFullSiteCompletion(scanId, next.summary, homepageUrl);
         if (retainedReport?.scanId === scanId && filters === initialFilters && !offset && !detailPage) {
           retainedReport.data = next;
+          try {
+            writeFullSiteReportSessionCache(window.sessionStorage, scanId, retainedReport.cacheScope, next);
+          } catch { /* Browser storage must not interrupt a successful report read. */ }
         }
         setData(previous => offset && previous ? {
           ...next,
@@ -264,7 +289,7 @@ export function FullSiteWorkspace({
       window.removeEventListener("pageshow", resume);
       if (timer) clearTimeout(timer);
     };
-  }, [scanId, filters, offset, detailPage, resource, detailOffset, refreshVersion, retainedReport]);
+  }, [scanId, filters, offset, detailPage, resource, detailOffset, refreshVersion, retainedReport, initialPending]);
   async function stopCrawl() {
     if (stopInFlight.current) return;
     stopInFlight.current = true;
@@ -380,8 +405,10 @@ export function FullSiteWorkspace({
           </ul>
           {failedPages.length > 50 ? <p className="mt-2 text-xs text-slate-600">Showing the first 50 of {failedPages.length} affected pages.</p> : null}
         </details> : null;
+  const scanDuration = duration(Number.isFinite(startTime) && timingEnd !== null ? Math.max(0, Math.floor((timingEnd - startTime) / 1000) * 1000) : null);
   const timing = <ReportCoverageTiming
-    duration={duration(Number.isFinite(startTime) && timingEnd !== null ? Math.max(0, Math.floor((timingEnd - startTime) / 1000) * 1000) : null)}
+    duration={scanDuration}
+    showDurationInSummary={initialPending}
     technology={technology}
     groups={[{ title: "Coverage", rows: [["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
                   ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
@@ -408,17 +435,18 @@ export function FullSiteWorkspace({
               ]}
     started={timestamp(state?.startedAt)} completed={timestamp(state?.completedAt)}
   />;
-  const reportStatus = running ? progressLabel : !state ? "Loading report…" : retainedAssessment ? "Starting page completed · Crawl limited" : crawlLimited ? "Crawl limited" : state?.status === "cancelled" ? "Cancelled" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" && (counts?.blockedFailed || counts?.partial || sitemapLimited) ? "Completed with limitations" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading";
+  const reportStatus = running ? progressLabel : !state ? "Loading report…" : retainedAssessment ? "Starting page completed · Crawl limited" : crawlLimited ? "Crawl limited" : state?.status === "cancelled" ? "Cancelled" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading";
   const previewMetrics = initialPending && valuesUpdating && !data?.score && (scannedPages ?? 0) === 0
     ? preliminarySiteInventoryMetrics(preConsentPreview) : null;
   const inventoryMetrics = previewMetrics ?? [
           { label: INVENTORY_METRIC_LABELS.storage, value: s ? s.totals.cookies + s.totals.storage : null, group: "cookies" },
           { label: INVENTORY_METRIC_LABELS.requests, value: s?.totals.requestEvents, group: "requests" },
           { label: INVENTORY_METRIC_LABELS.frames, value: s?.totals.embedInstances, group: "embeds" },
-        ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined, note: metric.group === "cookies" && data?.storageReconciliation?.unmatched ? `${data.storageReconciliation.unmatched} assessed items lack an exact inventory match.` : undefined }));
+        ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined }));
   const inventorySummary = <ReportInventorySummary forms={data?.collectionSurfaces?.rows} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={data?.score?.siteIntegrity} />;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
+    <FullSiteScanDurationContext.Provider value={scanDuration}>
     <FullSiteTimingContext.Provider value={timing}>
     <ServicesSnapshotContext.Provider value={{ overview: data?.networkOverview, navigate: () => { setInventoryView("services"); setFilters(initialFilters); setOffset(0); document.getElementById("site-resource-table")?.scrollIntoView({ behavior: "smooth", block: "start" }); } }}>
     <div
@@ -488,14 +516,14 @@ export function FullSiteWorkspace({
         ) : null}
         {error ? (
           <p role="status" className="text-sm text-amber-800">
-            {error} Retained results remain visible.
+            {error} {data?.score ? "Showing the last loaded sitewide results." : "The sitewide score and inventory will appear when report access resumes."}
           </p>
         ) : null}
       </header>
       {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
-          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={data?.score} pending={!data || valuesUpdating} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} />
+          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={data?.score} pending={!data || valuesUpdating} loadingSavedResult={!initialPending && !data && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} />
           {!(initialPending && !data?.score) ? <SitePriorityReview scannedPages={scannedPages} findings={data?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!data || valuesUpdating} sitewideAvailable={Boolean(data?.score)} /> : null}
           {homepageTimeline ? <section aria-label="Starting-page event timeline" className="my-3 border-y border-zinc-200 bg-white py-2">
             <h2 className="text-xl font-semibold">Starting-page event timeline</h2>
@@ -503,13 +531,12 @@ export function FullSiteWorkspace({
           </section> : null}
           </> : null}
           <section id="site-resource-inventory" className="my-5 min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div>{tab !== "pages" ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Supporting evidence</p> : null}<h2 className="text-xl font-semibold tracking-tight text-zinc-950">{tab === "pages" ? "Page observations and coverage" : "Services & Resources"}</h2></div>{tab !== "pages" ? <div className="flex shrink-0 gap-2" role="group" aria-label="Inventory view">{(["services", "resources"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`${button} capitalize ${inventoryView === view ? "!bg-slate-900 !text-white" : ""}`} onClick={() => { setInventoryView(view); setFilters(initialFilters); setOffset(0); }}>{view}</button>)}</div> : null}</div>
-          {tab === "resources" ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-500">Explore the integrations behind the observations. Privacy issues and recommended actions are listed in Priority review above.</p> : null}
-          {data && tab === "resources" ? <details className="mt-3 rounded-lg border border-zinc-200"><summary className="cursor-pointer px-4 py-3 text-xs font-medium text-zinc-600">Resource breakdowns <span className="ml-2 font-normal text-zinc-400">Type, purpose and site relationship</span></summary><div className="border-t border-zinc-100 px-4 py-3 [&>section]:my-0 [&>section]:border-0"><SitewideInventorySummary mix={data.inventoryMix} updating={valuesUpdating} /></div></details> : null}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div>{tab !== "pages" ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Supporting evidence</p> : null}<h2 className="text-xl font-semibold tracking-tight text-zinc-950">{tab === "pages" ? "Page observations and coverage" : "Services & Resources"}</h2></div>{tab !== "pages" ? <div className="flex shrink-0 gap-2" role="group" aria-label="Inventory view">{(["services", "resources"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`${button} capitalize ${inventoryView === view ? "!border-sky-300 !bg-sky-100 !text-sky-900 hover:!border-sky-400 hover:!bg-sky-200" : ""}`} onClick={() => { setInventoryView(view); setFilters(initialFilters); setOffset(0); }}>{view}</button>)}</div> : null}</div>
             {activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all resources</button> : null}
 
-            <div className="my-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
-              {tab === "pages" || inventoryView !== "services" ? <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="shrink-0"><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${tab === "pages" ? data.pages.total : data.resources.total} ${tab === "pages" ? "pages" : "resources"}` : "Loading inventory…"} /></span><span className="text-slate-500">{tab === "pages" ? "· Starting page audit and additional-page capture outcomes." : "· Distinct resources across scanned pages; repeated observations count once. Expand for linked resources."}</span></div> : null}
+            <div className="my-3 flex flex-wrap items-start justify-between gap-3 text-xs text-slate-500">
+              {tab === "pages" || inventoryView !== "services" ? <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="shrink-0"><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${tab === "pages" ? data.pages.total : data.resources.total} ${tab === "pages" ? "pages" : "resources"}` : "Loading inventory…"} /></span>{tab === "pages" ? <span className="text-slate-500">· Starting page audit and additional-page capture outcomes.</span> : null}</div> : null}
+              {data && tab === "resources" ? <details className="min-w-0 flex-1"><summary className="w-fit cursor-pointer rounded px-1 py-1 font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">Resource breakdowns</summary><div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 [&>section]:my-0 [&>section]:border-0"><SitewideInventorySummary mix={data.inventoryMix} updating={valuesUpdating} /></div></details> : null}
               <div className={tab === "pages" ? "hidden" : "ml-auto flex flex-wrap items-center gap-3"}><button type="button" onClick={() => setCollapseVersion(value => value + 1)} className="rounded-md px-2 py-1.5 text-sky-700 hover:bg-sky-50">Collapse all</button>{data ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire inventory table with all service and resource details as JSON" payload={JSON.stringify({ services: data.services, pages: data.pageChoices }, null, 2)} /> : null}</div>
             </div>
             <div id="site-resource-table" ref={inventoryRowLimit.ref} style={inventoryRowLimit.style} className="max-h-[376px] overflow-auto rounded-lg border border-zinc-200" tabIndex={0} aria-busy={isFetching} aria-label={tab === "pages" ? "Scrollable page observations" : `Scrollable ${inventoryView}`}
@@ -610,7 +637,7 @@ export function FullSiteWorkspace({
               </table></InventoryResourceProvider></div>
             </div>
             {<p className="mt-2 text-xs text-zinc-500">{!data ? "Loading inventory…" : isFetching ? "Updating inventory…" : tab !== "pages" && inventoryView === "services"
-                ? `${data.services.filter(service => service.context.identity).length} distinct services, including child services`
+                ? `${data.networkOverview.identifiedServices} services`
                 : `${tab === "pages" ? data.pages.total : data.resources.total} rows${(tab === "pages" ? data.pages.total : data.resources.total) > 6 ? " · Up to 6 visible. Scroll for more." : ""}`}</p>}
           </section>
           {tab === "resources" ? <CollectionSurfacesTable rows={data?.collectionSurfaces?.rows ?? []} loading={!data} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages} /> : null}
@@ -783,6 +810,7 @@ export function FullSiteWorkspace({
     </div>
     </ServicesSnapshotContext.Provider>
     </FullSiteTimingContext.Provider>
+    </FullSiteScanDurationContext.Provider>
     </FullSiteRegionContext.Provider>
   );
 }

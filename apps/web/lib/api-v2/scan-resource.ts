@@ -1,5 +1,5 @@
 import { readPrivacyAuditEvidence } from "../scans/report-review-focus";
-import { isAfterActionReportEligible, retainedConsentAssessment, retainedActionProjection } from "../scans/after-action-report-eligibility";
+import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../scans/choice-path-execution";
 import { deriveAfterActionSummary, afterActionInterpretation } from "./after-action-summary";
 import {
@@ -560,7 +560,7 @@ export function deriveApiV2PostRefusalObservation(scanRecord: ScanDetailResponse
     runtimeArtifacts?.post_refusal_evidence_projection ??
     metadata?.postRefusalReportProjection,
   );
-  if (!isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "reject", projection)) return undefined;
+  if (!isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "reject")) return undefined;
   const afterAction = deriveAfterActionSummary(projection, "reject");
   const execution = readChoicePathExecution(projection, "reject");
   const status = stringOrNull(projection?.status);
@@ -737,7 +737,7 @@ export function deriveApiV2PostAcceptObservation(scanRecord: ScanDetailResponse)
     runtimeArtifacts?.postAcceptObservationCoverage ??
     runtimeArtifacts?.post_accept_observation_coverage,
   );
-  if (!isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "accept", projection)) return undefined;
+  if (!isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "accept")) return undefined;
   const afterAction = deriveAfterActionSummary(projection, "accept");
   const execution = readChoicePathExecution(projection, "accept");
   const status = stringOrNull(projection?.status);
@@ -924,7 +924,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     runtimeArtifacts?.post_refusal_observation_coverage,
   );
   const postRefusalLimitationCode = stringOrNull(postRefusalCoverage?.limitationCode);
-  const postRefusalLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "reject", retainedActionProjection(scanRecord, "reject")) && postRefusalCoverage?.status === "limited"
+  const postRefusalLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "reject") && postRefusalCoverage?.status === "limited"
     ? postRefusalLimitationCode === "reject_path_timeout"
       ? "Reject Path did not complete within the configured action-lane allowance."
       : "Reject Path worker failed before verified evidence could be joined."
@@ -934,7 +934,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     runtimeArtifacts?.post_accept_observation_coverage,
   );
   const postAcceptLimitationCode = stringOrNull(postAcceptCoverage?.limitationCode);
-  const postAcceptLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "accept", retainedActionProjection(scanRecord, "accept")) && postAcceptCoverage?.status === "limited"
+  const postAcceptLimitation = isAfterActionReportEligible(retainedConsentAssessment(scanRecord), "accept") && postAcceptCoverage?.status === "limited"
     ? postAcceptLimitationCode === "accept_path_timeout"
       ? "Accept Path did not complete within the six-second post-primary allowance."
       : postAcceptLimitationCode === "accept_observation_window_truncated"

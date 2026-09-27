@@ -28,6 +28,7 @@ import {
   type PersistedCanonicalReportProjection
 } from "./persisted-canonical-report-projection";
 import { buildGdprEprivacyChecklistPresentation } from "../../lib/scans/gdpr-eprivacy-checklist-presentation";
+import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 
 const projectionPath = "apps/web/server/scans/scan-report-projection.ts";
 const projectionContractPath = "apps/web/server/scans/scan-report-projection-contract.ts";
@@ -218,7 +219,28 @@ test("persisted projection carries one scan-bound canonical output packet", () =
 
   const persisted = buildPersistedScanReportProjection(scanRecord, { canonicalReportProjection });
   const transported = JSON.parse(JSON.stringify(persisted.payload)) as ScanDetailResponse;
-  assert.deepEqual(getPersistedCanonicalReportProjection(transported), canonicalReportProjection);
+  assert.deepEqual(getPersistedCanonicalReportProjection(transported), { ...canonicalReportProjection, consentControlSummary: null });
+  const assessment = structuredClone(observedControlAssessment);
+  assessment.scan.scanId = transported.scan.id;
+  const limitedAssessment = {
+    ...assessment,
+    assessmentStatus: "limited",
+    coverage: { ...assessment.coverage, status: "limited" },
+    controls: { ...assessment.controls, reject: { ...assessment.controls.reject, state: "unknown" } },
+  };
+  const withAssessment = {
+    ...transported,
+    runtimeArtifacts: { ...transported.runtimeArtifacts, consentControlAssessment: limitedAssessment },
+  } as unknown as ScanDetailResponse;
+  const before = structuredClone(withAssessment);
+  const binaryReport = getPersistedCanonicalReportProjection(withAssessment);
+  assert.deepEqual(binaryReport?.consentControlSummary?.controls, {
+    accept: "observed", reject: "not_observed", options: "observed",
+  });
+  assert.equal(binaryReport?.consentControlSummary?.sourceHash, assessment.provenance.sourceHash);
+  assert.deepEqual(binaryReport?.legacyScoreAssessmentInput, canonicalReportProjection.legacyScoreAssessmentInput);
+  assert.deepEqual(binaryReport?.normalizedConcerns, canonicalReportProjection.normalizedConcerns);
+  assert.deepEqual(withAssessment, before, "historical assessment and stored report must remain unchanged");
   assert.equal(getPersistedCanonicalReportProjection({
     ...transported,
     canonicalReportProjection: {

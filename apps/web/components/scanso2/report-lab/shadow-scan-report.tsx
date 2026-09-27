@@ -1,7 +1,6 @@
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
-import { consentInspectionNotice } from "../../../lib/scans/consent-inspection-presentation";
 import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import type { FullSiteScanNoticeData } from "../../dashboard/full-site-scan-notice";
@@ -384,11 +383,10 @@ export function ControlStatusGrid({ compact = false, report }: { compact?: boole
     { label: "Reject", value: report.controls.reject },
     { label: "Options", value: report.controls.options }
   ].filter(control => control.value === "Observed" || control.value === "Not observed");
-  const notice = report.consentInspectionNotice ?? consentInspectionNotice(report.controls);
+  if (report.consentControlsAvailable === false) return null;
 
   return (
     <div>
-      {notice ? <p role="status" className="mb-2 text-xs text-slate-600">{notice}</p> : null}
       {controls.length > 0 ?
     <div className="grid grid-flow-col auto-cols-fr divide-x divide-zinc-200 overflow-hidden rounded-md border border-zinc-200 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
       {controls.map((control) => {
@@ -420,9 +418,12 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
     : consentCoverageLimited
       ? "Consent inspection was incomplete or not representative, so platform identity was not determined."
       : "No consent-platform identity was retained in the completed scan context.";
-  const privacyUrls = [...new Set(report.gdprTransparencyRows.flatMap((row) => row.policyEvidence?.sourceUrl ? [row.policyEvidence.sourceUrl] : []))];
+  const privacyUrls = report.verifiedPolicyDocumentUrls ??
+    [...new Set(report.gdprTransparencyRows.flatMap((row) => row.policyEvidence?.sourceUrl ? [row.policyEvidence.sourceUrl] : []))];
   const policySurfaceSummary = privacyUrls.length > 0
     ? `${privacyUrls.length} found`
+    : report.policySurfaceLinkObserved
+      ? "Link found"
     : report.policySurfaceCoverage === "limited"
       ? "Coverage limited"
       : report.policySurfaceCoverage === "complete"
@@ -450,7 +451,7 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
             <p className="text-xs leading-5 text-zinc-600">{consentPlatformDetail}</p>
           </div>
         </details>
-        <details className={signalRowClass}>
+        {report.consentControlsAvailable !== false ? <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Consent controls</span>
             <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{consentControlSummary} <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
@@ -466,7 +467,7 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
               <CompactRejectPathCard projection={report.rejectPath} />
             </div>
           ) : null}
-        </details>
+        </details> : null}
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Tracker footprint</span>
@@ -1254,9 +1255,8 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
           </div>
           <FindingsList dense report={report} />
           <div className="mt-9 grid gap-6 border-t border-zinc-200 pt-7 lg:grid-cols-2">
-            <div>
+            {report.consentControlsAvailable !== false ? <div>
               <h3 className="text-sm font-semibold text-zinc-950">Consent controls</h3>
-              {(report.consentInspectionNotice ?? consentInspectionNotice(report.controls)) ? <p className="text-xs text-slate-600">{report.consentInspectionNotice ?? consentInspectionNotice(report.controls)}</p> : null}
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {Object.entries(report.controls).filter(([, value]) => value === "Observed" || value === "Not observed").map(([label, value]) => (
                   <div className="border-l-2 border-zinc-200 pl-3" key={label}>
@@ -1265,7 +1265,7 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
                   </div>
                 ))}
               </div>
-            </div>
+            </div> : null}
             <div>
               <h3 className="text-sm font-semibold text-zinc-950">Coverage mix</h3>
               <div className="mt-4"><CoverageBar report={report} /></div>

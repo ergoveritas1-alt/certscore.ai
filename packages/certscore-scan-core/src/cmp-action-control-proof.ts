@@ -125,6 +125,9 @@ export async function buildConsentActionControlProof(input: {
       reason: `resolved_control_transactional_variant:${classification.variant}`,
     };
   }
+  if (classification.matchedLocale === "mk") {
+    return { status: "label_unverifiable", reason: "observation_only_control_locale" };
+  }
   const necessaryOnlyLabelVerified = input.canonicalNecessaryOnly
     ? Object.values(bounded).some((label) =>
         normalizeConsentControlText(label) ===
@@ -305,6 +308,13 @@ function sourceIntentConflict(fields: ControlLabelFields) {
   const classifications = [fields.ariaLabel, fields.visibleText, fields.value, fields.title]
     .filter((value): value is string => Boolean(value))
     .map((label) => classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1", label, hasConsentContext: true }));
+  // An unproven acknowledgment is not actionable, but it can become a valid
+  // decision label during the remaining original discovery window. Keep mixed
+  // sources vetoed, since an affirmative accessible label cannot override an
+  // ambiguous visible label on the same control.
+  if (classifications.length > 0 && classifications.every((classification) =>
+    classification.reasonCodes.includes("unproven_acknowledgment_consent")
+  )) return undefined;
   if (classifications.some(hasConsentControlSemanticVeto)) return "semantic_veto";
   const intents = new Set(classifications.map((classification) => classification.intent)
     .filter((intent) => intent !== "unknown"));

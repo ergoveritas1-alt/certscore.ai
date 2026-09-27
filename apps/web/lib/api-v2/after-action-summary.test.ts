@@ -101,7 +101,7 @@ for (const action of ["accept", "reject"] as const) {
 }
 
 
-test("customer action summaries retain verified independent clicks but omit unexecuted attempts without an observed control", () => {
+test("customer action summaries require an observed first-layer control while retaining independent action evidence", () => {
   for (const action of ["accept", "reject"] as const) {
     for (const state of ["unknown", "not_observed"]) {
       const assessment = { ...observedControlAssessment, controls: { ...observedControlAssessment.controls,
@@ -110,9 +110,7 @@ test("customer action summaries retain verified independent clicks but omit unex
         [action === "accept" ? "postAcceptEvidenceProjection" : "postRefusalEvidenceProjection"]: fixture(action),
       } } as any;
       const derive = action === "accept" ? deriveApiV2PostAcceptObservation : deriveApiV2PostRefusalObservation;
-      const result = derive(record);
-      assert.ok(result && "execution" in result);
-      assert.equal(result.execution?.status, "succeeded");
+      assert.equal(derive(record), undefined);
       const key = action === "accept" ? "postAcceptEvidenceProjection" : "postRefusalEvidenceProjection";
       record.runtimeArtifacts[key] = { ...fixture(action), afterActionCapture: undefined,
         afterActionRequests: undefined, afterActionStorage: undefined };

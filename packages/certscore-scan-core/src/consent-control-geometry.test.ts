@@ -1413,7 +1413,7 @@ test("capture policy recognizes reviewed observation labels in a local consent s
   ] as const) {
     const artifact = await captureFixture(`<section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position:fixed;bottom:0;padding:20px;background:white"><p>We use optional cookies for analytics. Choose your cookie preferences.</p><button>${label}</button></section>`);
     assert.equal(artifact.summary[field], true, label);
-    assert.equal(findCandidate(artifact, label)?.classifierRegistryVersion, "consent-control-label-registry.v6");
+    assert.equal(findCandidate(artifact, label)?.classifierRegistryVersion, "consent-control-label-registry.v8");
   }
 });
 
@@ -1584,4 +1584,19 @@ test("reviewed multilingual vocabulary retains unrelated, disabled and hidden co
     <section><h2>Account invitation</h2><button>Принять</button></section>`);
   assert.equal(artifact.summary.firstLayerAccept, false);
   assert.equal(artifact.summary.firstLayerReject, false);
+});
+
+test("retains reviewed necessary-only and role-button settings controls from the same passive capture", async () => {
+  const artifact = await captureFixture(`
+    <section id="cookie-banner" role="dialog" aria-label="Cookie consent">
+      <p>We use optional cookies. Choose your cookie preferences.</p>
+      <button>Accept all cookies</button>
+      <button>Allow necessary cookies</button>
+      <a role="button" tabindex="0">Cookie Settings</a>
+    </section>
+  `);
+  assert.equal(findCandidate(artifact, "Allow necessary cookies")?.actionType, "reject_all");
+  assert.equal(findCandidate(artifact, "Cookie Settings")?.actionType, "manage_preferences");
+  assert.equal(findCandidate(artifact, "Cookie Settings")?.linkDestination, "unverified");
+  assert.equal(findCandidate(artifact, "Cookie Settings")?.decisionStatus, "confirmed_visible");
 });

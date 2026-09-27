@@ -1,9 +1,9 @@
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../../lib/scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
-import { consentInspectionNotice } from "../../../lib/scans/consent-inspection-presentation";
+import { consentControlReportLabels } from "../../../lib/scans/consent-control-report";
 import { afterClickCoverage } from "../after-action-summary";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
-import { consentControlAssessmentSchema, siteMetadataProjectionSchema } from "@certscore/contracts";
+import { siteMetadataProjectionSchema } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { acceptPathIncompleteReason } from "./accept-path-reason";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -19,6 +19,7 @@ import {
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../../lib/scans/executive-findings-projection";
 import type { CertScoreFinding } from "../../../lib/scans/finding-registry";
 import { getHybridRuntimeEvidence } from "../../../lib/scans/hybrid-runtime-evidence";
+import { verifiedPolicyDocumentUrls } from "../../../lib/scans/verified-policy-document-urls";
 import {
   buildNonEssentialInventoryTallies,
   buildRuntimeInventoryProjectionFromScan,
@@ -154,17 +155,6 @@ export function getConsentControlSummaryLabel(
 ): string {
   const values = Object.values(controls);
   const observed = values.filter((value) => value === "Observed").length;
-  const notObserved = values.filter((value) => value === "Not observed").length;
-  const unknown = values.length - observed - notObserved;
-
-  if (unknown === values.length) return "Coverage limited";
-  if (unknown > 0) {
-    return [
-      observed > 0 ? `${observed} observed` : null,
-      notObserved > 0 ? `${notObserved} not observed` : null,
-      "Inspection limited",
-    ].filter(Boolean).join(" · ");
-  }
   return `${observed} of ${values.length} observed`;
 }
 
@@ -467,10 +457,6 @@ function scoreLabel(score: number) {
   return "Strong";
 }
 
-function projectedConsentControlLabels(controls?: Record<"accept" | "reject" | "options", { state: "observed" | "not_observed" | "unknown" }>) {
-  const label = (key: "accept" | "reject" | "options") => controls?.[key].state === "observed" ? "Observed" : controls?.[key].state === "not_observed" ? "Not observed" : "Unknown";
-  return { accept: label("accept"), reject: label("reject"), options: label("options") };
-}
 
 function siteRelationshipLabel(value: "same_site" | "cross_site" | "mixed" | "unknown") {
   if (value === "same_site") return "Same-site";
@@ -534,7 +520,7 @@ export function buildAcceptPathProjection(
   ownerUnifiedFindings: NonNullable<ReturnType<typeof getPersistedCanonicalReportProjection>>["ownerUnifiedFindings"],
 ): ShadowReportData["acceptPath"] {
   const projection = record(runtimeArtifacts?.postAcceptEvidenceProjection);
-  if (!isAfterActionReportEligible(retainedConsentAssessment(runtimeArtifacts), "accept", projection)) return null;
+  if (!isAfterActionReportEligible(retainedConsentAssessment(runtimeArtifacts), "accept")) return null;
   // Coverage-only outcomes do not establish that an Accept interaction occurred.
   // Keep them in retained diagnostics, not the After Accept report projection.
   if (!projection) return null;
@@ -670,8 +656,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
   });
   const capturedAt = formatTimestamp(scanRecord.scan.completedAt ?? scanRecord.scan.createdAt);
   const evidenceRows = reportableChecklistRows.map((item) => mapChecklistRow(item, capturedAt));
-  const assessment = consentControlAssessmentSchema.safeParse(scanRecord.snapshot?.consent_control_assessment ?? scanRecord.runtimeArtifacts?.consentControlAssessment ?? scanRecord.runtimeArtifacts?.consent_control_assessment);
-  const controls = projectedConsentControlLabels(assessment.success ? assessment.data.controls : undefined);
+  const consentControlSummary = canonical.consentControlSummary ?? null;
+  const controls = consentControlReportLabels(consentControlSummary);
   const executiveUnifiedFindings = projectExecutiveFindingsFromUnifiedPackets(
     canonical.ownerUnifiedFindings.filter(
       (finding) => finding.unifiedFindingId === "acceptance_signal_contradicts_action",
@@ -838,6 +824,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     consentVendor,
     policySurfaceCoverage,
     policySurfaceLinkObserved: getPolicySurfaceLinkObserved(runtimeArtifacts),
+    verifiedPolicyDocumentUrls: verifiedPolicyDocumentUrls(runtimeArtifacts),
     gpcResponse,
     gpcLaneStatus,
     acceptPath,
@@ -847,7 +834,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
       ...(acceptContradictionRow ? [acceptContradictionRow] : []),
     ],
     controls,
-    consentInspectionNotice: consentInspectionNotice(controls, assessment.success ? assessment.data : undefined),
+    consentControlsAvailable: consentControlSummary !== null,
     coverage: {
       concern: summaryCounts.gap_observed,
       contextual: summaryCounts.neutral_signal,

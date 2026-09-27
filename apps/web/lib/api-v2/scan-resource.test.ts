@@ -1752,24 +1752,27 @@ test("GPC v3 independent observation survives actual persisted report hydration 
   assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, observation: { ...response.observation, sourceSha256: "0".repeat(64) } }).success, false);
 });
 
-test("public A/R execution survives unknown passive controls without changing registration or scoring", async () => {
+test("public A/R summaries require their canonical observed control while action evidence stays retained", async () => {
   const { completedActionProjection } = await import("../scans/test-fixtures/action-execution-projection");
   const { deriveApiV2PostAcceptObservation, deriveApiV2PostRefusalObservation } = await import("./scan-resource");
   for (const action of ["accept", "reject"] as const) {
     const assessment = structuredClone(observedControlAssessment);
     assessment.assessmentStatus = "limited";
-    assessment.controls[action].state = "unknown";
     const projection = completedActionProjection(action);
     const record = { events: [], runtimeArtifacts: {
       consentControlAssessment: assessment,
       [action === "accept" ? "postAcceptEvidenceProjection" : "postRefusalEvidenceProjection"]: projection,
     } } as unknown as ScanDetailResponse;
     const original = structuredClone(record);
-    const result = action === "accept" ? deriveApiV2PostAcceptObservation(record) : deriveApiV2PostRefusalObservation(record);
-    assert.ok(result && "execution" in result);
-    assert.equal(result.execution?.status, "succeeded");
-    assert.equal(result?.status, "unconfirmed");
-    assert.equal(result?.productionProjectable, false);
+    const derive = action === "accept" ? deriveApiV2PostAcceptObservation : deriveApiV2PostRefusalObservation;
+    const observed = derive(record);
+    assert.ok(observed && "execution" in observed);
+    assert.equal(observed.execution?.status, "succeeded");
+    for (const state of ["unknown", "not_observed"] as const) {
+      assessment.controls[action].state = state;
+      assert.equal(derive(record), undefined);
+    }
+    assessment.controls[action].state = "observed";
     assert.deepEqual(record, original);
   }
 });

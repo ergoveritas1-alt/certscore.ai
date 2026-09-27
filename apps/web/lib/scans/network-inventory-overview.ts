@@ -35,7 +35,7 @@ export function buildNetworkInventoryOverview(services: readonly {
       if (resource.kind === "embed") embeds.add(resource.key);
     }
     const requests = service.resources.filter(resource => resource.kind === "request");
-    if (requests.length && service.context.identity) {
+    if (service.resources.length && service.context.identity) {
       identified.add(service.key);
       names.set(service.key, serviceIntegrationGroup(service.context.identity as { entity?: string; vendor?: string; product?: string }).name);
     }

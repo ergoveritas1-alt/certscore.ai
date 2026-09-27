@@ -1,25 +1,14 @@
-import { readChoicePathExecution } from "./choice-path-execution";
-import { consentControlAssessmentSchema } from "@certscore/contracts";
+import { projectConsentControlReport } from "./consent-control-report";
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
-/** Reporting only. A verified completed action in its independent session is
- * reportable even when the passive session saw no control. This does not change
- * passive A/R/O, finding eligibility, consent registration or scoring. */
-export function isAfterActionReportEligible(assessment: unknown, action: "accept" | "reject", projection?: unknown): boolean {
-  if (readChoicePathExecution(projection, action)?.clickCompleted === true) return true;
-  const parsed = consentControlAssessmentSchema.safeParse(assessment);
-  return parsed.success && parsed.data.controls[action].state === "observed";
-}
-
-export function retainedActionProjection(value: unknown, action: "accept" | "reject"): unknown {
-  const root = record(value);
-  const runtime = record(root?.runtimeArtifacts) ?? root;
-  return action === "accept"
-    ? runtime?.postAcceptEvidenceProjection ?? runtime?.post_accept_evidence_projection
-    : runtime?.postRefusalEvidenceProjection ?? runtime?.post_refusal_evidence_projection;
+/** The canonical first-layer assessment controls After Accept/Reject visibility.
+ * Independent action evidence remains retained but cannot promote an unknown or
+ * absent passive control into a reportable After Action path. */
+export function isAfterActionReportEligible(assessment: unknown, action: "accept" | "reject"): boolean {
+  return projectConsentControlReport(assessment)?.controls[action] === "observed";
 }
 
 export function retainedConsentAssessment(value: unknown): unknown {

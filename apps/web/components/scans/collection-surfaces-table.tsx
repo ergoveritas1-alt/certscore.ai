@@ -124,18 +124,15 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
   const [snapshot, setSnapshot] = useState<{ title: string; url: string } | null>(null);
   const [sort, setSort] = useState<{ key: FormSortKey; direction: "asc" | "desc" }>({ key: "page", direction: "asc" });
   const sortedRows = useMemo(() => sortCollectionSurfaces(rows, sort.key, sort.direction), [rows, sort]);
-  if (!loading && rows.length === 0) return <section id="report-forms" aria-label="Forms & fields" className="border-b border-zinc-200 bg-white py-3 text-sm text-zinc-600">
+  if (!loading && rows.length === 0) return <section id="report-forms" aria-label="Forms & fields" className="my-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600 lg:p-5">
     {scanning ? "Forms: none observed yet; scan in progress." : pagesWithoutInventory > 0 || limitedPages > 0 ? "Forms: no retained rows; form coverage is incomplete." : "Forms: no forms observed on the scanned pages."}
   </section>;
   return (
-    <section id="report-forms" aria-labelledby={`${prefix}-title`} className="min-w-0 border-b border-zinc-200 bg-white py-4">
+    <section id="report-forms" aria-labelledby={`${prefix}-title`} className="my-5 min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h2 id={`${prefix}-title`} className="text-xl font-semibold">Forms & fields</h2>
         <div className="flex items-center gap-2"><span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.length === 1 ? "form" : "forms"}`} /></span>{!loading ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire forms table with all fields and evidence as JSON" payload={JSON.stringify(rows, null, 2)} /> : null}</div>
       </div>
-      <p className="mb-2 text-xs text-zinc-600">Forms and fields observed on scanned pages. Expand a form to inspect its fields. CertScore.ai does not fill or submit forms; this inventory does not contain submitted field values.</p>
-      <p className="mb-2 text-xs text-zinc-600">Field review identifies fields worth checking. These labels are not privacy findings and do not affect the score by themselves.</p>
-      <p className="mb-4 text-xs text-zinc-600">Declared destination is the configured form action, not evidence that CertScore.ai submitted the form or observed a transfer.</p>
       {pagesWithoutInventory > 0 || limitedPages > 0 ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
         {pagesWithoutInventory > 0 ? `${pagesWithoutInventory} page(s) have no retained form inventory. ` : ""}
         {limitedPages > 0 ? `${limitedPages} page(s) have limited form coverage. ` : ""}Missing evidence does not establish that a page has no forms.

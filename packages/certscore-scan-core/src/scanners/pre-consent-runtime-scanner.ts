@@ -44,6 +44,7 @@ import {
   classifyConsentSurfaceText,
   classifyPrivacySurface,
   consentControlTerms,
+  CONSENT_CONTROL_CONTEXT_REGISTRY,
   isVerifiedTerminalConsentPacket,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
 } from "@certscore/contracts";
@@ -169,7 +170,7 @@ const CANONICAL_CONSENT_INVENTORY_TERMS = consentControlTerms
   .filter((term) => term.phrase.length >= 4 && term.phrase.length <= 80)
   .slice(0, 1_000);
 const CANONICAL_CONSENT_CONTEXT_HINTS = unique(
-  PRIVACY_EVIDENCE_LOCALE_REGISTRY
+  CONSENT_CONTROL_CONTEXT_REGISTRY
     .flatMap((entry) => [
       ...entry.contextHints,
       ...entry.cookiePolicyLabels,
@@ -2724,12 +2725,10 @@ export async function preConsentRuntimeScanner(
               const synchronizedObservation = await recordBoundedTiming(
                 timingBreakdown,
                 "synchronized CMP control inventory",
-                "Immediate typed control inventory against the exact DOM retained in the synchronized CMP screenshot.",
+                "Immediate typed control inventory after the same-document CMP screenshot, within the existing capture allowance.",
                 Math.min(750, remainingModuleBudgetMs()),
-                () => detectConsentUi(page, input.scanStartedAtMs, 0, {
-                  allowFullDocumentCmpControls: true,
-                }),
-                () => consentObservation,
+                () => readRapidFirstLayerConsentUiObservation(page, input.scanStartedAtMs, Math.min(750, remainingModuleBudgetMs())),
+                () => ({ ...consentObservation, observedAtMs: elapsed(input.scanStartedAtMs), inventoryOutcome: "timed_out" as const, captureStatus: "incomplete" as const }),
               );
               consentObservation = mergeConsentUiObservations(
                 consentObservation,
@@ -6821,6 +6820,10 @@ async function readCheapConsentTextObservation(
       timingMarkers: ["cheap_text_prefilter_completed"],
     },
   });
+  // No inventory outcome: a text read neither proves absence nor supersedes
+  // a completed typed inventory from this document.
+  observation.captureStatus = "incomplete";
+  observation.layerInspected = "unknown";
   const canonicalSurfaceText = classifyConsentSurfaceText({ text });
   return canonicalSurfaceText.recoveryHintObserved && !observation.likelyPresent
     ? {
@@ -6840,6 +6843,8 @@ async function readDirectCmpSemanticConsentUiObservation(
       label: string;
       linkHref?: string;
       contextText: string;
+      scopeText?: string;
+      scopeKind?: "paragraph" | "dialog";
       cmpScoped: boolean;
       role?: string;
       selectorHint: string;
@@ -6923,6 +6928,8 @@ async function readDirectCmpSemanticConsentUiObservation(
       controls.push({
         label,
         contextText: localContext,
+        scopeText: normalize(element.closest("p,li,[role=dialog],[role=alertdialog],dialog")?.textContent).slice(0, 2_000),
+        scopeKind: element.closest("p,li") ? "paragraph" : "dialog",
         linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
         cmpScoped: Boolean(cmpContainer),
         role: element.getAttribute("role") || undefined,
@@ -6947,6 +6954,9 @@ async function readDirectCmpSemanticConsentUiObservation(
     if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const classification = classifyConsentControlLabel({
       label: control.label,
+      linkRole: control.role,
+      scopeText: control.scopeText,
+      scopeKind: control.scopeKind,
       linkDestination: control.linkDestination,
       contextText: control.contextText,
       hasConsentContext: control.cmpScoped,
@@ -6959,7 +6969,7 @@ async function readDirectCmpSemanticConsentUiObservation(
     // retained only when their local DOM surface satisfies canonical consent
     // context. Direct/equivalent labels remain eligible.
     if (!isDirectCmpSemanticControlClassificationEligible(classification)) return [];
-    const { contextText: _contextText, cmpScoped: _cmpScoped, ...retainedControl } = control;
+    const { contextText: _contextText, scopeText: _scopeText, scopeKind: _scopeKind, cmpScoped: _cmpScoped, ...retainedControl } = control;
     return [{
       ...retainedControl,
       actionType,
@@ -7063,8 +7073,12 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
 ): Promise<ConsentUiObservation> {
   type RapidConsentInventory = {
     documentReadyState: DocumentReadyState;
+    inventoryTruncated?: boolean;
     controls: Array<{
       cmpScoped: boolean;
+      scopeText?: string;
+      scopeKind?: "paragraph" | "dialog";
+      contextText?: string;
       label: string;
       linkHref?: string;
       role?: string;
@@ -7157,6 +7171,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
             return normalize(current.textContent).slice(0, 4_000);
           }
         }
+        if (/^(?:dialog|alertdialog)$/i.test(current.getAttribute("role") || "") || current.tagName === "DIALOG") return "";
         current = current.parentElement;
       }
       return "";
@@ -7270,6 +7285,9 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
         strongConsentSurfaces.add(strongConsentSurface);
       }
       controls.push({
+        contextText,
+        scopeText: normalize(element.closest("p,li,[role=dialog],[role=alertdialog],dialog")?.textContent).slice(0, 2_000),
+        scopeKind: element.closest("p,li") ? "paragraph" : "dialog",
         cmpScoped: scopedSeen.has(element) || sameSurfaceCanonicalControlCount >= 2,
         linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
         label,
@@ -7333,6 +7351,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     return {
       controls,
       documentReadyState: document.readyState,
+      inventoryTruncated: probeBudgetExpired() || visitedCandidates > 5_000 || controls.length >= 12 || combinedCmpContainers.length >= 128,
       contextText: [...new Set(contexts)].join(" ").slice(0, 12_000),
       defaultTogglePurposeLabels: [...new Set(optionalPreferenceRows.map((row) => row.label))].slice(0, 12),
       defaultToggleStatesObserved: optionalPreferenceRows.length > 0 ? true : null,
@@ -7363,9 +7382,12 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     control,
     classification: classifyConsentControlLabel({
       label: control.label,
+      linkRole: control.role,
+      scopeText: control.scopeText,
+      scopeKind: control.scopeKind,
       linkDestination: control.linkDestination,
-      contextText: snapshot.contextText,
-      hasConsentContext: true,
+      contextText: control.contextText,
+      hasConsentContext: Boolean(control.contextText),
     }),
   }));
   const hasCanonicalAcceptRejectCluster =
@@ -7387,7 +7409,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
         (actionType === "manage_preferences" || actionType === "save_preferences")
       )
     ) return [];
-    const { cmpScoped: _cmpScoped, ...retainedControl } = control;
+    const { cmpScoped: _cmpScoped, scopeText: _scopeText, scopeKind: _scopeKind, contextText: _contextText, ...retainedControl } = control;
     return [{
       ...retainedControl,
       actionType,
@@ -7427,6 +7449,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       rejectionReasons: snapshot.rejectedNoContextLabels.length > 0 ? ["no_consent_context"] : [],
       timingMarkers: [
         `rapid_inventory_${phase}_completed`,
+        ...(snapshot.inventoryTruncated ? ["rapid_inventory_truncated"] : []),
         ...(controls.length > 0 ? ["rapid_first_layer_inventory"] : []),
         ...(snapshot.hasPotentialToggle ? ["rapid_inventory_toggle_present"] : []),
       ],
@@ -7435,9 +7458,9 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   const mainFrameObservation: ConsentUiObservation = {
     ...observation,
     documentReadyState: snapshot.documentReadyState,
-    inventoryOutcome: observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "partial" : controls.length > 0 ? "complete_with_controls"
+    inventoryOutcome: snapshot.inventoryTruncated || observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "partial" : controls.length > 0 ? "complete_with_controls"
       : snapshot.documentReadyState === "loading" ? "partial" : "complete_empty",
-    captureStatus: observation.basis.includes(UNRESOLVED_CONSENT_DECISION) || controls.length === 0 && snapshot.documentReadyState === "loading"
+    captureStatus: snapshot.inventoryTruncated || observation.basis.includes(UNRESOLVED_CONSENT_DECISION) || controls.length === 0 && snapshot.documentReadyState === "loading"
       ? "incomplete" : observation.captureStatus,
     captureDiagnostics: {
       completedChannels: ["dom_inventory"],
@@ -7461,9 +7484,12 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const classification = classifyConsentControlLabel({
       label: control.label,
+      linkRole: control.role,
+      scopeText: control.scopeText,
+      scopeKind: control.scopeKind,
       linkDestination: control.linkDestination,
-      contextText: frameContextText,
-      hasConsentContext: true,
+      contextText: control.nearbyConsentText,
+      hasConsentContext: control.consentContextEvidence === "local_surface",
     });
     frameNavigationLimited ||= classification.reasonCodes.includes("unverified_preferences_navigation");
     const actionType = consentUiControlActionTypeFromClassification(classification);
@@ -7612,7 +7638,7 @@ async function readRapidChildFrameConsentInventory(
         reason === "detached_frame" || reason === "canonical_embedded_media"
       )) as Array<"detached_frame" | "canonical_embedded_media">,
     inspectedFrameCount: frames.length,
-    textExcerpts: completed.map((row) => row.textExcerpt).filter(Boolean),
+    textExcerpts: completed.flatMap((row) => row.controls.map(control => control.nearbyConsentText ?? "")).filter(Boolean),
   };
 }
 
@@ -7711,6 +7737,9 @@ async function readConsentUiObservation(
   const classifiedControls = combinedControls.map(control => normalizeConsentControlLink(control, control.frameUrl ?? page.url())).map((control) => {
     const classification = classifyConsentControlLabel({
       label: control.label,
+      linkRole: control.role,
+      scopeText: control.scopeText,
+      scopeKind: control.scopeKind,
       linkDestination: control.linkDestination,
       contextText: control.nearbyConsentText,
       hasConsentContext: control.consentContextEvidence === "local_surface",
@@ -7847,6 +7876,7 @@ async function readConsentUiObservation(
       retainedRootSources.add(control.inventoryRootSource);
     }
     const {
+      scopeText: _scopeText, scopeKind: _scopeKind,
       frameUrl: _frameUrl,
       inventoryContainerKey: _inventoryContainerKey,
       inventoryRootSource: _inventoryRootSource,
@@ -7957,6 +7987,8 @@ function normalizeConsentControlLink<T extends { linkHref?: string; linkDestinat
 
 type ConsentUiInventoryControl = ConsentUiObservation["controls"][number] & {
   linkHref?: string;
+  scopeText?: string;
+  scopeKind?: "paragraph" | "dialog";
   frameUrl?: string;
   inventorySource?: "first_layer" | "full_document_cmp" | "full_document_consent_surface" | "same_origin_frame" | "accessibility_tree";
   inventoryContainerKey?: string;
@@ -8320,9 +8352,7 @@ async function readAccessibleFrameConsentInventory(
       continue;
     }
     controls.push(...frameInventory.controls.slice(0, 8));
-    if (frameInventory.textExcerpt) {
-      textExcerpts.push(frameInventory.textExcerpt);
-    }
+    textExcerpts.push(...frameInventory.controls.map(control => control.nearbyConsentText ?? "").filter(Boolean));
     if (controls.length >= 12) {
       break;
     }
@@ -8438,6 +8468,7 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
           if (contextText.length <= 4_000 && consentContextPattern.test(contextText)) {
             return `${current.textContent || ""} ${contextAttrs}`.replace(/\s+/g, " ").trim().slice(0, 500);
           }
+          if (/^(?:dialog|alertdialog)$/i.test(current.getAttribute("role") || "") || current.tagName === "DIALOG") return "";
           current = current.parentElement;
         }
         return "";
@@ -8459,6 +8490,8 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
             visible: true,
             consentContextEvidence: "local_surface" as const,
             nearbyConsentText: localConsentContext(element),
+          scopeText: (element.closest("p,li,[role=dialog],[role=alertdialog],dialog")?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 2_000),
+          scopeKind: element.closest("p,li") ? "paragraph" as const : "dialog" as const,
             frameUrl: window.location.href,
             inventoryContainerKey: `same_origin_frame:${window.location.href}`,
             inventoryRootSource: "document" as const,
@@ -8612,6 +8645,9 @@ function consentUiObservationFromAccessibilityInventory(
   const classifiedControls = inventory.controls.flatMap((control) => {
     const classification = classifyConsentControlLabel({
       label: control.label,
+      linkRole: control.role,
+      scopeText: control.scopeText,
+      scopeKind: control.scopeKind,
       linkDestination: control.linkDestination,
       contextText: control.nearbyConsentText,
       hasConsentContext: control.consentContextEvidence === "local_surface",
@@ -8619,6 +8655,7 @@ function consentUiObservationFromAccessibilityInventory(
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
     const {
+      scopeText: _scopeText, scopeKind: _scopeKind,
       frameUrl: _frameUrl,
       inventoryContainerKey: _inventoryContainerKey,
       inventoryRootSource: _inventoryRootSource,
@@ -8750,6 +8787,19 @@ export function consentControlsFromAccessibilityTree(
       continue;
     }
     const contextText = collectAccessibilitySubtreeText(container, nodesById, 80);
+    let scopeText = "";
+    let scopeKind: "paragraph" | "dialog" | undefined;
+    let scopeId = parentById.get(node.nodeId);
+    for (let depth = 0; scopeId && depth < 8; depth += 1) {
+      const scope = nodesById.get(scopeId);
+      if (!scope || scope.nodeId === container.nodeId) break;
+      if (/^(?:paragraph|dialog|alertdialog)$/i.test(axStringValue(scope.role))) {
+        scopeText = collectAccessibilitySubtreeText(scope, nodesById, 40);
+        scopeKind = axStringValue(scope.role) === "paragraph" ? "paragraph" : "dialog";
+        break;
+      }
+      scopeId = parentById.get(scopeId);
+    }
     if (!AX_CONSENT_CONTEXT_PATTERN.test(contextText)) {
       continue;
     }
@@ -8758,6 +8808,9 @@ export function consentControlsFromAccessibilityTree(
       ? classifyConsentControlLinkDestination(typeof href === "string" ? href : undefined, documentUrl) : undefined;
     const classification = classifyConsentControlLabel({
       label,
+      linkRole: role,
+      scopeText,
+      scopeKind,
       linkDestination,
       contextText,
       hasConsentContext: true,
@@ -8793,6 +8846,8 @@ export function consentControlsFromAccessibilityTree(
       visibilityEvidence: node.visibilityEvidence ?? "unverified",
       consentContextEvidence: "local_surface",
       nearbyConsentText: contextText.slice(0, 500),
+      scopeText,
+      scopeKind,
       inventoryContainerKey: `accessibility_tree:${container.nodeId}`,
       inventoryRootSource: "document",
       inventorySource: "accessibility_tree",
@@ -8841,6 +8896,7 @@ function nearestAccessibilityConsentContainer(
     ) {
       return current;
     }
+    if (/^(?:dialog|alertdialog)$/i.test(role)) return null;
     currentId = parentById.get(currentId);
   }
   return null;
@@ -9206,6 +9262,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           ) {
             return ((current.textContent || "") + " " + contextAttrs).replace(/\s+/g, " ").trim().slice(0, 500);
           }
+          if (/^(?:dialog|alertdialog)$/i.test(current.getAttribute("role") || "") || current.tagName === "DIALOG") return "";
           current = parentFor(current);
         }
         return "";
@@ -9367,6 +9424,8 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           visible: true,
           consentContextEvidence: "local_surface",
           nearbyConsentText: localConsentContext(element),
+          scopeText: (element.closest("p,li,[role=dialog],[role=alertdialog],dialog")?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 2_000),
+          scopeKind: element.closest("p,li") ? "paragraph" : "dialog",
           frameUrl: sameOriginFrameControl ? element.ownerDocument.location?.href : undefined,
           inventoryContainerKey: sameOriginFrameControl ? "same_origin_frame:" + (element.ownerDocument.location?.href || "about:blank") : container.key,
           inventoryRootSource: rootSourceFor(element),
@@ -9842,8 +9901,12 @@ export function mergeConsentUiObservations(
   const blockingFrameInaccessible =
     (current.inventoryOutcome === "frame_inaccessible" || candidate.inventoryOutcome === "frame_inaccessible") &&
     (inventoryDiagnostics.blockingInaccessibleFrameCount ?? 0) > 0;
+  const latestObservation = candidate.observedAtMs >= current.observedAtMs ? candidate : current;
+  const latestIncomplete = ["partial", "timed_out", "document_mismatch", "geometry_unavailable"].includes(latestObservation.inventoryOutcome ?? "");
   const inventoryOutcome: ConsentUiObservation["inventoryOutcome"] =
-    activeTimedOutChannels.length > 0
+    latestIncomplete
+      ? latestObservation.inventoryOutcome
+      : activeTimedOutChannels.length > 0
       ? "timed_out"
       : activeFailedChannels.length > 0
         ? "partial"
@@ -12668,7 +12731,7 @@ export function reconcileConsentUiObservationWithCompletedGeometry(input: {
         : input.current.likelyPresent,
       basis: unique([...input.current.basis, ...(unresolvedDecision ? [UNRESOLVED_CONSENT_DECISION] : [])]),
       inventoryOutcome:
-        unresolvedDecision ? "partial" : input.current.inventoryOutcome === "frame_inaccessible"
+        unresolvedDecision || input.current.inventoryOutcome === "partial" || input.current.inventoryOutcome === "timed_out" ? "partial" : input.current.inventoryOutcome === "frame_inaccessible"
           ? "frame_inaccessible"
           : input.current.controls.length > 0
             ? "complete_with_controls"

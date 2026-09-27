@@ -192,6 +192,11 @@ At the passive barrier, an unfinished such lane becomes explicitly limited, not
 `not_applicable`; add no tail wait solely to resolve passive absence. Aborting an
 AWS invocation is best-effort; late output must not reopen or independently
 publish a terminal result. See `docs/certscore-v2/consent-action-evidence-policy.md`.
+Customer-facing After Accept and After Reject sections require the corresponding
+canonical first-layer control assessment state to be `observed`. A completed
+independent action remains retained evidence but does not override `unknown` or
+`not_observed` for report visibility. Apply this rule through the shared
+reportability projection across reports and APIs, not in an individual card.
 
 Retain bounded operational timing telemetry for every lane: coordinator-observed
 invocation start, terminal-outcome time, elapsed duration, worker-reported
@@ -242,6 +247,22 @@ claim consent registration. Reports retain known binary states and present one
 inspection limitation for unresolved controls. This does not change scoring
 weights or permit display-layer inference. See
 `docs/certscore-v2/control-specific-consent-inspection-policy.md`.
+
+### Binary customer control summary
+
+On September 27, 2026, the owner approved `observed_control_report.v1` for
+local development. Reports use a shared, versioned projection of the retained
+assessment to show A/R/O as Observed or Not observed on usable consent visits.
+Not observed means the control was not identified in that visit; it does not
+upgrade an internal unknown into verified absence. Preserve assessment versions,
+source hashes, provenance, scoring, concern eligibility and action authorization.
+Failed, blocked, malformed or document-unbound visits omit the control summary
+rather than inventing three negatives. Do not show individual uncertainty or an
+inspection-limited warning in that summary. After Accept/Reject remains visible
+only when the same projection marks the respective control observed. This
+supersedes earlier customer inspection-notice wording only. See
+`docs/certscore-v2/observed-control-report-policy.md`. Production rollout was
+authorized by the owner on September 27, 2026.
 
 ### Finding-domain classification
 

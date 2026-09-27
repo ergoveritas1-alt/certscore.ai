@@ -1,6 +1,5 @@
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import type { ChoicePathExecution } from "@certscore/contracts";
-import { consentInspectionNotice } from "../../lib/scans/consent-inspection-presentation";
 import { afterClickCoverageLabel } from "./after-action-summary";
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { KNOWN_CMP_REGISTRY } from "../../../../packages/shared/src/known-cmps";
@@ -101,7 +100,6 @@ export type ExecutivePolicySurface = {
 };
 
 export type ExecutiveConsentControlProjection = {
-  inspectionNotice?: string | null;
   accept: boolean | null;
   options: boolean | null;
   reject: boolean | null;
@@ -2293,15 +2291,13 @@ function CompactConsentControlState(input: {
 export function CompactConsentControlsCard(input: {
   projection?: ExecutiveConsentControlProjection | null;
 }) {
-  const states = { accept: input.projection?.accept, reject: input.projection?.reject, options: input.projection?.options };
-  const label = (value: boolean | null | undefined) => value === true ? "Observed" : value === false ? "Not observed" : "Unknown";
-  const notice = input.projection?.inspectionNotice ?? consentInspectionNotice({ accept: label(states.accept), reject: label(states.reject), options: label(states.options) });
+  const states = input.projection;
+  if (!states || [states.accept, states.reject, states.options].some(value => typeof value !== "boolean")) return null;
   return (
     <div className="rounded-[1rem] border border-slate-200 bg-gradient-to-b from-white to-slate-50/90 px-3 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.95),0_2px_7px_rgba(15,23,42,0.06)]">
       <p className="mb-0.5 text-[10px] font-semibold uppercase leading-[10px] tracking-[0.16em] text-slate-500">
         Consent controls
       </p>
-      {notice ? <p role="status" className="my-1 text-xs text-slate-600">{notice}</p> : null}
       <div
         aria-label="Accept, Reject, and Options control detection"
         className="grid grid-flow-col auto-cols-fr gap-1.5"

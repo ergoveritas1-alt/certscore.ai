@@ -1,5 +1,4 @@
 import { choicePathExecutionSchema } from "@certscore/contracts";
-import { consentInspectionNotice } from "../../lib/scans/consent-inspection-presentation";
 import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
@@ -7935,15 +7934,12 @@ export async function SharedScanDetailView({
     (item) => item.id === "post_reject_tracking_reduction"
   );
   const executiveRejectPath = buildExecutiveRejectPathProjection(postRejectTrackingReductionItem);
-  const executiveConsentControls: ExecutiveConsentControlProjection = {
-    accept: getRecordOptionalBoolean(snapshot, "consent_accept_observed"),
-    reject: getRecordOptionalBoolean(snapshot, "consent_reject_observed"),
-    options: getRecordOptionalBoolean(snapshot, "consent_options_observed"),
-  };
-  const consentStateLabel = (value: boolean | null) => value === true ? "Observed" : value === false ? "Not observed" : "Unknown";
-  executiveConsentControls.inspectionNotice = consentInspectionNotice({
-    accept: consentStateLabel(executiveConsentControls.accept), reject: consentStateLabel(executiveConsentControls.reject), options: consentStateLabel(executiveConsentControls.options),
-  }, snapshot?.consent_control_assessment ?? runtimeArtifacts?.consentControlAssessment ?? runtimeArtifacts?.consent_control_assessment);
+  const controlSummary = persistedCanonicalProjection?.consentControlSummary;
+  const executiveConsentControls: ExecutiveConsentControlProjection | null = controlSummary ? {
+    accept: controlSummary.controls.accept === "observed",
+    reject: controlSummary.controls.reject === "observed",
+    options: controlSummary.controls.options === "observed",
+  } : null;
   const executiveCookieBannerPresent =
     consentSurfaceCoverageItem?.status === "Observed"
       ? true

@@ -1001,8 +1001,8 @@ test("handles contextual and weak terms without turning them into reject proof",
   assert.equal(classifyConsentControlLabel({ label: "Continuer sans accepter les cookies" }).intent, "reject");
 
   const okWithoutContext = classifyConsentControlLabel({ label: "OK" });
-  assert.equal(okWithoutContext.intent, "accept");
-  assert.equal(okWithoutContext.matchStrength, "weak");
+  assert.equal(okWithoutContext.intent, "unknown");
+  assert.ok(okWithoutContext.reasonCodes.includes("unproven_acknowledgment_consent"));
   assert.ok(okWithoutContext.confidence < 0.6);
 
   assert.equal(classifyConsentControlLabel({ label: "Save choices" }).intent, "unknown");
@@ -1149,4 +1149,78 @@ test("reviewed September cohort labels are exact contextual observations, not ne
     assert.ok(!["accept", "reject"].includes(classifyConsentControlLabel({ label, hasConsentContext: true }).intent), label);
   }
   assert.equal(classifyConsentControlLabel({ label: "Accept Only Necessary", ariaLabel: "Accept all cookies", hasConsentContext: true }).intent, "unknown");
+});
+
+test("September 27 observed control phrases recover semantic misses without authorizing actions", () => {
+  const choices = [["Allow necessary cookies", "reject"], ["Use website with required cookies only (revocation) →", "reject"],
+    ["Cookie preferences", "options"], ["Open Privacy Settings", "options"], ["接受並關閉", "accept"]] as const;
+  for (const [label, intent] of choices) {
+    assert.equal(classifyConsentControlLabel({ label, hasConsentContext: true, usage: "observation" }).intent, intent, label);
+    assert.equal(classifyConsentControlLabel({ label, hasConsentContext: false, usage: "observation" }).intent, "unknown", label);
+    assert.equal(classifyConsentControlLabel({ label, hasConsentContext: true, usage: "action" }).intent, "unknown", label);
+  }
+  assert.notEqual(classifyConsentControlLabel({ label: "Do not allow necessary cookies", hasConsentContext: true }).variant, "necessary_only");
+  for (const label of ["Allow necessary cookies or accept all", "How to use required cookies only?"]) {
+    assert.equal(classifyConsentControlLabel({ label, hasConsentContext: true, usage: "observation" }).intent, "unknown", label);
+  }
+});
+
+test("observing a cookie settings ARIA button does not claim navigation or broaden action proof", () => {
+  const input = { label: "Cookie Settings", hasConsentContext: true, linkRole: "button", linkDestination: "unverified" as const };
+  assert.equal(classifyConsentControlLabel({ ...input, usage: "observation" }).intent, "options");
+  assert.equal(classifyConsentControlLabel({ ...input, usage: "action" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ ...input, linkRole: "link" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ ...input, linkDestination: "other_document" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ ...input, hasConsentContext: false }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Do Not Sell or Share My Personal Information", hasConsentContext: true }).intent, "privacy_opt_out");
+  assert.equal(classifyConsentControlLabel({ label: "REFUSER & S'ABONNER", hasConsentContext: true }).intent, "unknown");
+});
+
+test("review regressions keep necessary-only observation separate from action authorization", () => {
+  const input = { label: "Use necessary cookies", hasConsentContext: true };
+  assert.equal(classifyConsentControlLabel(input).intent, "reject");
+  assert.equal(classifyConsentControlLabel(input).variant, "necessary_only");
+  assert.equal(classifyConsentControlLabel({ ...input, usage: "action" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Do not use necessary cookies", hasConsentContext: true }).intent, "unknown");
+});
+
+test("tab roles and unrelated notification decisions cannot become cookie choices", () => {
+  for (const label of ["Consent", "Accept", "Reject", "Details"]) {
+    assert.equal(classifyConsentControlLabel({ label, linkRole: "tab", hasConsentContext: true }).intent, "unknown");
+  }
+  for (const label of ["Accept", "Deny", "Deny all"]) {
+    assert.equal(classifyConsentControlLabel({ label, scopeText: "Receive notifications about offers", hasConsentContext: true }).intent, "unknown");
+  }
+  assert.equal(classifyConsentControlLabel({ label: "Reject all", contextText: "We use cookies. You may also receive notifications." }).intent, "reject");
+});
+
+test("an inline Utiq opt-out needs its own scope and cannot replace general Reject", () => {
+  assert.equal(classifyConsentControlLabel({ label: "jetzt ablehnen", scopeKind: "paragraph", scopeText: "Ihre Einwilligung für Utiq können Sie jetzt ablehnen", hasConsentContext: true }).intent, "privacy_opt_out");
+  assert.equal(classifyConsentControlLabel({ label: "Reject all", contextText: "Cookies and Utiq advertising", hasConsentContext: true }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "jetzt ablehnen", contextText: "Cookies and Utiq advertising", hasConsentContext: true }).intent, "reject");
+});
+
+test("acknowledgments require wording tying the click to consent", () => {
+  for (const contextText of [
+    "We process personal information. Click the button to exercise your privacy rights.",
+    "By using this website you agree to our use of cookies.",
+    "Click OK to close this notice about cookies.",
+    "By clicking OK you do not consent to cookies.",
+  ]) assert.equal(classifyConsentControlLabel({ label: "OK", contextText, hasConsentContext: true }).intent, "unknown");
+  for (const contextText of [
+    "By clicking OK, you consent to analytics cookies.",
+    "Cookies und andere Technologien erlauben? Wir benötigen Ihre Zustimmung (Klick auf „OK”) bei Datennutzungen.",
+  ]) assert.equal(classifyConsentControlLabel({ label: "OK", contextText }).intent, "accept");
+});
+
+test("Macedonian vocabulary is exact, consent-scoped, and observation-only", () => {
+  const contextText = "Поставки за колачиња";
+  assert.equal(classifyConsentSurfaceText({ text: `${contextText} Не се согласувам Се согласувам Подесување` }).likelyPresent, true);
+  for (const [label, intent] of [["Се согласувам", "accept"], ["Не се согласувам", "reject"], ["Подесување", "options"]]) {
+    assert.equal(classifyConsentControlLabel({ label, contextText }).intent, intent);
+    assert.equal(classifyConsentControlLabel({ label }).intent, "unknown");
+    assert.equal(classifyConsentControlLabel({ label, contextText, usage: "action" }).intent, "unknown");
+  }
+  assert.equal(classifyConsentControlLabel({ label: "Зошто се согласувам", contextText }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Accept essentials only", hasConsentContext: true, usage: "action" }).intent, "unknown");
 });

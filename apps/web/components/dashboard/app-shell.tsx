@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode, type SVGProps } from "react";
 import { FOOTER_COPYRIGHT_COPY, FOOTER_DISCLAIMER_COPY } from "../layout/footer-copy";
 import { isScanReportPath, resolveScanViewHref } from "./scan-view-navigation";
+import { ScanUsageIndicator } from "./scan-usage-indicator";
 
 type NavIconProps = SVGProps<SVGSVGElement>;
 
@@ -110,7 +111,8 @@ const navItems = [
   { href: "/app", label: "Overview", icon: OverviewIcon },
   { href: "/app/signals", label: "Scan view", icon: SignalsIcon },
   { href: "/app/settings", label: "Settings", icon: SettingsIcon },
-  { href: "/app/modify-plan", label: "Modify plan", icon: PlanIcon }
+  { href: "/app/modify-plan", label: "Modify plan", icon: PlanIcon },
+  { href: "/app/feedback", label: "Feedback", icon: FeedbackIcon }
 ] as const;
 
 type AppShellProps = {
@@ -271,14 +273,7 @@ export function AppShell({
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
-                <Link
-                  href="/app/feedback"
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-800 px-3 py-1.5 text-sm text-slate-300 transition hover:border-slate-700 hover:bg-slate-900 hover:text-white"
-                >
-                  <FeedbackIcon className="h-4 w-4" />
-                  <span className="hidden sm:inline">Feedback</span>
-                </Link>
-
+                <ScanUsageIndicator />
                 <div className="relative">
                   <button
                     type="button"

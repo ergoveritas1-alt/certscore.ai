@@ -133,7 +133,6 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
         <h2 id={`${prefix}-title`} className="text-xl font-semibold">Collection surfaces (forms)</h2>
         <div className="flex items-center gap-2"><span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.length === 1 ? "form" : "forms"}`} /></span>{!loading ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire forms table with all fields and evidence as JSON" payload={JSON.stringify(rows, null, 2)} /> : null}</div>
       </div>
-      <p className="mb-4 text-xs text-zinc-600">Forms and fields observed on scanned pages. Expand a form to inspect its fields; submitted values are not included.</p>
       {pagesWithoutInventory > 0 || limitedPages > 0 ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
         {pagesWithoutInventory > 0 ? `${pagesWithoutInventory} page(s) have no retained form inventory. ` : ""}
         {limitedPages > 0 ? `${limitedPages} page(s) have limited form coverage. ` : ""}Missing evidence does not establish that a page has no forms.

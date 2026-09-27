@@ -6,6 +6,7 @@ import { EmailVerificationCard } from "../../../components/settings/email-verifi
 import { ScanLocationSettingsCard } from "../../../components/settings/scan-location-settings-card";
 import { isPlatformAdminEmail } from "../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../server/auth";
+import { formatScanUsageResetDate } from "../../../lib/dashboard/scan-usage-reset";
 import { getBetterAuthVerificationStatus } from "../../../server/better-auth/user";
 import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-scan-usage";
 import { getSystemHealth } from "../../../server/health/get-system-health";
@@ -120,7 +121,7 @@ export default async function SettingsPage() {
               <p className="text-xs font-semibold text-sky-700">{usagePercent === null ? "Unlimited" : `${usagePercent}% used`}</p>
             </div>
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Monthly scan allowance used" aria-valuemax={100} aria-valuemin={0} aria-valuenow={usagePercent ?? undefined}><div className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-400" style={{ width: `${usagePercent ?? 0}%` }} /></div>
-            <p className="mt-2 text-xs text-slate-500">{scanUsage.monthlyScansUsed} used · resets {formatDate(scanUsage.monthlyPeriodEnd)}</p>
+            <p className="mt-2 text-xs text-slate-500">{scanUsage.monthlyScansUsed} used · resets {formatScanUsageResetDate(scanUsage.monthlyPeriodEnd)} UTC</p>
           </div>
         </div>
       </section>

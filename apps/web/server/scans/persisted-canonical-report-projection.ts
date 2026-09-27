@@ -1,4 +1,5 @@
-import { isAfterActionReportEligible, retainedConsentAssessment, retainedActionProjection } from "../../lib/scans/after-action-report-eligibility";
+import { projectConsentControlReport, type ConsentControlReport } from "../../lib/scans/consent-control-report";
+import { isAfterActionReportEligible, retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
 import { getReportableGdprEprivacyCoverageItems } from "../../lib/scans/gdpr-eprivacy-reportable-rows";
 import type { ScanReportUnifiedFindingState } from "../../lib/scans/scan-report-unified-findings";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
@@ -39,6 +40,7 @@ export type PersistedCanonicalReportProjection = {
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V4
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V3
     | typeof LEGACY_PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION_V2;
+  consentControlSummary?: ConsentControlReport | null;
   checklistPresentation?: GdprEprivacyChecklistPresentation;
   collectionSurfaceAssessment: CollectionSurfaceAssessment | null;
   preConsentBrowserStorageProjection?: PreConsentBrowserStorageProjection;
@@ -57,9 +59,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function reportChecklistPresentation(value: unknown, assessment: unknown, projection: unknown) {
+function reportChecklistPresentation(value: unknown, assessment: unknown) {
   return isGdprEprivacyChecklistPresentation(value)
-    ? filterGdprEprivacyChecklistPresentationForReport(value, isAfterActionReportEligible(assessment, "reject", projection))
+    ? filterGdprEprivacyChecklistPresentationForReport(value, isAfterActionReportEligible(assessment, "reject"))
     : undefined;
 }
 
@@ -142,15 +144,17 @@ export function getPersistedCanonicalReportProjection(
       .flatMap((id) => globalById.get(id) ?? []);
     return {
       ...candidate,
-      checklistRows: getReportableGdprEprivacyCoverageItems(candidate.checklistRows as GdprEprivacyCoverageChecklistItem[], { consentControlAssessment: retainedConsentAssessment(scanRecord), postRefusalEvidenceProjection: retainedActionProjection(scanRecord, "reject") }),
-      checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation, retainedConsentAssessment(scanRecord), retainedActionProjection(scanRecord, "reject")),
+      consentControlSummary: projectConsentControlReport(retainedConsentAssessment(scanRecord), scanRecord.scan.id),
+      checklistRows: getReportableGdprEprivacyCoverageItems(candidate.checklistRows as GdprEprivacyCoverageChecklistItem[], { consentControlAssessment: retainedConsentAssessment(scanRecord) }),
+      checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation, retainedConsentAssessment(scanRecord)),
       ownerUnifiedFindings,
     } as PersistedCanonicalReportProjection;
   }
 
   return {
     ...candidate,
-    checklistRows: getReportableGdprEprivacyCoverageItems(candidate.checklistRows as GdprEprivacyCoverageChecklistItem[], { consentControlAssessment: retainedConsentAssessment(scanRecord), postRefusalEvidenceProjection: retainedActionProjection(scanRecord, "reject") }),
-    checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation, retainedConsentAssessment(scanRecord), retainedActionProjection(scanRecord, "reject")),
+    consentControlSummary: projectConsentControlReport(retainedConsentAssessment(scanRecord), scanRecord.scan.id),
+    checklistRows: getReportableGdprEprivacyCoverageItems(candidate.checklistRows as GdprEprivacyCoverageChecklistItem[], { consentControlAssessment: retainedConsentAssessment(scanRecord) }),
+    checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation, retainedConsentAssessment(scanRecord)),
   } as PersistedCanonicalReportProjection;
 }

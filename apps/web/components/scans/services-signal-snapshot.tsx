@@ -14,7 +14,7 @@ export function ServicesSignalSnapshot({ overview, card = false }: { overview?: 
   const inventory = site ? site.overview : overview;
   const names = inventory?.identifiedServiceNames ?? [];
   return <details className={card ? "group/services min-w-0" : "group/services border-b border-zinc-200 py-2"}>
-    <summary className={card ? inventoryTileDisclosure : "flex items-center justify-between gap-3 cursor-pointer list-none text-xs leading-4 [&::-webkit-details-marker]:hidden"}>
+    <summary title={inventory ? undefined : "Service count unavailable; this is not a verified zero."} className={card ? inventoryTileDisclosure : "flex items-center justify-between gap-3 cursor-pointer list-none text-xs leading-4 [&::-webkit-details-marker]:hidden"}>
       {card ? <InventoryTileHeading label="Services" value={inventory?.identifiedServices ?? "—"} chevron={<DisclosureChevron className="group-open/services:rotate-180" />} /> : <>
       <span className={card ? "text-slate-500" : "font-medium text-zinc-500"}>Services {!card ? <span className="text-[10px] font-normal text-zinc-400">{site ? "Scanned pages" : "Starting page"}</span> : null}</span>
       <span className={`flex items-center gap-2 font-semibold tabular-nums ${card ? "text-xl text-slate-950" : "text-zinc-800"}`}>{inventory?.identifiedServices ?? "Unavailable"}<DisclosureChevron className="text-zinc-400 group-open/services:rotate-180" /></span>

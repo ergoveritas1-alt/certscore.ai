@@ -78,9 +78,7 @@ test("ordinary field classifications are neutral information, separate from find
     const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[{ ...row, form: { ...row.form, fields: [field] } }]} />);
     assert.match(html, /Field review information/);
     assert.doesNotMatch(html, /⚠|text-amber-700|text-rose-700/);
-    assert.match(html, /CertScore.ai does not fill or submit forms; this inventory does not contain submitted field values\./);
-    assert.match(html, /Field review identifies fields worth checking\. These labels are not privacy findings and do not affect the score by themselves\./);
-    assert.match(html, /Declared destination is the configured form action, not evidence that CertScore.ai submitted the form or observed a transfer\./);
+    assert.doesNotMatch(html, /Forms and fields observed on scanned pages|Field review identifies fields worth checking|Declared destination is the configured form action/);
   }
 });
 

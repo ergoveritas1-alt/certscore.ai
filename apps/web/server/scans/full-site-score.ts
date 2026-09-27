@@ -145,7 +145,17 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
   if (saved.success && saved.data.fullSiteScore.sourceHash === key) {
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
-    if (parsed.success) return parsed.data;
+    if (parsed.success) {
+      const homeScore = deriveCanonicalOverallScoreForReport({
+        scanRecord: home,
+        checklistRows: canonical.checklistRows,
+        unifiedFindings: canonical.globalUnifiedFindings,
+      });
+      // Older cached site results may have a null value solely because the
+      // report suppressed scores for incomplete consent inspection. Reassess
+      // those results from retained page evidence so site-wide effects remain intact.
+      if (parsed.data.value !== null || homeScore === null) return parsed.data;
+    }
   }
   const existing = cache.get(key);
   if (existing && existing.expiresAt > Date.now()) return existing.result;

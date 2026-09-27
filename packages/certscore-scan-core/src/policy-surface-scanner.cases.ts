@@ -1073,6 +1073,183 @@ test("browser recovery reopens the retained session after the original policy pa
   }
 });
 
+test("policySurfaceScanner follows a primary privacy link through a delayed index to its declared notice", async () => {
+  const noticeText = Array.from({ length: 5 }, () =>
+    "The publisher processes personal data for service delivery and analytics. Its controller can be contacted at privacy@example.test. Processing uses consent, contract, legal obligation, and legitimate interests. Personal data is shared with service providers, retained only as long as needed, and may be transferred internationally with standard contractual clauses. Visitors may request access, correction, deletion, restriction, portability, or object and may complain to a supervisory authority."
+  ).join(" ");
+  const privacyRequests: Array<{ cookie: string; referer: string }> = [];
+  const server = createServer((request, response) => {
+    const pathname = new URL(request.url ?? "/", "http://fixture.test").pathname;
+    const host = request.headers.host ?? "127.0.0.1";
+    if (pathname === "/") {
+      response.writeHead(200, {
+        "content-type": "text/html; charset=utf-8",
+        "set-cookie": "policy_session=retained; Path=/; SameSite=Lax",
+      });
+      response.end("<!doctype html><html><body><footer><a href='/privacy'>Privacy Policy</a></footer></body></html>");
+      return;
+    }
+    if (pathname === "/privacy") {
+      privacyRequests.push({ cookie: request.headers.cookie ?? "", referer: request.headers.referer ?? "" });
+      if (!(request.headers.cookie ?? "").includes("policy_session=retained") ||
+          !(request.headers.referer ?? "").endsWith("/")) {
+        response.writeHead(403, { "content-type": "text/html; charset=utf-8" });
+        response.end("Access denied");
+        return;
+      }
+      response.writeHead(302, { location: "/policycenter/b2c/" });
+      response.end();
+      return;
+    }
+    if (pathname === "/policycenter/b2c/") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<!doctype html><html><head><title>Privacy Center</title></head><body>
+        <main><h1>Privacy Center</h1><p>Select the privacy policy for your region.</p></main>
+        <footer><a href="/policycenter/b2c/en-us" title="Privacy Policy">Privacy Policy</a></footer>
+        <a href="http://${host}/policycenter/b2c/en-ca">Privacy Policy</a>
+        <a href="http://${host}/policycenter/b2c/en-apac">Privacy Policy</a>
+        <script src="/policycenter/slow-script.js"></script></body></html>`);
+      return;
+    }
+    if (pathname === "/policycenter/slow-script.js") {
+      setTimeout(() => {
+        if (!response.destroyed) {
+          response.writeHead(200, { "content-type": "application/javascript" });
+          response.end("// Deliberately delays DOMContentLoaded after the policy index has committed.");
+        }
+      }, 4_500);
+      return;
+    }
+    if (pathname === "/policycenter/b2c/en-us") {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end("<!doctype html><html><head><title>Privacy Policy</title><script>OneTrust.NoticeApi.LoadNotices([\"/policycenter/notice.json\"], true, \"en-us\", \"false\")</script></head><body><main>Processing Error. Privacy Center.</main></body></html>");
+      return;
+    }
+    if (pathname === "/policycenter/notice.json") {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(JSON.stringify({ notices: [{ title: "Privacy Policy", content: `<h1>Privacy Policy</h1><p>${noticeText}</p>` }] }));
+      return;
+    }
+    response.writeHead(404);
+    response.end("Not found");
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const targetUrl = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-primary-index-"));
+  try {
+    const result = await policySurfaceScanner({
+      url: targetUrl,
+      normalizedUrl: targetUrl,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 14_000,
+      artifactWriter: await createArtifactWriter(tempRoot),
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const primary = applyGoverningPolicySelection(result.policySurfaceObservations).find((observation) =>
+      observation.normalizedUrl === `${targetUrl}policycenter/b2c/en-us` &&
+      observation.surfaceType === "privacy_policy"
+    );
+    assert.equal(primary?.status, "fetched", JSON.stringify({
+      errors: result.moduleRun.errors,
+      observations: result.policySurfaceObservations.map((observation) => ({
+        url: observation.normalizedUrl,
+        status: observation.status,
+        reason: observation.fetchFailureReason,
+        role: observation.documentRole,
+      })),
+      diagnostics: await readPolicyCaptureDiagnostics(result),
+    }));
+    assert.equal(primary?.documentRole, "policy_document");
+    assert.equal(primary?.documentEvaluationState, "usable");
+    assert.equal(primary?.documentTextCoverage?.status, "complete");
+    assert.equal(primary?.governingPolicySelection?.state, "primary");
+    assert.equal(primary?.selectionReasonCodes?.includes("unique_primary_privacy_document_link"), true);
+    const retainedText = primary?.artifactRefs?.find((artifact) =>
+      artifact.artifactId.startsWith("policy_surface_text_")
+    );
+    assert.ok(retainedText?.path);
+    assert.match(await readFile(retainedText.path, "utf8"), /controller can be contacted/i);
+    assert.equal(privacyRequests.some((request) => request.referer === targetUrl &&
+      request.cookie.includes("policy_session=retained")), true);
+    assert.equal(result.policySurfaceObservations.some((observation) =>
+      observation.normalizedUrl === `${targetUrl}policycenter/b2c/en-ca` && observation.status === "fetched"
+    ), false);
+  } finally {
+    server.close();
+    await once(server, "close");
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("policy index starts its unique observed document fetch during index retention", async () => {
+  const policyText = "The publisher processes personal information for service delivery. The data controller can be contacted at privacy@example.test. Visitors may request access, deletion, and objection. Data is retained for two years and transferred under standard contractual clauses. ".repeat(12);
+  let childRequests = 0;
+  let childRequestedAt = 0;
+  let indexExcerptFinishedAt = 0;
+  const childRequestDetails: Array<{ at: number; referer: string; userAgent: string }> = [];
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    const host = request.headers.host ?? "127.0.0.1";
+    if (request.url === "/") {
+      response.end('<html><body><footer><a href="/policycenter/b2c/">Privacy Policy</a></footer></body></html>');
+    } else if (request.url === "/policycenter/b2c/") {
+      response.end(`<html><head><title>Privacy Center</title></head><body><main><h1>Privacy Center</h1><p>Select the privacy policy for your region.</p></main><footer><a href="/policycenter/b2c/en-us">Privacy Policy</a></footer><a href="http://${host}/policycenter/b2c/en-ca">Privacy Policy</a><a href="http://${host}/policycenter/b2c/en-apac">Privacy Policy</a></body></html>`);
+    } else if (request.url === "/policycenter/b2c/en-us") {
+      childRequests += 1;
+      childRequestedAt = Date.now();
+      childRequestDetails.push({ at: childRequestedAt, referer: request.headers.referer ?? "", userAgent: request.headers["user-agent"] ?? "" });
+      setTimeout(() => {
+        if (!response.destroyed) response.end(`<html><body><main><h1>Privacy Policy</h1><p>${policyText}</p></main></body></html>`);
+      }, 3_200);
+    } else {
+      response.writeHead(404);
+      response.end("Not found");
+    }
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const dir = await mkdtemp(path.join(tmpdir(), "certscore-policy-early-child-"));
+  try {
+    const artifactWriter = await createArtifactWriter(dir);
+    const writeTextArtifact = artifactWriter.writeTextArtifact.bind(artifactWriter);
+    let delayedIndexExcerpt = false;
+    artifactWriter.writeTextArtifact = async (filename, content) => {
+      if (!delayedIndexExcerpt && filename.startsWith("policy_excerpt_")) {
+        delayedIndexExcerpt = true;
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        indexExcerptFinishedAt = Date.now();
+      }
+      return writeTextArtifact(filename, content);
+    };
+    const result = await policySurfaceScanner({
+      url,
+      normalizedUrl: url,
+      scanStartedAtMs: Date.now(),
+      internalBudgetMs: 12_000,
+      discoveryMode: "fast",
+      artifactWriter,
+      nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
+    });
+    const policy = result.policySurfaceObservations.find((observation) =>
+      observation.normalizedUrl === `${url}policycenter/b2c/en-us`
+    );
+    assert.equal(childRequests, 1, JSON.stringify(childRequestDetails));
+    assert.ok(childRequestedAt > 0 && childRequestedAt < indexExcerptFinishedAt);
+    assert.equal(policy?.status, "fetched", JSON.stringify({ status: result.moduleRun.status, policy }));
+    assert.equal(policy?.documentEvaluationState, "usable");
+    assert.equal(policy?.governingPolicySelection?.state, "primary");
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("browser recovery accepts a secure www redirect as the same policy session site", () => {
   assert.equal(
     isPolicySessionPrimerCompatible(

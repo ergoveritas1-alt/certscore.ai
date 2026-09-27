@@ -396,11 +396,12 @@ test("typed controls are never merged across browser document tokens", () => {
 
 function rapidInventorySnapshot(withControls: boolean) {
   return {
+    documentReadyState: "complete",
     controls: withControls
       ? [
-          { cmpScoped: true, label: "Accept", role: "button", selectorHint: "#accept", tagName: "button", visible: true },
-          { cmpScoped: true, label: "Decline", role: "button", selectorHint: "#decline", tagName: "button", visible: true },
-          { cmpScoped: true, label: "Customise", role: "link", selectorHint: "#customise", tagName: "a", visible: true },
+          { cmpScoped: true, contextText: "We use cookies and advertising technologies.", label: "Accept", role: "button", selectorHint: "#accept", tagName: "button", visible: true },
+          { cmpScoped: true, contextText: "We use cookies and advertising technologies.", label: "Decline", role: "button", selectorHint: "#decline", tagName: "button", visible: true },
+          { cmpScoped: true, contextText: "We use cookies and advertising technologies.", label: "Customise", role: "link", selectorHint: "#customise", tagName: "a", visible: true },
         ]
       : [],
     contextText: withControls
@@ -424,12 +425,13 @@ test("rapid DOM inventory retains complete first-layer controls before accessibi
   const page = {
     evaluate: async (_pageFunction: unknown, argument?: unknown) => {
       evaluateCallCount += 1;
-      return argument === undefined ? true : rapidInventorySnapshot(true);
+      return rapidInventorySnapshot(true);
     },
     context: () => {
       accessibilityAttempted = true;
       throw new Error("accessibility should not be attempted after complete rapid evidence");
     },
+    frames: () => [{}],
     url: () => "https://example.test/",
   } as unknown as Page;
 
@@ -439,7 +441,7 @@ test("rapid DOM inventory retains complete first-layer controls before accessibi
   });
 
   assert.equal(accessibilityAttempted, false);
-  assert.equal(evaluateCallCount, 2);
+  assert.equal(evaluateCallCount, 1);
   assert.equal(result.acceptControlObserved, true);
   assert.equal(result.rejectControlObserved, true);
   assert.equal(result.managePreferencesControlObserved, true);
@@ -457,8 +459,7 @@ test("rapid initial snapshot returns a completed empty DOM inventory without slo
   const page = {
     evaluate: async (_pageFunction: unknown, argument?: unknown) => {
       evaluateCallCount += 1;
-      if (argument !== undefined) return rapidInventorySnapshot(false);
-      return true;
+      return rapidInventorySnapshot(false);
     },
     context: () => {
       accessibilityAttempted = true;
@@ -481,7 +482,7 @@ test("rapid initial snapshot returns a completed empty DOM inventory without slo
     result.inventoryDiagnostics?.timingMarkers.includes("rapid_snapshot"),
     true,
   );
-  assert.equal(evaluateCallCount, 2);
+  assert.equal(evaluateCallCount, 1);
 });
 
 test("rapid initial snapshot returns a timed-out DOM inventory as incomplete without waiting for accessibility", async () => {
@@ -490,13 +491,13 @@ test("rapid initial snapshot returns a timed-out DOM inventory as incomplete wit
   const page = {
     evaluate: async (_pageFunction: unknown, argument?: unknown) => {
       evaluateCallCount += 1;
-      if (argument === undefined) return true;
       return await new Promise<never>(() => undefined);
     },
     context: () => {
       accessibilityAttempted = true;
       throw new Error("accessibility should remain a later recovery channel");
     },
+    frames: () => [{}],
     url: () => "https://example.test/",
   } as unknown as Page;
 
@@ -506,7 +507,7 @@ test("rapid initial snapshot returns a timed-out DOM inventory as incomplete wit
     waitForCompleteChoiceControls: true,
   });
 
-  assert.equal(evaluateCallCount, 2);
+  assert.equal(evaluateCallCount, 1);
   assert.equal(accessibilityAttempted, false);
   assert.equal(result.captureStatus, "incomplete");
   assert.deepEqual(result.captureDiagnostics?.timedOutChannels, ["dom_inventory"]);
@@ -523,7 +524,6 @@ test("post-accessibility rapid retry preserves typed controls and records the in
   const page = {
     evaluate: async (_pageFunction: unknown, argument?: unknown) => {
       evaluateCallCount += 1;
-      if (argument === undefined) return true;
       rapidSnapshotCount += 1;
       return rapidInventorySnapshot(rapidSnapshotCount >= 2);
     },
@@ -536,6 +536,7 @@ test("post-accessibility rapid retry preserves typed controls and records the in
         };
       },
     }),
+    frames: () => [{}],
     url: () => "https://example.test/",
   } as unknown as Page;
 
@@ -546,7 +547,7 @@ test("post-accessibility rapid retry preserves typed controls and records the in
   });
 
   assert.equal(accessibilityAttemptCount, 1);
-  assert.equal(evaluateCallCount, 4);
+  assert.equal(evaluateCallCount, 2);
   assert.equal(result.acceptControlObserved, true);
   assert.equal(result.rejectControlObserved, true);
   assert.equal(result.managePreferencesControlObserved, true);

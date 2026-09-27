@@ -40,6 +40,16 @@ seeing “VERSTANDEN” is not independently verified acceptance of all purposes
    preclude that stronger conclusion. The legacy machine signal ID is retained
    for compatibility; wording and evidence metadata no longer assert equivalence.
 
+## September 27, 2026 report visibility rule
+
+Customer-facing After Accept and After Reject projections require the matching
+control to be `observed` in the canonical first-layer
+`ConsentControlAssessment`. `unknown` and `not_observed` suppress that action's
+report card, checklist row, comparison, and API summary. A completed click in
+an independent session cannot override this visibility gate. The verified
+action packet remains retained for diagnostics and does not relabel the passive
+control assessment; the existing lane terminal barrier is unchanged.
+
 ## Evidence and dispatch invariants
 
 ### Registered contextual activation

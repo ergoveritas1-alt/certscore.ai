@@ -42,6 +42,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
       : getOrganizationScanStatusProjection({ organizationId: organization.id, scanId })
   );
   if (!statusProjection) notFound();
+  const reportCacheScope = `${organization.id}:${user.id}:${statusProjection.reportGeneration ?? ""}`;
 
   const fullSiteNotice = statusProjection.fullSite && (await readFullSiteOptions()).allowed
     ? await loadFullSiteNotice(scanId, organization.id, user.id) : null;
@@ -51,7 +52,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
     !statusProjection.reportReady;
   if (isPendingScanStatus(statusProjection.status) || waitingForReportProjection) {
     return (
-      <FullSiteReportContinuity scanId={scanId}>
+      <FullSiteReportContinuity scanId={scanId} cacheScope={reportCacheScope}>
         <PendingScanStartedEvent />
         <PendingScanDetailView
           fullSiteClassName="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10"
@@ -91,7 +92,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   if (!persistedReportProjection) {
     if (!statusProjection.reportProjectionRequired) redirect(legacyScanHref(scanId));
     return (
-      <FullSiteReportContinuity scanId={scanId}>
+      <FullSiteReportContinuity scanId={scanId} cacheScope={reportCacheScope}>
         <PendingScanDetailView
           fullSiteClassName="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10"
           fullSiteNotice={fullSiteNotice}
@@ -118,7 +119,7 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
   }
 
   return (
-    <FullSiteReportContinuity scanId={scanId}>
+    <FullSiteReportContinuity scanId={scanId} cacheScope={reportCacheScope}>
       <PendingScanStartedEvent />
       <ScanProgressReportVisible scanId={scanId} />
       <ShadowScanReport

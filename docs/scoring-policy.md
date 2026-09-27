@@ -19,11 +19,14 @@ choice control or independently classified non-essential activity through the
 canonical concern and checklist path. An incomplete first-layer inspection is
 a coverage limit, not a scored absence.
 
-The canonical report withholds its numeric score when retained runtime or
-critical-coverage confidence is `withheld_incomplete_runtime_coverage` or
-`withheld_incomplete_critical_coverage`. Independently supported findings remain
-visible. Administrative score summaries use the same eligibility rule; older
-retained assessment evidence is not rewritten.
+Incomplete runtime or critical coverage remains a visible limitation. It does
+not suppress a numeric score supported by the canonical checklist and unified
+findings. Unknown consent controls do not become scored absences. A retained
+scan no-go decision still withholds the report score and findings.
+Reassessing an older cached null site score reads its already-retained page
+artifacts once and persists the repaired result. In the current localhost cohort,
+one cached result required repair; estimated incremental storage and compute cost
+is below $0.01, with no new scan or browser work.
 
 Storage and tracking use 8 for the first eligible identity/vendor, 4 for the
 second, and 2 for each additional, capped independently at 40. Session replay

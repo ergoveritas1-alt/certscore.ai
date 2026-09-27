@@ -16,22 +16,15 @@ export function projectScanReportNoGo(input: ScanReportAccessContext) {
   });
 }
 
-/** A withheld score must not fall back to an older numeric snapshot. */
+/** Only a retained no-go decision makes an otherwise supported report score ineligible. */
 export function resolveScanReportScore(input: ScanReportAccessContext, score: number | null) {
-  const confidence = input.runtimeArtifacts?.scoreConfidence ??
-    input.runtimeArtifacts?.score_confidence ??
-    input.snapshot?.score_confidence;
-  return projectScanReportNoGo(input) ||
-    confidence === "withheld_incomplete_runtime_coverage" ||
-    confidence === "withheld_incomplete_critical_coverage"
-    ? null
-    : score;
+  return projectScanReportNoGo(input) ? null : score;
 }
 
 /** Withhold ineligible report scores without rewriting retained evidence or assessment decisions. */
 export function withScanReportDisposition<T extends ScanReportAccessContext>(input: T): T {
   const noGo = projectScanReportNoGo(input);
-  if (!noGo && resolveScanReportScore(input, 0) !== null) return input;
+  if (!noGo) return input;
   return {
     ...input,
     snapshot: {
@@ -41,7 +34,8 @@ export function withScanReportDisposition<T extends ScanReportAccessContext>(inp
       consent_score: null,
       legal_coverage_score: null,
       privacy_score: null,
-      ...(noGo ? { report_finding_count: 0, top_finding_count: 0 } : {}),
+      report_finding_count: 0,
+      top_finding_count: 0,
       score_source: null,
       score_version: null,
       score_scored_at: null,

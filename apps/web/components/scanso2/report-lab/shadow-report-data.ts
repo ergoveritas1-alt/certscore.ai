@@ -165,12 +165,13 @@ export type ShadowReportData = {
     vendors: number;
   };
   controls: { accept: string; options: string; reject: string };
-  consentInspectionNotice?: string | null;
+  consentControlsAvailable?: boolean;
   consentVendor: string | null;
   gpcResponse?: GpcResponseReportProjection | null;
   gpcLaneStatus?: "completed" | "not_requested" | "unavailable";
   policySurfaceCoverage: "complete" | "limited" | "unavailable";
   policySurfaceLinkObserved?: boolean;
+  verifiedPolicyDocumentUrls?: string[] | null;
   acceptPath?: ExecutiveAcceptPathProjection | null;
   choicePathComparison?: ChoicePathComparison | null;
   rejectPath?: ExecutiveRejectPathProjection | null;

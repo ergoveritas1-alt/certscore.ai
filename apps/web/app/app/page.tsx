@@ -3,6 +3,7 @@ import Link from "next/link";
 import { OverviewScanHistoryCard } from "../../components/dashboard/overview-scan-history-card";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
 import { getDashboardContext } from "../../server/auth";
+import { formatScanUsageResetDate } from "../../lib/dashboard/scan-usage-reset";
 import { getDashboardScanUsage } from "../../server/dashboard/get-dashboard-scan-usage";
 import {
   applyManualRescanLimitOverride,
@@ -14,20 +15,6 @@ import { getOrganizationScans } from "../../server/scans/get-organization-scans"
 import { getOrganizationSettings } from "../../server/settings/get-organization-settings";
 import { canUseRestrictedScanOptions } from "../../server/scans/restricted-scan-options";
 import type { ServerScanFrom } from "../../components/scans/scan-from-select";
-
-function formatDate(value: string | null) {
-  if (!value) {
-    return "Not available";
-  }
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date(value);
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "America/Los_Angeles"
-  }).format(date);
-}
 
 function getDashboardScanFromDefault(value: string | null | undefined): ServerScanFrom {
   return value === "eu_de" || value === "eu_ie" || value === "california" ? value : "eu_ie";
@@ -148,7 +135,7 @@ export default async function DashboardPage() {
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label="Monthly scan allowance used" aria-valuemax={100} aria-valuemin={0} aria-valuenow={scanUsagePercent ?? undefined}>
                 <div className="h-full rounded-full bg-sky-500" style={{ width: `${scanUsagePercent ?? 0}%` }} />
               </div>
-              <p className="mt-1.5 text-xs text-slate-500">{scanUsagePercent === null ? "No monthly limit" : `${scanUsagePercent}% used`} · resets {formatDate(scanUsage.monthlyPeriodEnd)}</p>
+              <p className="mt-1.5 text-xs text-slate-500">{scanUsagePercent === null ? "No monthly limit" : `${scanUsagePercent}% used`} · resets {formatScanUsageResetDate(scanUsage.monthlyPeriodEnd)} UTC</p>
             </div>
             <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{latestCompletedScan?.scoreLabel ?? "GDPR/ePrivacy posture"}</p><p className="mt-1 text-2xl font-semibold text-slate-950">{latestCompletedScan?.certscoreOverall ?? "—"}{latestCompletedScan?.certscoreOverall !== null && latestCompletedScan ? <span className="text-sm text-slate-400">/100</span> : null}</p><p className="truncate text-xs text-slate-500">{latestCompletedScan?.domainHostname ?? "No completed scan"}</p></div>
             <div className="bg-white p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Needs review</p><p className="mt-1 text-2xl font-semibold text-slate-950">{websitesNeedingReview}</p><p className="text-xs text-slate-500">of {latestByWebsite.length} websites</p></div>

@@ -77,3 +77,10 @@ This corrects fresh materialization within contract 2.2; it does not change the
 historical-read policy above, action authorization, path-success definitions,
 finding eligibility or scoring rules. It adds no capture work, wait, model call,
 lane or recurring cost. See the [September 27 operational validation record](../operations/ar-capture-coverage-correction-2026-09-27.md).
+
+### September 27: binary report summary (local development)
+
+The owner approved the shared [observed-control report policy](observed-control-report-policy.md)
+for customer-facing A/R/O labels. Its binary visit summary replaces the individual
+Unknown/inspection-notice presentation. Internal control-specific completeness,
+assessment states, provenance, finding and scoring rules above remain intact.

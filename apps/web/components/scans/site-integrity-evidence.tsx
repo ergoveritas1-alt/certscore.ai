@@ -51,6 +51,7 @@ export function SiteIntegrityEvidence({ finding, sampleNotice }: { finding?: Sit
   const [view, setView] = useState<"destinations" | "pages">("destinations");
   if (!site && !finding) return null;
   const report: SiteIntegritySiteReport = site ?? { findings: [finding!], coverage: [{ pageId: "homepage", url: finding!.evidence.observation.documentUrl, homepage: true, status: finding!.evidence.observation.truncated ? "limited" : "captured" }] };
+  if (!report.findings.length) return null;
   const findings = [...new Map(report.findings.map(item => [item.evidence.observation.documentUrl, item])).values()];
   const destinations = groupDestinations(findings);
   const totals = summarizeSiteIntegrityLinks(report);

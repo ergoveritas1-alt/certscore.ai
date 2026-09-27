@@ -1,3 +1,5 @@
+import { projectConsentControlReport } from "../../lib/scans/consent-control-report";
+import { retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
 import "server-only";
 import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import { getLocalV2DagReportInput } from "./local-v2-dag-report";
@@ -764,6 +766,7 @@ export async function deriveScanReportProjection(
   );
   const canonicalReportProjection: PersistedCanonicalReportProjection = {
     artifactVersion: PERSISTED_CANONICAL_REPORT_PROJECTION_VERSION,
+    consentControlSummary: projectConsentControlReport(retainedConsentAssessment(projectionScanRecord), scanRecord.scan.id),
     checklistPresentation: buildGdprEprivacyChecklistPresentation(checklist),
     checklistRows: indexedChecklistEvidence.rows,
     collectionSurfaceAssessment: collectionSurfaceAssessment.success

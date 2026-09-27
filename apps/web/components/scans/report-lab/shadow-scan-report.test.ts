@@ -60,17 +60,17 @@ test("policy surface coverage preserves limited and unavailable states", () => {
   assert.equal(getPolicySurfaceCoverageStatus(null), "unavailable");
 });
 
-test("consent control summary distinguishes unknown coverage from verified absence", () => {
+test("consent control summary counts observed controls without inspection caveats", () => {
   assert.equal(getConsentControlSummaryLabel({
     accept: "Unknown",
     options: "Unknown",
     reject: "Unknown",
-  }), "Coverage limited");
+  }), "0 of 3 observed");
   assert.equal(getConsentControlSummaryLabel({
     accept: "Observed",
     options: "Unknown",
     reject: "Not observed",
-  }), "1 observed · 1 not observed · Inspection limited");
+  }), "1 of 3 observed");
   assert.equal(getConsentControlSummaryLabel({
     accept: "Not observed",
     options: "Not observed",
@@ -298,7 +298,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(gpcCardIndex < transportIndex);
   assert.match(source, />GPC observation and comparison\{/);
-  assert.match(source, /Typed comparison evidence/);
+  assert.match(source, /Evidence data \(JSON\)/);
   assert.match(source, /"Advertising \/ measurement"/);
   assert.match(source, /"Consent \/ CMP"/);
   assert.match(modelSource, /buildGpcResponseReportProjection\(canonical\.ownerUnifiedFindings\)/);
@@ -399,34 +399,25 @@ test("preview and final reports share the vertically compressed timeline", async
   assert.doesNotMatch(source, /top-\[4\.2rem\]/);
 });
 
-import { projectedConsentControlLabels } from "./timeline-report-model";
-test("control labels use typed inventory state independently of review or action outcomes", () => {
-  assert.deepEqual(projectedConsentControlLabels({accept: {state: "not_observed"}, reject: {state: "not_observed"}, options: {state: "not_observed"}}), {accept: "Not observed", reject: "Not observed", options: "Not observed"});
-  assert.equal(projectedConsentControlLabels({accept: {state: "observed"}, reject: {state: "unknown"}, options: {state: "not_observed"}}).reject, "Unknown");
-  assert.equal(projectedConsentControlLabels().reject, "Unknown");
-});
-
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ControlStatusGrid } from "./shadow-scan-report";
 import type { ShadowReportData } from "./shadow-report-data";
 
-test("control grids show known binary results and one specific inspection limitation", () => {
+test("control grids show binary results without an inspection caveat", () => {
   for (const compact of [true, false]) {
     const html = renderToStaticMarkup(createElement(ControlStatusGrid, { compact,
-      report: { controls: { accept: "Observed", reject: "Not observed", options: "Unknown" } } as ShadowReportData }));
+      report: { controls: { accept: "Observed", reject: "Not observed", options: "Not observed" } } as ShadowReportData }));
     assert.match(html, />Observed</);
     assert.match(html, />Not observed</);
     assert.doesNotMatch(html, />Unknown</);
-    assert.equal((html.match(/role="status"/g) ?? []).length, 1);
-    assert.match(html, /incomplete for Options/);
+    assert.doesNotMatch(html, /role="status"|incomplete|limited|uncertain/i);
     assert.match(html, /Initial visit/);
   }
   const blocked = renderToStaticMarkup(createElement(ControlStatusGrid, {
     report: { controls: { accept: "Unknown", reject: "Unknown", options: "Unknown" },
-      consentInspectionNotice: "Consent inspection was blocked by an access restriction or challenge." } as ShadowReportData }));
-  assert.match(blocked, /blocked by an access restriction/);
-  assert.equal((blocked.match(/role="status"/g) ?? []).length, 1);
+      consentControlsAvailable: false } as ShadowReportData }));
+  assert.equal(blocked, "");
   assert.doesNotMatch(blocked, />Unknown<|>Not observed</);
 });
 

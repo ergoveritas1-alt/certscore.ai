@@ -542,6 +542,7 @@ interface PolicyDocumentFetchCaches {
   direct: Map<string, Promise<FetchTextResult>>;
   rendered: Map<string, Promise<FetchTextResult>>;
   runRenderedFetch: <T>(run: () => Promise<T>) => Promise<T>;
+  scanSignal?: AbortSignal;
 }
 
 type PolicyFetchAttemptOutcome =
@@ -725,6 +726,7 @@ export async function policySurfaceScanner(
     direct: new Map(),
     rendered: new Map(),
     runRenderedFetch: createConcurrencyLimiter(POLICY_RENDERED_FETCH_CONCURRENCY),
+    scanSignal: input.signal,
   };
 
   const retainFailureDiagnostics = async () => {
@@ -1549,6 +1551,7 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
     direct: new Map(),
     rendered: new Map(),
     runRenderedFetch: createConcurrencyLimiter(POLICY_RENDERED_FETCH_CONCURRENCY),
+    scanSignal: input.scannerInput.signal,
   };
   try {
     const existingKeys = new Set(input.existingObservations
@@ -2272,26 +2275,37 @@ async function processPolicyCandidate({
   // module budget; no new direct network work is started in this case.
 
   const documentFetchStartedAtMs = Date.now();
+  const prefetchedSupplement = boundedSameOriginSupplement && fetchCaches.direct.has(
+    policyDocumentFetchCacheKey(candidate.normalizedUrl),
+  );
   let fetched = await recordPolicyTiming(
     timingBreakdown,
     `${protectedObservedFetch ? "policy protected fetch" : "policy fetch"} ${candidateIndex + 1}`,
     `Fetch ${candidate.deterministicSurfaceType} candidate document.`,
-    () => fetchPolicyDocumentSingleFlight(
-      fetchCaches.direct,
-      candidate.normalizedUrl,
-      protectedObservedFetch
-        ? Math.min(
-            POLICY_PROTECTED_OBSERVED_FETCH_TIMEOUT_MS,
-            remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
-          )
-        : boundedSameOriginSupplement
+    () => {
+      const fetchPromise = fetchPolicyDocumentSingleFlight(
+        fetchCaches.direct,
+        candidate.normalizedUrl,
+        protectedObservedFetch
           ? Math.min(
-              supplementalDocumentBudgetMs,
-              remainingPolicyFetchMs(input, moduleStartedAtMs),
+              POLICY_PROTECTED_OBSERVED_FETCH_TIMEOUT_MS,
+              remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
             )
-          : remainingPolicyFetchMs(input, moduleStartedAtMs),
-      input.signal,
-    ),
+          : boundedSameOriginSupplement
+            ? Math.min(
+                supplementalDocumentBudgetMs,
+                remainingPolicyFetchMs(input, moduleStartedAtMs),
+              )
+            : remainingPolicyFetchMs(input, moduleStartedAtMs),
+        input.signal,
+      );
+      return prefetchedSupplement
+        ? settlePrefetchedPolicyChild(fetchPromise, Math.min(
+            supplementalDocumentBudgetMs,
+            remainingPolicyFetchMs(input, moduleStartedAtMs),
+          ), candidate.normalizedUrl)
+        : fetchPromise;
+    },
   );
   recordPolicyFetchDiagnostic(fetchCaches.diagnostics, {
     stage: "candidate_direct",
@@ -2388,7 +2402,52 @@ async function processPolicyCandidate({
   let fetchedHtml = fetched.html ?? fetched.text;
   const secondaryCandidateHtmlInputs = [fetchedHtml];
   let title = titleFromHtml(fetchedHtml);
-  let visibleText = boundedAfterSoftBudget || boundedSameOriginSupplement
+  let explicitPrimaryPolicyIndex = false;
+  if (!boundedAfterSoftBudget && !boundedSameOriginSupplement &&
+      effectiveCandidate.deterministicSurfaceType === "privacy_policy") {
+    const earlyChildren = highValueSecondaryCandidatesFromPolicyPage(
+      effectiveCandidate.normalizedUrl,
+      fetchedHtml,
+      fetched.text,
+    );
+    const exactPrivacyLinks = new Set(earlyChildren
+      .filter((child) => child.clickable && isExactPrivacyPolicyLinkLabel(child.linkText))
+      .map((child) => child.normalizedUrl));
+    const directPrimaryLinks = earlyChildren.filter((child) =>
+      child.clickable && child.url.startsWith("/") && !child.url.startsWith("//") &&
+      isExactPrivacyPolicyLinkLabel(child.linkText) && child.sameOrigin &&
+      child.deterministicScore >= 0.72
+    );
+    const indexShape = directPrimaryLinks.length === 1 && exactPrivacyLinks.size >= 3 &&
+      /\b(?:privacy|policy)\s+center\b/i.test(`${title ?? ""} ${fetched.text.slice(0, 1_000)}`);
+    if (indexShape) {
+      const earlySelection = await selectOneHopPolicyIndexChildren({
+        input,
+        indexCandidate: effectiveCandidate,
+        indexTitle: title,
+        indexText: fetched.text,
+        candidates: earlyChildren,
+      });
+      const primaryChild = earlySelection.fetchCandidates.find((child) =>
+        child.selectionReasonCodes?.includes("unique_primary_privacy_document_link")
+      );
+      explicitPrimaryPolicyIndex = Boolean(primaryChild);
+      if (explicitPrimaryPolicyIndex && primaryChild &&
+          !fetchCaches.direct.has(policyDocumentFetchCacheKey(primaryChild.normalizedUrl))) {
+        // This is the same one-hop request later consumed by the child worker.
+        // A clear regional index needs its selected document, not another
+        // attempt to treat the index as policy text. Start that one request
+        // before retaining the index, within the existing lane deadline.
+        void fetchPolicyDocumentSingleFlight(
+          fetchCaches.direct,
+          primaryChild.normalizedUrl,
+          Math.min(POLICY_FETCH_TIMEOUT_MS, deadlineRemainingMs(input.absoluteDeadlineAtMs)),
+          fetchCaches.scanSignal,
+        ).catch(() => undefined);
+      }
+    }
+  }
+  let visibleText = boundedAfterSoftBudget || boundedSameOriginSupplement || explicitPrimaryPolicyIndex
     ? await recordPolicyTiming(
       timingBreakdown,
       `policy prefetched text resolution ${candidateIndex + 1}`,
@@ -2435,7 +2494,7 @@ async function processPolicyCandidate({
       }
     }
   }
-  const urlOnlyStubResolution = boundedAfterSoftBudget || boundedSameOriginSupplement
+  const urlOnlyStubResolution = boundedAfterSoftBudget || boundedSameOriginSupplement || explicitPrimaryPolicyIndex
     ? undefined
     : await recordPolicyTiming(
       timingBreakdown,
@@ -2471,7 +2530,7 @@ async function processPolicyCandidate({
   });
   // Redirect normalization can recompute sameOrigin against the scan target.
   // Preserve the original child budget instead of reopening browser recovery.
-  if (!boundedSameOriginSupplement && renderedLowQualityFallbackWithinBudget && shouldTryRenderedPolicyDocumentTextFallback({
+  if (!boundedSameOriginSupplement && !explicitPrimaryPolicyIndex && renderedLowQualityFallbackWithinBudget && shouldTryRenderedPolicyDocumentTextFallback({
     candidate: effectiveCandidate,
     documentFormat: fetched.documentFormat,
     input,
@@ -3362,7 +3421,10 @@ async function clickObservedPolicyLink(
   try {
     const [response] = await Promise.all([
       page.waitForNavigation({
-        waitUntil: "domcontentloaded",
+        // A committed response is enough to bind the clicked link to its
+        // destination. Publisher scripts can delay DOMContentLoaded beyond
+        // this recovery slot even when the policy document is already live.
+        waitUntil: "commit",
         timeout: Math.max(1_000, input.timeoutMs),
       }).catch(() => null),
       markedLocator.click({ timeout: Math.max(1_000, input.timeoutMs) }),
@@ -5444,6 +5506,33 @@ async function selectOneHopPolicyIndexChildren(input: {
     };
   }
 
+  // A privacy-center index can expose one primary local "Privacy Policy"
+  // link while also embedding a long list of absolute regional alternatives.
+  // Only a unique, directly linked relative route identifies the default
+  // document; otherwise retain the existing regional/model selection gate.
+  const primaryPrivacyLink = privacyCandidates.filter((candidate) =>
+    candidate.clickable &&
+    candidate.url.startsWith("/") &&
+    !candidate.url.startsWith("//") &&
+    isExactPrivacyPolicyLinkLabel(candidate.linkText)
+  );
+  if (primaryPrivacyLink.length === 1) {
+    const selected = primaryPrivacyLink[0]!;
+    return {
+      fetchCandidates: [{
+        ...selected,
+        selectionReasonCodes: uniqueStrings([
+          ...(selected.selectionReasonCodes ?? []),
+          "unique_primary_privacy_document_link",
+          "deterministic_one_hop_selection",
+        ]),
+      }],
+      observedChildCandidates: privacyCandidates
+        .filter((candidate) => candidate.candidateId !== selected.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
+    };
+  }
+
   const latestDatedPrivacyDocument = selectLatestDatedPrivacyDocument(
     privacyCandidates,
     input.input.scanStartedAtMs,
@@ -5562,6 +5651,16 @@ async function selectOneHopPolicyIndexChildren(input: {
       observedChildCandidates: privacyCandidates.map(markUnselectedPrivacyIndexChild),
     };
   }
+}
+
+function isExactPrivacyPolicyLinkLabel(value: string): boolean {
+  const label = normalizeWhitespace(value).normalize("NFKC").toLowerCase();
+  return PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) =>
+    entry.privacyPolicyLabels.some((rawLabel) => {
+      const policyLabel = normalizeWhitespace(rawLabel).normalize("NFKC").toLowerCase();
+      return label === policyLabel || label === `${policyLabel} ${policyLabel}`;
+    })
+  );
 }
 
 function selectRegionalPrivacyDocument(
@@ -7667,6 +7766,28 @@ function fetchPolicyDocumentSingleFlight(
   const pending = fetchText(url, timeoutMs, signal);
   cache.set(key, pending);
   return pending;
+}
+
+async function settlePrefetchedPolicyChild(
+  pending: Promise<FetchTextResult>,
+  waitMs: number,
+  url: string,
+): Promise<FetchTextResult> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<FetchTextResult>((resolve) => {
+        timer = setTimeout(() => resolve({
+          ok: false,
+          text: "",
+          attempts: [{ mode: "direct", requestedUrl: url, outcome: "timeout" }],
+        }), Math.max(1, waitMs));
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function fetchRenderedPolicyDocumentSingleFlight(
@@ -10489,7 +10610,18 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
         (policyCandidateDiscoveryPriority(candidate) === policyCandidateDiscoveryPriority(existing) && candidate.deterministicScore > existing.deterministicScore)
       ));
     const preferred = preferCandidate ? candidate : existing!;
-    byUrl.set(key, { ...preferred, cmpDiscovery: mergeCmpPolicyProvenance(preferred.cmpDiscovery, (preferCandidate ? existing : candidate)?.cmpDiscovery) });
+    const renderedLink = [existing, candidate].find((item) =>
+      item?.clickable && item.renderedSourcePageUrl &&
+      isPolicySessionPrimerCompatible(item.renderedSourcePageUrl, candidate.normalizedUrl)
+    );
+    byUrl.set(key, {
+      ...preferred,
+      ...(renderedLink ? {
+        renderedSourcePageUrl: renderedLink.renderedSourcePageUrl,
+        selector: preferred.selector ?? renderedLink.selector,
+      } : {}),
+      cmpDiscovery: mergeCmpPolicyProvenance(preferred.cmpDiscovery, (preferCandidate ? existing : candidate)?.cmpDiscovery),
+    });
   }
   return [...byUrl.values()];
 }

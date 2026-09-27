@@ -17,6 +17,13 @@ const classificationColors = { nonEssential: "bg-rose-500", review: "bg-amber-50
 const classificationKeys = { "Non-essential": "nonEssential", Review: "review", Unclassified: "unclassified", Contextual: "contextual", Essential: "essential" } as const;
 const classifications = INVENTORY_CLASSIFICATION_ORDER.map(value => [INVENTORY_CLASSIFICATION_LABELS[value]!, classificationKeys[value], INVENTORY_CLASSIFICATION_DESCRIPTIONS[value]] as const);
 
+function InventoryCount({ value, updating, label }: { value: number | null | undefined; updating: boolean; label: string }) {
+  const count = <ScanLiveValue value={value} active={updating} />;
+  return value == null
+    ? <span tabIndex={0} aria-label={`${label} unavailable; not a verified zero`} title={`${label} unavailable; this is not a verified zero.`} className="rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">{count}</span>
+    : count;
+}
+
 /** Only projected privacy evidence belongs in the executive cards. */
 export function ReportRuntimeSummary({ cards }: { cards: ExecutiveRuntimeCard[] }) {
   return <section aria-label="Pre-consent privacy evidence" className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
@@ -66,6 +73,13 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="Inventory summary">
     <div className="grid grid-cols-3 items-stretch divide-x divide-slate-200 border-b border-slate-200 bg-slate-50/50">
       <ServicesSignalSnapshot overview={overview} card />
+      {(formCount ?? 0) > 0 ? <details className="group/forms min-w-0">
+        <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={formCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
+        <div className="border-t border-slate-100 px-3 pb-3 sm:px-4">
+        <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs leading-5 text-slate-600" aria-label="Observed forms">{forms.map(({ id, form }) => <li key={id}><p className="break-words font-medium">{form.title || form.surfaceType.replaceAll("_", " ")}</p><p>{form.retainedFieldCount} {form.retainedFieldCount === 1 ? "field" : "fields"} · {form.method}</p></li>)}</ul>
+        <a href="#report-forms" className="mt-3 inline-block text-xs text-sky-700 hover:underline" onClick={event => { event.preventDefault(); onViewEvidence?.(); document.getElementById("report-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>View forms ↗</a>
+        </div>
+      </details> : <div className={`min-w-0 ${inventoryTilePadding}`}><InventoryTileHeading label="Forms" value={<InventoryCount value={formCount} updating={updating} label="Form count" />} /></div>}
       {(hiddenLinks?.count ?? 0) > 0 ? <details className="group/hidden-links min-w-0">
         <summary className={inventoryTileDisclosure}>
           <InventoryTileHeading label="Hidden links" value={<>{hiddenLinks?.count != null && hiddenLinks.lowerBound ? "≥" : ""}<ScanLiveValue value={hiddenLinks?.count} active={updating} /></>} chevron={<DisclosureChevron className="group-open/hidden-links:rotate-180" />} />
@@ -86,19 +100,16 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
             section.scrollIntoView({ behavior: "smooth", block: "start" });
           }}>View hidden links ↗</a> : null}
         </div>
-      </details> : <div className={`min-w-0 ${inventoryTilePadding}`}><InventoryTileHeading label="Hidden links" value={<ScanLiveValue value={hiddenLinks?.count} active={updating} />} /></div>}
-      {(formCount ?? 0) > 0 ? <details className="group/forms min-w-0">
-        <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={formCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
-        <div className="border-t border-slate-100 px-3 pb-3 sm:px-4">
-        <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs leading-5 text-slate-600" aria-label="Observed forms">{forms.map(({ id, form }) => <li key={id}><p className="break-words font-medium">{form.title || form.surfaceType.replaceAll("_", " ")}</p><p>{form.retainedFieldCount} {form.retainedFieldCount === 1 ? "field" : "fields"} · {form.method}</p></li>)}</ul>
-        <a href="#report-forms" className="mt-3 inline-block text-xs text-sky-700 hover:underline" onClick={event => { event.preventDefault(); onViewEvidence?.(); document.getElementById("report-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>View forms ↗</a>
-        </div>
-      </details> : <div className={`min-w-0 ${inventoryTilePadding}`}><InventoryTileHeading label="Forms" value={<ScanLiveValue value={formCount} active={updating} />} /></div>}
+      </details> : <div className={`min-w-0 ${inventoryTilePadding}`}><InventoryTileHeading label="Hidden links" value={<InventoryCount value={hiddenLinks?.count} updating={updating} label="Hidden-link count" />} /></div>}
     </div>
     <div className="overflow-x-auto" role="region" aria-label="Inventory totals" tabIndex={0}>
-      <div className="grid grid-cols-3 divide-x divide-slate-200">
-        {technical.map(tile => <div key={tile.label} className={`min-w-0 ${inventoryTilePadding}`}>
-          <InventoryTileHeading label={tile.label} value={<ScanLiveValue value={tile.value} active={updating} />} />
+      <div className="grid grid-cols-1 divide-y divide-slate-200 md:grid-cols-3 md:divide-x md:divide-y-0">
+        {technical.map(tile => <div key={tile.label} className="min-w-0 px-3 py-2 sm:px-4">
+          <InventoryTileHeading
+            label={tile.label}
+            value={<InventoryCount value={tile.value} updating={updating} label={`${tile.label} count`} />}
+            detail={<InventoryQuickSignals counts={tile.counts} />}
+          />
         </div>)}
       </div>
     </div>
@@ -116,6 +127,16 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
       </div>
     </details> : null}
   </section>;
+}
+
+function InventoryQuickSignals({ counts }: { counts?: InventoryAssessmentCounts }) {
+  if (!counts) return null;
+  const nonEssential = counts.nonEssential;
+  const review = counts.review;
+  return <span className="flex flex-nowrap items-center gap-x-2 whitespace-nowrap text-[10px] leading-4 text-slate-600 tabular-nums">
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap ${nonEssential === 0 ? "text-slate-400" : ""}`}><span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${nonEssential === 0 ? "bg-slate-300" : "bg-rose-500"}`} /><span className="text-xs font-semibold">{nonEssential.toLocaleString()}</span> non-essential</span>
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap ${review === 0 ? "text-slate-400" : ""}`}><span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${review === 0 ? "bg-slate-300" : "bg-amber-500"}`} /><span className="text-xs font-semibold">{review.toLocaleString()}</span> review</span>
+  </span>;
 }
 
 function ClassificationCounts({ counts }: { counts?: InventoryAssessmentCounts }) {

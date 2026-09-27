@@ -5,16 +5,18 @@ import { FullSiteRegion, FullSiteTiming } from "./full-site-workspace";
 import { ShareReportActions } from "./share-report-actions";
 import { VendorBrandLogo } from "./vendor-brand-chip";
 
-export function FullSiteIdentity({ scanId, host, url, createdAt, region, visualEvidenceHref, visualEvidenceAction, actions, timing }: {
+export function FullSiteIdentity({ scanId, host, url, createdAt, duration, region, visualEvidenceHref, visualEvidenceAction, actions, timing, reviewFocusControl }: {
   scanId: string;
   host: string;
   url?: string | null;
   createdAt: string;
+  duration?: ReactNode;
   region: ReactNode;
   visualEvidenceHref?: string | null;
   visualEvidenceAction?: ReactNode;
   actions?: ReactNode;
   timing?: ReactNode;
+  reviewFocusControl?: ReactNode;
 }) {
   return <header className="space-y-2">
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-medium text-zinc-500">
@@ -22,10 +24,13 @@ export function FullSiteIdentity({ scanId, host, url, createdAt, region, visualE
         {visualEvidenceAction ?? <ShareReportActions domainLabel={host} scanId={scanId} visualEvidenceHref={visualEvidenceHref} visualEvidenceOnly />}
       </div>
       <FullSiteRegion>{region}</FullSiteRegion>
-      {timing ?? <FullSiteTiming />}
+      {reviewFocusControl}
     </div>
     <div className="min-w-0">
-      <p className="text-xs font-medium text-zinc-500">{createdAt}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-xs font-medium text-zinc-500">{createdAt}{duration}</p>
+        {timing ?? <FullSiteTiming />}
+      </div>
       <div className="mt-1 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <VendorBrandLogo className="!h-7 !w-7 translate-y-0.5 !rounded-md !border-zinc-200 !bg-zinc-50 !p-1 !shadow-sm" label={host} />

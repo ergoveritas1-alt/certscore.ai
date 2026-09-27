@@ -31,3 +31,11 @@ test("authenticated mobile header stays on one row and preserves compact navigat
   assert.match(source, /w-\[min\(19rem,calc\(100vw-2\.5rem\)\)\]/);
   assert.match(source, /max-h-\[calc\(100dvh-5rem\)\][^"\n]*overflow-y-auto/);
 });
+
+test("feedback is available in navigation without competing with scan usage in the header", async () => {
+  const source = await readFile(APP_SHELL_PATH, "utf8");
+
+  assert.match(source, /\{ href: "\/app\/feedback", label: "Feedback", icon: FeedbackIcon \}/);
+  assert.match(source, /<ScanUsageIndicator \/>/);
+  assert.doesNotMatch(source, /<Link\s+href="\/app\/feedback"/);
+});

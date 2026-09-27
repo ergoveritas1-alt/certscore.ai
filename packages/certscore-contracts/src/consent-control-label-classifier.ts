@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v6";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v8";
 
 export type ConsentControlIntent =
   | "accept"
@@ -14,7 +14,17 @@ export type ConsentControlIntent =
   | "privacy_opt_out"
   | "unknown";
 
-export type ConsentControlLocale = SupportedPrivacyEvidenceLocale;
+export type ConsentControlLocale = SupportedPrivacyEvidenceLocale | "mk";
+
+// Observation-only Macedonian control vocabulary does not expand policy review
+// languages or authorize actions. Context is shared by passive capture paths.
+export const CONSENT_CONTROL_CONTEXT_REGISTRY: readonly {
+  locale: ConsentControlLocale; contextHints: readonly string[];
+  cookiePolicyLabels: readonly string[]; cookieSettingsLabels: readonly string[];
+}[] = [...PRIVACY_EVIDENCE_LOCALE_REGISTRY, {
+  locale: "mk", contextHints: ["колачиња"], cookiePolicyLabels: [],
+  cookieSettingsLabels: ["поставки за колачиња"],
+}];
 
 export type ConsentControlMatchStrength =
   | "direct"
@@ -55,6 +65,9 @@ export type ConsentControlLabelClassifierInput = {
   title?: string | null;
   value?: string | null;
   contextText?: string | null;
+  /** Nearest paragraph or dialog text, without borrowing a sibling surface. */
+  scopeText?: string | null;
+  scopeKind?: "paragraph" | "dialog";
   localeHints?: ConsentControlLocale[];
   classifierProfile?: ConsentControlClassifierProfile;
   usage?: "observation" | "action";
@@ -63,6 +76,8 @@ export type ConsentControlLabelClassifierInput = {
   hasPreferenceContext?: boolean;
   /** Destination proof for link controls; omitted preserves legacy behavior. */
   linkDestination?: ConsentControlLinkDestination;
+  /** Retained ARIA role, including non-decision tabs. */
+  linkRole?: string;
 };
 
 export type ConsentControlLabelClassification = {
@@ -116,7 +131,7 @@ const CONTINUE_AS_ACCEPT_CONTEXT_PATTERN =
   /\b(?:by\s+(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)|(?:using|continuing(?:\s+to\s+use)?|accessing|remaining\s+on)\s+(?:this\s+)?(?:site|website|service|page)\s+(?:means|constitutes|indicates)|you\s+(?:consent|agree)\s+to\s+(?:these\s+)?cookies?)\b/i;
 
 const PRODUCTION_DEFAULT_CONSENT_CONTROL_LOCALES = new Set<ConsentControlLocale>(
-  SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
+  [...SUPPORTED_PRIVACY_EVIDENCE_LOCALES, "mk"],
 );
 
 const en = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "en", ...term }));
@@ -128,6 +143,21 @@ const nl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ lo
 const pl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "pl", ...term }));
 
 export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
+  ...([
+    ["се согласувам", "accept"], ["не се согласувам", "reject"], ["подесување", "options"],
+  ] as const).map(([phrase, intent]): ConsentControlTerm => ({
+    locale: "mk", phrase, intent, strength: "direct", observationOnly: true,
+    exactLabelOnly: true, requiresConsentContext: true,
+  })),
+  { locale: "en", phrase: "accept essentials only", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  // September 27 retained-evidence review: observation vocabulary only.
+  { locale: "en", phrase: "use necessary cookies", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "en", phrase: "allow necessary cookies", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "en", phrase: "use website with required cookies only (revocation) →", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "en", phrase: "required cookies only", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, observationOnly: true },
+  { locale: "en", phrase: "cookie preferences", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "en", phrase: "open privacy settings", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "zh", phrase: "接受並關閉", intent: "accept", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   // Full, reviewed observation phrases. Do not broaden action recipes.
   // Retained-cohort review, September 22: exact contextual observation aliases.
   { locale: "tr", phrase: "kabul et", intent: "accept", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
@@ -977,7 +1007,7 @@ export function classifyConsentSurfaceText(input: {
   const localeHints = new Set(input.localeHints ?? []);
   const localeEligible = (locale: ConsentControlLocale) =>
     profileLocales.has(locale) && (localeHints.size === 0 || localeHints.has(locale));
-  const contextMatches = PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap((entry): ConsentSurfaceTextMatch[] => {
+  const contextMatches = CONSENT_CONTROL_CONTEXT_REGISTRY.flatMap((entry): ConsentSurfaceTextMatch[] => {
     if (!localeEligible(entry.locale)) return [];
     return uniqueStrings([
       ...entry.contextHints,
@@ -1043,12 +1073,20 @@ export function hasConsentControlSemanticVeto(classification: ConsentControlLabe
   return classification.reasonCodes.some((reason) => [
     "informational_consent_reference", "negated_accept_label", "negated_consent_choice",
     "conflicting_consent_decisions", "visible_accessible_intent_conflict",
+    "non_decision_control_role", "notification_permission_control", "unproven_acknowledgment_consent",
   ].includes(reason));
 }
 
 function classifyConsentControlLabelInternal(
   input: ConsentControlLabelClassifierInput,
 ): ConsentControlLabelClassification {
+  if (/^(?:tab|tablist|navigation|menuitem)$/i.test(input.linkRole ?? "")) {
+    return unknown(["non_decision_control_role"]);
+  }
+  if (/\b(?:notifications?|push alerts?)\b/i.test(input.scopeText ?? "") &&
+      !/\b(?:cookies?|tracking|analytics)\b/i.test(input.scopeText ?? "")) {
+    return unknown(["notification_permission_control"]);
+  }
   const fields = [
     input.label,
     input.ariaLabel,
@@ -1119,7 +1157,8 @@ function classifyConsentControlLabelInternal(
   if (normalizedLabel === "learn more") {
     return unknown(["ambiguous_information_control"]);
   }
-  if (isUtiqScopedRejectLabel(normalizedLabel)) {
+  if (isUtiqScopedRejectLabel(normalizedLabel) ||
+      (/^(?:jetzt )?ablehnen$/.test(normalizedLabel) && input.scopeKind === "paragraph" && /\butiq\b/i.test(input.scopeText ?? ""))) {
     return {
       intent: "privacy_opt_out",
       semanticRole: "unknown",
@@ -1155,6 +1194,11 @@ function classifyConsentControlLabelInternal(
   // An instruction negating a necessary-only choice is not a refusal choice.
   if (/^do not accept (?:only (?:essential|necessary)|(?:essential|necessary) only)(?: cookies)?$/i.test(normalizedLabel)) {
     return unknown(["negated_consent_choice"]);
+  }
+  if (input.usage === "action" && CONSENT_CONTROL_PHRASE_REGISTRY.some(term =>
+      term.observationOnly && term.variant === "necessary_only" && term.exactLabelOnly &&
+      normalizeConsentControlText(term.phrase) === normalizedLabel)) {
+    return unknown(["observation_only_necessary_choice"]);
   }
   const terms = CONSENT_CONTROL_PHRASE_REGISTRY.filter((term) =>
     activeLocales.has(term.locale) &&
@@ -1222,11 +1266,20 @@ function classifyConsentControlLabelInternal(
     return unknown(reasonCodes.length > 0 ? reasonCodes : ["no_term_match"]);
   }
 
+  // An acknowledgment is Accept only when local wording explicitly ties that
+  // click to consent. CMP selector names and implied continued use are insufficient.
+  if (match.term.intent === "accept" && match.term.strength === "weak" &&
+      /^(?:ok|okay|got it)$/.test(normalizedLabel) &&
+      !hasExplicitAcknowledgmentConsent(input.contextText ?? "", normalizedLabel)) {
+    return { ...unknown(["unproven_acknowledgment_consent"]), semanticRole: "ambiguous_acknowledgment" };
+  }
   const contextSatisfied = contextRequirementSatisfied(match.term, hasConsentContext, hasPreferenceContext, hasContinueConsentContext);
   if (
     match.term.intent === "options" &&
     input.linkDestination !== undefined &&
-    input.linkDestination !== "same_document"
+    input.linkDestination !== "same_document" &&
+    !(input.usage !== "action" && input.linkDestination === "unverified" &&
+      input.linkRole === "button" && hasConsentContext && match.term.strength === "direct")
   ) {
     return unknown(["unverified_preferences_navigation"]);
   }
@@ -1485,7 +1538,7 @@ function uniqueSurfaceTextMatches(matches: ConsentSurfaceTextMatch[]) {
 
 function activeLocalesForProfile(profile: ConsentControlClassifierProfile) {
   if (profile === "multilingual_v1") {
-    return new Set<ConsentControlLocale>(SUPPORTED_PRIVACY_EVIDENCE_LOCALES);
+    return new Set<ConsentControlLocale>([...SUPPORTED_PRIVACY_EVIDENCE_LOCALES, "mk"]);
   }
   return PRODUCTION_DEFAULT_CONSENT_CONTROL_LOCALES;
 }
@@ -1497,7 +1550,7 @@ function hasCanonicalLocaleContext(
 ): boolean {
   const normalizedContext = normalizeConsentControlText(contextText);
   if (!normalizedContext) return false;
-  return PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) => {
+  return CONSENT_CONTROL_CONTEXT_REGISTRY.some((entry) => {
     if (!activeLocales.has(entry.locale)) return false;
     const hints = kind === "preference"
       ? entry.cookieSettingsLabels
@@ -1517,4 +1570,13 @@ function unknown(reasonCodes: string[]): ConsentControlLabelClassification {
     reasonCodes: uniqueStrings(reasonCodes),
     contextSatisfied: false,
   };
+}
+
+function hasExplicitAcknowledgmentConsent(context: string, label: string): boolean {
+  const text = normalizeConsentControlText(context).replace(/["„”]/g, " ").replace(/\s+/g, " ");
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Bounded affirmative wording; do not borrow a separate Reject sentence.
+  return new RegExp(`by (?:clicking|selecting|pressing) ${escapedLabel} (?:you )?(?:agree|consent|accept|allow)\\b`, "i").test(text) ||
+    new RegExp(`zustimmung klick auf ${escapedLabel}\\b`, "i").test(text) ||
+    new RegExp(`(?:mit|durch) (?:einen )?klick auf ${escapedLabel} (?:stimmen sie|willigen sie|akzeptieren sie)\\b`, "i").test(text);
 }

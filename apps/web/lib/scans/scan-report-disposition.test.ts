@@ -36,16 +36,17 @@ test("explicit continue preserves recovered and partial reports despite lane-loc
   assert.equal(deriveCanonicalOverallScoreForReport({ scanRecord: input, checklistRows: checkedRows, unifiedFindings: [] }), 100);
 });
 
-test("critical coverage withholding removes stale score fields without hiding findings", () => {
+test("limited critical coverage retains a supported score and findings", () => {
   const input = {
     runtimeArtifacts: { scoreConfidence: "withheld_incomplete_critical_coverage" },
     snapshot: { certscore_overall: 88, legal_coverage_score: 88,
       report_finding_count: 1, top_finding_count: 1 }
   };
   const projected = withScanReportDisposition(input);
-  assert.equal(resolveScanReportScore(input, 88), null);
-  assert.equal(projected.snapshot.certscore_overall, null);
-  assert.equal(projected.snapshot.legal_coverage_score, null);
+  assert.equal(resolveScanReportScore(input, 88), 88);
+  assert.equal(projected, input);
+  assert.equal(projected.snapshot.certscore_overall, 88);
+  assert.equal(projected.snapshot.legal_coverage_score, 88);
   assert.equal(projected.snapshot.report_finding_count, 1);
   assert.equal(projected.snapshot.top_finding_count, 1);
   assert.equal(input.snapshot.certscore_overall, 88);

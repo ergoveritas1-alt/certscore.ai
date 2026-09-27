@@ -19,6 +19,27 @@ test("inventory breakdown uses distinct counts rather than repeated events", () 
   for (const color of ["rose", "amber", "slate", "sky", "blue"]) assert.match(html, new RegExp(`bg-${color}-${color === "slate" ? "400" : "500"}`));
   assert.doesNotMatch(html, /<details[^>]*open/);
 });
+
+test("inventory totals show non-essential and review classifications, including zero", () => {
+  const html = renderToStaticMarkup(<ReportInventorySummary metrics={[
+    { label: "Network requests", value: 12, counts: { nonEssential: 3, review: 2, contextual: 7, essential: 0 } },
+    { label: "Cookies & storage", value: 4, counts: { nonEssential: 0, review: 1, contextual: 3, essential: 0 } },
+    { label: "Embedded frames", value: 2, counts: { nonEssential: 0, review: 0, contextual: 2, essential: 0 } },
+  ]} />);
+  const tiles = html.slice(html.indexOf('aria-label="Inventory totals"'), html.indexOf('group/technical'));
+  assert.match(tiles, /text-xs font-semibold">3<\/span> non-essential/);
+  assert.match(tiles, /text-xs font-semibold">2<\/span> review/);
+  assert.match(tiles, /text-xs font-semibold">1<\/span> review/);
+  assert.equal((tiles.match(/non-essential/g) ?? []).length, 3);
+  assert.equal((tiles.match(/review/g) ?? []).length, 3);
+  assert.match(tiles, /bg-rose-500/);
+  assert.match(tiles, /bg-amber-500/);
+  assert.match(tiles, /text-xs font-semibold">0<\/span> non-essential/);
+  assert.match(tiles, /text-xs font-semibold">0<\/span> review/);
+  assert.match(tiles, /bg-slate-300/);
+  assert.match(tiles, /flex-nowrap items-center gap-x-2 whitespace-nowrap/);
+  assert.match(tiles, /grid-cols-1 divide-y divide-slate-200 md:grid-cols-3/);
+});
 test("all vendor identities remain available with bundled logos and bounded expansion", () => {
   const html = renderToStaticMarkup(<DetectedIntegrationVendors vendors={[{name:"Google Fonts"}]} inventoryNames={["Google Fonts", ...Array.from({length:47},(_,i)=>`Service ${i}`)]} />);
   assert.match(html, /vendor-logos\/google.png/);

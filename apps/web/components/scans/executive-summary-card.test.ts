@@ -70,12 +70,12 @@ test("Executive benchmark renders review instead of unavailable for partially cl
   assert.doesNotMatch(html, />N\/A</);
 });
 
-test("compact A/R/O card renders persisted tri-state control projections without findings", () => {
+test("compact A/R/O card renders the canonical binary control projection without findings", () => {
   const html = renderToStaticMarkup(createElement(CompactConsentControlsCard, {
     projection: {
       accept: true,
       reject: false,
-      options: null,
+      options: false,
     },
   }));
 
@@ -83,7 +83,8 @@ test("compact A/R/O card renders persisted tri-state control projections without
   assert.match(html, /Accept control: Observed/);
   assert.match(html, /Reject control: Not observed/);
   assert.doesNotMatch(html, /Options control: Unknown/);
-  assert.match(html, /Initial consent inspection is incomplete for Options/);
+  assert.match(html, /Options control: Not observed/);
+  assert.doesNotMatch(html, /inspection|uncertain|limited/i);
   assert.match(html, /data-consent-control-state="observed"/);
   assert.match(html, /data-consent-control-state="not_observed"/);
   assert.doesNotMatch(html, /data-consent-control-state="unknown"/);

@@ -33,6 +33,15 @@ test("only projected integrity findings render a separate review callout and det
   }
 });
 
+test("empty sitewide hidden-link evidence does not render a panel regardless of coverage", () => {
+  for (const status of ["captured", "limited", "unavailable"] as const) {
+    const html = renderToStaticMarkup(<SiteIntegritySiteContext.Provider value={{ findings: [], coverage: [
+      { pageId: "home", url: "https://clinic.example/", homepage: true, status },
+    ] }}><SiteIntegrityEvidence /></SiteIntegritySiteContext.Provider>);
+    assert.equal(html, "");
+  }
+});
+
 
 test("site integrity displays affected pages and explicitly unavailable and limited page coverage", () => {
   const packets = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: siteIntegrityProjectionFixture }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });

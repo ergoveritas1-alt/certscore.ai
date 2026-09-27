@@ -124,3 +124,41 @@ for (const mode of ["dom", "config", "invalid", "rendered-vendor", "rendered-sha
     assert.equal(requests.filter(url => url === "/vendor-privacy").length, 0);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(dir, { recursive: true, force: true }); }
 });
+
+for (const sitePolicyUsable of [true, false]) test(`site link and CMP configuration are both retained when site policy is ${sitePolicyUsable ? "usable" : "unusable"}`, async () => {
+  const requests: string[] = [];
+  const policyText = "We collect personal data for service delivery. Our legal basis is contractual necessity. We retain account records for two years. Contact privacy@publisher.example to exercise your right to access, delete or object. ".repeat(12);
+  const server = createServer((req, res) => {
+    requests.push(req.url ?? "");
+    res.setHeader("content-type", "text/html");
+    if (req.url === "/") {
+      res.end('<html><body><footer><a href="/site-policy">Privacy Policy</a></footer><script>window.didomiConfig = {"app":{"privacyPolicyURL":"/configured-policy"}};</script></body></html>');
+    } else if (req.url === "/site-policy") {
+      res.end(sitePolicyUsable ? `<main><h1>Privacy Policy</h1><p>${policyText}</p></main>` : "Processing Error Close");
+    } else if (req.url === "/configured-policy") {
+      res.end(`<main><h1>Privacy Policy</h1><p>${policyText}</p></main>`);
+    } else { res.statusCode = 404; res.end("Not found"); }
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const addr = server.address(); assert.ok(addr && typeof addr !== "string");
+  const baseUrl = `http://127.0.0.1:${addr.port}`;
+  const dir = await mkdtemp(path.join(tmpdir(), "cmp-policy-fallback-fixture-"));
+  try {
+    const result = await policySurfaceScanner({ url: baseUrl + "/", normalizedUrl: baseUrl + "/", scanStartedAtMs: Date.now(), internalBudgetMs: 9000, discoveryMode: "fast", artifactWriter: await createArtifactWriter(dir) });
+    assert.ok(requests.includes("/site-policy"));
+    assert.ok(requests.includes("/configured-policy"));
+    const siteObservation = result.policySurfaceObservations.find((row) => row.normalizedUrl === baseUrl + "/site-policy");
+    const cmpObservation = result.policySurfaceObservations.find((row) => row.normalizedUrl === baseUrl + "/configured-policy");
+    assert.ok(siteObservation);
+    assert.equal(cmpObservation?.status, "fetched");
+    assert.equal(cmpObservation?.cmpDiscovery?.[0]?.source, "cmp_config");
+    const selected = result.policySurfaceObservations.find((row) => row.governingPolicySelection?.state === "primary");
+    if (sitePolicyUsable) {
+      assert.equal(siteObservation.status, "fetched");
+      assert.ok(selected);
+    } else {
+      assert.notEqual(siteObservation.documentEvaluationState, "usable");
+      assert.equal(selected?.normalizedUrl, baseUrl + "/configured-policy");
+    }
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(dir, { recursive: true, force: true }); }
+});

@@ -94,7 +94,7 @@ export const directVsInferredSchema = z.enum([
 export const confidenceSchema = z.number().min(0).max(1);
 export const supportedPrivacyEvidenceLocaleSchema = z.enum(SUPPORTED_PRIVACY_EVIDENCE_LOCALES);
 export const supportedGdprTransparencyLocaleSchema = z.enum(SUPPORTED_GDPR_TRANSPARENCY_LOCALES);
-export const consentControlLocaleSchema = supportedPrivacyEvidenceLocaleSchema;
+export const consentControlLocaleSchema = z.union([supportedPrivacyEvidenceLocaleSchema, z.literal("mk")]);
 export const consentControlMatchStrengthSchema = z.enum(["direct", "equivalent", "contextual", "weak"]);
 export const consentControlSemanticRoleSchema = z.enum([
   "explicit_accept",
