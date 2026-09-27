@@ -97,7 +97,7 @@ function packagesFromDeveloperDocs() {
   const packages = new Set<string>();
   for (const file of rgFiles("*.tsx")) {
     const source = readFileSync(join(repoRoot, file), "utf8");
-    for (const match of source.matchAll(/\bnpm\s+install\s+((?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+(?:@[A-Za-z0-9._-]+)?)/g)) {
+    for (const match of source.matchAll(/\bnpm\s+install\s+(?:-g\s+)?((?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+(?:@[A-Za-z0-9._-]+)?)/g)) {
       if (match[1]) {
         packages.add(packageNameFromToken(match[1]));
       }
@@ -112,7 +112,8 @@ function packagesFromDeveloperDocs() {
 }
 
 const approvedPublicNpmPackages = new Set([
-  "@certscore/sdk"
+  "@certscore/sdk",
+  "@certscore/mcp"
 ]);
 
 function assertOnlyApprovedPublicNpmPackageClaims() {

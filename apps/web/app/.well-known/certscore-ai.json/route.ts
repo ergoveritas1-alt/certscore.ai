@@ -1,6 +1,7 @@
 import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
 import { CORE_MARKETING_POSITIONING } from "../../../lib/marketing/core-positioning";
 import {
+  PUBLIC_CERTSCORE_MCP_CASK_VERSION,
   PUBLIC_CERTSCORE_MCP_VERSION,
   PUBLIC_CERTSCORE_SDK_VERSION
 } from "../../../lib/public-integration-versions";
@@ -105,7 +106,7 @@ const discoveryDocument = {
     distribution: "homebrew",
     binary: "certscore-mcp",
     packageStatus: "homebrew_developer_preview",
-    currentVersion: PUBLIC_CERTSCORE_MCP_VERSION,
+    currentVersion: PUBLIC_CERTSCORE_MCP_CASK_VERSION,
     docs: "https://certscore.ai/developers/mcp",
     repositoryPath: "packages/certscore-mcp",
     install: "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp",

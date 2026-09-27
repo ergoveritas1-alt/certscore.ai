@@ -64,6 +64,7 @@ export const apiV2Routes = [
   ["GET", "/api/v2/scans/{scanId}/findings", "List already-projected public findings for a scan."],
   ["GET", "/api/v2/scans/{scanId}/findings/{findingId}", "Retrieve one public-safe finding and capped evidence summary."],
   ["GET", "/api/v2/scans/{scanId}/pulse", "Retrieve the Pulse projection wrapper for a completed public scan."],
+  ["GET", "/api/v2/scans/{scanId}/report-evidence", "Retrieve retained report evidence with pagination or a tracking workpaper."],
   ["GET", "/api/v2/scans/{scanId}/pre-consent-cookies-trackers", "Retrieve Pre-consent Cookies & Trackers report table data as public-safe JSON."],
   ["GET", "/api/v2/domains/{domain}/latest", "Find the latest eligible public scan for a domain."],
   ["GET", "/api/v2/domains/{domain}/latest/pre-consent-cookies-trackers", "Retrieve the latest-domain Pre-consent Cookies & Trackers table projection."],

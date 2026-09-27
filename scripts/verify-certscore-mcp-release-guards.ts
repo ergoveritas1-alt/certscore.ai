@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { certScoreMcpToolContracts } from "../packages/certscore-api-contracts/src/mcp.js";
-import { PUBLIC_CERTSCORE_MCP_VERSION } from "../apps/web/lib/public-integration-versions.js";
+import { PUBLIC_CERTSCORE_MCP_CASK_VERSION } from "../apps/web/lib/public-integration-versions.js";
 
 type ManifestTool = {
   name: string;
@@ -180,10 +180,10 @@ async function main() {
   assertIdentifierAfterMarker(
     discoveryRoutePath,
     "currentVersion:",
-    "PUBLIC_CERTSCORE_MCP_VERSION",
+    "PUBLIC_CERTSCORE_MCP_CASK_VERSION",
     "mcp: {"
   );
-  const discoveryVersion = PUBLIC_CERTSCORE_MCP_VERSION;
+  const discoveryVersion = PUBLIC_CERTSCORE_MCP_CASK_VERSION;
 
   assert.deepEqual(
     sortedTools(certScoreMcpToolContracts.map((tool) => ({ name: tool.name, description: tool.description }))),
@@ -272,7 +272,7 @@ async function main() {
     "packages/certscore-mcp/README.md",
     "apps/web/app/developers/mcp/page.tsx"
   ]);
-  assert.deepEqual(packageNames, [], "Public MCP docs should use Homebrew, not npx/npm package examples");
+  assert.deepEqual(packageNames, [], "Public MCP docs should not use npx launch examples");
 
   console.log("CertScore MCP release guards passed.");
 }
