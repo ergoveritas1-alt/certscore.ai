@@ -62,3 +62,18 @@ This is a fresh-materialization correction within assessment contract 2.2. Store
 2.0/2.1/2.2 assessments retain their original version, provenance and conclusions on
 read; no automatic backfill is performed. A diagnostic replay of retained evidence
 is not a new producer-bound observation and must not be persisted as one.
+
+### September 27: independent runtime loading limitation
+
+Projector 2.2.2 keeps `runtime_page_inventory_document_loading` scoped to the
+runtime lane when the existing canonical completion predicate independently
+establishes a completed consent inspection. The retained runtime limitation is
+unchanged. An incomplete consent inventory does not receive this exception, and
+other limitations (including unavailable inventory, inaccessible frames and no-go
+conditions) continue to apply. Downstream document, structured-evidence and
+per-control assessment guards remain authoritative.
+
+This corrects fresh materialization within contract 2.2; it does not change the
+historical-read policy above, action authorization, path-success definitions,
+finding eligibility or scoring rules. It adds no capture work, wait, model call,
+lane or recurring cost. See the [September 27 operational validation record](../operations/ar-capture-coverage-correction-2026-09-27.md).

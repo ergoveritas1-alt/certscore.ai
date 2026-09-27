@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { CanonicalEvidenceBundle } from "@certscore/contracts";
+import { deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 
 function bundle(
@@ -1510,9 +1510,38 @@ test("missing or mismatched consent binding cannot override a blocked document",
   }
 });
 
+test("runtime loading stays scoped while the materializer preserves consent document guards", () => {
+  for (const mismatch of [false, true]) {
+    const { b, g } = independentConsentLaneFixture();
+    b.consentUiObservations[0] = {
+      ...b.consentUiObservations[0]!, controls: [], likelyPresent: false,
+      captureStatus: "no_evidence", inventoryOutcome: "complete_empty", documentReadyState: "complete",
+      basis: ["settled_control_inventory_completed", "geometry:captured"],
+      captureDiagnostics: { completedChannels: ["dom_inventory", "geometry"], failedChannels: [], timedOutChannels: [] },
+    };
+    b.modulesRun = [{ moduleName: "preConsentRuntimeScanner", status: "partial", startedAt: b.startedAt, errors: [], evidenceRefs: [] }];
+    b.runtimeCoverage = {
+      coverageStatus: "limited_partial", limitationKeys: ["runtime_page_inventory_document_loading"], notes: [], silentEmpty: false,
+      fallbackModesUsed: [], observationCounts: { networkEvents: 0, thirdPartyRequests: 0, cookieEvents: 0,
+        cookiesBeforeConsent: 0, normalizedVendors: 0, observedJourneys: 0 },
+    };
+    if (mismatch) b.consentUiObservations[0]!.documentIdentity = { source: "cdp_loader_id", token: "another-document" };
+    const inspection = deriveConsentSurfaceInspectionOutcome(b);
+    const evidence = { ...geometry([], { firstLayerAccept: false, firstLayerReject: false, firstLayerOptions: false }),
+      documentIdentity: mismatch ? { source: "cdp_loader_id", token: "another-document" } : g.documentIdentity };
+    const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: evidence,
+      consentSurfaceInspection: inspection, noGo: false });
+    for (const action of ["accept", "reject", "options"] as const) {
+      assert.equal(result.controls[action].state, mismatch ? "unknown" : "not_observed", action);
+    }
+    assert.equal(result.provenance.projectorVersion, "2.2.2");
+    assert.deepEqual(b.runtimeCoverage!.limitationKeys, ["runtime_page_inventory_document_loading"]);
+  }
+});
+
 test("new materialization preserves legacy classifier provenance rather than inventing a registry version", () => {
   const result = deriveMaterializedConsentControlAssessment({ bundle: bundle([{ actionType: "accept_all", label: "Accept", visible: true }]), noGo: false });
-  assert.equal(result.provenance.projectorVersion, "2.2.1");
+  assert.equal(result.provenance.projectorVersion, "2.2.2");
   assert.equal(result.evidence[0]?.classifier?.registryVersion, "consent-control-label-registry");
 });
 

@@ -3252,6 +3252,9 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     // lane independently retained a verified same-document negative packet,
     // they do not invalidate consent-surface coverage.
     "cmp_runtime_without_actionable_surface",
+    // The runtime lane may still be loading after the independent consent
+    // lane completed. Keep its inventory limitation on runtime evidence only.
+    "runtime_page_inventory_document_loading",
   ]);
   const materialLimitationKeys = (input.runtimeCoverage?.limitationKeys ?? []).filter(
     (key) => key !== "post_consent_flow_runtime_disabled" &&

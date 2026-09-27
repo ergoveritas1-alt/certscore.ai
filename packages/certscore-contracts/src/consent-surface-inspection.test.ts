@@ -493,6 +493,60 @@ test("verified complete-empty consent proof is not limited by unrelated runtime 
   assert.deepEqual(outcome.limitationKeys, []);
 });
 
+function independentEmptyConsentWithLoadingRuntime() {
+  const input = baseInput();
+  input.modulesRun![0]!.status = "partial";
+  input.runtimeCoverage = {
+    ...input.runtimeCoverage!,
+    coverageStatus: "limited_partial",
+    limitationKeys: ["pre_consent_runtime_partial", "runtime_page_inventory_document_loading"],
+  };
+  input.consentUiObservations![0] = {
+    ...input.consentUiObservations![0]!,
+    documentUrl: "https://example.test/",
+    documentReadyState: "complete",
+    captureStatus: "no_evidence",
+    inventoryOutcome: "complete_empty",
+    captureDiagnostics: {
+      completedChannels: ["dom_inventory", "geometry"],
+      timedOutChannels: [],
+      failedChannels: [],
+    },
+    layerInspected: "first_layer",
+    basis: ["settled_control_inventory_completed", "geometry:captured"],
+  };
+  return input;
+}
+
+test("independent completed consent inspection preserves the loading runtime's limited inventory", () => {
+  const input = independentEmptyConsentWithLoadingRuntime();
+  const original = structuredClone(input);
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(outcome.coverageStatus, "complete");
+  assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
+  assert.deepEqual(outcome.limitationKeys, []);
+  assert.deepEqual(input, original, "assessment must not erase retained runtime limitations");
+});
+
+for (const condition of ["loading", "missing_geometry", "inaccessible_frame", "no_go"] as const) {
+  test(`runtime scoping does not complete consent proof with ${condition}`, () => {
+    const input = independentEmptyConsentWithLoadingRuntime();
+    const observation = input.consentUiObservations![0]!;
+    if (condition === "loading") observation.documentReadyState = "loading";
+    if (condition === "missing_geometry") {
+      observation.inventoryOutcome = "geometry_unavailable";
+      observation.captureDiagnostics!.completedChannels = ["dom_inventory"];
+    }
+    if (condition === "inaccessible_frame") observation.inventoryOutcome = "frame_inaccessible";
+    if (condition === "no_go") input.runtimeCoverage!.limitationKeys.push("scan_no_go_diagnostics");
+    const outcome = deriveConsentSurfaceInspectionOutcome(input);
+    assert.equal(outcome.coverageStatus, "limited");
+    assert.equal(outcome.inspectionCompleted, false);
+    assert.ok(outcome.limitationKeys.includes(condition === "no_go"
+      ? "scan_no_go_diagnostics" : "runtime_page_inventory_document_loading"));
+  });
+}
+
 test("verified empty consent proof does not erase a no-go limitation", () => {
   const input = baseInput();
   input.runtimeCoverage = {
@@ -795,4 +849,12 @@ test("captured geometry remains an observed evidence channel when AX owns classi
 
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.status, "observed");
   assert.equal(outcome.evidenceChannels.find((channel) => channel.channel === "geometry")?.evidenceCount, 1);
+});
+
+test("runtime scoping does not suppress other runtime inventory failures", () => {
+  const input = independentEmptyConsentWithLoadingRuntime();
+  input.runtimeCoverage!.limitationKeys.push("runtime_page_inventory_unavailable");
+  const outcome = deriveConsentSurfaceInspectionOutcome(input);
+  assert.equal(outcome.coverageStatus, "limited");
+  assert.ok(outcome.limitationKeys.includes("runtime_page_inventory_unavailable"));
 });
