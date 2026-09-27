@@ -22,7 +22,12 @@ const faqs = [
   {
     question: "How accurate are the results?",
     answer:
-      "Findings reflect automated analysis of public website signals under the tested scan context. They are designed for human and agentic review and monitoring, not as a legal or formal accessibility determination."
+      "Findings describe evidence recorded during a public website scan. They reflect the pages, time, region, and coverage of that visit, and should be checked against the retained evidence. They are not legal or formal accessibility determinations."
+  },
+  {
+    question: "Why do the scan time and region matter?",
+    answer:
+      "A website can show different content, consent choices, cookies, and requests by location or over time. Use the report's scan timestamp and region when reviewing a finding; a later visit or a visit from another region may behave differently."
   },
   {
     question: "Does CertScore.ai scan private or logged-in pages?",
@@ -57,12 +62,12 @@ const faqs = [
   {
     question: "Does CertScore.ai test what happens after I click Reject?",
     answer:
-      "On eligible sites, yes. CertScore.ai performs one bounded refusal in its own browser session, confirms a refusal-state transition, and retains the requests, cookies, storage, and consent signals that follow. Only activity anchored after confirmation counts, so an already in-flight request is not attributed to the refusal. This is evidence relevant to GDPR/ePrivacy review, not a compliance determination."
+      "On eligible sites, CertScore.ai can attempt one bounded first-layer Reject action in a separate browser session. The report distinguishes a completed click from a confirmed refusal and retains bounded after-click observations when available. Confirmed post-refusal findings require their own verified evidence; a separately verified Reject-click tracking signal may support review even if consent registration remains unconfirmed. Incomplete or unverifiable observations remain limited coverage."
   },
   {
     question: "What does a limited or unknown choice-path result mean?",
     answer:
-      "It means the interaction could not be completed or confirmed—for example, there was no identifiable control, the interface was unsupported, the action was unverifiable, or the observation timed out or went stale. Limited coverage is explicit, score-neutral, and not a pass. It means the question was not answered."
+      "It means the available evidence did not resolve the choice path—for example, the control inspection was incomplete, the interface was unsupported, the action was unverifiable, or the observation timed out or went stale. A completed inspection that finds no matching control can instead make that action not applicable. Limited coverage is explicit and is not a pass; separately verified Reject-click tracking can still support its own review signal."
   },
   {
     question: "How often can my site be rescanned?",
@@ -78,6 +83,11 @@ const faqs = [
     question: "Is CertScore.ai legal advice?",
     answer:
       "No. CertScore.ai scans public pages for observable website signals and change history. It does not provide legal advice or certification."
+  },
+  {
+    question: "Is CertScore.ai a certification?",
+    answer:
+      "No. CertScore.ai records observable website behavior and supporting evidence from a point-in-time scan. Its findings help people review possible issues; they do not certify a site or determine legal compliance."
   }
 ];
 

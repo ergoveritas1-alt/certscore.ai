@@ -44,6 +44,35 @@ const nextConfig = {
         ]
       },
       {
+        source: "/scan/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }]
+      },
+      {
+        source: "/scano/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }]
+      },
+      {
+        source: "/pulse/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }]
+      },
+      {
+        source: "/browser-scans/:path*",
+        headers: [
+          {
+            key: "X-Robots-Tag",
+            value: "noindex, follow"
+          }
+        ]
+      },
+      {
+        source: "/api/v2/scans/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }]
+      },
+      {
+        source: "/api/v2/domains/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, follow" }]
+      },
+      {
         source: "/api/v1/:path*",
         headers: [
           {

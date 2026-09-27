@@ -97,7 +97,7 @@ export function deriveScanTimeoutSummary(input: ScanTimeoutSummaryInput): ScanTi
   const trackerEvidenceUrlCount = getFiniteNumber(input.trackerEvidenceUrlCount) ?? 0;
   if (preconsentObserved && preconsentViolationCount === 0 && trackerEvidenceUrlCount === 0) {
     details.push(
-      "Pre-consent tracking was still detected, but request-level evidence URLs and vendor-level pre-consent violation rows were not retained in the final result."
+      "Pre-consent tracking was still detected, but request-level evidence URLs and vendor-level pre-consent tracking rows were not retained in the final result."
     );
   }
 

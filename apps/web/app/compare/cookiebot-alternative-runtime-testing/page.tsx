@@ -8,41 +8,42 @@ import {
 const config: GrowthContentPageConfig = {
   badge: "Comparison",
   description:
-    "Learn how CertScore.ai can complement Cookiebot-style consent management with runtime behavior testing.",
+    "See where Cookiebot's consent banner and cookie declaration help, and how CertScore.ai adds evidence from a particular browser visit.",
   intro:
-    "Cookiebot-style consent platforms help manage choices and cookie declarations. CertScore.ai complements that by observing whether runtime behavior appears aligned with expected consent behavior.",
+    "Cookiebot helps present consent choices and publish a cookie declaration. CertScore.ai records what cookies and requests appeared in a particular public browser visit, including their timing around a choice when evidence is available.",
   path: "/compare/cookiebot-alternative-runtime-testing",
   relatedLinks: [
     { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" },
     { href: "/guides/cmp-verification", label: "CMP verification" },
     { href: "/guides/third-party-cookie-checker", label: "Third-party cookie checker" },
-    { href: "/guides/detect-tracking-before-consent", label: "Pre-consent tracking detection" }
+    { href: "/guides/detect-tracking-before-consent", label: "Pre-consent tracking detection" },
+    { href: "/guides/consent-report-example", label: "Annotated retained report" }
   ],
   sections: [
     {
-      title: "Direct answer",
+      title: "What each tool answers",
       paragraphs: [
-        "CertScore.ai is not positioned as a hostile replacement for Cookiebot. It is useful when teams want runtime evidence about what tags, cookies, and third-party requests appear to do in the browser.",
-        "That makes it a complementary review layer for consent programs that already use a CMP."
+        "Cookiebot provides a consent banner, cookie scanning, and a declaration that can list each cookie's name, provider, purpose, and expiration. Those are useful for informing visitors and managing choices.",
+        "CertScore.ai answers a narrower measurement question: which cookies, storage entries, and third-party requests appeared during this visit, and when relative to the recorded consent state? It does not operate the consent banner."
+      ],
+      sourceLinks: [{ href: "https://www.cookiebot.com/en/cookie-scripts/", label: "Cookiebot's cookie scripts and declaration" }]
+    },
+    {
+      title: "A practical declaration check",
+      paragraphs: [
+        "If a team updates a tag manager or adds an embed, open a fresh scan from the relevant region. Compare the retained pre-choice cookie names and request destinations with the site's current Cookiebot declaration and configured categories.",
+        "A difference is a question for the site owner to investigate. One automated visit cannot prove that a declaration is complete or that a legal requirement was breached."
       ]
     },
     {
-      title: "Why teams add runtime testing",
+      title: "Read the action evidence separately",
       paragraphs: [
-        "Cookie declarations and banner configuration can become stale when marketing tags, embeds, or tag-manager rules change.",
-        "Runtime testing can surface whether observed website behavior appears to match the intended consent setup."
-      ]
-    },
-    {
-      title: "What to review in CertScore.ai",
-      paragraphs: [
-        "Review pre-consent tracking signals, third-party cookie timing, vendor domains, and the separately observed Accept and Reject paths. CertScore.ai requires a confirmed consent-state transition before interpreting post-choice activity; Accept is a score-neutral baseline and limited coverage is not reported as clean.",
-        "For Reject, review whether qualifying non-essential activity was retained after confirmed refusal, along with temporal and attribution limitations.",
-        "Use the retained evidence as a practical checklist for engineering, marketing operations, and privacy review."
+        "On eligible scans, Accept and Reject use separate sessions. A completed click, confirmed choice, and after-choice activity are distinct facts. Accept is an ordinary score-neutral comparison; limited coverage is not a clean result.",
+        "For a confirmed refusal, inspect any qualifying later requests alongside timing and attribution limits. Separately verified tracking after a completed Reject click can be a review signal even when registration was not confirmed."
       ]
     }
   ],
-  title: "Cookiebot alternative for runtime testing",
+  title: "Cookiebot consent management and runtime testing",
   type: "Comparison"
 };
 

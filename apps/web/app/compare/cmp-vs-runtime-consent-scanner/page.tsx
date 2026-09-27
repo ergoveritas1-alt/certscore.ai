@@ -15,7 +15,7 @@ const config: GrowthContentPageConfig = {
   relatedLinks: [
     { href: "/guides/cmp-verification", label: "CMP verification guide" },
     { href: "/guides/cookie-consent-enforcement-checker", label: "Consent enforcement checker" },
-    { href: "/compare/cookiebot-alternative-runtime-testing", label: "Cookiebot runtime testing" },
+    { href: "/compare/cookiebot-alternative-runtime-testing", label: "Cookiebot consent management and runtime testing" },
     { href: "/compare/onetrust-runtime-consent-testing", label: "OneTrust runtime testing" }
   ],
   sections: [
@@ -36,8 +36,8 @@ const config: GrowthContentPageConfig = {
     {
       title: "Where runtime scanning helps",
       paragraphs: [
-        "On eligible scans, CertScore.ai opens separate fresh browser sessions for baseline, Accept, and Reject. It acts only when the selected first-layer choice and the resulting consent-state transition can be confirmed; otherwise the path remains limited coverage rather than being reported as clean.",
-        "Runtime scanning can then compare request timing, cookie timing, and vendor domains after confirmed acceptance or refusal. Accept is a score-neutral comparison baseline; qualifying activity retained after confirmed refusal can support a review finding.",
+        "On eligible scans, CertScore.ai uses separate fresh browser sessions for baseline, Accept, and Reject. It acts only on an authorized, uniquely identified first-layer control; the completed click and any confirmed consent-state transition are reported separately.",
+        "Runtime scanning compares request timing, cookie timing, and vendor domains in the retained observation windows. Accept is a score-neutral comparison baseline. Qualifying activity after confirmed refusal, and separately verified Reject-click tracking where registration is unconfirmed, can support review findings.",
         "This evidence helps teams investigate implementation drift without making legal conclusions."
       ]
     }

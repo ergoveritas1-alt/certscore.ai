@@ -58,7 +58,7 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
   if (process.env.NODE_ENV !== "production" && scanId === SHADOW_REPORT_SCAN_ID) {
     return {
       title: { absolute: `Previous report for ${SHADOW_REPORT.scan.host} | CertScore.ai` },
-      robots: { follow: false, index: false }
+      robots: { follow: true, index: false }
     };
   }
   const scanRecord = await getPublicScanStatusProjection(scanId);
@@ -86,11 +86,9 @@ export async function generateMetadata({ params }: PublicScanDetailPageProps): P
     alternates: {
       canonical: reportUrl
     },
-    // Public report pages remain noindex until there is an intentional allowlist
-    // strategy for indexable scans, owner controls, retention rules, and safe
-    // redaction of any sensitive context in generated metadata.
+    // Public reports are shareable by URL but are not search results.
     robots: {
-      follow: false,
+      follow: true,
       index: false
     },
     openGraph: {

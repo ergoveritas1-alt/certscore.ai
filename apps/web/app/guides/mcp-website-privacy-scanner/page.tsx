@@ -4,7 +4,6 @@ import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import {
   createBreadcrumbSchema,
-  createFaqPageSchema,
   createPageMetadata,
   createPublicArticleSchema
 } from "../../../lib/seo";
@@ -12,7 +11,7 @@ import {
 const path = "/guides/mcp-website-privacy-scanner";
 const title = "How to run a website privacy scan through MCP";
 const description =
-  "A technical guide to the CertScore.ai MCP Light three-tool workflow, evidence boundaries, privacy-minimized telemetry, and tested asynchronous scan behavior.";
+  "A technical guide to CertScore.ai MCP Light's scan workflow, four available tools, evidence boundaries, and asynchronous scan behavior.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
@@ -29,10 +28,10 @@ export const metadata: Metadata = createPageMetadata({
 
 const sections = [
   {
-    title: "Use one public endpoint and three tools",
+    title: "Use one public endpoint and four tools",
     paragraphs: [
-      "CertScore.ai MCP Light is a no-account Streamable HTTP server at https://mcp.certscore.ai/mcp/light. A compatible agent discovers exactly three tools: certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle.",
-      "The small tool surface keeps the first run explicit: request or reuse a scan, check status only while work is active, then retrieve a bounded completed result. No API key, bearer token, browser login, or OAuth is required for the Light route."
+      "CertScore.ai MCP Light is a no-account Streamable HTTP server at https://mcp.certscore.ai/mcp/light. A compatible agent discovers four tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, and certscore_get_report_evidence_page.",
+      "Request or reuse a scan, check status only while work is active, and retrieve a bounded completed result. Use the evidence-page tool when a user needs deeper retained evidence or a report export. No API key, bearer token, browser login, or OAuth is required for the Light route."
     ]
   },
   {
@@ -46,13 +45,13 @@ const sections = [
     title: "Keep preliminary and final evidence separate",
     paragraphs: [
       "A preConsentPreview is partial checkpoint context, not a finding, score, or final inventory. Final summaries should come from the completed bundle, which carries canonical public-safe findings, evidence references, coverage limitations, and report links where available.",
-      "A completed_limited or no-go result is still an observation with explicit limitations. It is not proof that a site is compliant, free of risk, or fully tested."
+      "A completed_limited or no-go result retains explicit coverage limitations. It is not proof that a site is compliant, free of risk, or fully tested."
     ]
   },
   {
     title: "Reject Path evidence fails closed",
     paragraphs: [
-      "CertScore describes Reject Path behavior only when an eligible scan confirms a deterministic refusal action and retains qualifying post-refusal evidence. Unsupported, unavailable, unconfirmed, stale, or unverifiable outcomes remain neutral and must not be turned into findings.",
+      "Confirmed post-refusal findings require a verified refusal and qualifying later evidence. A separately verified Reject-click tracking signal may support review after a completed authorized click even when consent registration is unconfirmed. Unsupported, unavailable, stale, or unverifiable observations do not become findings solely because coverage is missing.",
       "This boundary matters for agents: a missing Reject Path finding must never be rewritten as proof that rejection worked or failed."
     ]
   },
@@ -88,23 +87,9 @@ const schemas = [
       type: "TechArticle"
     }),
     datePublished: "2026-08-30",
-    dateModified: "2026-08-30",
+    dateModified: "2026-09-27",
     mainEntityOfPage: { "@id": `https://certscore.ai${path}`, "@type": "WebPage" }
   },
-  createFaqPageSchema([
-    {
-      question: "Does CertScore.ai MCP Light require authentication?",
-      answer: "No. The Light endpoint requires no account, API key, bearer token, browser login, or OAuth."
-    },
-    {
-      question: "Which tools does MCP Light expose?",
-      answer: "It exposes certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle."
-    },
-    {
-      question: "Does an MCP privacy scan determine legal compliance?",
-      answer: "No. Results are automated public-web observations with evidence and coverage limitations, not legal advice, certification, or a compliance determination."
-    }
-  ]),
   createBreadcrumbSchema([
     { name: "Home", path: "/" },
     { name: "Guides", path: "/guides" },

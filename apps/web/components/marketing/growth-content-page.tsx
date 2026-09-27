@@ -13,6 +13,7 @@ import {
 type GrowthSection = {
   title: string;
   paragraphs: string[];
+  sourceLinks?: { href: string; label: string }[];
 };
 
 type GrowthLink = {

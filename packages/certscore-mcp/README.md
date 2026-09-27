@@ -89,7 +89,7 @@ MCP scan-resource reads use the same weighted, rolling policy as the direct Cert
 
 ## Authenticated and local MCP tool reference
 
-The sections below document the broader authenticated and local package surfaces. They do not change the GitHub-listed Light contract, which exposes only `certscore_scan_site`, `certscore_get_scan_status`, and `certscore_get_scan_bundle`.
+The sections below document the broader authenticated and local package surfaces. The Light contract exposes `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, and `certscore_get_report_evidence_page`.
 
 - `certscore_scan_site` - Creates a public-website privacy scan or reuses an eligible recent completed scan. Coverage includes pre-consent storage, trackers, consent and CMP signals, privacy-policy disclosures, transport security, and GDPR/ePrivacy or CCPA/CPRA review signals. The response contains a stable scanId, lifecycle status, retry timing, and sometimes a bounded preliminary preConsentPreview; preliminary data contains no final findings or score. Results are automated public-web observations, not legal advice, certification, or a compliance determination. Tool and workflow documentation: https://certscore.ai/developers/mcp.
 

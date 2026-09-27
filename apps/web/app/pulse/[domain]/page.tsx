@@ -26,7 +26,7 @@ export async function generateMetadata({ params }: PulsePageProps): Promise<Meta
     title: `CertScore.ai Pulse for ${label}`,
     description: `Agent-readable CertScore.ai summary of automated public-web observations for ${label}.`,
     robots: {
-      follow: false,
+      follow: true,
       index: false
     }
   };

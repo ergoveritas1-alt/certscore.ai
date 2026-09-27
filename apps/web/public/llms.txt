@@ -149,11 +149,19 @@ CERTSCORE_API_KEY=<token> certscore-mcp doctor
 ```
 
 MCP route labels:
-- Light MCP — no authentication: first-time users, testing, and discovery; no account or credentials; three core tools; up to 50 genuinely new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free.
+- Light MCP — no authentication: first-time users, testing, and discovery; no account or credentials; four available tools; up to 50 genuinely new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free.
 - Hosted MCP — OAuth: production and team remote clients; account and OAuth scopes required; higher-volume and approved advanced access.
 - Local MCP — scoped API key: backend, local, and stdio clients; account and scoped key required; access follows key scopes.
 
 Light MCP — no authentication workflow:
+Use certscore_scan_site for a new or reusable public-site scan; certscore_get_scan_status for an active scan with a scanId; certscore_get_scan_bundle for the completed findings and coverage; and certscore_get_report_evidence_page when the user needs paginated supporting evidence or a report export. These are scan and evidence tools, not generic web search or legal-advice tools.
+
+Example requests:
+
+- Scan example.com and summarize pre-consent cookies and trackers, including scan region and time.
+- Check whether example.com presented a consent-management surface and which first-layer controls were observed.
+- Retrieve the report evidence supporting a named finding in CertScore scan [SCAN_ID], preserving the finding ID and evidence references.
+
 1. Connect to CertScore Light at https://mcp.certscore.ai/mcp/light. It uses Streamable HTTP and requires no account, API key, bearer token, browser login, or OAuth.
 2. Codex setup: codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 3. Call certscore_scan_site with a public URL.
@@ -173,7 +181,7 @@ Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseli
 The ErgoVeritas canary page is a controlled, stable test site for demonstrating the complete scan, status, and bundle flow. Users may substitute their own public URL.
 
 Codex verification prompt:
-List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
+List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, and certscore_get_report_evidence_page are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
@@ -191,7 +199,7 @@ No-account agent scan path:
 - POST https://certscore.ai/api/v2/scans without Authorization for low-volume discovery or evaluation.
 - New anonymous scans are limited to 20 per requester IP per UTC day. Contact support@certscore.ai for a higher-volume allowance.
 - Reusing an eligible recent result does not consume the anonymous quota.
-- CertScore Light intentionally exposes only certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle.
+- CertScore Light exposes certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, and certscore_get_report_evidence_page.
 - Poll https://certscore.ai/api/v2/scans/{scanId}/status, then retrieve findings or evidence.
 - Use OAuth or a scoped API key for repeated or higher-volume workflows.
 

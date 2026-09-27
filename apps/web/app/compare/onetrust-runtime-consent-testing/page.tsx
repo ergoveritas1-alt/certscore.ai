@@ -8,37 +8,38 @@ import {
 const config: GrowthContentPageConfig = {
   badge: "Comparison",
   description:
-    "Learn how CertScore.ai can complement OneTrust-style consent management with runtime consent behavior testing.",
+    "Compare OneTrust's consent configuration and preferences with CertScore.ai observations of public website behavior in a chosen scan region.",
   intro:
-    "OneTrust-style consent management helps operate notices and preferences. Runtime consent testing helps teams review what actually happens in the browser around those choices.",
+    "OneTrust offers consent banners, preference controls, and regional configuration. CertScore.ai gives teams a separate browser observation to inspect what appeared on a public page in a chosen region and scan window.",
   path: "/compare/onetrust-runtime-consent-testing",
   relatedLinks: [
     { href: "/compare/cmp-vs-runtime-consent-scanner", label: "CMP vs runtime scanner" },
     { href: "/guides/cmp-verification", label: "CMP verification" },
     { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
-    { href: "/methodology", label: "CertScore.ai methodology" }
+    { href: "/methodology", label: "CertScore.ai methodology" },
+    { href: "/guides/test-global-privacy-control", label: "How to test GPC response" }
   ],
   sections: [
     {
-      title: "Direct answer",
+      title: "Different jobs in the same review",
       paragraphs: [
-        "CertScore.ai complements OneTrust-style CMP workflows by observing runtime tracking, cookie, and third-party request behavior from public webpages.",
-        "It helps teams find evidence for human and agentic review when consent settings and live tag behavior may have drifted."
+        "OneTrust's consent platform can configure regional notices, preference centers, consent signals, and cookie and tracker categories. It is useful for operating visitor choices and maintaining a consent inventory.",
+        "CertScore.ai records public-page requests, cookies, storage, controls, and supported consent-path evidence from a specific visit. It helps reviewers compare that evidence with the intended OneTrust setup; the scan does not establish how OneTrust was configured internally."
+      ],
+      sourceLinks: [{ href: "https://www.onetrust.com/products/consent-management/", label: "OneTrust consent-management capabilities" }]
+    },
+    {
+      title: "Check regional behavior",
+      paragraphs: [
+        "Choose the report's scan region and timestamp before comparing it with an intended regional notice or rule. Check which first-layer controls appeared and which requests and cookies were recorded before a choice.",
+        "Where eligible, separate Accept and Reject sessions can retain completed-click, confirmed-choice, and after-action evidence. A click is not proof that consent registered; coverage limitations remain visible."
       ]
     },
     {
-      title: "Complementary roles",
+      title: "Read GPC and refusal results carefully",
       paragraphs: [
-        "The CMP helps manage consent categories, notices, choice records, and preference-center behavior.",
-        "On eligible scans, CertScore.ai tests Accept and Reject in separate fresh sessions and requires a confirmed consent-state transition before interpreting post-choice activity. Accept remains a score-neutral comparison baseline; non-confirmed paths are limited coverage, not a pass.",
-        "Runtime testing checks public-web observations such as initial-load tracking, cookie timing, and whether qualifying activity continues after confirmed refusal."
-      ]
-    },
-    {
-      title: "Safe interpretation",
-      paragraphs: [
-        "A scan result should be treated as an automated review signal that may indicate an implementation issue.",
-        "Teams should review the evidence, environment, geography, and consent-state assumptions before changing production behavior."
+        "A GPC assessment records whether signal delivery was verified and what a paired passive comparison observed. Unverified delivery remains indeterminate. No observable response in that window does not establish every downstream use of data or a legal conclusion.",
+        "After Reject, distinguish a verified refusal from a completed click with unconfirmed registration. Review supported findings and their evidence rather than treating a banner dismissal as a confirmed choice."
       ]
     }
   ],
