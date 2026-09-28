@@ -296,6 +296,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.doesNotMatch(gpcEvidenceCardSource, /<details open=/);
   assert.doesNotMatch(evidenceDirectorySource, /expanded=\{report\.reviewFocus === "ccpa_cpra"\}/);
   assert.doesNotMatch(gpcEvidenceCardSource, /CMP GPC signal:|Visible acknowledgment:/);
+  assert.doesNotMatch(gpcEvidenceCardSource, /California policy ·/);
   assert.doesNotMatch(gpcEvidenceCardSource, /<GpcStatusBadge/);
   assert.ok(runtimeIndex >= 0);
   assert.ok(runtimeIndex < gpcCardIndex);

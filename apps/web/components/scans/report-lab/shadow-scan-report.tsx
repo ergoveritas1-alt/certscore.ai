@@ -1528,7 +1528,6 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
         {activity ? <p>{activity}</p> : null}
         <p>{gpcCardResponse(projection)}</p>
         <GpcActivityComparison comparison={projection.activityComparison} />
-        {projection.californiaDeductionPoints > 0 ? <p className="text-sm font-semibold text-rose-800">California policy · −{projection.californiaDeductionPoints} points</p> : null}
         <details className="group/gpc-comparison border-t border-zinc-200 pt-3 text-sm text-zinc-600">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">
             How we measured this

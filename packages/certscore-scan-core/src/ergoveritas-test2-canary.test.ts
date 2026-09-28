@@ -17,7 +17,7 @@ const assetNames = [
 ];
 const expectedCookieNames = ["_ga_TEST2", "_gat_TEST2", "_fbc", "_clsk", "ajs_anonymous_id", "mp_test2_mixpanel"];
 
-test("owned test2 canary separates manual Do Not Sell/Share from unchanged GPC activity", { timeout: 60_000 }, async () => {
+test("owned test2 canary separates partial GPC reduction from complete manual Do Not Sell/Share opt-out", { timeout: 60_000 }, async () => {
   const assets = new Map(await Promise.all(assetNames.map(async (name) => [name, await readFile(new URL(name, canaryRoot))] as const)));
   const server = createServer((request, response) => {
     const name = new URL(request.url ?? "/", "http://localhost").pathname.slice(1);
@@ -85,7 +85,7 @@ test("owned test2 canary separates manual Do Not Sell/Share from unchanged GPC a
       await rm(artifactDir, { recursive: true, force: true });
     }
     assert.match(assets.get("test2-notice-at-collection.html")!.toString(), /Categories collected and purposes[\s\S]*Sale or sharing[\s\S]*Retention[\s\S]*Opt-out methods/);
-    assert.match(assets.get("test2-privacy-policy.html")!.toString(), /Global Privacy Control[\s\S]*does not reduce optional cookies or requests/);
+    assert.match(assets.get("test2-privacy-policy.html")!.toString(), /Global Privacy Control[\s\S]*omits the Meta advertising request/);
     const noticePage = await baseline.context.newPage();
     await noticePage.goto(new URL("test2-notice-at-collection.html", url).toString());
     const passages = locateCaliforniaNoticePassages(await noticePage.locator("body").innerText());
@@ -98,8 +98,10 @@ test("owned test2 canary separates manual Do Not Sell/Share from unchanged GPC a
     await policyPage.close();
 
     const gpc = await visit(true);
-    assert.deepEqual(gpc.requests.sort(), baseline.requests.sort());
-    assert.deepEqual((await gpc.context.cookies(url)).map((cookie) => cookie.name).filter((name) => expectedCookieNames.includes(name)).sort(), [...expectedCookieNames].sort());
+    assert.equal(gpc.requests.length, 5);
+    assert.equal(gpc.requests.some((request) => request.startsWith("https://connect.facebook.net/")), false);
+    assert.deepEqual(gpc.requests.sort(), baseline.requests.filter((request) => !request.startsWith("https://connect.facebook.net/")).sort());
+    assert.deepEqual((await gpc.context.cookies(url)).map((cookie) => cookie.name).filter((name) => expectedCookieNames.includes(name)).sort(), expectedCookieNames.filter((name) => name !== "_fbc").sort());
     await gpc.context.close();
 
     const stalledContext = await browser.newContext();

@@ -31,9 +31,19 @@ export function gpcCardResponse(projection: GpcResponseReportProjection): string
   if (projection.assessment.status === "indeterminate") {
     return "The paired scan could not determine whether classified tracking activity changed with GPC.";
   }
-  return projection.assessment.status === "responsive"
-    ? "The paired scan observed reduced classified tracking activity with GPC."
-    : "The paired scan did not observe a qualifying reduction in classified tracking activity with GPC.";
+  if (projection.assessment.status === "responsive") {
+    const activity = projection.activityComparison?.activity;
+    const baselineRequests = activity
+      ? activity.advertisingMarketing.baselineRequests + activity.analyticsReplay.baselineRequests
+      : null;
+    const gpcRequests = activity
+      ? activity.advertisingMarketing.gpcRequests + activity.analyticsReplay.gpcRequests
+      : null;
+    return baselineRequests !== null && gpcRequests !== null && gpcRequests > 0 && gpcRequests < baselineRequests
+      ? "The paired scan observed a partial reduction in classified tracking activity with GPC."
+      : "The paired scan observed reduced classified tracking activity with GPC.";
+  }
+  return "The paired scan did not observe a qualifying reduction in classified tracking activity with GPC.";
 }
 
 export function buildGpcResponseReportProjection(

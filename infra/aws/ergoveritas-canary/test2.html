@@ -25,11 +25,11 @@
 <body>
   <main data-certscore-canary="gpc-dns-test2"
         data-expected-dns-path="observed"
-        data-expected-gpc-comparison="no_observable_response_when_comparable"
+        data-expected-gpc-comparison="partial_reduction_when_comparable"
         data-expected-prechoice-categories="analytics,advertising,session_replay,product_analytics"
         data-expected-post-refusal-activity="true">
     <h1>GPC and privacy-choice canary</h1>
-    <p class="note">Owned synthetic test page. It deliberately loads optional technologies before a choice and does not change that activity for browser GPC alone. No account or transaction state is involved.</p>
+    <p class="note">Owned synthetic test page. It loads optional technologies before a choice and reduces advertising activity when browser GPC is enabled. No account or transaction state is involved.</p>
 
     <section class="banner" id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
       <h2>Cookie choices</h2>
@@ -44,7 +44,7 @@
 
     <section class="choice" aria-labelledby="collection-notice-title">
       <h2 id="collection-notice-title">Notice at collection</h2>
-      <p>This test page records identifiers and internet activity through optional analytics, advertising, session replay, and product measurement requests. Before a choice is saved, those requests may be sent to the named providers. A manual opt-out stops future optional test requests in this browser; browser GPC alone intentionally does not change this canary's behavior.</p>
+      <p>This test page records identifiers and internet activity through optional analytics, advertising, session replay, and product measurement requests. Before a choice is saved, those requests may be sent to the named providers. Browser GPC prevents the Meta advertising request and its test cookie; a saved manual opt-out stops all future optional test requests in this browser.</p>
       <nav aria-label="Privacy and cookie choices">
         <ul>
           <li><a href="/test2-cookie-settings.html">Cookie Settings</a></li>
@@ -67,9 +67,9 @@
         <li>Advertising identity cookie: <code>_fbc</code>.</li>
         <li>Session-replay cookie: <code>_clsk</code>.</li>
         <li>Product-analytics identity cookies: <code>ajs_anonymous_id</code> and <code>mp_test2_mixpanel</code>.</li>
-        <li>Six vendor requests spanning analytics, advertising, session replay, and product measurement. Their observed transmission and classification must be verified from retained network evidence.</li>
+        <li>Six vendor requests without GPC, five with GPC, spanning analytics, advertising, session replay, and product measurement. Their observed transmission and classification must be verified from retained network evidence.</li>
       </ul>
-      <p class="note">Expected GPC outcome: activity continues in both fresh passive visits. A “No observable GPC response” finding requires a complete, verified paired comparison; a limited comparison remains indeterminate and score-neutral.</p>
+      <p class="note">Expected GPC outcome: the Meta advertising request and its test cookie appear only without GPC; five other optional requests remain. A complete, verified paired comparison can show this partial reduction. A limited comparison remains indeterminate.</p>
     </section>
   </main>
   <script>
@@ -89,8 +89,8 @@
         return;
       }
 
-      // Browser GPC is deliberately not used to alter this fresh-visit activity.
-      // The scanner must establish delivery and any paired response from its own retained evidence.
+      // The scanner must independently verify delivery and this paired response.
+      const gpcEnabled = navigator.globalPrivacyControl === true;
       const trackerUrls = [
         "https://www.google-analytics.com/analytics.js?certscore=test2",
         "https://connect.facebook.net/en_US/fbevents.js?certscore=test2",
@@ -98,16 +98,16 @@
         "https://static.hotjar.com/c/hotjar-100002.js?sv=7",
         "https://rs.fullstory.com/s/fs.js?certscore=test2",
         "https://api-js.mixpanel.com/track/?data=certscore-test2"
-      ];
+      ].filter((url) => !gpcEnabled || !url.startsWith("https://connect.facebook.net/"));
       window.__CERTSCORE_REVIEW_CANARY__ = {
         id: "test2",
         controls: "stacked",
         postRefusal: "reject_ignored",
         fingerprint: "webgl_fonts",
-        cookies: testCookies.slice(0, 6),
+        cookies: testCookies.slice(0, 6).filter((name) => !gpcEnabled || name !== "_fbc"),
         trackers: []
       };
-      // Retain all six transmitted requests, while ensuring a stalled provider
+      // Retain the transmitted requests, while ensuring a stalled provider
       // cannot consume the passive lane's existing quiet-window cap.
       window.__CERTSCORE_TEST2_TRACKER_SETTLED__ = Promise.all(trackerUrls.map((url) => {
         const controller = new AbortController();

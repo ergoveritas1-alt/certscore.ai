@@ -137,6 +137,18 @@ test("v3 card states the observed signal and activity without implying an establ
   assert.equal(gpcSummaryLabel(limited), "Observation limited · Response not determined");
 });
 
+test("responsive GPC card describes a retained partial reduction", async () => {
+  const { gpcActivityComparisonFixture } = await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
+  const projection = {
+    assessment: { status: "responsive" },
+    activityComparison: gpcActivityComparisonFixture(),
+  } as GpcResponseReportProjection;
+  assert.equal(gpcCardResponse(projection), "The paired scan observed a partial reduction in classified tracking activity with GPC.");
+  projection.activityComparison!.activity.advertisingMarketing.gpcRequests = 0;
+  projection.activityComparison!.activity.analyticsReplay.gpcRequests = 0;
+  assert.equal(gpcCardResponse(projection), "The paired scan observed reduced classified tracking activity with GPC.");
+});
+
 test("fails closed for non-surfaced packets and malformed score effects", () => {
   assert.equal(buildGpcResponseReportProjection([gpcFinding({ presentationStatus: "suppress" })]), null);
   assert.equal(

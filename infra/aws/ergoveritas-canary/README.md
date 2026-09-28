@@ -7,9 +7,10 @@ the live shared runtime before these assets are published.
 
 On a fresh visit, the page writes six optional first-party test cookies and
 loads six third-party requests covering analytics, advertising, session replay,
-and product measurement. It deliberately leaves this activity unchanged when
-GPC is enabled. A **complete paired comparison** can therefore report no
-observable GPC response; a partial comparison remains indeterminate. The page
+and product measurement. With GPC enabled, it suppresses the Meta advertising
+request and its `_fbc` test cookie while the other five optional requests
+remain. A **complete paired comparison** can therefore report a partial
+reduction; an incomplete comparison remains indeterminate. The page
 stops any stalled provider fetch after 120 milliseconds, preserving the existing
 passive quiet-window budget while retaining the request attempts for inspection.
 It leaves page navigation alone so an early privacy-choice click remains usable.

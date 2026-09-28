@@ -16,6 +16,5 @@ export function GpcActivityComparison({ comparison }: { comparison?: Comparison 
           <td className="px-3 py-2 font-mono text-zinc-900">{comparison.activity[key].gpcRequests}</td>
         </tr>)}</tbody>
     </table>
-    <p className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-500">This matched interval does not describe later activity or establish what caused a difference.</p>
   </section>;
 }
