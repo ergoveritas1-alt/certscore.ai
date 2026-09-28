@@ -1,0 +1,22 @@
+<!-- OWNED CANARY CHOICE PAGE — test behavior only -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>Cookie Settings — CertScore test 2</title>
+  <style>body{font:16px/1.5 system-ui,sans-serif;max-width:720px;margin:36px auto;padding:0 20px;color:#0f172a}button{font:inherit;padding:10px 14px;margin:8px 8px 8px 0;border:0;border-radius:6px;background:#0f172a;color:white;cursor:pointer}a{color:#075985}</style>
+</head>
+<body data-test2-choice-cookie="certscore_test2_optional_off">
+  <main>
+    <h1>Cookie Settings</h1>
+    <p>For this test page, one setting turns off the optional analytics, advertising, replay and product-measurement cookies and their associated requests on future visits to <a href="/test2.html">test2.html</a>. It removes the six first-party test cookies already present in this browser. The scanner observes the link but does not execute this setting.</p>
+    <button id="save-choice" type="button">Turn off optional cookies and requests</button>
+    <button id="reset-choice" type="button">Reset this test setting</button>
+    <p id="choice-status" role="status" aria-live="polite"></p>
+    <p><a href="/test2-cookie-policy.html">Cookie Policy</a> · <a href="/test2-privacy-choices.html">Your Privacy Choices</a></p>
+  </main>
+  <script src="/test2-choice-runtime.js"></script>
+</body>
+</html>
