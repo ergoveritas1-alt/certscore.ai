@@ -17,7 +17,7 @@ export function createMarketplaceAccessVerifier(deps: {
   const cache = new Map<string, { until: number; promise: Promise<Agreement> }>();
   return async (token: string) => {
     const binding = await deps.binding(token);
-    if (!binding?.agreement_id) return false;
+    if (!binding?.agreement_id) return null;
     const id = binding.agreement_id;
     let entry = cache.get(id);
     if (!entry || entry.until <= now()) {
@@ -28,9 +28,11 @@ export function createMarketplaceAccessVerifier(deps: {
       void entry.promise.catch(() => { if (cache.get(id) === current) cache.delete(id); });
     }
     const agreement = await entry.promise;
-    if (!agreementAllowsAccess(agreement, binding.buyer_account_id, now())) return false;
+    if (!agreementAllowsAccess(agreement, binding.buyer_account_id, now())) return null;
     // Rotation, expiry or deprovisioning may occur while the AWS call is pending.
     const current = await deps.binding(token);
-    return current?.license_arn === binding.license_arn && current.agreement_id === id && current.buyer_account_id === binding.buyer_account_id;
+    return current?.license_arn === binding.license_arn && current.agreement_id === id && current.buyer_account_id === binding.buyer_account_id
+      ? { agreementId: id, licenseArn: binding.license_arn }
+      : null;
   };
 }

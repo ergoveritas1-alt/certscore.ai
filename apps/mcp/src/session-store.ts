@@ -5,6 +5,7 @@ import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/se
 import type { HostedMcpObservationContext } from "./telemetry.js";
 import type { McpRequestDetails } from "@website-signal-risk-scanner/shared";
 import type { OAuthSessionIdentity } from "./session-identity.js";
+import type { MarketplaceAttribution } from "./marketplace-auth.js";
 
 export type McpHttpSession = {
   expiresAt: number;
@@ -13,6 +14,7 @@ export type McpHttpSession = {
   tokenHash: string;
   surface: "oauth" | "anonymous" | "light" | "microsoft" | "marketplace";
   oauthIdentity?: OAuthSessionIdentity;
+  marketplaceAttribution?: MarketplaceAttribution | null;
   transport: StreamableHTTPServerTransport;
   telemetry?: {
     observationContext(): HostedMcpObservationContext;

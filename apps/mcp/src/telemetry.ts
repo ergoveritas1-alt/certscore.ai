@@ -6,6 +6,7 @@ import type { McpActivationStage, McpRequestDetails, McpTelemetryEvent, McpTelem
 import { projectMcpToolInvocationObservation, type McpToolInvocationObservation } from "@certscore/mcp/server";
 import type { AnonymousRequesterNetwork } from "@website-signal-risk-scanner/shared";
 import { CERTSCORE_MCP_VERSION } from "@certscore/mcp/version";
+import type { MarketplaceAttribution } from "./marketplace-auth.js";
 
 const {
   boundMcpRequestDetails,
@@ -41,6 +42,7 @@ export type HostedMcpObservationContext = Pick<LightMcpClientContext,
 > & { sessionCorrelationId: string | null };
 
 type CreateHostedMcpTelemetryInput = {
+  marketplaceAttribution?: MarketplaceAttribution | null;
   authenticatedActorId?: string | null;
   authenticatedActorBinding?: string | null;
   authenticatedOrganizationId?: string | null;
@@ -182,7 +184,7 @@ export function classifyHostedMcpClient(input: {
     attributionConfidence,
     attributionRulesetVersion: MCP_CALLER_ATTRIBUTION_RULESET_VERSION,
     attributionSignals,
-    authClass: input.surface === "mcp_authenticated" ? "authenticated" : "anonymous",
+    authClass: input.surface === "mcp_authenticated" || input.surface === "mcp_marketplace_light" ? "authenticated" : "anonymous",
     callerProduct: product,
     clientFamily: verifiedAnthropic && family === "unknown" ? "anthropic_claude" : family,
     clientName: declaredClientName(input.clientInfoBody),
@@ -294,6 +296,7 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   };
 
   const reportActivation = (stage: McpActivationStage) => {
+    if (input.surface === "mcp_marketplace_light") return;
     const sessionId = observationContext().sessionCorrelationId;
     if (!client.actorId && !sessionId) return;
     if (sentActivationStages.has(stage)) return;
@@ -335,10 +338,11 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
   const report = (observation: Omit<McpToolInvocationObservation, "transportOutcome"> & {
     transportOutcome: McpTelemetryEvent["transportOutcome"];
   }, requestContext?: ToolRequestContext) => {
+    const marketplace = input.surface === "mcp_marketplace_light";
     const sessionValue = conversationId ?? input.sessionId();
     const eventRequesterIp = requestContext?.requesterIp ?? input.requesterIp ?? null;
     const parsed = mcpTelemetryEventSchema.safeParse({
-      requestDetails: boundMcpRequestDetails({
+      requestDetails: marketplace ? null : boundMcpRequestDetails({
         version: process.env.MCP_EXPANDED_CALLER_INPUT_ENABLED === "1" ? 2 : 1,
         ...(eventRequesterIp && input.requesterIp ? {requesterChanged: eventRequesterIp !== input.requesterIp} : {}),
         ...(observation.callerInput ? { callerInput: mergeMcpCallerInputs(observation.callerInput, initialInput) } : {}),
@@ -362,41 +366,45 @@ export function createHostedMcpTelemetry(input: CreateHostedMcpTelemetryInput) {
         sessionBasis: conversationId ? "provider_conversation" : input.sessionId() ? "mcp_session" : "unavailable",
         rateLimit: requestContext?.rateLimit ?? observation.rateLimit ?? null,
       }),
-      actorId: client.actorId,
-      attributionConfidence: client.attributionConfidence,
+      actorId: marketplace ? null : client.actorId,
+      attributionConfidence: marketplace ? "unknown" : client.attributionConfidence,
       attributionRulesetVersion: client.attributionRulesetVersion,
-      attributionSignals: client.attributionSignals,
+      attributionSignals: marketplace ? [] : client.attributionSignals,
       authClass: client.authClass,
-      callerProduct: client.callerProduct,
-      clientName: client.clientName,
-      clientFamily: client.clientFamily,
+      callerProduct: marketplace ? "unknown" : client.callerProduct,
+      clientName: marketplace ? null : client.clientName,
+      clientFamily: marketplace ? "unknown" : client.clientFamily,
       durationMs: observation.durationMs,
       endpoint: mcpTelemetryEndpoint(input.surface),
       errorCode: observation.errorCode,
       eventId: randomUUID(),
       freshness: observation.freshness,
       integration: MCP_TELEMETRY_INTEGRATION,
-      executionChannel: client.executionChannel,
-      installationOrigin: client.installationOrigin,
+      executionChannel: marketplace ? "unknown" : client.executionChannel,
+      installationOrigin: marketplace ? "unknown" : client.installationOrigin,
+      ...(input.marketplaceAttribution ? {
+        marketplaceAgreementId: input.marketplaceAttribution.agreementId,
+        marketplaceLicenseArn: input.marketplaceAttribution.licenseArn,
+      } : {}),
       isCanary: observation.isCanary,
       occurredAt: new Date().toISOString(),
       outcome: observation.outcome,
       quotaOutcome: observation.quotaOutcome,
       requestId: observation.requestId ?? randomUUID(),
-      requestedResource: observation.requestedResource,
-      requestedResourceType: observation.requestedResourceType,
-      requesterIp: eventRequesterIp,
-      requesterIpHash: requesterIpHash(input.secret, eventRequesterIp),
-      requesterNetwork: requestContext?.requesterNetwork ?? input.requesterNetwork ?? "unknown",
+      requestedResource: marketplace && observation.requestedResourceType !== "scan_id" ? null : observation.requestedResource,
+      requestedResourceType: marketplace && observation.requestedResourceType !== "scan_id" ? null : observation.requestedResourceType,
+      requesterIp: marketplace ? null : eventRequesterIp,
+      requesterIpHash: marketplace ? null : requesterIpHash(input.secret, eventRequesterIp),
+      requesterNetwork: marketplace ? "unknown" : requestContext?.requesterNetwork ?? input.requesterNetwork ?? "unknown",
       scanDecision: observation.scanDecision,
       scanFrom: observation.scanFrom,
       scanId: observation.scanId,
       scanStatus: observation.scanStatus,
-      sessionId: hashOpaque(input.secret, "session", sessionValue),
-      source: client.source,
-      sourceAttribution: client.sourceAttribution,
+      sessionId: marketplace ? null : hashOpaque(input.secret, "session", sessionValue),
+      source: marketplace ? "unknown" : client.source,
+      sourceAttribution: marketplace ? "unknown" : client.sourceAttribution,
       surface: input.surface,
-      targetHostname: observation.targetHostname,
+      targetHostname: marketplace ? null : observation.targetHostname,
       toolName: sanitizedTransportToolName(observation.toolName),
       transportOutcome: observation.transportOutcome,
     });

@@ -244,10 +244,40 @@ stores owner_user_id and the AWS buyer/account/agreement identity; the key hash
 maps to that license. Thus its owner can be resolved to the CertScore user's
 email. That email is obtained from CertScore sign-in, not an AWS buyer-email
 field. Holding a shared key does not establish the identity of its current human
-operator. The Marketplace MCP path currently supplies a caller hash but does not
-populate authenticatedUserId in activity telemetry, so it does not yet provide
-a reliable email-attributed per-scan activity view. The anonymous Light endpoint
-remains separate and anonymous.
+operator. From migration `0205` onward, successfully validated Marketplace MCP
+tool requests carry the agreement ID and license ARN from the server-side
+credential validation result. The admin view at `/app/admin/mcp/marketplace`
+resolves the license to its buyer account and separates tool outcomes, scan
+dispatch, later scan completion, and report retrieval. Marketplace tool events
+are retained indefinitely with minimized fields; ordinary MCP telemetry remains
+on the 90-day target. Historical events have no verified agreement binding and
+remain unattributed. License deletion can make the buyer account unavailable
+for historical events, while the recorded agreement/license remain unchanged.
+The anonymous Light endpoint remains separate and anonymous.
+
+Attribution is recorded only after the internal key validator has confirmed an
+active key/license and the current agreement. Rejected credentials create no
+attributed tool event. An agreement/license change invalidates the old MCP
+session, even if its key still validates; the client must initialize again.
+Rotation, cancellation, and re-subscription do not rewrite earlier events.
+The agreement records a buyer/license relationship, not the human who used a
+shared key. The scan completion column is a later read of the canonical scan
+row, not a completion claim made by the original tool request; deleted or
+unavailable scans cannot be reconstructed from telemetry.
+
+Incremental cost estimate before implementation: no new AWS call, scan,
+Lambda invocation, log delivery, or database write per tool request. The
+existing validation response gains roughly 100–200 bytes (about 10–20 MiB
+per 100,000 validated HTTP requests). Two small
+attribution fields and two partial indexes add roughly 0.5–1 KiB per
+Marketplace tool event. At 100,000 such calls/month, indefinite retention grows
+by roughly 50–100 MiB/month, or 0.6–1.2 GiB after a year. Using a representative
+RDS SSD rate of $0.115/GiB-month, the first year's ending monthly storage
+increase is about $0.07–$0.14, then grows with lifetime call volume. Actual
+AWS region, storage class, backups, index fill, and call volume can change this
+estimate; provisioned storage may absorb the initial growth without an immediate
+bill change. A lower-cost 90-day detail plus lifetime daily aggregates was
+considered, but the owner explicitly chose indefinite per-tool attribution.
 
 ## Copy-ready Marketplace usage instructions
 

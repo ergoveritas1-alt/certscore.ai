@@ -11,6 +11,9 @@ export async function POST(request: Request) {
   if (!token || !secret || !verifyMarketplaceKeyProof(secret, timestamp, token, proof)) return new Response(null, { status: 401 });
   try {
     requireMarketplaceEnabled();
-    return new Response(null, { status: await verifyMarketplaceAccess(token) ? 204 : 401, headers: { "Cache-Control": "no-store" } });
+    const attribution = await verifyMarketplaceAccess(token);
+    return attribution
+      ? Response.json(attribution, { status: 200, headers: { "Cache-Control": "no-store" } })
+      : new Response(null, { status: 401, headers: { "Cache-Control": "no-store" } });
   } catch { return new Response(null, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "10" } }); }
 }

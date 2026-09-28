@@ -93,7 +93,8 @@ export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
          client_name, requester_ip, requester_ip_hash, requester_network,
          requested_resource_type, requested_resource,
          caller_product, attribution_confidence, attribution_signals,
-         attribution_ruleset_version, execution_channel, installation_origin, request_details
+         attribution_ruleset_version, execution_channel, installation_origin, request_details,
+         marketplace_agreement_id, marketplace_license_arn
        ) values (
          $1::uuid, $2::timestamptz, $3, $4, $5, $6, $7,
          $8, $9::uuid, $10, $11, $12, $13,
@@ -106,7 +107,7 @@ export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
          )), $16, $17, $18, $19, $20,
          $21, $22, $23, $24, $25,
          $26, $27::inet, $28, $29, $30, $31,
-         $32, $33, $34::jsonb, $35, $36, $37, $39::jsonb
+         $32, $33, $34::jsonb, $35, $36, $37, $39::jsonb, $40, $41
        )
        on conflict (event_id) do nothing
        returning event_id
@@ -114,6 +115,7 @@ export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
        select event_id
          from public.mcp_tool_invocation_events
         where occurred_at < now() - ($38::int * interval '1 day')
+          and surface <> 'mcp_marketplace_light'
         order by occurred_at asc
         limit 500
      ), pruned as (
@@ -164,6 +166,8 @@ export async function persistMcpTelemetryEvent(event: McpTelemetryEvent) {
       event.installationOrigin,
       MCP_TELEMETRY_RETENTION_DAYS,
       event.requestDetails ? JSON.stringify(event.requestDetails) : null,
+      event.marketplaceAgreementId ?? null,
+      event.marketplaceLicenseArn ?? null,
     ],
   );
 }

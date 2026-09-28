@@ -431,6 +431,7 @@ async function loadAdminMcpTelemetryDashboardUncached(
               count(*) as total_event_count,
               count(*) filter (
                 where occurred_at < now() - (${retentionDaysParameter}::int * interval '1 day')
+                  and surface <> 'mcp_marketplace_light'
               ) as expired_event_count
          from public.mcp_tool_invocation_events events
         where true ${internalQaFilter} ${macMiniFilter}`,

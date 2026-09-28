@@ -14,7 +14,7 @@ import { McpReadThrottle, mcpReadCallsFromJsonRpc, mcpReadRateLimitGuidance } fr
 import { anonymousMcpRequester, anonymousMcpRequesterFromHeaders, anonymousSessionBinding, authenticatedMcpCallerBinding } from "./requester-identity.js";
 import { createHostedMcpTelemetry } from "./telemetry.js";
 import { createMicrosoftEntraTokenValidator, microsoftEntraSessionBinding } from "./microsoft-entra-auth.js";
-import { admitMarketplaceAuth, validateMarketplaceCredential } from "./marketplace-auth.js";
+import { admitMarketplaceAuth, validateMarketplaceCredential, type MarketplaceAttribution } from "./marketplace-auth.js";
 import type { McpTelemetrySurface } from "@website-signal-risk-scanner/shared";
 
 const OPENAI_APPS_CHALLENGE_TOKEN = "RVujVoFeQNvwzz4Upt8IPh_f2Xm3qf2Uqa_-tr3VTeQ";
@@ -346,14 +346,14 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   const requestStartedAt = Date.now();
   if (!hostAllowed(req)) {
     json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
-    if (anonymous && !microsoft) {
+    if (anonymous && !microsoft && !marketplace) {
       logAnonymousMcpObservation({ light, reasonCode: "host_rejected", req, res, sessionFound: null });
     }
     return;
   }
   if (!requestOriginAllowed(req)) {
     json(res, 403, { error: "forbidden", error_description: "Host or Origin is not allowed." }, corsHeaders(req));
-    if (anonymous && !microsoft) {
+    if (anonymous && !microsoft && !marketplace) {
       logAnonymousMcpObservation({ light, reasonCode: "origin_rejected", req, res, sessionFound: null });
     }
     return;
@@ -371,17 +371,19 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   let authenticatedUserId: string | null = null;
   let grantedOAuthScopes: string[] | undefined;
   let microsoftIdentity: { clientId: string; tenantId: string } | null = null;
+  let marketplaceAttribution: MarketplaceAttribution | null = null;
   if (marketplace) {
     if (!admitMarketplaceAuth(clientIp ?? "unknown")) {
       return json(res, 429, { error: "rate_limited" }, { ...corsHeaders(req), "Retry-After": "60" });
     }
     const credential = bearerToken(req);
     const decision = await validateMarketplaceCredential({ token: credential, baseUrl: env.CERTSCORE_BASE_URL, secret: env.jwtSecret });
-    if (decision !== "valid") {
-      return json(res, decision === "invalid" ? 401 : 503,
-        { error: decision === "invalid" ? "unauthorized" : "temporarily_unavailable", error_description: "An active AWS Marketplace Light API key is required. Manage keys at https://certscore.ai/marketplace/light." },
+    if (decision.status !== "valid") {
+      return json(res, decision.status === "invalid" ? 401 : 503,
+        { error: decision.status === "invalid" ? "unauthorized" : "temporarily_unavailable", error_description: "An active AWS Marketplace Light API key is required. Manage keys at https://certscore.ai/marketplace/light." },
         { ...corsHeaders(req), "WWW-Authenticate": 'Bearer realm="CertScore Marketplace Light"' });
     }
+    marketplaceAttribution = decision.attribution;
     tokenHash = sessions.hashToken(credential!);
     authenticatedCallerHash = tokenHash;
     // Do not forward this credential to the workspace API. Light remains public-scope.
@@ -425,7 +427,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       parsedBody = await readJsonBody(req);
     } catch {
       json(res, 400, { error: "invalid_request", error_description: "MCP request body must be valid JSON." }, corsHeaders(req));
-      if (anonymous && !microsoft) {
+      if (anonymous && !microsoft && !marketplace) {
         logAnonymousMcpObservation({
           light,
           reasonCode: "malformed_json",
@@ -444,7 +446,9 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID()
     });
-    const surface: McpTelemetrySurface = light
+    const surface: McpTelemetrySurface = marketplace
+      ? "mcp_marketplace_light"
+      : light
       ? "mcp_light"
       : anonymous
         ? "mcp_anonymous"
@@ -454,6 +458,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       authenticatedActorBinding: authenticatedCallerHash,
       authenticatedOrganizationId,
       authenticatedUserId,
+      marketplaceAttribution,
       baseUrl: env.CERTSCORE_BASE_URL,
       clientInfoBody: parsedBody,
       headers: req.headers,
@@ -522,6 +527,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         telemetry,
         tokenHash,
         surface: sessionSurface,
+        marketplaceAttribution,
         oauthIdentity,
         transport
       });
@@ -534,10 +540,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         }));
       }
     } else {
-      await server.close().catch((error) => console.error("[mcp-http] failed initialize server close failed", { error }));
-      await transport.close().catch((error) => console.error("[mcp-http] failed initialize transport close failed", { error }));
+      await server.close().catch((error) => console.error(JSON.stringify({ event: "mcp_http.initialize_server_close_failed", errorName: error instanceof Error ? error.name : "UnknownError" })));
+      await transport.close().catch((error) => console.error(JSON.stringify({ event: "mcp_http.initialize_transport_close_failed", errorName: error instanceof Error ? error.name : "UnknownError" })));
     }
-    if (anonymous && !microsoft) {
+    if (anonymous && !microsoft && !marketplace) {
       logAnonymousMcpObservation({
         clientContext: telemetry.observationContext(),
         light,
@@ -563,7 +569,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
 
   if (!session) {
     json(res, sessionId ? 404 : 400, { error: "invalid_session", error_description: "MCP session is missing or expired." }, corsHeaders(req));
-    if (anonymous && !microsoft) {
+    if (anonymous && !microsoft && !marketplace) {
       logAnonymousMcpObservation({
         light,
         parsedBody,
@@ -575,6 +581,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
       });
     }
     return;
+  }
+  if (marketplace && (session.marketplaceAttribution?.agreementId !== marketplaceAttribution?.agreementId
+    || session.marketplaceAttribution?.licenseArn !== marketplaceAttribution?.licenseArn)) {
+    return json(res, 401, { error: "session_agreement_changed", error_description: "Initialize a new session for this Marketplace agreement." }, corsHeaders(req));
   }
   const identityMismatch = session.surface !== sessionSurface ? "surface"
     : sessionSurface === "oauth"
@@ -698,7 +708,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
         scanId: readCall.target.startsWith("scan:") ? readCall.target.slice("scan:".length) : null,
         toolName: readCall.tool
       });
-      if (anonymous && !microsoft) {
+      if (anonymous && !microsoft && !marketplace) {
         logAnonymousMcpObservation({
           clientContext: session.telemetry?.observationContext() ?? null,
           light,
@@ -731,7 +741,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, anonymous: b
   if (req.method === "DELETE" && sessionId) {
     sessions.delete(sessionId);
   }
-  if (anonymous && !microsoft) {
+  if (anonymous && !microsoft && !marketplace) {
     const transportFailure = transportReason(res);
     logAnonymousMcpObservation({
       clientContext: session.telemetry?.observationContext() ?? null,
@@ -809,7 +819,7 @@ const server = createServer(async (req, res) => {
       } else {
         res.end();
       }
-      if (anonymous && !microsoft) {
+      if (anonymous && !microsoft && !marketplace) {
         logAnonymousMcpObservation({ light: url.pathname === "/mcp/light", reasonCode: "other", req, res, sessionFound: null });
       }
     });

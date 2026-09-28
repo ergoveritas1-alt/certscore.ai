@@ -60,6 +60,7 @@ export const mcpAttributionSignalSchema = z.enum([
 
 export const mcpTelemetrySurfaceSchema = z.enum([
   "mcp_light",
+  "mcp_marketplace_light",
   "mcp_anonymous",
   "mcp_authenticated",
 ]);
@@ -110,9 +111,11 @@ export const mcpActivationEventSchema = z.object({
   (event) => Boolean(event.actorId || event.sessionId),
   { message: "Activation requires an opaque actor or session identity.", path: ["actorId"] },
 ).refine(
-  (event) => event.surface === "mcp_authenticated"
-    ? event.authClass === "authenticated"
-    : event.authClass === "anonymous" && event.organizationId === null && event.userId === null,
+  (event) => event.surface === "mcp_marketplace_light"
+    ? false
+    : event.surface === "mcp_authenticated"
+      ? event.authClass === "authenticated"
+      : event.authClass === "anonymous" && event.organizationId === null && event.userId === null,
   { message: "Activation identity must match the hosted MCP surface.", path: ["authClass"] },
 );
 
@@ -211,6 +214,8 @@ export function boundMcpRequestDetails(input: McpRequestDetails): McpRequestDeta
 }
 
 export const mcpTelemetryEventSchema = z.object({
+  marketplaceAgreementId: z.string().min(1).max(256).regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]*$/).nullable().optional(),
+  marketplaceLicenseArn: z.string().min(1).max(512).regex(/^arn:aws(?:-[a-z]+)?:license-manager:[A-Za-z0-9-]*:[0-9]{12}:license:[A-Za-z0-9/._-]+$/).nullable().optional(),
   requestDetails: mcpRequestDetailsSchema.nullable().optional(),
   actorId: z.string().regex(/^[a-f0-9]{24}$/).nullable(),
   authClass: z.enum(["anonymous", "authenticated"]),
@@ -232,7 +237,7 @@ export const mcpTelemetryEventSchema = z.object({
   executionChannel: mcpCallerExecutionChannelSchema,
   installationOrigin: mcpInstallationOriginSchema,
   durationMs: z.number().int().min(0).max(3_600_000),
-  endpoint: z.enum(["/mcp/light", "/mcp/anonymous", "/mcp"]),
+  endpoint: z.enum(["/mcp/light", "/mcp/marketplace/light", "/mcp/anonymous", "/mcp"]),
   errorCode: z.string().min(1).max(100).regex(/^[a-zA-Z0-9_.:-]+$/).nullable(),
   eventId: z.string().uuid(),
   freshness: z.enum(["latest", "refresh"]).nullable(),
@@ -269,6 +274,23 @@ export const mcpTelemetryEventSchema = z.object({
 ).refine(
   (event) => Boolean(event.requesterIp) === Boolean(event.requesterIpHash),
   { message: "Requester IP and hash must be retained together.", path: ["requesterIp"] },
+).refine(
+  (event) => event.surface === "mcp_marketplace_light"
+    ? event.endpoint === "/mcp/marketplace/light" && event.authClass === "authenticated" && Boolean(event.marketplaceAgreementId && event.marketplaceLicenseArn)
+    : !event.marketplaceAgreementId && !event.marketplaceLicenseArn && event.endpoint !== "/mcp/marketplace/light",
+  { message: "Marketplace attribution requires the validated Marketplace surface and credential.", path: ["marketplaceAgreementId"] },
+).refine(
+  (event) => event.surface !== "mcp_marketplace_light" || (
+    !event.requestDetails && !event.actorId && !event.clientName && !event.requesterIp && !event.requesterIpHash
+    && !event.sessionId && !event.targetHostname
+    && (!event.requestedResourceType || (event.requestedResourceType === "scan_id" && /^[A-Za-z0-9_-]{1,128}$/.test(event.requestedResource ?? "")))
+    && event.source === "unknown" && event.sourceAttribution === "unknown"
+    && event.callerProduct === "unknown" && event.clientFamily === "unknown"
+    && event.attributionConfidence === "unknown" && event.attributionSignals.length === 0
+    && event.executionChannel === "unknown" && event.installationOrigin === "unknown"
+    && event.requesterNetwork === "unknown"
+  ),
+  { message: "Marketplace telemetry must contain only minimal operational attribution.", path: ["requestDetails"] },
 );
 
 export type McpTelemetryEvent = z.infer<typeof mcpTelemetryEventSchema>;
@@ -278,6 +300,7 @@ export type McpTelemetrySurface = z.infer<typeof mcpTelemetrySurfaceSchema>;
 
 export function mcpTelemetryEndpoint(surface: McpTelemetrySurface): McpTelemetryEvent["endpoint"] {
   if (surface === "mcp_light") return "/mcp/light";
+  if (surface === "mcp_marketplace_light") return "/mcp/marketplace/light";
   if (surface === "mcp_anonymous") return "/mcp/anonymous";
   return "/mcp";
 }

@@ -43,11 +43,12 @@ export const revalidate = 0;
 
 const surfaceLabels = {
   mcp_light: "Light · /mcp/light",
+  mcp_marketplace_light: "Marketplace Light · /mcp/marketplace/light",
   mcp_anonymous: "Anonymous full · /mcp/anonymous",
   mcp_authenticated: "Authenticated · /mcp",
 } as const;
 
-const surfaces = ["mcp_light", "mcp_anonymous", "mcp_authenticated"] as const;
+const surfaces = ["mcp_light", "mcp_marketplace_light", "mcp_anonymous", "mcp_authenticated"] as const;
 const sources = ["openai", "anthropic", "google", "xai", "other", "unknown"] as const;
 const products = ["chatgpt", "codex", "claude", "claude_code", "gemini_cli", "grok", "other", "unknown"] as const;
 const confidenceLevels = ["verified", "corroborated", "declared", "inferred", "unknown"] as const;
@@ -279,6 +280,7 @@ export default async function AdminMcpTelemetryPage({ searchParams }: AdminMcpPa
       <AdminTrafficFilters basePath="/app/admin/mcp" scope={traffic} searchParams={resolved} />
     </div>
     <McpNavigation active={active} traffic={traffic} client={resolved.client} surface={resolved.surface} source={resolved.source} period={normalizeOption(resolved.timeSpan, active === "usage" ? timeSpans : Object.keys(MCP_DISCOVERY_PERIODS)) ?? (active === "usage" ? "30d" : "24h")} />
+    <Link className="inline-flex text-sm font-semibold text-sky-700 hover:underline" href="/app/admin/mcp/marketplace">Marketplace agreement and buyer activity →</Link>
     <McpPanelBoundary key={key} label="MCP activity">
       <Suspense key={key} fallback={<McpPanelLoading label="MCP activity" />}>
         <AdminMcpContent searchParams={Promise.resolve(resolved)} />
@@ -409,7 +411,7 @@ async function AdminMcpContent({ searchParams }: AdminMcpPageProps) {
     return details ? <><Card className="border-slate-200 bg-white">
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div><CardTitle>Tool distribution and latency</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.toolAnalytics.label} · p50 / p95{activeToolPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p></div>
+                <div><CardTitle>Tool distribution and latency</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.toolAnalytics.label} · p50 / p95{activeToolPeriod === "1y" ? ` · ordinary events: ${dashboard.retention.days}d; Marketplace events: indefinite` : ""}</p></div>
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
                   {Object.entries(responseFilters).map(([name, value]) => value ? <input key={name} name={name} type="hidden" value={value} /> : null)}{activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="sourcePeriod" type="hidden" value={activeSourcePeriod} />
@@ -454,7 +456,7 @@ async function AdminMcpContent({ searchParams }: AdminMcpPageProps) {
       <Card className="border-slate-200 bg-white">
             <CardHeader className="pb-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <div><CardTitle>Source and access signals</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.sourceAnalytics.label}{activeSourcePeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}</p></div>
+                <div><CardTitle>Source and access signals</CardTitle><p className="mt-0.5 text-xs text-slate-500">{dashboard.sourceAnalytics.label}{activeSourcePeriod === "1y" ? ` · ordinary events: ${dashboard.retention.days}d; Marketplace events: indefinite` : ""}</p></div>
                 <form action="/app/admin/mcp" className="flex items-center gap-2" method="get">
                   {Object.entries(responseFilters).map(([name, value]) => value ? <input key={name} name={name} type="hidden" value={value} /> : null)}{activeQuery ? <input name="q" type="hidden" value={activeQuery} /> : null}{activeSurface ? <input name="surface" type="hidden" value={activeSurface} /> : null}{activeSource ? <input name="source" type="hidden" value={activeSource} /> : null}{activeProduct ? <input name="product" type="hidden" value={activeProduct} /> : null}{activeConfidence ? <input name="confidence" type="hidden" value={activeConfidence} /> : null}{activeTool ? <input name="tool" type="hidden" value={activeTool} /> : null}{activeOutcome ? <input name="outcome" type="hidden" value={activeOutcome} /> : null}{activeDecision ? <input name="decision" type="hidden" value={activeDecision} /> : null}
                   <input name="timeSpan" type="hidden" value={activeTimeSpan} /><input name="snapshot" type="hidden" value={activeSnapshotPeriod} /><input name="toolPeriod" type="hidden" value={activeToolPeriod} />
@@ -498,7 +500,7 @@ async function AdminMcpContent({ searchParams }: AdminMcpPageProps) {
       <Card className="border-slate-200 bg-white">
         <CardHeader className="pb-2">
           <CardTitle>MCP growth funnel</CardTitle>
-          <p className="mt-1 text-sm text-slate-500">Privacy-separated hosted activation stages for {dashboard.snapshot.label.toLowerCase()}. Landing-page visits and setup clicks remain aggregate first-party analytics and are not joined to opaque MCP identities.</p>
+          <p className="mt-1 text-sm text-slate-500">Privacy-separated hosted activation stages for {dashboard.snapshot.label.toLowerCase()}. Marketplace Light omits activation identifiers and is summarized in its agreement activity view. Landing-page visits and setup clicks remain aggregate first-party analytics.</p>
         </CardHeader>
         <CardContent className="space-y-3 pt-0">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -531,7 +533,7 @@ async function AdminMcpContent({ searchParams }: AdminMcpPageProps) {
         period={activeSnapshotPeriod as AdminMcpSnapshotPeriod}
         rates={rateMetrics}
         searchParams={resolved}
-        subtitle={`All hosted MCP entrypoints · ${dashboard.snapshot.label}${activeSnapshotPeriod === "1y" ? ` · limited to ${dashboard.retention.days}d retained data` : ""}`}
+        subtitle={`All hosted MCP entrypoints · ${dashboard.snapshot.label}${activeSnapshotPeriod === "1y" ? ` · ordinary events: ${dashboard.retention.days}d; Marketplace events: indefinite` : ""}`}
         trend={dashboard.trend.map((bucket, index) => ({ key: `${bucket.label}:${index}`, label: bucket.label, value: bucket.invocations, title: `${bucket.label}: ${bucket.invocations} requests, ${bucket.errors} execution errors, ${bucket.invalidRequests} invalid requests, ${bucket.scanLimited} scan limited, ${bucket.quotaLimited} quota limited`, className: bucket.errors > 0 ? "bg-rose-400 hover:bg-rose-500" : bucket.quotaLimited > 0 ? "bg-amber-400 hover:bg-amber-500" : undefined }))}
         trendTotal={dashboard.snapshot.label}
       /></>;

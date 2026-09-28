@@ -411,6 +411,38 @@ test("telemetry delivery failure is contained and transport quota events are rec
   assert.ok(failures.every((failure) => !failure.includes("database unavailable")));
 });
 
+test("Marketplace telemetry retains only validated agreement metadata and fails without leaking a key", async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const failures: string[] = [];
+  const telemetry = createHostedMcpTelemetry({
+    baseUrl: "https://certscore.ai",
+    clientInfoBody: { params: { clientInfo: { name: "private-marketplace-client", version: "1" } } },
+    fetch: (async (_url, init) => { bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>); throw new Error("private-delivery-error"); }) as typeof fetch,
+    headers: {},
+    logger: { error: message => { failures.push(String(message)); } },
+    marketplaceAttribution: { agreementId: "agmt-test", licenseArn: "arn:aws:license-manager::123456789012:license:l-test" },
+    requesterBinding: "private-key-hash",
+    requesterIp: "198.51.100.10",
+    secret,
+    sessionId: () => "private-session",
+    surface: "mcp_marketplace_light",
+  });
+  telemetry.observeActivation("mcp_initialized");
+  telemetry.observeToolInvocation({ ...observation(), targetHostname: "private.example" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(bodies.length, 2, "one tool event is retried; activation is not retained");
+  assert.deepEqual(bodies[0], bodies[1]);
+  assert.equal(bodies[0]?.marketplaceAgreementId, "agmt-test");
+  assert.equal(bodies[0]?.marketplaceLicenseArn, "arn:aws:license-manager::123456789012:license:l-test");
+  assert.equal(bodies[0]?.requestedResource, "scan_123");
+  for (const field of ["requestDetails", "requesterIp", "requesterIpHash", "actorId", "sessionId", "targetHostname", "clientName"]) assert.equal(bodies[0]?.[field], null, field);
+  assert.equal(failures.length, 1);
+  for (const secretValue of ["private-delivery-error", "private-key-hash", "private-session", "private-marketplace-client", "private.example"]) {
+    assert.equal(JSON.stringify(bodies).includes(secretValue), false);
+    assert.equal(failures.join(" ").includes(secretValue), false);
+  }
+});
+
 test("telemetry retries the same idempotent event before reporting a delivery failure", async () => {
   const bodies: string[] = [];
   const failures: string[] = [];

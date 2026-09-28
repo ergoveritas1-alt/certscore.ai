@@ -35,7 +35,7 @@ Each completed hosted tool invocation produces one best-effort event with:
 - bounded error code
 - bounded requested resource: scan/job ID, normalized domain, or HTTP(S) origin
 
-The canonical event schema is `packages/shared/src/mcp-telemetry.ts`. Tool events are stored in `mcp_tool_invocation_events`; initialization and tool-discovery stages are stored separately in `mcp_activation_events`. Both use a 90-day retention target. Each ingestion path deletes up to 500 expired rows on an accepted write, avoiding a separate scheduler or paid retention service. If traffic stops entirely, expired rows remain until the next accepted event of the same class triggers pruning.
+The canonical event schema is `packages/shared/src/mcp-telemetry.ts`. Tool events are stored in `mcp_tool_invocation_events`; initialization and tool-discovery stages are stored separately in `mcp_activation_events`. Ordinary MCP tool and activation events have a 90-day retention target. Successfully authenticated Marketplace Light **tool** events starting with migration `0205` are retained indefinitely at the owner's request. These exceptional rows hold only validated agreement/license binding, tool/outcome/scan metadata and timestamps, with no request details, prompt, target hostname, IP, client, actor or session identifier. Marketplace activation events are not written. Accepted writes prune at most 500 expired ordinary rows; if traffic stops, pruning waits for the next accepted event. Historical Light events are never backfilled or reclassified.
 
 ## Source attribution
 

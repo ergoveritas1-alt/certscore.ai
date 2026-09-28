@@ -79,6 +79,21 @@ test("MCP telemetry accepts only bounded structured metadata", () => {
   assert.equal(event.targetHostname, "example.com");
   assert.equal(mcpTelemetryEndpoint("mcp_authenticated"), "/mcp");
   assert.equal(mcpTelemetryEndpoint("mcp_anonymous"), "/mcp/anonymous");
+  const marketplace = {
+    ...event, actorId: null, authClass: "authenticated", attributionConfidence: "unknown",
+    attributionSignals: [], callerProduct: "unknown", clientName: null, clientFamily: "unknown",
+    endpoint: "/mcp/marketplace/light", executionChannel: "unknown", installationOrigin: "unknown",
+    marketplaceAgreementId: "agmt-verified", marketplaceLicenseArn: "arn:aws:license-manager::123456789012:license:l-verified",
+    requesterIp: null, requesterIpHash: null, requesterNetwork: "unknown", sessionId: null,
+    source: "unknown", sourceAttribution: "unknown", surface: "mcp_marketplace_light", targetHostname: null,
+  };
+  assert.equal(mcpTelemetryEventSchema.safeParse(marketplace).success, true);
+  assert.equal(mcpTelemetryEventSchema.safeParse({ ...event, marketplaceAgreementId: "agmt-forged", marketplaceLicenseArn: marketplace.marketplaceLicenseArn }).success, false);
+  assert.equal(mcpTelemetryEventSchema.safeParse({ ...marketplace, requesterIp: "198.51.100.10", requesterIpHash: "c".repeat(64) }).success, false);
+  assert.equal(mcpTelemetryEventSchema.safeParse({ ...marketplace, requestDetails: { version: 1 } }).success, false);
+  assert.equal(mcpTelemetryEventSchema.safeParse({ ...marketplace, marketplaceAgreementId: null }).success, false);
+  assert.equal(mcpTelemetryEventSchema.safeParse({ ...marketplace, endpoint: "/mcp/light" }).success, false);
+  assert.equal(mcpTelemetryEndpoint("mcp_marketplace_light"), "/mcp/marketplace/light");
 });
 
 test("MCP telemetry rejects raw request material", () => {
