@@ -293,11 +293,14 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
   assert.match(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
   assert.match(gpcEvidenceCardSource, /projection\.coverageSummary/);
+  assert.doesNotMatch(gpcEvidenceCardSource, /<details open=/);
+  assert.doesNotMatch(evidenceDirectorySource, /expanded=\{report\.reviewFocus === "ccpa_cpra"\}/);
+  assert.doesNotMatch(gpcEvidenceCardSource, /CMP GPC signal:|Visible acknowledgment:/);
   assert.doesNotMatch(gpcEvidenceCardSource, /<GpcStatusBadge/);
   assert.ok(runtimeIndex >= 0);
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(gpcCardIndex < transportIndex);
-  assert.match(source, />GPC observation and comparison\{/);
+  assert.match(source, />GPC\{homepage \? " · Starting page" : ""\}/);
   assert.match(source, /Evidence data \(JSON\)/);
   assert.match(source, /"Advertising \/ measurement"/);
   assert.match(source, /"Consent \/ CMP"/);
