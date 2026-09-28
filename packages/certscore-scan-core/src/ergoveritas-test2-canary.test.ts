@@ -83,6 +83,20 @@ test("owned test2 canary separates manual Do Not Sell/Share from unchanged GPC a
     assert.deepEqual((await gpc.context.cookies(url)).map((cookie) => cookie.name).filter((name) => expectedCookieNames.includes(name)).sort(), [...expectedCookieNames].sort());
     await gpc.context.close();
 
+    const stalledContext = await browser.newContext();
+    const stalledPage = await stalledContext.newPage();
+    await stalledPage.route("https://**/*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+      await route.fulfill({ status: 204, body: "" }).catch(() => undefined);
+    });
+    await stalledPage.goto(url);
+    const boundedSettlements = await stalledPage.evaluate(async () => Promise.race([
+      (window as typeof window & { __CERTSCORE_TEST2_TRACKER_SETTLED__: Promise<string[]> }).__CERTSCORE_TEST2_TRACKER_SETTLED__,
+      new Promise<string[]>((_, reject) => setTimeout(() => reject(new Error("Tracker request lifetime was not bounded")), 1_000)),
+    ]));
+    assert.deepEqual(boundedSettlements, Array(6).fill("stopped"));
+    await stalledContext.close();
+
     await baseline.page.locator('a[href="/test2-do-not-sell-or-share.html"]').click();
     assert.equal(await baseline.page.locator("h1").textContent(), "Do Not Sell or Share My Personal Information");
     await baseline.page.locator("#save-choice").click();
