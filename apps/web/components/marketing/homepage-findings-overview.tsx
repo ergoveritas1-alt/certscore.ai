@@ -40,9 +40,9 @@ export function HomepageFindingsOverview() {
               <button type="button" onClick={() => select(active - 1)} aria-label="Previous feature" aria-controls="showcase-content" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>←</button>
               <button type="button" onClick={() => select(active + 1)} aria-label="Next feature" aria-controls="showcase-content" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>→</button>
             </div>
-            <p className="ml-auto min-w-0 truncate text-right text-sm font-medium text-slate-700">
-              <span className="mr-3 text-xs tabular-nums text-slate-500">{String(active + 1).padStart(2, "0")} / {HOMEPAGE_SHOWCASE.length}</span>
-              {slide.label}
+            <p className="ml-auto flex min-w-0 items-center gap-3 text-right text-sm font-medium text-slate-700">
+              <span className="truncate">{slide.label}</span>
+              <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-slate-500">{String(active + 1).padStart(2, "0")} / {HOMEPAGE_SHOWCASE.length}</span>
             </p>
           </div>
           <div id="showcase-content" className="grid lg:grid-cols-[1.45fr_1fr]">
