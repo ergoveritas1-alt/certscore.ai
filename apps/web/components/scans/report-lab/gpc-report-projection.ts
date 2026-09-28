@@ -33,6 +33,14 @@ export function gpcCardResponse(projection: GpcResponseReportProjection): string
   }
   if (projection.assessment.status === "responsive") {
     const activity = projection.activityComparison?.activity;
+    if (activity && activity.advertisingMarketing.baselineRequests > 0 &&
+      activity.advertisingMarketing.gpcRequests === 0 &&
+      activity.analyticsReplay.gpcRequests > 0 &&
+      activity.analyticsReplay.baselineRequests === activity.analyticsReplay.gpcRequests) {
+      const advertising = activity.advertisingMarketing.baselineRequests;
+      const remaining = activity.analyticsReplay.gpcRequests;
+      return `Advertising/marketing request${advertising === 1 ? "" : "s"} fell from ${advertising} to 0 with GPC; ${remaining} analytics/replay request${remaining === 1 ? "" : "s"} remained.`;
+    }
     const baselineRequests = activity
       ? activity.advertisingMarketing.baselineRequests + activity.analyticsReplay.baselineRequests
       : null;

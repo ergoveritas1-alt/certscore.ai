@@ -144,7 +144,11 @@ test("responsive GPC card describes a retained partial reduction", async () => {
     activityComparison: gpcActivityComparisonFixture(),
   } as GpcResponseReportProjection;
   assert.equal(gpcCardResponse(projection), "The paired scan observed a partial reduction in classified tracking activity with GPC.");
+  projection.activityComparison!.activity.advertisingMarketing.baselineRequests = 1;
   projection.activityComparison!.activity.advertisingMarketing.gpcRequests = 0;
+  projection.activityComparison!.activity.analyticsReplay.baselineRequests = 5;
+  projection.activityComparison!.activity.analyticsReplay.gpcRequests = 5;
+  assert.equal(gpcCardResponse(projection), "Advertising/marketing request fell from 1 to 0 with GPC; 5 analytics/replay requests remained.");
   projection.activityComparison!.activity.analyticsReplay.gpcRequests = 0;
   assert.equal(gpcCardResponse(projection), "The paired scan observed reduced classified tracking activity with GPC.");
 });
