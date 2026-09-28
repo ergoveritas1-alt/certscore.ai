@@ -17,6 +17,21 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatTableDateTime(value: string | null) {
+  if (!value) return { date: "—", time: "" };
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return { date: "—", time: "" };
+  return {
+    date: new Intl.DateTimeFormat("en-US", {
+      month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles"
+    }).format(date),
+    time: new Intl.DateTimeFormat("en-US", {
+      hour: "numeric", minute: "2-digit", hour12: true,
+      timeZone: "America/Los_Angeles", timeZoneName: "short"
+    }).format(date)
+  };
+}
+
 function formatDuration(scan: Pick<OrganizationScanListItem, "completedAt" | "createdAt" | "startedAt">) {
   const start = Date.parse(scan.startedAt ?? scan.createdAt);
   const end = scan.completedAt ? Date.parse(scan.completedAt) : Number.NaN;
@@ -85,9 +100,9 @@ export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps)
             </div>
           </div>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="table-fixed text-left text-xs" style={{ minWidth: "1125px" }}>
-              <colgroup><col style={{ width: "40px" }} /><col style={{ width: "180px" }} /><col style={{ width: "75px" }} /><col style={{ width: "60px" }} /><col style={{ width: "205px" }} /><col style={{ width: "80px" }} /><col style={{ width: "60px" }} /><col style={{ width: "95px" }} /><col style={{ width: "155px" }} /><col style={{ width: "175px" }} /></colgroup>
-              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>{["Status", "Website", "Score", "Top", "Privacy / CMP", "Time", "From", "Freshness", "Scanned", "Actions"].map((label) => <th className="border-b border-slate-200 px-2.5 py-1.5 font-semibold" key={label}>{label}</th>)}</tr></thead>
+            <table className="w-full table-fixed text-left text-xs" style={{ minWidth: "1280px" }}>
+              <colgroup><col style={{ width: "5%" }} /><col style={{ width: "19%" }} /><col style={{ width: "6%" }} /><col style={{ width: "4%" }} /><col style={{ width: "23%" }} /><col style={{ width: "7%" }} /><col style={{ width: "6%" }} /><col style={{ width: "9%" }} /><col style={{ width: "13%" }} /><col style={{ width: "8%" }} /></colgroup>
+              <thead className="bg-slate-50 text-[10px] uppercase tracking-[0.08em] text-slate-500"><tr>{["Status", "Website", "Score", "Top", "Privacy / CMP", "Time", "From", "Freshness", "Scanned", "Actions"].map((label) => <th className="border-b border-slate-200 px-3 py-2 font-semibold" key={label}>{label}</th>)}</tr></thead>
               <tbody className="divide-y divide-slate-100 bg-white">
                 {visibleGroups.map((group) => {
                   const latest = group.scans[0];
@@ -95,17 +110,18 @@ export function OverviewScanHistoryCard({ scans }: OverviewScanHistoryCardProps)
                   const status = statusIndicator(latest);
                   const marker = getScanFromMarkerInput(latest.scanFromValue);
                   const earlier = group.scans.slice(1, 11);
-                  return <tr className="h-[56px] hover:bg-slate-50/70" key={group.key}>
-                    <td className="px-2.5 py-1.5 text-center" title={status.label}><span aria-label={status.label} className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /></td>
-                    <td className="px-2.5 py-1.5"><p className="truncate font-semibold text-slate-900">{group.hostname ?? "Unknown website"}</p><p className="text-[10px] text-slate-400">{group.scans.length} scan{group.scans.length === 1 ? "" : "s"}</p></td>
-                    <td className="px-2.5 py-1.5 font-semibold text-slate-900" title={[latest.scoreLabel, latest.scoreVersion, latest.scoreCoverageConfidence ? `${latest.scoreCoverageConfidence} coverage` : null, latest.scoreScoredAt ? `scored ${latest.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined}>{latest.certscoreOverall !== null ? <><span>{latest.certscoreOverall}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
-                    <td className="px-2.5 py-1.5 font-semibold text-slate-900">{latest.topFindingCount ?? "—"}</td>
-                    <td className="px-2.5 py-1.5"><p>Privacy {latest.privacyPolicyPresent === true ? "✓" : latest.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={latest.cmpVendorName ?? undefined}>CMP {latest.cmpVendorName ?? "—"}</p></td>
-                    <td className="px-2.5 py-1.5 font-medium">{formatDuration(latest)}</td>
-                    <td className="px-2.5 py-1.5" title={latest.scanFromLabel}><ScanFromMarker flag={"flag" in marker ? marker.flag : undefined} icon={"icon" in marker ? marker.icon : undefined} selected /></td>
-                    <td className="px-2.5 py-1.5"><span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{freshnessLabel(latest.freshRescanRequested)}</span></td>
-                    <td className="px-2.5 py-1.5 text-[11px] text-slate-600">{formatDateTime(latest.completedAt ?? latest.createdAt)}</td>
-                    <td className="px-2.5 py-1.5"><div className="flex items-center gap-1">
+                  const scanned = formatTableDateTime(latest.completedAt ?? latest.createdAt);
+                  return <tr className="h-[60px] hover:bg-slate-50/70" key={group.key}>
+                    <td className="px-3 py-2 text-center" title={status.label}><span aria-label={status.label} className={`inline-block h-2.5 w-2.5 rounded-full ${status.className}`} /></td>
+                    <td className="px-3 py-2" title={group.hostname ?? "Unknown website"}><p className="truncate font-semibold text-slate-900">{group.hostname ?? "Unknown website"}</p><p className="truncate text-[10px] text-slate-400">{group.scans.length} scan{group.scans.length === 1 ? "" : "s"}</p></td>
+                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-900" title={[latest.scoreLabel, latest.scoreVersion, latest.scoreCoverageConfidence ? `${latest.scoreCoverageConfidence} coverage` : null, latest.scoreScoredAt ? `scored ${latest.scoreScoredAt}` : null].filter(Boolean).join(" · ") || undefined}>{latest.certscoreOverall !== null ? <><span>{latest.certscoreOverall}</span><span className="text-[11px] font-normal text-slate-400">/100</span></> : "—"}</td>
+                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-900">{latest.topFindingCount ?? "—"}</td>
+                    <td className="px-3 py-2"><p className="truncate">Privacy {latest.privacyPolicyPresent === true ? "✓" : latest.privacyPolicyPresent === false ? "—" : "?"}</p><p className="truncate text-slate-500" title={latest.cmpVendorName ?? undefined}>CMP {latest.cmpVendorName ?? "—"}</p></td>
+                    <td className="whitespace-nowrap px-3 py-2 font-medium">{formatDuration(latest)}</td>
+                    <td className="px-3 py-2" title={latest.scanFromLabel}><ScanFromMarker flag={"flag" in marker ? marker.flag : undefined} icon={"icon" in marker ? marker.icon : undefined} selected /></td>
+                    <td className="px-3 py-2"><span className="inline-block whitespace-nowrap rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">{freshnessLabel(latest.freshRescanRequested)}</span></td>
+                    <td className="px-3 py-2 text-[11px] leading-4 text-slate-600" title={formatDateTime(latest.completedAt ?? latest.createdAt)}><span className="block whitespace-nowrap">{scanned.date}</span>{scanned.time ? <span className="block whitespace-nowrap">{scanned.time}</span> : null}</td>
+                    <td className="px-3 py-2"><div className="flex items-center gap-1">
                       <PendingButtonLink ariaLabel="View latest scan" className="h-8 w-8 rounded-full border border-slate-300 bg-white p-0" href={`/app/scans/${latest.id}`} idleContent={<ViewIcon />} pendingContent="…" prefetch={false} size="sm" title="View latest scan" variant="secondary" />
                       {earlier.length > 0 ? <details className="relative"><summary aria-label="Earlier scans" className="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-full border border-slate-300 bg-white [&::-webkit-details-marker]:hidden"><HistoryIcon /></summary><div className="absolute right-0 top-full z-30 mt-2 w-72 rounded-xl border border-slate-200 bg-white p-2 shadow-xl"><p className="px-2 py-1 text-xs font-semibold text-slate-900">Earlier scans</p>{earlier.map((scan) => <Link className="block rounded-lg px-2 py-1.5 text-xs hover:bg-slate-50" href={`/app/scans/${scan.id}`} key={scan.id} prefetch={false}>{formatDateTime(scan.completedAt ?? scan.createdAt)} · {scan.certscoreOverall ?? "—"}<span className="text-slate-400">/100 · {scan.scoreLabel ?? "Not scored"}</span></Link>)}</div></details> : null}
                     </div></td>
