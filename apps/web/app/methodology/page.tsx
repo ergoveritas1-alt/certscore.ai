@@ -6,6 +6,7 @@ import { DomainScanForm } from "../../components/marketing/domain-scan-form";
 import { SiteFooter } from "../../components/layout/site-footer";
 import { SiteHeader } from "../../components/layout/site-header";
 import { createPageMetadata, createPublicArticleSchema } from "../../lib/seo";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 
 export const metadata: Metadata = createPageMetadata({
   description:
@@ -106,7 +107,7 @@ export default function MethodologyPage() {
               </Suspense>
               <p className="mt-3 text-xs leading-5 text-slate-300">No credit card required. Public websites only. Existing scan allowances apply.</p>
             </div>
-            <Link href="/sample-report" className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-sky-200 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-300">
+            <Link href={AUTHENTIC_SAMPLE_REPORT_URL} className="mt-5 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-sky-200 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-300">
               Explore a sample report <span aria-hidden="true">↗</span>
             </Link>
           </div>
@@ -157,7 +158,7 @@ export default function MethodologyPage() {
           ))}
         </div>
         <div className="mt-5 grid gap-6 rounded-2xl border border-slate-200 bg-slate-50 p-6 sm:grid-cols-3">
-          <div><h3 className="font-semibold text-slate-950">Share the evidence</h3><p className="mt-2 text-sm leading-6 text-slate-600">Use report sharing and evidence exports to give your team a concrete starting point.</p><Link href="/sample-report" className="mt-3 inline-block text-sm font-semibold text-sky-700 hover:underline">Explore a sample report →</Link></div>
+          <div><h3 className="font-semibold text-slate-950">Share the evidence</h3><p className="mt-2 text-sm leading-6 text-slate-600">Use report sharing and evidence exports to give your team a concrete starting point.</p><Link href={AUTHENTIC_SAMPLE_REPORT_URL} className="mt-3 inline-block text-sm font-semibold text-sky-700 hover:underline">Explore a sample report →</Link></div>
           <div><h3 className="font-semibold text-slate-950">Expand your review</h3><p className="mt-2 text-sm leading-6 text-slate-600">Explore full-site scanning and monitoring within your plan’s access and crawl limits.</p><Link href="/pricing" className="mt-3 inline-block text-sm font-semibold text-sky-700 hover:underline">Compare plans →</Link></div>
           <div><h3 className="font-semibold text-slate-950">Bring it into your workflow</h3><p className="mt-2 text-sm leading-6 text-slate-600">API, MCP, and browser-extension options support additional workflows. Start your free website scan here.</p><Link href="/developers" className="mt-3 inline-block text-sm font-semibold text-sky-700 hover:underline">Explore integrations →</Link></div>
         </div>

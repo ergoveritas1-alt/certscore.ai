@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-report";
 import {
   SolutionPage,
   createSolutionPageMetadata,
@@ -76,7 +77,7 @@ const config: SolutionPageConfig = {
     { href: "/guides/cookie-consent-enforcement-checker", label: "Cookie consent enforcement checker" },
     { href: "/guides/check-third-party-cookies-before-consent", label: "Third-party cookies before consent" },
     { href: "/guides/cmp-verification", label: "CMP verification" },
-    { href: "/sample-report", label: "Sample report" }
+    { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "Sample report" }
   ],
   title: "Cookie consent scanner"
 };

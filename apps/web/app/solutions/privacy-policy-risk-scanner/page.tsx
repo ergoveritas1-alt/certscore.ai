@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-report";
 import {
   SolutionPage,
   createSolutionPageMetadata,
@@ -72,7 +73,7 @@ const config: SolutionPageConfig = {
     { href: "/guides/website-privacy-policy-requirements", label: "Privacy policy requirements" },
     { href: "/guides/privacy-policy-examples", label: "Privacy policy examples" },
     { href: "/guides/disclosure-signals", label: "Disclosure signals" },
-    { href: "/sample-report", label: "Sample report" }
+    { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "Sample report" }
   ],
   title: "Privacy policy risk scanner"
 };

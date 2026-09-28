@@ -95,7 +95,7 @@ Search aliases: CertScore.ai, CertScore API, CertScore MCP, website risk API, pr
 - https://certscore.ai/compare
 - https://certscore.ai/compare/privacy-scanner-vs-cookie-scanner
 - https://certscore.ai/compare/website-consent-audit-tools
-- https://certscore.ai/scan/f4362840-376e-4d8c-897a-34a220136ad4
+- https://certscore.ai/scan/981194df-111a-42dc-958e-89b98a6c2735
 - https://certscore.ai/press
 
 ## Scanner solution pages

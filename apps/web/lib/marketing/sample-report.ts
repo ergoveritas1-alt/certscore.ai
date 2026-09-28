@@ -1,4 +1,3 @@
-export const AUTHENTIC_SAMPLE_REPORT_SCAN_ID = "f4362840-376e-4d8c-897a-34a220136ad4";
-export const AUTHENTIC_SAMPLE_REPORT_TARGET_URL = "https://ergoveritas.com/sample_09_03_26_01.html";
+export const AUTHENTIC_SAMPLE_REPORT_SCAN_ID = "981194df-111a-42dc-958e-89b98a6c2735";
+export const AUTHENTIC_SAMPLE_REPORT_TARGET_URL = "https://ergoveritas.com/test2.html";
 export const AUTHENTIC_SAMPLE_REPORT_URL = `https://certscore.ai/scan/${AUTHENTIC_SAMPLE_REPORT_SCAN_ID}`;
-
