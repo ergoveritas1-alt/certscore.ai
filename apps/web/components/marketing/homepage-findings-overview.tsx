@@ -25,7 +25,6 @@ export function HomepageFindingsOverview() {
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Findings overview</p>
             <h2 id="showcase-heading" className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">See what’s inside a scan.</h2>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">Explore real report screens and structured evidence from our ErgoVeritas test page.</p>
           </div>
           <a href={AUTHENTIC_SAMPLE_REPORT_URL} className={`inline-flex min-h-11 shrink-0 items-center gap-2 font-semibold text-sky-700 hover:underline ${focus}`}>Open sample report <span aria-hidden="true">↗</span></a>
         </div>
