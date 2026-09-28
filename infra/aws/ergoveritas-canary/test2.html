@@ -117,7 +117,6 @@
           referrerPolicy: "no-referrer", signal: controller.signal
         }).then(() => "completed", () => "stopped").finally(() => window.clearTimeout(timeout));
       }));
-      window.setTimeout(() => window.stop(), 750);
       const runtime = document.createElement("script");
       runtime.src = "/certscore-review-canary.js";
       document.body.appendChild(runtime);
