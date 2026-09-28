@@ -1,6 +1,6 @@
 # Homepage feature showcase
 
-The homepage Findings overview is a manually controlled, 13-part product tour. A large report capture sits on the left and a short explanation, observed result and destination link sit on the right. Desktop has named feature buttons; mobile has a compact feature selector. Selected slides offer report JSON. Screenshots open in a native dialog with Escape dismissal and focus restoration. No automatic rotation, live report fetch, scan creation or model call is added to the homepage.
+The homepage Findings overview is a manually controlled, 13-part product tour. A large report capture sits on the left and a short explanation, observed result and destination link sit on the right. A fixed-height navigation bar above the changing content holds the previous/next buttons on the left, with the slide count and name aligned right, on every screen size. The evidence toggle is labeled “JSON”. Feature selector pills and the mobile selector were removed at the owner’s request. The arrows retain the same position across slides without constraining or clipping the copy. Selected slides offer report JSON. Screenshots open in a native dialog with Escape dismissal and focus restoration. No automatic rotation, live report fetch, scan creation or model call is added to the homepage.
 
 ## Source and provenance
 
@@ -54,3 +54,5 @@ Canonical assessment, normalized concerns, policy, unified findings and scoring 
 - AWS repository `preflight:fast` against `075a8563` and web typecheck: see completion record below.
 
 Completion record: final `PREDEPLOY_BASE_REF=075a8563 pnpm preflight:fast` passed, including web typecheck, canonical projection parity, scan-source/allowance contracts and post-refusal release contracts (1,398 tests; zero failures). Desktop was reviewed at 1,218 px and 1,440 px, mobile at 390 px. A transient development HMR warning during JSON editing did not recur after a full reload. Browser viewport overrides were reset. Changes are local and not deployed.
+
+Navigation refinement: removed the feature pills/mobile selector; previous/next remain at the top left and slide count/title at the top right. Renamed the preview toggle to “JSON”. Browser measurements across all 13 slides confirmed unchanged arrow coordinates on desktop and mobile, with no mobile horizontal overflow. Web typecheck passed. No added cost or deployment.

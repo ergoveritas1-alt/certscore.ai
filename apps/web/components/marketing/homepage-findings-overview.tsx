@@ -30,33 +30,29 @@ export function HomepageFindingsOverview() {
           <a href={AUTHENTIC_SAMPLE_REPORT_URL} className={`inline-flex min-h-11 shrink-0 items-center gap-2 font-semibold text-sky-700 hover:underline ${focus}`}>Open sample report <span aria-hidden="true">↗</span></a>
         </div>
 
-        <label className="mt-6 block text-sm font-medium text-slate-600 sm:hidden">
-          Explore a feature
-          <select aria-label="Choose a feature" value={active} onChange={(event) => select(Number(event.target.value))} className={`mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 ${focus}`}>
-            {HOMEPAGE_SHOWCASE.map((item, index) => <option key={item.id} value={index}>{index + 1}. {item.label}</option>)}
-          </select>
-        </label>
-        <div role="group" aria-label="Choose a feature" className="mt-8 hidden flex-wrap gap-2 pb-3 sm:flex">
-          {HOMEPAGE_SHOWCASE.map((item, index) => (
-            <button key={item.id} type="button" aria-pressed={active === index} aria-controls="showcase-slide" onClick={() => select(index)} className={`min-h-11 shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors ${focus} ${active === index ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-sky-400 hover:text-sky-800"}`}>
-              {item.label}
-            </button>
-          ))}
-        </div>
-
         <div id="showcase-slide" role="region" aria-roledescription="carousel" aria-label="CertScore feature tour" onKeyDown={(event) => {
           if (dialog.current?.open || (event.target as HTMLElement).closest("pre") || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
           event.preventDefault();
           select(active + (event.key === "ArrowRight" ? 1 : -1));
-        }} className="mt-3 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_70px_-35px_rgba(15,23,42,0.25)]">
-          <div className="grid lg:grid-cols-[1.45fr_1fr]">
+        }} className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_70px_-35px_rgba(15,23,42,0.25)]">
+          <div role="group" aria-label="Carousel navigation" className="flex h-20 items-center gap-4 border-b border-slate-200 px-4 sm:px-6">
+            <div className="flex shrink-0 gap-2">
+              <button type="button" onClick={() => select(active - 1)} aria-label="Previous feature" aria-controls="showcase-content" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>←</button>
+              <button type="button" onClick={() => select(active + 1)} aria-label="Next feature" aria-controls="showcase-content" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>→</button>
+            </div>
+            <p className="ml-auto min-w-0 truncate text-right text-sm font-medium text-slate-700">
+              <span className="mr-3 text-xs tabular-nums text-slate-500">{String(active + 1).padStart(2, "0")} / {HOMEPAGE_SHOWCASE.length}</span>
+              {slide.label}
+            </p>
+          </div>
+          <div id="showcase-content" className="grid lg:grid-cols-[1.45fr_1fr]">
             <div className="min-w-0 border-b border-slate-200 bg-slate-50 lg:border-b-0 lg:border-r">
               <div className="flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 sm:px-6">
                 <p className="text-xs font-medium text-slate-500">{previewLabel}</p>
                 {slide.json !== undefined && (
                   <div role="group" aria-label="Preview format" className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs">
                     <button type="button" aria-pressed={!showJson} onClick={() => setShowJson(false)} className={`min-h-8 rounded-md px-3 ${focus} ${!showJson ? "bg-slate-900 text-white" : "text-slate-600"}`}>{slide.code ? "Request" : "Report"}</button>
-                    <button type="button" aria-pressed={showJson} onClick={() => setShowJson(true)} className={`min-h-8 rounded-md px-3 ${focus} ${showJson ? "bg-slate-900 text-white" : "text-slate-600"}`}>Report JSON</button>
+                    <button type="button" aria-pressed={showJson} onClick={() => setShowJson(true)} className={`min-h-8 rounded-md px-3 ${focus} ${showJson ? "bg-slate-900 text-white" : "text-slate-600"}`}>JSON</button>
                   </div>
                 )}
               </div>
@@ -84,13 +80,7 @@ export function HomepageFindingsOverview() {
                 <p className="mt-6 border-l-2 border-sky-400 pl-4 text-sm leading-6 text-slate-600">{slide.result}</p>
               </div>
               <a href={slide.href} className={`mt-6 inline-flex min-h-11 items-center gap-2 self-start text-sm font-semibold text-sky-700 hover:underline ${focus}`}>{slide.linkLabel} <span aria-hidden="true">↗</span></a>
-              <div className="mt-auto flex items-center justify-between gap-4 pt-6">
-                <span className="text-xs tabular-nums text-slate-500">{String(active + 1).padStart(2, "0")} / {HOMEPAGE_SHOWCASE.length} features</span>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => select(active - 1)} aria-label="Previous feature" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>←</button>
-                  <button type="button" onClick={() => select(active + 1)} aria-label="Next feature" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>→</button>
-                </div>
-              </div>
+
             </div>
           </div>
         </div>

@@ -119,7 +119,7 @@ export const HOMEPAGE_SHOWCASE: ShowcaseSlide[] = [
     id: "api", label: "API & SDK", category: "Developer interfaces", title: "Build the report into your application.",
     description: "Use the REST API or TypeScript SDK to create scans, poll status and retrieve findings and evidence. Keep scan identity and coverage with the results you display.",
     highlights: ["Structured scan and evidence contracts", "Documented endpoints and TypeScript SDK"],
-    result: "Switch to Report JSON for selected fields from this scan’s real export. The request below is an API usage example.",
+    result: "Switch to JSON for selected fields from this scan’s real export. The request below is an API usage example.",
     code: { label: "REST API · example scan request", content: 'POST https://certscore.ai/api/v2/scans\nContent-Type: application/json\n\n{\n  "url": "https://ergoveritas.com/test2.html",\n  "freshness": "latest",\n  "scanFrom": "california"\n}\n\nGET /api/v2/scans/<scanId>/status\nGET /api/v2/scans/<scanId>/findings\nGET /api/v2/scans/<scanId>/report-evidence' },
     json: { scan: { id: evidence.scan.id, status: evidence.scan.status }, gpcResponse: evidence.gpcResponse },
     href: "/developers/quickstart", linkLabel: "Explore API and SDK"
