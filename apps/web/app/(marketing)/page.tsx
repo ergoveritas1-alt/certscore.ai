@@ -256,7 +256,7 @@ export default async function MarketingHomePage() {
       <HomepageFindingsOverview />
 
       <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-14">
+        <div className="mx-auto max-w-6xl px-4 pb-12 pt-6 sm:px-6 sm:pb-14">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="max-w-3xl space-y-3">
               <Badge tone="neutral">Scanner solutions</Badge>

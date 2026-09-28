@@ -19,7 +19,7 @@ export function HomepageFindingsOverview() {
   const previewLabel = showJson ? "Actual report export · selected fields" : slide.code?.label ?? "Actual scan report · click to enlarge";
 
   return (
-    <section id="findings-overview" aria-labelledby="showcase-heading" className="scroll-mt-24 bg-white px-5 py-16 sm:px-8 lg:py-24">
+    <section id="findings-overview" aria-labelledby="showcase-heading" className="scroll-mt-24 bg-white px-5 pt-8 sm:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
           <div>
@@ -33,8 +33,8 @@ export function HomepageFindingsOverview() {
           if (dialog.current?.open || (event.target as HTMLElement).closest("pre") || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
           event.preventDefault();
           select(active + (event.key === "ArrowRight" ? 1 : -1));
-        }} className="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_70px_-35px_rgba(15,23,42,0.25)]">
-          <div role="group" aria-label="Carousel navigation" className="flex h-20 items-center gap-4 border-b border-slate-200 px-4 sm:px-6">
+        }} className="mt-5 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_70px_-35px_rgba(15,23,42,0.25)]">
+          <div role="group" aria-label="Carousel navigation" className="flex h-16 items-center gap-4 border-b border-slate-200 px-4 sm:px-6">
             <div className="flex shrink-0 gap-2">
               <button type="button" onClick={() => select(active - 1)} aria-label="Previous feature" aria-controls="showcase-content" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>←</button>
               <button type="button" onClick={() => select(active + 1)} aria-label="Next feature" aria-controls="showcase-content" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>→</button>
