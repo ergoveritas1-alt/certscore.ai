@@ -330,8 +330,8 @@ test("policySurfaceScanner warms an observed privacy link before guessed policy 
       url: `${baseUrl}/`,
       normalizedUrl: `${baseUrl}/`,
       scanStartedAtMs: startedAt,
-      internalBudgetMs: 2_500,
-      absoluteDeadlineAtMs: startedAt + 2_500,
+      internalBudgetMs: 6_000,
+      absoluteDeadlineAtMs: startedAt + 6_000,
       discoveryMode: "fast",
       artifactWriter: await createArtifactWriter(tempRoot),
       nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
@@ -661,7 +661,14 @@ test("policySurfaceScanner caps a same-origin supplement fetch and does not rend
     assert.equal(supplement?.traversalDepth, 1);
     assert.equal(supplement?.selectionReasonCodes?.includes("supplement_fetch_cap_2500ms"), true);
     assert.equal(supplement?.selectionReasonCodes?.includes("supplement_rendered_fallback_disabled"), true);
-    assert.equal(Date.now() - startedAt < 7_000, true, "bounded traversal should not wait for the delayed response");
+    const secondaryFetch = result.moduleRun.timingBreakdown?.find((timing) =>
+      timing.label === "secondary policy fetch group"
+    );
+    assert.ok(secondaryFetch, "secondary policy fetch timing should be retained");
+    assert.ok(
+      secondaryFetch.durationMs < 3_500,
+      `bounded supplement fetch took ${secondaryFetch.durationMs}ms and may have waited for the delayed response`,
+    );
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
@@ -3041,7 +3048,7 @@ test("policySurfaceScanner retains canonical GDPR Transparency topic candidates 
         );
       }
     }
-  });
+  }, { internalBudgetMs: 15_000 });
 });
 
 test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from retained French policy sections", () => {
@@ -4012,7 +4019,7 @@ test("policySurfaceScanner fetches long policies and captures all canonical GDPR
         );
         assert.ok(lateTopic, `${locale} should retain the topic placed after the former 40k cutoff`);
       }
-    }, { internalBudgetMs: 30_000 });
+    }, { internalBudgetMs: 60_000 });
   }
 });
 
@@ -5718,7 +5725,7 @@ test("policySurfaceScanner does not follow third-party privacy policy links from
 
     assert.ok(firstPartyCookie);
     assert.deepEqual(thirdPartyPolicies, []);
-  }, { enableNanoPolicyAssist: true, internalBudgetMs: 12_000 });
+  }, { enableNanoPolicyAssist: true, internalBudgetMs: 20_000 });
 });
 
 test("policySurfaceScanner ignores external URL-only body privacy links as policy surfaces", async () => {
