@@ -115,12 +115,6 @@ export function projectSnapshotSignals(snapshot: ScanSnapshot, trackerVendors: S
   );
   pushBoolean(
     "privacy",
-    "privacy.sale_sharing_controls_missing",
-    "Sale/sharing controls missing",
-    snapshot.doNotSellLinkPresent === false && snapshot.retargetingPixelDetected === true
-  );
-  pushBoolean(
-    "privacy",
     "privacy.preconsent_tracking_detected",
     "Pre-consent tracking detected",
     observableConsentSurface && snapshot.preconsentTrackingDetected

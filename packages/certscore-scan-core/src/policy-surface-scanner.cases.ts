@@ -2818,6 +2818,19 @@ test("policy lane preserves rendered control proof when static discovery found t
   }
 });
 
+test("policy lane keeps a visible privacy-choice link from the middle of an overflowing DOM", async () => {
+  await withPolicyScan("policy-middle-choice-link", ({ result, baseUrl }) => {
+    const choice = result.policySurfaceObservations.find((surface) =>
+      surface.surfaceType === "your_privacy_choices" &&
+      surface.url.includes("/privacy-control/onetrust/choices") &&
+      surface.linkVisibility === "visible"
+    );
+    assert.ok(choice);
+    assert.equal(choice.selector, "#middle-choices");
+    assert.equal(choice.linkSourcePageUrl, `${baseUrl}/f/policy-middle-choice-link`);
+  }, { discoveryMode: "fast", internalBudgetMs: 12_000 });
+});
+
 test("policySurfaceScanner uses canonical privacy-surface classifier across supported locales", async () => {
   await withPolicyScan("policy-multilingual-surfaces", async ({ result }) => {
     const diagnostics = await readPolicyCaptureDiagnostics(result);

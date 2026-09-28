@@ -154,6 +154,7 @@ export type StaticFixturePage =
   | "policy-image-do-not-sell-link"
   | "policy-unavailable-choice-link"
   | "policy-mixed-choice-labels"
+  | "policy-middle-choice-link"
   | "policy-footer-privacy-delayed"
   | "policy-global-footer-delayed"
   | "policy-gold-caltech-common-path"
@@ -408,6 +409,7 @@ const fixtureSlugs: Record<StaticFixturePage, string> = {
   "policy-image-do-not-sell-link": "policy-image-do-not-sell",
   "policy-unavailable-choice-link": "policy-unavailable-choice",
   "policy-mixed-choice-labels": "policy-mixed-choice-labels",
+  "policy-middle-choice-link": "policy-middle-choice-link",
   "policy-footer-privacy-delayed": "policy-footer-privacy-delayed",
   "policy-global-footer-delayed": "policy-global-footer-delayed",
   "policy-gold-caltech-common-path": "policy-gold-caltech-common-path",
@@ -2984,6 +2986,7 @@ function policyHomeMarkup(caseName: StaticFixturePage): string {
     "policy-image-do-not-sell-link": `<a href="/do-not-sell-or-share"><img alt="Do Not Sell or Share My Personal Information" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" width="24" height="24"></a>`,
     "policy-unavailable-choice-link": `<footer><a href="/privacy-control/missing">Your Privacy Choices</a></footer>`,
     "policy-mixed-choice-labels": `<a id="hidden-dns" href="/privacy-control/onetrust/choices" style="display:none">Do Not Sell or Share My Personal Information</a><footer><a id="visible-choices" href="/privacy-control/onetrust/choices">Your Privacy Choices</a></footer>`,
+    "policy-middle-choice-link": `${Array.from({ length: 600 }, (_, index) => `<button>Item ${index}</button>`).join("")}${Array.from({ length: 45 }, (_, index) => `<a id="hidden-choice-${index}" style="display:none" href="/privacy-control/onetrust/choices">Your Privacy Choices</a>`).join("")}<a id="middle-choices" href="/privacy-control/onetrust/choices">Your Privacy Choices</a>${Array.from({ length: 600 }, (_, index) => `<button>More ${index}</button>`).join("")}`,
     "policy-external-choice-platform": `<a href="/privacy-control/onetrust/choices">Your Privacy Choices</a>`,
     "policy-footer-privacy-delayed": `<span id="delayed-footer-anchor"></span><script>setTimeout(() => { document.getElementById("delayed-footer-anchor").outerHTML = '<a href="/policies/privacy">Privacy Policy</a>'; }, 250);</script>`,
     "policy-global-footer-delayed": `<span id="delayed-global-footer"></span><script>setTimeout(() => { document.getElementById("delayed-global-footer").outerHTML = '<a href="/policies/privacy">Privacy Policy</a><a href="/policies/cookies">Cookie Policy</a><a href="/privacy-center">Privacy Center</a><a href="/do-not-sell-or-share">Do Not Sell or Share My Personal Information</a>'; }, 250);</script>`,

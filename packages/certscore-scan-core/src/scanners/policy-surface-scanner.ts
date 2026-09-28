@@ -20,6 +20,7 @@ import {
   type PrivacySurfaceClassification,
   type PrivacySurfaceMatchStrength,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
+  PRIVACY_SURFACE_PHRASE_REGISTRY,
   privacySurfacePathsForLocale,
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
@@ -4290,10 +4291,11 @@ async function extractRenderedCandidates(
       const headChars = Math.floor(maxChars * 0.65);
       return `${text.slice(0, headChars)}\n\n[CertScore retained tail of oversized rendered text.]\n\n${text.slice(-(maxChars - headChars))}`;
     }, MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS).catch(() => "");
-    const collectPolicyCandidates = ({ maxCandidates, cmpScopes, vendorPattern }: {
+    const collectPolicyCandidates = ({ maxCandidates, cmpScopes, vendorPattern, priorityPhrases }: {
       maxCandidates: number;
       cmpScopes: typeof CMP_POLICY_SCOPES;
       vendorPattern: string;
+      priorityPhrases: string[];
     }) => {
       type RawCandidate = {
         cmpProvider?: string;
@@ -4365,10 +4367,42 @@ async function extractRenderedCandidates(
           ...root.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]"),
         ];
         const remaining = maxCandidates - output.length;
-        const headCount = Math.ceil(remaining / 2);
-        const elements = allElements.length > remaining
-          ? [...allElements.slice(0, headCount), ...allElements.slice(-(remaining - headCount))]
-          : allElements;
+        let elements = allElements;
+        if (allElements.length > remaining) {
+          // Preserve bounded first/last discovery, but reserve a few slots for
+          // registered privacy-choice labels buried in a large middle section.
+          // Classification and visible proof still happen below; this only
+          // prevents the sampling cap from dropping those candidates outright.
+          const priorityMatches = allElements.filter((element) => {
+            if (!element.matches("a[href], button, [role='button'], [role='link']")) return false;
+            const label = normalizeText([
+              element.textContent?.slice(0, 250),
+              element.getAttribute("aria-label"),
+              element.getAttribute("title"),
+              element.querySelector("img[alt]")?.getAttribute("alt"),
+            ].filter(Boolean).join(" ")).normalize("NFKC").toLowerCase();
+            return priorityPhrases.some((phrase) => label.includes(phrase));
+          });
+          const isRectVisible = (element: Element) => [...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0);
+          const priority = [
+            ...priorityMatches.filter(isRectVisible),
+            ...priorityMatches.filter((element) => !isRectVisible(element)),
+          ].slice(0, Math.min(40, remaining));
+          const selected = new Set(priority);
+          const headCount = Math.ceil((remaining - priority.length) / 2);
+          const tailCount = remaining - priority.length - headCount;
+          for (const element of allElements.slice(0, headCount)) selected.add(element);
+          if (tailCount > 0) {
+            for (const element of allElements.slice(-tailCount)) selected.add(element);
+          }
+          if (selected.size < remaining) {
+            for (const element of allElements) {
+              selected.add(element);
+              if (selected.size >= remaining) break;
+            }
+          }
+          elements = [...selected].slice(0, remaining);
+        }
         for (const element of elements) {
           if (output.length >= maxCandidates) break;
           const cmpContext = cmpContextFor(element);
@@ -4442,7 +4476,14 @@ async function extractRenderedCandidates(
     };
     // tsx/esbuild can emit a module-scoped function-name helper. Bind it only
     // within this serialized read, without installing anything on the target.
-    const discoveryArgs = JSON.stringify({ maxCandidates: MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS, cmpScopes: CMP_POLICY_SCOPES, vendorPattern: CMP_VENDOR_SCOPE_PATTERN.source });
+    const discoveryArgs = JSON.stringify({
+      maxCandidates: MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS,
+      cmpScopes: CMP_POLICY_SCOPES,
+      vendorPattern: CMP_VENDOR_SCOPE_PATTERN.source,
+      priorityPhrases: PRIVACY_SURFACE_PHRASE_REGISTRY
+        .filter((phrase) => ["do_not_sell_or_share", "your_privacy_choices"].includes(phrase.surfaceType) && ["direct", "equivalent"].includes(phrase.strength))
+        .map((phrase) => phrase.phrase.normalize("NFKC").toLowerCase()),
+    });
     const rawCandidates = await page.evaluate<ReturnType<typeof collectPolicyCandidates>>(
       `(() => { const __name = (fn) => fn; return (${collectPolicyCandidates.toString()})(${discoveryArgs}); })()`,
     ).catch(() => []);

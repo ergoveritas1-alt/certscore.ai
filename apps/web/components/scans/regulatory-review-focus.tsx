@@ -31,7 +31,7 @@ export function CaliforniaPrivacyWorkpaper({ evidence, focus }: { evidence?: Pri
           const rows = evidence.controls.filter(row => row.kind === kind);
           return <div key={kind}><dt className="font-semibold">{label}</dt><dd>{rows.length ? rows.map(row => <div key={row.evidenceRef} className="mt-1">
             <span>Observed: “{row.label}” · {row.placement.replaceAll("_", " ")}</span>
-            {row.destinationUrl ? <a className="ml-2 break-all text-sky-800 underline" href={row.destinationUrl} target="_blank" rel="noreferrer">Retained destination</a> : <span> · No navigable destination retained</span>}
+            {row.destinationUrl ? <a className="ml-2 break-all text-sky-800 underline" href={row.destinationUrl} target="_blank" rel="noreferrer">Retained destination</a> : <span> · No separate HTTP destination retained; interaction untested</span>}
             <p className="text-xs text-zinc-500">Destination capture: {row.retrieval.replaceAll("_", " ")}. Opt-out execution not tested. Evidence: {row.evidenceRef}</p>
           </div>) : "No retained evidence; absence was not verified."}</dd></div>;
         })}</dl>

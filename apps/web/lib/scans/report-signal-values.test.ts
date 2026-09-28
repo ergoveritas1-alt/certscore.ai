@@ -65,6 +65,10 @@ test("getSnapshotSignalValue derives fallback snapshot signal semantics", () => 
     }, "privacy.consent_surface_missing"),
     true
   );
+  assert.equal(getSnapshotSignalValue({
+    retargeting_pixel_detected: true,
+    do_not_sell_link_present: false,
+  }, "privacy.sale_sharing_controls_missing"), null);
 });
 
 test("isSignalValuePopulated treats risk scores and absent strings consistently", () => {

@@ -1,0 +1,6 @@
+{"packetId":"fixture-s01-visit-a","siteKey":"synthetic-site-01","capture":"complete","evidence":[{"evidenceId":"s01-a1","kind":"anchor","excerpt":"Your Privacy Choices","source":"fixture://homepage/footer"}]}
+{"packetId":"fixture-s01-visit-b","siteKey":"synthetic-site-01","capture":"complete","evidence":[{"evidenceId":"s01-b1","kind":"anchor","excerpt":"Privacy policy","source":"fixture://homepage/footer"}]}
+{"packetId":"fixture-s02","siteKey":"synthetic-site-02","capture":"complete","evidence":[{"evidenceId":"s02-a1","kind":"anchor","excerpt":"Do not sell or share my personal information","source":"fixture://homepage/footer"}]}
+{"packetId":"fixture-s03","siteKey":"synthetic-site-03","capture":"limited","evidence":[{"evidenceId":"s03-a1","kind":"coverage","excerpt":"Anchor scan truncated before footer; no conclusion available","source":"fixture://capture-status"}]}
+{"packetId":"fixture-s04","siteKey":"synthetic-site-04","capture":"complete","evidence":[{"evidenceId":"s04-a1","kind":"anchor","excerpt":"Your privacy choices","source":"fixture://homepage/footer"}]}
+{"packetId":"fixture-s05","siteKey":"synthetic-site-05","capture":"failed","evidence":[{"evidenceId":"s05-a1","kind":"coverage","excerpt":"Evidence capture failed; control state unknown","source":"fixture://capture-status"}]}

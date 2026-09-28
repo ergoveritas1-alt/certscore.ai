@@ -253,6 +253,14 @@ test("does not emit consent snapshot signals when no consent surface was observe
   assert.equal(keys.includes("privacy.dark_pattern_dismiss_without_reject"), false);
 });
 
+test("a legacy false DNS boolean never proves sale/share controls missing", () => {
+  const signals = projectSnapshotSignals(buildSnapshot({
+    doNotSellLinkPresent: false,
+    retargetingPixelDetected: true,
+  }), []);
+  assert.equal(signals.some((signal) => signal.key === "privacy.sale_sharing_controls_missing"), false);
+});
+
 test("emits consent snapshot signals when a consent surface was observed", () => {
   const signals = projectSnapshotSignals(
     buildSnapshot({
