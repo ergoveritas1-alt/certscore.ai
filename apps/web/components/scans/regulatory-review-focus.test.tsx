@@ -39,10 +39,14 @@ test("retained California choices and notices remain accessible only in CCPA foc
   };
   assert.equal(renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="gdpr_eprivacy" evidence={evidence} />), "");
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" evidence={evidence} />);
-  assert.match(html, /1 observed choice · 1 notice/);
+  assert.match(html, /1 observed choice · 1 notice · 1 topic found/);
   assert.match(html, /href="https:\/\/example.test\/choices"/);
   assert.match(html, /You can request deletion/);
-  assert.match(html, /Opt-out functionality and notice completeness were not tested/);
+  assert.match(html, /1 visible, named privacy-choice link was verified/);
+  assert.match(html, /Retained notice text covers privacy rights/);
+  assert.match(html, /View retained passages/);
+  assert.match(html, /Evidence scope/);
+  assert.doesNotMatch(html, /Opt-out functionality and notice completeness were not tested/);
   assert.match(html, /Evidence provenance/);
   assert.doesNotMatch(html, /<details[^>]+open=/);
 });

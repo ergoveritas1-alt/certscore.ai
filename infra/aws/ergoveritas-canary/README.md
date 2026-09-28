@@ -10,7 +10,7 @@ loads six third-party requests covering analytics, advertising, session replay,
 and product measurement. It deliberately leaves this activity unchanged when
 GPC is enabled. A **complete paired comparison** can therefore report no
 observable GPC response; a partial comparison remains indeterminate. The page
-stops any stalled provider fetch after 500 milliseconds, preserving the existing
+stops any stalled provider fetch after 120 milliseconds, preserving the existing
 passive quiet-window budget while retaining the request attempts for inspection.
 It leaves page navigation alone so an early privacy-choice click remains usable.
 The page also retains a first-layer Accept/Reject/Options test banner. Its Reject behavior
