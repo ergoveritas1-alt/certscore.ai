@@ -5617,6 +5617,68 @@ test("materializeLocalV2DagScanDetail records stable GDPR Transparency profile m
   }
 });
 
+test("materializeLocalV2DagScanDetail preserves a source-matched historical privacy workpaper", async () => {
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/legacy-privacy-workpaper-"));
+  const scanId = "legacy-privacy-workpaper-fixture";
+  const completedAt = "2026-09-25T12:00:00.000Z";
+  const pageUrl = "https://example.test/";
+  const destinationUrl = "https://example.test/choices";
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    const bundleBody = Buffer.from(JSON.stringify({
+      completedAt, consentUiObservations: [], cookieEvents: [], modulesRun: [], networkEvents: [],
+      normalizedUrl: pageUrl, normalizedVendorObservations: [],
+      policySurfaceObservations: [{ observationId: "legacy-dns", confidence: 0.92,
+        surfaceType: "do_not_sell_or_share", url: destinationUrl, normalizedUrl: destinationUrl,
+        linkText: "Do Not Sell or Share", linkObservationState: "observed",
+        directlyLinkedFromScannedPage: true, discoveryMethod: "footer_link", status: "observed", fetchable: false }],
+      runtimeCoverage: { coverageStatus: "usable", fallbackModesUsed: [], limitationKeys: [], notes: [],
+        observationCounts: { cookieEvents: 0, cookiesBeforeConsent: 0, networkEvents: 0,
+          normalizedVendors: 0, observedJourneys: 0, thirdPartyRequests: 0 }, silentEmpty: false },
+      runtimeTimeline: [], scanId, schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+      screenshots: [], startedAt: "2026-09-25T11:59:50.000Z", url: pageUrl,
+    }), "utf8");
+    const manifestBody = Buffer.from(JSON.stringify({ auxiliaryArtifacts: [] }), "utf8");
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), bundleBody);
+    await writeFile(path.join(outDir, "LocalV2DagLambdaManifest.json"), manifestBody);
+    const sourceHash = createHash("sha256").update(bundleBody).digest("hex");
+    const workpaper = { contractVersion: "certscore.privacy-audit-evidence.v1", scanId,
+      documentUrl: pageUrl, capturedAt: completedAt, sourceHash, verificationStatus: "verified",
+      scoreEffect: "none", passagePolicy: "california_notice_passages.v1",
+      controls: [{ kind: "do_not_sell_or_share", label: "Do Not Sell or Share", sourceUrl: pageUrl,
+        destinationUrl: null, placement: "footer_link", evidenceRef: "policy-surface:legacy-dns",
+        retrieval: "not_attempted", interaction: "not_tested" }], notices: [],
+      negativeControlCoverage: "not_verified", collectionPointNoticeAssessment: "not_assessed", truncated: false };
+    const record = makeScanRecord({
+      runtimeArtifacts: { privacyAuditEvidence: workpaper },
+      events: [{ createdAt: completedAt, eventType: "v2_lambda_result.received", id: "legacy-result",
+        message: "Verified Lambda artifacts retained.", metadataJson: { artifactAccess: { productionReadMode: "verified_s3" },
+          artifactOnly: true, artifactMetadata: {
+            manifestUri: { sha256: createHash("sha256").update(manifestBody).digest("hex"), sizeBytes: manifestBody.byteLength },
+            scanArtifactUri: { sha256: sourceHash, sizeBytes: bundleBody.byteLength },
+          }, artifactPointers: { manifestUri: "s3://test-policy-artifacts/LocalV2DagLambdaManifest.json",
+            scanArtifactUri: "s3://test-policy-artifacts/CanonicalEvidenceBundle.json" },
+          processor: LOCAL_V2_DAG_SCAN_PROCESSOR, productionFindingIntegration: false } }],
+      scan: { ...makeScanRecord().scan, id: scanId, domainHostname: "example.test",
+        scanConfigJson: { hostname: "example.test", normalizedUrl: pageUrl, processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+          execution: { localV2Dag: { outDir }, v2DagParallel: { artifactOnly: true, localOnly: true,
+            profile: "standard", productionFindingIntegration: false } } } },
+    } as Partial<ScanDetailResponse>);
+    const materialized = await materializeLocalV2DagScanDetail(record, { requireBundle: true });
+    assert.deepEqual(materialized.runtimeArtifacts?.privacyAuditEvidence, workpaper);
+    const stale = await materializeLocalV2DagScanDetail({ ...record, runtimeArtifacts: {
+      privacyAuditEvidence: { ...workpaper, sourceHash: "b".repeat(64) },
+    } }, { requireBundle: true });
+    assert.deepEqual((stale.runtimeArtifacts?.privacyAuditEvidence as { controls?: unknown[] } | undefined)?.controls, []);
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});
+
 test("materializeLocalV2DagScanDetail verifies a checksum-matching local policy mirror", async () => {
   const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
   const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;

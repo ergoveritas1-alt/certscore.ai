@@ -1,4 +1,4 @@
-import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
+import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
 import { projectFormDestinations } from "./form-destination-projection";
 import { projectCmsSecurity } from "./cms-security-projection";
@@ -6037,7 +6037,10 @@ function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
-    privacyAuditEvidence: runtimeEvidenceReportable ? projectPrivacyAuditEvidence(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
+    privacyAuditEvidence: runtimeEvidenceReportable ? projectPrivacyAuditEvidenceForMaterialization(
+      bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl,
+      inheritedRuntimeArtifacts.privacyAuditEvidence,
+    ) : null,
     formSnapshots: verifiedFormSnapshots(bundle).map(({ snapshot: { data: _data, ...metadata } }) => metadata),
     siteIntegrity: runtimeEvidenceReportable ? projectSiteIntegrity(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null,
     formDestinations: runtimeEvidenceReportable ? projectFormDestinations(bundle, options.policyTextEvidenceContext?.sourceBundle) : null,
@@ -6516,7 +6519,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v21";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v22";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
@@ -6737,6 +6740,7 @@ export async function materializeLocalV2DagScanDetail(
     input.scanArtifactSha256,
     input.manifestArtifactSha256 ?? "no-manifest",
     getProductionPolicyModelReviewRevision(scanRecord.runtimeArtifacts),
+    createHash("sha256").update(JSON.stringify(scanRecord.runtimeArtifacts?.privacyAuditEvidence ?? null)).digest("hex").slice(0, 16),
     reportGeneration.eventCount,
     reportGeneration.latestEventId ?? "no-events",
     options.requireBundle === true ? "required" : "optional"

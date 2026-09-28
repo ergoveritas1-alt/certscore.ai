@@ -15,6 +15,8 @@ export const privacyAuditEvidenceOpenApi = {
         kind: { type: "string", enum: ["do_not_sell_or_share", "your_privacy_choices", "cookie_settings"] },
         label: { type: "string", maxLength: 200 }, sourceUrl: evidenceUrl, destinationUrl: { ...evidenceUrl, type: ["string", "null"] },
         placement: { type: "string", maxLength: 80 }, evidenceRef: { type: "string", minLength: 1, maxLength: 240 },
+        classificationProvenance: { type: "string", const: "privacy_surface_classifier.v1" },
+        accessibleNameSource: { type: "string", enum: ["aria_label", "aria_labelledby", "text", "image_alt", "svg_title", "title"] },
         retrieval: { type: "string", enum: ["not_attempted", "fetched", "failed", "skipped_budget"] }, interaction: { type: "string", const: "not_tested" },
       },
     } },

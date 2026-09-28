@@ -12,6 +12,15 @@ test("privacy workpaper schema rejects unsafe URLs and unsupported conclusions w
   for (const overrides of [{ scoreEffect: "deduct" }, { negativeControlCoverage: "absent" }, { collectionPointNoticeAssessment: "compliant" }, { contractVersion: "unknown" }]) assert.equal(privacyAuditEvidenceSchema.safeParse({ ...evidence, ...overrides }).success, false);
 });
 
+test("historical v1 workpapers remain readable without new control proof fields", () => {
+  const legacy = { ...evidence, controls: [{
+    kind: "do_not_sell_or_share", label: "Do Not Sell or Share", sourceUrl: "https://example.test/",
+    destinationUrl: null, placement: "footer_link", evidenceRef: "policy-surface:legacy",
+    retrieval: "not_attempted", interaction: "not_tested",
+  }] };
+  assert.ok(privacyAuditEvidenceSchema.safeParse(legacy).success);
+});
+
 test("OpenAPI publishes the bounded, score-neutral workpaper under the scan resource", () => {
   const document = buildCertScoreApiV2OpenApiDocument();
   assert.equal(document.components.schemas.Scan.properties.privacyAuditEvidence.$ref, "#/components/schemas/PrivacyAuditEvidence");

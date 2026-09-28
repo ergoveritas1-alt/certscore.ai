@@ -169,6 +169,8 @@ export interface PolicySurfaceScannerResult {
 }
 
 export type RetainedRenderedPolicyLink = {
+  linkVisibility?: "visible" | "hidden";
+  accessibleNameSource?: "aria_label" | "aria_labelledby" | "text" | "image_alt" | "svg_title" | "title" | "none";
   documentLanguage?: string;
   domLocation: "footer" | "header" | "nav" | "body";
   href: string;
@@ -226,6 +228,8 @@ function policySurfaceCandidatesFromRetainedRenderedLinks(
       url: link.href,
       normalizedUrl: link.href,
       linkText: link.linkText || link.href,
+      linkVisibility: link.linkVisibility,
+      accessibleNameSource: link.accessibleNameSource,
       selector: link.selector,
       renderedSourcePageUrl: link.pageUrl,
       domLocation: link.domLocation,
@@ -263,12 +267,31 @@ export function mergePolicySurfaceObservations(
       if (existingById && existingById[0] !== key) {
         merged.delete(existingById[0]);
       }
-      merged.set(key, { ...observation, cmpDiscovery: mergeCmpPolicyProvenance(observation.cmpDiscovery, existing?.cmpDiscovery) });
+      merged.set(key, mergeVisibleLinkProof({ ...observation, cmpDiscovery: mergeCmpPolicyProvenance(observation.cmpDiscovery, existing?.cmpDiscovery) }, existing));
     } else if (existing) {
-      merged.set(existingById?.[0] ?? key, { ...existing, cmpDiscovery: mergeCmpPolicyProvenance(existing.cmpDiscovery, observation.cmpDiscovery) });
+      merged.set(existingById?.[0] ?? key, mergeVisibleLinkProof({ ...existing, cmpDiscovery: mergeCmpPolicyProvenance(existing.cmpDiscovery, observation.cmpDiscovery) }, observation));
     }
   }
   return [...merged.values()];
+}
+
+function mergeVisibleLinkProof(
+  preferred: PolicySurfaceObservation,
+  other: PolicySurfaceObservation | undefined,
+): PolicySurfaceObservation {
+  if (preferred.linkVisibility === "visible" || other?.linkVisibility !== "visible" ||
+      other.linkObservationState !== "observed" || other.directlyLinkedFromScannedPage !== true) return preferred;
+  return {
+    ...preferred,
+    linkVisibility: "visible",
+    accessibleNameSource: other.accessibleNameSource,
+    classifierProvenance: other.classifierProvenance,
+    classifierReasonCodes: other.classifierReasonCodes,
+    linkText: other.linkText,
+    linkObservationState: other.linkObservationState,
+    directlyLinkedFromScannedPage: true,
+    discoveryMethod: other.discoveryMethod,
+  };
 }
 
 export function applyGoverningPolicySelection(
@@ -480,6 +503,8 @@ export interface NanoTopicExtractionResult {
 }
 
 export interface PolicySurfaceCandidate {
+  linkVisibility?: "visible" | "hidden";
+  accessibleNameSource?: RetainedRenderedPolicyLink["accessibleNameSource"];
   cmpDiscovery?: PolicySurfaceObservation["cmpDiscovery"];
   candidateId: string;
   url: string;
@@ -6241,6 +6266,8 @@ function observationFromCandidate(
     url: candidate.url,
     normalizedUrl: candidate.normalizedUrl,
     linkText: candidate.linkText,
+    linkVisibility: candidate.linkVisibility,
+    accessibleNameSource: candidate.accessibleNameSource,
     parentObservationId: candidate.parentObservationId,
     parentSurfaceUrl: candidate.parentSurfaceUrl,
     traversalDepth: candidate.traversalDepth ?? 0,

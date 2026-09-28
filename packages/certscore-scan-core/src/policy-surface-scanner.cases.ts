@@ -2152,6 +2152,27 @@ test("fetched policy evidence outranks a supplemental rendered-link observation"
   assert.equal(countRecoveredPolicySurfaceObservations([fetched], [observed]), 0);
 });
 
+test("fetched duplicate preserves the visible rendered control's label and classifier proof", () => {
+  const visible = policySurfaceObservationsFromRetainedRenderedLinks({ links: [{
+    domLocation: "footer", href: "https://example.com/do-not-sell", linkText: "Do Not Sell or Share",
+    pageUrl: "https://example.com/", linkVisibility: "visible", accessibleNameSource: "image_alt",
+  }] })[0];
+  assert.ok(visible);
+  const fetched = { ...visible, status: "fetched" as const, linkText: "Read more",
+    linkVisibility: undefined, accessibleNameSource: undefined,
+    directlyLinkedFromScannedPage: false, classifierProvenance: undefined,
+    textExcerpt: "Substantive retained policy text." };
+  const merged = mergePolicySurfaceObservations([fetched], [visible]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.status, "fetched");
+  assert.equal(merged[0]?.textExcerpt, "Substantive retained policy text.");
+  assert.equal(merged[0]?.linkVisibility, "visible");
+  assert.equal(merged[0]?.accessibleNameSource, "image_alt");
+  assert.equal(merged[0]?.linkText, "Do Not Sell or Share");
+  assert.equal(merged[0]?.classifierProvenance, "privacy_surface_classifier.v1");
+  assert.equal(merged[0]?.directlyLinkedFromScannedPage, true);
+});
+
 test("fetched policy evidence replaces the same observation after a canonical redirect", () => {
   const observed = policySurfaceObservationsFromRetainedRenderedLinks({
     links: [{

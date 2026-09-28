@@ -26,6 +26,8 @@ export const privacyAuditEvidenceSchema = z.object({
     destinationUrl: evidenceUrl.nullable(),
     placement: z.string().max(80),
     evidenceRef: z.string().min(1).max(240),
+    classificationProvenance: z.literal("privacy_surface_classifier.v1").optional(),
+    accessibleNameSource: z.enum(["aria_label", "aria_labelledby", "text", "image_alt", "svg_title", "title"]).optional(),
     retrieval: z.enum(["not_attempted", "fetched", "failed", "skipped_budget"]),
     interaction: z.literal("not_tested"),
   }).strict()).max(12),
