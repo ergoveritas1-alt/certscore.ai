@@ -22,5 +22,5 @@ export type GpcActivityComparison = z.infer<typeof gpcActivityComparisonSchema>;
 
 export function describeGpcActivityComparison(value: GpcActivityComparison): string {
   const a = value.activity.advertisingMarketing, b = value.activity.analyticsReplay;
-  return `Baseline -> GPC, first ${value.durationMs} ms: advertising/marketing requests ${a.baselineRequests} -> ${a.gpcRequests}; analytics/replay requests ${b.baselineRequests} -> ${b.gpcRequests}.`;
+  return `Baseline -> GPC, first ${value.durationMs} ms after each document commit: advertising/marketing requests ${a.baselineRequests} -> ${a.gpcRequests}; analytics/replay requests ${b.baselineRequests} -> ${b.gpcRequests}.`;
 }

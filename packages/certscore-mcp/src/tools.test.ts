@@ -1926,7 +1926,7 @@ test("GPC v3 MCP text preserves completed bounded findings alongside an indeterm
   const text = scanBundleText(bundle);
   assert.match(text, /GPC observation: Bounded GPC observation completed/);
   assert.match(text, /1 classified/);
-  assert.match(text, /Baseline -> GPC, first 1000 ms: advertising\/marketing requests 2 -> 1/);
+  assert.match(text, /Baseline -> GPC, first 1000 ms after each document commit: advertising\/marketing requests 2 -> 1/);
   assert.deepEqual(bundle.gpcResponse.activityComparison, activityComparison);
   assert.match(text, /status=indeterminate/);
   assert.equal(bundle.gpcResponse.observation.registration.sale, "unknown");
