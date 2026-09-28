@@ -584,6 +584,8 @@ export interface PreConsentRuntimeScannerResult {
 }
 
 export type RetainedRenderedPolicyLink = {
+  linkVisibility?: "visible" | "hidden";
+  accessibleNameSource?: "aria_label" | "aria_labelledby" | "text" | "image_alt" | "svg_title" | "title" | "none";
   documentLanguage?: string;
   domLocation: "footer" | "header" | "nav" | "body";
   href: string;
@@ -4951,6 +4953,8 @@ type ConsolidatedPageEvidenceSnapshot = {
   sessionStorageReadComplete: boolean;
   pageUrl: string;
   links: Array<{
+    linkVisibility?: "visible" | "hidden";
+    accessibleNameSource?: RetainedRenderedPolicyLink["accessibleNameSource"];
     documentLanguage?: string;
     domLocation: "footer" | "header" | "nav" | "body";
     href: string;
@@ -5378,11 +5382,30 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
     const renderedLinks = selectedAnchors.flatMap((element) => {
       const href = element.getAttribute("href")?.trim();
       if (!href) return [];
-      const linkText = [
-        element.textContent,
-        element.getAttribute("aria-label"),
-        element.getAttribute("title"),
-      ].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
+      const labelledBy = element.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
+        .map((id) => (element.getRootNode() as Document | ShadowRoot).getElementById(id)?.textContent ?? "")
+        .join(" ");
+      const names = [
+        ["aria_label", element.getAttribute("aria-label")],
+        ["aria_labelledby", labelledBy],
+        ["text", element.innerText],
+        ["image_alt", [...element.querySelectorAll("img[alt]")].map((img) => img.getAttribute("alt")).join(" ")],
+        ["svg_title", element.querySelector("svg title")?.textContent],
+        ["title", element.getAttribute("title")],
+      ] as const;
+      const named = names.find(([, value]) => value?.trim());
+      const linkText = (named?.[1] ?? "").replace(/\s+/g, " ").trim().slice(0, 220);
+      const accessibleNameSource: RetainedRenderedPolicyLink["accessibleNameSource"] = named?.[0] ?? "none";
+      let linkVisibility: "visible" | "hidden" = "visible";
+      for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
+        const style = getComputedStyle(current);
+        if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
+            current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) {
+          linkVisibility = "hidden";
+          break;
+        }
+      }
+      if (!element.getClientRects().length || ![...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0)) linkVisibility = "hidden";
       const domLocation = element.closest("footer")
         ? "footer" as const
         : element.closest("header")
@@ -5396,6 +5419,8 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
         domLocation,
         href,
         linkText,
+        linkVisibility,
+        accessibleNameSource,
         ...(id ? { selector: `#${id.replace(/[^a-zA-Z0-9_-]/g, "")}` } : {}),
       }];
     });
@@ -5518,7 +5543,7 @@ function retainedRenderedPolicyLinks(
   pageUrl: string,
 ): RetainedRenderedPolicyLink[] {
   const retained: RetainedRenderedPolicyLink[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, number>();
   for (const row of rows) {
     let href: string;
     try {
@@ -5532,30 +5557,40 @@ function retainedRenderedPolicyLinks(
     const classification = classifyPrivacySurface({ linkText: row.linkText, url: href });
     if (classification.surfaceType === "unknown" || classification.confidence <= 0.2) continue;
     const key = `${classification.surfaceType}:${href}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const existingIndex = seen.get(key);
+    if (existingIndex !== undefined) {
+      if (retained[existingIndex]?.linkVisibility !== "visible" && row.linkVisibility === "visible")
+        retained[existingIndex] = { ...row, href, pageUrl };
+      continue;
+    }
+    if (retained.length >= 40) continue;
+    seen.set(key, retained.length);
     retained.push({ ...row, href, pageUrl });
-    if (retained.length >= 40) break;
   }
   return retained;
 }
 
-function mergeRetainedRenderedPolicyLinks(
+export function mergeRetainedRenderedPolicyLinks(
   ...groups: RetainedRenderedPolicyLink[][]
 ): RetainedRenderedPolicyLink[] {
   const retained: RetainedRenderedPolicyLink[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, number>();
   for (const link of groups.flat()) {
-    const key = link.href;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    const key = `${classifyPrivacySurface({ linkText: link.linkText, url: link.href }).surfaceType}:${link.href}`;
+    const existingIndex = seen.get(key);
+    if (existingIndex !== undefined) {
+      if (retained[existingIndex]?.linkVisibility !== "visible" && link.linkVisibility === "visible")
+        retained[existingIndex] = link;
+      continue;
+    }
+    if (retained.length >= 40) continue;
+    seen.set(key, retained.length);
     retained.push(link);
-    if (retained.length >= 40) break;
   }
   return retained;
 }
 
-async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedPolicyLink[]> {
+export async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedPolicyLink[]> {
   const snapshot = await page.evaluate(() => {
     const elements: HTMLAnchorElement[] = [];
     const pendingRoots: Array<Document | ShadowRoot> = [document];
@@ -5579,8 +5614,30 @@ async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedP
       links: selected.flatMap((element) => {
         const href = element.getAttribute("href")?.trim();
         if (!href) return [];
-        const linkText = [element.textContent, element.getAttribute("aria-label"), element.getAttribute("title")]
-          .filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 220);
+        const labelledBy = element.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
+          .map((id) => (element.getRootNode() as Document | ShadowRoot).getElementById(id)?.textContent ?? "")
+          .join(" ");
+        const names = [
+          ["aria_label", element.getAttribute("aria-label")],
+          ["aria_labelledby", labelledBy],
+          ["text", element.innerText],
+          ["image_alt", [...element.querySelectorAll("img[alt]")].map((img) => img.getAttribute("alt")).join(" ")],
+          ["svg_title", element.querySelector("svg title")?.textContent],
+          ["title", element.getAttribute("title")],
+        ] as const;
+        const named = names.find(([, value]) => value?.trim());
+        const linkText = (named?.[1] ?? "").replace(/\s+/g, " ").trim().slice(0, 220);
+        const accessibleNameSource: RetainedRenderedPolicyLink["accessibleNameSource"] = named?.[0] ?? "none";
+        let linkVisibility: "visible" | "hidden" = "visible";
+        for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
+          const style = getComputedStyle(current);
+          if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
+              current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) {
+            linkVisibility = "hidden";
+            break;
+          }
+        }
+        if (!element.getClientRects().length || ![...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0)) linkVisibility = "hidden";
         const domLocation = element.closest("footer")
           ? "footer" as const
           : element.closest("header")
@@ -5593,6 +5650,8 @@ async function captureRenderedPolicyLinks(page: Page): Promise<RetainedRenderedP
           domLocation,
           href,
           linkText,
+          linkVisibility,
+          accessibleNameSource,
         }];
       }),
     };

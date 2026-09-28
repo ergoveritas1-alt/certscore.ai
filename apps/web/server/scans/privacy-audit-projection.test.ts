@@ -3,7 +3,7 @@ import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { privacyAuditEvidenceSchema } from "@certscore/api-contracts";
 import { readPrivacyAuditEvidence, resolveReportReviewFocus, reviewFocusScopeNote, reportUrlWithFocus } from "../../lib/scans/report-review-focus";
-import { projectPrivacyAuditEvidence } from "./privacy-audit-projection";
+import { projectPrivacyAuditEvidence, projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 
 const url = "https://example.test/";
 const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
@@ -15,6 +15,7 @@ function bundle(surfaces: Array<Record<string, unknown>> = [], overrides: Record
 function surface(overrides: Record<string, unknown> = {}) {
   return { observationId: "dns", surfaceType: "do_not_sell_or_share", url: `${url}choices`,
     linkText: "Do Not Sell or Share My Personal Information", linkObservationState: "observed",
+    linkVisibility: "visible", accessibleNameSource: "text", classifierProvenance: "privacy_surface_classifier.v1",
     directlyLinkedFromScannedPage: true, discoveryMethod: "footer_link", documentFetchState: "not_attempted", ...overrides };
 }
 
@@ -33,8 +34,8 @@ test("only verified retained bundles produce a score-neutral privacy workpaper",
 
 test("DNS, privacy choices and cookie settings remain distinct; rights and guessed paths do not prove controls", () => {
   const result = projectPrivacyAuditEvidence(bundle([
-    surface(), surface({ observationId: "choices", linkText: "Your California Privacy Choices" }),
-    surface({ observationId: "cookies", linkText: "Cookie Settings" }),
+    surface(), surface({ observationId: "choices", surfaceType: "your_privacy_choices", linkText: "Your California Privacy Choices" }),
+    surface({ observationId: "cookies", surfaceType: "cookie_settings", linkText: "Cookie Settings" }),
     surface({ observationId: "rights", linkText: "Exercise your privacy rights" }),
     surface({ observationId: "guessed", discoveryMethod: "common_path" }),
     surface({ observationId: "nested", traversalDepth: 1, parentObservationId: "privacy" }),
@@ -42,6 +43,60 @@ test("DNS, privacy choices and cookie settings remain distinct; rights and guess
   ]), source, url)!;
   assert.deepEqual(result.controls.map(row => row.kind), ["do_not_sell_or_share", "your_privacy_choices", "cookie_settings"]);
   assert.ok(result.controls.every(row => row.interaction === "not_tested"));
+});
+
+test("non-fetchable observed DNS links keep all six retained production destinations", () => {
+  const destinations = [
+    "https://www.pdfescape.com/ccpa/",
+    "https://datatrust.coca-cola.com/us/en/notices/do-not-sell-or-share-my-personal-information",
+    "https://www.geocaching.com/account/documents/donotsell",
+    "https://preferences.snyk.io/dont_sell",
+    "https://www.imvu.com/next/policyhub/ccpa/",
+    "https://forms.progress.com/ccpa-subscription",
+  ];
+  const result = projectPrivacyAuditEvidence(bundle(destinations.map((destination, index) => surface({
+    observationId: `dns-${index}`, url: destination, normalizedUrl: destination, fetchable: false,
+    documentFetchState: "not_attempted",
+  }))), source, url)!;
+  assert.deepEqual(result.controls.map((control) => control.destinationUrl), destinations);
+  assert.ok(result.controls.every((control) => control.retrieval === "not_attempted" && control.interaction === "not_tested"));
+});
+
+test("visible named controls require typed proof; historical and hidden candidates do not gain new control claims", () => {
+  const cases = [
+    surface({ observationId: "hidden", linkVisibility: "hidden" }),
+    surface({ observationId: "legacy", linkVisibility: undefined, accessibleNameSource: undefined }),
+    surface({ observationId: "url-only", linkText: "", accessibleNameSource: "none", url: `${url}do-not-sell` }),
+    surface({ observationId: "generic", linkText: "Learn more", url: `${url}do-not-sell` }),
+  ];
+  for (const candidate of cases) assert.deepEqual(projectPrivacyAuditEvidence(bundle([candidate]), source, url)?.controls, []);
+  const icon = projectPrivacyAuditEvidence(bundle([surface({
+    observationId: "icon", linkText: "Do Not Sell or Share", accessibleNameSource: "image_alt",
+    url: `${url}do-not-sell`, fetchable: false,
+  })]), source, url)!;
+  assert.equal(icon.controls[0]?.accessibleNameSource, "image_alt");
+  assert.equal(icon.controls[0]?.classificationProvenance, "privacy_surface_classifier.v1");
+  assert.equal(icon.controls[0]?.destinationUrl, `${url}do-not-sell`);
+  for (const raw of ["#privacy", "javascript:openChoices()", "/"]) {
+    const candidate = surface({ observationId: raw, url: raw, normalizedUrl: url, fetchable: false });
+    assert.equal(projectPrivacyAuditEvidence(bundle([candidate]), source, url)?.controls[0]?.destinationUrl, null);
+  }
+});
+
+test("historical workpaper survives rematerialization only with the same verified scan, source and document", () => {
+  const historicalBundle = bundle([surface({ linkVisibility: undefined, accessibleNameSource: undefined })]);
+  const oldWorkpaper = { ...projectPrivacyAuditEvidence(bundle([surface()]), source, url)!,
+    controls: [{ kind: "do_not_sell_or_share" as const, label: "Do Not Sell or Share My Personal Information",
+      sourceUrl: url, destinationUrl: `${url}choices`, placement: "footer_link", evidenceRef: "policy-surface:dns",
+      retrieval: "not_attempted" as const, interaction: "not_tested" as const }] };
+  const materialized = projectPrivacyAuditEvidenceForMaterialization(historicalBundle, source, url, oldWorkpaper);
+  assert.deepEqual(materialized, oldWorkpaper);
+  for (const stale of [
+    { ...oldWorkpaper, scanId: "other" }, { ...oldWorkpaper, sourceHash: "b".repeat(64) },
+    { ...oldWorkpaper, documentUrl: "https://other.test/" }, { ...oldWorkpaper, capturedAt: "2026-09-24T12:00:00.000Z" },
+  ]) assert.deepEqual(projectPrivacyAuditEvidenceForMaterialization(historicalBundle, source, url, stale)?.controls, []);
+  assert.deepEqual(projectPrivacyAuditEvidenceForMaterialization(bundle([surface()]), source, url, oldWorkpaper)?.controls[0]?.accessibleNameSource, "text");
+  assert.equal(projectPrivacyAuditEvidenceForMaterialization(historicalBundle, { ...source, verificationStatus: "unverified" }, url, oldWorkpaper), null);
 });
 
 test("dynamic controls require visible geometry and same-document retained proof", () => {

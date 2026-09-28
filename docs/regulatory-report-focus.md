@@ -26,10 +26,22 @@ rescan is triggered.
 
 Direct observed links distinguish Do Not Sell/Share, Your Privacy Choices and
 Cookie Settings. A common-path fetch, nested policy link or generic rights link
-does not prove a starting-page opt-out control. Visible JavaScript controls need
-retained geometry and matching document identity. Missing controls remain
-unknown because existing privacy-policy search does not establish complete
-privacy-choice inspection.
+does not prove a starting-page opt-out control. New rendered-link observations
+retain typed visibility and accessible-name source from the existing browser
+capture. Only a visible, named link with matching typed classifier evidence can
+enter the workpaper; hidden and URL-only links remain discovery candidates.
+Retained, display-safe HTTP destinations remain available even when document
+fetching was not permitted or attempted. Fragment, JavaScript and self links
+retain a null destination; retrieval and interaction states remain separate.
+Visible JavaScript controls need retained geometry and matching document
+identity. Missing controls remain unknown because existing privacy-policy
+search does not establish complete privacy-choice inspection.
+
+Historical persisted v1 workpapers remain readable. When report navigation
+rematerializes an older bundle without link-visibility fields, it preserves an
+existing workpaper only if its scan ID, verified source hash, document URL and
+capture time match that bundle. A new projection from old raw evidence alone
+does not infer visibility or add a control.
 
 Only usable, target-owned retained policy text can supply notice passages.
 `california_notice_passages.v1` locates bounded topic excerpts deterministically;

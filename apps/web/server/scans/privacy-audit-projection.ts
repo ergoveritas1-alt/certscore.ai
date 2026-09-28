@@ -10,6 +10,15 @@ function safeUrl(value: string | undefined) {
   } catch { return null; }
 }
 
+function observedDestination(rawHref: string | undefined, pageUrl: string): string | null {
+  if (!rawHref || /^(?:#|javascript:|data:|about:)/i.test(rawHref.trim())) return null;
+  try {
+    const resolved = new URL(rawHref, pageUrl);
+    const destination = safeUrl(resolved.toString());
+    return destination && destination !== pageUrl ? destination : null;
+  } catch { return null; }
+}
+
 /** Called only during canonical materialization after original bundle checksum
  * verification. This is an observational workpaper, never a finding generator. */
 export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null): PrivacyAuditEvidence | null {
@@ -27,12 +36,19 @@ export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, sou
       !surface.parentObservationId && !surface.traversalDepth &&
       ["footer_link", "header_link", "page_text_link"].includes(surface.discoveryMethod);
     const classification = classifyPrivacySurface({ linkText: surface.linkText ?? "" });
-    const kind = classification.surfaceType;
-    if (directLink && (kind === "do_not_sell_or_share" || kind === "your_privacy_choices" || kind === "cookie_settings") &&
-        surface.linkText && !controls.some(row => row.kind === kind && row.destinationUrl === url && row.label === surface.linkText?.slice(0, 200))) {
+    const kind = surface.surfaceType;
+    const destinationUrl = observedDestination(surface.url, pageUrl);
+    const visibleControl = directLink && surface.linkVisibility === "visible" &&
+      surface.accessibleNameSource && surface.accessibleNameSource !== "none" &&
+      surface.classifierProvenance === "privacy_surface_classifier.v1" &&
+      classification.surfaceType === kind;
+    if (visibleControl && (kind === "do_not_sell_or_share" || kind === "your_privacy_choices" || kind === "cookie_settings") &&
+        surface.linkText && !controls.some(row => row.kind === kind && row.destinationUrl === destinationUrl && row.label === surface.linkText?.slice(0, 200))) {
       controls.push({ kind, label: surface.linkText.slice(0, 200), sourceUrl: pageUrl,
-        destinationUrl: surface.fetchable === false ? null : url, placement: surface.discoveryMethod,
-        evidenceRef, retrieval: surface.documentFetchState ?? "not_attempted", interaction: "not_tested" });
+        destinationUrl, placement: surface.discoveryMethod,
+        evidenceRef, classificationProvenance: surface.classifierProvenance,
+        accessibleNameSource: surface.accessibleNameSource === "none" ? undefined : surface.accessibleNameSource,
+        retrieval: surface.documentFetchState ?? "not_attempted", interaction: "not_tested" });
     }
     // Ownership and retained usable text are required independently of discovery.
     if ((surface.surfaceType === "privacy_policy" || surface.surfaceType === "california_notice" || surface.surfaceType === "notice_at_collection") &&
@@ -71,4 +87,25 @@ export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, sou
     collectionPointNoticeAssessment: "not_assessed", truncated: controls.length > 12 || notices.length > 4,
   });
   return result.success ? result.data : null;
+}
+
+/** Preserve a persisted, source-bound v1 workpaper when reading a historical
+ * bundle that predates typed link-visibility capture. New bundles project
+ * solely from their verified observations. */
+export function projectPrivacyAuditEvidenceForMaterialization(
+  bundle: CanonicalEvidenceBundle,
+  source: { sha256?: string; verificationStatus?: string } | undefined,
+  documentUrl: string | null,
+  existing: unknown,
+): PrivacyAuditEvidence | null {
+  const projected = projectPrivacyAuditEvidence(bundle, source, documentUrl);
+  if (!projected || bundle.policySurfaceObservations?.some((surface) => surface.linkVisibility !== undefined)) return projected;
+  const persisted = privacyAuditEvidenceSchema.safeParse(existing);
+  if (!persisted.success) return projected;
+  const workpaper = persisted.data;
+  return workpaper.scanId === bundle.scanId &&
+    workpaper.sourceHash === projected.sourceHash &&
+    workpaper.documentUrl === projected.documentUrl &&
+    workpaper.capturedAt === projected.capturedAt
+    ? workpaper : projected;
 }
