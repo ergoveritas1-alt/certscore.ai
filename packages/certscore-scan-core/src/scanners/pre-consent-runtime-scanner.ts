@@ -2058,9 +2058,7 @@ export async function preConsentRuntimeScanner(
       ]),
     );
     retainedGpcSignalObservation = gpcSignalObservation;
-    // Keep the impact listener live through the remaining work in this same
-    // session. Freezing here would miss later request events and navigation
-    // drift while the retained bundle is still being assembled.
+    impactCapture?.finish(gpcSignalObservation);
     // Sparse-page confirmation is already required later in this session. Keep
     // its GPC listener alive through that work, then take the same single read.
     // The overlapping document proof stays anchored here: navigation during the
