@@ -44,8 +44,22 @@ export function HomepageFindingsOverview() {
               <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-slate-500">{String(active + 1).padStart(2, "0")} / {HOMEPAGE_SHOWCASE.length}</span>
             </p>
           </div>
-          <div id="showcase-content" className="grid lg:grid-cols-[1.45fr_1fr]">
-            <div className="min-w-0 border-b border-slate-200 bg-slate-50 lg:border-b-0 lg:border-r">
+          <div id="showcase-content" className="grid lg:grid-cols-[1fr_1.45fr]">
+            <div className="flex min-w-0 flex-col p-6 sm:p-8">
+              <div aria-live="polite" aria-atomic="true">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">{slide.category}</p>
+                <h3 className="mt-3 text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-3xl">{slide.title}</h3>
+                <p className="mt-4 text-base leading-7 text-slate-600">{slide.description}</p>
+                <ul className="mt-5 space-y-2 text-sm leading-6 text-slate-700">
+                  {slide.highlights.map((item) => <li key={item} className="flex gap-3"><span aria-hidden="true" className="text-sky-600">✓</span>{item}</li>)}
+                </ul>
+                <p className="mt-6 border-l-2 border-sky-400 pl-4 text-sm leading-6 text-slate-600">{slide.result}</p>
+              </div>
+              <a href={slide.href} className={`mt-6 inline-flex min-h-11 items-center gap-2 self-start text-sm font-semibold text-sky-700 hover:underline ${focus}`}>{slide.linkLabel} <span aria-hidden="true">↗</span></a>
+
+            </div>
+
+            <div className="min-w-0 border-t border-slate-200 bg-slate-50 lg:border-l lg:border-t-0">
               <div className="flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 sm:px-6">
                 <p className="text-xs font-medium text-slate-500">{previewLabel}</p>
                 {slide.json !== undefined && (
@@ -65,20 +79,6 @@ export function HomepageFindingsOverview() {
                   </button>
                 ) : null}
               </div>
-            </div>
-
-            <div className="flex min-w-0 flex-col p-6 sm:p-8">
-              <div aria-live="polite" aria-atomic="true">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">{slide.category}</p>
-                <h3 className="mt-3 text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-3xl">{slide.title}</h3>
-                <p className="mt-4 text-base leading-7 text-slate-600">{slide.description}</p>
-                <ul className="mt-5 space-y-2 text-sm leading-6 text-slate-700">
-                  {slide.highlights.map((item) => <li key={item} className="flex gap-3"><span aria-hidden="true" className="text-sky-600">✓</span>{item}</li>)}
-                </ul>
-                <p className="mt-6 border-l-2 border-sky-400 pl-4 text-sm leading-6 text-slate-600">{slide.result}</p>
-              </div>
-              <a href={slide.href} className={`mt-6 inline-flex min-h-11 items-center gap-2 self-start text-sm font-semibold text-sky-700 hover:underline ${focus}`}>{slide.linkLabel} <span aria-hidden="true">↗</span></a>
-
             </div>
           </div>
         </div>
