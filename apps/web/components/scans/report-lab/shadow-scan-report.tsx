@@ -55,6 +55,7 @@ import {
   getIndustryBenchmark,
 } from "./industry-benchmark-data";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
+import { gpcSummaryLabel } from "./gpc-report-projection";
 import { getConsentControlSummaryLabel } from "./timeline-report-model";
 import {
   SHADOW_PRIVACY_NOTICE_EVIDENCE,
@@ -525,7 +526,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
               <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
               <span className="flex min-w-0 items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-800">
-                  {report.gpcResponse.observedFacts[0]?.value ?? report.gpcResponse.headline}
+                  {gpcSummaryLabel(report.gpcResponse)}
                 </span>
                 {report.gpcResponse.californiaDeductionPoints > 0 ? (
                   <span className={`${monoClass} text-[0.68rem] font-semibold text-rose-700`}>
@@ -1516,7 +1517,7 @@ function GpcEvidenceIndexCard({ projection, homepage = false, expanded = false }
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-zinc-500">GPC observation and comparison{homepage ? " · Starting page" : ""}</p>
-          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{projection.observedFacts[0]?.value ?? projection.headline}</h3>
+          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{gpcSummaryLabel(projection)}</h3>
         </div>
         <span className="flex shrink-0 items-center">
           <DisclosureChevron className="text-zinc-400 group-open/gpc:rotate-180" />

@@ -6,7 +6,7 @@ export function GpcActivityComparison({ comparison }: { comparison?: Comparison 
   return <section aria-label="Baseline versus GPC" className="overflow-hidden rounded-md border border-zinc-200">
     <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-50 px-3 py-2">
       <h4 className="text-sm font-semibold text-zinc-900">Baseline → GPC</h4>
-      <span className="text-xs text-zinc-600">First {comparison.durationMs.toLocaleString("en-US")} ms of the loaded page</span>
+      <span className="text-xs text-zinc-600">First {comparison.durationMs.toLocaleString("en-US")} ms after each document commit</span>
     </div>
     <table className="w-full text-left text-xs">
       <thead className="text-zinc-500"><tr><th scope="col" className="px-3 py-2 font-medium">Observed requests</th><th scope="col" className="px-3 py-2 font-medium">Baseline</th><th scope="col" className="px-3 py-2 font-medium">GPC</th></tr></thead>
@@ -16,5 +16,6 @@ export function GpcActivityComparison({ comparison }: { comparison?: Comparison 
           <td className="px-3 py-2 font-mono text-zinc-900">{comparison.activity[key].gpcRequests}</td>
         </tr>)}</tbody>
     </table>
+    <p className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-500">This matched interval does not describe later activity or establish what caused a difference.</p>
   </section>;
 }

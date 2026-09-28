@@ -13,7 +13,7 @@ function setup() {
   capture.documentCommitted({ loaderId: "loader", url: b.url });
   capture.bindReadback("loader");
   const finish = () => { now = 1500; return capture.finish({ ...b.gpcSignalObservation!, capturedAtMs: now }); };
-  return { capture, finish, url: b.url };
+  return { capture, finish, setNow: (value: number) => { now = value; }, url: b.url };
 }
 
 test("same-URL history update preserves fixed windows and frozen evidence", () => {
@@ -49,4 +49,23 @@ test("changed route then return, unknown identity, fragments and recommits stay 
 test("invalidation reasons cannot coexist with usable windows", () => {
   const result = setup().finish();
   assert.equal(gpcImpactCaptureSchema.safeParse({ ...result, invalidationReasons: ["renderer_crash"] }).success, false);
+});
+
+test("events and document drift after signal readback remain part of the final capture", () => {
+  const { capture, setNow, url } = setup();
+  const proof = { ...gpcRuntimeFixture({ enabled: true }).gpcSignalObservation!, capturedAtMs: 1200 };
+  setNow(1300);
+  capture.recordRequest({ eventId: "late-request", timestampMs: 900, requestUrl: `${url}late` });
+  setNow(1500);
+  const retained = capture.finish(proof);
+  assert.equal(retained.windows.at(-1)?.requestCount, 1);
+
+  const drifted = setup();
+  drifted.setNow(1500);
+  drifted.capture.recordRequest({ eventId: "late-request", timestampMs: 900, requestUrl: `${url}late` });
+  drifted.capture.navigatedWithinDocument({ url: `${url}changed`, navigationType: "historyApi" }, "loader");
+  const result = drifted.capture.finish(proof);
+  assert.deepEqual(result.windows, []);
+  assert.ok(result.invalidationReasons?.includes("same_document_url_changed"));
+  assert.ok(result.limitationKeys.includes("document_or_readback_unverified"));
 });

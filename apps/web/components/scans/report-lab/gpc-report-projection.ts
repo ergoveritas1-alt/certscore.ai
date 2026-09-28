@@ -2,6 +2,12 @@ import { buildCanonicalGpcResponseProjection } from "../../../lib/scans/gpc-resp
 import type { UnifiedFindingDisplayPacket } from "../../../lib/scans/unified-findings";
 import type { GpcResponseReportProjection } from "./shadow-report-data";
 
+export function gpcSummaryLabel(projection: GpcResponseReportProjection): string {
+  return projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3"
+    ? `${projection.headline} · ${projection.comparisonHeadline}`
+    : projection.headline;
+}
+
 export function buildGpcResponseReportProjection(
   findings: UnifiedFindingDisplayPacket[],
 ): GpcResponseReportProjection | null {

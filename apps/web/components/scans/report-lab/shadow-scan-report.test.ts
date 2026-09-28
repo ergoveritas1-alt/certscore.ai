@@ -285,13 +285,13 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(consentControlsIndex < transportSecurityIndex);
   assert.ok(transportSecurityIndex < gpcIndex);
   assert.match(snapshotSource, /<VendorBrandLogo label=\{consentVendor\} \/>/);
-  assert.match(snapshotSource, /report\.gpcResponse\.headline/);
+  assert.match(snapshotSource, /gpcSummaryLabel\(report\.gpcResponse\)/);
   assert.match(snapshotSource, /report\.gpcResponse\.coverageSummary/);
   assert.doesNotMatch(snapshotSource, /<GpcStatusBadge/);
   assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /href="#gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
-  assert.match(gpcEvidenceCardSource, /projection\.headline/);
+  assert.match(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
   assert.match(gpcEvidenceCardSource, /projection\.coverageSummary/);
   assert.doesNotMatch(gpcEvidenceCardSource, /<GpcStatusBadge/);
   assert.ok(runtimeIndex >= 0);
