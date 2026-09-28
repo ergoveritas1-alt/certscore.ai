@@ -62,12 +62,49 @@ test("non-fetchable observed DNS links keep all six retained production destinat
   assert.ok(result.controls.every((control) => control.retrieval === "not_attempted" && control.interaction === "not_tested"));
 });
 
+test("a visible direct privacy-choices link survives an insufficient cross-subdomain destination", () => {
+  const destination = "https://privacy.example.test/main/web/main";
+  const result = projectPrivacyAuditEvidence(bundle([surface({
+    observationId: "privacy-choices", surfaceType: "your_privacy_choices", linkText: "Your Privacy Choices",
+    url: destination, normalizedUrl: destination, linkSourcePageUrl: url,
+    documentFetchState: "failed", documentEvaluationState: "insufficient",
+  })]), source, url)!;
+  assert.equal(result.controls.length, 1);
+  assert.equal(result.controls[0]?.kind, "your_privacy_choices");
+  assert.equal(result.controls[0]?.destinationUrl, destination);
+  assert.equal(result.controls[0]?.retrieval, "failed");
+});
+
+test("direct Cookie Settings candidates remain review context until live visibility proof is retained", () => {
+  const candidate = surface({ observationId: "cookies", surfaceType: "cookie_settings",
+    linkText: "Cookie Settings", url: `${url}cookie-settings`, clickable: true,
+    linkVisibility: undefined, accessibleNameSource: undefined });
+  const pending = projectPrivacyAuditEvidence(bundle([candidate]), source, url)!;
+  assert.equal(pending.contractVersion, "certscore.privacy-audit-evidence.v2");
+  assert.deepEqual(pending.controls, []);
+  assert.deepEqual(pending.contractVersion === "certscore.privacy-audit-evidence.v2"
+    ? pending.controlCandidates.map(row => [row.kind, row.verification]) : [],
+    [["cookie_settings", "visibility_unverified"]]);
+  const verified = projectPrivacyAuditEvidence(bundle([{ ...candidate, linkVisibility: "visible", accessibleNameSource: "text", linkSourcePageUrl: url }]), source, url)!;
+  assert.equal(verified.controls[0]?.kind, "cookie_settings");
+  assert.deepEqual(verified.contractVersion === "certscore.privacy-audit-evidence.v2" ? verified.controlCandidates : [], []);
+  for (const unsafe of [
+    { linkVisibility: "hidden" }, { discoveryMethod: "guessed_common_path" },
+    { linkSourcePageUrl: "https://other.test/" }, { clickable: false },
+  ]) {
+    const result = projectPrivacyAuditEvidence(bundle([{ ...candidate, ...unsafe }]), source, url)!;
+    assert.deepEqual(result.controls, []);
+    assert.deepEqual(result.contractVersion === "certscore.privacy-audit-evidence.v2" ? result.controlCandidates : [], []);
+  }
+});
+
 test("visible named controls require typed proof; historical and hidden candidates do not gain new control claims", () => {
   const cases = [
     surface({ observationId: "hidden", linkVisibility: "hidden" }),
     surface({ observationId: "legacy", linkVisibility: undefined, accessibleNameSource: undefined }),
     surface({ observationId: "url-only", linkText: "", accessibleNameSource: "none", url: `${url}do-not-sell` }),
     surface({ observationId: "generic", linkText: "Learn more", url: `${url}do-not-sell` }),
+    surface({ observationId: "other-document", linkSourcePageUrl: "https://other.test/" }),
   ];
   for (const candidate of cases) assert.deepEqual(projectPrivacyAuditEvidence(bundle([candidate]), source, url)?.controls, []);
   const icon = projectPrivacyAuditEvidence(bundle([surface({
@@ -77,6 +114,7 @@ test("visible named controls require typed proof; historical and hidden candidat
   assert.equal(icon.controls[0]?.accessibleNameSource, "image_alt");
   assert.equal(icon.controls[0]?.classificationProvenance, "privacy_surface_classifier.v1");
   assert.equal(icon.controls[0]?.destinationUrl, `${url}do-not-sell`);
+  assert.equal(projectPrivacyAuditEvidence(bundle([surface({ linkSourcePageUrl: url })]), source, url)?.controls.length, 1);
   for (const raw of ["#privacy", "javascript:openChoices()", "/"]) {
     const candidate = surface({ observationId: raw, url: raw, normalizedUrl: url, fetchable: false });
     assert.equal(projectPrivacyAuditEvidence(bundle([candidate]), source, url)?.controls[0]?.destinationUrl, null);
@@ -85,7 +123,8 @@ test("visible named controls require typed proof; historical and hidden candidat
 
 test("historical workpaper survives rematerialization only with the same verified scan, source and document", () => {
   const historicalBundle = bundle([surface({ linkVisibility: undefined, accessibleNameSource: undefined })]);
-  const oldWorkpaper = { ...projectPrivacyAuditEvidence(bundle([surface()]), source, url)!,
+  const { controlCandidates: _candidates, ...projectedV2 } = projectPrivacyAuditEvidence(bundle([surface()]), source, url)! as Extract<ReturnType<typeof projectPrivacyAuditEvidence>, { contractVersion: "certscore.privacy-audit-evidence.v2" }>;
+  const oldWorkpaper = { ...projectedV2, contractVersion: "certscore.privacy-audit-evidence.v1" as const,
     controls: [{ kind: "do_not_sell_or_share" as const, label: "Do Not Sell or Share My Personal Information",
       sourceUrl: url, destinationUrl: `${url}choices`, placement: "footer_link", evidenceRef: "policy-surface:dns",
       retrieval: "not_attempted" as const, interaction: "not_tested" as const }] };

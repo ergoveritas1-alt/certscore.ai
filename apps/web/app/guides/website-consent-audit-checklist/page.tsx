@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AiVisibilityContent } from "../../../components/marketing/ai-visibility-content";
 import { createPageMetadata } from "../../../lib/seo";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-report";
 import { aiGuideContent, buildArticleSchema } from "../ai-guide-content";
 
 const guide = aiGuideContent.websiteConsentAuditChecklist;
@@ -29,7 +30,7 @@ export default function WebsiteConsentAuditChecklistGuidePage() {
       path={guide.path}
       relatedLinks={[
         { href: "/resources/consent-audit-worksheet.md", label: "Download the consent audit worksheet (Markdown)" },
-        { href: "/sample-report", label: "Explore the sample report" },
+        { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "Explore the sample report" },
         { href: "/findings/pre_consent_tracking_detected", label: "tracking started before consent finding" },
         { href: "/findings/reject_tracking_persists_after_reject", label: "reject tracking persists finding" },
         { href: "/findings/cookie_disclosure_gap", label: "cookie disclosure gap finding" },

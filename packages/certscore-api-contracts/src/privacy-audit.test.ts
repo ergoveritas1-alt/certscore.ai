@@ -21,11 +21,24 @@ test("historical v1 workpapers remain readable without new control proof fields"
   assert.ok(privacyAuditEvidenceSchema.safeParse(legacy).success);
 });
 
+test("v2 keeps unverified link candidates separate from observed controls", () => {
+  const candidate = { kind: "cookie_settings", label: "Cookie Settings", sourceUrl: "https://example.test/",
+    destinationUrl: "https://example.test/cookie-settings", placement: "header_link",
+    evidenceRef: "policy-surface:cookies", verification: "visibility_unverified" };
+  const v2 = { ...evidence, contractVersion: "certscore.privacy-audit-evidence.v2", controlCandidates: [candidate] };
+  assert.ok(privacyAuditEvidenceSchema.safeParse(v2).success);
+  assert.equal(privacyAuditEvidenceSchema.safeParse({ ...v2, controlCandidates: undefined }).success, false);
+  assert.equal(privacyAuditEvidenceSchema.safeParse({ ...v2, controls: [candidate], controlCandidates: [] }).success, false);
+  assert.equal(privacyAuditEvidenceSchema.safeParse({ ...v2, controlCandidates: [{ ...candidate, destinationUrl: "javascript:alert(1)" }] }).success, false);
+  assert.equal(privacyAuditEvidenceSchema.safeParse({ ...evidence, controlCandidates: [candidate] }).success, false);
+});
+
 test("OpenAPI publishes the bounded, score-neutral workpaper under the scan resource", () => {
   const document = buildCertScoreApiV2OpenApiDocument();
   assert.equal(document.components.schemas.Scan.properties.privacyAuditEvidence.$ref, "#/components/schemas/PrivacyAuditEvidence");
   const schema = document.components.schemas.PrivacyAuditEvidence;
   assert.equal(schema.properties.controls.maxItems, 12);
+  assert.equal(schema.properties.controlCandidates.maxItems, 12);
   assert.equal(schema.properties.notices.maxItems, 4);
   assert.equal(schema.properties.scoreEffect.const, "none");
 });

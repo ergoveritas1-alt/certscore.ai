@@ -11,6 +11,7 @@ import { buildCanonicalReportExport } from "./report-export";
 import { renderCanonicalReportPdf } from "./report-export-pdf";
 import { aggregateFullSite } from "@website-signal-risk-scanner/shared";
 import { completedActionProjection } from "../../lib/scans/test-fixtures/action-execution-projection";
+import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 
@@ -72,6 +73,7 @@ test("review focus changes presentation without changing evidence, findings or s
 test("exports omit speculative action lanes but preserve independently verified clicks", () => {
   const record = scanRecord();
   record.runtimeArtifacts = {
+    consentControlAssessment: observedControlAssessment,
     postAcceptEvidenceProjection: completedActionProjection("accept"),
     postRefusalEvidenceProjection: completedActionProjection("reject"),
   };
@@ -343,10 +345,10 @@ test("bounded GPC measurements survive checked persistence, both report focuses 
   assert.equal(eu.gpcResponse?.status, assessment.status);
   const { renderPulseMarkdown } = await import("../../lib/pulse/markdown");
   const markdown = renderPulseMarkdown({ domain: "example.test", scanId: scan.scan.id, scanStatus: "completed", gpcResponse: ca.gpcResponse, topFindings: [], links: {}, summary: {} });
-  assert.match(markdown, /Baseline -> GPC, first 1000 ms/);
+  assert.match(markdown, /Baseline -> GPC, first 1000 ms after each document commit/);
   const pdf = renderCanonicalReportPdf(ca).toString("latin1");
-  assert.match(pdf, /Baseline -> GPC, first 1000 ms/);
-  assert.match(pdf, /advertising\/marketing requests 2 -> 1/);
+  assert.match(pdf, /Baseline -> GPC, first 1000 ms after each document commit/);
+  assert.match(pdf, /advertising\/marketing requests 2 ->[\s\S]{0,100}1; analytics\/replay requests 1 -> 1/);
   const foreign = { ...restored, scan: { ...restored.scan, id: "foreign-scan" } };
   assert.equal(buildCanonicalReportExport(foreign), null, "a report cannot be rebound to a different scan");
 });

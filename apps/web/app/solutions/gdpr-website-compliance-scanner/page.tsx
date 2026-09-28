@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-report";
 import {
   SolutionPage,
   createSolutionPageMetadata,
@@ -81,7 +82,7 @@ const config: SolutionPageConfig = {
     { href: "/gdpr", label: "How to interpret GDPR website evidence" },
     { href: "/guides/cmp-verification", label: "CMP verification" },
     { href: "/guides/rtb-cookie-syncing", label: "RTB cookie syncing" },
-    { href: "/sample-report", label: "Sample report" }
+    { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "Sample report" }
   ],
   title: "GDPR website scanner"
 };

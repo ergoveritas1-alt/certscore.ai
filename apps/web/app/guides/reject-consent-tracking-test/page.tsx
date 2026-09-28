@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { AiVisibilityContent } from "../../../components/marketing/ai-visibility-content";
 import { createPageMetadata } from "../../../lib/seo";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../../lib/marketing/sample-report";
 import { aiGuideContent, buildArticleSchema } from "../ai-guide-content";
 
 const guide = aiGuideContent.rejectConsentTrackingTest;
@@ -27,7 +28,7 @@ export default function RejectConsentTrackingTestGuidePage() {
         { href: "/guides/consent-report-example", label: "Read the retained owned-fixture example" },
         { href: "/guides/test-global-privacy-control", label: "Test GPC in a separate passive session" },
         { href: "/resources/consent-audit-worksheet.md", label: "Download the consent audit worksheet (Markdown)" },
-        { href: "/sample-report", label: "Explore the sample report" },
+        { href: AUTHENTIC_SAMPLE_REPORT_URL, label: "Explore the sample report" },
         { href: "/guides/consent-enforcement-testing", label: "how Accept and Reject Path confirmation works" },
         { href: "/findings/reject_tracking_persists_after_reject", label: "reject tracking persists finding" },
         { href: "/findings/pre_consent_tracking_detected", label: "tracking started before consent finding" },

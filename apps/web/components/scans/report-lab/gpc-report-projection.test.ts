@@ -3,7 +3,8 @@ import test from "node:test";
 import type { GpcResponseAssessment } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "../../../lib/scans/unified-findings";
 import { describeCanonicalGpcResponse } from "../../../lib/scans/gpc-response-projection";
-import { buildGpcResponseReportProjection } from "./gpc-report-projection";
+import type { GpcResponseReportProjection } from "./shadow-report-data";
+import { buildGpcResponseReportProjection, gpcCardActivity, gpcCardResponse, gpcSummaryLabel } from "./gpc-report-projection";
 
 function gpcFinding(input: {
   deductionPoints?: number;
@@ -108,6 +109,48 @@ test("separates verified GPC delivery from an incomplete baseline comparison", (
   assert.doesNotMatch(presentation.coverageSummary, /baseline_settle_not_completed/);
   assessment.comparison.limitationKeys = ["baseline_settle_not_completed", "gpc_settle_not_completed"];
   assert.match(describeCanonicalGpcResponse(assessment).coverageSummary, /Neither passive lane reached the required 250 ms quiet period/);
+});
+
+test("v3 card states the observed signal and activity without implying an established response", () => {
+  const projection = {
+    assessment: {
+      contractVersion: "certscore.gpc-response-assessment.v3",
+      status: "indeterminate",
+      observation: {
+        status: "complete",
+        requests: { complete: true, classifiedCount: 71, collectionCount: 6 },
+      },
+    },
+    comparisonHeadline: "Comparison incomplete",
+    headline: "Observation complete",
+  } as GpcResponseReportProjection;
+
+  assert.equal(gpcSummaryLabel(projection), "GPC signal observed · Response not determined");
+  assert.equal(gpcCardActivity(projection), "With GPC enabled, we observed 71 classified tracking requests, including 6 collection requests.");
+  assert.equal(gpcCardResponse(projection), "The paired scan could not determine whether classified tracking activity changed with GPC.");
+
+  const limited = structuredClone(projection);
+  if (limited.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") assert.fail("v3 fixture required");
+  limited.assessment.observation.status = "limited";
+  limited.headline = "Observation limited";
+  assert.equal(gpcCardActivity(limited), null);
+  assert.equal(gpcSummaryLabel(limited), "Observation limited · Response not determined");
+});
+
+test("responsive GPC card describes a retained partial reduction", async () => {
+  const { gpcActivityComparisonFixture } = await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
+  const projection = {
+    assessment: { status: "responsive" },
+    activityComparison: gpcActivityComparisonFixture(),
+  } as GpcResponseReportProjection;
+  assert.equal(gpcCardResponse(projection), "The paired scan observed a partial reduction in classified tracking activity with GPC.");
+  projection.activityComparison!.activity.advertisingMarketing.baselineRequests = 1;
+  projection.activityComparison!.activity.advertisingMarketing.gpcRequests = 0;
+  projection.activityComparison!.activity.analyticsReplay.baselineRequests = 5;
+  projection.activityComparison!.activity.analyticsReplay.gpcRequests = 5;
+  assert.equal(gpcCardResponse(projection), "Advertising/marketing request fell from 1 to 0 with GPC; 5 analytics/replay requests remained.");
+  projection.activityComparison!.activity.analyticsReplay.gpcRequests = 0;
+  assert.equal(gpcCardResponse(projection), "The paired scan observed reduced classified tracking activity with GPC.");
 });
 
 test("fails closed for non-surfaced packets and malformed score effects", () => {

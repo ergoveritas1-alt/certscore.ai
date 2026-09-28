@@ -30,6 +30,10 @@ does not prove a starting-page opt-out control. New rendered-link observations
 retain typed visibility and accessible-name source from the existing browser
 capture. Only a visible, named link with matching typed classifier evidence can
 enter the workpaper; hidden and URL-only links remain discovery candidates.
+The policy lane carries that proof through static/rendered duplicate merging and
+binds new rendered proof to the captured starting-page URL. Static HTML alone
+does not establish visibility, including when the policy lane skips rendered
+discovery under its existing budget.
 Retained, display-safe HTTP destinations remain available even when document
 fetching was not permitted or attempted. Fragment, JavaScript and self links
 retain a null destination; retrieval and interaction states remain separate.

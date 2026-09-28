@@ -9,7 +9,8 @@ test("measured requests and duration appear directly, without a response claim",
   const comparison = gpcActivityComparisonFixture();
   const html = renderToStaticMarkup(<GpcActivityComparison comparison={comparison} />);
   assert.match(html, /Baseline → GPC/);
-  assert.match(html, /First 1,000 ms/);
+  assert.match(html, /First 1,000 ms after each document commit/);
+  assert.doesNotMatch(html, /does not describe later activity/);
   assert.match(html, /Advertising \/ marketing/);
   assert.match(html, /Analytics \/ session replay/);
   assert.doesNotMatch(html, /<details|honored|suppressed|compliant|%/i);

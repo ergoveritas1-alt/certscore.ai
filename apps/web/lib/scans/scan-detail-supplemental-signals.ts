@@ -139,8 +139,6 @@ export function deriveSupplementalSnapshotSignals(input: {
   const cmpVendorName = typeof snapshot.cmp_vendor_name === "string" ? snapshot.cmp_vendor_name : null;
   const consentInteractionModel =
     typeof snapshot.consent_interaction_model === "string" ? snapshot.consent_interaction_model : null;
-  const doNotSellLinkPresent = snapshot.do_not_sell_link_present === true;
-  const retargetingPixelDetected = snapshot.retargeting_pixel_detected === true;
   const familyPacketFindingIds = getFamilyPacketFindingIds(input.events);
   const accessibilitySupportPresent =
     familyPacketFindingIds.has("accessibility_support_path_present") ||
@@ -172,12 +170,6 @@ export function deriveSupplementalSnapshotSignals(input: {
       cookieBannerPresent === false &&
       !cmpVendorName &&
       (!consentInteractionModel || consentInteractionModel === "none")
-  );
-  pushBoolean(
-    "privacy",
-    "privacy.sale_sharing_controls_missing",
-    "Sale/sharing controls missing",
-    !doNotSellLinkPresent && retargetingPixelDetected
   );
   pushBoolean(
     "accessibility",

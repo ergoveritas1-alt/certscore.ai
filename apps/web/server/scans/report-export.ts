@@ -319,7 +319,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     findings: findings.filter(finding => finding.unifiedFindingId !== SITE_INTEGRITY_FINDING_ID) });
   if (focus === "ccpa_cpra") executiveSummary.sentences = [
     "CCPA/CPRA review focuses on GPC response, observed privacy choices, retained notices and tracking inventory.",
-    privacyAuditEvidence ? `${privacyAuditEvidence.controls.length} privacy-choice/settings surfaces and ${privacyAuditEvidence.notices.length} notice documents are retained in the bounded workpaper. Presence does not establish a working opt-out or adequate disclosure.`
+    privacyAuditEvidence ? `${privacyAuditEvidence.controls.length} observed privacy-choice/settings surfaces${privacyAuditEvidence.contractVersion === "certscore.privacy-audit-evidence.v2" && privacyAuditEvidence.controlCandidates.length ? ` and ${privacyAuditEvidence.controlCandidates.length} link candidates needing proof` : ""}, plus ${privacyAuditEvidence.notices.length} notice documents, are retained in the bounded workpaper. Presence does not establish a working opt-out or adequate disclosure.`
       : "Verified California privacy-choice and notice evidence is unavailable; absence and disclosure adequacy remain unknown.",
     "Existing technical findings are retained. A separate CCPA/CPRA score is not available; the overall score must not be interpreted as a CCPA/CPRA compliance score.",
   ];

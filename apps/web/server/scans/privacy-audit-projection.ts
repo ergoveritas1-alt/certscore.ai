@@ -1,5 +1,5 @@
 import { CALIFORNIA_NOTICE_PASSAGE_POLICY, classifyPrivacySurface, locateCaliforniaNoticePassages, type CanonicalEvidenceBundle } from "@certscore/contracts";
-import { privacyAuditEvidenceSchema, type PrivacyAuditEvidence } from "@certscore/api-contracts";
+import { privacyAuditEvidenceSchema, type PrivacyAuditEvidence, type PrivacyAuditEvidenceV2 } from "@certscore/api-contracts";
 
 function safeUrl(value: string | undefined) {
   try {
@@ -26,6 +26,7 @@ export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, sou
   const pageUrl = safeUrl(documentUrl);
   if (!pageUrl) return null;
   const controls: PrivacyAuditEvidence["controls"] = [];
+  const controlCandidates: PrivacyAuditEvidenceV2["controlCandidates"] = [];
   const notices: PrivacyAuditEvidence["notices"] = [];
   for (const surface of bundle.policySurfaceObservations ?? []) {
     const url = safeUrl(surface.normalizedUrl ?? surface.url);
@@ -38,17 +39,32 @@ export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, sou
     const classification = classifyPrivacySurface({ linkText: surface.linkText ?? "" });
     const kind = surface.surfaceType;
     const destinationUrl = observedDestination(surface.url, pageUrl);
+    const privacyChoice = kind === "do_not_sell_or_share" || kind === "your_privacy_choices" || kind === "cookie_settings";
+    const sourceMatches = surface.linkSourcePageUrl === undefined || safeUrl(surface.linkSourcePageUrl) === pageUrl;
     const visibleControl = directLink && surface.linkVisibility === "visible" &&
       surface.accessibleNameSource && surface.accessibleNameSource !== "none" &&
+      sourceMatches &&
       surface.classifierProvenance === "privacy_surface_classifier.v1" &&
       classification.surfaceType === kind;
-    if (visibleControl && (kind === "do_not_sell_or_share" || kind === "your_privacy_choices" || kind === "cookie_settings") &&
+    if (visibleControl && privacyChoice &&
         surface.linkText && !controls.some(row => row.kind === kind && row.destinationUrl === destinationUrl && row.label === surface.linkText?.slice(0, 200))) {
       controls.push({ kind, label: surface.linkText.slice(0, 200), sourceUrl: pageUrl,
         destinationUrl, placement: surface.discoveryMethod,
         evidenceRef, classificationProvenance: surface.classifierProvenance,
         accessibleNameSource: surface.accessibleNameSource === "none" ? undefined : surface.accessibleNameSource,
         retrieval: surface.documentFetchState ?? "not_attempted", interaction: "not_tested" });
+    }
+    // A directly linked HTML candidate is useful review context, but it is not
+    // an observed visitor-facing choice until browser visibility/name proof is
+    // retained. Hidden, guessed, and document-mismatched links stay excluded.
+    if (!visibleControl && directLink && privacyChoice && surface.clickable === true &&
+        destinationUrl && sourceMatches && surface.linkText &&
+        surface.classifierProvenance === "privacy_surface_classifier.v1" && classification.surfaceType === kind &&
+        (surface.linkVisibility === undefined || surface.linkVisibility === "visible") &&
+        !controlCandidates.some(row => row.kind === kind && row.destinationUrl === destinationUrl && row.label === surface.linkText?.slice(0, 200))) {
+      controlCandidates.push({ kind, label: surface.linkText.slice(0, 200), sourceUrl: pageUrl,
+        destinationUrl, placement: surface.discoveryMethod, evidenceRef,
+        verification: surface.linkVisibility === undefined ? "visibility_unverified" : "accessible_name_unverified" });
     }
     // Ownership and retained usable text are required independently of discovery.
     if ((surface.surfaceType === "privacy_policy" || surface.surfaceType === "california_notice" || surface.surfaceType === "notice_at_collection") &&
@@ -80,11 +96,15 @@ export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, sou
     }
   }
   const result = privacyAuditEvidenceSchema.safeParse({
-    contractVersion: "certscore.privacy-audit-evidence.v1", scanId: bundle.scanId, documentUrl: pageUrl,
+    contractVersion: "certscore.privacy-audit-evidence.v2", scanId: bundle.scanId, documentUrl: pageUrl,
     capturedAt: bundle.completedAt, sourceHash: source.sha256, verificationStatus: "verified", scoreEffect: "none",
     passagePolicy: CALIFORNIA_NOTICE_PASSAGE_POLICY,
-    controls: controls.slice(0, 12), notices: notices.slice(0, 4), negativeControlCoverage: "not_verified",
-    collectionPointNoticeAssessment: "not_assessed", truncated: controls.length > 12 || notices.length > 4,
+    controls: controls.slice(0, 12),
+    controlCandidates: controlCandidates.filter(candidate => !controls.some(control =>
+      control.kind === candidate.kind && control.destinationUrl === candidate.destinationUrl && control.label === candidate.label
+    )).slice(0, 12),
+    notices: notices.slice(0, 4), negativeControlCoverage: "not_verified",
+    collectionPointNoticeAssessment: "not_assessed", truncated: controls.length > 12 || controlCandidates.length > 12 || notices.length > 4,
   });
   return result.success ? result.data : null;
 }

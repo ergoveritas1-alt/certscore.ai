@@ -83,7 +83,9 @@ export function getSnapshotSignalValue(snapshot: Record<string, unknown> | null,
     case "privacy.privacy_contact_channel_missing":
       return snapshot.privacy_contact_channel_type === "none";
     case "privacy.sale_sharing_controls_missing":
-      return snapshot.retargeting_pixel_detected === true && snapshot.do_not_sell_link_present === false;
+      // The legacy boolean describes one narrow inventory. It cannot establish
+      // sitewide absence of a sale/share choice or an ineffective opt-out path.
+      return null;
     case "accessibility.accessibility_support_path_missing":
       return snapshot.accessibility_contact_method_present === false;
     case "privacy.cmp_vendor_detected":

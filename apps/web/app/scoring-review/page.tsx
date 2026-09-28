@@ -1,5 +1,6 @@
 import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS, CALIFORNIA_GPC_RESPONSE_POLICY_VERSION, CANONICAL_OVERALL_SCORE_VERSION } from "../../lib/scans/california-gpc-response-policy";
 import { SCORE_BASE, SCORE_FLOOR, SCORING_RULES, SCORING_FAMILIES, SCORING_POLICY_VERSION, scoringRuleDescription } from "../../lib/scans/scoring-policy";
+import { getCaliforniaEvidenceRowPoints } from "../../lib/scans/regulatory-coverage-score";
 
 export const metadata = {
   title: "Scoring policy review",
@@ -8,6 +9,8 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default function ScoringReviewPage() {
+  const dnsChecklistPoints = getCaliforniaEvidenceRowPoints("do_not_sell_share_availability");
+  const gpcDisclosureChecklistPoints = getCaliforniaEvidenceRowPoints("gpc_opt_out_signal_handling");
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-900 sm:px-8">
       <div className="mx-auto max-w-6xl">
@@ -23,7 +26,18 @@ export default function ScoringReviewPage() {
 
         <section aria-labelledby="ccpa-scoring-heading" className="mb-7 rounded-xl border border-sky-200 bg-white p-5 sm:p-6">
           <h2 id="ccpa-scoring-heading" className="text-xl font-semibold tracking-tight">CCPA/CPRA interpretation</h2>
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600">The current overall technical score combines GDPR/ePrivacy-based posture with eligible GPC and site-integrity deductions. It is not a separate CCPA/CPRA score or a determination of legal compliance. Changing the report’s review focus changes emphasis, not evidence or scoring.</p>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600">The current overall technical score combines GDPR/ePrivacy-based posture with eligible GPC and site-integrity deductions. It is not a separate CCPA/CPRA score or a determination of legal compliance. Changing the report’s review focus changes emphasis, not evidence or scoring. The California evidence scorecard keeps link-availability and GPC-disclosure checklist rows score-neutral; they cannot duplicate the verified GPC deduction.</p>
+          <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[600px] text-left text-sm">
+              <caption className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-left font-semibold">Do Not Sell/Share and opt-out scoring</caption>
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600"><tr><th scope="col" className="px-4 py-2">Evidence</th><th scope="col" className="px-4 py-2">Current effect</th><th scope="col" className="px-4 py-2">Gate</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">
+                <tr><th scope="row" className="px-4 py-3 font-medium">Do Not Sell/Share or Your Privacy Choices link</th><td className="px-4 py-3">{dnsChecklistPoints === null ? "Unconfigured" : `${dnsChecklistPoints} points`}</td><td className="px-4 py-3">Observed, missing, or unverified link evidence alone cannot establish opt-out failure.</td></tr>
+                <tr><th scope="row" className="px-4 py-3 font-medium">GPC disclosure checklist row</th><td className="px-4 py-3">{gpcDisclosureChecklistPoints === null ? "Unconfigured" : `${gpcDisclosureChecklistPoints} points`}</td><td className="px-4 py-3">A notice passage is not a verified response.</td></tr>
+                <tr><th scope="row" className="px-4 py-3 font-medium">Qualified California GPC response finding</th><td className="px-4 py-3">−{CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS} points once</td><td className="px-4 py-3">Verified signal delivery and paired comparison, with qualifying baseline activity persisting unsuppressed under GPC.</td></tr>
+              </tbody>
+            </table>
+          </div>
           <div className="mt-5 grid gap-6 md:grid-cols-2">
             <div>
               <h3 className="font-semibold text-slate-900">What deducts today</h3>
@@ -43,7 +57,7 @@ export default function ScoringReviewPage() {
             </div>
             <div>
               <h3 className="font-semibold text-slate-900">Evidence-only CCPA/CPRA checks</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Observed Do Not Sell/Share, Your Privacy Choices and Cookie Settings surfaces remain distinct. Their presence and retained notice passages create no additional CCPA/CPRA deductions. Missing surface evidence is not automatically a failure.</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Observed Do Not Sell/Share, Your Privacy Choices and Cookie Settings surfaces remain distinct. Their presence, absence in one capture, and retained notice passages create no additional CCPA/CPRA deductions. A missing link is not a verified opt-out failure.</p>
               <p className="mt-2 text-sm leading-6 text-slate-600">The tracking inventory supports review; it does not independently establish sale or sharing. Runtime activity may still support existing technical deductions in the table below.</p>
             </div>
             <div>

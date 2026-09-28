@@ -3,8 +3,10 @@ import test from "node:test";
 import { getGdprEprivacyCoverageChecklistRowIds } from "./gdpr-eprivacy-coverage-checklist";
 import {
   auditRegulatoryCoverageScoreConfig,
+  CALIFORNIA_EVIDENCE_SCORE_VERSION,
   deriveRegulatoryCoverageScore,
   GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION,
+  getCaliforniaEvidenceRowPoints,
   getGdprEprivacyPostureTone,
   REGULATORY_COVERAGE_SCORE_SOURCE
 } from "./regulatory-coverage-score";
@@ -415,11 +417,34 @@ test("California score is derived from evidence-gated checklist rows", () => {
     ]
   });
 
-  assert.equal(score.ratingLabel, "Watch");
-  assert.equal(score.score, 71);
+  assert.equal(score.ratingLabel, "Strong");
+  assert.equal(score.score, 77);
   assert.match(score.summary, /applicable findings supported by retained evidence/i);
   assert.doesNotMatch(score.summary, /weighted|deduct|credit|score effect/i);
   assert.doesNotMatch(score.summary, /\d+ checked|\d+ review|\d+ gap/i);
+});
+
+test("DNS surface and GPC disclosure checklist rows cannot independently change California points", () => {
+  assert.equal(getCaliforniaEvidenceRowPoints("do_not_sell_share_availability"), 0);
+  assert.equal(getCaliforniaEvidenceRowPoints("gpc_opt_out_signal_handling"), 0);
+  const scoredRow = {
+    assessmentStatus: "checked",
+    evidenceState: "observed",
+    id: "privacy_notice_availability",
+    status: "observed"
+  };
+  const baseline = deriveRegulatoryCoverageScore({ framework: "california", rows: [scoredRow] });
+  const withDnsRows = deriveRegulatoryCoverageScore({
+    framework: "california",
+    rows: [
+      scoredRow,
+      { assessmentStatus: "gap_observed", evidenceState: "not_observed", id: "do_not_sell_share_availability", status: "Gap observed" },
+      { assessmentStatus: "gap_observed", evidenceState: "not_observed", id: "gpc_opt_out_signal_handling", status: "Gap observed" }
+    ]
+  });
+  assert.equal(withDnsRows.score, baseline.score);
+  assert.equal(withDnsRows.coverageRatio, baseline.coverageRatio);
+  assert.equal(withDnsRows.scoreVersion, CALIFORNIA_EVIDENCE_SCORE_VERSION);
 });
 
 test("GDPR/ePrivacy score uses the same row-led scoring mechanics", () => {

@@ -35,7 +35,7 @@ export type RegulatoryCoverageScore = {
 };
 
 export const REGULATORY_COVERAGE_SCORE_SOURCE = "wc01.regulatory-coverage-score";
-export const CALIFORNIA_EVIDENCE_SCORE_VERSION = "california-evidence.legacy-v1";
+export const CALIFORNIA_EVIDENCE_SCORE_VERSION = "california-evidence.v2";
 export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = SCORING_POLICY_VERSION;
 
 type GdprEprivacyRiskFamily = keyof typeof SCORING_FAMILIES;
@@ -52,8 +52,10 @@ const CALIFORNIA_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   cipa_sensitive_communication_interception: { weight: 7 },
   cipa_sensitive_interaction_recording: { weight: 9 },
   consumer_rights_request_methods: { weight: 8 },
-  do_not_sell_share_availability: { weight: 11 },
-  gpc_opt_out_signal_handling: { weight: 8 },
+  // These checklist rows report observed surfaces/disclosures, not verified
+  // opt-out failure. The canonical GPC finding owns its separate 15-point rule.
+  do_not_sell_share_availability: { scoreEffect: "none" },
+  gpc_opt_out_signal_handling: { scoreEffect: "none" },
   limit_use_sensitive_pi: { weight: 7 },
   notice_at_collection: { weight: 7 },
   opt_out_friction_dark_patterns: { weight: 5 },
@@ -64,6 +66,12 @@ const CALIFORNIA_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   sensitive_forms_third_party_tracking: { weight: 7 },
   targeted_advertising_signals: { weight: 7 }
 };
+
+export function getCaliforniaEvidenceRowPoints(rowId: string): number | null {
+  const config = CALIFORNIA_ROW_WEIGHTS[rowId];
+  if (!config) return null;
+  return "scoreEffect" in config ? 0 : config.weight;
+}
 
 const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   accessibility_consent_controls: { weight: 4 },

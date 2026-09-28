@@ -341,7 +341,10 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     const audit = report.privacyAuditEvidence;
     lines.push(...wrappedLines("Starting-page observations only. Opt-out execution and notice placement at collection points were not assessed. Topic passages are evidence aids, not disclosure-adequacy assessments."));
     for (const control of audit.controls) lines.push(...wrappedLines(`${control.kind.replaceAll("_", " ")}: ${control.label}. ${control.placement.replaceAll("_", " ")}. Destination: ${control.destinationUrl ?? "not retained"}. Evidence: ${control.evidenceRef}`));
-    if (!audit.controls.length) lines.push(...wrappedLines("No verified privacy-choice surface retained; control absence remains unknown."));
+    if (audit.contractVersion === "certscore.privacy-audit-evidence.v2") for (const candidate of audit.controlCandidates) {
+      lines.push(...wrappedLines(`${candidate.kind.replaceAll("_", " ")}: link identified (${candidate.verification.replaceAll("_", " ")}); visitor-facing choice not confirmed. Destination: ${candidate.destinationUrl}. Evidence: ${candidate.evidenceRef}`));
+    }
+    if (!audit.controls.length && (audit.contractVersion !== "certscore.privacy-audit-evidence.v2" || !audit.controlCandidates.length)) lines.push(...wrappedLines("No verified privacy-choice surface retained; control absence remains unknown."));
     for (const notice of audit.notices) {
       lines.push(...wrappedLines(`${notice.kind}: ${notice.url}. Text coverage: ${notice.coverage}. Evidence: ${notice.evidenceRef}`));
       for (const passage of notice.passages) lines.push(...wrappedLines(`${passage.topic.replaceAll("_", " ")} - passage for review: ${passage.excerpt}`, { size: 9 }));

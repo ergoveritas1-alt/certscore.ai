@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import Link from "next/link";
 import { OverviewScanHistoryCard } from "../../components/dashboard/overview-scan-history-card";
 import { AddDomainForm } from "../../components/domains/add-domain-form";
 import { getDashboardContext } from "../../server/auth";
@@ -113,13 +112,6 @@ export default async function DashboardPage() {
               planCode={organization.plan}
               recentReusableScans={recentReusableScans}
             />
-            <Link
-              className="mt-3 inline-flex items-center gap-2 px-1 py-1 text-xs font-medium text-slate-500 transition hover:text-slate-900"
-              href="/app/browser-scans/setup"
-            >
-              <span><strong>Scan from Chrome.</strong> Install the public CertScore.ai Browser Evidence extension.</span>
-              <span aria-hidden="true" className="text-slate-400">→</span>
-            </Link>
           </CardContent>
         </Card>
 

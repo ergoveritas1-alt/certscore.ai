@@ -1,0 +1,126 @@
+<!-- OWNED CANARY TEST PAGE — intentionally varied privacy behavior for scanner validation -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>CertScore GPC and Do Not Sell/Share canary — test 2</title>
+  <style>
+    body { background:#f8fafc; color:#0f172a; font:16px/1.5 system-ui,sans-serif; margin:0; }
+    main { margin:36px auto; max-width:800px; padding:0 20px 48px; }
+    h1 { line-height:1.15; }
+    section { margin-top:20px; }
+    .banner, .choice { background:#fff; border:1px solid #94a3b8; border-radius:12px; padding:20px; }
+    .banner { border-color:#7c2d12; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; }
+    button { background:#0f172a; border:0; border-radius:7px; color:#fff; cursor:pointer; font:inherit; padding:9px 12px; }
+    button.secondary { background:#e2e8f0; color:#0f172a; }
+    .choice ul { margin:10px 0; padding-left:22px; }
+    .note { color:#475569; font-size:0.9rem; }
+    a { color:#075985; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <main data-certscore-canary="gpc-dns-test2"
+        data-expected-dns-path="observed"
+        data-expected-gpc-comparison="partial_reduction_when_comparable"
+        data-expected-prechoice-categories="analytics,advertising,session_replay,product_analytics"
+        data-expected-post-refusal-activity="true">
+    <h1>GPC and privacy-choice canary</h1>
+    <p class="note">Owned synthetic test page. It loads optional technologies before a choice and reduces advertising activity when browser GPC is enabled. No account or transaction state is involved.</p>
+
+    <section class="banner" id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
+      <h2>Cookie choices</h2>
+      <p>Optional analytics, advertising, session replay, and product measurement are active on this test page before consent.</p>
+      <div class="controls">
+        <button id="onetrust-reject-all-handler" type="button">Reject optional cookies</button>
+        <button id="onetrust-pc-btn-handler" class="secondary" type="button">Privacy options</button>
+        <button id="onetrust-accept-btn-handler" type="button">Allow all cookies</button>
+      </div>
+      <p id="canary-consent-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="choice" aria-labelledby="collection-notice-title">
+      <h2 id="collection-notice-title">Notice at collection</h2>
+      <p>This test page records identifiers and internet activity through optional analytics, advertising, session replay, and product measurement requests. Before a choice is saved, those requests may be sent to the named providers. Browser GPC prevents the Meta advertising request and its test cookie; a saved manual opt-out stops all future optional test requests in this browser.</p>
+      <nav aria-label="Privacy and cookie choices">
+        <ul>
+          <li><a href="/test2-cookie-settings.html">Cookie Settings</a></li>
+          <li><a href="/test2-do-not-sell-or-share.html">Do Not Sell or Share My Personal Information</a></li>
+          <li><a href="/test2-privacy-choices.html">Your Privacy Choices</a></li>
+        </ul>
+      </nav>
+      <p id="test2-choice-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="choice" aria-labelledby="notice-links-title">
+      <h2 id="notice-links-title">Test notices</h2>
+      <p><a href="/test2-notice-at-collection.html">Notice at Collection</a> explains the categories collected, purposes, retention and opt-out methods. The <a href="/test2-privacy-policy.html">Privacy Policy</a> describes sale/sharing, privacy rights, cookie practices, and the canary's deliberate GPC behavior. The <a href="/test2-cookie-policy.html">Cookie Policy</a> lists the synthetic cookies and their purposes.</p>
+    </section>
+
+    <section aria-labelledby="test2-expectations">
+      <h2 id="test2-expectations">Signals to inspect</h2>
+      <ul>
+        <li>First-party analytics cookies: <code>_ga_TEST2</code> and <code>_gat_TEST2</code>.</li>
+        <li>Advertising identity cookie: <code>_fbc</code>.</li>
+        <li>Session-replay cookie: <code>_clsk</code>.</li>
+        <li>Product-analytics identity cookies: <code>ajs_anonymous_id</code> and <code>mp_test2_mixpanel</code>.</li>
+        <li>Six vendor requests without GPC, five with GPC, spanning analytics, advertising, session replay, and product measurement. Their observed transmission and classification must be verified from retained network evidence.</li>
+      </ul>
+      <p class="note">Expected GPC outcome: the Meta advertising request and its test cookie appear only without GPC; five other optional requests remain. A complete, verified paired comparison can show this partial reduction. A limited comparison remains indeterminate.</p>
+    </section>
+  </main>
+  <script>
+    (function () {
+      "use strict";
+      const optOutNames = ["certscore_test2_dns_optout", "certscore_test2_optional_off"];
+      const testCookies = ["_ga_TEST2", "_gat_TEST2", "_fbc", "_clsk", "ajs_anonymous_id", "mp_test2_mixpanel", "_gid"];
+      const optedOut = document.cookie.split(";").some((part) => optOutNames.some((name) => part.trim() === `${name}=1`));
+      const status = document.getElementById("test2-choice-status");
+      const banner = document.getElementById("onetrust-banner-sdk");
+      status.textContent = optedOut ? "A manual privacy choice is active in this browser." : "No manual privacy choice is saved in this browser.";
+
+      if (optedOut) {
+        banner.hidden = true;
+        document.documentElement.dataset.certscoreCanaryReady = "true";
+        window.__CERTSCORE_CANARY_RESULT__ = { id: "test2", manualOptOut: true, trackerRequests: [] };
+        return;
+      }
+
+      // The scanner must independently verify delivery and this paired response.
+      const gpcEnabled = navigator.globalPrivacyControl === true;
+      const trackerUrls = [
+        "https://www.google-analytics.com/analytics.js?certscore=test2",
+        "https://connect.facebook.net/en_US/fbevents.js?certscore=test2",
+        "https://www.clarity.ms/collect?tid=certscore-test2",
+        "https://static.hotjar.com/c/hotjar-100002.js?sv=7",
+        "https://rs.fullstory.com/s/fs.js?certscore=test2",
+        "https://api-js.mixpanel.com/track/?data=certscore-test2"
+      ].filter((url) => !gpcEnabled || !url.startsWith("https://connect.facebook.net/"));
+      window.__CERTSCORE_REVIEW_CANARY__ = {
+        id: "test2",
+        controls: "stacked",
+        postRefusal: "reject_ignored",
+        fingerprint: "webgl_fonts",
+        cookies: testCookies.slice(0, 6).filter((name) => !gpcEnabled || name !== "_fbc"),
+        trackers: []
+      };
+      // Retain the transmitted requests, while ensuring a stalled provider
+      // cannot consume the passive lane's existing quiet-window cap.
+      window.__CERTSCORE_TEST2_TRACKER_SETTLED__ = Promise.all(trackerUrls.map((url) => {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 120);
+        return fetch(url, {
+          cache: "no-store", credentials: "omit", mode: "no-cors",
+          referrerPolicy: "no-referrer", signal: controller.signal
+        }).then(() => "completed", () => "stopped").finally(() => window.clearTimeout(timeout));
+      }));
+      const runtime = document.createElement("script");
+      runtime.src = "/certscore-review-canary.js";
+      document.body.appendChild(runtime);
+    })();
+  </script>
+</body>
+</html>

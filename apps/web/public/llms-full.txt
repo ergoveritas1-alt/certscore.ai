@@ -244,7 +244,7 @@ Choice-path interpretation:
 - Read Accept/Reject `execution.status` independently of consent confirmation. Both `succeeded` and `succeeded_with_confirmation` are completed paths; report returned after-click facts even when registration is unconfirmed. Missing historical execution is unavailable. Use canonical findings for score effects.
 - `postAcceptObservation` is a score-neutral comparison baseline.
 - `postRefusalObservation` separates registered-refusal verdicts from `afterAction` facts. Canonical findings may also include independently verified Reject-click tracking under its separate policy; do not infer scoring from request counts.
-- The public methodology is https://certscore.ai/guides/consent-enforcement-testing and an authentic owned-sample report is https://certscore.ai/scan/f4362840-376e-4d8c-897a-34a220136ad4.
+- The public methodology is https://certscore.ai/guides/consent-enforcement-testing and an authentic owned-sample report is https://certscore.ai/scan/981194df-111a-42dc-958e-89b98a6c2735.
 
 Docs:
 

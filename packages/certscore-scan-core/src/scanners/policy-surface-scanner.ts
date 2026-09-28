@@ -20,6 +20,7 @@ import {
   type PrivacySurfaceClassification,
   type PrivacySurfaceMatchStrength,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
+  PRIVACY_SURFACE_PHRASE_REGISTRY,
   privacySurfacePathsForLocale,
   type ScanModuleRun,
   type SupportedPrivacyEvidenceLocale,
@@ -230,6 +231,7 @@ function policySurfaceCandidatesFromRetainedRenderedLinks(
       linkText: link.linkText || link.href,
       linkVisibility: link.linkVisibility,
       accessibleNameSource: link.accessibleNameSource,
+      linkSourcePageUrl: sanitizedSiteFacingUrl(link.pageUrl),
       selector: link.selector,
       renderedSourcePageUrl: link.pageUrl,
       domLocation: link.domLocation,
@@ -285,6 +287,7 @@ function mergeVisibleLinkProof(
     ...preferred,
     linkVisibility: "visible",
     accessibleNameSource: other.accessibleNameSource,
+    linkSourcePageUrl: other.linkSourcePageUrl,
     classifierProvenance: other.classifierProvenance,
     classifierReasonCodes: other.classifierReasonCodes,
     linkText: other.linkText,
@@ -505,6 +508,7 @@ export interface NanoTopicExtractionResult {
 export interface PolicySurfaceCandidate {
   linkVisibility?: "visible" | "hidden";
   accessibleNameSource?: RetainedRenderedPolicyLink["accessibleNameSource"];
+  linkSourcePageUrl?: string;
   cmpDiscovery?: PolicySurfaceObservation["cmpDiscovery"];
   candidateId: string;
   url: string;
@@ -4287,16 +4291,21 @@ async function extractRenderedCandidates(
       const headChars = Math.floor(maxChars * 0.65);
       return `${text.slice(0, headChars)}\n\n[CertScore retained tail of oversized rendered text.]\n\n${text.slice(-(maxChars - headChars))}`;
     }, MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS).catch(() => "");
-    const collectPolicyCandidates = ({ maxCandidates, cmpScopes, vendorPattern }: {
+    const collectPolicyCandidates = ({ maxCandidates, cmpScopes, vendorPattern, priorityPhrases }: {
       maxCandidates: number;
       cmpScopes: typeof CMP_POLICY_SCOPES;
       vendorPattern: string;
+      priorityPhrases: string[];
     }) => {
       type RawCandidate = {
         cmpProvider?: string;
         cmpVendor?: boolean;
         href?: string;
         text: string;
+        accessibleName?: string;
+        accessibleNameSource?: RetainedRenderedPolicyLink["accessibleNameSource"];
+        linkVisibility?: "visible" | "hidden";
+        linkSourcePageUrl?: string;
         selector?: string;
         domLocation: "footer" | "header" | "nav" | "body";
         clickable: boolean;
@@ -4358,14 +4367,72 @@ async function extractRenderedCandidates(
           ...root.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]"),
         ];
         const remaining = maxCandidates - output.length;
-        const headCount = Math.ceil(remaining / 2);
-        const elements = allElements.length > remaining
-          ? [...allElements.slice(0, headCount), ...allElements.slice(-(remaining - headCount))]
-          : allElements;
+        let elements = allElements;
+        if (allElements.length > remaining) {
+          // Preserve bounded first/last discovery, but reserve a few slots for
+          // registered privacy-choice labels buried in a large middle section.
+          // Classification and visible proof still happen below; this only
+          // prevents the sampling cap from dropping those candidates outright.
+          const priorityMatches = allElements.filter((element) => {
+            if (!element.matches("a[href], button, [role='button'], [role='link']")) return false;
+            const label = normalizeText([
+              element.textContent?.slice(0, 250),
+              element.getAttribute("aria-label"),
+              element.getAttribute("title"),
+              element.querySelector("img[alt]")?.getAttribute("alt"),
+            ].filter(Boolean).join(" ")).normalize("NFKC").toLowerCase();
+            return priorityPhrases.some((phrase) => label.includes(phrase));
+          });
+          const isRectVisible = (element: Element) => [...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0);
+          const priority = [
+            ...priorityMatches.filter(isRectVisible),
+            ...priorityMatches.filter((element) => !isRectVisible(element)),
+          ].slice(0, Math.min(40, remaining));
+          const selected = new Set(priority);
+          const headCount = Math.ceil((remaining - priority.length) / 2);
+          const tailCount = remaining - priority.length - headCount;
+          for (const element of allElements.slice(0, headCount)) selected.add(element);
+          if (tailCount > 0) {
+            for (const element of allElements.slice(-tailCount)) selected.add(element);
+          }
+          if (selected.size < remaining) {
+            for (const element of allElements) {
+              selected.add(element);
+              if (selected.size >= remaining) break;
+            }
+          }
+          elements = [...selected].slice(0, remaining);
+        }
         for (const element of elements) {
           if (output.length >= maxCandidates) break;
           const cmpContext = cmpContextFor(element);
           const href = hrefFromElement(element);
+          const directAnchor = element.matches("a[href]") && Boolean(element.getAttribute("href")?.trim());
+          const labelledBy = element.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
+            .map((id) => (element.getRootNode() as Document | ShadowRoot).getElementById(id)?.textContent ?? "")
+            .join(" ");
+          const names = [
+            ["aria_label", element.getAttribute("aria-label")],
+            ["aria_labelledby", labelledBy],
+            ["text", (element as HTMLElement).innerText],
+            ["image_alt", [...element.querySelectorAll("img[alt]")].map((img) => img.getAttribute("alt")).join(" ")],
+            ["svg_title", element.querySelector("svg title")?.textContent],
+            ["title", element.getAttribute("title")],
+          ] as const;
+          const named = names.find(([, value]) => value?.trim());
+          const accessibleName = normalizeText(named?.[1]).slice(0, 220);
+          let linkVisibility: "visible" | "hidden" = "visible";
+          if (directAnchor) {
+            for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
+              const style = getComputedStyle(current);
+              if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
+                  current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) {
+                linkVisibility = "hidden";
+                break;
+              }
+            }
+            if (![...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0)) linkVisibility = "hidden";
+          }
           const text = normalizeText([
             element.textContent,
             element.getAttribute("aria-label"),
@@ -4379,6 +4446,12 @@ async function extractRenderedCandidates(
             cmpProvider: cmpContext.provider,
             cmpVendor: cmpContext.vendor,
             text: text.slice(0, 220),
+            ...(directAnchor ? {
+              accessibleName,
+              accessibleNameSource: named?.[0] ?? "none",
+              linkVisibility,
+              linkSourcePageUrl: document.URL,
+            } : {}),
             selector: selectorFor(element),
             domLocation: domLocationForElement(element),
             clickable: element.matches("button, a, [role='button'], [role='link']"),
@@ -4403,7 +4476,14 @@ async function extractRenderedCandidates(
     };
     // tsx/esbuild can emit a module-scoped function-name helper. Bind it only
     // within this serialized read, without installing anything on the target.
-    const discoveryArgs = JSON.stringify({ maxCandidates: MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS, cmpScopes: CMP_POLICY_SCOPES, vendorPattern: CMP_VENDOR_SCOPE_PATTERN.source });
+    const discoveryArgs = JSON.stringify({
+      maxCandidates: MAX_RENDERED_POLICY_DISCOVERY_ELEMENTS,
+      cmpScopes: CMP_POLICY_SCOPES,
+      vendorPattern: CMP_VENDOR_SCOPE_PATTERN.source,
+      priorityPhrases: PRIVACY_SURFACE_PHRASE_REGISTRY
+        .filter((phrase) => ["do_not_sell_or_share", "your_privacy_choices"].includes(phrase.surfaceType) && ["direct", "equivalent"].includes(phrase.strength))
+        .map((phrase) => phrase.phrase.normalize("NFKC").toLowerCase()),
+    });
     const rawCandidates = await page.evaluate<ReturnType<typeof collectPolicyCandidates>>(
       `(() => { const __name = (fn) => fn; return (${collectPolicyCandidates.toString()})(${discoveryArgs}); })()`,
     ).catch(() => []);
@@ -4438,9 +4518,10 @@ async function extractRenderedCandidates(
       ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
       if ("cmpVendor" in candidate && candidate.cmpVendor) return [];
       const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, renderedBaseUrl) : renderedBaseUrl;
-      const surroundingTextExcerpt = surroundingText(visibleText, candidate.text, visibleTextLower);
+      const candidateLinkText = candidate.accessibleName || candidate.text;
+      const surroundingTextExcerpt = surroundingText(visibleText, candidateLinkText, visibleTextLower);
       const deterministic = classifySurface({
-        linkText: candidate.text,
+        linkText: candidateLinkText,
         url: normalizedUrl,
         surroundingText: surroundingTextExcerpt,
       });
@@ -4478,7 +4559,12 @@ async function extractRenderedCandidates(
           : undefined,
         url: candidate.href ?? renderedBaseUrl,
         normalizedUrl,
-        linkText: candidate.text || normalizedUrl,
+        linkText: candidateLinkText || normalizedUrl,
+        ...(candidate.linkSourcePageUrl === renderedBaseUrl && page.url() === renderedBaseUrl ? {
+          linkVisibility: candidate.linkVisibility,
+          accessibleNameSource: candidate.accessibleNameSource,
+          linkSourcePageUrl: sanitizedSiteFacingUrl(candidate.linkSourcePageUrl),
+        } : {}),
         selector: candidate.selector,
         renderedSourcePageUrl: renderedBaseUrl,
         surroundingTextExcerpt,
@@ -6268,6 +6354,7 @@ function observationFromCandidate(
     linkText: candidate.linkText,
     linkVisibility: candidate.linkVisibility,
     accessibleNameSource: candidate.accessibleNameSource,
+    linkSourcePageUrl: candidate.linkSourcePageUrl,
     parentObservationId: candidate.parentObservationId,
     parentSurfaceUrl: candidate.parentSurfaceUrl,
     traversalDepth: candidate.traversalDepth ?? 0,
@@ -10637,6 +10724,15 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
         (policyCandidateDiscoveryPriority(candidate) === policyCandidateDiscoveryPriority(existing) && candidate.deterministicScore > existing.deterministicScore)
       ));
     const preferred = preferCandidate ? candidate : existing!;
+    const other = preferCandidate ? existing : candidate;
+    const visibleLink = [preferred, other].find((item) =>
+      item?.clickable && item.linkVisibility === "visible" &&
+      item.accessibleNameSource && item.accessibleNameSource !== "none" &&
+      item.linkSourcePageUrl
+    );
+    const retainedLinkEvidence = visibleLink ?? [preferred, other].find((item) =>
+      item?.linkVisibility && item.linkSourcePageUrl
+    );
     const renderedLink = [existing, candidate].find((item) =>
       item?.clickable && item.renderedSourcePageUrl &&
       isPolicySessionPrimerCompatible(item.renderedSourcePageUrl, candidate.normalizedUrl)
@@ -10647,10 +10743,48 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
         renderedSourcePageUrl: renderedLink.renderedSourcePageUrl,
         selector: preferred.selector ?? renderedLink.selector,
       } : {}),
+      // Keep the observed anchor's label, classification and locator together.
+      // Fetch eligibility still follows the preferred URL candidate.
+      ...(retainedLinkEvidence ? {
+        candidateId: retainedLinkEvidence.candidateId,
+        linkText: retainedLinkEvidence.linkText,
+        linkVisibility: retainedLinkEvidence.linkVisibility,
+        accessibleNameSource: retainedLinkEvidence.accessibleNameSource,
+        linkSourcePageUrl: retainedLinkEvidence.linkSourcePageUrl,
+        selector: retainedLinkEvidence.selector,
+        renderedSourcePageUrl: retainedLinkEvidence.renderedSourcePageUrl,
+        surroundingTextExcerpt: retainedLinkEvidence.surroundingTextExcerpt,
+        domLocation: retainedLinkEvidence.domLocation,
+        discoveryMethod: retainedLinkEvidence.discoveryMethod,
+        mayLeadToConsentControls: retainedLinkEvidence.mayLeadToConsentControls,
+        deterministicSurfaceType: retainedLinkEvidence.deterministicSurfaceType,
+        deterministicScore: retainedLinkEvidence.deterministicScore,
+        deterministicKeywordMatches: retainedLinkEvidence.deterministicKeywordMatches,
+        deterministicMatchedConcept: retainedLinkEvidence.deterministicMatchedConcept,
+        deterministicMatchedLocale: retainedLinkEvidence.deterministicMatchedLocale,
+        deterministicMatchStrength: retainedLinkEvidence.deterministicMatchStrength,
+        deterministicClassifierReasonCodes: retainedLinkEvidence.deterministicClassifierReasonCodes,
+        deterministicClassifierProvenance: retainedLinkEvidence.deterministicClassifierProvenance,
+      } : {}),
       cmpDiscovery: mergeCmpPolicyProvenance(preferred.cmpDiscovery, (preferCandidate ? existing : candidate)?.cmpDiscovery),
     });
   }
-  return [...byUrl.values()];
+  const deduped = [...byUrl.values()];
+  // Observation-only controls retain selector-specific candidates so two
+  // different controls can share a destination. A static HTML candidate has no
+  // selector or browser visibility proof, however, and must not take a bounded
+  // ranking slot ahead of the same link inspected in the rendered document.
+  return deduped.filter((candidate) => {
+    if (!candidate.observationOnly || candidate.selector || candidate.linkVisibility !== undefined) return true;
+    const label = normalizeWhitespace(candidate.linkText).toLowerCase();
+    return !deduped.some((rendered) =>
+      rendered !== candidate && rendered.observationOnly && Boolean(rendered.selector) &&
+      rendered.normalizedUrl === candidate.normalizedUrl &&
+      rendered.deterministicSurfaceType === candidate.deterministicSurfaceType &&
+      normalizeWhitespace(rendered.linkText).toLowerCase() === label &&
+      rendered.linkVisibility !== undefined && Boolean(rendered.linkSourcePageUrl)
+    );
+  });
 }
 
 function remainingMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {

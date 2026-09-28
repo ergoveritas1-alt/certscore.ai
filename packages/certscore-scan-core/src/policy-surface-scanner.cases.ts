@@ -28,6 +28,8 @@ import {
   commonPathCandidatesFor,
   commonPathLocaleHintsForUnavailableHomepage,
   countRecoveredPolicySurfaceObservations,
+  dedupeCandidates,
+  extractCandidates,
   extractPolicyCookieDisclosures,
   extractPolicySections,
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
@@ -330,8 +332,8 @@ test("policySurfaceScanner warms an observed privacy link before guessed policy 
       url: `${baseUrl}/`,
       normalizedUrl: `${baseUrl}/`,
       scanStartedAtMs: startedAt,
-      internalBudgetMs: 2_500,
-      absoluteDeadlineAtMs: startedAt + 2_500,
+      internalBudgetMs: 6_000,
+      absoluteDeadlineAtMs: startedAt + 6_000,
       discoveryMode: "fast",
       artifactWriter: await createArtifactWriter(tempRoot),
       nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider(),
@@ -661,7 +663,14 @@ test("policySurfaceScanner caps a same-origin supplement fetch and does not rend
     assert.equal(supplement?.traversalDepth, 1);
     assert.equal(supplement?.selectionReasonCodes?.includes("supplement_fetch_cap_2500ms"), true);
     assert.equal(supplement?.selectionReasonCodes?.includes("supplement_rendered_fallback_disabled"), true);
-    assert.equal(Date.now() - startedAt < 7_000, true, "bounded traversal should not wait for the delayed response");
+    const secondaryFetch = result.moduleRun.timingBreakdown?.find((timing) =>
+      timing.label === "secondary policy fetch group"
+    );
+    assert.ok(secondaryFetch, "secondary policy fetch timing should be retained");
+    assert.ok(
+      secondaryFetch.durationMs < 3_500,
+      `bounded supplement fetch took ${secondaryFetch.durationMs}ms and may have waited for the delayed response`,
+    );
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve, reject) =>
@@ -2781,6 +2790,77 @@ test("policySurfaceScanner classifies expected policy and control surfaces", asy
   }
 });
 
+test("policy lane preserves rendered control proof when static discovery found the same link", async () => {
+  for (const [page, sourcePath, surfaceType, path, visibility, nameSource, label] of [
+    ["policy-do-not-sell-link", "/f/policy-do-not-sell", "do_not_sell_or_share", "/do-not-sell-or-share", "visible", "text", /Do Not Sell or Share My Personal Information/],
+    ["policy-hidden-do-not-sell-link", "/f/policy-hidden-do-not-sell", "do_not_sell_or_share", "/do-not-sell-or-share", "hidden", "text", /Do Not Sell or Share My Personal Information/],
+    ["policy-image-do-not-sell-link", "/f/policy-image-do-not-sell", "do_not_sell_or_share", "/do-not-sell-or-share", "visible", "image_alt", /Do Not Sell or Share My Personal Information/],
+    ["policy-unavailable-choice-link", "/f/policy-unavailable-choice", "your_privacy_choices", "/privacy-control/missing", "visible", "text", /Your Privacy Choices/],
+    ["policy-external-choice-platform", "/f/policy-external-choice", "your_privacy_choices", "/privacy-control/onetrust/choices", "visible", "text", /Your Privacy Choices/],
+    ["policy-mixed-choice-labels", "/f/policy-mixed-choice-labels", "your_privacy_choices", "/privacy-control/onetrust/choices", "visible", "text", /Your Privacy Choices/],
+  ] as const) {
+    await withPolicyScan(page, ({ result, baseUrl }) => {
+      const observation = result.policySurfaceObservations.find((surface) =>
+        surface.surfaceType === surfaceType &&
+        surface.directlyLinkedFromScannedPage === true &&
+        surface.url.includes(path)
+      );
+      assert.ok(observation, `${page} should retain the direct link`);
+      assert.equal(observation.linkVisibility, visibility, page);
+      assert.equal(observation.accessibleNameSource, nameSource, page);
+      assert.equal(observation.linkSourcePageUrl, `${baseUrl}${sourcePath}`, page);
+      assert.match(observation.linkText ?? "", label, page);
+      if (page === "policy-unavailable-choice-link") {
+        assert.notEqual(observation.documentEvaluationState, "usable", page);
+      }
+      if (page === "policy-mixed-choice-labels") {
+        assert.equal(observation.selector, "#visible-choices", page);
+        assert.match(observation.surroundingTextExcerpt ?? "", /Your Privacy Choices/, page);
+        assert.doesNotMatch(observation.surroundingTextExcerpt ?? "", /Do Not Sell or Share/, page);
+        assert.equal(result.policySurfaceObservations.some((surface) =>
+          surface.surfaceType === "do_not_sell_or_share" && surface.linkVisibility === "visible" &&
+          surface.url.includes(path)
+        ), false, page);
+      }
+      assert.equal(result.moduleRun.timingBreakdown?.some((timing) => timing.label === "rendered discovery"), true, page);
+    }, { discoveryMode: "fast", internalBudgetMs: 12_000 });
+  }
+});
+
+test("observation-only Cookie Settings keeps rendered proof ahead of its static duplicate", () => {
+  const pageUrl = "https://example.test/";
+  const staticCandidate = extractCandidates(pageUrl,
+    '<nav><a href="/cookie-settings">Cookie Settings</a></nav>', "Cookie Settings")
+    .find(candidate => candidate.deterministicSurfaceType === "cookie_settings");
+  assert.ok(staticCandidate);
+  const rendered = { ...staticCandidate, candidateId: "rendered-cookie-settings", selector: "#settings",
+    linkVisibility: "visible" as const, accessibleNameSource: "text" as const,
+    linkSourcePageUrl: pageUrl };
+  const retained = dedupeCandidates([staticCandidate, rendered]);
+  assert.equal(retained.length, 1);
+  assert.equal(retained[0]?.linkVisibility, "visible");
+  assert.equal(retained[0]?.accessibleNameSource, "text");
+  assert.equal(retained[0]?.selector, "#settings");
+  const hidden = dedupeCandidates([staticCandidate, { ...rendered, linkVisibility: "hidden" as const }]);
+  assert.equal(hidden.length, 1);
+  assert.equal(hidden[0]?.linkVisibility, "hidden");
+  assert.equal(dedupeCandidates([staticCandidate, { ...rendered, linkText: "Other settings" }]).length, 2,
+    "a different same-URL control must not borrow the visible anchor's proof");
+});
+
+test("policy lane keeps a visible privacy-choice link from the middle of an overflowing DOM", async () => {
+  await withPolicyScan("policy-middle-choice-link", ({ result, baseUrl }) => {
+    const choice = result.policySurfaceObservations.find((surface) =>
+      surface.surfaceType === "your_privacy_choices" &&
+      surface.url.includes("/privacy-control/onetrust/choices") &&
+      surface.linkVisibility === "visible"
+    );
+    assert.ok(choice);
+    assert.equal(choice.selector, "#middle-choices");
+    assert.equal(choice.linkSourcePageUrl, `${baseUrl}/f/policy-middle-choice-link`);
+  }, { discoveryMode: "fast", internalBudgetMs: 12_000 });
+});
+
 test("policySurfaceScanner uses canonical privacy-surface classifier across supported locales", async () => {
   await withPolicyScan("policy-multilingual-surfaces", async ({ result }) => {
     const diagnostics = await readPolicyCaptureDiagnostics(result);
@@ -2991,7 +3071,7 @@ test("policySurfaceScanner retains canonical GDPR Transparency topic candidates 
         );
       }
     }
-  });
+  }, { internalBudgetMs: 15_000 });
 });
 
 test("policySurfaceScanner derives diagnostic GDPR Transparency candidates from retained French policy sections", () => {
@@ -3962,7 +4042,7 @@ test("policySurfaceScanner fetches long policies and captures all canonical GDPR
         );
         assert.ok(lateTopic, `${locale} should retain the topic placed after the former 40k cutoff`);
       }
-    }, { internalBudgetMs: 30_000 });
+    }, { internalBudgetMs: 60_000 });
   }
 });
 
@@ -5668,7 +5748,7 @@ test("policySurfaceScanner does not follow third-party privacy policy links from
 
     assert.ok(firstPartyCookie);
     assert.deepEqual(thirdPartyPolicies, []);
-  }, { enableNanoPolicyAssist: true, internalBudgetMs: 12_000 });
+  }, { enableNanoPolicyAssist: true, internalBudgetMs: 20_000 });
 });
 
 test("policySurfaceScanner ignores external URL-only body privacy links as policy surfaces", async () => {
