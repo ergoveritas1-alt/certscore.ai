@@ -19,7 +19,7 @@ export function HomepageFindingsOverview() {
   const previewLabel = showJson ? "Actual report export · selected fields" : slide.code?.label ?? "Actual scan report · click to enlarge";
 
   return (
-    <section id="findings-overview" aria-labelledby="showcase-heading" className="scroll-mt-24 bg-white px-5 pt-8 sm:px-8">
+    <section id="findings-overview" aria-labelledby="showcase-heading" className="scroll-mt-24 bg-white px-5 pt-4 sm:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
           <div>
