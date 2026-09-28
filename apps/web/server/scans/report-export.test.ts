@@ -11,6 +11,7 @@ import { buildCanonicalReportExport } from "./report-export";
 import { renderCanonicalReportPdf } from "./report-export-pdf";
 import { aggregateFullSite } from "@website-signal-risk-scanner/shared";
 import { completedActionProjection } from "../../lib/scans/test-fixtures/action-execution-projection";
+import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 
@@ -72,6 +73,7 @@ test("review focus changes presentation without changing evidence, findings or s
 test("exports omit speculative action lanes but preserve independently verified clicks", () => {
   const record = scanRecord();
   record.runtimeArtifacts = {
+    consentControlAssessment: observedControlAssessment,
     postAcceptEvidenceProjection: completedActionProjection("accept"),
     postRefusalEvidenceProjection: completedActionProjection("reject"),
   };
