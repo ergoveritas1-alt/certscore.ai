@@ -21,7 +21,7 @@ export function HomepageFindingsOverview() {
   return (
     <section id="findings-overview" aria-labelledby="showcase-heading" className="scroll-mt-24 bg-white px-5 py-16 sm:px-8 lg:py-24">
       <div className="mx-auto max-w-7xl">
-        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Findings overview</p>
             <h2 id="showcase-heading" className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">See what’s inside a scan.</h2>
