@@ -66,7 +66,6 @@ export function HomepageFindingsOverview() {
                   </button>
                 ) : null}
               </div>
-              <p className="border-t border-slate-200 px-4 py-3 text-xs leading-5 text-slate-500 sm:px-6">Owned test page · ergoveritas.com/test2.html · 28 Sep 2026 · California</p>
             </div>
 
             <div className="flex min-w-0 flex-col p-6 sm:p-8">
