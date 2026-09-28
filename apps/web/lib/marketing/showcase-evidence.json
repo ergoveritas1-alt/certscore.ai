@@ -1,0 +1,136 @@
+{
+  "scan": {
+    "id": "d96df06d-3e94-4896-8346-1a026d68e5af",
+    "domainHostname": "ergoveritas.com",
+    "status": "completed",
+    "scanType": "full",
+    "scanFrom": "california",
+    "createdAt": "2026-09-28T15:36:36.691Z",
+    "startedAt": "2026-09-28T15:36:36.691Z",
+    "completedAt": "2026-09-28T15:36:44.010Z",
+    "durationMs": null,
+    "pagesRequested": 5,
+    "pagesScanned": 1
+  },
+  "gpcResponse": {
+    "status": "responsive",
+    "observation": {
+      "status": "complete",
+      "delivery": {
+        "httpHeaderRetained": true,
+        "mainNavigatorReadbackRetained": true,
+        "fullContextVerified": true
+      }
+    },
+    "activityComparison": {
+      "status": "measured",
+      "durationMs": 250,
+      "activity": {
+        "advertisingMarketing": {
+          "baselineRequests": 1,
+          "gpcRequests": 0,
+          "baselineServices": 1,
+          "gpcServices": 0
+        },
+        "analyticsReplay": {
+          "baselineRequests": 5,
+          "gpcRequests": 5,
+          "baselineServices": 5,
+          "gpcServices": 5
+        }
+      }
+    }
+  },
+  "postRefusalObservation": {
+    "status": "confirmed_observation",
+    "execution": {
+      "policyVersion": "choice_path_execution.v1",
+      "status": "succeeded_with_confirmation",
+      "clickCompleted": true,
+      "observationCompleted": true,
+      "consentConfirmed": true
+    },
+    "observationCount": 2,
+    "verdict": "eligible_nonessential_activity_observed_after_confirmed_refusal"
+  },
+  "privacyAuditEvidence": {
+    "verificationStatus": "verified",
+    "controls": [],
+    "notices": [
+      {
+        "kind": "privacy_policy",
+        "url": "https://ergoveritas.com/test2-privacy-policy.html",
+        "coverage": "partial",
+        "passages": [
+          {
+            "topic": "sale_sharing"
+          },
+          {
+            "topic": "collection_purposes"
+          },
+          {
+            "topic": "retention"
+          },
+          {
+            "topic": "privacy_rights"
+          },
+          {
+            "topic": "opt_out_methods"
+          }
+        ]
+      }
+    ]
+  },
+  "projection": {
+    "unifiedFindings": [
+      {
+        "unifiedFindingId": "cookie_policy_present",
+        "title": "Cookie settings or policy surface present",
+        "severity": "medium"
+      },
+      {
+        "unifiedFindingId": "privacy_policy_present",
+        "title": "Privacy policy surface present",
+        "severity": "medium"
+      },
+      {
+        "unifiedFindingId": "consent_gated_tracking_claim_conflict",
+        "title": "Consent-gated tracking claim conflict",
+        "severity": "high"
+      },
+      {
+        "unifiedFindingId": "post_refusal_non_essential_activity",
+        "title": "Non-essential activity continued after refusal",
+        "severity": "high"
+      },
+      {
+        "unifiedFindingId": "preconsent_tracking",
+        "title": "Third-party tracking observed before recorded consent",
+        "severity": "high"
+      },
+      {
+        "unifiedFindingId": "session_replay_observed",
+        "title": "Session replay observed",
+        "severity": "high"
+      },
+      {
+        "unifiedFindingId": "gpc_response",
+        "title": "GPC response",
+        "severity": "low"
+      }
+    ]
+  },
+  "appendix": {
+    "dataCollectionSurfaces": {
+      "assessmentStatus": "not_observed",
+      "summary": {
+        "totalForms": 0,
+        "totalFields": 0,
+        "candidateForms": 0,
+        "candidateFields": 0,
+        "omittedForms": 0,
+        "omittedFields": 0
+      }
+    }
+  }
+}

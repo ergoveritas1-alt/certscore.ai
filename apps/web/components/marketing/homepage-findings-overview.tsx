@@ -1,642 +1,110 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import type { FindingReferenceItem } from "../../lib/marketing/finding-atlas";
+import Image from "next/image";
+import { useRef, useState } from "react";
+import { HOMEPAGE_SHOWCASE } from "../../lib/marketing/homepage-showcase";
+import { AUTHENTIC_SAMPLE_REPORT_URL } from "../../lib/marketing/sample-report";
 
-type HomepageFindingsOverviewProps = {
-  findings: FindingReferenceItem[];
-};
+const focus = "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-700";
 
-type HomepageChecklistFinding = {
-  category: "Consent Controls" | "Policy Surfaces" | "GDPR Transparency" | "Pre-consent Signals";
-  criticalityChip: string;
-  evidence: {
-    lines: string[];
-    title: string;
+export function HomepageFindingsOverview() {
+  const [active, setActive] = useState(0);
+  const [showJson, setShowJson] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const slide = HOMEPAGE_SHOWCASE[active]!;
+  const select = (index: number) => {
+    setActive((index + HOMEPAGE_SHOWCASE.length) % HOMEPAGE_SHOWCASE.length);
+    setShowJson(false);
   };
-  href?: string;
-  id: string;
-  overview: string;
-  regulatoryCopy: string;
-  regulatoryLabel: string;
-  reviewPrompt: string;
-  title: string;
-};
-
-const HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS = [
-  {
-    id: "consent_banner_observed",
-    title: "Consent banner observed",
-    category: "Consent Controls",
-    criticalityChip: "Evidence checklist",
-    overview:
-      "CertScore retains whether an actionable cookie banner, consent prompt, or CMP preference surface was observed in the tested public-web context.",
-    regulatoryLabel: "Consent surface availability",
-    regulatoryCopy:
-      "Useful for reviewing whether a visitor was presented with a choice surface before optional cookies, tracking, or storage activity was evaluated.",
-    evidence: {
-      title: "Consent surface sample",
-      lines: [
-        "{\"rowId\":\"consent_surface_observed\",\"status\":\"Observed\"}",
-        "{\"surface\":\"homepage\",\"component\":\"cookie_banner\"}",
-        "{\"evidenceState\":\"observed\",\"source\":\"retained_scan_evidence\"}"
-      ]
-    },
-    reviewPrompt: "What retained screenshot or DOM evidence shows the consent surface that was available to the visitor?"
-  },
-  {
-    id: "accept_control_available",
-    title: "Accept control available",
-    category: "Consent Controls",
-    criticalityChip: "Evidence checklist",
-    overview:
-      "The checklist can show whether a first-layer accept, accept-all, allow-all, or agree control was observed on the retained consent surface.",
-    regulatoryLabel: "Affirmative choice control",
-    regulatoryCopy:
-      "Useful for comparing the available acceptance path with refusal and settings paths without treating label presence as a consent action.",
-    evidence: {
-      title: "Accept control sample",
-      lines: [
-        "{\"rowId\":\"accept_consent_control\",\"status\":\"Observed\"}",
-        "{\"controlIntent\":\"accept\",\"layer\":\"initial\"}",
-        "{\"labelEvidence\":\"Accept all\",\"actionClicked\":false}"
-      ]
-    },
-    reviewPrompt: "Which retained first-layer control supports accept availability, and what language or viewport was captured?"
-  },
-  {
-    id: "reject_decline_control_available",
-    title: "Decline consent control",
-    category: "Consent Controls",
-    criticalityChip: "High criticality",
-    href: "/findings/reject_option_missing_or_hidden",
-    overview:
-      "The checklist can show whether a reject, decline, refuse, necessary-only, or continue-without-accepting path was observed on the retained consent surface.",
-    regulatoryLabel: "Refusal path availability",
-    regulatoryCopy:
-      "Useful for reviewing whether refusal evidence is visible and direct in the tested context, without relying on post-consent clicking.",
-    evidence: {
-      title: "Reject control sample",
-      lines: [
-        "{\"rowId\":\"reject_all_path_availability\",\"status\":\"Observed\"}",
-        "{\"controlIntent\":\"reject\",\"variant\":\"continue_without_accepting\"}",
-        "{\"layer\":\"initial\",\"actionClicked\":false}"
-      ]
-    },
-    reviewPrompt: "Was a refusal-equivalent control retained on the first layer, or was the row coverage limited?"
-  },
-  {
-    id: "options_settings_preferences_control",
-    title: "Options / settings / preferences control",
-    category: "Consent Controls",
-    criticalityChip: "Evidence checklist",
-    overview:
-      "The checklist can show whether a settings, preferences, options, or manage-choices control was retained on the consent surface.",
-    regulatoryLabel: "Choice configuration path",
-    regulatoryCopy:
-      "Useful for reviewing whether a path to more granular choices was visible, while keeping options distinct from proof of reject availability.",
-    evidence: {
-      title: "Options control sample",
-      lines: [
-        "{\"rowId\":\"options_settings_preferences_control\",\"status\":\"Observed\"}",
-        "{\"controlIntent\":\"options\",\"labelEvidence\":\"Set up\"}",
-        "{\"layer\":\"initial\",\"deeperPathClicked\":false}"
-      ]
-    },
-    reviewPrompt: "Which retained control opened or indicated a settings path, and does the evidence distinguish it from reject?"
-  },
-  {
-    id: "consent_platform_identified",
-    title: "Consent platform identified",
-    category: "Consent Controls",
-    criticalityChip: "Review signal",
-    overview:
-      "CertScore can retain CMP or consent-framework evidence such as known vendor signals, framework APIs, consent cookies, or canonical CMP registry matches.",
-    regulatoryLabel: "CMP and consent framework context",
-    regulatoryCopy:
-      "Useful for reviewing regional configuration, framework behavior, and whether consent evidence comes from a recognizable consent-management surface.",
-    evidence: {
-      title: "CMP signal sample",
-      lines: [
-        "{\"rowId\":\"cmp_framework_signal_observed\",\"status\":\"Observed\"}",
-        "{\"cmp\":\"Didomi\",\"registryMatch\":\"canonical_cmp\"}",
-        "{\"signals\":[\"dom_selector\",\"consent_cookie\"]}"
-      ]
-    },
-    reviewPrompt: "Which retained CMP signal or framework evidence supports the consent-platform identification?"
-  },
-  {
-    id: "privacy_notice_availability",
-    title: "Privacy notice availability",
-    category: "Policy Surfaces",
-    criticalityChip: "Evidence checklist",
-    overview:
-      "The checklist can show whether a reachable privacy notice or privacy policy surface was retained for the scanned site.",
-    regulatoryLabel: "Public privacy surface retained",
-    regulatoryCopy:
-      "Useful for deciding whether GDPR transparency rows can be evaluated from retained policy text or should be marked coverage limited.",
-    evidence: {
-      title: "Privacy notice sample",
-      lines: [
-        "{\"rowId\":\"privacy_notice_availability\",\"status\":\"Observed\"}",
-        "{\"surfaceType\":\"privacy_policy\",\"url\":\"https://example.test/privacy\"}",
-        "{\"textQuality\":\"usable\",\"source\":\"policy_surface_scanner\"}"
-      ]
-    },
-    reviewPrompt: "Was a usable privacy notice retained, and what coverage limitation applies if text extraction was low quality?"
-  },
-  {
-    id: "cookie_policy_availability",
-    title: "Cookie policy availability",
-    category: "Policy Surfaces",
-    criticalityChip: "Evidence checklist",
-    overview:
-      "The checklist can show whether a cookie policy, cookie notice, cookie-settings surface, or equivalent disclosure surface was retained.",
-    regulatoryLabel: "Cookie disclosure surface retained",
-    regulatoryCopy:
-      "Useful for reviewing whether observed cookie and tracker behavior has a retained policy surface for comparison.",
-    evidence: {
-      title: "Cookie policy sample",
-      lines: [
-        "{\"rowId\":\"cookie_notice_policy_availability\",\"status\":\"Observed\"}",
-        "{\"surfaceType\":\"cookie_policy\",\"url\":\"https://example.test/cookies\"}",
-        "{\"coverage\":\"retained_policy_surface\"}"
-      ]
-    },
-    reviewPrompt: "Which retained cookie disclosure surface was used, and did it include usable text for reviewer context?"
-  },
-  {
-    id: "policy_surface_retained",
-    title: "Policy surface retained",
-    category: "Policy Surfaces",
-    criticalityChip: "Evidence checklist",
-    overview:
-      "CertScore can retain the policy surface URL, text quality, fetch or render pathway, and coverage notes needed before display rows claim policy evidence.",
-    regulatoryLabel: "Policy evidence availability",
-    regulatoryCopy:
-      "Useful for separating observed disclosure evidence from not-testable rows caused by missing, blocked, or low-quality policy extraction.",
-    evidence: {
-      title: "Policy retention sample",
-      lines: [
-        "{\"surfaceType\":\"privacy_policy\",\"coverageStatus\":\"usable\"}",
-        "{\"fetchPath\":\"canonical_prefetch\",\"textQuality\":\"usable\"}",
-        "{\"limitation\":null,\"evidenceRefs\":[\"policy_surface_001\"]}"
-      ]
-    },
-    reviewPrompt: "Was policy evidence actually retained, and does the retained text quality support row-specific extraction?"
-  },
-  {
-    id: "controller_contact_disclosure",
-    title: "Controller/contact disclosure",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained privacy-policy evidence includes a controller, privacy contact, or equivalent contact-point disclosure.",
-    regulatoryLabel: "Controller and contact transparency",
-    regulatoryCopy:
-      "Useful for reviewing whether users can identify who is responsible for processing and how to contact the privacy team.",
-    evidence: {
-      title: "Controller disclosure sample",
-      lines: [
-        "{\"rowId\":\"controller_contact_disclosure\",\"status\":\"Observed\"}",
-        "{\"disclosureType\":\"controller_contact\",\"matchStrength\":\"direct\"}",
-        "{\"source\":\"gdpr_transparency_topic_classifier.v1\"}"
-      ]
-    },
-    reviewPrompt: "Which retained policy excerpt identifies the controller, privacy contact, or equivalent contact point?"
-  },
-  {
-    id: "processing_purposes_disclosure",
-    title: "Processing purposes disclosure",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained policy text describes purposes for processing personal data.",
-    regulatoryLabel: "Purpose transparency",
-    regulatoryCopy:
-      "Useful for reviewing whether policy evidence gives a concrete purpose context for observed processing, cookies, vendors, or tracking.",
-    evidence: {
-      title: "Purpose disclosure sample",
-      lines: [
-        "{\"rowId\":\"processing_purposes_disclosure\",\"status\":\"Observed\"}",
-        "{\"disclosureType\":\"processing_purposes\",\"matchStrength\":\"direct\"}",
-        "{\"evidenceText\":\"bounded policy excerpt retained\"}"
-      ]
-    },
-    reviewPrompt: "Which retained policy text describes processing purposes, and is it specific enough for reviewer use?"
-  },
-  {
-    id: "legal_basis_disclosure",
-    title: "Legal basis disclosure",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained privacy-policy evidence includes a canonical legal-basis disclosure signal.",
-    regulatoryLabel: "Legal basis transparency",
-    regulatoryCopy:
-      "Useful for reviewing whether the policy text names legal bases without CertScore deciding whether the basis is correct.",
-    evidence: {
-      title: "Legal basis sample",
-      lines: [
-        "{\"rowId\":\"legal_basis_disclosure_observed\",\"status\":\"Observed\"}",
-        "{\"disclosureType\":\"legal_basis\",\"selectedEvidenceStrength\":\"strong\"}",
-        "{\"matchedLocale\":\"fr\",\"source\":\"deterministic\"}"
-      ]
-    },
-    reviewPrompt: "Which retained excerpt supports legal-basis disclosure, and what locale or classifier matched it?"
-  },
-  {
-    id: "recipients_vendor_categories_disclosed",
-    title: "Recipients/vendor categories disclosed",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained policy evidence describes recipient, vendor, partner, or third-party categories.",
-    regulatoryLabel: "Recipient and vendor-category transparency",
-    regulatoryCopy:
-      "Useful for comparing retained policy statements with observed runtime vendors and third-party domains.",
-    evidence: {
-      title: "Recipient disclosure sample",
-      lines: [
-        "{\"rowId\":\"recipients_vendor_categories_disclosure\",\"status\":\"Review signal\"}",
-        "{\"disclosureType\":\"recipients_vendor_categories\",\"matchStrength\":\"direct\"}",
-        "{\"runtimeComparison\":\"available_when_vendor_evidence_retained\"}"
-      ]
-    },
-    reviewPrompt: "Which retained text describes recipient or vendor categories, and does runtime evidence suggest review follow-up?"
-  },
-  {
-    id: "retention_disclosure",
-    title: "Retention disclosure",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained privacy-policy evidence includes a data-retention disclosure signal.",
-    regulatoryLabel: "Retention transparency",
-    regulatoryCopy:
-      "Useful for reviewing whether policy text describes retention periods or criteria, especially when cookie-retention evidence is retained.",
-    evidence: {
-      title: "Retention disclosure sample",
-      lines: [
-        "{\"rowId\":\"retention_disclosure_observed\",\"status\":\"Observed\"}",
-        "{\"disclosureType\":\"retention\",\"matchStrength\":\"direct\"}",
-        "{\"selectedPolicySectionUrl\":\"https://example.test/privacy\"}"
-      ]
-    },
-    reviewPrompt: "Which retained policy excerpt describes retention periods, criteria, or deletion timing?"
-  },
-  {
-    id: "data_subject_rights_disclosure",
-    title: "Data subject rights disclosure",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained policy evidence describes data subject rights or a rights request path.",
-    regulatoryLabel: "Rights request transparency",
-    regulatoryCopy:
-      "Useful for reviewing whether users are told how to exercise access, deletion, objection, correction, or portability rights.",
-    evidence: {
-      title: "Rights disclosure sample",
-      lines: [
-        "{\"rowId\":\"data_subject_rights_disclosure\",\"status\":\"Observed\"}",
-        "{\"disclosureType\":\"data_subject_rights\",\"matchStrength\":\"direct\"}",
-        "{\"evidenceRefs\":[\"policy_surface_001#rights\"]}"
-      ]
-    },
-    reviewPrompt: "Which retained policy text describes data subject rights or a request mechanism?"
-  },
-  {
-    id: "international_transfer_disclosure",
-    title: "International transfer disclosure",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained policy evidence describes international transfers or transfer-relevant vendor and endpoint context.",
-    regulatoryLabel: "Transfer transparency review",
-    regulatoryCopy:
-      "Useful for reviewing transfer disclosures alongside observed analytics, advertising, or identifier-bearing third-party endpoints.",
-    evidence: {
-      title: "Transfer disclosure sample",
-      lines: [
-        "{\"rowId\":\"international_transfers_disclosure\",\"status\":\"Review signal\"}",
-        "{\"disclosureType\":\"international_transfers\",\"matchStrength\":\"direct\"}",
-        "{\"endpointContext\":\"review_when_runtime_evidence_retained\"}"
-      ]
-    },
-    reviewPrompt: "Which retained policy text or endpoint context supports international-transfer review?"
-  },
-  {
-    id: "dpo_privacy_contact_point",
-    title: "DPO / privacy contact point",
-    category: "GDPR Transparency",
-    criticalityChip: "Article 13",
-    overview:
-      "The checklist can show whether retained privacy-policy evidence identifies a DPO, privacy office, or data-protection contact point.",
-    regulatoryLabel: "DPO or privacy contact evidence",
-    regulatoryCopy:
-      "Useful for reviewing whether a data-protection contact path is visible in the retained policy surface.",
-    evidence: {
-      title: "DPO contact sample",
-      lines: [
-        "{\"rowId\":\"dpo_contact_point_disclosure\",\"status\":\"Observed\"}",
-        "{\"disclosureType\":\"dpo_privacy_contact\",\"matchStrength\":\"direct\"}",
-        "{\"values\":\"contact details redacted in public preview\"}"
-      ]
-    },
-    reviewPrompt: "Which retained policy excerpt identifies a DPO, privacy office, or data-protection contact point?"
-  },
-  {
-    id: "third_party_tracking_before_recorded_consent",
-    title: "Third-party tracking before recorded consent",
-    category: "Pre-consent Signals",
-    criticalityChip: "High criticality",
-    href: "/findings/pre_consent_tracking_detected",
-    overview:
-      "Runtime evidence can tie analytics, advertising, cross-site measurement, or similar third-party requests to the page-load timeline before recorded consent.",
-    regulatoryLabel: "Consent timing before recorded choice",
-    regulatoryCopy:
-      "Useful for reviewing whether non-essential third-party activity began before a retained choice point was observed.",
-    evidence: {
-      title: "Pre-consent tracking sample",
-      lines: [
-        "{\"rowId\":\"pre_consent_third_party_tracking\",\"status\":\"Gap observed\"}",
-        "{\"surface\":\"homepage\",\"consentState\":\"no_choice_observed\"}",
-        "{\"signal\":\"analytics_or_ad_request\",\"firstSeenMs\":3405}"
-      ]
-    },
-    reviewPrompt: "What was the first retained third-party tracking signal, and what timeline supports it?"
-  },
-  {
-    id: "cookies_storage_before_recorded_consent",
-    title: "Cookies/storage before recorded consent",
-    category: "Pre-consent Signals",
-    criticalityChip: "High criticality",
-    href: "/findings/third_party_cookie_pre_consent",
-    overview:
-      "Cookie and browser-storage evidence can show whether non-essential storage appeared before a recorded consent action or prior consent state.",
-    regulatoryLabel: "Storage timing before recorded choice",
-    regulatoryCopy:
-      "Useful for reviewing cookie consent timing, domain scope, purpose classification, and whether storage was retained before choice.",
-    evidence: {
-      title: "Pre-consent storage sample",
-      lines: [
-        "{\"rowId\":\"pre_consent_cookies_storage\",\"status\":\"Gap observed\"}",
-        "{\"type\":\"cookie_observed\",\"party\":\"third_party\"}",
-        "{\"firstSeenMs\":1840,\"consentBeforeFirstSeen\":false}"
-      ]
-    },
-    reviewPrompt: "Which cookie or storage key appeared first, and what domain or scope set it?"
-  },
-  {
-    id: "ad_vendor_activity_before_recorded_consent",
-    title: "Ad vendor activity before recorded consent",
-    category: "Pre-consent Signals",
-    criticalityChip: "Review signal",
-    href: "/findings/pre_consent_tracking_detected",
-    overview:
-      "Retained runtime evidence can identify ad serving, ad measurement, ad verification, retargeting, or audience-building signals before recorded consent.",
-    regulatoryLabel: "Advertising and retargeting review",
-    regulatoryCopy:
-      "Useful for reviewing adtech purpose, vendor role, timing, and disclosure alignment without treating a vendor match as a legal conclusion.",
-    evidence: {
-      title: "Advertising signal sample",
-      lines: [
-        "{\"rowId\":\"advertising_retargeting_vendor_signal_observed\",\"status\":\"Review signal\"}",
-        "{\"purpose\":\"advertising\",\"vendor\":\"classified_ad_vendor\"}",
-        "{\"firstSeenMs\":2210,\"consentState\":\"no_choice_observed\"}"
-      ]
-    },
-    reviewPrompt: "Which retained request, vendor, or purpose classification supports ad-vendor review?"
-  },
-  {
-    id: "fingerprinting_signal_before_recorded_consent",
-    title: "Fingerprinting signal before recorded consent",
-    category: "Pre-consent Signals",
-    criticalityChip: "Review signal",
-    href: "/findings/probable_fingerprinting",
-    overview:
-      "Runtime evidence can retain browser or device entropy signals that support fingerprinting-oriented review in the pre-consent/public-web context.",
-    regulatoryLabel: "Device identification review",
-    regulatoryCopy:
-      "Useful for reviewing high-entropy signal categories, purpose, disclosure, consent state, and whether raw values were avoided or redacted.",
-    evidence: {
-      title: "Fingerprinting signal sample",
-      lines: [
-        "{\"rowId\":\"device_identification_fingerprinting_signal_observed\",\"status\":\"Review signal\"}",
-        "{\"signals\":[\"canvas_or_webgl\",\"screen_locale\"],\"rawValues\":\"not_retained\"}",
-        "{\"consentState\":\"no_choice_observed\"}"
-      ]
-    },
-    reviewPrompt: "Which browser or device signal categories co-occurred, and what raw values were excluded from public evidence?"
-  },
-  {
-    id: "embedded_content_before_recorded_consent",
-    title: "Embedded content before recorded consent",
-    category: "Pre-consent Signals",
-    criticalityChip: "Review signal",
-    overview:
-      "The checklist can show whether social, media, map, form/chat, iframe, or other embedded third-party services loaded before recorded consent.",
-    regulatoryLabel: "Embedded third-party service review",
-    regulatoryCopy:
-      "Useful for reviewing whether embedded services, plugins, or widgets triggered third-party requests before a retained choice point.",
-    evidence: {
-      title: "Embedded service sample",
-      lines: [
-        "{\"rowId\":\"embedded_content_pre_consent\",\"status\":\"Gap observed\"}",
-        "{\"serviceType\":\"media_embed\",\"party\":\"third_party\"}",
-        "{\"firstSeenMs\":2975,\"consentBeforeFirstSeen\":false}"
-      ]
-    },
-    reviewPrompt: "Which retained iframe, embed, widget, or service request supports embedded-content review?"
-  }
-] satisfies HomepageChecklistFinding[];
-
-function ArrowIcon({ direction }: { direction: "left" | "right" }) {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      {direction === "left" ? <path d="m15 18-6-6 6-6" /> : <path d="m9 18 6-6-6-6" />}
-    </svg>
-  );
-}
-
-function getFindingHref(finding: HomepageChecklistFinding, referenceFindingIds: Set<string>) {
-  if (!finding.href) {
-    return "/findings";
-  }
-
-  const referenceId = finding.href.replace("/findings/", "");
-  return referenceFindingIds.has(referenceId) ? finding.href : "/findings";
-}
-
-export function HomepageFindingsOverview({ findings }: HomepageFindingsOverviewProps) {
-  const carouselFindings = HOMEPAGE_GDPR_EPRIVACY_CHECKLIST_FINDINGS;
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [showRawEvidence, setShowRawEvidence] = useState(false);
-  const activeFinding = useMemo(
-    () => carouselFindings[activeIndex] ?? carouselFindings[0],
-    [activeIndex, carouselFindings]
-  );
-  const referenceFindingIds = useMemo(() => new Set(findings.map((finding) => finding.id)), [findings]);
-
-  if (!activeFinding) {
-    return null;
-  }
-
-  function showPrevious() {
-    setShowRawEvidence(false);
-    setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
-  }
-
-  function showNext() {
-    setShowRawEvidence(false);
-    setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
-  }
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "ArrowLeft") {
-        setShowRawEvidence(false);
-        setActiveIndex((current) => (current === 0 ? carouselFindings.length - 1 : current - 1));
-      }
-      if (event.key === "ArrowRight") {
-        setShowRawEvidence(false);
-        setActiveIndex((current) => (current === carouselFindings.length - 1 ? 0 : current + 1));
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  const previewLabel = showJson ? "Actual report export · selected fields" : slide.code?.label ?? "Actual scan report · click to enlarge";
 
   return (
-    <section className="border-y border-slate-200 bg-white">
-      <div className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-5 lg:h-[30rem] lg:grid-cols-[0.64fr_1.36fr] lg:items-stretch">
-          <div className="flex max-w-sm flex-col gap-3">
-            <div className="space-y-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Findings overview</p>
-              <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Review the evidence.</h2>
-            </div>
-
-            <div className="flex min-h-[18rem] flex-1 flex-col rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.98)_0%,rgba(255,255,255,1)_100%)] p-4 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.25)]">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Finding navigator</p>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">{activeIndex + 1} of {carouselFindings.length}</p>
-              </div>
-              <div className="mt-4 space-y-3">
-                <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-800">{activeFinding.category}</span>
-                <p className="max-w-[19rem] text-sm leading-5 text-slate-600">Browse retained signals one at a time. The detail panel shows the evidence and review context.</p>
-              </div>
-
-              <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
-                <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-label="Show previous finding"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#f0f9ff_100%)] text-slate-900 shadow-[0_2px_0_rgba(186,230,253,0.9),0_8px_16px_-12px_rgba(14,116,144,0.6)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-[0_3px_0_rgba(125,211,252,0.95),0_12px_20px_-12px_rgba(14,116,144,0.75)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
-                  onClick={showPrevious}
-                >
-                  <ArrowIcon direction="left" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Show next finding"
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-sky-200 bg-[linear-gradient(180deg,#ffffff_0%,#f0f9ff_100%)] text-slate-900 shadow-[0_2px_0_rgba(186,230,253,0.9),0_8px_16px_-12px_rgba(14,116,144,0.6)] transition hover:-translate-y-0.5 hover:border-sky-400 hover:shadow-[0_3px_0_rgba(125,211,252,0.95),0_12px_20px_-12px_rgba(14,116,144,0.75)] active:translate-y-0.5 active:shadow-inner focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
-                  onClick={showNext}
-                >
-                  <ArrowIcon direction="right" />
-                </button>
-                </div>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
-                  {String(activeIndex + 1).padStart(2, "0")} / {String(carouselFindings.length).padStart(2, "0")}
-                </p>
-              </div>
-            </div>
+    <section id="findings-overview" aria-labelledby="showcase-heading" className="scroll-mt-24 bg-white px-5 py-16 sm:px-8 lg:py-24">
+      <div className="mx-auto max-w-7xl">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Findings overview</p>
+            <h2 id="showcase-heading" className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl lg:text-5xl">See what’s inside a scan.</h2>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">Explore real report screens and structured evidence from our ErgoVeritas test page.</p>
           </div>
+          <a href={AUTHENTIC_SAMPLE_REPORT_URL} className={`inline-flex min-h-11 shrink-0 items-center gap-2 font-semibold text-sky-700 hover:underline ${focus}`}>Open sample report <span aria-hidden="true">↗</span></a>
+        </div>
 
-          <div className="relative h-full overflow-y-auto rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,252,255,1)_0%,rgba(255,255,255,0.98)_64%,rgba(249,253,250,0.98)_100%)] p-4 shadow-[0_24px_56px_rgba(15,23,42,0.08)]">
-            <div
-              aria-hidden="true"
-              className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(15,139,215,0.9)_0%,rgba(103,199,240,0.78)_58%,rgba(71,181,74,0.7)_100%)]"
-            />
-            <div className="relative grid h-full min-h-0 gap-4 lg:grid-cols-[1fr_0.78fr]">
-              <div className="space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    {activeFinding.criticalityChip}
-                  </span>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                    GDPR / ePrivacy checklist
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">{activeFinding.title}</h3>
-                  <p className="mt-2 text-sm leading-5 text-slate-600">{activeFinding.overview}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white p-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Why this matters</p>
-                  <p className="mt-2 text-sm font-semibold text-slate-950">{activeFinding.regulatoryLabel}</p>
-                  <p className="mt-1 text-xs leading-4 text-slate-500">{activeFinding.regulatoryCopy}</p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200">
-                      Evidence review
-                    </span>
+        <label className="mt-6 block text-sm font-medium text-slate-600 sm:hidden">
+          Explore a feature
+          <select aria-label="Choose a feature" value={active} onChange={(event) => select(Number(event.target.value))} className={`mt-2 min-h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-slate-900 ${focus}`}>
+            {HOMEPAGE_SHOWCASE.map((item, index) => <option key={item.id} value={index}>{index + 1}. {item.label}</option>)}
+          </select>
+        </label>
+        <div role="group" aria-label="Choose a feature" className="mt-8 hidden flex-wrap gap-2 pb-3 sm:flex">
+          {HOMEPAGE_SHOWCASE.map((item, index) => (
+            <button key={item.id} type="button" aria-pressed={active === index} aria-controls="showcase-slide" onClick={() => select(index)} className={`min-h-11 shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-colors ${focus} ${active === index ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-sky-400 hover:text-sky-800"}`}>
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div id="showcase-slide" role="region" aria-roledescription="carousel" aria-label="CertScore feature tour" onKeyDown={(event) => {
+          if (dialog.current?.open || (event.target as HTMLElement).closest("pre") || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) return;
+          event.preventDefault();
+          select(active + (event.key === "ArrowRight" ? 1 : -1));
+        }} className="mt-3 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_70px_-35px_rgba(15,23,42,0.25)]">
+          <div className="grid lg:grid-cols-[1.45fr_1fr]">
+            <div className="min-w-0 border-b border-slate-200 bg-slate-50 lg:border-b-0 lg:border-r">
+              <div className="flex min-h-16 flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 sm:px-6">
+                <p className="text-xs font-medium text-slate-500">{previewLabel}</p>
+                {slide.json !== undefined && (
+                  <div role="group" aria-label="Preview format" className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs">
+                    <button type="button" aria-pressed={!showJson} onClick={() => setShowJson(false)} className={`min-h-8 rounded-md px-3 ${focus} ${!showJson ? "bg-slate-900 text-white" : "text-slate-600"}`}>{slide.code ? "Request" : "Report"}</button>
+                    <button type="button" aria-pressed={showJson} onClick={() => setShowJson(true)} className={`min-h-8 rounded-md px-3 ${focus} ${showJson ? "bg-slate-900 text-white" : "text-slate-600"}`}>Report JSON</button>
                   </div>
-                </div>
+                )}
               </div>
-
-              <div className="flex flex-col rounded-[1.5rem] border border-slate-200 bg-white p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Example evidence</p>
-                <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-950 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-xs font-semibold text-slate-100">{activeFinding.evidence.title}</p>
-                    <div className="flex shrink-0 gap-1">
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-sky-200">Structured</span>
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">Retained</span>
-                    </div>
-                  </div>
-                  {showRawEvidence ? (
-                    <div className="mt-2 space-y-1 font-mono text-[11px] leading-5 text-slate-300">
-                      {activeFinding.evidence.lines.map((line) => <p key={line} className="break-all">{line}</p>)}
-                    </div>
-                  ) : (
-                    <div className="mt-2 space-y-1 text-xs leading-5 text-slate-300">
-                      {activeFinding.evidence.lines.map((line) => {
-                        try {
-                          const parsed = JSON.parse(line) as Record<string, unknown>;
-                          const entries = Object.entries(parsed);
-                          return <p key={line}><span className="text-slate-500">{entries[0]?.[0]}:</span> {String(entries[0]?.[1] ?? "—")}</p>;
-                        } catch {
-                          return <p key={line}>{line}</p>;
-                        }
-                      })}
-                    </div>
-                  )}
-                  <button className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300" onClick={() => setShowRawEvidence((current) => !current)} type="button">
-                    {showRawEvidence ? "Readable view" : "View raw"}
+              <div className="flex h-[320px] items-center justify-center p-4 sm:h-[470px] sm:p-6">
+                {showJson || slide.code ? (
+                  <pre tabIndex={0} aria-label={previewLabel} className={`h-full w-full overflow-auto rounded-xl bg-slate-950 p-5 text-xs leading-6 text-sky-100 sm:text-sm ${focus}`}><code>{showJson ? JSON.stringify(slide.json, null, 2) : slide.code?.content}</code></pre>
+                ) : slide.image ? (
+                  <button type="button" onClick={() => dialog.current?.showModal()} aria-label={`Enlarge ${slide.label} report screenshot`} className={`group relative flex h-full w-full items-center justify-center rounded-xl ${focus}`}>
+                    <Image key={slide.image.name} src={`/showcase/test2/${slide.image.name}.webp`} alt={slide.image.alt} width={slide.image.width} height={slide.image.height} unoptimized className="max-h-full w-auto max-w-full rounded-lg border border-slate-200 bg-white object-contain shadow-sm" />
+                    <span className="absolute bottom-2 right-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm group-hover:border-sky-400">Enlarge ↗</span>
                   </button>
-                </div>
-                <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">Reviewer prompts</p>
-                <ul className="mt-1.5 space-y-2 text-sm leading-5 text-slate-600">
-                  <li className="flex gap-2">
-                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sky-500" />
-                    <span>{activeFinding.reviewPrompt}</span>
-                  </li>
+                ) : null}
+              </div>
+              <p className="border-t border-slate-200 px-4 py-3 text-xs leading-5 text-slate-500 sm:px-6">Owned test page · ergoveritas.com/test2.html · 28 Sep 2026 · California</p>
+            </div>
+
+            <div className="flex min-w-0 flex-col p-6 sm:p-8">
+              <div aria-live="polite" aria-atomic="true">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">{slide.category}</p>
+                <h3 className="mt-3 text-2xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-3xl">{slide.title}</h3>
+                <p className="mt-4 text-base leading-7 text-slate-600">{slide.description}</p>
+                <ul className="mt-5 space-y-2 text-sm leading-6 text-slate-700">
+                  {slide.highlights.map((item) => <li key={item} className="flex gap-3"><span aria-hidden="true" className="text-sky-600">✓</span>{item}</li>)}
                 </ul>
-                <div className="mt-auto pt-4">
-                  <Link
-                    href={getFindingHref(activeFinding, referenceFindingIds)}
-                    className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-900 bg-[linear-gradient(180deg,#334155_0%,#0f172a_100%)] px-4 text-sm font-semibold text-white shadow-[0_3px_0_#020617,0_12px_22px_-15px_rgba(2,6,23,0.9)] transition hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
-                  >
-                    View full finding
-                  </Link>
+                <p className="mt-6 border-l-2 border-sky-400 pl-4 text-sm leading-6 text-slate-600">{slide.result}</p>
+              </div>
+              <a href={slide.href} className={`mt-6 inline-flex min-h-11 items-center gap-2 self-start text-sm font-semibold text-sky-700 hover:underline ${focus}`}>{slide.linkLabel} <span aria-hidden="true">↗</span></a>
+              <div className="mt-auto flex items-center justify-between gap-4 pt-6">
+                <span className="text-xs tabular-nums text-slate-500">{String(active + 1).padStart(2, "0")} / {HOMEPAGE_SHOWCASE.length} features</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => select(active - 1)} aria-label="Previous feature" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>←</button>
+                  <button type="button" onClick={() => select(active + 1)} aria-label="Next feature" className={`h-11 w-11 rounded-full border border-slate-200 text-xl text-slate-700 hover:border-sky-400 hover:bg-sky-50 ${focus}`}>→</button>
                 </div>
               </div>
             </div>
           </div>
         </div>
+        <p className="mt-4 text-xs leading-5 text-slate-500">Screenshots and report JSON are from one completed test scan. Interface examples are labeled. Findings describe retained observations, not a determination of compliance.</p>
       </div>
+
+      <dialog ref={dialog} aria-labelledby="showcase-image-title" className="m-auto max-h-[94vh] w-[calc(100%-2rem)] max-w-6xl overflow-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl backdrop:bg-slate-950/70 sm:p-6">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <h3 id="showcase-image-title" className="font-semibold text-slate-900">{slide.label} · actual test2 report</h3>
+          <button type="button" autoFocus onClick={() => dialog.current?.close()} aria-label="Close enlarged screenshot" className={`min-h-11 rounded-lg border border-slate-200 px-4 text-sm font-medium ${focus}`}>Close ×</button>
+        </div>
+        {slide.image && <Image src={`/showcase/test2/${slide.image.name}.webp`} alt={slide.image.alt} width={slide.image.width} height={slide.image.height} unoptimized className="mx-auto h-auto max-h-[75vh] w-auto max-w-full object-contain" />}
+        <p className="mt-4 text-xs text-slate-500">28 Sep 2026 · California · Scan d96df06d-3e94-4896-8346-1a026d68e5af</p>
+      </dialog>
     </section>
   );
 }

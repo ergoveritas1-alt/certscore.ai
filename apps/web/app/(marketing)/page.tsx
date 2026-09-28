@@ -253,7 +253,7 @@ export default async function MarketingHomePage() {
         </div>
       </section>
 
-      <HomepageFindingsOverview findings={findings} />
+      <HomepageFindingsOverview />
 
       <section className="border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-14">
