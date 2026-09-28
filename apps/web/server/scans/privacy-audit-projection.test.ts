@@ -62,12 +62,26 @@ test("non-fetchable observed DNS links keep all six retained production destinat
   assert.ok(result.controls.every((control) => control.retrieval === "not_attempted" && control.interaction === "not_tested"));
 });
 
+test("a visible direct privacy-choices link survives an insufficient cross-subdomain destination", () => {
+  const destination = "https://privacy.example.test/main/web/main";
+  const result = projectPrivacyAuditEvidence(bundle([surface({
+    observationId: "privacy-choices", surfaceType: "your_privacy_choices", linkText: "Your Privacy Choices",
+    url: destination, normalizedUrl: destination, linkSourcePageUrl: url,
+    documentFetchState: "failed", documentEvaluationState: "insufficient",
+  })]), source, url)!;
+  assert.equal(result.controls.length, 1);
+  assert.equal(result.controls[0]?.kind, "your_privacy_choices");
+  assert.equal(result.controls[0]?.destinationUrl, destination);
+  assert.equal(result.controls[0]?.retrieval, "failed");
+});
+
 test("visible named controls require typed proof; historical and hidden candidates do not gain new control claims", () => {
   const cases = [
     surface({ observationId: "hidden", linkVisibility: "hidden" }),
     surface({ observationId: "legacy", linkVisibility: undefined, accessibleNameSource: undefined }),
     surface({ observationId: "url-only", linkText: "", accessibleNameSource: "none", url: `${url}do-not-sell` }),
     surface({ observationId: "generic", linkText: "Learn more", url: `${url}do-not-sell` }),
+    surface({ observationId: "other-document", linkSourcePageUrl: "https://other.test/" }),
   ];
   for (const candidate of cases) assert.deepEqual(projectPrivacyAuditEvidence(bundle([candidate]), source, url)?.controls, []);
   const icon = projectPrivacyAuditEvidence(bundle([surface({
@@ -77,6 +91,7 @@ test("visible named controls require typed proof; historical and hidden candidat
   assert.equal(icon.controls[0]?.accessibleNameSource, "image_alt");
   assert.equal(icon.controls[0]?.classificationProvenance, "privacy_surface_classifier.v1");
   assert.equal(icon.controls[0]?.destinationUrl, `${url}do-not-sell`);
+  assert.equal(projectPrivacyAuditEvidence(bundle([surface({ linkSourcePageUrl: url })]), source, url)?.controls.length, 1);
   for (const raw of ["#privacy", "javascript:openChoices()", "/"]) {
     const candidate = surface({ observationId: raw, url: raw, normalizedUrl: url, fetchable: false });
     assert.equal(projectPrivacyAuditEvidence(bundle([candidate]), source, url)?.controls[0]?.destinationUrl, null);

@@ -1964,6 +1964,7 @@ export const policySurfaceObservationSchema = z.object({
   linkText: z.string().optional(),
   linkVisibility: z.enum(["visible", "hidden"]).optional(),
   accessibleNameSource: z.enum(["aria_label", "aria_labelledby", "text", "image_alt", "svg_title", "title", "none"]).optional(),
+  linkSourcePageUrl: z.string().max(800).optional(),
   parentObservationId: z.string().optional(),
   parentSurfaceUrl: z.string().max(500).optional(),
   traversalDepth: z.number().int().min(0).max(1).optional(),

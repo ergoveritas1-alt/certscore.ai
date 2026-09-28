@@ -230,6 +230,7 @@ function policySurfaceCandidatesFromRetainedRenderedLinks(
       linkText: link.linkText || link.href,
       linkVisibility: link.linkVisibility,
       accessibleNameSource: link.accessibleNameSource,
+      linkSourcePageUrl: sanitizedSiteFacingUrl(link.pageUrl),
       selector: link.selector,
       renderedSourcePageUrl: link.pageUrl,
       domLocation: link.domLocation,
@@ -285,6 +286,7 @@ function mergeVisibleLinkProof(
     ...preferred,
     linkVisibility: "visible",
     accessibleNameSource: other.accessibleNameSource,
+    linkSourcePageUrl: other.linkSourcePageUrl,
     classifierProvenance: other.classifierProvenance,
     classifierReasonCodes: other.classifierReasonCodes,
     linkText: other.linkText,
@@ -505,6 +507,7 @@ export interface NanoTopicExtractionResult {
 export interface PolicySurfaceCandidate {
   linkVisibility?: "visible" | "hidden";
   accessibleNameSource?: RetainedRenderedPolicyLink["accessibleNameSource"];
+  linkSourcePageUrl?: string;
   cmpDiscovery?: PolicySurfaceObservation["cmpDiscovery"];
   candidateId: string;
   url: string;
@@ -4297,6 +4300,10 @@ async function extractRenderedCandidates(
         cmpVendor?: boolean;
         href?: string;
         text: string;
+        accessibleName?: string;
+        accessibleNameSource?: RetainedRenderedPolicyLink["accessibleNameSource"];
+        linkVisibility?: "visible" | "hidden";
+        linkSourcePageUrl?: string;
         selector?: string;
         domLocation: "footer" | "header" | "nav" | "body";
         clickable: boolean;
@@ -4366,6 +4373,32 @@ async function extractRenderedCandidates(
           if (output.length >= maxCandidates) break;
           const cmpContext = cmpContextFor(element);
           const href = hrefFromElement(element);
+          const directAnchor = element.matches("a[href]") && Boolean(element.getAttribute("href")?.trim());
+          const labelledBy = element.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
+            .map((id) => (element.getRootNode() as Document | ShadowRoot).getElementById(id)?.textContent ?? "")
+            .join(" ");
+          const names = [
+            ["aria_label", element.getAttribute("aria-label")],
+            ["aria_labelledby", labelledBy],
+            ["text", (element as HTMLElement).innerText],
+            ["image_alt", [...element.querySelectorAll("img[alt]")].map((img) => img.getAttribute("alt")).join(" ")],
+            ["svg_title", element.querySelector("svg title")?.textContent],
+            ["title", element.getAttribute("title")],
+          ] as const;
+          const named = names.find(([, value]) => value?.trim());
+          const accessibleName = normalizeText(named?.[1]).slice(0, 220);
+          let linkVisibility: "visible" | "hidden" = "visible";
+          if (directAnchor) {
+            for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
+              const style = getComputedStyle(current);
+              if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
+                  current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) {
+                linkVisibility = "hidden";
+                break;
+              }
+            }
+            if (![...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0)) linkVisibility = "hidden";
+          }
           const text = normalizeText([
             element.textContent,
             element.getAttribute("aria-label"),
@@ -4379,6 +4412,12 @@ async function extractRenderedCandidates(
             cmpProvider: cmpContext.provider,
             cmpVendor: cmpContext.vendor,
             text: text.slice(0, 220),
+            ...(directAnchor ? {
+              accessibleName,
+              accessibleNameSource: named?.[0] ?? "none",
+              linkVisibility,
+              linkSourcePageUrl: document.URL,
+            } : {}),
             selector: selectorFor(element),
             domLocation: domLocationForElement(element),
             clickable: element.matches("button, a, [role='button'], [role='link']"),
@@ -4438,9 +4477,10 @@ async function extractRenderedCandidates(
       ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
       if ("cmpVendor" in candidate && candidate.cmpVendor) return [];
       const normalizedUrl = candidate.href ? normalizeUrl(candidate.href, renderedBaseUrl) : renderedBaseUrl;
-      const surroundingTextExcerpt = surroundingText(visibleText, candidate.text, visibleTextLower);
+      const candidateLinkText = candidate.accessibleName || candidate.text;
+      const surroundingTextExcerpt = surroundingText(visibleText, candidateLinkText, visibleTextLower);
       const deterministic = classifySurface({
-        linkText: candidate.text,
+        linkText: candidateLinkText,
         url: normalizedUrl,
         surroundingText: surroundingTextExcerpt,
       });
@@ -4478,7 +4518,12 @@ async function extractRenderedCandidates(
           : undefined,
         url: candidate.href ?? renderedBaseUrl,
         normalizedUrl,
-        linkText: candidate.text || normalizedUrl,
+        linkText: candidateLinkText || normalizedUrl,
+        ...(candidate.linkSourcePageUrl === renderedBaseUrl && page.url() === renderedBaseUrl ? {
+          linkVisibility: candidate.linkVisibility,
+          accessibleNameSource: candidate.accessibleNameSource,
+          linkSourcePageUrl: sanitizedSiteFacingUrl(candidate.linkSourcePageUrl),
+        } : {}),
         selector: candidate.selector,
         renderedSourcePageUrl: renderedBaseUrl,
         surroundingTextExcerpt,
@@ -6268,6 +6313,7 @@ function observationFromCandidate(
     linkText: candidate.linkText,
     linkVisibility: candidate.linkVisibility,
     accessibleNameSource: candidate.accessibleNameSource,
+    linkSourcePageUrl: candidate.linkSourcePageUrl,
     parentObservationId: candidate.parentObservationId,
     parentSurfaceUrl: candidate.parentSurfaceUrl,
     traversalDepth: candidate.traversalDepth ?? 0,
@@ -10637,6 +10683,15 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
         (policyCandidateDiscoveryPriority(candidate) === policyCandidateDiscoveryPriority(existing) && candidate.deterministicScore > existing.deterministicScore)
       ));
     const preferred = preferCandidate ? candidate : existing!;
+    const other = preferCandidate ? existing : candidate;
+    const visibleLink = [preferred, other].find((item) =>
+      item?.clickable && item.linkVisibility === "visible" &&
+      item.accessibleNameSource && item.accessibleNameSource !== "none" &&
+      item.linkSourcePageUrl
+    );
+    const retainedLinkEvidence = visibleLink ?? [preferred, other].find((item) =>
+      item?.linkVisibility && item.linkSourcePageUrl
+    );
     const renderedLink = [existing, candidate].find((item) =>
       item?.clickable && item.renderedSourcePageUrl &&
       isPolicySessionPrimerCompatible(item.renderedSourcePageUrl, candidate.normalizedUrl)
@@ -10646,6 +10701,29 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
       ...(renderedLink ? {
         renderedSourcePageUrl: renderedLink.renderedSourcePageUrl,
         selector: preferred.selector ?? renderedLink.selector,
+      } : {}),
+      // Keep the observed anchor's label, classification and locator together.
+      // Fetch eligibility still follows the preferred URL candidate.
+      ...(retainedLinkEvidence ? {
+        candidateId: retainedLinkEvidence.candidateId,
+        linkText: retainedLinkEvidence.linkText,
+        linkVisibility: retainedLinkEvidence.linkVisibility,
+        accessibleNameSource: retainedLinkEvidence.accessibleNameSource,
+        linkSourcePageUrl: retainedLinkEvidence.linkSourcePageUrl,
+        selector: retainedLinkEvidence.selector,
+        renderedSourcePageUrl: retainedLinkEvidence.renderedSourcePageUrl,
+        surroundingTextExcerpt: retainedLinkEvidence.surroundingTextExcerpt,
+        domLocation: retainedLinkEvidence.domLocation,
+        discoveryMethod: retainedLinkEvidence.discoveryMethod,
+        mayLeadToConsentControls: retainedLinkEvidence.mayLeadToConsentControls,
+        deterministicSurfaceType: retainedLinkEvidence.deterministicSurfaceType,
+        deterministicScore: retainedLinkEvidence.deterministicScore,
+        deterministicKeywordMatches: retainedLinkEvidence.deterministicKeywordMatches,
+        deterministicMatchedConcept: retainedLinkEvidence.deterministicMatchedConcept,
+        deterministicMatchedLocale: retainedLinkEvidence.deterministicMatchedLocale,
+        deterministicMatchStrength: retainedLinkEvidence.deterministicMatchStrength,
+        deterministicClassifierReasonCodes: retainedLinkEvidence.deterministicClassifierReasonCodes,
+        deterministicClassifierProvenance: retainedLinkEvidence.deterministicClassifierProvenance,
       } : {}),
       cmpDiscovery: mergeCmpPolicyProvenance(preferred.cmpDiscovery, (preferCandidate ? existing : candidate)?.cmpDiscovery),
     });

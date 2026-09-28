@@ -40,6 +40,7 @@ export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, sou
     const destinationUrl = observedDestination(surface.url, pageUrl);
     const visibleControl = directLink && surface.linkVisibility === "visible" &&
       surface.accessibleNameSource && surface.accessibleNameSource !== "none" &&
+      (surface.linkSourcePageUrl === undefined || safeUrl(surface.linkSourcePageUrl) === pageUrl) &&
       surface.classifierProvenance === "privacy_surface_classifier.v1" &&
       classification.surfaceType === kind;
     if (visibleControl && (kind === "do_not_sell_or_share" || kind === "your_privacy_choices" || kind === "cookie_settings") &&

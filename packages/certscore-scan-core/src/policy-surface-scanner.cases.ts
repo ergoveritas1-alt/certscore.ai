@@ -2781,6 +2781,43 @@ test("policySurfaceScanner classifies expected policy and control surfaces", asy
   }
 });
 
+test("policy lane preserves rendered control proof when static discovery found the same link", async () => {
+  for (const [page, sourcePath, surfaceType, path, visibility, nameSource, label] of [
+    ["policy-do-not-sell-link", "/f/policy-do-not-sell", "do_not_sell_or_share", "/do-not-sell-or-share", "visible", "text", /Do Not Sell or Share My Personal Information/],
+    ["policy-hidden-do-not-sell-link", "/f/policy-hidden-do-not-sell", "do_not_sell_or_share", "/do-not-sell-or-share", "hidden", "text", /Do Not Sell or Share My Personal Information/],
+    ["policy-image-do-not-sell-link", "/f/policy-image-do-not-sell", "do_not_sell_or_share", "/do-not-sell-or-share", "visible", "image_alt", /Do Not Sell or Share My Personal Information/],
+    ["policy-unavailable-choice-link", "/f/policy-unavailable-choice", "your_privacy_choices", "/privacy-control/missing", "visible", "text", /Your Privacy Choices/],
+    ["policy-external-choice-platform", "/f/policy-external-choice", "your_privacy_choices", "/privacy-control/onetrust/choices", "visible", "text", /Your Privacy Choices/],
+    ["policy-mixed-choice-labels", "/f/policy-mixed-choice-labels", "your_privacy_choices", "/privacy-control/onetrust/choices", "visible", "text", /Your Privacy Choices/],
+  ] as const) {
+    await withPolicyScan(page, ({ result, baseUrl }) => {
+      const observation = result.policySurfaceObservations.find((surface) =>
+        surface.surfaceType === surfaceType &&
+        surface.directlyLinkedFromScannedPage === true &&
+        surface.url.includes(path)
+      );
+      assert.ok(observation, `${page} should retain the direct link`);
+      assert.equal(observation.linkVisibility, visibility, page);
+      assert.equal(observation.accessibleNameSource, nameSource, page);
+      assert.equal(observation.linkSourcePageUrl, `${baseUrl}${sourcePath}`, page);
+      assert.match(observation.linkText ?? "", label, page);
+      if (page === "policy-unavailable-choice-link") {
+        assert.notEqual(observation.documentEvaluationState, "usable", page);
+      }
+      if (page === "policy-mixed-choice-labels") {
+        assert.equal(observation.selector, "#visible-choices", page);
+        assert.match(observation.surroundingTextExcerpt ?? "", /Your Privacy Choices/, page);
+        assert.doesNotMatch(observation.surroundingTextExcerpt ?? "", /Do Not Sell or Share/, page);
+        assert.equal(result.policySurfaceObservations.some((surface) =>
+          surface.surfaceType === "do_not_sell_or_share" && surface.linkVisibility === "visible" &&
+          surface.url.includes(path)
+        ), false, page);
+      }
+      assert.equal(result.moduleRun.timingBreakdown?.some((timing) => timing.label === "rendered discovery"), true, page);
+    }, { discoveryMode: "fast", internalBudgetMs: 12_000 });
+  }
+});
+
 test("policySurfaceScanner uses canonical privacy-surface classifier across supported locales", async () => {
   await withPolicyScan("policy-multilingual-surfaces", async ({ result }) => {
     const diagnostics = await readPolicyCaptureDiagnostics(result);
