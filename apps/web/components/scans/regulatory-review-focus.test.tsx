@@ -39,12 +39,28 @@ test("retained California choices and notices remain accessible only in CCPA foc
   };
   assert.equal(renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="gdpr_eprivacy" evidence={evidence} />), "");
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" evidence={evidence} />);
-  assert.match(html, /1 retained choice · 1 notice/);
+  assert.match(html, /1 observed choice · 1 notice/);
   assert.match(html, /href="https:\/\/example.test\/choices"/);
   assert.match(html, /You can request deletion/);
   assert.match(html, /Opt-out functionality and notice completeness were not tested/);
   assert.match(html, /Evidence provenance/);
   assert.doesNotMatch(html, /<details[^>]+open=/);
+});
+
+test("California evidence distinguishes identified links from verified visitor-facing choices", () => {
+  const evidence: PrivacyAuditEvidence = {
+    contractVersion: "certscore.privacy-audit-evidence.v2", scanId: "fixture", documentUrl: "https://example.test/",
+    capturedAt: "2026-09-25T12:00:00.000Z", sourceHash: "a".repeat(64), verificationStatus: "verified",
+    scoreEffect: "none", passagePolicy: "california_notice_passages.v1", negativeControlCoverage: "not_verified",
+    collectionPointNoticeAssessment: "not_assessed", truncated: false, controls: [], notices: [],
+    controlCandidates: [{ kind: "cookie_settings", label: "Cookie Settings", sourceUrl: "https://example.test/",
+      destinationUrl: "https://example.test/cookie-settings", placement: "header_link",
+      evidenceRef: "policy-surface:cookies", verification: "visibility_unverified" }],
+  };
+  const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" evidence={evidence} />);
+  assert.match(html, /0 observed choices · 1 link to review · 0 notices/);
+  assert.match(html, /Link identified: “Cookie Settings” · visibility not verified/);
+  assert.doesNotMatch(html, /Observed: “Cookie Settings”/);
 });
 
 test("share and download links preserve focus, with tracking exports explicitly starting-page scoped", () => {

@@ -526,7 +526,14 @@ export const mcpPreConsentCookiesTrackersOutputSchema = apiV2PreConsentCookiesTr
 // again in the declaration for the tool registry. Runtime validation is unchanged.
 const mcpGetScanOutputSchema: z.ZodType<ApiV2ScanResource> = apiV2ScanResourceSchema;
 
-export const certScoreMcpToolContracts = [
+export const certScoreMcpToolContracts: ReadonlyArray<{
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: Record<string, z.ZodTypeAny>;
+  outputSchema: z.ZodTypeAny;
+  annotations: Record<string, unknown>;
+}> = [
   {
     name: "certscore_get_connection_status",
     title: "Check CertScore connection",
@@ -639,4 +646,4 @@ export const certScoreMcpToolContracts = [
     outputSchema: mcpPreConsentCookiesTrackersOutputSchema,
     annotations: { title: "Get latest domain pre-consent cookies and trackers", ...readOnlyOpenWorldAnnotations }
   }
-] as const;
+];

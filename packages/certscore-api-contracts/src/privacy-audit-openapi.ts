@@ -1,10 +1,10 @@
 const evidenceUrl = { type: "string", format: "uri", maxLength: 800, description: "Retained HTTP(S) URL with credentials, query and fragment removed." } as const;
 export const privacyAuditEvidenceOpenApi = {
   type: ["object", "null"], additionalProperties: false,
-  description: "Verified starting-page privacy controls and retained notice passages. Observational only, without legal adequacy, control-absence, opt-out success or score conclusions. Null for older or insufficient-evidence reports.",
+  description: "Verified starting-page privacy controls and retained notice passages. Version 2 separately retains link candidates whose visitor-facing proof is incomplete. Observational only, without legal adequacy, control-absence, opt-out success or score conclusions. Null for older or insufficient-evidence reports.",
   required: ["contractVersion", "scanId", "documentUrl", "capturedAt", "sourceHash", "verificationStatus", "scoreEffect", "passagePolicy", "controls", "notices", "negativeControlCoverage", "collectionPointNoticeAssessment", "truncated"],
   properties: {
-    contractVersion: { type: "string", const: "certscore.privacy-audit-evidence.v1" },
+    contractVersion: { type: "string", enum: ["certscore.privacy-audit-evidence.v1", "certscore.privacy-audit-evidence.v2"] },
     scanId: { type: "string", minLength: 1 }, documentUrl: evidenceUrl, capturedAt: { type: "string", format: "date-time" },
     sourceHash: { type: "string", pattern: "^[a-f0-9]{64}$" }, verificationStatus: { type: "string", const: "verified" },
     scoreEffect: { type: "string", const: "none" }, passagePolicy: { type: "string", const: "california_notice_passages.v1" },
@@ -18,6 +18,16 @@ export const privacyAuditEvidenceOpenApi = {
         classificationProvenance: { type: "string", const: "privacy_surface_classifier.v1" },
         accessibleNameSource: { type: "string", enum: ["aria_label", "aria_labelledby", "text", "image_alt", "svg_title", "title"] },
         retrieval: { type: "string", enum: ["not_attempted", "fetched", "failed", "skipped_budget"] }, interaction: { type: "string", const: "not_tested" },
+      },
+    } },
+    controlCandidates: { type: "array", maxItems: 12, description: "Required for version 2; omitted in historical version 1. These links are not verified visitor-facing controls and have no score effect.", items: {
+      type: "object", additionalProperties: false,
+      required: ["kind", "label", "sourceUrl", "destinationUrl", "placement", "evidenceRef", "verification"],
+      properties: {
+        kind: { type: "string", enum: ["do_not_sell_or_share", "your_privacy_choices", "cookie_settings"] },
+        label: { type: "string", minLength: 1, maxLength: 200 }, sourceUrl: evidenceUrl, destinationUrl: evidenceUrl,
+        placement: { type: "string", maxLength: 80 }, evidenceRef: { type: "string", minLength: 1, maxLength: 240 },
+        verification: { type: "string", enum: ["visibility_unverified", "accessible_name_unverified"] },
       },
     } },
     notices: { type: "array", maxItems: 4, items: {

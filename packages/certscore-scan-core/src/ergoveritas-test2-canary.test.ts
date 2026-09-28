@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { classifyPrivacySurface, locateCaliforniaNoticePassages } from "@certscore/contracts";
 import { chromium } from "playwright";
+import { createArtifactWriter } from "./artifact-writer.js";
+import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
 
 const canaryRoot = new URL("../../../infra/aws/ergoveritas-canary/", import.meta.url);
 const assetNames = [
@@ -13,7 +17,7 @@ const assetNames = [
 ];
 const expectedCookieNames = ["_ga_TEST2", "_gat_TEST2", "_fbc", "_clsk", "ajs_anonymous_id", "mp_test2_mixpanel"];
 
-test("owned test2 canary separates manual Do Not Sell/Share from unchanged GPC activity", { timeout: 30_000 }, async () => {
+test("owned test2 canary separates manual Do Not Sell/Share from unchanged GPC activity", { timeout: 60_000 }, async () => {
   const assets = new Map(await Promise.all(assetNames.map(async (name) => [name, await readFile(new URL(name, canaryRoot))] as const)));
   const server = createServer((request, response) => {
     const name = new URL(request.url ?? "/", "http://localhost").pathname.slice(1);
@@ -64,6 +68,21 @@ test("owned test2 canary separates manual Do Not Sell/Share from unchanged GPC a
     for (const name of assetNames.filter((asset) => asset.endsWith(".html"))) {
       const response = await fetch(new URL(name, url));
       assert.equal(response.status, 200, `${name} must be reachable from the starting page`);
+    }
+    const artifactDir = await mkdtemp(path.join(tmpdir(), "certscore-test2-policy-"));
+    try {
+      const policy = await policySurfaceScanner({
+        url, normalizedUrl: url, scanStartedAtMs: Date.now(), internalBudgetMs: 12_000,
+        discoveryMode: "fast", artifactWriter: await createArtifactWriter(artifactDir),
+      });
+      for (const kind of ["do_not_sell_or_share", "your_privacy_choices", "cookie_settings"]) {
+        const link = policy.policySurfaceObservations.find(observation => observation.surfaceType === kind);
+        assert.equal(link?.linkVisibility, "visible", `${kind} must retain live visibility proof`);
+        assert.equal(link?.accessibleNameSource, "text", `${kind} must retain its accessible name`);
+        assert.equal(link?.linkSourcePageUrl, url, `${kind} must remain bound to the starting page`);
+      }
+    } finally {
+      await rm(artifactDir, { recursive: true, force: true });
     }
     assert.match(assets.get("test2-notice-at-collection.html")!.toString(), /Categories collected and purposes[\s\S]*Sale or sharing[\s\S]*Retention[\s\S]*Opt-out methods/);
     assert.match(assets.get("test2-privacy-policy.html")!.toString(), /Global Privacy Control[\s\S]*does not reduce optional cookies or requests/);

@@ -1528,8 +1528,9 @@ export function scanBundleText(bundle: Record<string, any>, options: { lightTria
   if (audit.success) {
     const facts = audit.data;
     const controls = facts.controls.map(control => `${control.kind}: ${control.label}`).join("; ");
+    const candidates = (facts.controlCandidates ?? []).map(candidate => `${candidate.kind}: ${candidate.label} (${candidate.verification.replaceAll("_", " ")})`).join("; ");
     const topics = [...new Set(facts.notices.flatMap(notice => notice.topics))].join(", ");
-    append(`Privacy workpaper: ${facts.retainedControlCount} retained choice control(s), ${facts.retainedNoticeCount} notice document(s).${controls ? ` Observed: ${controls}.` : ""}${topics ? ` Notice topics: ${topics}.` : ""}${facts.truncated ? " Summary is partial." : ""} Controls were not exercised; notice passages do not assess adequacy.`);
+    append(`Privacy workpaper: ${facts.retainedControlCount} retained choice control(s), ${facts.retainedNoticeCount} notice document(s).${controls ? ` Observed: ${controls}.` : ""}${candidates ? ` Link candidates needing proof: ${candidates}.` : ""}${topics ? ` Notice topics: ${topics}.` : ""}${facts.truncated ? " Summary is partial." : ""} Controls were not exercised; notice passages do not assess adequacy.`);
     append(`For inventory or export requests, retrieve the tracking workpaper with certscore_get_report_evidence_page, scanId=${bundle.scanId}, workpaper=tracking for retained inventory and JSON/CSV downloads.`);
   } else if (bundle.mcpMetadata?.omittedSections?.includes("privacyAuditSummary")) {
     append(`Privacy workpaper omitted to fit the byte limit. Retrieve it with certscore_get_report_evidence_page, scanId=${bundle.scanId}, workpaper=tracking.`);
@@ -1777,9 +1778,12 @@ export function buildScanBundle(input: {
     sourceHash: audit.sourceHash, verificationStatus: audit.verificationStatus, scoreEffect: audit.scoreEffect,
     negativeControlCoverage: audit.negativeControlCoverage, collectionPointNoticeAssessment: audit.collectionPointNoticeAssessment,
     retainedControlCount: audit.controls.length, retainedNoticeCount: audit.notices.length,
+    ...(audit.contractVersion === "certscore.privacy-audit-evidence.v2" ? { controlCandidates: audit.controlCandidates.slice(0, 3) } : {}),
     controls: audit.controls.slice(0, 3),
     notices: audit.notices.slice(0, 2).map(({ passages, ...notice }) => ({ ...notice, topics: [...new Set(passages.map(p => p.topic))] })),
-    truncated: audit.truncated || audit.controls.length > 3 || audit.notices.length > 2,
+    truncated: audit.truncated || audit.controls.length > 3 ||
+      (audit.contractVersion === "certscore.privacy-audit-evidence.v2" && audit.controlCandidates.length > 3) ||
+      audit.notices.length > 2,
   }) : null;
   const guidedScan = withMcpAgentGuidance(input.scan as unknown as Record<string, any>);
   const bundle: Record<string, any> = {

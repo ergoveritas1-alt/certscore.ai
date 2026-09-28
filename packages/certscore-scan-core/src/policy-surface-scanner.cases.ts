@@ -28,6 +28,8 @@ import {
   commonPathCandidatesFor,
   commonPathLocaleHintsForUnavailableHomepage,
   countRecoveredPolicySurfaceObservations,
+  dedupeCandidates,
+  extractCandidates,
   extractPolicyCookieDisclosures,
   extractPolicySections,
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
@@ -2823,6 +2825,27 @@ test("policy lane preserves rendered control proof when static discovery found t
       assert.equal(result.moduleRun.timingBreakdown?.some((timing) => timing.label === "rendered discovery"), true, page);
     }, { discoveryMode: "fast", internalBudgetMs: 12_000 });
   }
+});
+
+test("observation-only Cookie Settings keeps rendered proof ahead of its static duplicate", () => {
+  const pageUrl = "https://example.test/";
+  const staticCandidate = extractCandidates(pageUrl,
+    '<nav><a href="/cookie-settings">Cookie Settings</a></nav>', "Cookie Settings")
+    .find(candidate => candidate.deterministicSurfaceType === "cookie_settings");
+  assert.ok(staticCandidate);
+  const rendered = { ...staticCandidate, candidateId: "rendered-cookie-settings", selector: "#settings",
+    linkVisibility: "visible" as const, accessibleNameSource: "text" as const,
+    linkSourcePageUrl: pageUrl };
+  const retained = dedupeCandidates([staticCandidate, rendered]);
+  assert.equal(retained.length, 1);
+  assert.equal(retained[0]?.linkVisibility, "visible");
+  assert.equal(retained[0]?.accessibleNameSource, "text");
+  assert.equal(retained[0]?.selector, "#settings");
+  const hidden = dedupeCandidates([staticCandidate, { ...rendered, linkVisibility: "hidden" as const }]);
+  assert.equal(hidden.length, 1);
+  assert.equal(hidden[0]?.linkVisibility, "hidden");
+  assert.equal(dedupeCandidates([staticCandidate, { ...rendered, linkText: "Other settings" }]).length, 2,
+    "a different same-URL control must not borrow the visible anchor's proof");
 });
 
 test("policy lane keeps a visible privacy-choice link from the middle of an overflowing DOM", async () => {

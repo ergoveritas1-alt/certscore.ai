@@ -10769,7 +10769,22 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
       cmpDiscovery: mergeCmpPolicyProvenance(preferred.cmpDiscovery, (preferCandidate ? existing : candidate)?.cmpDiscovery),
     });
   }
-  return [...byUrl.values()];
+  const deduped = [...byUrl.values()];
+  // Observation-only controls retain selector-specific candidates so two
+  // different controls can share a destination. A static HTML candidate has no
+  // selector or browser visibility proof, however, and must not take a bounded
+  // ranking slot ahead of the same link inspected in the rendered document.
+  return deduped.filter((candidate) => {
+    if (!candidate.observationOnly || candidate.selector || candidate.linkVisibility !== undefined) return true;
+    const label = normalizeWhitespace(candidate.linkText).toLowerCase();
+    return !deduped.some((rendered) =>
+      rendered !== candidate && rendered.observationOnly && Boolean(rendered.selector) &&
+      rendered.normalizedUrl === candidate.normalizedUrl &&
+      rendered.deterministicSurfaceType === candidate.deterministicSurfaceType &&
+      normalizeWhitespace(rendered.linkText).toLowerCase() === label &&
+      rendered.linkVisibility !== undefined && Boolean(rendered.linkSourcePageUrl)
+    );
+  });
 }
 
 function remainingMs(input: PolicySurfaceScannerInput, startedAtMs: number): number {
