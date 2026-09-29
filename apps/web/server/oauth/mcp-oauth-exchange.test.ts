@@ -25,7 +25,7 @@ test('real OAuth code exchange and refresh preserve consented scopes and reject 
       create table organization_members(organization_id uuid,user_id uuid);
       create table mcp_oauth_scan_create_grants(grant_kind text,grantee_id text,revoked_at timestamptz);
       create table mcp_oauth_authorization_codes(code_hash text primary key,client_id text,redirect_uri text,code_challenge text,code_challenge_method text,scope text[],organization_id uuid,owner_user_id text,expires_at timestamptz,consumed_at timestamptz);
-      create table mcp_oauth_refresh_tokens(token_hash text primary key,family_id text,client_id text,scope text[],organization_id uuid,owner_user_id text,expires_at timestamptz,revoked_at timestamptz,last_used_at timestamptz);
+      create table mcp_oauth_refresh_tokens(token_hash text primary key,family_id text,client_id text,scope text[],organization_id uuid,owner_user_id text,redirect_uri text,expires_at timestamptz,revoked_at timestamptz,last_used_at timestamptz);
     `);
     const oauth=await import('./mcp-oauth');
     db=await import('@website-signal-risk-scanner/db');
@@ -45,10 +45,15 @@ test('real OAuth code exchange and refresh preserve consented scopes and reject 
     assert.equal(await oauth.exchangeAuthorizationCode({...request,redirectUri:'http://localhost:8787/other'}),null);
     const grant=await oauth.exchangeAuthorizationCode(request);assert.ok(grant);
     assert.equal(await oauth.exchangeAuthorizationCode(request),null);
-    const consent = {...context, scopes: resolution.approvedScopes};
+    const consent = {...context, redirectUri:callback, scopes: resolution.approvedScopes};
     assert.equal(await oauth.hasReusableMcpOAuthConsent(consent), false, 'first connection requires consent');
-    const refresh=await oauth.createRefreshToken({...context,scopes:grant.scope});
+    const legacy=await oauth.createRefreshToken({...context,redirectUri:null,scopes:grant.scope});
+    assert.equal(await oauth.hasReusableMcpOAuthConsent(consent), false, 'historical grants cannot imply approval of a destination');
+    await oauth.rotateRefreshToken(legacy);
+    assert.equal(await oauth.hasReusableMcpOAuthConsent(consent), false, 'refresh does not upgrade a historical grant');
+    const refresh=await oauth.createRefreshToken({...context,redirectUri:callback,scopes:grant.scope});
     assert.equal(await oauth.hasReusableMcpOAuthConsent(consent), true, 'existing full grant reconnects');
+    assert.equal(await oauth.hasReusableMcpOAuthConsent({...consent,redirectUri:'https://other.example/callback'}), false, 'approval is tied to its exact redirect');
     assert.equal(await oauth.hasReusableMcpOAuthConsent({...consent, ownerUserId:randomUUID()}), false);
     assert.equal(await oauth.hasReusableMcpOAuthConsent({...consent, organizationId:randomUUID()}), false);
     assert.equal(await oauth.hasReusableMcpOAuthConsent({...consent, clientId:'another-client'}), false);
@@ -64,7 +69,7 @@ test('real OAuth code exchange and refresh preserve consented scopes and reject 
     assert.equal(await oauth.hasReusableMcpOAuthConsent(consent),true,'rotation preserves consent');
     assert.equal(await oauth.rotateRefreshToken(refresh),null);
     assert.equal(await oauth.hasReusableMcpOAuthConsent(consent),false,'replay revokes the family and consent');
-    const readOnly=await oauth.createRefreshToken({...context,scopes:['scan:read','mcp']});
+    const readOnly=await oauth.createRefreshToken({...context,redirectUri:callback,scopes:['scan:read','mcp']});
     const readRotated=await oauth.rotateRefreshToken(readOnly);assert.ok(readRotated);
     assert.deepEqual(readRotated.row.scope,['scan:read','mcp']);
     assert.equal(await oauth.hasReusableMcpOAuthConsent(consent),false,'read-only grants cannot silently acquire create');

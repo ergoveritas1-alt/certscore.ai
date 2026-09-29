@@ -61,6 +61,20 @@ test("access tokens are signed and validated with issuer and audience", () => {
   assert.equal(result.ok && result.claims.client_id, "client_123");
 });
 
+test("reported researcher registrations cannot use existing bearer tokens", () => {
+  for (const clientId of ["mcp_client_pJbW3S57286UWLQ31RVHFXYp", "mcp_client_hxH0zuH9ZKEldEwYpDTOwF8u"]) {
+    const token = signCertScoreAccessToken({
+      audience: "https://mcp.certscore.ai", clientId, issuer: "https://certscore.ai",
+      jwtSecret: "test-secret", organizationId: "org_123", scopes: ["scan:read", "mcp"],
+      subject: "user_123", userId: "user_123"
+    });
+    assert.deepEqual(verifyCertScoreAccessToken({
+      audience: "https://mcp.certscore.ai", issuer: "https://certscore.ai",
+      jwtSecret: "test-secret", token
+    }), { ok: false, reason: "blocked_client" });
+  }
+});
+
 test("access-token validation rejects misleading JWT headers and future-issued tokens", () => {
   const token = signCertScoreAccessToken({
     audience: "https://mcp.certscore.ai",

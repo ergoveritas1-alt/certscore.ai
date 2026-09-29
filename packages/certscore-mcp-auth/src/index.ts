@@ -13,6 +13,17 @@ export const CERTSCORE_OAUTH_SUPPORTED_SCOPES = [
 export type CertScoreOAuthScope = (typeof CERTSCORE_OAUTH_SUPPORTED_SCOPES)[number];
 export type CertScoreIntegrationScope = "pulse:read" | "pulse:scan" | "mcp";
 
+// Registrations reported on 2026-09-28 with researcher-controlled callbacks.
+// Deny issued bearer tokens as well as future authorization and refresh attempts.
+const BLOCKED_CLIENT_IDS = new Set([
+  "mcp_client_pJbW3S57286UWLQ31RVHFXYp",
+  "mcp_client_hxH0zuH9ZKEldEwYpDTOwF8u"
+]);
+
+export function isBlockedMcpOAuthClientId(clientId: string) {
+  return BLOCKED_CLIENT_IDS.has(clientId);
+}
+
 export type CertScoreAccessTokenClaims = {
   aud: string;
   client_id: string;
@@ -191,6 +202,9 @@ export function verifyCertScoreAccessToken(input: {
   const now = input.nowSeconds ?? Math.floor(Date.now() / 1000);
   if (claims.iss !== input.issuer || claims.aud !== input.audience) {
     return { ok: false as const, reason: "wrong_issuer_or_audience" as const };
+  }
+  if (isBlockedMcpOAuthClientId(claims.client_id)) {
+    return { ok: false as const, reason: "blocked_client" as const };
   }
   if (claims.exp <= now) {
     return { ok: false as const, reason: "expired" as const };

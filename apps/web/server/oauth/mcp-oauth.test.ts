@@ -115,9 +115,12 @@ test("invalid OAuth clients cannot select an external error redirect", () => {
   assert.doesNotMatch(source, /redirectWithParams\(redirectUri \|\|/);
 });
 
-test("self-serve OAuth connects after sign-in without a second approval screen", () => {
+test("OAuth requires consent for unfamiliar clients and reuses exact callback grants", () => {
   const page = readFileSync(new URL("../../app/oauth/authorize/page.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(page, /<form|hasReusableMcpOAuthConsent|name="decision"/);
+  assert.match(page, /<form action="\/api\/v2\/oauth\/authorize"/);
+  assert.match(page, /hasReusableMcpOAuthConsent/);
+  assert.match(page, /isTrustedMcpOAuthConnection/);
+  assert.match(page, /name="decision" value="approve"/);
   assert.match(page, /redirect\(`\/login\?next=/);
   assert.match(page, /redirectUriAllowed\(client, redirectUri\)/);
   assert.match(page, /codeChallengeMethod !== "S256"/);
