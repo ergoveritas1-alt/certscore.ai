@@ -8,6 +8,7 @@ test("public policy describes registered-client active membership without host-p
   assert.match(MCP_OAUTH_ELIGIBILITY, /Members of active/);
   assert.match(MCP_OAUTH_ELIGIBILITY, /registered OAuth clients/);
   assert.match(MCP_OAUTH_AUTHORIZATION, /client may show its own/);
+  assert.match(MCP_OAUTH_AUTHORIZATION, /review its exact connection destination/);
   for (const path of ["developers/mcp", "developers/quickstart"]) {
     const source = readFileSync(`apps/web/app/${path}/page.tsx`, "utf8");
     assert.match(source, /MCP_OAUTH_ELIGIBILITY/);

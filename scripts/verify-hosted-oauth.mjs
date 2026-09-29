@@ -113,7 +113,7 @@ async function authorize(as) {
       server.listen(8787, 'localhost', () => {
         console.log('Open this URL yourself to authorize this diagnostic client (tokens stay in memory):');
         console.log(request.url.toString());
-        console.log('prompt=consent is requested; current CertScore policy may authorize automatically after sign-in.');
+        console.log('prompt=consent is requested; review the CertScore connection destination and access before selecting Connect.');
       });
       timer = setTimeout(() => reject(new Error('Authorization timed out after five minutes')), 300_000);
     });

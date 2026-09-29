@@ -65,6 +65,7 @@ export async function POST(request: Request) {
       clientId: client.clientId,
       organizationId: authorizationCode.organization_id,
       ownerUserId: authorizationCode.owner_user_id,
+      redirectUri,
       scopes: authorizationCode.scope
     });
     const accessToken = issueMcpAccessToken({

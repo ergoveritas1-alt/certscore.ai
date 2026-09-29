@@ -9,6 +9,7 @@ import {
   resolveMcpOAuthRequestedScopes
 } from "../../../../../server/oauth/mcp-oauth";
 import { recordMcpOAuthAuthorization } from "../../../../../server/oauth/mcp-oauth-authorization-event";
+import { isTrustedMcpOAuthConnection, verifyMcpOAuthConsentProof } from "../../../../../server/oauth/mcp-oauth-consent";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,6 +38,8 @@ export async function POST(request: Request) {
   const redirectUri = boundedFormValue(form, "redirect_uri", 2_048);
   const state = boundedFormValue(form, "state", 1_024);
   const decision = boundedFormValue(form, "decision", 16);
+  const consentExpiresAt = Number(boundedFormValue(form, "consent_expires_at", 16));
+  const consentProof = boundedFormValue(form, "consent_proof", 64);
   const codeChallenge = boundedFormValue(form, "code_challenge", 128);
   const codeChallengeMethod = boundedFormValue(form, "code_challenge_method", 16);
   const requestedScopes = boundedFormValue(form, "scope", 512).split(/\s+/).filter(Boolean);
@@ -46,17 +49,7 @@ export async function POST(request: Request) {
     redirect("/developers/mcp?oauth_error=invalid_request");
   }
   if (!/^[A-Za-z0-9_-]{43,128}$/.test(codeChallenge) || codeChallengeMethod !== "S256") {
-    redirectWithParams(redirectUri, {
-      error: "invalid_request",
-      error_description: "OAuth request is invalid.",
-      state
-    });
-  }
-  if (decision !== "approve") {
-    redirectWithParams(redirectUri, {
-      error: "access_denied",
-      state
-    });
+    redirect("/developers/mcp?oauth_error=invalid_request");
   }
   const { organization, user } = await bootstrapAppUserSession(sessionUser);
   const scopeResolution = await resolveMcpOAuthRequestedScopes({
@@ -69,18 +62,23 @@ export async function POST(request: Request) {
     }
   });
   if (scopeResolution.invalidScopes.length > 0) {
-    redirectWithParams(redirectUri, {
-      error: "invalid_scope",
-      error_description: `Requested scopes are not supported: ${scopeResolution.invalidScopes.join(" ")}.`,
-      state
-    });
+    redirect("/developers/mcp?oauth_error=invalid_scope");
   }
   if (scopeResolution.deniedScopes.length > 0) {
-    redirectWithParams(redirectUri, {
-      error: "invalid_scope",
-      error_description: `Requested scopes are not available: ${oauthScopeString(scopeResolution.deniedScopes)}.`,
-      state
-    });
+    redirect("/developers/mcp?oauth_error=invalid_scope");
+  }
+  if (!verifyMcpOAuthConsentProof({
+    clientId, redirectUri, codeChallenge, state,
+    scope: oauthScopeString(scopeResolution.approvedScopes),
+    organizationId: organization.id, ownerUserId: user.id
+  }, consentExpiresAt, consentProof)) {
+    redirect("/developers/mcp?oauth_error=invalid_consent");
+  }
+  if (decision !== "approve") {
+    if (!isTrustedMcpOAuthConnection(clientId, redirectUri)) {
+      redirect("/developers/mcp?oauth_error=access_denied");
+    }
+    redirectWithParams(redirectUri, { error: "access_denied", state });
   }
   const code = await createAuthorizationCode({
     clientId,

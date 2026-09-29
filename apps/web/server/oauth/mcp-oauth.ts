@@ -5,6 +5,7 @@ import { query, queryOne } from "@website-signal-risk-scanner/db";
 import {
   CERTSCORE_OAUTH_CREATE_SCOPE,
   generateOpaqueToken,
+  isBlockedMcpOAuthClientId,
   mapOAuthScopesToIntegrationScopes,
   normalizeOAuthScopes,
   oauthScopeString,
@@ -59,6 +60,7 @@ type AuthorizationCodeRow = {
 type RefreshTokenRow = {
   client_id: string;
   family_id: string;
+  redirect_uri: string | null;
   scope: string[];
   organization_id: string | null;
   owner_user_id: string | null;
@@ -250,6 +252,7 @@ export async function registerMcpOAuthClient(input: {
 }
 
 export async function getMcpOAuthClient(clientId: string) {
+  if (isBlockedMcpOAuthClientId(clientId)) return null;
   const row = await queryOne<McpOAuthClientRow>(
     `select client_id, client_name, redirect_uris, scope, token_endpoint_auth_method
        from mcp_oauth_clients
@@ -265,13 +268,14 @@ export function redirectUriAllowed(client: McpOAuthClient, redirectUri: string) 
   return client.redirectUris.includes(redirectUri);
 }
 
-/** Reuse only a live, already-consented grant; never combine scopes from different grants.
+/** Reuse only a live grant for the exact destination; never combine scopes from different grants.
  * Read the primary so a recently revoked grant cannot be reused from a stale replica.
  */
 export async function hasReusableMcpOAuthConsent(input: {
   clientId: string;
   organizationId: string;
   ownerUserId: string;
+  redirectUri: string;
   scopes: readonly string[];
 }) {
   if (!input.scopes.length) return false;
@@ -285,12 +289,13 @@ export async function hasReusableMcpOAuthConsent(input: {
       where tokens.client_id = $1
         and tokens.organization_id = $2
         and tokens.owner_user_id = $3
+        and tokens.redirect_uri = $5
         and tokens.revoked_at is null
         and tokens.expires_at > timezone('utc', now())
         and tokens.scope @> $4::text[]
         and org.plan_status = 'active'
       limit 1`,
-    [input.clientId, input.organizationId, input.ownerUserId, [...input.scopes]]
+    [input.clientId, input.organizationId, input.ownerUserId, [...input.scopes], input.redirectUri]
   );
   return row?.allowed === true;
 }
@@ -381,14 +386,15 @@ export async function createRefreshToken(input: {
   familyId?: string | null;
   organizationId: string | null;
   ownerUserId: string | null;
+  redirectUri: string | null;
   scopes: readonly string[];
 }) {
   const refreshToken = generateOpaqueToken("mcp_refresh");
   await query(
     `insert into mcp_oauth_refresh_tokens (
-       token_hash, family_id, client_id, scope, organization_id, owner_user_id, expires_at
+       token_hash, family_id, client_id, scope, organization_id, owner_user_id, redirect_uri, expires_at
      )
-     values ($1, coalesce($2::uuid, gen_random_uuid()), $3, $4, $5, $6, timezone('utc', now()) + ($7::int * interval '1 second'))`,
+     values ($1, coalesce($2::uuid, gen_random_uuid()), $3, $4, $5, $6, $7, timezone('utc', now()) + ($8::int * interval '1 second'))`,
     [
       hashToken(refreshToken),
       input.familyId ?? null,
@@ -396,6 +402,7 @@ export async function createRefreshToken(input: {
       normalizeOAuthScopes([...input.scopes]),
       input.organizationId,
       input.ownerUserId,
+      input.redirectUri,
       REFRESH_TOKEN_TTL_SECONDS
     ]
   );
@@ -433,7 +440,7 @@ export async function rotateRefreshToken(refreshToken: string) {
       where token_hash = $1
         and revoked_at is null
         and expires_at > timezone('utc', now())
-      returning client_id, family_id, scope, organization_id, owner_user_id, expires_at, revoked_at`,
+      returning client_id, family_id, redirect_uri, scope, organization_id, owner_user_id, expires_at, revoked_at`,
     [tokenHash]
   );
   if (!row) {
@@ -450,6 +457,7 @@ export async function rotateRefreshToken(refreshToken: string) {
     familyId: row.family_id,
     organizationId: row.organization_id,
     ownerUserId: row.owner_user_id,
+    redirectUri: row.redirect_uri,
     scopes
   });
   return { row: { ...row, scope: scopes }, refreshToken: nextRefreshToken };
