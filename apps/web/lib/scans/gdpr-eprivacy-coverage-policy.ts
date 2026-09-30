@@ -1774,6 +1774,7 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
     finalScheme: getString(summary, ["finalScheme", "final_scheme"]),
     finalUrl: getString(summary, ["finalUrl", "final_url"]),
     formTransportCount: getNumber(summary, ["formTransportCount", "form_transport_count"]),
+    formInventoryState: getString(summary, ["formInventoryState", "form_inventory_state"]),
     httpProbeAttempted: getBoolean(summary, ["httpProbeAttempted", "http_probe_attempted"]),
     httpProbeErrorCategory: getString(summary, ["httpProbeErrorCategory", "http_probe_error_category"]),
     httpProbeErrorMessage: getString(summary, ["httpProbeErrorMessage", "http_probe_error_message"]),
@@ -1837,6 +1838,22 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
         ? ` Retained certificate evidence: ${certificateValidityDetails.join("; ")}.`
         : "";
       if (retainedValidationState === true) {
+        const certificateObservations = getObjectArray(summary, ["tlsCertificateObservations", "tls_certificate_observations"]);
+        const verifiedUrls = uniqueStrings(certificateObservations
+          .filter(observation => getBoolean(observation, ["validCertificate", "valid_certificate"]) === true)
+          .map(observation => getString(observation, ["inputUrl", "input_url"])));
+        const failedUrls = uniqueStrings(certificateObservations
+          .filter(observation => getBoolean(observation, ["validCertificate", "valid_certificate"]) === false)
+          .map(observation => getString(observation, ["inputUrl", "input_url"])));
+        if (verifiedUrls.length && failedUrls.length) {
+          return makeOutcome(
+            "transport_security_tls_certificate",
+            "Observed",
+            `Certificate validation succeeded for ${verifiedUrls.join(", ")}. A separate probe did not verify the certificate for ${failedUrls.join(", ")}${tlsProbeErrorMessage ? ` (${tlsProbeErrorMessage})` : ""}. The successful result applies to the validated origin only.${certificateDetails}`,
+            transportEvidenceRef(summary),
+            { retainedEvidence },
+          );
+        }
         const secondaryProbeNote =
           strictProbeValidCertificate !== true && tlsProbeErrorCategory
             ? ` A secondary strict TLS probe encountered an operational limitation (${tlsProbeErrorCategory}${tlsProbeErrorMessage ? `: ${tlsProbeErrorMessage}` : ""}), but it does not override the successful retained certificate validation.`
@@ -1954,19 +1971,43 @@ function deriveTransportSecurityOutcomes(input: GdprEprivacyCoveragePolicyInput)
       trueText: "HTTP subresources were retained on an HTTPS page.",
       value: getBoolean(summary, ["mixedContentObserved", "mixed_content_observed"]),
     }),
-    transportOutcomeFromBoolean({
-      falseStatus: "Observed",
-      falseText: "No insecure observed form transport was retained for the scanned page.",
-      nullText: getNumber(summary, ["formTransportCount", "form_transport_count"]) === 0
-        ? "No forms were observed on the assessed page; form transport was not assessed. Forms found on other pages are outside this check."
-        : "Observed form transport evidence was not retained.",
-      retainedEvidence,
-      rowId: "transport_security_form_transport",
-      trueStatus: "Gap observed",
-      trueText: "An observed form resolved to insecure HTTP transport or was on an HTTP page.",
-      value: getNumber(summary, ["formTransportCount", "form_transport_count"]) === 0
-        ? null : getBoolean(summary, ["insecureFormTransportObserved", "insecure_form_transport_observed"]),
-    }),
+    (() => {
+      const rowId = "transport_security_form_transport";
+      const formTransportCount = getNumber(summary, ["formTransportCount", "form_transport_count"]);
+      const formInventoryState = getString(summary, ["formInventoryState", "form_inventory_state"]);
+      const insecureFormTransportObserved = getBoolean(summary, ["insecureFormTransportObserved", "insecure_form_transport_observed"]);
+      if (formTransportCount === 0) {
+        // Only a completed, document-bound form inventory supports an empty-page statement.
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          formInventoryState === "complete"
+            ? "No forms found on the starting page. Form transport was not assessed."
+            : "Form transport was not assessed on the starting page.",
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      if (formInventoryState === "limited" && insecureFormTransportObserved !== true) {
+        return makeOutcome(
+          rowId,
+          "Not testable",
+          "Form transport was not fully assessed on the starting page.",
+          transportEvidenceRef(summary),
+          { retainedEvidence },
+        );
+      }
+      return transportOutcomeFromBoolean({
+        falseStatus: "Observed",
+        falseText: "No insecure observed form transport was retained for the scanned page.",
+        nullText: "Observed form transport evidence was not retained.",
+        retainedEvidence,
+        rowId,
+        trueStatus: "Gap observed",
+        trueText: "An observed form resolved to insecure HTTP transport or was on an HTTP page.",
+        value: insecureFormTransportObserved,
+      });
+    })(),
   ];
 }
 

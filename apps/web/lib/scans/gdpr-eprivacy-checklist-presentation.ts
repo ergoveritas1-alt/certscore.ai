@@ -33,6 +33,7 @@ export type GdprEprivacyChecklistPresentationRow = {
   assessmentDirection: AssessmentDirection;
   assessmentStatus: RegulatoryAssessmentStatus;
   debugConfidence?: RegulatoryChecklistDebugConfidence;
+  displayStatusLabel?: string;
   evidenceLabel: EvidenceLabel;
   evidenceState: RegulatoryEvidenceState;
   id: string;
@@ -152,10 +153,17 @@ export function buildGdprEprivacyChecklistPresentation(
     },
     rows: reportableRows.map((item) => {
       const evidenceLabel = getEvidenceLabel(item);
+      const formEvidence = item.criticalEvidence.retainedEvidence;
+      const displayStatusLabel = item.id === "transport_security_form_transport" && item.status === "Not testable"
+        ? formEvidence.formInventoryState === "complete" && formEvidence.formTransportCount === 0
+          ? "No forms found"
+          : "Not assessed"
+        : undefined;
       return {
         assessmentDirection: getAssessmentDirection(item),
         assessmentStatus: item.assessmentStatus,
         debugConfidence: item.debugConfidence,
+        displayStatusLabel,
         evidenceLabel,
         evidenceState: item.evidenceState,
         id: item.id,

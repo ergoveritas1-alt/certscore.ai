@@ -6,35 +6,48 @@ import { DisclosureChevron } from "./report-finding-row";
 export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityProjection | null }) {
   if (!projection?.assessment.detections.length) return null;
   const { assessment } = projection;
+  const flagged = assessment.matches.length > 0;
+  const status = assessment.matches.some(row => row.record.kind === "vulnerability") ? "Potential exposure"
+    : flagged ? "Older version · support ended"
+    : assessment.detections.every(row => row.informationalOnly) ? "Hosted CMS"
+    : assessment.detections.every(row => row.informationalOnly || row.version) ? "No match in selected checks"
+    : "Version check unavailable";
+  const versionLabel = (row: typeof assessment.detections[number]) => row.version ??
+    (row.observedVersions.length === 1 ? row.observedVersions[0] : row.observedVersions.length ? "version unclear" : "version unknown");
   return <details id="cms-security-evidence" className="group/cms-security my-3 rounded-lg border border-zinc-200 bg-white">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
-      <span className="min-w-0">CMS &amp; version evidence <span className="ml-2 font-normal text-zinc-500">{assessment.detections.map(row => row.name).join(", ")}</span></span>
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
+      <span className="min-w-0">
+        <span className="block text-xs font-semibold uppercase text-zinc-500">CMS &amp; version</span>
+        <span className="mt-1 block text-sm font-semibold text-zinc-900">{assessment.detections.map(row => `${row.name} ${versionLabel(row)}`).join(" · ")}</span>
+        <span className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${flagged ? "bg-amber-50 text-amber-900" : "bg-zinc-100 text-zinc-700"}`}>{status}</span>
+      </span>
       <DisclosureChevron className="shrink-0 text-zinc-400 group-open/cms-security:rotate-180" />
     </summary>
     <div className="space-y-4 border-t border-zinc-200 p-4 text-sm">
-      <p className="text-zinc-600">Passive starting-page evidence. Declared versions are not confirmed runtime versions. A catalogue match identifies a potential exposure; installed patches and advisory prerequisites need administrator verification.</p>
-      {assessment.detections.map(detection => <div key={detection.evidenceRef} id={detection.evidenceRef} className="space-y-2 border-b border-zinc-100 pb-3">
-        <p className="font-semibold">{detection.name} · {detection.version ?? (detection.observedVersions.join(", ") || "Version unknown")}</p>
-        <p className="text-zinc-600">{detection.versionBasis === "declared" ? "Declared by the page" : "Inferred from an asset path"} · {detection.confidence} confidence in identification · {detection.informationalOnly ? "Hosted service — informational only" : detection.versionStatus === "declared_exact" ? "Exact declared version" : "Version matching unavailable"}</p>
-        <p className="break-all text-xs text-zinc-500">{detection.evidenceRef} · {detection.evidenceRefs.map(ref => <a key={ref} className="mr-2 underline" href={`#${ref}`}>{ref}</a>)}</p>
-      </div>)}
-      {assessment.matches.map(match => <div key={match.evidenceRef} id={match.evidenceRef} className="space-y-1 rounded border border-amber-200 p-3">
-        <p className="font-semibold">{match.record.kind === "vulnerability" ? "Affected-version match" : "Support-status match"}: {match.record.id}</p>
-        <p>{match.record.title} · Declared {match.observedVersion} matches {match.matchedRange}.</p>
-        {match.record.fixedVersions?.length ? <p>Outdated against this security fix. Vendor fixed releases: {match.record.fixedVersions.join(", ")}.</p> : null}
-        <p className="text-zinc-600">{match.record.qualification}</p>
-        <p><a href={match.record.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sky-700 underline">Lifecycle / vulnerability source</a> · <a href={`#${match.detectionRef}`} className="text-sky-700 underline">Version evidence</a></p>
-        <p className="break-all text-xs text-zinc-500">{match.evidenceRef}</p>
-      </div>)}
-      {!assessment.matches.length ? <p className="text-zinc-600">No match in the reviewed catalogue. This does not establish that the CMS is current, supported or free of vulnerabilities.</p> : null}
-      <details><summary className="cursor-pointer font-medium">Retained source signals</summary>
-        <ul className="mt-2 space-y-3">{projection.signals.map(signal => <li id={signal.evidenceRef} key={signal.evidenceRef} className="break-words">
-          <p className="font-medium">{signal.kind === "meta_generator" ? "Meta generator" : "Same-origin asset path"}: <code className="break-all">{signal.value}</code></p>
-          <p className="break-all text-xs text-zinc-500">{signal.evidenceRef} · artifact {signal.artifactRef}</p>
-          <a className="break-all text-sky-700 underline" href={signal.sourceUrl} target="_blank" rel="noopener noreferrer">{signal.sourceUrl}</a>
+      {assessment.detections.map(detection => {
+        const matches = assessment.matches.filter(match => match.detectionRef === detection.evidenceRef);
+        return <div key={detection.evidenceRef} id={detection.evidenceRef} className="space-y-2 border-b border-zinc-100 pb-4 last:border-0 last:pb-0">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h3 className="font-semibold text-zinc-900">{detection.name}</h3>
+            <span className="font-medium text-zinc-900">{versionLabel(detection)}</span>
+          </div>
+          <p className="text-xs text-zinc-500">{detection.versionBasis === "declared" ? "Version reported by the page" : "CMS identified from a page asset"}{detection.observedVersions.length > 1 ? ` · Conflicting reported versions: ${detection.observedVersions.join(", ")}` : ""}</p>
+          {matches.length ? <div className="space-y-2">{matches.map(match => <div key={match.evidenceRef} id={match.evidenceRef} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+            <p className="font-medium text-amber-950">{match.record.kind === "vulnerability" ? "Potential exposure" : "Support ended"}: {match.record.title}</p>
+            {match.record.fixedVersions?.length ? <p className="mt-1 text-xs text-zinc-700">Vendor fixes: {match.record.fixedVersions.join(", ")}</p> : null}
+            <a href={match.record.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs font-medium text-sky-800 underline">View vendor source</a>
+          </div>)}</div> : <p className="text-zinc-600">{detection.informationalOnly ? "Hosted service; version checks do not apply." : detection.version ? "No issue matched in the selected version checks." : "Version could not be checked."}</p>}
+        </div>;
+      })}
+      <p className="text-xs leading-5 text-zinc-500">Page-reported versions and selected vendor advisories. Confirm the installed version and patches with the site administrator.</p>
+      {projection.signals.length ? <details className="border-t border-zinc-100 pt-3 text-xs text-zinc-600">
+        <summary className="cursor-pointer font-medium">How we identified the CMS</summary>
+        <ul className="mt-2 space-y-2">{projection.signals.map(signal => <li id={signal.evidenceRef} key={signal.evidenceRef} className="break-words">
+          <span className="font-medium">{signal.kind === "meta_generator" ? "Page metadata" : "Page asset"}: </span>
+          <span className="break-all">{signal.value}</span>
+          {signal.kind === "asset_path" ? <a className="ml-2 text-sky-700 underline" href={signal.sourceUrl} target="_blank" rel="noopener noreferrer">View asset</a> : null}
         </li>)}</ul>
-      </details>
-      <p className="break-all text-xs text-zinc-500">Catalogue reviewed {assessment.catalogueReviewedAt}; selected advisories only. Support status is unknown for branches without a lifecycle match. Source SHA-256: {projection.sourceHash}</p>
+      </details> : null}
     </div>
   </details>;
 }

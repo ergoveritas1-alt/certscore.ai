@@ -91,6 +91,7 @@ test("transportSecurityObservationSchema accepts bounded redacted transport evid
       validTlsCertificate: true,
       httpRedirectsToHttps: true,
       httpProbeOutcome: "redirected_to_https",
+      formInventoryState: "complete",
       mixedContentObserved: true,
       insecureFormTransportObserved: true,
     },
@@ -102,6 +103,7 @@ test("transportSecurityObservationSchema accepts bounded redacted transport evid
   assert.equal(parsed.summary.httpRedirectsToHttps, true);
   assert.equal(parsed.httpProbe.outcome, "redirected_to_https");
   assert.equal(parsed.summary.httpProbeOutcome, "redirected_to_https");
+  assert.equal(parsed.summary.formInventoryState, "complete");
   assert.equal(parsed.mixedContent.observedCount, 1);
   assert.equal(parsed.formTransports[0]?.insecureTransportObserved, true);
 });

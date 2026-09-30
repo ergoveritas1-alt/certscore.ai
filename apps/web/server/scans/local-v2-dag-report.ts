@@ -4138,6 +4138,7 @@ function summarizeTransportSecurity(bundle: CanonicalEvidenceBundle) {
     finalScheme: observation.finalScheme,
     finalUrl: observation.finalUrl,
     formTransportCount: formTransports.length,
+    formInventoryState: observation.summary?.formInventoryState ?? null,
     httpProbeAttempted: observation.httpProbe?.attempted === true,
     httpProbeErrorCategory: observation.httpProbe?.errorCategory,
     httpProbeErrorMessage: observation.httpProbe?.errorMessage,

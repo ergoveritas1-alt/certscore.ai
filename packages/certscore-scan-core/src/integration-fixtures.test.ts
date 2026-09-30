@@ -2520,7 +2520,7 @@ test("pre-consent runtime scanner returns retained partial evidence at its soft 
   } finally {
     clearTimeout(deadlineTimer);
     await server.close();
-    await rm(tempRoot, { recursive: true, force: true });
+    await rm(tempRoot, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });
 

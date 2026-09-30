@@ -10198,11 +10198,13 @@ async function captureTransportSecurityObservation(input: {
   scanStartedAtMs: number;
 }): Promise<{ observation: TransportSecurityObservation; artifactRef?: ArtifactRef }> {
   const pageUrl = safePageUrl(input.page, input.normalizedUrl);
-  const pageForms = await captureFormTransportObservations(input.page, pageUrl).catch(() => []);
+  const pageFormCapture = await captureFormTransportObservations(input.page, pageUrl)
+    .catch(() => ({ forms: [], complete: false }));
   const collectionSurfaceForms = input.collectionSurfaceObservations.map((surface, index) =>
     formTransportFromCollectionSurface(surface, index, pageUrl)
   );
-  const formTransports = dedupeFormTransports([...pageForms, ...collectionSurfaceForms]).slice(0, 40);
+  const combinedFormTransports = dedupeFormTransports([...pageFormCapture.forms, ...collectionSurfaceForms]);
+  const formTransports = combinedFormTransports.slice(0, 40);
   const loadedHttpSubresources = input.networkEvents
     .filter((event) => isMixedContentNetworkEvent(event))
     .map((event) => ({
@@ -10212,8 +10214,7 @@ async function captureTransportSecurityObservation(input: {
       pageUrl: sanitizeTransportUrl(event.documentUrl ?? event.topLevelUrl ?? pageUrl),
       resourceType: event.resourceType,
       url: sanitizeTransportUrl(event.requestUrl),
-    }))
-    .slice(0, 25);
+    }));
   const blockedHttpSubresources = [
     ...input.failedHttpRequests
       .filter((request) =>
@@ -10230,7 +10231,7 @@ async function captureTransportSecurityObservation(input: {
         url: sanitizeTransportUrl(request.url),
       })),
     ...input.mixedContentConsoleMessages.flatMap((message) => {
-      const url = firstHttpUrl(message);
+      const url = extractMixedContentHttpUrl(message);
       return url
         ? [{
           disposition: "blocked" as const,
@@ -10242,7 +10243,8 @@ async function captureTransportSecurityObservation(input: {
         }]
         : [];
     }),
-  ].slice(0, 25);
+  ];
+  const mixedContent = consolidateMixedContentSubresources(loadedHttpSubresources, blockedHttpSubresources);
   const { httpProbe, tlsProbe, tlsCertificateObservations } = input.networkProbes;
   const observation: TransportSecurityObservation = {
     observationId: "transport_security_pre_consent",
@@ -10259,18 +10261,15 @@ async function captureTransportSecurityObservation(input: {
     httpProbe,
     tlsProbe,
     tlsCertificateObservations,
-    mixedContent: {
-      loadedHttpSubresources,
-      blockedHttpSubresources,
-      observedCount: loadedHttpSubresources.length + blockedHttpSubresources.length,
-    },
+    mixedContent,
     formTransports,
     summary: {
+      formInventoryState: pageFormCapture.complete && combinedFormTransports.length <= 40 ? "complete" : "limited",
       scannedPagesUseHttps: schemeOf(pageUrl) === "https",
       validTlsCertificate: tlsProbe.validCertificate,
       httpRedirectsToHttps: httpProbe.redirectedToHttps,
       httpProbeOutcome: httpProbe.outcome,
-      mixedContentObserved: loadedHttpSubresources.length + blockedHttpSubresources.length > 0,
+      mixedContentObserved: mixedContent.observedCount > 0,
       insecureFormTransportObserved: formTransports.some((form) => form.insecureTransportObserved),
     },
     evidenceRefs: [{ refId: "ref_transport_security", artifactId: "transport_security_observation" }],
@@ -10689,30 +10688,42 @@ async function fetchOnceWithTimeout(url: string, timeoutMs: number, method: "GET
   }
 }
 
-async function captureFormTransportObservations(page: Page, pageUrl: string): Promise<TransportSecurityObservation["formTransports"]> {
-  const rows = await page.evaluate(() => [...document.querySelectorAll("form")].slice(0, 40).map((form, index) => {
-    const fields = [...form.querySelectorAll("input, textarea, select")].slice(0, 24).map((element) => {
-      const input = element as HTMLInputElement;
-      return {
-        type: (input.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
-        label: [
-          input.getAttribute("aria-label"),
-          input.getAttribute("placeholder"),
-          input.getAttribute("name"),
-          input.getAttribute("id"),
-        ].filter(Boolean).join(" "),
-      };
-    });
+async function captureFormTransportObservations(page: Page, pageUrl: string): Promise<{
+  complete: boolean;
+  forms: TransportSecurityObservation["formTransports"];
+}> {
+  const capture = await page.evaluate(() => {
+    const forms = document.querySelectorAll("form");
     return {
-      action: form.getAttribute("action") || "",
-      actionPresent: form.hasAttribute("action"),
-      index,
-      method: (form.getAttribute("method") || "get").toLowerCase(),
-      resolvedAction: form.action || window.location.href,
-      fields,
+      documentUrl: window.location.href,
+      formCount: forms.length,
+      rows: Array.from({ length: Math.min(forms.length, 40) }, (_, index) => forms.item(index)!).map((form, index) => {
+        const fields = [...form.querySelectorAll("input, textarea, select")].slice(0, 24).map((element) => {
+          const input = element as HTMLInputElement;
+          return {
+            type: (input.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase(),
+            label: [
+              input.getAttribute("aria-label"),
+              input.getAttribute("placeholder"),
+              input.getAttribute("name"),
+              input.getAttribute("id"),
+            ].filter(Boolean).join(" "),
+          };
+        });
+        return {
+          action: form.getAttribute("action") || "",
+          actionPresent: form.hasAttribute("action"),
+          index,
+          method: (form.getAttribute("method") || "get").toLowerCase(),
+          resolvedAction: form.action || window.location.href,
+          fields,
+        };
+      }),
     };
-  }));
-  return rows.map((row) => {
+  });
+  const documentMatches = capture.documentUrl === pageUrl;
+  const complete = capture.formCount <= 40 && documentMatches;
+  const forms = capture.rows.map((row) => {
     const haystack = row.fields.map((field) => `${field.type} ${field.label}`).join(" ").toLowerCase();
     const actionUrl = sanitizeTransportUrl(row.resolvedAction || pageUrl);
     const actionScheme = schemeOf(actionUrl);
@@ -10732,6 +10743,7 @@ async function captureFormTransportObservations(page: Page, pageUrl: string): Pr
       hasSensitiveFieldHint: /password|ssn|social security|credit card|card number|health|medical|birth|date of birth/.test(haystack),
     };
   });
+  return { complete, forms: documentMatches ? forms : [] };
 }
 
 function formTransportFromCollectionSurface(
@@ -10769,6 +10781,28 @@ function dedupeFormTransports(forms: TransportSecurityObservation["formTransport
   });
 }
 
+export function consolidateMixedContentSubresources(
+  loaded: TransportSecurityObservation["mixedContent"]["loadedHttpSubresources"],
+  blocked: TransportSecurityObservation["mixedContent"]["blockedHttpSubresources"],
+): TransportSecurityObservation["mixedContent"] {
+  const resourceKey = (resource: { pageUrl?: string; url: string }) => `${resource.pageUrl ?? ""}\n${resource.url}`;
+  const dedupe = <T extends { pageUrl?: string; url: string }>(resources: T[]) => {
+    const seen = new Set<string>();
+    return resources.filter((resource) => {
+      const key = resourceKey(resource);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 25);
+  };
+  const loadedHttpSubresources = dedupe(loaded);
+  const blockedHttpSubresources = dedupe(blocked);
+  const observedCount = new Set(
+    [...loadedHttpSubresources, ...blockedHttpSubresources].map(resourceKey),
+  ).size;
+  return { loadedHttpSubresources, blockedHttpSubresources, observedCount };
+}
+
 function isMixedContentNetworkEvent(event: NetworkEvent) {
   if (event.isMainFrame || schemeOf(event.requestUrl) !== "http") {
     return false;
@@ -10788,8 +10822,9 @@ function originProbeUrl(value: string, scheme: "http" | "https") {
   }
 }
 
-function firstHttpUrl(value: string) {
-  return value.match(/https?:\/\/[^\s"'<>)]{1,500}/i)?.[0];
+export function extractMixedContentHttpUrl(value: string) {
+  // Chromium names the HTTPS document before the insecure resource in mixed-content warnings.
+  return value.match(/https?:\/\/[^\s"'<>)]{1,500}/gi)?.find(url => /^http:\/\//i.test(url));
 }
 
 function safePageUrl(page: Page, fallbackUrl: string) {

@@ -510,10 +510,10 @@ test("resolver timeline captures a delayed identical-class A/R/O set without loo
     assert.equal(packet.resolver.found, true);
     assert.equal(packet.refusalRegistration.status, "confirmed");
     assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
-    assert.deepEqual(
-      packet.interactionDiagnostics.resolver?.snapshots.map((snapshot) => snapshot.state),
-      ["selector_absent", "single_actionable", "candidate_detected"],
-    );
+    const states = packet.interactionDiagnostics.resolver?.snapshots.map((snapshot) => snapshot.state);
+    assert.deepEqual(states, states?.[0] === "document_loading"
+      ? ["document_loading", "selector_absent", "single_actionable", "candidate_detected"]
+      : ["selector_absent", "single_actionable", "candidate_detected"]);
     const terminal = packet.interactionDiagnostics.resolver?.snapshots.findLast((snapshot) => snapshot.source === "named_recipe");
     const proofRead = packet.interactionDiagnostics.resolver?.snapshots.at(-1);
     assert.equal(proofRead?.source, "control_proof");

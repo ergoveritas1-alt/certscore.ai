@@ -2744,7 +2744,7 @@ function ChecklistRows({
                         getEvidenceLabelBadgeClasses(row.evidenceLabel)
                       )}
                     >
-                      {row.evidenceLabel}
+                      {row.displayStatusLabel ?? row.evidenceLabel}
                     </span>
                   </div>
                   <DebugConfidenceSummary row={row} showImprovements={showDebugConfidenceImprovements} />
