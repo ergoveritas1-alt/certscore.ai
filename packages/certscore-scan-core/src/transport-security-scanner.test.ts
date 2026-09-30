@@ -12,7 +12,35 @@ import { createArtifactWriter } from "./artifact-writer.js";
 import {
   preConsentRuntimeScanner,
   probeStrictTls,
+  extractMixedContentHttpUrl,
+  consolidateMixedContentSubresources,
 } from "./scanners/pre-consent-runtime-scanner.js";
+
+test("mixed-content console evidence identifies the HTTP resource instead of the HTTPS document", () => {
+  const message = "Mixed Content: The page at 'https://www.rvbeypublications.com/' was loaded over HTTPS, but requested an insecure script 'http://svcs.myregisteredsite.com/svcs/timestamp.js'. This request has been blocked; the content must be served over HTTPS.";
+  assert.equal(extractMixedContentHttpUrl(message), "http://svcs.myregisteredsite.com/svcs/timestamp.js");
+  assert.equal(extractMixedContentHttpUrl("Mixed Content: The page at 'https://example.test/?next=http://unrelated.test/' requested 'http://assets.example.test/script.js'."), "http://assets.example.test/script.js");
+  assert.equal(extractMixedContentHttpUrl("Mixed Content: The page at 'https://example.test/' was loaded over HTTPS."), undefined);
+  assert.equal(extractMixedContentHttpUrl("Mixed Content: blocked insecure resource without a retained URL"), undefined);
+});
+
+test("mixed-content count represents distinct retained resources across repeated sources", () => {
+  const resource = { disposition: "blocked" as const, evidenceSource: "request_failed" as const, pageUrl: "https://example.test/", url: "http://cdn.example.test/script.js" };
+  const mixedContent = consolidateMixedContentSubresources(
+    [],
+    [resource, { ...resource, evidenceSource: "console" }, { ...resource, url: "http://cdn.example.test/style.css" }],
+  );
+  assert.equal(mixedContent.blockedHttpSubresources.length, 2);
+  assert.equal(mixedContent.blockedHttpSubresources[0]?.evidenceSource, "request_failed");
+  assert.equal(mixedContent.observedCount, 2);
+  const retried = consolidateMixedContentSubresources(
+    [{ ...resource, disposition: "loaded", evidenceSource: "network_request" }],
+    [resource],
+  );
+  assert.equal(retried.observedCount, 1);
+  assert.equal(retried.loadedHttpSubresources.length, 1);
+  assert.equal(retried.blockedHttpSubresources.length, 1);
+});
 
 test("strict TLS probe keeps timeouts and network failures unknown instead of invalid", async () => {
   const result = await probeStrictTls("https://192.0.2.1/", undefined, Date.now() + 10);
@@ -146,6 +174,7 @@ test("pre-consent scanner uses strict TLS probe and records transport-security e
     assert.equal(observation.summary.validTlsCertificate, false);
     assert.equal(observation.summary.mixedContentObserved, true);
     assert.ok(observation.mixedContent.observedCount > 0);
+    assert.equal(observation.summary.formInventoryState, "complete");
     assert.equal(observation.summary.insecureFormTransportObserved, true);
 
     const insecureForm = observation.formTransports.find((form) => form.insecureTransportObserved);

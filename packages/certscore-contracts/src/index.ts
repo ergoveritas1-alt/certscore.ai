@@ -1102,6 +1102,7 @@ export const transportSecurityObservationSchema = z.object({
     validTlsCertificate: z.boolean().optional(),
     httpRedirectsToHttps: z.boolean().optional(),
     httpProbeOutcome: transportHttpProbeOutcomeSchema.optional(),
+    formInventoryState: z.enum(["complete", "limited"]).optional(),
     mixedContentObserved: z.boolean(),
     insecureFormTransportObserved: z.boolean(),
   }),

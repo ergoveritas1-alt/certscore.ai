@@ -1070,6 +1070,42 @@ test("deriveGdprEprivacyCoverageChecklist starts with primary GDPR/ePrivacy evid
   );
 });
 
+test("form transport rationale distinguishes empty retained evidence from a missing observation", () => {
+  for (const retained of [true, false]) {
+    const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      coverageLimited: false,
+      scanCompleted: true,
+      runtimeArtifacts: retained ? {
+        transportSecuritySummary: {
+          evidenceRetained: true,
+          evidenceRefs: ["ref_transport_security"],
+          formTransportCount: 0,
+          formInventoryState: "complete",
+          insecureFormTransportObserved: false,
+        },
+      } : {},
+    });
+    const row = byId(deriveGdprEprivacyCoverageChecklist({
+      coverageLimited: false,
+      coverageOutcomes,
+      scanCompleted: true,
+      unifiedFindings: [],
+    }), "transport_security_form_transport");
+    assert.equal(row.status, "Not testable");
+    assert.equal(getAssessmentDirection(row), "technical_limitation");
+    const rationale = deriveGdprEprivacyCoverageChecklistRowRationale(row);
+    if (retained) {
+      assert.match(rationale, /No forms found on the starting page/);
+      assert.doesNotMatch(rationale, /Missing or incomplete source signal|retained missing|source-signal coverage evidence/);
+      assert.deepEqual(row.criticalEvidence.missingOrIncompleteSourceSignals, []);
+      assert.ok(row.evidenceRefs.includes("ref_transport_security"));
+    } else {
+      assert.match(rationale, /expected typed transport security observation; retained missing/);
+      assert.ok(row.criticalEvidence.missingOrIncompleteSourceSignals.length > 0);
+    }
+  }
+});
+
 test("deriveGdprEprivacyCoverageChecklist orders structured consent controls as reject, accept, options", () => {
   const items = deriveGdprEprivacyCoverageChecklist({
     coverageLimited: false,

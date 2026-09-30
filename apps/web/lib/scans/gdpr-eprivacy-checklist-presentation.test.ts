@@ -94,3 +94,33 @@ test("compact checklist presentation rejects contradictory GDPR row state", () =
     rows: [...presentation.rows, presentation.rows[0]],
   }), false);
 });
+
+test("form transport display distinguishes a complete empty inventory from unknown coverage", () => {
+  const base = makePolicyRow();
+  const formRow = {
+    ...base,
+    id: "transport_security_form_transport",
+    label: "Observed form transport",
+    status: "Not testable" as const,
+    evidenceState: "not_testable" as const,
+    assessmentStatus: "coverage_limitation" as const,
+  };
+  const complete = buildGdprEprivacyChecklistPresentation([{
+    ...formRow,
+    criticalEvidence: {
+      ...formRow.criticalEvidence,
+      retainedEvidence: { formTransportCount: 0, formInventoryState: "complete" },
+    },
+  }]);
+  const legacy = buildGdprEprivacyChecklistPresentation([{
+    ...formRow,
+    criticalEvidence: {
+      ...formRow.criticalEvidence,
+      retainedEvidence: { formTransportCount: 0 },
+    },
+  }]);
+  assert.equal(complete.rows[0]?.displayStatusLabel, "No forms found");
+  assert.equal(legacy.rows[0]?.displayStatusLabel, "Not assessed");
+  assert.equal(complete.rows[0]?.evidenceLabel, "Not testable");
+  assert.equal(legacy.rows[0]?.evidenceLabel, "Not testable");
+});

@@ -6714,6 +6714,33 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes prefers successful retained certi
   assert.doesNotMatch(outcome?.limitation ?? "", /hostname defect/i);
 });
 
+test("certificate success on the redirected host preserves the original origin's separate failure", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      transportSecuritySummary: {
+        evidenceRetained: true,
+        evidenceRefs: ["ref_transport_security"],
+        finalUrl: "https://www.example.test/",
+        validTlsCertificate: false,
+        tlsProbeErrorCategory: "tls_or_certificate_failure",
+        tlsProbeErrorMessage: "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+        tlsCertificateObservations: [
+          { inputUrl: "https://example.test/", validCertificate: false, chainCertificateCount: 1 },
+          { inputUrl: "https://www.example.test/", validCertificate: true, chainCertificateCount: 3 },
+        ],
+      },
+    },
+  });
+  const outcome = outcomes.transport_security_tls_certificate!;
+  assert.equal(outcome.status, "Observed");
+  assert.match(outcome.limitation, /validation succeeded for https:\/\/www\.example\.test\//);
+  assert.match(outcome.limitation, /did not verify the certificate for https:\/\/example\.test\/ \(UNABLE_TO_VERIFY_LEAF_SIGNATURE\)/);
+  assert.match(outcome.limitation, /successful result applies to the validated origin only/);
+  assert.doesNotMatch(outcome.limitation, /secondary|operational limitation/);
+  assert.equal((outcome.criticalEvidence.retainedEvidence.tlsCertificateObservations as unknown[]).length, 2);
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes retains certificate probe failure detail", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
@@ -7309,11 +7336,64 @@ test("embed source counts keep admitted query-free sources and deduplicate repea
   assert.deepEqual(result.third_party_iframe_pre_consent?.criticalEvidence.retainedEvidence.embeddedFrameSources,["https://www.youtube.com/embed/abc123"]);
 });
 
-test("zero assessed forms cannot establish positive form transport", () => {
+test("legacy empty form inventory stays neutral without claiming complete inspection", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,
     runtimeArtifacts: {transportSecuritySummary: {evidenceRetained: true, evidenceRefs: ["transport:0"], formTransportCount: 0, insecureFormTransportObserved: false}}
   });
   assert.equal(outcomes.transport_security_form_transport?.status, "Not testable");
-  assert.match(outcomes.transport_security_form_transport?.limitation ?? "", /No forms were observed on the assessed page/);
+  const outcome = outcomes.transport_security_form_transport!;
+  assert.match(outcome.limitation, /Form transport was not assessed/);
+  assert.doesNotMatch(outcome.limitation, /No forms found/);
+  assert.deepEqual(outcome.criticalEvidence.missingOrIncompleteSourceSignals, []);
+  assert.deepEqual(outcome.evidenceRefs, ["transport:0"]);
+  assert.equal(outcome.criticalEvidence.retainedEvidence.formTransportCount, 0);
+});
+
+test("completed empty form inventory is reported as no forms found without a secure-form pass", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {transportSecuritySummary: {
+      evidenceRetained: true,
+      evidenceRefs: ["transport:0"],
+      formTransportCount: 0,
+      formInventoryState: "complete",
+      insecureFormTransportObserved: false,
+    }},
+  });
+  const outcome = outcomes.transport_security_form_transport!;
+  assert.equal(outcome.status, "Not testable");
+  assert.match(outcome.limitation, /No forms found on the starting page/);
+  assert.equal(outcome.criticalEvidence.retainedEvidence.formInventoryState, "complete");
+});
+
+test("limited empty form inventory remains unassessed", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {transportSecuritySummary: {
+      evidenceRetained: true,
+      evidenceRefs: ["transport:0"],
+      formTransportCount: 0,
+      formInventoryState: "limited",
+      insecureFormTransportObserved: false,
+    }},
+  });
+  const outcome = outcomes.transport_security_form_transport!;
+  assert.equal(outcome.status, "Not testable");
+  assert.match(outcome.limitation, /Form transport was not assessed/);
+  assert.doesNotMatch(outcome.limitation, /No forms found/);
+});
+
+test("limited inventory cannot establish secure form transport from its partial sample", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {transportSecuritySummary: {
+      evidenceRetained: true,
+      evidenceRefs: ["transport:0"],
+      formTransportCount: 1,
+      formInventoryState: "limited",
+      insecureFormTransportObserved: false,
+    }},
+  });
+  assert.equal(outcomes.transport_security_form_transport?.status, "Not testable");
 });
