@@ -11,6 +11,7 @@ import { identifyCrawlService, describeCrawlService } from "../../lib/scans/full
 import { loadFullSiteReviewedPolicies } from "./full-site-reviewed-policies";
 import { loadFullSiteRelationshipCounts } from "./full-site-relationship-counts";
 import { loadFullSiteScore } from "./full-site-score";
+import { fullSiteReportSourceKey, isDefaultFullSiteReport, readFullSiteReportCache, writeFullSiteReportCache } from "./full-site-report-cache";
 import { unscannedCrawlPageLimitation } from "../../lib/scans/full-site-crawl-limitation";
 import { classifyCrawlInventoryResource } from "../../lib/scans/full-site-inventory-classification";
 import {
@@ -37,15 +38,72 @@ export type FullSiteReportOverview = {
   finalizationStartedAt: ReturnType<typeof fullSiteFinalizationStartedAt>;
 };
 
+type ReportOptions = { crawl?: FullSiteCrawlRow | null; onOverview?: (overview: FullSiteReportOverview) => void; onIncompleteDetails?: () => void };
+const pendingReports = new Map<string, { result: Promise<FullSiteReportResponse | null>; overview?: FullSiteReportOverview; listeners: Set<NonNullable<ReportOptions["onOverview"]>> }>();
+
 export async function loadFullSiteReport(
   scanId: string,
   params = new URLSearchParams(),
   exportAllPages = false,
-  options: { crawl?: FullSiteCrawlRow | null; onOverview?: (overview: FullSiteReportOverview) => void } = {},
+  options: ReportOptions = {},
+): Promise<FullSiteReportResponse | null> {
+  const started = performance.now();
+  if (!isDefaultFullSiteReport(params, exportAllPages)) return buildFullSiteReport(scanId, params, exportAllPages, options);
+  let sourceKey: string | null = null;
+  try {
+    sourceKey = await fullSiteReportSourceKey(scanId);
+    if (sourceKey) {
+      const cached = await readFullSiteReportCache(scanId, sourceKey) as FullSiteReportResponse | null;
+      if (cached?.summary?.state?.scanId === scanId && cached.summary.state.status === "completed" &&
+          Array.isArray(cached.resources?.rows) && Array.isArray(cached.pages?.rows)) {
+        options.onOverview?.({ summary: cached.summary, score: cached.score, finalizationStartedAt: cached.finalizationStartedAt });
+        console.info("[full-site-report]", { scanId, cache: "hit", elapsedMs: Math.round(performance.now() - started) });
+        return cached;
+      }
+    }
+  } catch { console.warn("[full-site-report] cache unavailable", { scanId }); }
+  if (!sourceKey) return buildFullSiteReport(scanId, params, exportAllPages, options);
+  const pending = pendingReports.get(sourceKey);
+  if (pending) {
+    if (options.onOverview) {
+      pending.listeners.add(options.onOverview);
+      if (pending.overview) options.onOverview(pending.overview);
+    }
+    return pending.result;
+  }
+  const entry: { result: Promise<FullSiteReportResponse | null>; overview?: FullSiteReportOverview; listeners: Set<NonNullable<ReportOptions["onOverview"]>> } = {
+    result: Promise.resolve(null), listeners: new Set(options.onOverview ? [options.onOverview] : []),
+  };
+  const key = sourceKey;
+  let complete = true;
+  entry.result = (async () => {
+    const result = await buildFullSiteReport(scanId, params, exportAllPages, { ...options,
+      onIncompleteDetails: () => { complete = false; options.onIncompleteDetails?.(); },
+      onOverview: overview => { entry.overview = overview; for (const listener of entry.listeners) listener(overview); },
+    });
+    let saved = false;
+    if (result?.score && complete) {
+      try { saved = await writeFullSiteReportCache(scanId, key, result); }
+      catch { console.warn("[full-site-report] cache write unavailable", { scanId }); }
+    }
+    console.info("[full-site-report]", { scanId, cache: "miss", saved, elapsedMs: Math.round(performance.now() - started) });
+    return result;
+  })().finally(() => { if (pendingReports.get(key) === entry) pendingReports.delete(key); });
+  if (pendingReports.size < 16) pendingReports.set(key, entry);
+  return entry.result;
+}
+
+async function buildFullSiteReport(
+  scanId: string,
+  params = new URLSearchParams(),
+  exportAllPages = false,
+  options: ReportOptions = {},
 ) {
+  const buildStarted = performance.now();
   const crawl = options.crawl === undefined ? await loadFullSiteCrawl(scanId) : options.crawl;
   if (!crawl || crawl.scan_id !== scanId) return null;
   const records = await loadFullSitePages(scanId);
+  const pagesLoadedAt = performance.now();
   const state: CrawlState = {
     scanId,
     status: crawl.status as CrawlState["status"],
@@ -105,6 +163,7 @@ export async function loadFullSiteReport(
   // Publish the canonical assessment before fetching supporting policy/graph details.
   options.onOverview?.({ summary: { ...aggregate, resources: undefined }, score,
     finalizationStartedAt: fullSiteFinalizationStartedAt(crawl, records) });
+  const overviewAt = performance.now();
   const storageReconciliation = reconcileStorageInventory(score?.assessedStorageRecords ?? [], aggregate.resources);
   const additionalServiceIds = new Set(aggregate.resources.filter(row => row.occurrence.kind === "service" && row.homepage === "not_observed").map(row => row.occurrence.serviceId).filter(Boolean));
   const inventoryClassification = (row: (typeof aggregate.resources)[number]) =>
@@ -156,7 +215,9 @@ export async function loadFullSiteReport(
           ...pages.filter((p) => row.pageIds.includes(p.id)).map((p) => p.url),
         ].some((v) => v?.toLowerCase().includes(q))),
   );
-  const reviewedPolicies = await loadFullSiteReviewedPolicies(scanId);
+  const reviewedPolicies = await loadFullSiteReviewedPolicies(scanId, options.onIncompleteDetails);
+  const policiesLoadedAt = performance.now();
+  if (reviewedPolicies.some(policy => !policy.complete)) options.onIncompleteDetails?.();
   const serviceContexts = new Map<string, ReturnType<typeof describeCrawlService>>();
   const resourceContext = (row: (typeof aggregate.resources)[number]) => {
     const identity = identifyCrawlService(row.occurrence);
@@ -393,10 +454,16 @@ export async function loadFullSiteReport(
     serviceGroups.set(key, group);
   }
   const displayedResources = exportAllPages ? resources : resources.slice(offset, offset + limit);
-  const relationshipCounts = await loadFullSiteRelationshipCounts(scanId, pages, serviceEvidencePageIds({
+  const relationshipPageIds = serviceEvidencePageIds({
     localAudit: process.env.NODE_ENV !== "production" && Boolean((crawl.policy_json as {localExecution?: boolean}).localExecution),
     pages, displayedPageIds: displayedResources.map(row => row.pageIds[0]!).filter(Boolean), detailId,
-  }), state.configurationHash, crawl);
+  });
+  const relationshipCounts = await loadFullSiteRelationshipCounts(scanId, pages, relationshipPageIds, state.configurationHash, crawl);
+  console.info("[full-site-report] assembly", { scanId, pages: pages.length,
+    pageReadMs: Math.round(pagesLoadedAt - buildStarted), overviewMs: Math.round(overviewAt - buildStarted),
+    policyAndInventoryMs: Math.round(policiesLoadedAt - overviewAt),
+    inventoryAndGraphMs: Math.round(performance.now() - policiesLoadedAt) });
+  if (pages.some(page => relationshipPageIds.includes(page.id) && page.observation?.runtimeGraph && !relationshipCounts.has(page.id))) options.onIncompleteDetails?.();
   const resourcesByKey = new Map(resources.map(row => [row.key, row]));
   const destinationSummary = (row: (typeof resources)[number]) => ({
     destinations: row.destinationAssessedCount > 0 ? row.destinations : relationshipCounts.get(row.pageIds[0] ?? "")?.get(row.occurrence.id)?.destinations ?? [],
@@ -558,7 +625,7 @@ export async function loadFullSiteReport(
   };
 }
 export type FullSiteReportResponse = NonNullable<
-  Awaited<ReturnType<typeof loadFullSiteReport>>
+  Awaited<ReturnType<typeof buildFullSiteReport>>
 >;
 
 export async function loadFullSiteExport(scanId: string) {
