@@ -1,3 +1,4 @@
+import { streamFullSiteReport } from "../../../../../server/scans/full-site-report-stream";
 import { loadFullSiteFormSnapshot } from "../../../../../server/scans/full-site-forms";
 import { readFullSiteOptions } from "../../../../../server/scans/full-site-options";
 import { NextResponse } from "next/server";
@@ -38,7 +39,11 @@ export async function GET(
       return bytes ? new Response(new Uint8Array(bytes), { headers: { "Content-Type": "image/jpeg", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": 'inline; filename="form.jpg"' } }) : new Response(null, { status: 404 });
     } catch { return new Response(null, { status: 404 }); }
   }
-  const report = params.has("graphPage") ? await loadFullSiteGraph(scanId, params.get("graphPage")!) : await loadFullSiteReport(scanId, params);
+  if (params.get("stream") === "1" && !params.has("graphPage")) {
+    if (!crawl) return new Response(null, { status: 404 });
+    return streamFullSiteReport(onOverview => loadFullSiteReport(scanId, params, false, { crawl, onOverview }));
+  }
+  const report = params.has("graphPage") ? await loadFullSiteGraph(scanId, params.get("graphPage")!) : await loadFullSiteReport(scanId, params, false, { crawl });
   return NextResponse.json(report, {
     status: report ? 200 : 404,
     headers: { "Cache-Control": "private, no-store" },

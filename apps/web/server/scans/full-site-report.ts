@@ -28,15 +28,23 @@ import {
   loadFullSiteCrawl,
   loadFullSitePages,
   query,
+  type FullSiteCrawlRow,
 } from "@website-signal-risk-scanner/db";
+
+export type FullSiteReportOverview = {
+  summary: Omit<ReturnType<typeof aggregateFullSite>, "resources"> & { resources: undefined };
+  score: Awaited<ReturnType<typeof loadFullSiteScore>>;
+  finalizationStartedAt: ReturnType<typeof fullSiteFinalizationStartedAt>;
+};
 
 export async function loadFullSiteReport(
   scanId: string,
   params = new URLSearchParams(),
   exportAllPages = false,
+  options: { crawl?: FullSiteCrawlRow | null; onOverview?: (overview: FullSiteReportOverview) => void } = {},
 ) {
-  const crawl = await loadFullSiteCrawl(scanId);
-  if (!crawl) return null;
+  const crawl = options.crawl === undefined ? await loadFullSiteCrawl(scanId) : options.crawl;
+  if (!crawl || crawl.scan_id !== scanId) return null;
   const records = await loadFullSitePages(scanId);
   const state: CrawlState = {
     scanId,
@@ -94,6 +102,9 @@ export async function loadFullSiteReport(
   }));
   const aggregate = aggregateFullSite(state, pages);
   const score = await loadFullSiteScore(crawl, pages);
+  // Publish the canonical assessment before fetching supporting policy/graph details.
+  options.onOverview?.({ summary: { ...aggregate, resources: undefined }, score,
+    finalizationStartedAt: fullSiteFinalizationStartedAt(crawl, records) });
   const storageReconciliation = reconcileStorageInventory(score?.assessedStorageRecords ?? [], aggregate.resources);
   const additionalServiceIds = new Set(aggregate.resources.filter(row => row.occurrence.kind === "service" && row.homepage === "not_observed").map(row => row.occurrence.serviceId).filter(Boolean));
   const inventoryClassification = (row: (typeof aggregate.resources)[number]) =>
@@ -385,7 +396,7 @@ export async function loadFullSiteReport(
   const relationshipCounts = await loadFullSiteRelationshipCounts(scanId, pages, serviceEvidencePageIds({
     localAudit: process.env.NODE_ENV !== "production" && Boolean((crawl.policy_json as {localExecution?: boolean}).localExecution),
     pages, displayedPageIds: displayedResources.map(row => row.pageIds[0]!).filter(Boolean), detailId,
-  }), state.configurationHash);
+  }), state.configurationHash, crawl);
   const resourcesByKey = new Map(resources.map(row => [row.key, row]));
   const destinationSummary = (row: (typeof resources)[number]) => ({
     destinations: row.destinationAssessedCount > 0 ? row.destinations : relationshipCounts.get(row.pageIds[0] ?? "")?.get(row.occurrence.id)?.destinations ?? [],

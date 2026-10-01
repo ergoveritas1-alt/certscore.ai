@@ -43,3 +43,42 @@ export function crawlOccurrenceGraphIdentity(occurrence: {
   }
   return identity;
 }
+
+/** Build once per verified graph, rather than scanning every node/edge per row. */
+export function createInventoryRelationshipCounter(graph: ApiRuntimeEvidenceGraph) {
+  const nodeIds = new Set(graph.nodes.map(node => node.id));
+  const endpoints = new Map<string, string[]>();
+  const products = new Map<string, string[]>();
+  const children = new Map<string, Set<string>>();
+  const normalizeProduct = (value: string) => value.trim().replace(/\s+/g, " ").toLowerCase();
+  const endpoint = (host: string | null, path: string | null, method: string | null | undefined) =>
+    JSON.stringify([host?.trim().toLowerCase().replace(/^www\./, ""), path, method, method === undefined]);
+  const add = (index: Map<string, string[]>, key: string, id: string) => {
+    const ids = index.get(key) ?? []; ids.push(id); index.set(key, ids);
+  };
+  for (const node of graph.nodes) {
+    if (node.kind !== "request" || !node.url) continue;
+    const url = new URL(node.url);
+    add(endpoints, endpoint(url.hostname, url.pathname, node.method), node.id);
+    if (node.classification?.basis === "canonical_registry" && typeof node.classification.product === "string") {
+      add(products, normalizeProduct(node.classification.product), node.id);
+    }
+  }
+  for (const edge of graph.edges) {
+    const targets = children.get(edge.from) ?? new Set<string>();
+    targets.add(edge.to); children.set(edge.from, targets);
+  }
+  return (identity: InventoryResourceIdentity) => {
+    const matches = new Set([...(identity.nodeRefs ?? []), ...identity.cookieRefs].filter(id => nodeIds.has(id)));
+    for (const request of identity.requests) {
+      for (const id of endpoints.get(endpoint(request.hostname, request.path, request.method)) ?? []) matches.add(id);
+    }
+    if (!identity.requests.length) for (const product of identity.products ?? []) {
+      const key = normalizeProduct(product);
+      if (key) for (const id of products.get(key) ?? []) matches.add(id);
+    }
+    const targets = new Set<string>();
+    for (const id of matches) for (const target of children.get(id) ?? []) targets.add(target);
+    return targets.size;
+  };
+}

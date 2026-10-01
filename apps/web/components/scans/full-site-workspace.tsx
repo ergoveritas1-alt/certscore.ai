@@ -40,7 +40,8 @@ import { InventoryPriorityHelp } from "./inventory-priority-help";
 import { InventoryResourceProvider, InventoryResourceMobile, type InventoryGraphSource } from "./inventory-resource-details";
 import type { ApiRuntimeEvidenceGraphProjection, ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 
-import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
+import { readFullSiteReportStream } from "../../lib/scans/full-site-report-stream";
+import type { FullSiteReportOverview, FullSiteReportResponse } from "../../server/scans/full-site-report";
 
 type Filters = {
   kind: string;
@@ -165,6 +166,8 @@ export function FullSiteWorkspace({
     [offset, setOffset] = useState(0);
   const [data, setData] = useState<FullSiteReportResponse | null>(() => retainedReport?.scanId === scanId ? retainedReport.data : null),
     [error, setError] = useState<string | null>(null);
+  const [partialOverview, setPartialOverview] = useState<FullSiteReportOverview | null>(null);
+  const overview = data ?? partialOverview;
   const [detailPage, setDetailPage] = useState(""),
     [resource, setResource] = useState(""),
     [detailOffset, setDetailOffset] = useState(0);
@@ -214,9 +217,11 @@ export function FullSiteWorkspace({
       loading = true;
       setIsFetching(true);
       let delay = Math.max(15000, pollMs);
+      const requestSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]);
       try {
         const params = new URLSearchParams({
           ...filters,
+          stream: "1",
           offset: String(offset),
           ...(detailPage
             ? { detailPage, resource, detailOffset: String(detailOffset) }
@@ -225,7 +230,7 @@ export function FullSiteWorkspace({
         for (const [key, value] of [...params]) if (!value) params.delete(key);
         const response = await fetch(
           `/api/scans/${scanId}/full-site?${params}`,
-          { cache: "no-store", signal: controller.signal },
+          { cache: "no-store", signal: requestSignal },
         );
         if (!response.ok) {
           delay = Math.max(
@@ -238,7 +243,11 @@ export function FullSiteWorkspace({
               : "Inventory updates are temporarily unavailable.",
           );
         }
-        const next = (await response.json()) as FullSiteReportResponse;
+        const next = response.headers.get("content-type")?.includes("application/x-ndjson")
+          ? await readFullSiteReportStream(response, nextOverview => {
+              if (!controller.signal.aborted) setPartialOverview(nextOverview);
+            })
+          : (await response.json()) as FullSiteReportResponse;
         if (controller.signal.aborted) return;
         // Bind completion to this response and request, not stale component state after navigation.
         trackFullSiteCompletion(scanId, next.summary, homepageUrl);
@@ -262,7 +271,8 @@ export function FullSiteWorkspace({
       } catch (e) {
         failures += 1;
         delay = Math.max(delay, Math.min(120000, 15000 * 2 ** failures));
-        if (!controller.signal.aborted) setError((e as Error).message);
+        if (!controller.signal.aborted) setError(requestSignal.reason?.name === "TimeoutError"
+          ? "Report loading took too long. Please retry." : (e as Error).message);
       }
       nextReadAt = Date.now() + delay;
       loading = false;
@@ -337,7 +347,7 @@ export function FullSiteWorkspace({
     setDetailOffset(0);
     setTimeout(() => detailRef.current?.focus(), 0);
   }
-  const s = data?.summary,
+  const s = overview?.summary,
     counts = s?.counts,
     state = s?.state;
   const awaitingActiveReport = !state && (initialNotice ? ["waiting_homepage", "running"].includes(initialNotice.status) : initialPending);
@@ -367,10 +377,10 @@ export function FullSiteWorkspace({
   const crawlLimited = isRetainedCrawlLimitation(state?.status, state?.stopReason);
   const sitemapLimited = ["sitemap_discovery_limited", "sitemap_document_limit"].includes(state?.stopReason ?? "") ||
     (state?.discoveryDiagnostics?.some(diagnostic => diagnostic.stage === "sitemap") ?? false);
-  const retainedAssessment = crawlLimited && Boolean(data?.score);
+  const retainedAssessment = crawlLimited && Boolean(overview?.score);
   const reportActionsAvailable = completed || retainedAssessment;
-  const finalizing = valuesUpdating && Boolean(data?.finalizationStartedAt);
-  const finalizationDelayed = finalizing && fullSiteFinalizationDelayed(data?.finalizationStartedAt, now);
+  const finalizing = valuesUpdating && Boolean(overview?.finalizationStartedAt);
+  const finalizationDelayed = finalizing && fullSiteFinalizationDelayed(overview?.finalizationStartedAt, now);
   const stoppingWorkers = state?.status === "cancelled" && running;
   const progressLabel = stoppingWorkers ? "Stopping" : finalizationDelayed ? "Finalization delayed" : finalizing ? "Finalizing results" : "In progress";
   const failedPages = data?.pageChoices.filter(page => ["partial", "failed", "blocked"].includes(page.status)) ?? [];
@@ -436,14 +446,14 @@ export function FullSiteWorkspace({
     started={timestamp(state?.startedAt)} completed={timestamp(state?.completedAt)}
   />;
   const reportStatus = running ? progressLabel : !state ? "Loading report…" : retainedAssessment ? "Starting page completed · Crawl limited" : crawlLimited ? "Crawl limited" : state?.status === "cancelled" ? "Cancelled" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading";
-  const previewMetrics = initialPending && valuesUpdating && !data?.score && (scannedPages ?? 0) === 0
+  const previewMetrics = initialPending && valuesUpdating && !overview?.score && (scannedPages ?? 0) === 0
     ? preliminarySiteInventoryMetrics(preConsentPreview) : null;
   const inventoryMetrics = previewMetrics ?? [
           { label: INVENTORY_METRIC_LABELS.storage, value: s ? s.totals.cookies + s.totals.storage : null, group: "cookies" },
           { label: INVENTORY_METRIC_LABELS.requests, value: s?.totals.requestEvents, group: "requests" },
           { label: INVENTORY_METRIC_LABELS.frames, value: s?.totals.embedInstances, group: "embeds" },
         ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined }));
-  const inventorySummary = <ReportInventorySummary forms={data?.collectionSurfaces?.rows} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={data?.score?.siteIntegrity} />;
+  const inventorySummary = <ReportInventorySummary forms={data?.collectionSurfaces?.rows} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
     <FullSiteScanDurationContext.Provider value={scanDuration}>
@@ -514,17 +524,18 @@ export function FullSiteWorkspace({
             </p>
           </div>
         ) : null}
+        {partialOverview && !data && !error ? <p role="status" className="text-sm text-slate-600">Loading supporting details…</p> : null}
         {error ? (
           <p role="status" className="text-sm text-amber-800">
-            {error} {data?.score ? "Showing the last loaded sitewide results." : "The sitewide score and inventory will appear when report access resumes."}
+            {error} <button type="button" className="ml-2 underline" onClick={() => setRefreshVersion(version => version + 1)} disabled={isFetching}>Retry report</button>{" "} {overview?.score ? "Showing the last loaded sitewide results." : "The sitewide score and inventory will appear when report access resumes."}
           </p>
         ) : null}
       </header>
       {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
-          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={data?.score} pending={!data || valuesUpdating} loadingSavedResult={!initialPending && !data && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} />
-          {!(initialPending && !data?.score) ? <SitePriorityReview scannedPages={scannedPages} findings={data?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!data || valuesUpdating} sitewideAvailable={Boolean(data?.score)} /> : null}
+          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={overview?.score} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} />
+          {!(initialPending && !overview?.score) ? <SitePriorityReview scannedPages={scannedPages} findings={overview?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
           {homepageTimeline ? <section aria-label="Starting-page event timeline" className="my-3 border-y border-zinc-200 bg-white py-2">
             <h2 className="text-xl font-semibold">Starting-page event timeline</h2>
             <div className="mt-1">{homepageTimeline}</div>
@@ -642,7 +653,7 @@ export function FullSiteWorkspace({
           </section>
           {tab === "resources" ? <CollectionSurfacesTable rows={data?.collectionSurfaces?.rows ?? []} loading={!data} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages} /> : null}
           {tab === "resources" ? formDestinationEvidence : null}
-          {tab === "resources" ? <SitewideEvidenceContext.Provider value={data?.score?.evidencePages ? { pages: data.score.evidencePages, limitedPages: data.score.limitedPages } : null}><SiteIntegritySiteContext.Provider value={data?.score?.siteIntegrity ?? null}>{evidenceDirectory}</SiteIntegritySiteContext.Provider></SitewideEvidenceContext.Provider> : null}
+          {tab === "resources" ? <SitewideEvidenceContext.Provider value={overview?.score?.evidencePages ? { pages: overview.score.evidencePages, limitedPages: overview.score.limitedPages } : null}><SiteIntegritySiteContext.Provider value={overview?.score?.siteIntegrity ?? null}>{evidenceDirectory}</SiteIntegritySiteContext.Provider></SitewideEvidenceContext.Provider> : null}
           {detailPage ? (
             <section
               ref={detailRef}

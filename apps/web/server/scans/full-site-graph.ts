@@ -1,11 +1,12 @@
 import "server-only";
-import { loadFullSiteCrawl, loadFullSitePages, query, readFullSiteArtifact } from "@website-signal-risk-scanner/db";
+import { loadFullSiteCrawl, loadFullSitePages, query, readFullSiteArtifact, type FullSiteCrawlRow } from "@website-signal-risk-scanner/db";
 import { crawlObservationSchema } from "@website-signal-risk-scanner/shared";
 import { projectCrawlRuntimeGraph } from "./runtime-evidence-graph-projection";
 
-export async function loadFullSiteGraphContext(scanId: string, pageId: string) {
+export async function loadFullSiteGraphContext(scanId: string, pageId: string, retainedCrawl?: FullSiteCrawlRow) {
   if (!/^[a-f0-9-]{36}$/i.test(pageId)) return null;
-  const crawl = await loadFullSiteCrawl(scanId);
+  const crawl = retainedCrawl ?? await loadFullSiteCrawl(scanId);
+  if (crawl && crawl.scan_id !== scanId) return null;
   const [page] = await loadFullSitePages(scanId, pageId);
   if (!crawl || !page?.observation_json || !["completed", "partial"].includes(page.status)) return null;
   const parsed = crawlObservationSchema.safeParse(page.observation_json);
