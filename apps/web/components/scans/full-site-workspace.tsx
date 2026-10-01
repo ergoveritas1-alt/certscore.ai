@@ -448,10 +448,12 @@ export function FullSiteWorkspace({
   const reportStatus = running ? progressLabel : !state ? "Loading report…" : retainedAssessment ? "Starting page completed · Crawl limited" : crawlLimited ? "Crawl limited" : state?.status === "cancelled" ? "Cancelled" : state?.status === "stopped" ? "Unsuccessful" : state?.status === "completed" ? "Completed" : state?.status.replaceAll("_", " ") ?? "Loading";
   const previewMetrics = initialPending && valuesUpdating && !overview?.score && (scannedPages ?? 0) === 0
     ? preliminarySiteInventoryMetrics(preConsentPreview) : null;
+  // The overview counts observations; final inventory cards count distinct resources.
+  // Wait for the canonical inventory projection rather than switching count semantics.
   const inventoryMetrics = previewMetrics ?? [
-          { label: INVENTORY_METRIC_LABELS.storage, value: s ? s.totals.cookies + s.totals.storage : null, group: "cookies" },
-          { label: INVENTORY_METRIC_LABELS.requests, value: s?.totals.requestEvents, group: "requests" },
-          { label: INVENTORY_METRIC_LABELS.frames, value: s?.totals.embedInstances, group: "embeds" },
+          { label: INVENTORY_METRIC_LABELS.storage, value: data ? data.summary.totals.cookies + data.summary.totals.storage : null, group: "cookies" },
+          { label: INVENTORY_METRIC_LABELS.requests, value: data?.summary.totals.requestEvents, group: "requests" },
+          { label: INVENTORY_METRIC_LABELS.frames, value: data?.summary.totals.embedInstances, group: "embeds" },
         ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined }));
   const inventorySummary = <ReportInventorySummary forms={data?.collectionSurfaces?.rows} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
   return (
