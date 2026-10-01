@@ -1,3 +1,4 @@
+import { orderedEvidencePrefetch } from "./ordered-evidence-prefetch";
 import { projectAdditionalPageSiteIntegrity } from "./site-integrity-projection";
 import { selectSiteIntegrityFinding, siteIntegritySiteReportSchema, type SiteIntegritySiteReport } from "../../lib/scans/site-integrity-report";
 import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
@@ -177,14 +178,37 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     const projected: GdprEprivacyCoverageChecklistItem[] = [];
     const sources: FullSiteScore["sources"] = [];
     let scoredPages = 1, limitedPages = 0;
-    for (const page of pages.filter(p => !["excluded", "cancelled"].includes(p.status) && p.observation?.executionProfile !== "homepage_baseline")) {
-      const observation = page.observation;
-      if (!observation || !isFullSiteScoringCaptureComplete(page) || observation.parentScanId !== crawl.scan_id || observation.pageJobId !== page.id || observation.configurationHash !== crawl.configuration_hash || !observation.runtimeGraph) { limitedPages++; continue; }
+    let evidenceReadFailed = false;
+    const additionalPages = pages.filter(p => !["excluded", "cancelled"].includes(p.status) && p.observation?.executionProfile !== "homepage_baseline");
+    const eligible = (page: CrawlPage) => Boolean(page.observation && isFullSiteScoringCaptureComplete(page) &&
+      page.observation.parentScanId === crawl.scan_id && page.observation.pageJobId === page.id &&
+      page.observation.configurationHash === crawl.configuration_hash && page.observation.runtimeGraph);
+    const attemptIds = additionalPages.filter(eligible).map(page => page.observation!.attemptId);
+    const { rows: attempts } = attemptIds.length ? await query<{
+      id: string; page_id: string; artifact_json: { bucket: string; evidenceKey: string; sourceHash: string };
+    }>("select id,page_id,artifact_json from full_site_attempts where id=any($1::uuid[]) and status='completed'", [attemptIds]) : { rows: [] };
+    const attemptsById = new Map(attempts.map(attempt => [attempt.id, attempt]));
+    for await (const { item: page, result: packet } of orderedEvidencePrefetch(additionalPages, async page => {
+      if (!eligible(page)) {
+        if (page.status === "completed") throw new Error("Completed page evidence is malformed or unbound");
+        return null;
+      }
+      const observation = page.observation!;
+      const attempt = attemptsById.get(observation.attemptId);
+      const artifact = attempt?.artifact_json;
+      if (attempt?.page_id !== page.id || !artifact || artifact.bucket !== crawl.bucket ||
+        artifact.evidenceKey !== `${crawl.artifact_prefix}/${page.id}/${observation.attemptId}/evidence.json` || artifact.sourceHash !== observation.sourceHash)
+        throw new Error("Retained page evidence is unavailable or unbound");
+      const evidence = await readFullSiteArtifact({ bucket: artifact.bucket, key: artifact.evidenceKey, region: crawl.region,
+        sha256: observation.sourceHash, sizeBytes: observation.runtimeGraph!.sourceSizeBytes, maxBytes: 64 * 1024 * 1024 });
+      if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) throw new Error("Malformed retained page evidence");
+      return evidence as Record<string, unknown>;
+    })) {
+      if (!packet.ok) { evidenceReadFailed = true; limitedPages++; continue; }
+      if (!packet.value) { limitedPages++; continue; }
+      const observation = page.observation!;
+      const evidence = packet.value;
       try {
-        const { rows: [attempt] } = await query<{ artifact_json: { bucket: string; evidenceKey: string; sourceHash: string } }>("select artifact_json from full_site_attempts where id=$1 and page_id=$2 and status='completed'", [observation.attemptId, page.id]);
-        const artifact = attempt?.artifact_json;
-        if (!artifact || artifact.bucket !== crawl.bucket || artifact.evidenceKey !== `${crawl.artifact_prefix}/${page.id}/${observation.attemptId}/evidence.json` || artifact.sourceHash !== observation.sourceHash) { limitedPages++; continue; }
-        const evidence = await readFullSiteArtifact({ bucket: artifact.bucket, key: artifact.evidenceKey, region: crawl.region, sha256: observation.sourceHash, sizeBytes: observation.runtimeGraph.sourceSizeBytes, maxBytes: 64 * 1024 * 1024 }) as Record<string, unknown>;
         const integrityProjection = projectAdditionalPageSiteIntegrity(evidence, observation, crawl.scan_id);
         if (integrityProjection) {
           const coverage = siteIntegrity.coverage.find(row => row.pageId === page.id)!;
@@ -198,9 +222,9 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
           if (finding) siteIntegrity.findings.push(finding);
         }
         const pageRows = projectFullSiteScoringEvidence(evidence, page.id, observation.sourceHash, observation.finalUrl ?? observation.requestedUrl);
-        if (!pageRows) { limitedPages++; continue; }
+        if (!pageRows) { evidenceReadFailed = true; limitedPages++; continue; }
         const runtimeCoverage = additionalRuntimeSchema.safeParse(evidence);
-        if (!runtimeCoverage.success || runtimeCoverage.data.moduleRun.status !== "completed") limitedPages++;
+        if (!runtimeCoverage.success || runtimeCoverage.data.moduleRun.status !== "completed") { evidenceReadFailed = true; limitedPages++; }
         projected.push(...pageRows);
         evidencePages.push(projectSitewideEvidencePage({
           pageId: page.id, url: page.finalUrl ?? page.url,
@@ -208,7 +232,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
         }, pageRows));
         sources.push({ pageId: page.id, sourceHash: observation.sourceHash, findingIds: pageRows.filter(row => SCORING_RULE_BY_ID.get(row.id)?.siteWide && getGdprEprivacyRowDeduction(row) > 0).map(row => row.id) });
         scoredPages++;
-      } catch { limitedPages++; }
+      } catch { evidenceReadFailed = true; limitedPages++; }
     }
     const checklistRows = mergeSiteChecklistRows(canonical.checklistRows, projected);
     const executive = projectExecutiveFindingsFromUnifiedPackets(canonical.ownerUnifiedFindings.filter(finding => finding.unifiedFindingId === "acceptance_signal_contradicts_action")).topFindings;
@@ -222,7 +246,10 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     const assessedStorageRecords = (checklistRows.find(row => row.id === "pre_consent_cookies_storage")?.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows ?? []) as Record<string, unknown>[];
     const result = { siteIntegrity, assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ scanRecord: home, checklistRows, unifiedFindings: scoringFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface, embed and site-integrity evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
     // Persist the versioned, evidence-bound result once; table filtering and downloads reuse it.
-    if (!limitedPages) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
+    // Failed/partial scan pages are permanent coverage limitations, not failed reads.
+    // Persist their honest limited result; retryable/unverifiable evidence reads must not
+    // become a durable cache entry that prevents a later verified assessment.
+    if (!evidenceReadFailed) await query("update full_site_crawls set policy_json=jsonb_set(policy_json,'{fullSiteScore}',$2::jsonb) where scan_id=$1 and status='completed'", [crawl.scan_id, JSON.stringify({sourceHash: key, score: result})]);
     return result;
   })();
   cache.set(key, { expiresAt: Date.now() + 10 * 60_000, result: pending });
