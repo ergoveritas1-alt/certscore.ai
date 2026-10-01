@@ -45,8 +45,9 @@ test("server stream delivers overview before completion and strips duplicate ass
     let release!:()=>void;
     const gate=new Promise<void>(resolve=>{release=resolve;});
     const overview={score:{value:92},summary:{counts:{completed:171}},finalizationStartedAt:null};
-    const response=streamFullSiteReport(async (send:(value:unknown)=>void)=>{send(overview);await gate;return {...overview,services:[]};});
-    const reader=response.body.getReader();
+    const response=streamFullSiteReport(async (send:(value:unknown)=>void)=>{send(overview);await gate;return {...overview,services:[]};}, true);
+    assert.equal(response.headers.get("content-encoding"),"gzip");
+    const reader=response.body.pipeThrough(new DecompressionStream("gzip")).getReader();
     const first=JSON.parse(new TextDecoder().decode((await reader.read()).value));
     assert.equal(first.type,"overview");
     assert.deepEqual(first.data,overview);

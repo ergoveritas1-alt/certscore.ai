@@ -41,7 +41,11 @@ export async function GET(
   }
   if (params.get("stream") === "1" && !params.has("graphPage")) {
     if (!crawl) return new Response(null, { status: 404 });
-    return streamFullSiteReport(onOverview => loadFullSiteReport(scanId, params, false, { crawl, onOverview }));
+    const gzip = (request.headers.get("accept-encoding") ?? "").split(",").some(value => {
+      const [encoding, ...parameters] = value.trim().split(";");
+      return encoding?.toLowerCase() === "gzip" && !parameters.some(parameter => /^\s*q=0(?:\.0*)?\s*$/i.test(parameter));
+    });
+    return streamFullSiteReport(onOverview => loadFullSiteReport(scanId, params, false, { crawl, onOverview }), gzip);
   }
   const report = params.has("graphPage") ? await loadFullSiteGraph(scanId, params.get("graphPage")!) : await loadFullSiteReport(scanId, params, false, { crawl });
   return NextResponse.json(report, {
