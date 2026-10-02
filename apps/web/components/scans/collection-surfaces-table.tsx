@@ -14,6 +14,12 @@ export type CollectionSurfaceTableRow = {
   id: string;
   form: Form;
   capturedAt: string;
+  capturePhase?: "after_accept_click";
+  captureLimited?: boolean;
+  captureProvenance?: {
+    packetSha256: string; sessionId: string; frameRef: string; documentToken: string;
+    exactTargetSha256: string; actionDispatchedAtMs: number; capturedAtMs: number;
+  };
   snapshot: { status: "available"; url: string } | { status: "unavailable" | "withheld" | "pending"; reason?: string };
 };
 
@@ -78,6 +84,22 @@ function ControlState({ field }: { field: Form["fields"][number] }) {
  return <span className="inline-flex items-center gap-1">{state}{field.review?.preselectedMarketing ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Marketing control was selected at capture. Review the opt-in; this does not establish valid consent." className="text-amber-700">⚠</span> : null}</span>;
 }
 
+export function FormPrivacyDisclosure({ form }: { form: Form }) {
+  const disclosure = form.privacyDisclosure;
+  return <details className="my-3 max-w-xl rounded-lg border border-zinc-200 bg-white p-3">
+    <summary className="cursor-pointer text-xs font-medium">Privacy disclosure <span className="ml-2 font-normal text-zinc-500">{disclosure?.excerpts.length ? `${disclosure.excerpts.length} excerpt${disclosure.excerpts.length === 1 ? "" : "s"}` : "Not retained"}</span></summary>
+    <div className="mt-3 space-y-3 text-xs text-zinc-600">
+      {disclosure?.excerpts.length ? disclosure.excerpts.map((excerpt, index) => <div key={index}>
+        <blockquote className="border-l-2 border-sky-200 pl-3 text-zinc-800">{excerpt.text}</blockquote>
+        <p className="mt-2 text-zinc-500">{excerpt.association === "inside_form" ? "Within this form" : excerpt.association === "described_by" ? "Explicitly linked to this form" : "Beside this form"}</p>
+        {excerpt.links.map((link, i) => pageHref(link.url) ? <a key={i} href={pageHref(link.url)} target="_blank" rel="noopener noreferrer" className="mr-3 mt-2 inline-block text-sky-700 underline">{link.label}</a> : null)}
+      </div>) : <p>No disclosure text was retained for this form. This does not establish that a notice was absent.</p>}
+      {disclosure?.truncated ? <p>Capture limits apply; this may not include the full notice.</p> : null}
+      {disclosure?.excerpts.length ? <p>Captured wording describes the site’s stated use of data; it does not establish agreement or compliance. {pageHref(form.pageUrl) ? <a href={pageHref(form.pageUrl)} target="_blank" rel="noopener noreferrer" className="text-sky-700 underline">Source page</a> : null}</p> : null}
+    </div>
+  </details>;
+}
+
 function FormSnapshotDialog({ title, url, onClose }: { title: string; url: string; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const headingId = useId();
@@ -111,12 +133,13 @@ function FormSnapshotDialog({ title, url, onClose }: { title: string; url: strin
   </dialog>;
 }
 
-export function CollectionSurfacesTable({ rows, loading = false, scanning = false, pagesWithoutInventory = 0, limitedPages = 0 }: {
+export function CollectionSurfacesTable({ rows, loading = false, scanning = false, pagesWithoutInventory = 0, limitedPages = 0, afterAcceptLimited = false }: {
   rows: CollectionSurfaceTableRow[];
   loading?: boolean;
   scanning?: boolean;
   pagesWithoutInventory?: number;
   limitedPages?: number;
+  afterAcceptLimited?: boolean;
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const rowLimit = useTableRowLimit(3, expanded.size > 0 && rows.length < 4 ? 4 : 0);
@@ -124,21 +147,22 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
   const [snapshot, setSnapshot] = useState<{ title: string; url: string } | null>(null);
   const [sort, setSort] = useState<{ key: FormSortKey; direction: "asc" | "desc" }>({ key: "page", direction: "asc" });
   const sortedRows = useMemo(() => sortCollectionSurfaces(rows, sort.key, sort.direction), [rows, sort]);
-  if (!loading && rows.length === 0) return <section id="report-forms" aria-label="Forms & fields" className="my-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600 lg:p-5">
+  if (!loading && !afterAcceptLimited && rows.length === 0) return <section id="report-forms" aria-label="Forms & fields" className="my-5 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600 lg:p-5">
     {scanning ? "Forms: none observed yet; scan in progress." : pagesWithoutInventory > 0 || limitedPages > 0 ? "Forms: no retained rows; form coverage is incomplete." : "Forms: no forms observed on the scanned pages."}
   </section>;
   return (
     <section id="report-forms" aria-labelledby={`${prefix}-title`} className="my-5 min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">
       <div className="mb-2 flex items-baseline justify-between gap-3">
         <h2 id={`${prefix}-title`} className="text-xl font-semibold">Forms & fields</h2>
-        <div className="flex items-center gap-2"><span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.length === 1 ? "form" : "forms"}`} /></span>{!loading ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire forms table with all fields and evidence as JSON" payload={JSON.stringify(rows, null, 2)} /> : null}</div>
+        <div className="flex items-center gap-2"><span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.some(row => row.capturePhase) ? rows.length === 1 ? "form observation" : "form observations" : rows.length === 1 ? "form" : "forms"}`} /></span>{!loading ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire forms table with all fields and evidence as JSON" payload={JSON.stringify(rows, null, 2)} /> : null}</div>
       </div>
       {pagesWithoutInventory > 0 || limitedPages > 0 ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
         {pagesWithoutInventory > 0 ? `${pagesWithoutInventory} page(s) have no retained form inventory. ` : ""}
         {limitedPages > 0 ? `${limitedPages} page(s) have limited form coverage. ` : ""}Missing evidence does not establish that a page has no forms.
       </p> : null}
+      {afterAcceptLimited ? <p className="mb-3 text-xs text-zinc-500">After Accept form capture was limited. Some forms or disclosures may not have been retained.</p> : null}
       {loading ? <p role="status" className="py-4 text-sm text-zinc-500">Loading form inventory…</p> : rows.length === 0 ?
-        <p className="py-4 text-sm text-zinc-500">{scanning ? "Form inventory will appear as pages finish scanning." : pagesWithoutInventory > 0 || limitedPages > 0 ? "No form rows are available in the retained evidence." : "No forms were observed on the inventoried pages."}</p> :
+        <p className="py-4 text-sm text-zinc-500">{scanning ? "Form inventory will appear as pages finish scanning." : pagesWithoutInventory > 0 || limitedPages > 0 || afterAcceptLimited ? "No form rows are available in the retained evidence." : "No forms were observed on the inventoried pages."}</p> :
         <div ref={rowLimit.ref} style={rowLimit.style} className="max-h-[240px] overflow-auto" tabIndex={0} aria-label="Scrollable collection surfaces">
           <table className="w-full text-left text-xs">
             <caption className="sr-only">One row per captured form, with expandable field details</caption>
@@ -155,31 +179,33 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
                 const samePageRows = rows.filter(item => item.form.pageUrl === form.pageUrl);
                 const occurrence = samePageRows.findIndex(item => item.id === row.id) + 1;
                 const open = expanded.has(row.id);
-                const title = form.title ?? `${label(form.surfaceType)} ${Number(form.formRef.replace("collection_form_", "")) + 1}`;
+                const title = form.title ?? `${label(form.surfaceType)} ${occurrence}`;
                 const detailId = `${prefix}-fields-${row.id}`;
                 return <Fragment key={row.id}>
                   <tr className="border-b border-zinc-100">
                     <th scope="row" className="w-10 px-3 py-2 font-medium"><InspectButton open={open} controls={detailId} name={title} onClick={() => setExpanded(current => {
                       const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next;
                     })} /></th>
-                    <td className="px-3 py-2 capitalize">{label(form.surfaceType)}{samePageRows.length > 1 ? <span className="block text-zinc-500 normal-case">Page observation {occurrence} of {samePageRows.length}</span> : null}</td>
+                    <td className="px-3 py-2 capitalize">{label(form.surfaceType)}{row.capturePhase ? <span className="block whitespace-nowrap text-xs normal-case text-zinc-500">After Accept click</span> : null}{samePageRows.length > 1 ? <span className="block text-zinc-500 normal-case">Page observation {occurrence} of {samePageRows.length}</span> : null}</td>
                     <td className="px-3 py-2 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
                     <td className="px-3 py-2">{controlsSummary(form.fields)}{form.fields.some(f=>f.review?.preselectedMarketing) ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Expand to review preselected marketing controls" className="ml-1 text-amber-700">⚠</span> : null}{form.fieldsTruncated ? <span className="block text-zinc-500">Partial inventory</span> : null}</td>
                     <td className="px-3 py-2">{form.fields.length ? <FieldReview field={[...form.fields].sort((a,b)=>reviewRank(b)-reviewRank(a))[0]!}/> : "—"}</td>
                     <td className="px-3 py-2 uppercase">{form.method}</td>
                     <td className="px-3 py-2"><span className="block max-w-52 truncate" title={form.actionHostname}>{form.actionHostname ?? (form.method === "dialog" ? "No submission (dialog)" : "Destination not observed")}</span>{form.actionHostname ? <span className="block text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
                     <td className="px-3 py-2"><a className="block max-w-64 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl}</a></td>
-                    <td className="whitespace-nowrap px-3 py-2">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-1.5 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500">{row.snapshot.status === "pending" ? "Snapshot pending" : row.snapshot.status === "withheld" ? "Snapshot withheld" : "Snapshot unavailable"}{row.snapshot.status !== "pending" ? <span className="mt-1 block max-w-56 whitespace-normal text-xs">{formSnapshotExplanation(row.snapshot.status === "available" ? undefined : row.snapshot.reason)}</span> : null}</span>}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-1.5 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500">{row.capturePhase ? "Fields captured" : row.snapshot.status === "pending" ? "Snapshot pending" : row.snapshot.status === "withheld" ? "Snapshot withheld" : "Snapshot unavailable"}{!row.capturePhase && row.snapshot.status !== "pending" ? <span className="mt-1 block max-w-56 whitespace-normal text-xs">{formSnapshotExplanation(row.snapshot.status === "available" ? undefined : row.snapshot.reason)}</span> : null}</span>}</td>
                   </tr>
                   <tr data-expanded-details id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={columns.length} className="p-4">
                     <h3 className="mb-2 font-semibold">{title}</h3>
                     {samePageRows.length > 1 ? <p className="mb-2 text-zinc-600">Observation {occurrence} of {samePageRows.length} on this page. Separate captures are retained; they may show the same form.</p> : null}
                     <p className="mb-2 text-zinc-500">Observation reference: {row.id}</p>
-                    <p className="mb-3 text-zinc-500">{label(form.structure)} · {row.capturedAt ? `Captured ${row.capturedAt}` : "Capture time not retained"}</p>
+                    <p className="mb-3 text-zinc-500">{label(form.structure)} · {row.captureProvenance ? `Observed ${row.captureProvenance.capturedAtMs - row.captureProvenance.actionDispatchedAtMs} ms after Accept click` : row.capturedAt ? `Captured ${row.capturedAt}` : "Capture time not retained"}</p>
                     <dl className="mb-3 grid gap-2 text-xs sm:grid-cols-2">
                       <div><dt className="text-zinc-500">Form confidence</dt><dd>{Math.round(form.confidence * 100)}% · {form.directVsInferred}</dd></div>
                       <div><dt className="text-zinc-500">Evidence references</dt><dd className="break-all">{form.evidenceRefs.length ? JSON.stringify(form.evidenceRefs) : "Not retained"}</dd></div>
                     </dl>
+                    {row.capturePhase ? <p className="my-2 max-w-xl text-xs text-zinc-500">Observed after the Accept click. This does not establish consent registration.{row.captureLimited ? " Capture was limited; other fields or forms may be missing." : ""}</p> : null}
+                    <FormPrivacyDisclosure form={form} />
                     {form.fields.length ? <table className="w-full text-left text-xs">
                       <caption className="sr-only">Fields in {title}</caption>
                       <thead><tr>{["Field", "Element", "Input type", "Category", "Field review", "Required", "Selection", "State", "Autocomplete", "Confidence", "Evidence refs"].map(h => <th key={h} scope="col" className="border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>

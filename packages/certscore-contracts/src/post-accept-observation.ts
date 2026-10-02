@@ -1,3 +1,4 @@
+import { postAcceptFormCaptureSchema } from "./post-accept-form-capture";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
@@ -146,6 +147,7 @@ export const postAcceptStorageWriteSchema = postRefusalStorageWriteBaseSchema.om
 }).superRefine(validateActionStorageName);
 
 const postAcceptEvidencePacketBaseSchema = z.object({
+  formCapture: postAcceptFormCaptureSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
   runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(1).optional(),
@@ -210,6 +212,15 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  if (packet.formCapture && (packet.formCapture.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 ||
+    packet.formCapture.exactTargetSha256 !== packet.exactTargetSha256 ||
+    packet.interactionDiagnostics?.navigation.documentCommitted !== true ||
+    packet.interactionDiagnostics?.navigation.finalUrlAuthorized !== true ||
+    packet.formCapture.actionDispatchedAtMs !== packet.acceptanceRegistration.actionDispatchedAtMs ||
+    packet.interactionDiagnostics?.click.outcome !== "completed" ||
+    packet.formCapture.frames.some(frame => frame.capturedAtMs > packet.timing.readyAtMs || frame.capturedAtMs > packet.formCapture!.actionDispatchedAtMs + packet.observationWindowMs))) {
+    context.addIssue({code: z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires the same completed authorized action and bounded timestamps"});
+  }
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "accept", context);
   validateLegacyActionStorageNames(packet, context);
   validateAfterActionCapture(packet.afterActionCapture, context, {
@@ -482,6 +493,7 @@ export const postAcceptReportProjectionSchema = z.object({
   resolver: postRefusalResolverSchema.optional(),
   resolverDurationMs: z.number().int().nonnegative().optional(),
   interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
+  formCapture: postAcceptFormCaptureSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
   afterActionRequests: z.array(postRefusalNetworkRequestSchema.omit({ inFlightAtRefusalRegistration: true, msOffsetFromRefusal: true })).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT).optional(),
   afterActionStorage: z.array(postRefusalStorageItemSchema).max(96).optional(),
@@ -520,6 +532,12 @@ export const postAcceptReportProjectionSchema = z.object({
     projection.registrationStatus !== "confirmed" || !projection.acceptanceExercised ||
     (projection.registeredObservationCompletion.termination === "evidence_satisfied" && projection.observationCount === 0)
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["registeredObservationCompletion"], message: "Registered completion must retain its action, registration and observation binding." });
+  if (projection.formCapture && (!projection.packetSha256 ||
+    projection.formCapture.exactTargetSha256 !== projection.actionControlProof?.authorizedTargetSha256 ||
+    projection.interactionDiagnostics?.click.outcome !== "completed" ||
+    (projection.afterActionCapture && projection.formCapture.actionDispatchedAtMs !== projection.afterActionCapture.actionDispatchedAtMs))) {
+    context.addIssue({code:z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires retained packet provenance and completed action proof"});
+  }
   validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "accept", context);
   validateChoicePathExecution(projection.execution, projection, "accept", context);
   validateAfterActionProjection(projection.afterActionCapture, context, {
@@ -611,6 +629,7 @@ export function projectPostAcceptEvidenceForReport(input: {
       readyAtMs: packet.timing.readyAtMs, exitReason: packet.timing.observationExitReason,
       observationCount: packet.observations.length,
     }),
+    ...(packet.formCapture && input.packetSha256 ? {formCapture: packet.formCapture} : {}),
     ...(packet.afterActionCapture ? {
       afterActionCapture: packet.afterActionCapture,
       afterActionRequests: packet.network.requests.filter((row) => packet.afterActionCapture!.requestIds.includes(row.requestId)),

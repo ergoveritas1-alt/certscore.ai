@@ -1,5 +1,5 @@
 import { installFormDestinationTracing } from "../form-destination-trace.js";
-import { CMS_ASSET_PATTERNS, SITE_INTEGRITY_LIMITS, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
+import { CMS_ASSET_PATTERNS, SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { createProxyDestinationCapture } from "../proxy-destination-capture.js";
 import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "../collection-surface-snapshots";
@@ -2022,6 +2022,22 @@ export async function preConsentRuntimeScanner(
       })()
       : Promise.resolve(undefined);
 
+    // A timed-out baseline document gets its existing sparse-page settling
+    // allowance before the inventory, so a later text-only confirmation cannot
+    // leave forms/scripts/iframes frozen at the earlier empty DOM. GPC retains
+    // its independent paired-impact freeze and terminal confirmation ordering.
+    const earlySparseConfirmation = captureScope === "runtime_evidence" &&
+      !input.globalPrivacyControlEnabled &&
+      navigationAttempts.some(attempt => attempt.outcome === "committed_timeout");
+    if (earlySparseConfirmation) {
+      await measureRecovery("sparse_page_confirmation", () => recordTiming(
+        timingBreakdown,
+        "no-go candidate confirmation wait",
+        "Use the existing bounded sparse-page allowance before baseline inventory capture after a navigation readiness timeout.",
+        () => waitForPassiveRuntimeDocumentReadiness(page, Math.min(fastWait ? 750 : 1_250, Math.max(0, remainingModuleBudgetMs()))),
+      ));
+    }
+
     gpcObservationSession?.prepareFinalization();
     const [pageEvidence, initialConsentObservation, lateAccessibilityObservation, gpcSignalObservation] = await recordTiming(
       timingBreakdown,
@@ -3676,7 +3692,7 @@ export async function preConsentRuntimeScanner(
       hasSufficientFirstLayerControls: hasSufficientFirstLayerConsentControls(consentObservation),
     })) {
       const confirmationWaitMs = fastWait ? 750 : 1_250;
-      await measureRecovery("sparse_page_confirmation", () => recordTiming(
+      if (!earlySparseConfirmation) await measureRecovery("sparse_page_confirmation", () => recordTiming(
         timingBreakdown,
         "no-go candidate confirmation wait",
         "Short, read-only second-look window for initially blank or loading pages.",
@@ -5223,7 +5239,7 @@ async function capturePostSettlePageEvidence(input: {
 async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIntegrity: false | "starting_page_main_document" | "additional_page_main_document" = false): Promise<ConsolidatedPageEvidenceSnapshot> {
   const before = currentBrowserDocumentIdentity(page);
   const cmpSelectors = KNOWN_CMP_REGISTRY.flatMap((definition) => definition.domSelectors ?? []).slice(0, 100);
-  const snapshot = await page.evaluate(({ cmpSelectors, maxFieldCandidates, captureSiteIntegrity, integrityLimits }) => {
+  const snapshot = await page.evaluate(({ cmpSelectors, maxFieldCandidates, captureSiteIntegrity, integrityLimits, privacyHints }) => {
     // tsx/esbuild can preserve nested browser-callback names by emitting calls to
     // its module-scoped __name helper. Playwright serializes only this callback,
     // so provide the no-op helper in the page before any nested callback runs.
@@ -5315,6 +5331,84 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
         120,
       );
     };
+    // Public notice text only: never read entered values or page-wide footer text.
+    let disclosureBytes = 0;
+    let disclosureRemainingMs = 5;
+    const disclosureCache = new WeakMap<Element, { version: 1; excerpts: Array<{ text: string; association: "inside_form" | "adjacent_notice" | "described_by"; links: Array<{ label: string; url: string }> }>; truncated: boolean }>();
+    const disclosureFor = (group: Element | null) => {
+      if (!group) return undefined;
+      const cached = disclosureCache.get(group);
+      if (cached) return cached.excerpts.length ? cached : undefined;
+      const result: NonNullable<ReturnType<typeof disclosureCache.get>> = { version: 1, excerpts: [], truncated: false };
+      disclosureCache.set(group, result);
+      if (disclosureRemainingMs <= 0) return undefined;
+      const disclosureStarted = performance.now();
+      const disclosureDeadline = disclosureStarted + disclosureRemainingMs;
+      try {
+        const candidates: Array<{ node: Element; association: "inside_form" | "adjacent_notice" | "described_by" }> = [];
+        const blocks = group.querySelectorAll('p, label, small, [role="note"], a[href]');
+        for (let i = 0; i < Math.min(blocks.length, 40); i++) candidates.push({ node: blocks[i]!, association: "inside_form" });
+        result.truncated = blocks.length > 40;
+        for (const id of (group.getAttribute("aria-describedby") ?? "").split(/\s+/).slice(0, 4)) {
+          const node = document.getElementById(id);
+          if (node) candidates.push({ node, association: "described_by" });
+        }
+        const parent = group.parentElement;
+        if (parent && !parent.matches("body, main, header, footer, nav") && parent.querySelectorAll('form, [role="form"]').length === 1) {
+          for (const node of [group.previousElementSibling, group.nextElementSibling]) {
+            if (node?.matches('p, small, [role="note"]')) candidates.push({ node, association: "adjacent_notice" });
+          }
+        }
+        const retained: Element[] = [];
+        for (const { node, association } of candidates) {
+          if (performance.now() >= disclosureDeadline) { result.truncated = true; break; }
+          if (!isVisible(node) || isCmpOwned(node) || node.closest('footer, nav, [contenteditable="true"]') || retained.some(other => other.contains(node))) continue;
+          const owner = node.closest('form, [role="form"]');
+          if (owner && owner !== group) continue;
+          const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+          const pieces: string[] = [];
+          let visited = 0;
+          while (walker.nextNode() && visited++ < 80) {
+            const textNode = walker.currentNode;
+            const parentNode = textNode.parentElement;
+            if (!parentNode || parentNode.closest('input, textarea, select, script, style, [contenteditable="true"]') || !isVisible(parentNode)) continue;
+            pieces.push((textNode.textContent ?? "").slice(0, 700));
+          }
+          const original = pieces.join(" ").replace(/\s+/g, " ").trim();
+          const normalized = original.toLocaleLowerCase();
+          if (!original || !privacyHints.some(hint => normalized.includes(hint))) continue;
+          if (result.excerpts.length >= 2) { result.truncated = true; break; }
+          const text = original.slice(0, 600).replace(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi, "[email redacted]");
+          const links: Array<{ label: string; url: string }> = [];
+          const anchors = node.matches('a[href]') ? [node] : Array.from(node.querySelectorAll('a[href]')).slice(0, 6);
+          for (const anchor of anchors) {
+            try {
+              const url = new URL(anchor.getAttribute("href") ?? "", location.href);
+              const label = (anchor.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 100);
+              const normalizedLabel = label.toLocaleLowerCase();
+              if (!/^https?:$/.test(url.protocol) || !label || !privacyHints.some(hint => normalizedLabel.includes(hint))) continue;
+              url.search = ""; url.hash = ""; url.username = ""; url.password = "";
+              if (url.href.length <= 500 && links.length < 2) links.push({ label, url: url.href });
+            } catch {}
+          }
+          const excerpt = { text, association, links };
+          const previousSize = new TextEncoder().encode(JSON.stringify(result)).length;
+          const next = { ...result, excerpts: [...result.excerpts, excerpt], truncated: result.truncated || original.length > 600 || visited >= 80 };
+          const nextSize = new TextEncoder().encode(JSON.stringify(next)).length;
+          const increase = result.excerpts.length ? nextSize - previousSize : nextSize;
+          if (disclosureBytes + increase > 1024) { result.truncated = true; break; }
+          disclosureBytes += increase;
+          result.excerpts = next.excerpts;
+          result.truncated = next.truncated;
+          retained.push(node);
+        }
+        return result.excerpts.length ? result : undefined;
+      } finally {
+        // Share five milliseconds of disclosure work across forms. Layout and
+        // ordinary field inspection between calls must not spend that budget.
+        disclosureRemainingMs = Math.max(0, disclosureRemainingMs - (performance.now() - disclosureStarted));
+      }
+    };
     const rows = inspectedFieldCandidates.flatMap((element, domOrder) => {
       const type = (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase();
       if ((["hidden", "submit", "button", "reset", "image"].includes(type) && !["checkbox", "switch"].includes(element.getAttribute("role") ?? "")) || !isVisible(element) || isCmpOwned(element)) {
@@ -5340,6 +5434,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
       const checkedState = element instanceof HTMLInputElement && ["checkbox", "radio"].includes(type) ? input.indeterminate ? "mixed" as const : input.checked ? "checked" as const : "unchecked" as const : ariaChecked === "true" ? "checked" as const : ariaChecked === "false" ? "unchecked" as const : ariaChecked === "mixed" ? "mixed" as const : "unknown" as const;
       return [{
         ...(controlKind ? { controlKind, checkedState } : {}),
+        privacyDisclosure: disclosureFor(group),
         groupKey: groupRefFor(element),
         structure: nativeForm ? "native_form" as const : roleForm ? "role_form" as const : "unassociated_controls" as const,
         title: titleFor(group),
@@ -5358,6 +5453,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
       }];
     });
     const collectionCapture = {
+      documentReadyState: document.readyState,
       pageUrl: window.location.href,
       rows,
       inspectedFieldCandidateCount: inspectedFieldCandidates.length,
@@ -5428,6 +5524,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
     // Bounded passive main-document observation. Do not inspect or follow destinations.
     const hiddenLinks: SiteIntegrityObservation["links"] = [];
     let inspectedLinks = 0;
+    let codeProofBytes = 0;
     let integrityTruncated = anchorElements.length > integrityLimits.inspectedLinks;
     if (captureSiteIntegrity) {
       const stopAt = performance.now() + integrityLimits.captureBudgetMs;
@@ -5441,24 +5538,66 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
         try { target = new URL(element.getAttribute("href") ?? "", location.href); } catch { continue; }
         if (!/^https?:$/.test(target.protocol) || target.hostname === location.hostname || target.username || target.password) continue;
         let concealment: SiteIntegrityObservation["links"][number]["concealment"] | undefined;
+        let proofTarget: { element: Element; style: CSSStyleDeclaration; rect: DOMRect } | undefined;
+        const ancestry: Element[] = [];
         let excluded = false;
         let positionedDescendant = false;
         const linkRect = element.getBoundingClientRect();
         let ancestor: Element | null = element;
         for (let depth = 0; ancestor && ancestor !== document.body && depth < integrityLimits.ancestorDepth; depth++, ancestor = ancestor.parentElement) {
+          ancestry.push(ancestor);
           const style = getComputedStyle(ancestor);
           // Hidden menus, collapsed widgets and conventional screen-reader-only content are not integrity evidence.
           if (style.display === "none" || style.visibility !== "visible" || style.clip !== "auto" || style.clipPath !== "none" ||
               /(?:^|\s)(?:sr-only|screen-reader-text|visually-hidden)(?:\s|$)/i.test(ancestor.className?.toString() ?? "") ||
               ancestor.matches('[aria-expanded="false"], [role="dialog"], details:not([open])')) { excluded = true; break; }
           const rect = ancestor.getBoundingClientRect();
+          const previousConcealment = concealment;
           if ((style.position === "absolute" || style.position === "fixed") && (rect.right < -1000 || rect.bottom < -1000) &&
               (linkRect.right < -1000 || linkRect.bottom < -1000)) concealment ??= "offscreen_position";
           if (!positionedDescendant && rect.width <= 0 && rect.height <= 0 && ["hidden", "clip"].includes(style.overflow)) concealment ??= "zero_size_container";
           if (depth === 0 && parseFloat(style.fontSize) === 0) concealment ??= "zero_font_size";
+          if (!previousConcealment && concealment) proofTarget = { element: ancestor, style, rect };
           positionedDescendant ||= style.position === "absolute" || style.position === "fixed";
         }
-        if (!excluded && concealment) hiddenLinks.push({ evidenceRef: `site_integrity:link:${index}`, destinationDomain: target.hostname.toLowerCase(), concealment });
+        if (!excluded && concealment) {
+          let codeProof: SiteIntegrityObservation["links"][number]["codeProof"];
+          // Serialize a bounded ancestor path, never arbitrary outerHTML, text,
+          // URL paths/queries, scripts, event handlers, IDs or data attributes.
+          if (proofTarget && performance.now() < stopAt) {
+            const targetIndex = ancestry.indexOf(proofTarget.element);
+            const context = ancestry.slice(0, targetIndex + 2).reverse();
+            const lines: string[] = [];
+            let highlightedLine = 0;
+            for (const node of context) {
+              const tag = /^[a-z][a-z0-9-]*$/.test(node.localName) ? node.localName : "[element]";
+              const inline = (node as HTMLElement).style;
+              const declarations = ["position", "left", "top", "right", "bottom", "width", "height", "overflow", "font-size"]
+                .flatMap(property => {
+                  const value = inline?.getPropertyValue(property) ?? "";
+                  return /^(?:-?\d+(?:\.\d+)?(?:px|em|rem|%|vh|vw)?|absolute|fixed|relative|static|sticky|hidden|clip|visible|auto|scroll)$/.test(value)
+                    ? [`${property}:${value}`] : [];
+                }).join(";");
+              if (node === proofTarget.element) highlightedLine = lines.length;
+              const attributes = `${node === element ? ` href="${target.protocol}//${target.hostname}/[redacted]"` : ""}${declarations ? ` style="${declarations}"` : ""}`;
+              lines.push(`${"  ".repeat(lines.length)}<${tag}${attributes}>${node === element ? "[link text omitted]</a>" : ""}`);
+            }
+            for (let depth = context.length - 2; depth >= 0; depth--) lines.push(`${"  ".repeat(depth)}</${context[depth]!.localName}>`);
+            const rect = (value: DOMRect) => Object.fromEntries(["left", "top", "right", "bottom", "width", "height"].map(key => [key, Math.round(value[key as keyof DOMRect] as number * 100) / 100])) as {left:number;top:number;right:number;bottom:number;width:number;height:number};
+            const candidate = {
+              contractVersion: "certscore.site-integrity-code-proof.v1" as const,
+              format: "sanitized_dom_excerpt" as const, lines, highlightedLine, sanitized: true as const, truncated: false,
+              computedStyle: { position: proofTarget.style.position as "static" | "relative" | "absolute" | "fixed" | "sticky", overflow: proofTarget.style.overflow, fontSizePx: parseFloat(proofTarget.style.fontSize) },
+              concealingRect: rect(proofTarget.rect), linkRect: rect(linkRect),
+            };
+            const bytes = new TextEncoder().encode(JSON.stringify(candidate)).length;
+            if (performance.now() < stopAt && bytes <= integrityLimits.codeProofBytes && codeProofBytes + bytes <= integrityLimits.codeProofPageBytes) {
+              codeProof = candidate;
+              codeProofBytes += bytes;
+            }
+          }
+          hiddenLinks.push({ evidenceRef: `site_integrity:link:${index}`, destinationDomain: target.hostname.toLowerCase(), concealment, ...(codeProof ? { codeProof } : { codeProofUnavailableReason: "capture_limit" as const }) });
+        }
       }
     }
     const apiScope = window as typeof window & {
@@ -5488,13 +5627,18 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
       })),
       sessionStorageEntries,
     };
-  }, { cmpSelectors, maxFieldCandidates: MAX_COLLECTION_SURFACE_INSPECTED_FIELDS, captureSiteIntegrity, integrityLimits: SITE_INTEGRITY_LIMITS });
+  }, { cmpSelectors, maxFieldCandidates: MAX_COLLECTION_SURFACE_INSPECTED_FIELDS, captureSiteIntegrity, integrityLimits: SITE_INTEGRITY_LIMITS, privacyHints: [...new Set(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [...entry.privacyPolicyLabels, ...entry.contextHints]).map(hint => hint.toLocaleLowerCase()))] });
   const identity = stableBrowserDocumentIdentity(before, currentBrowserDocumentIdentity(page));
   const { integrityCapture, ...evidence } = snapshot;
   if (!captureSiteIntegrity || !identity || snapshot.pageUrl !== page.url()) return evidence;
   const pageUrl = new URL(snapshot.pageUrl); pageUrl.search = ""; pageUrl.hash = ""; pageUrl.username = ""; pageUrl.password = "";
   const observation = siteIntegrityObservationSchema.safeParse({
-    ...integrityCapture, links: integrityCapture.links.filter(link => classifyHostnameParty(link.destinationDomain, pageUrl.hostname) === "third_party"),
+    ...integrityCapture, links: integrityCapture.links.filter(link => classifyHostnameParty(link.destinationDomain, pageUrl.hostname) === "third_party").map(link => {
+      // Optional presentation proof must not discard an otherwise valid observation.
+      const { codeProof, ...observation } = link;
+      const parsed = siteIntegrityCodeProofSchema.safeParse(codeProof);
+      return { ...observation, ...(parsed.success ? { codeProof: parsed.data } : {}) };
+    }),
     contractVersion: captureSiteIntegrity === "additional_page_main_document" ? "certscore.site-integrity-observation.v2" : "certscore.site-integrity-observation.v1", sourceLane: "runtime_evidence", scope: captureSiteIntegrity,
     documentUrl: pageUrl.href, documentToken: identity.token,
   });

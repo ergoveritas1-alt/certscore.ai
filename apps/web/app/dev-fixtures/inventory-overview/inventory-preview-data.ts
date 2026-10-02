@@ -3,15 +3,16 @@ import { inventoryLayoutFixture, type InventoryScenario } from "./inventory-fixt
 import { SHADOW_REPORT } from "../../../components/scans/report-lab/shadow-report-data";
 import type { SitePriorityFinding } from "../../../lib/scans/full-site-priority-review";
 import type { CollectionSurfaceTableRow } from "../../../components/scans/collection-surfaces-table";
-import { siteIntegrityProjectionFixture } from "../../../../../packages/certscore-contracts/src/site-integrity.fixture";
+import { siteIntegrityProjectionFixture, siteIntegrityCodeProofFixture } from "../../../../../packages/certscore-contracts/src/site-integrity.fixture";
 import { buildUnifiedFindingDisplayPackets } from "../../../lib/scans/unified-findings";
 import { selectSiteIntegrityFinding } from "../../../lib/scans/site-integrity-report";
 
 // Development-only layout data. Never persisted or used as canonical scan evidence.
 const homepage = { id: "preview-homepage", url: "https://www.pferdeklinik-roentorf.de/", homepage: true };
 const fixtureForm: CollectionSurfaceTableRow = {
-  id: "layout-form", capturedAt: "2026-09-17T07:22:36Z", snapshot: { status: "unavailable" },
+  id: "layout-form", capturePhase: "after_accept_click", capturedAt: "2026-09-17T07:22:36Z", snapshot: { status: "unavailable" },
   form: { formRef: "layout-contact", structure: "native_form", surfaceType: "contact", title: "Illustrative contact form", pageUrl: "https://example.test/contact", method: "post", actionRelationship: "same_site", candidateFieldCount: 5, retainedFieldCount: 5, fieldsTruncated: false, confidence: 1, directVsInferred: "direct", evidenceRefs: [],
+    privacyDisclosure: { version: 1, truncated: false, excerpts: [{ text: "I have taken note of the privacy policy and agree that my personal data may be stored and processed for the purpose of handling my request.", association: "inside_form", links: [{ label: "Privacy policy (illustrative)", url: "https://example.test/privacy" }] }] },
     fields: ["Name", "Email", "Phone", "Subject", "Message"].map((label, index) => ({ fieldRef: `layout-field-${index}`, elementType: "input", inputType: "text", semanticCategory: "unknown", label, required: false, disabled: false, readOnly: false, confidence: 1, directVsInferred: "direct", evidenceRefs: [] })),
   },
 };
@@ -47,6 +48,7 @@ export function buildInventoryPreviewData(scenario: InventoryScenario) {
         documentUrl: "https://sample-site.example/",
         links: siteIntegrityProjectionFixture.observation.links.map((link, index) => ({
           ...link, destinationDomain: index === 0 ? "destination-one.example" : "destination-two.example",
+          ...(index === 0 ? {codeProof: {...siteIntegrityCodeProofFixture, lines: siteIntegrityCodeProofFixture.lines.map(line => line.replace("pharmacy.example", "destination-one.example"))}} : {}),
         })),
       },
     } },

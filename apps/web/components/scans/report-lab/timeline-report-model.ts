@@ -1,3 +1,4 @@
+import { projectPostAcceptForms } from "../../../lib/scans/post-accept-form-projection";
 import { readPrivacyAuditEvidence } from "../../../lib/scans/report-review-focus";
 import { projectFormDestinationPriority } from "../../../lib/scans/form-destination-report";
 import { formDestinationProjectionSchema } from "@certscore/contracts";
@@ -801,6 +802,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   });
   const score = Math.max(0, Math.min(100, recordNumber(snapshot, ["certscore_overall"]) ?? canonicalScore ?? 0));
   const forms = canonical.collectionSurfaceAssessment?.forms ?? [];
+  const afterAcceptForms = projectPostAcceptForms(scanRecord);
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
   const verdict = buildExecutiveOverview({
     acceptPath,
@@ -894,13 +896,14 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     inventory,
     inventorySummary,
     resourceInventory,
-    collectionTableRows: forms.map(form => {
+    afterAcceptFormsLimited: afterAcceptForms.limited,
+    collectionTableRows: [...forms.map(form => {
       const candidates = record(scanRecord.runtimeArtifacts)?.formSnapshots;
       const snapshot = Array.isArray(candidates) ? candidates.map(record).find(item => item?.formRef === form.formRef && item?.sourceInventoryHash === canonical.collectionSurfaceAssessment?.sourceHash && item?.pageUrl === form.pageUrl) : null;
       return { id: form.formRef, form, capturedAt: typeof snapshot?.capturedAt === "string" ? snapshot.capturedAt : "", snapshot: snapshot?.status === "available"
         ? { status: "available" as const, url: `/api/scans/${encodeURIComponent(scanRecord.scan.id)}/form-snapshot?formRef=${encodeURIComponent(form.formRef)}` }
         : { status: snapshot?.status === "withheld" ? "withheld" as const : "unavailable" as const, ...(typeof snapshot?.reason === "string" ? { reason: snapshot.reason } : {}) } };
-    }),
+    }), ...afterAcceptForms.rows],
     metrics: {
       domains: vendorSurface.thirdPartyDomains.length,
       fields: countFormFields(forms),

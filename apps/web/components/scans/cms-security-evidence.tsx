@@ -1,3 +1,5 @@
+import { EvidenceStatusBadge } from "./evidence-status-badge";
+import { EvidenceHeaderStatus } from "./evidence-header-status";
 import React from "react";
 import type { CmsSecurityProjection } from "@certscore/contracts";
 import { DisclosureChevron } from "./report-finding-row";
@@ -14,16 +16,16 @@ export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityPr
     : "Version check unavailable";
   const versionLabel = (row: typeof assessment.detections[number]) => row.version ??
     (row.observedVersions.length === 1 ? row.observedVersions[0] : row.observedVersions.length ? "version unclear" : "version unknown");
-  return <details id="cms-security-evidence" className="group/cms-security my-3 rounded-lg border border-zinc-200 bg-white">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
+  return <details id="cms-security-evidence" className="group/cms-security border-b border-r border-zinc-200 bg-white p-5">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
       <span className="min-w-0">
         <span className="block text-xs font-semibold uppercase text-zinc-500">CMS &amp; version</span>
         <span className="mt-1 block text-sm font-semibold text-zinc-900">{assessment.detections.map(row => `${row.name} ${versionLabel(row)}`).join(" · ")}</span>
-        <span className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${flagged ? "bg-amber-50 text-amber-900" : "bg-zinc-100 text-zinc-700"}`}>{status}</span>
       </span>
-      <DisclosureChevron className="shrink-0 text-zinc-400 group-open/cms-security:rotate-180" />
+      <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={flagged ? [{status: "Warning"}] : status === "Version check unavailable" ? [{status: "Limited"}] : []} /><DisclosureChevron className="shrink-0 text-zinc-400 group-open/cms-security:rotate-180" /></span>
     </summary>
-    <div className="space-y-4 border-t border-zinc-200 p-4 text-sm">
+    <div className="mt-3 space-y-4 border-t border-zinc-200 pt-3 text-sm">
+      <EvidenceStatusBadge label={status} tone={flagged ? "review" : status === "Version check unavailable" ? "limited" : "neutral"} />
       {assessment.detections.map(detection => {
         const matches = assessment.matches.filter(match => match.detectionRef === detection.evidenceRef);
         return <div key={detection.evidenceRef} id={detection.evidenceRef} className="space-y-2 border-b border-zinc-100 pb-4 last:border-0 last:pb-0">

@@ -56,6 +56,8 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
   onViewEvidence?: () => void;
   siteIntegrity?: SiteIntegritySiteReport;
 }) {
+  const afterAcceptCount = forms.filter(row => row.capturePhase === "after_accept_click").length;
+  const formObservationCount = (formCount ?? forms.filter(row => !row.capturePhase).length) + afterAcceptCount;
   const network = metrics.find(metric => metric.overview);
   const overview = network?.overview;
   const technical: ReportInventoryMetric[] = overview ? [
@@ -73,10 +75,11 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="Inventory summary">
     <div className="grid grid-cols-3 items-stretch divide-x divide-slate-200 border-b border-slate-200 bg-slate-50/50">
       <ServicesSignalSnapshot overview={overview} card />
-      {(formCount ?? 0) > 0 ? <details className="group/forms min-w-0">
-        <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={formCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
+      {formObservationCount > 0 ? <details className="group/forms min-w-0">
+        <summary className={inventoryTileDisclosure}><InventoryTileHeading label={afterAcceptCount ? "Form observations" : "Forms"} value={formObservationCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
         <div className="border-t border-slate-100 px-3 pb-3 sm:px-4">
-        <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs leading-5 text-slate-600" aria-label="Observed forms">{forms.map(({ id, form }) => <li key={id}><p className="break-words font-medium">{form.title || form.surfaceType.replaceAll("_", " ")}</p><p>{form.retainedFieldCount} {form.retainedFieldCount === 1 ? "field" : "fields"} · {form.method}</p></li>)}</ul>
+        {afterAcceptCount ? <p className="mt-3 text-xs text-slate-500">Includes {afterAcceptCount} after Accept click; the same form may appear in both visits.</p> : null}
+        <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs leading-5 text-slate-600" aria-label="Observed forms">{forms.map(({ id, form, capturePhase }) => <li key={id}><p className="break-words font-medium">{form.title || form.surfaceType.replaceAll("_", " ")}</p><p>{form.retainedFieldCount} {form.retainedFieldCount === 1 ? "field" : "fields"} · {form.method}{capturePhase ? " · After Accept click" : ""}</p></li>)}</ul>
         <a href="#report-forms" className="mt-3 inline-block text-xs text-sky-700 hover:underline" onClick={event => { event.preventDefault(); onViewEvidence?.(); document.getElementById("report-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>View forms ↗</a>
         </div>
       </details> : <div className={`min-w-0 ${inventoryTilePadding}`}><InventoryTileHeading label="Forms" value={<InventoryCount value={formCount} updating={updating} label="Form count" />} /></div>}

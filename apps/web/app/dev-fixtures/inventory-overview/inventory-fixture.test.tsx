@@ -15,7 +15,9 @@ test("current preview uses service groups and consistent distinct-resource total
   assert.equal(fixture.inventory.resources.length, 199);
   assert.equal(fixture.inventory.services.length, 7);
   assert.match(html, /6 distinct services, including child services/);
-  assert.match(html, /Google Fonts/);
+  // This fixture identifies fonts but retains no loading-origin proof.
+  assert.doesNotMatch(html, /Expand Google Fonts/);
+  assert.match(html, /Unattributed resources/);
   assert.match(html, /Google Static Assets/);
   assert.equal(fixture.metrics[1]?.overview?.identifiedServices, 6);
   assert.equal(fixture.metrics[1]?.overview?.distinctResources, 196);

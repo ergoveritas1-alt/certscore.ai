@@ -88,3 +88,27 @@ test("limited form inventory exposes retained counts and omitted fields instead 
   assert.match(html, /1 field\(s\) were omitted by the capture limit/);
   assert.match(html, /1 page\(s\) have limited form coverage/);
 });
+
+test("form disclosure stays collapsed, escapes text, and preserves form-specific sources", () => {
+  const form = { ...row.form, privacyDisclosure: { version: 1 as const, truncated: false, excerpts: [{ text: "We process your data to handle your request. <script>unsafe</script>", association: "inside_form" as const, links: [{ label: "Privacy policy", url: "https://example.test/privacy" }] }] } };
+  const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[{ ...row, form }]} />);
+  assert.match(html, /Privacy disclosure/);
+  assert.match(html, /We process your data to handle your request/);
+  assert.match(html, /href="https:\/\/example.test\/privacy"/);
+  assert.doesNotMatch(html, /<script>|<details[^>]*open/);
+  const legacy = renderToStaticMarkup(<CollectionSurfacesTable rows={[row]} />);
+  assert.match(legacy, /does not establish that a notice was absent/);
+});
+
+
+test("after-click form observations retain context without claiming consent or absent forms", () => {
+  const html = renderToStaticMarkup(<CollectionSurfacesTable afterAcceptLimited rows={[{...row, capturePhase:"after_accept_click", captureLimited:true, snapshot:{status:"unavailable"}}]} />);
+  assert.match(html,/After Accept click/);
+  assert.match(html,/1 form observation/);
+  assert.match(html,/does not establish consent registration/);
+  assert.match(html,/Some forms or disclosures may not have been retained/);
+  assert.doesNotMatch(html,/Snapshot unavailable|View form:/);
+  assert.match(html,/aria-expanded="false"/);
+  const empty=renderToStaticMarkup(<CollectionSurfacesTable afterAcceptLimited rows={[]} />);
+  assert.doesNotMatch(empty,/No forms were observed|no forms observed/);
+});

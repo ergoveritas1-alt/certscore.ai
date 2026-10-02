@@ -17,6 +17,7 @@ export function describeAccessReliability(bundle: CanonicalEvidenceBundle | null
     /renderer crash/i.test(errors) ? "renderer_crash" :
     /interrupted by another navigation to ["']about:blank|Navigation to ["']about:blank["'] is interrupted by another navigation to ["']chrome-error:\/\/chromewebdata\//.test(errors) ? "navigation_reset_interruption" :
     /ERR_BLOCKED_BY_CLIENT/.test(errors) ? "client_or_safety_block" :
+    /ERR_NETWORK_CHANGED/.test(errors) ? "network_changed" :
     /ERR_HTTP2_PROTOCOL_ERROR/.test(errors) ? "http2_transport_failure" :
     /ERR_(NAME_NOT_RESOLVED|NAME_RESOLUTION_FAILED)/.test(errors) ? "dns_failure" :
     /ERR_(CERT_|SSL_)/.test(errors) ? "tls_failure" :
@@ -58,13 +59,14 @@ export async function resetForNavigationRecovery(page: Pick<Page, "goto" | "cont
   const timeout = recoveryNavigationTimeout(remainingMs, 1000);
   if (timeout <= 0) throw Error("Navigation budget exhausted before reset.");
   const deadline = Date.now() + timeout;
-  let ended = false, detached = false;
+  let ended = false;
+  const detachedSessions = new WeakSet<CDPSession>();
   let session: CDPSession | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let onAbort: (() => void) | undefined;
   const detach = () => {
-    if (!session || detached) return;
-    detached = true;
+    if (!session || detachedSessions.has(session)) return;
+    detachedSessions.add(session);
     void session.detach().catch(() => {});
   };
   const checkActive = () => {
@@ -98,6 +100,13 @@ export async function resetForNavigationRecovery(page: Pick<Page, "goto" | "cont
         if (page.mainFrame().url() !== "chrome-error://chromewebdata/") {
           await Promise.race([errorDocument, interrupted]);
         }
+        checkActive();
+        // An error-document commit can replace the renderer target while this
+        // CDP session remains bound to the inactive page. Rebind the existing
+        // single stop retry; do not retry against that stale session.
+        detach();
+        session = undefined;
+        session = await page.context().newCDPSession(page as Page);
         checkActive();
         await session.send("Page.stopLoading");
       }

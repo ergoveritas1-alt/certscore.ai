@@ -245,3 +245,36 @@ a {
 body:has([aria-label="Executive overview"]), body:has([data-full-site-report]) {
   background-color: #fff;
 }
+
+
+/* Only the outer evidence headers: nested proof and finding text may wrap. */
+.evidence-directory-grid { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 640px) {
+  .evidence-directory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+#evidence .evidence-directory-column > details { padding: 12px !important; }
+#evidence .evidence-directory-column > details > summary,
+#evidence .evidence-directory-column > section > details > summary {
+  min-height: 40px;
+  gap: 8px;
+}
+#evidence .evidence-directory-column > section > details > summary { padding: 12px !important; min-height: 64px; }
+#evidence .evidence-directory-column > details > summary > :first-child,
+#evidence .evidence-directory-column > section > details > summary > :first-child { min-width: 0; flex: 1; }
+#evidence .evidence-directory-column > details > summary > svg,
+#evidence .evidence-directory-column > section > details > summary > svg { flex-shrink: 0; }
+#evidence .evidence-directory-column > details > summary p,
+#evidence .evidence-directory-column > section > details > summary p {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; line-height: 16px;
+}
+#evidence .evidence-directory-column > details > summary h3,
+#evidence .evidence-directory-column > section > details > summary h3,
+#evidence .evidence-directory-column > details > summary > span:first-child > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  line-height: 20px;
+}
+
+#evidence .evidence-directory-column > details > summary > span:first-child > span:first-child {
+  font-size: 11px; line-height: 16px;
+}

@@ -3,6 +3,9 @@ import { serviceIntegrationPurposes } from "./service-integration-group";
 type Service = FullSiteReportResponse["services"][number];
 export type ServiceBranch = { service: Service; collection?: boolean; directSite?: boolean; children: ServiceBranch[]; inferred: boolean; residual: boolean; ownResources: Service["resources"] };
 
+// Policy over the canonical product identity, never hostname or display-name inference.
+const requiresVerifiedOrigin = (service: Service) => service.context.identity?.product === "Google Fonts";
+
 /** Nest only fully accounted-for resource identities. Unknown coverage stays visible. */
 export function buildServiceHierarchy(services: Service[]): ServiceBranch[] {
   const byKey = new Map(services.map(service => [service.key, service]));
@@ -24,7 +27,12 @@ export function buildServiceHierarchy(services: Service[]): ServiceBranch[] {
       if (parents.length === 1 && candidate && (candidate === "site:document" || byKey.has(candidate)) && !reaches(service.key, candidate)) {
         const occurrences = new Map(links.map(link => [JSON.stringify([link.pageId, link.occurrenceId]), link]));
         const count = [...occurrences.values()].reduce((sum, link) => sum + (link.eventCount ?? 0), 0);
-        if (count === resource.eventCount && resource.pageIds.every(id => links.some(link => link.pageId === id))) parent = candidate;
+        const verified = !requiresVerifiedOrigin(service) || links.every(link =>
+          link.inferred === false && Boolean(link.nodeId) && Array.isArray(link.edgeIds) && link.edgeIds.length > 0 && link.edgeIds.every(Boolean) &&
+          Boolean(link.occurrenceId) && Number.isSafeInteger(link.eventCount) && link.eventCount > 0 &&
+          resource.pageIds.includes(link.pageId) && (candidate !== "site:document" || link.kind === "site") &&
+          occurrences.get(JSON.stringify([link.pageId, link.occurrenceId]))?.eventCount === link.eventCount);
+        if (verified && count === resource.eventCount && resource.pageIds.length > 0 && resource.pageIds.every(id => links.some(link => link.pageId === id))) parent = candidate;
       }
       groups.set(parent, [...(groups.get(parent) ?? []), resource]);
       if (parent && parent !== "site:document") edges.set(parent, new Set([...(edges.get(parent) ?? []), service.key]));
@@ -44,7 +52,7 @@ export function buildServiceHierarchy(services: Service[]): ServiceBranch[] {
   };
   const roots = services.flatMap(service => {
     const branches = ["", "site:document"].filter(parent => assigned.get(service.key)?.has(parent)).map(parent => make(service, parent, new Set()));
-    if (!service.context.identity || branches.length < 2) return branches;
+    if (!service.context.identity || requiresVerifiedOrigin(service) || branches.length < 2) return branches;
     // Loading attribution partitions resources, not the service identity. Keep a
     // single identified root while retaining the original per-resource origins.
     // Verified branches beneath other services are intentionally left nested.
@@ -58,8 +66,9 @@ export function buildServiceHierarchy(services: Service[]): ServiceBranch[] {
       inferred: branches.some(branch => branch.inferred),
     }];
   });
-  // Identified services remain visible even when loading ancestry is incomplete.
-  const other = roots.filter(branch => !branch.directSite && !branch.service.context.identity);
+  // Font identity alone cannot establish a standalone site integration. Preserve
+  // unresolved resources separately, including when other font loads are verified.
+  const other = roots.filter(branch => !branch.directSite && (!branch.service.context.identity || requiresVerifiedOrigin(branch.service)));
   const first = other[0];
   if (!first) return roots;
   const resources = [...new Map(other.flatMap(branch => branch.service.resources).map(row => [row.key, row])).values()];
@@ -68,4 +77,15 @@ export function buildServiceHierarchy(services: Service[]): ServiceBranch[] {
     service: {...first.service, key: "collection:unattributed", name: "Other / unattributed resources", origins: [], resources,
       pageIds: [...new Set(resources.flatMap(row => row.pageIds))], purposes: [...new Set(resources.flatMap(row => row.purposes))]},
   }];
+}
+
+/** Count identities once across direct, child and unattributed resource branches. */
+export function countHierarchyServices(branches: ServiceBranch[]): number {
+  const keys = new Set<string>();
+  const visit = (branch: ServiceBranch) => {
+    if (!branch.collection && branch.service.context.identity) keys.add(branch.service.key);
+    branch.children.forEach(visit);
+  };
+  branches.forEach(visit);
+  return keys.size;
 }

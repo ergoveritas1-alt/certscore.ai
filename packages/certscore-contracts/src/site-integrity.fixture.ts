@@ -18,3 +18,13 @@ export const siteIntegrityProjectionFixture: SiteIntegrityProjection = {
   observationHash: "b".repeat(64), verificationStatus: "verified",
   evidenceRef: "CanonicalEvidenceBundle.json#siteIntegrityObservation", observation: siteIntegrityObservationFixture,
 };
+
+/** Synthetic sanitized excerpt; historical observation fixtures intentionally omit it. */
+export const siteIntegrityCodeProofFixture: import("./site-integrity").SiteIntegrityCodeProof = {
+  contractVersion: "certscore.site-integrity-code-proof.v1", format: "sanitized_dom_excerpt", sanitized: true, truncated: false,
+  lines: ['<section>', '  <div style="width:0px;height:0px;overflow:hidden">', '    <a href="https://pharmacy.example/[redacted]">[link text omitted]</a>', '  </div>', '</section>'],
+  highlightedLine: 1,
+  computedStyle: { position: "static", overflow: "hidden", fontSizePx: 16 },
+  concealingRect: { left: 0, top: 100, right: 0, bottom: 100, width: 0, height: 0 },
+  linkRect: { left: 0, top: 100, right: 120, bottom: 118, width: 120, height: 18 },
+};

@@ -22,7 +22,7 @@ import { SitewideEvidenceContext } from "./sitewide-evidence-card";
 import { FullSiteServices } from "./full-site-services-table";
 import { ServiceResourceRows } from "./service-resource-rows";
 import { FullSiteResourceContext } from "./full-site-resource-context";
-import { CollectionSurfacesTable } from "./collection-surfaces-table";
+import { CollectionSurfacesTable, type CollectionSurfaceTableRow } from "./collection-surfaces-table";
 import { describeFullSitePageFailure } from "../../lib/scans/full-site-page-failure";
 import { fullSiteFinalizationDelayed } from "../../lib/scans/full-site-finalization";
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
@@ -115,6 +115,8 @@ export function FullSiteWorkspace({
   scanId,
   requested,
   homepageGraph,
+  afterAcceptForms = [],
+  afterAcceptFormsLimited = false,
   formDestinationEvidence,
   executiveSnapshot,
   executiveActions,
@@ -136,6 +138,8 @@ export function FullSiteWorkspace({
 }: {
   scanId: string;
   requested: CrawlOptions;
+  afterAcceptForms?: CollectionSurfaceTableRow[];
+  afterAcceptFormsLimited?: boolean;
   homepageGraph?: ApiRuntimeEvidenceGraphProjection;
   formDestinationEvidence?: ReactNode;
   executiveSnapshot?: ReactNode;
@@ -488,7 +492,7 @@ export function FullSiteWorkspace({
           { label: INVENTORY_METRIC_LABELS.requests, value: data?.summary.totals.requestEvents, group: "requests" },
           { label: INVENTORY_METRIC_LABELS.frames, value: data?.summary.totals.embedInstances, group: "embeds" },
         ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined }));
-  const inventorySummary = <ReportInventorySummary forms={data?.collectionSurfaces?.rows} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
+  const inventorySummary = <ReportInventorySummary forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
     <FullSiteScanDurationContext.Provider value={scanDuration}>
@@ -692,7 +696,7 @@ export function FullSiteWorkspace({
                 ? `${data.networkOverview.identifiedServices} services`
                 : `${tab === "pages" ? data.pages.total : data.resources.total} rows${(tab === "pages" ? data.pages.total : data.resources.total) > 6 ? " · Up to 6 visible. Scroll for more." : ""}`}</p>}
           </section>
-          {tab === "resources" ? <CollectionSurfacesTable rows={data?.collectionSurfaces?.rows ?? partialSupporting?.collectionSurfaces.rows ?? []} loading={!data && !partialSupporting} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory ?? partialSupporting?.collectionSurfaces.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages ?? partialSupporting?.collectionSurfaces.limitedPages} /> : null}
+          {tab === "resources" ? <CollectionSurfacesTable afterAcceptLimited={afterAcceptFormsLimited} rows={[...(data?.collectionSurfaces?.rows ?? partialSupporting?.collectionSurfaces.rows ?? []), ...afterAcceptForms]} loading={!data && !partialSupporting} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory ?? partialSupporting?.collectionSurfaces.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages ?? partialSupporting?.collectionSurfaces.limitedPages} /> : null}
           {tab === "resources" ? formDestinationEvidence : null}
           {tab === "resources" ? <SitewideEvidenceContext.Provider value={overview?.score?.evidencePages ? { pages: overview.score.evidencePages, limitedPages: overview.score.limitedPages } : null}><SiteIntegritySiteContext.Provider value={overview?.score?.siteIntegrity ?? null}>{evidenceDirectory}</SiteIntegritySiteContext.Provider></SitewideEvidenceContext.Provider> : null}
           {detailPage ? (

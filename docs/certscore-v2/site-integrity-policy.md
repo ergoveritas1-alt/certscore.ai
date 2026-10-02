@@ -60,3 +60,44 @@ other historical homepage records are not bulk rewritten. See
 [canonical scoring policy](../scoring-policy.md) for the reference sheet and cost.
 
 The owner subsequently increased the first-link deduction to 17 points (v4). Additional occurrences remain 5 points each, capped at 40. Overall scoring is v5 and full-site scoring is v4; previously recorded policy versions remain historical. This arithmetic change adds no scan work or infrastructure cost.
+
+## Optional code proof (October 2, 2026)
+
+`certscore.site-integrity-code-proof.v1` is an additive, optional field on each
+retained link. The runtime lane captures it in the same passive snapshot and
+existing 20 ms inspection budget. It retains a sanitized ancestor-path DOM
+excerpt, the concealing element's highlighted line, computed position/overflow/
+font size, and measured element/link bounds. This is a sanitized rendered DOM
+excerpt, not original source-file lines or reconstructed stylesheet declarations.
+Only bounded numeric/layout inline declarations survive; text, URL paths,
+queries, IDs, event handlers, scripts and unrelated attributes are omitted.
+
+The existing document, timestamp, original artifact hash and canonical projection
+bind the proof to its link. It passes through the existing normalized concern,
+policy and unified finding; eligibility and scoring are unchanged. Historical
+records remain unchanged and show “Code excerpt not retained.” New captures that
+exhaust the time or byte allowance explicitly record `capture_limit`. Proof is
+optional: a capture-side validation failure drops the excerpt, not an otherwise
+valid link observation. No live-page reconstruction or backfill is performed.
+
+The report keeps code behind “View code evidence” in both destination and page
+views. Multiple links have separate collapsed disclosures. The expanded view
+highlights the concealing element, explains measured concealment, marks
+sanitization, and keeps provenance behind “Capture details.” Markup is escaped
+text, never rendered as executable HTML or an outbound link.
+
+The final code-proof limit is **2 KiB total per page**, within the existing
+12-link cap. This is a bounded sample of code excerpts; remaining links preserve
+all existing evidence. At 100,000 ten-page scans/month, eight retained copies and
+30-day retention, the maximum extra excerpt storage is about 16.4 GB (about
+$0.38/month at $0.023/GB-month). One full-volume 2.05 GB transfer is about $0.18
+at $0.09/GB. Allowing for availability metadata, the planning estimate is about
+$0.65/month, below the $1 approval threshold. Existing provisioned database
+capacity, capture-time ceiling, request count, browser runs and model usage stay
+unchanged. Re-estimate before raising page limits, copy counts, retention or
+transfer assumptions. This replaces the preliminary 2 KiB-per-link estimate.
+
+Validation includes actual Chromium capture with external CSS, redaction and
+page-byte limits; strict schema/historical compatibility; verified homepage and
+additional-page projection, hash-drift rejection and unchanged scoring; escaped,
+collapsed rendering and local interactive preview.

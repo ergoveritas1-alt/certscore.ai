@@ -158,6 +158,7 @@ export type ShadowReportData = {
   resourceInventory?: import("../../../lib/scans/single-page-resource-inventory").SinglePageResourceInventory;
   runtimeEvidenceGraph?: import("@certscore/api-contracts").ApiRuntimeEvidenceGraphProjection;
   inventorySummary?: import("../report-inventory-summary").ReportInventoryMetric[];
+  afterAcceptFormsLimited?: boolean;
   collectionTableRows?: import("../collection-surfaces-table").CollectionSurfaceTableRow[];
   scan: {
     benchmark: string;

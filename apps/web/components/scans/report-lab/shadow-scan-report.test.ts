@@ -98,8 +98,8 @@ test("evidence section headings distinguish review, observed, and total check co
     "utf8"
   );
 
-  assert.match(source, /\{trackingExternalReviewCount\} checks need review · \{report\.trackingExternalRows\.length\} checks/);
-  assert.match(source, /\{preConsentRuntimeReviewCount\} checks need review · \{report\.preConsentRuntimeRows\.length\} checks/);
+  assert.match(source, /\{trackingExternalReviewCount\} need review · \{report\.trackingExternalRows\.length\} checks/);
+  assert.match(source, /\{preConsentRuntimeReviewCount\} need review · \{report\.preConsentRuntimeRows\.length\} checks/);
   assert.match(source, /\{observedGdprTransparencyRows\} observed · \{report\.gdprTransparencyRows\.length\} checks/);
   assert.match(source, /positive · \{report\.transportRows\.length\} checks/);
 });
@@ -275,7 +275,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   const consentControlsIndex = snapshotSource.indexOf(">Consent controls<");
   const gpcIndex = snapshotSource.indexOf(">Global Privacy Control (GPC)<");
   const transportSecurityIndex = snapshotSource.indexOf(">Transport security<");
-  const runtimeIndex = evidenceDirectorySource.indexOf(">Storage &amp; tracking techniques{");
+  const runtimeIndex = evidenceDirectorySource.indexOf(">Storage &amp; tracking{");
   const gpcCardIndex = evidenceDirectorySource.indexOf("<GpcEvidenceIndexCard");
   const transportIndex = evidenceDirectorySource.indexOf(">Transport security{");
 
@@ -300,7 +300,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.doesNotMatch(gpcEvidenceCardSource, /<GpcStatusBadge/);
   assert.ok(runtimeIndex >= 0);
   assert.ok(runtimeIndex < gpcCardIndex);
-  assert.ok(gpcCardIndex < transportIndex);
+  assert.ok(transportIndex < gpcCardIndex);
   assert.match(source, />GPC\{homepage \? " · Starting page" : ""\}/);
   assert.match(source, /Evidence data \(JSON\)/);
   assert.match(source, /"Advertising \/ measurement"/);

@@ -1,3 +1,5 @@
+import { COLLECTION_SURFACE_INVENTORY_VERSION, COLLECTION_SURFACE_ASSESSMENT_VERSION, MAX_COLLECTION_SURFACE_FORMS, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM, MAX_COLLECTION_SURFACE_FIELDS, MAX_COLLECTION_SURFACE_INVENTORY_BYTES, collectionSurfaceSemanticCategorySchema, collectionSurfaceEvidenceRefSchema, collectionSurfaceFieldSchema, formPrivacyDisclosureSchema, collectionSurfaceFormSchema } from "./collection-surface-form";
+export * from "./post-accept-form-capture";
 import { formDestinationTraceSchema } from "./form-destination-trace";
 import { siteIntegrityObservationSchema } from "./site-integrity";
 export * from "./site-integrity";
@@ -10,7 +12,6 @@ const canonicalGpcActivityComparisonSchema: z.ZodType<GpcActivityComparison> = g
 import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
 export { terminalLaneEvidenceSchema, type TerminalLaneEvidence } from "./terminal-lane-evidence";
 export * from "./gpc-impact";
-import { FIELD_REVIEW_CATEGORIES } from "./collection-field-review";
 export * from "./collection-field-review";
 import { siteMetadataSchema } from "./site-metadata";
 export * from "./site-metadata";
@@ -800,97 +801,7 @@ export const collectionSurfaceObservationSchema = z.object({
   directVsInferred: directVsInferredSchema,
 });
 
-export const COLLECTION_SURFACE_INVENTORY_VERSION = "certscore.collection-surface-inventory.v1";
-export const COLLECTION_SURFACE_ASSESSMENT_VERSION = "certscore.collection-surface-assessment.v1";
-export const MAX_COLLECTION_SURFACE_FORMS = 10;
-export const MAX_COLLECTION_SURFACE_FIELDS_PER_FORM = 20;
-export const MAX_COLLECTION_SURFACE_FIELDS = 60;
-export const MAX_COLLECTION_SURFACE_INVENTORY_BYTES = 64 * 1024;
-
-export const collectionSurfaceSemanticCategorySchema = z.enum([
-  "search",
-  "name",
-  "email",
-  "phone",
-  "address",
-  "password",
-  "payment_card",
-  "bank_account",
-  "government_id",
-  "social_security_number",
-  "date_of_birth",
-  "health",
-  "geolocation",
-  "file_upload",
-  "free_text",
-  "selection",
-  "boolean_choice",
-  "website_url",
-  "unknown",
-]);
-
-export const collectionSurfaceEvidenceRefSchema = z.object({
-  refId: z.string().min(1).max(120),
-  eventId: z.string().min(1).max(120).optional(),
-  artifactId: z.string().min(1).max(120).optional(),
-  eventType: z.string().min(1).max(80).optional(),
-}).strict();
-
-export const collectionSurfaceFieldSchema = z.object({
-  controlKind: z.enum(["checkbox", "switch", "radio"]).optional(),
-  checkedState: z.enum(["checked", "unchecked", "mixed", "unknown"]).optional(),
-  review: z.object({ version: z.literal("collection-field-review.v1"), category: z.enum(FIELD_REVIEW_CATEGORIES), preselectedMarketing: z.boolean() }).strict().optional(),
-  fieldRef: z.string().min(1).max(80),
-  controlIndex: z.number().int().nonnegative().max(249).optional(),
-  elementType: z.enum(["input", "textarea", "select", "custom_control"]),
-  inputType: z.string().min(1).max(40),
-  semanticCategory: collectionSurfaceSemanticCategorySchema,
-  label: z.string().min(1).max(120).optional(),
-  autocompleteToken: z.string().min(1).max(80).optional(),
-  required: z.boolean(),
-  disabled: z.boolean(),
-  readOnly: z.boolean(),
-  evidenceRefs: z.array(collectionSurfaceEvidenceRefSchema).max(2).default([]),
-  confidence: confidenceSchema,
-  directVsInferred: directVsInferredSchema,
-}).strict().superRefine((field, ctx) => {
-  if (field.review?.preselectedMarketing && (field.checkedState !== "checked" || !["checkbox", "switch"].includes(field.controlKind ?? ""))) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Preselected marketing review requires a retained selected checkbox or switch", path: ["review", "preselectedMarketing"] });
-  }
-});
-
-export const collectionSurfaceFormSchema = z.object({
-  formRef: z.string().min(1).max(80),
-  structure: z.enum(["native_form", "role_form", "unassociated_controls"]),
-  surfaceType: z.enum(["search", "newsletter", "contact", "account", "checkout", "generic_form", "unknown"]),
-  title: z.string().min(1).max(120).optional(),
-  pageUrl: z.string().min(1).max(500),
-  method: z.enum(["get", "post", "dialog", "other", "unknown"]),
-  actionRelationship: z.enum(["same_site", "third_party", "self", "none", "unknown"]),
-  actionHostname: z.string().min(1).max(255).optional(),
-  candidateFieldCount: z.number().int().nonnegative(),
-  retainedFieldCount: z.number().int().nonnegative().max(MAX_COLLECTION_SURFACE_FIELDS_PER_FORM),
-  fieldsTruncated: z.boolean(),
-  fields: z.array(collectionSurfaceFieldSchema).max(MAX_COLLECTION_SURFACE_FIELDS_PER_FORM),
-  evidenceRefs: z.array(collectionSurfaceEvidenceRefSchema).max(4).default([]),
-  confidence: confidenceSchema,
-  directVsInferred: directVsInferredSchema,
-}).strict().superRefine((form, context) => {
-  if (form.retainedFieldCount !== form.fields.length) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "retainedFieldCount must equal the retained fields array length",
-      path: ["retainedFieldCount"],
-    });
-  }
-  if (form.fieldsTruncated !== (form.candidateFieldCount > form.retainedFieldCount)) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "fieldsTruncated must reflect omitted candidate fields",
-      path: ["fieldsTruncated"],
-    });
-  }
-});
+export { COLLECTION_SURFACE_INVENTORY_VERSION, COLLECTION_SURFACE_ASSESSMENT_VERSION, MAX_COLLECTION_SURFACE_FORMS, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM, MAX_COLLECTION_SURFACE_FIELDS, MAX_COLLECTION_SURFACE_INVENTORY_BYTES, collectionSurfaceSemanticCategorySchema, collectionSurfaceEvidenceRefSchema, collectionSurfaceFieldSchema, formPrivacyDisclosureSchema, collectionSurfaceFormSchema } from "./collection-surface-form";
 
 export const collectionSurfaceSnapshotReasonSchema = z.enum([
   "capture_cancelled", "capture_budget_exhausted", "document_changed", "control_identity_unavailable",
@@ -956,6 +867,8 @@ export const collectionSurfaceInventorySchema = z.object({
   directVsInferred: directVsInferredSchema,
 }).strict().superRefine((inventory, context) => {
   const retainedFieldCount = inventory.forms.reduce((total, form) => total + form.fields.length, 0);
+  const disclosureBytes = inventory.forms.reduce((total, form) => total + (form.privacyDisclosure ? new TextEncoder().encode(JSON.stringify(form.privacyDisclosure)).byteLength : 0), 0);
+  if (disclosureBytes > 1024) context.addIssue({ code: z.ZodIssueCode.custom, message: "Form disclosures exceed the page byte limit", path: ["forms"] });
   if (inventory.coverage.retainedFormCount !== inventory.forms.length) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

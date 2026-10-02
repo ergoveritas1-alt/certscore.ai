@@ -1,3 +1,4 @@
+import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
 import { inspectCustomAcceptControl, isCustomAcceptControlCandidate, sameCustomAcceptControlBinding } from "./custom-accept-control.js";
@@ -365,6 +366,8 @@ export async function runPostAcceptObserver(
   let observationCoverageSufficient = false;
   let selectedRecipe: PostAcceptActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
+  let formCaptureHandle: ReturnType<typeof startPostAcceptFormCapture> | undefined;
+  let formCapture: PostAcceptEvidencePacket["formCapture"];
   let afterActionCapture: PostAcceptEvidencePacket["afterActionCapture"];
   let terminalDecisionEvidence: PostAcceptEvidencePacket["terminalDecisionEvidence"];
   let decisionEvidence: PostAcceptEvidencePacket["decisionEvidence"] = {
@@ -415,6 +418,7 @@ export async function runPostAcceptObserver(
     }
     if (captureCoverage.requestsDroppedAfterAction > 0) limitations.push("post_action_network_capture_truncated");
     captureCoverage.requestsDroppedBeforeAction += Math.max(0, preActionRequests.length + postActionRequests.length - retainedRequests().length);
+    formCapture ??= formCaptureHandle?.finish();
     const completedAtMs = Date.now();
     const confirmed = fields.registration.status === "confirmed" &&
       fields.registration.acceptanceExercised &&
@@ -423,6 +427,7 @@ export async function runPostAcceptObserver(
     const packet = postAcceptEvidencePacketSchema.parse({
       ...finishOptionalRuntimeGraph(graphCapture, "post_accept", confirmed ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_accept_evidence.v2",
+      ...(formCapture ? { formCapture } : {}),
       ...(afterActionCapture ? { afterActionCapture } : {}),
       ...(terminalDecisionEvidence ? { terminalDecisionEvidence } : {}),
       decisionEvidence,
@@ -964,6 +969,9 @@ export async function runPostAcceptObserver(
     try { input.onLifecycleEvent?.({ type: "action_dispatched", atMs: actionDispatchedAtMs }); }
     catch { limitations.push("lifecycle_listener_failed"); }
     let clickError: unknown;
+    let actionDocumentChanged = false;
+    const watchActionDocument = (frame: import("playwright").Frame) => { if (frame === page!.mainFrame()) actionDocumentChanged = true; };
+    page.on("framenavigated", watchActionDocument);
     try {
       await dispatchAcceptControl(
         page,
@@ -974,6 +982,13 @@ export async function runPostAcceptObserver(
       );
     } catch (error) {
       clickError = error;
+    } finally {
+      page.off("framenavigated", watchActionDocument);
+    }
+    if (!clickError && observationWindowMs > 0) {
+      formCaptureHandle = startPostAcceptFormCapture({ page,
+        exactTargetUrl: normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl),
+        parentScanStartedAtMs, actionDispatchedAtMs, windowMs: remainingResultBudgetMs(observationWindowMs), signal: effectiveSignal, documentChangedBeforeStart: actionDocumentChanged });
     }
     const confirmationStartedAtMs = Date.now();
     const confirmedState = await waitForAcceptanceConfirmation(
@@ -1019,6 +1034,7 @@ export async function runPostAcceptObserver(
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
         clickCompleted: diagnostics.click.outcome === "completed", signal: effectiveSignal, targetStillAuthorized,
       });
+      formCapture = formCaptureHandle?.finish();
       timing.observationMs = Math.max(0, Date.now() - captureStartedAtMs);
       if (stopReason !== "window_elapsed") limitations.push(`after_action_capture:${stopReason}`);
       cancellation();
@@ -1121,6 +1137,7 @@ export async function runPostAcceptObserver(
       signal: effectiveSignal,
       targetUrl: observationTargetUrl,
     });
+    formCapture = formCaptureHandle?.finish();
     timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
     timing.observationExitReason = observationResult.reason;
     observationCoverageSufficient = observationResult.completed;
@@ -1205,6 +1222,9 @@ export async function runPostAcceptObserver(
       observations,
     });
   } finally {
+    // Finalization already froze the optional sample. Cleanup must run even if
+    // a capture-side failure interrupted packet construction.
+    try { formCaptureHandle?.finish(); } catch { /* Optional form evidence cannot block browser cleanup. */ }
     if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
     finishOptionalRuntimeGraph(graphCapture, "post_accept", "action_capture_closed");
     actionDiscovery?.dispose();

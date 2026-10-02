@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildServiceHierarchy } from "./service-hierarchy";
+import { buildServiceHierarchy, countHierarchyServices } from "./service-hierarchy";
 type Service = Parameters<typeof buildServiceHierarchy>[0][number];
 const resource = (key: string, eventCount = 1, pageIds = ["p"]) => ({key, eventCount, pageIds, purposes: [], inventoryEvidence: "Review"}) as unknown as Service["resources"][number];
 const service = (key: string, resources = [resource(key)], origins: Service["origins"] = []) => ({key,name:key,context:{identity:{product:key}},resources,origins,pageIds:["p"]}) as Service;
@@ -34,16 +34,16 @@ test("cycles retain a visible root and each resource exactly once", () => {
 });
 
 test("identified supporting services stay visible while unknown identities stay grouped", () => {
- const fonts = {...service("fonts"),name:"Google Fonts"};
+ const fonts = {...service("fonts"),name:"Example CDN"};
  const bst = {...service("bst", [resource("bst")], [link("absent", "bst")]), name:"BST DSGVO Cookie notice plugin, non-TCF"};
  const unknown = {...service("unknown"), context: {identity:null}} as Service;
  const tree = buildServiceHierarchy([service("youtube"),fonts,bst,unknown]);
- assert.deepEqual(tree.map(x=>x.service.name),["youtube","Google Fonts",bst.name,"Other / unattributed resources"]);
+ assert.deepEqual(tree.map(x=>x.service.name),["youtube","Example CDN",bst.name,"Other / unattributed resources"]);
  assert.equal(tree[2]!.residual,true);
  assert.deepEqual(tree[3]!.children.map(x=>x.service.key),["unknown"]);
 });
 test("one identified root combines site-loaded and unresolved resources while embedded resources remain nested", () => {
- const fonts={...service("fonts",[resource("site-font"),resource("embedded-font"),resource("unresolved")],[{...link("site:document","site-font"),kind:"site" as const},link("youtube","embedded-font")]),name:"Google Fonts"};
+ const fonts={...service("fonts",[resource("site-font"),resource("embedded-font"),resource("unresolved")],[{...link("site:document","site-font"),kind:"site" as const},link("youtube","embedded-font")]),name:"Example CDN"};
  const tree=buildServiceHierarchy([service("youtube"),fonts]);
  const roots=tree.filter(x=>x.service.key==="fonts");
  assert.equal(roots.length,1);
@@ -74,7 +74,61 @@ test("child function and delivery purposes never replace the parent's canonical 
  const tree=buildServiceHierarchy([maps,fonts]);
  assert.deepEqual(tree[0]!.service.purposes,['Maps / location services']);
  assert.deepEqual(tree[0]!.children[0]!.service.purposes,['Font delivery']);
- const inverse=buildServiceHierarchy([{...maps,origins:[link('fonts','map')]},{...fonts,origins:[]}]);
+ const inverse=buildServiceHierarchy([{...maps,origins:[link('fonts','map')]},{...fonts,origins:[{...link('site:document','font'),kind:'site' as const}]}]);
  assert.deepEqual(inverse[0]!.service.purposes,['Font delivery']);
  assert.deepEqual(inverse[0]!.children[0]!.service.purposes,['Maps / location services']);
+});
+
+const googleFonts = (resources = [resource("font")], origins: Service["origins"] = []): Service => ({
+ ...service("fonts", resources, origins), name: "Google Fonts",
+ context: { identity: { product: "Google Fonts", vendor: "Google", entity: "Google LLC" } } as Service["context"],
+});
+const siteLink = (resourceKey: string) => ({...link("site:document", resourceKey), kind: "site" as const});
+
+test("Google Fonts requires verified direct site evidence for a standalone row", () => {
+ const tree = buildServiceHierarchy([googleFonts([resource("font")], [siteLink("font")])]);
+ assert.equal(tree.length, 1);
+ assert.equal(tree[0]!.service.key, "fonts");
+ assert.equal(tree[0]!.directSite, true);
+ assert.equal(countHierarchyServices(tree), 1);
+});
+
+test("Google Fonts loaded by Maps stays beneath Maps and is counted once", () => {
+ const tree = buildServiceHierarchy([service("maps"), googleFonts([resource("font")], [link("maps", "font")])]);
+ assert.deepEqual(tree.map(branch => branch.service.key), ["maps"]);
+ assert.equal(tree[0]!.children[0]!.service.key, "fonts");
+ assert.equal(countHierarchyServices(tree), 2);
+});
+
+test("unverified Google Fonts origins never produce standalone or inferred child rows", () => {
+ const proof = siteLink("font");
+ const cases: Service["origins"][] = [
+  [], [{...proof, inferred: true}], [{...proof, edgeIds: []}], [{...proof, nodeId: ""}],
+  [{...proof, kind: undefined}], [{...proof, occurrenceId: ""}], [{...proof, eventCount: 0}],
+  [{...proof, pageId: "other-page"}], [proof, link("maps", "font")], [link("missing", "font")],
+  [{...link("maps", "font"), inferred: true}],
+ ];
+ for (const origins of cases) {
+  const tree = buildServiceHierarchy([service("maps"), googleFonts([resource("font")], origins)]);
+  assert.deepEqual(tree.filter(branch => !branch.collection).map(branch => branch.service.key), ["maps"]);
+  assert.equal(tree[0]!.children.length, 0);
+  assert.deepEqual(tree.find(branch => branch.collection)!.children.map(branch => branch.service.key), ["fonts"]);
+  assert.equal(countHierarchyServices(tree), 2);
+ }
+ for (const row of [resource("font", 2), resource("font", 1, ["p", "p2"])]) {
+  const tree = buildServiceHierarchy([googleFonts([row], [proof])]);
+  assert.equal(tree[0]!.collection, true);
+ }
+});
+
+test("mixed direct, embedded and unresolved fonts remain separate without loss or duplicate counts", () => {
+ const fonts = googleFonts([resource("direct"), resource("embedded"), resource("unknown")], [siteLink("direct"), link("maps", "embedded")]);
+ const tree = buildServiceHierarchy([service("maps"), fonts]);
+ assert.deepEqual(tree.find(branch => branch.directSite)!.ownResources.map(row => row.key), ["direct"]);
+ assert.deepEqual(tree.find(branch => branch.service.key === "maps")!.children[0]!.ownResources.map(row => row.key), ["embedded"]);
+ assert.deepEqual(tree.find(branch => branch.collection)!.children[0]!.ownResources.map(row => row.key), ["unknown"]);
+ const owned = (branches: typeof tree): string[] => branches.flatMap(branch => [...branch.ownResources.map(row => row.key), ...owned(branch.children)]);
+ assert.deepEqual(owned(tree).sort(), ["direct", "embedded", "maps", "unknown"]);
+ assert.equal(countHierarchyServices(tree), 2);
+ assert.equal(fonts.resources.length, 3);
 });

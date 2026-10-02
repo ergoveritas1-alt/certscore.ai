@@ -17,6 +17,7 @@ export const MAX_COLLECTION_SURFACE_INSPECTED_FIELDS = 250;
 export type CollectionSurfaceCaptureRow = {
   controlKind?: "checkbox" | "switch" | "radio";
   checkedState?: "checked" | "unchecked" | "mixed" | "unknown";
+  privacyDisclosure?: CollectionSurfaceInventory["forms"][number]["privacyDisclosure"];
   groupKey: string;
   structure: "native_form" | "role_form" | "unassociated_controls";
   title?: string;
@@ -33,6 +34,7 @@ export type CollectionSurfaceCaptureRow = {
 };
 
 export type CollectionSurfaceCaptureSnapshot = {
+  documentReadyState?: "loading" | "interactive" | "complete";
   pageUrl: string;
   rows: CollectionSurfaceCaptureRow[];
   inspectedFieldCandidateCount: number;
@@ -210,6 +212,7 @@ export function buildCollectionSurfaceInventory(
         retainedFieldCount: fields.length,
         fieldsTruncated: classified.length > fields.length,
         fields,
+        ...(rows[0]?.privacyDisclosure ? { privacyDisclosure: rows[0].privacyDisclosure } : {}),
         evidenceRefs: [{
           refId: `ref_collection_surface_form_${formIndex}`,
           artifactId: "collection_surface_inventory_pre_consent",
@@ -242,7 +245,9 @@ export function buildCollectionSurfaceInventory(
   const candidateFormCount = grouped.size;
   const candidateFieldCount = eligibleRows.length;
   const retentionTruncated = candidateFormCount > forms.length || candidateFieldCount > retainedFieldCount;
+  const documentLoading = snapshot.documentReadyState === "loading";
   const reasonCodes = [
+    documentLoading ? "document_still_loading" : null,
     snapshot.candidateScanTruncated ? "candidate_scan_truncated" : null,
     candidateFormCount > MAX_COLLECTION_SURFACE_FORMS ? "form_retention_limit_reached" : null,
     candidateFieldCount > retainedFieldCount ? "field_retention_limit_reached" : null,
@@ -257,7 +262,7 @@ export function buildCollectionSurfaceInventory(
     consentStateAtTime: "pre_consent",
     pageUrl: snapshot.pageUrl.slice(0, 500),
     coverage: {
-      status: snapshot.candidateScanTruncated || retentionTruncated ? "limited" : "complete",
+      status: documentLoading || snapshot.candidateScanTruncated || retentionTruncated ? "limited" : "complete",
       documentScope: "main_document",
       interactionMode: "none",
       candidateFormCount,

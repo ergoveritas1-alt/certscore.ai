@@ -88,3 +88,17 @@ test("limited samples score retained verified links, while empty samples stay ne
     assert.equal(Boolean(selectSiteIntegrityFinding(packets)), expected);
   }
 });
+
+
+import { siteIntegrityCodeProofFixture } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
+test("code proof survives verified persistence and canonical finding projection without changing score", () => {
+  const bundle = {...siteIntegrityBundleFixture, siteIntegrityObservation: {...observation, links: observation.links.map((link, index) => index === 0 ? {...link, codeProof: siteIntegrityCodeProofFixture} : link)}};
+  const projection = projectSiteIntegrity(bundle, source, observation.documentUrl);
+  assert.deepEqual(projection?.observation.links[0]?.codeProof, siteIntegrityCodeProofFixture);
+  const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({runtimeArtifacts: {siteIntegrity: projection!}, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map()}));
+  assert.deepEqual(finding?.evidence.observation.links[0]?.codeProof, siteIntegrityCodeProofFixture);
+  assert.equal(finding?.scoreEffects?.[0]?.deductionPoints, 27);
+  const evidence = {...pageEvidence, siteIntegrityObservation: {...pageEvidence.siteIntegrityObservation, links: bundle.siteIntegrityObservation.links}};
+  assert.deepEqual(projectAdditionalPageSiteIntegrity(evidence, {...packet, sourceHash: hash(evidence)}, scanId)?.observation.links[0]?.codeProof, siteIntegrityCodeProofFixture);
+  assert.equal(projectAdditionalPageSiteIntegrity(evidence, packet, scanId), null, "changed proof bytes require matching retained hash");
+});

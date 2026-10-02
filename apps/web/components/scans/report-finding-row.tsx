@@ -1,4 +1,5 @@
 "use client";
+import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import type { SitePriorityFinding } from "../../lib/scans/full-site-priority-review";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
@@ -18,28 +19,13 @@ export function DisclosureChevron({ className = "" }: { className?: string }) {
   );
 }
 
-function statusClasses(status: ShadowEvidenceStatus) {
-  if (status === "Potential gap") return "border-rose-200 bg-rose-50 text-rose-800";
-  if (status === "Partial concern") return "border-amber-200 bg-amber-50 text-amber-900";
-  if (status === "Observed") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (status === "Not observed") return "border-zinc-200 bg-zinc-50 text-zinc-700";
-  if (status === "Limited") return "border-zinc-300 bg-zinc-100 text-zinc-700";
-  return "border-sky-200 bg-sky-50 text-sky-800";
-}
-
 export function StatusBadge({ status, priority }: { status: ShadowEvidenceStatus; priority?: "high" }) {
-  const symbol = status === "Observed" ? "✓" : status === "Partial concern" ? "±" : "—";
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.68rem] font-semibold uppercase ${priority === "high" ? "border-rose-200 bg-rose-50 text-rose-800" : statusClasses(status)}`}>
-      {status === "Potential gap" || priority === "high" ? (
-        <svg aria-hidden="true" className="h-3 w-3 shrink-0 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3 2 21h20ZM12 9v5m0 3v1" />
-        </svg>
-      ) : <span aria-hidden="true">{symbol}</span>}
-      {priority === "high" ? "High priority" : status}
-    </span>
-  );
+  const tone: EvidenceBadgeTone = priority === "high" || status === "Potential gap" ? "concern"
+    : status === "Partial concern" ? "review"
+    : status === "Limited" || status === "Not confirmed" ? "limited"
+    : status === "Observed" ? "positive"
+    : status === "Not observed" ? "neutral" : "context";
+  return <EvidenceStatusBadge label={priority === "high" ? "High priority" : status} tone={tone} />;
 }
 
 export function JsonEvidence({ value }: { value: Record<string, unknown> }) {

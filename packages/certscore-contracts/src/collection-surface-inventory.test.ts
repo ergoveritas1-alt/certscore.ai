@@ -136,3 +136,14 @@ test("form snapshot contracts reject unapproved bytes and oversized or incomplet
   assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "available", data: "jpeg" }).success, false);
   assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "available", data: "jpeg", width: 641, height: 300, sha256: "b".repeat(64), sizeBytes: 4 }).success, false);
 });
+
+test("form notices are optional, bounded and reject active links", () => {
+  const base = inventory();
+  const withNotice = { ...base, forms: base.forms.map(form => ({ ...form, privacyDisclosure: { version: 1, truncated: false, excerpts: [{ text: "Personal data is used to handle your request.", association: "inside_form", links: [{ label: "Privacy policy", url: "https://example.test/privacy" }] }] } })) };
+  assert.equal(collectionSurfaceInventorySchema.safeParse(withNotice).success, true);
+  withNotice.forms[0]!.privacyDisclosure.excerpts[0]!.links[0]!.url = "javascript:alert(1)";
+  assert.equal(collectionSurfaceInventorySchema.safeParse(withNotice).success, false);
+  withNotice.forms[0]!.privacyDisclosure.excerpts[0]!.links = [];
+  withNotice.forms[0]!.privacyDisclosure.excerpts[0]!.text = "x".repeat(601);
+  assert.equal(collectionSurfaceInventorySchema.safeParse(withNotice).success, false);
+});

@@ -68,11 +68,6 @@ export function FullSiteServices({ collapseVersion = 0, services, pageName, page
   const hierarchy = buildServiceHierarchy(services);
   const rows = hierarchy.filter(branch => !branch.collection).sort(compare);
   const unattributed = hierarchy.find(branch => branch.collection);
-  const serviceKeys = (branches: ServiceBranch[]): string[] => branches.flatMap(branch => [branch.service.key, ...serviceKeys(branch.children)]);
-  const visibleServiceKeys = new Set(serviceKeys(rows));
-  const additionalServices = [...new Map((unattributed?.children ?? []).filter(branch => branch.service.context.identity && !visibleServiceKeys.has(branch.service.key)).map(branch => [branch.service.key, branch.service])).values()];
-  const showUnattributedInline = rows.length === 0 && Boolean(unattributed);
-  const visibleRows = showUnattributedInline ? [...unattributed!.children].sort(compare) : rows;
 
   const renderBranch = (branch: ServiceBranch, path: string[] = [], unattributed = false) => {
           const service = branch.service;
@@ -116,17 +111,17 @@ export function FullSiteServices({ collapseVersion = 0, services, pageName, page
       <table className="w-full min-w-[1000px] text-left text-xs">
         <caption className="sr-only">Services and their member resources</caption>
         {tableHead}
-        <tbody>{visibleRows.map(branch => renderBranch(branch, [], showUnattributedInline))}</tbody>
+        <tbody>{rows.map(branch => renderBranch(branch))}</tbody>
       </table>
-      {!visibleRows.length ? <p className="p-5 text-sm text-slate-500">{unattributed ? "Loading origins could not be verified. Resources are available below." : "No services match the current filters."}</p> : null}
-      {unattributed && !showUnattributedInline ? <details open={unattributedOpen} className="border-t border-zinc-100" onToggle={event => setUnattributedOpen(event.currentTarget.open)}>
-        <summary className="cursor-pointer px-3 py-3 text-xs text-slate-500 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">{additionalServices.length ? <><span className="font-medium text-slate-700">{additionalServices.length} more {additionalServices.length === 1 ? "service" : "services"}</span><span className="ml-2 inline-flex flex-wrap items-center gap-2 align-middle">{additionalServices.slice(0, 2).map(service => <span key={service.key} className="inline-flex items-center gap-1"><VendorBrandIcon label={service.context.identity?.vendor ?? service.name} /><span>{service.name}</span></span>)}{additionalServices.length > 2 ? <span>+{additionalServices.length - 2}</span> : null}</span></> : <>Unattributed resources ({unattributed.service.resources.length})</>}<button type="button" popoverTarget={unattributedHelpId} onClick={event => event.stopPropagation()} aria-label="Explain unattributed resources" title="About unattributed resources" className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded align-middle text-slate-500 hover:bg-sky-100 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5M10 6v.01"/></svg></button></summary>
+      {!rows.length ? <p className="p-5 text-sm text-slate-500">{unattributed ? "Loading origins could not be verified. Resources are available below." : "No services match the current filters."}</p> : null}
+      {unattributed ? <details open={unattributedOpen} className="border-t border-zinc-100" onToggle={event => setUnattributedOpen(event.currentTarget.open)}>
+        <summary className="cursor-pointer px-3 py-3 text-xs text-slate-500 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">Unattributed resources ({unattributed.service.resources.length})<button type="button" popoverTarget={unattributedHelpId} onClick={event => event.stopPropagation()} aria-label="Explain unattributed resources" title="About unattributed resources" className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded align-middle text-slate-500 hover:bg-sky-100 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5M10 6v.01"/></svg></button></summary>
         {unattributedOpen ? <>
           <p className="px-3 pb-3 text-xs text-slate-500">{unattributed.service.resources.length} resources, grouped by service; loading origins are not fully verified.</p>
           <table className="w-full min-w-[1000px] text-left text-xs">
             <caption className="sr-only">Resources with unverified loading origins, grouped by service</caption>
             {tableHead}
-            <tbody>{[...unattributed.children].sort(compare).map(branch => renderBranch(branch, [], true))}</tbody>
+            <tbody>{[...unattributed.children].sort(compare).map(branch => renderBranch(branch, ["collection:unattributed"], true))}</tbody>
           </table>
         </> : null}
       </details> : null}

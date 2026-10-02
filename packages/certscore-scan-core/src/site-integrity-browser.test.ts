@@ -13,7 +13,7 @@ test("runtime capture retains concealed outbound links, excludes ordinary hidden
     response.end(`<!doctype html><html lang="en"><title>Clinic fixture</title><body>
       <h1>Clinic fixture</h1><p>Public clinic services and opening hours. This deterministic fixture contains no tracking or personal information collection.</p>
       <div style="width:0;height:0;overflow:hidden"><a href="https://pharmacy.example/?secret=never-retain">Pharmacy promotion</a></div>
-      <p style="position:absolute;left:-9999px;top:-9999px"><a href="https://promotion.example/path/never-retain">Promotion</a></p>
+      <style>.offscreen { position:absolute; left:-9999px; top:-9999px }</style><p class="offscreen" data-private="never-retain" onclick="never-retain"><a href="https://promotion.example/path/never-retain">Promotion</a></p>
       <span style="font-size:0"><a href="https://third.example/">Third promotion</a></span>
       <a href="https://visible.example/">Ordinary visible link</a>
       <span style="font-size:0"><a href="https://reset.example/" style="font-size:16px">Visible restored text</a></span>
@@ -41,6 +41,19 @@ test("runtime capture retains concealed outbound links, excludes ordinary hidden
     assert.ok(observation, JSON.stringify(result.moduleRun));
     assert.deepEqual(observation.links.map(link => link.destinationDomain), ["pharmacy.example", "promotion.example", "third.example"]);
     assert.deepEqual(observation.links.map(link => link.concealment), ["zero_size_container", "offscreen_position", "zero_font_size"]);
+    for (const link of observation.links) {
+      if (!link.codeProof) { assert.equal(link.codeProofUnavailableReason, "capture_limit"); continue; }
+      assert.ok(new TextEncoder().encode(JSON.stringify(link.codeProof)).length <= 2048);
+      assert.match(link.codeProof.lines.join("\n"), /href=/);
+      assert.doesNotMatch(link.codeProof.lines.join("\n"), /onclick|data-private|<script|<style|Pharmacy promotion/);
+    }
+    assert.ok(observation.links[0]!.codeProof);
+    assert.ok(observation.links.reduce((total, link) => total + (link.codeProof ? new TextEncoder().encode(JSON.stringify(link.codeProof)).length : 0), 0) <= 2048);
+    const offscreen = observation.links[1]!.codeProof!;
+    assert.ok(offscreen);
+    assert.equal(offscreen.computedStyle.position, "absolute");
+    assert.ok(offscreen.linkRect.right < -1000);
+    assert.equal(offscreen.lines[offscreen.highlightedLine]?.trim(), "<p>", "external CSS is explained by computed evidence, never invented inline styles");
     assert.ok(result.domSnapshots.some(snapshot => snapshot.documentIdentity?.token === observation.documentToken));
     assert.doesNotMatch(JSON.stringify(observation), /never-retain|secret/);
     assert.ok(result.networkEvents.every(event => !/pharmacy\.example|promotion\.example|third\.example/.test(event.requestUrl)));

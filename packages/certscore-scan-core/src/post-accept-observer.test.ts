@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
-import { projectPostAcceptEvidenceForReport, runtimeGraphDispatchSchema } from "@certscore/contracts";
+import { projectPostAcceptEvidenceForReport, postAcceptEvidencePacketSchema, runtimeGraphDispatchSchema } from "@certscore/contracts";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
 import { chromium } from "playwright";
@@ -496,6 +496,7 @@ test("canonical Accept discovery reports an unconfirmed click as indeterminate e
 async function withFixture(
   options: {
     activityDelayMs?: number;
+    forms?: boolean;
     ambiguous: boolean;
     controlLabel?: string;
     framed?: boolean;
@@ -544,6 +545,7 @@ async function withFixture(
             fetch("/accept-action", { method: "POST" });
             localStorage.setItem("certscore:analytics-consent:v1", "granted");
             document.querySelector("section").hidden = true;
+            ${options.forms ? `document.body.insertAdjacentHTML('beforeend', '<form aria-label="Revealed contact"><input type="email" name="email"><p>Personal data is processed to handle your request. <a href="/privacy">Privacy policy</a></p></form>');` : ""}
             setTimeout(() => {
               localStorage.setItem("cmp_receipt", "accepted");
               document.cookie = "_ga=GA1.1.CERTSCORE_ACCEPT_RAW; Path=/; SameSite=Lax";
@@ -726,4 +728,27 @@ test("Accept storage diagnostics distinguish a denied session-storage read from 
       }
     });
   } finally { await browser.close(); }
+});
+
+
+test("completed Accept retains form evidence through the hashed report projection without changing findings", async () => {
+  await withFixture({ ambiguous: false, forms: true, activityDelayMs: 600 }, async ({url, actionCount}) => {
+    const packet = await runPostAcceptObserver({actionSearchTimeoutMs:500, confirmationTimeoutMs:500,
+      interactionAuthorization:{authorizationId:"loopback_local_lab",kind:"loopback"},
+      observationWindowMs:1200, productionProjectable:true, recipe:CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+      scanId:"forms-after-accept",url});
+    assert.equal(actionCount(),1);
+    assert.ok(packet.formCapture?.frames.flatMap(frame=>frame.forms).some(form=>form.title==="Revealed contact"),JSON.stringify(packet.formCapture));
+    const projection=projectPostAcceptEvidenceForReport({packet,packetSha256:"a".repeat(64)});
+    assert.deepEqual(projection.formCapture,packet.formCapture);
+    assert.equal(projectPostAcceptEvidenceForReport({packet}).formCapture,undefined);
+    assert.equal(projection.observationCount,packet.observations.length);
+    assert.equal(projection.formCapture?.exactTargetSha256,packet.actionControlProof?.authorizedTargetSha256);
+    for (const formCapture of [
+      {...packet.formCapture, exactTargetSha256:"c".repeat(64)},
+      {...packet.formCapture, actionDispatchedAtMs:packet.formCapture!.actionDispatchedAtMs+1},
+      {...packet.formCapture, frames:packet.formCapture!.frames.map(frame=>({...frame,capturedAtMs:packet.timing.readyAtMs+1}))},
+    ]) assert.equal(postAcceptEvidencePacketSchema.safeParse({...packet,formCapture}).success,false);
+
+  });
 });

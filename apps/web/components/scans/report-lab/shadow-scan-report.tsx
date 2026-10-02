@@ -1,3 +1,4 @@
+import { EvidenceHeaderStatus } from "../evidence-header-status";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
@@ -1309,7 +1310,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
     <SitePriorityReview findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
     <section aria-label="Page event timeline" className="my-3 border-y border-zinc-200 bg-white py-2"><h2 className="text-xl font-semibold">Page event timeline</h2><div className="mt-1"><RuntimeObservationTimeline dominant compact events={report.timeline} /></div></section>
     {report.resourceInventory ? <SinglePageResourceInventory inventory={report.resourceInventory} report={report}/> : <RuntimeInventoryTable report={report} heading="Services & Resources" />}
-    <CollectionSurfacesTable rows={report.collectionTableRows ?? []} loading={false} pagesWithoutInventory={report.collectionTableRows ? 0 : 1} />
+    <CollectionSurfacesTable afterAcceptLimited={report.afterAcceptFormsLimited} rows={report.collectionTableRows ?? []} loading={false} pagesWithoutInventory={report.collectionTableRows ? 0 : 1} />
     <FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />
     <EvidenceDirectory compact report={report} />
   </div></ReportInventoryNavigation>;
@@ -1518,9 +1519,10 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
       <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-zinc-500">GPC{homepage ? " · Starting page" : ""}</p>
-          <h3 className="mt-1 text-lg font-semibold text-zinc-950">{gpcSummaryLabel(projection)}</h3>
+          <h3 title={gpcSummaryLabel(projection)} className="mt-1 text-lg font-semibold text-zinc-950">{gpcSummaryLabel(projection)}</h3>
         </div>
-        <span className="flex shrink-0 items-center">
+        <span className="flex shrink-0 items-center gap-2">
+          <EvidenceHeaderStatus rows={projection.californiaDeductionPoints > 0 ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />
           <DisclosureChevron className="text-zinc-400 group-open/gpc:rotate-180" />
         </span>
       </summary>
@@ -1573,15 +1575,15 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
           </div>
           <RatingMix report={report} homepage={compact} />
         </div>
-        <SiteIntegrityEvidence finding={report.siteIntegrity} />
-        <CmsSecurityEvidence projection={report.cmsSecurity} />
-        <div className={`${compact ? "mt-3 gap-3" : "mt-6 gap-6"} grid items-start lg:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)]`}>
-          <div className="border-l border-t border-zinc-200">
+        <div className={`${compact ? "mt-3 gap-3" : "mt-6 gap-6"} evidence-directory-grid grid items-start sm:grid-cols-2`}>
+          <div className="evidence-directory-column min-w-0 border-l border-t border-zinc-200">
+            <SiteIntegrityEvidence finding={report.siteIntegrity} />
             {additionalEvidence}
+            <CmsSecurityEvidence projection={report.cmsSecurity} />
             <details id="consent-review-evidence" className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>Controls and CMP context</h3></div>
-                <DisclosureChevron className="text-zinc-400 group-open/consent:rotate-180" />
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>Controls & CMP</h3></div>
+                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.consentRows} /><DisclosureChevron className="text-zinc-400 group-open/consent:rotate-180" /></span>
               </summary>
               {report.consentControlsAvailable !== false ? <div className="mt-5"><p className="mb-2 text-xs font-semibold text-zinc-600">Consent choices</p><ControlStatusGrid report={report} /></div> : null}
               <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4">
@@ -1598,15 +1600,15 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
             </details>
             {compact && report.fullSite ? <SitewideEvidenceCard group="tracking"><EvidenceIndexRows rows={report.trackingExternalRows} /></SitewideEvidenceCard> : <details className="group/tracking border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; embedded content{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{trackingExternalReviewCount} checks need review · {report.trackingExternalRows.length} checks</h3></div>
-                <DisclosureChevron className="text-zinc-400 group-open/tracking:rotate-180" />
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; embeds{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{trackingExternalReviewCount} need review · {report.trackingExternalRows.length} checks</h3></div>
+                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.trackingExternalRows} /><DisclosureChevron className="text-zinc-400 group-open/tracking:rotate-180" /></span>
               </summary>
               <EvidenceIndexRows rows={report.trackingExternalRows} />
             </details>}
             <details className="group/policy border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy and transparency{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{observedGdprTransparencyRows} observed · {report.gdprTransparencyRows.length} checks</h3></div>
-                <DisclosureChevron className="text-zinc-400 group-open/policy:rotate-180" />
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy &amp; transparency{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{observedGdprTransparencyRows} observed · {report.gdprTransparencyRows.length} checks</h3></div>
+                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.gdprTransparencyRows} /><DisclosureChevron className="text-zinc-400 group-open/policy:rotate-180" /></span>
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {report.gdprTransparencyRows.map((row) => (
@@ -1642,20 +1644,19 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               </dl>
             </details> : null}
           </div>
-          <div className="border-l border-t border-zinc-200">
+          <div className="evidence-directory-column min-w-0 border-l border-t border-zinc-200">
             {compact && report.fullSite ? <SitewideEvidenceCard group="runtime"><EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools /></SitewideEvidenceCard> : <details className="group/runtime border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Storage &amp; tracking techniques{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{preConsentRuntimeReviewCount} checks need review · {report.preConsentRuntimeRows.length} checks</h3></div>
-                <DisclosureChevron className="text-zinc-400 group-open/runtime:rotate-180" />
+                <div><p className="text-xs font-semibold uppercase text-zinc-500">Storage &amp; tracking{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{preConsentRuntimeReviewCount} need review · {report.preConsentRuntimeRows.length} checks</h3></div>
+                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.preConsentRuntimeRows} /><DisclosureChevron className="text-zinc-400 group-open/runtime:rotate-180" /></span>
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>}
-            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : <div id="gpc-evidence" className="border-b border-r border-zinc-200 p-5"><h3 className="font-semibold">GPC evidence</h3><p className="mt-2 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></div>}
             <CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
-                <DisclosureChevron className="text-zinc-400 group-open/transport:rotate-180" />
+                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.transportRows} /><DisclosureChevron className="text-zinc-400 group-open/transport:rotate-180" /></span>
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {report.transportRows.map((row) => (
@@ -1715,6 +1716,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
                 </div>
               </details>
             ) : null}
+            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden"><div className="min-w-0"><p className="text-xs font-semibold uppercase text-zinc-500">GPC{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>Evidence unavailable</h3></div><span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={[{status: "Limited"}]} /><DisclosureChevron className="shrink-0 text-zinc-400 group-open/gpc:rotate-180" /></span></summary><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>}
           </div>
         </div>
         {!compact ? <>
@@ -1789,7 +1791,7 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<RuntimeObservationTimeline dominant compact events={report.timeline} />} executiveSnapshot={<SignalSnapshot siteOverview report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace afterAcceptForms={report.collectionTableRows?.filter(row => row.capturePhase === "after_accept_click")} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<RuntimeObservationTimeline dominant compact events={report.timeline} />} executiveSnapshot={<SignalSnapshot siteOverview report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   const completionEvent = report.resultDisposition !== "no_go" && !report.fullSite
     ? <ScanCompletedEvent scanId={report.scan.id} scanSource={mode === "authenticated" ? "dashboard" : "homepage"} domain={report.scan.host} /> : null;

@@ -57,3 +57,23 @@ test("site integrity displays affected pages and explicitly unavailable and limi
   assert.match(html, /1 page has unavailable evidence/);
   assert.equal((html.match(/id="site-integrity-evidence"/g) ?? []).length, 1);
 });
+
+
+import { HiddenLinkCodeEvidence } from "./site-integrity-evidence";
+import { siteIntegrityCodeProofFixture as proof } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
+test("code evidence is collapsed, escaped and explicit about sanitization and missing historical proof", () => {
+  const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({ runtimeArtifacts: {siteIntegrity: siteIntegrityProjectionFixture}, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() }))!;
+  const old = renderToStaticMarkup(<HiddenLinkCodeEvidence finding={finding} domain="pharmacy.example" />);
+  assert.match(old, /Code excerpt not retained/);
+  const withProof = {...finding, evidence: {...finding.evidence, observation: {...finding.evidence.observation, links: [{...finding.evidence.observation.links[0]!, codeProof: proof}]}}} as typeof finding;
+  const html = renderToStaticMarkup(<HiddenLinkCodeEvidence finding={withProof} />);
+  assert.match(html, /View code evidence/);
+  assert.doesNotMatch(html, /<details[^>]* open/);
+  assert.match(html, /&lt;div style=/);
+  assert.match(html, /bg-amber-50/);
+  assert.match(html, /0 × 0px with overflow hidden/);
+  assert.match(html, /Text, URL paths and unrelated attributes omitted/);
+  assert.doesNotMatch(html, /<a href="https:/);
+  const panel = renderToStaticMarkup(<SiteIntegrityEvidence finding={withProof} />);
+  assert.match(panel, /View code evidence/);
+});

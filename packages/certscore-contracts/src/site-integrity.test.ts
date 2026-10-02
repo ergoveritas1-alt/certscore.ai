@@ -29,3 +29,18 @@ test("historical v1 scope cannot silently become an additional-page observation"
   assert.equal(siteIntegrityObservationSchema.safeParse({ ...observation, scope: "additional_page_main_document" }).success, false);
   assert.equal(siteIntegrityProjectionSchema.safeParse({ ...projection, observation: { ...observation, contractVersion: "certscore.site-integrity-observation.v2", scope: "additional_page_main_document" } }).success, false);
 });
+
+
+import { siteIntegrityCodeProofFixture as proof } from "./site-integrity.fixture";
+import { siteIntegrityCodeProofSchema } from "./site-integrity";
+test("optional code proof is bounded and cannot silently alter historical evidence", () => {
+  assert.ok(siteIntegrityCodeProofSchema.safeParse(proof).success);
+  const withProof = {...observation, links: [{...observation.links[0]!, codeProof: proof}]};
+  assert.ok(siteIntegrityObservationSchema.safeParse(withProof).success);
+  assert.equal(siteIntegrityObservationSchema.parse(observation).links[0]!.codeProof, undefined);
+  assert.equal(siteIntegrityObservationSchema.safeParse({...observation, links: Array.from({length: 12}, (_, index) => ({...observation.links[0]!, evidenceRef: `site_integrity:link:${index}`, codeProof: proof}))}).success, false);
+  assert.equal(siteIntegrityObservationSchema.safeParse({...observation, links: [{...observation.links[0]!, codeProof: proof, codeProofUnavailableReason: "capture_limit"}]}).success, false);
+  for (const change of [{highlightedLine: 99}, {lines: Array(14).fill("x".repeat(300))}, {sanitized: false}, {rawHtml: "unsafe"}, {linkRect: {...proof.linkRect, left: Infinity}}]) {
+    assert.equal(siteIntegrityCodeProofSchema.safeParse({...proof, ...change}).success, false);
+  }
+});

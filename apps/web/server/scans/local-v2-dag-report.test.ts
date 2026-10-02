@@ -294,6 +294,12 @@ test("CollectionSurfaceAssessment v1 preserves verified provenance and fails clo
   assert.equal(observed.sourceLane, "runtime_evidence");
   assert.equal(observed.forms.length, 1);
 
+  const loadingInventory = { ...inventory, forms: [], coverage: { ...inventory.coverage, status: "limited" as const, candidateFormCount: 0, retainedFormCount: 0, candidateFieldCount: 0, retainedFieldCount: 0, inspectedFormCandidateCount: 0, inspectedFieldCandidateCount: 0, reasonCodes: ["document_still_loading"] } };
+  const loading = deriveCollectionSurfaceAssessment({ bundle: { ...bundle, collectionSurfaceInventory: loadingInventory }, canonicalDocumentUrl: "https://example.com/contact", scanId: "scan-1" });
+  assert.equal(loading.assessmentStatus, "limited", "unfinished empty DOM never becomes verified no-forms evidence");
+  assert.deepEqual(loading.limitationKeys, ["document_still_loading"]);
+
+
   const drifted = deriveCollectionSurfaceAssessment({
     bundle,
     canonicalDocumentUrl: "https://example.com/checkout",
@@ -2804,7 +2810,7 @@ test("dedupePolicySurfaces rejects IMOU 404 evidence and preserves typed semanti
       normalizedUrl: "https://www.imou.com/na/policy#cookie-policy",
       status: "fetched",
       confidence: 0.99,
-      textExcerpt: "IMOU cookie policy explains the cookies used by the website."
+      textExcerpt: "IMOU cookie policy explains the cookies used by the website. Essential session cookies support requested services; optional analytics cookies measure visits and can be managed through the cookie settings."
     }
   ] as never, "https://www.imou.com/");
 
