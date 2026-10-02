@@ -1,0 +1,12 @@
+/** Local-only failure and A/A checks, using the same research capture component. */
+import fs from 'node:fs';import {createServer} from 'node:http';import {captureVisit} from './visit.ts';
+async function main(){
+ const server=createServer((req,res)=>{if(req.url==='/open'){res.writeHead(200,{'Content-Type':'text/event-stream'});res.write('data: open\n\n');return;}res.setHeader('Content-Type','text/html');const script=req.url==='/stream'?"setTimeout(()=>fetch('/open'),1500)":req.url==='/drift'?"setTimeout(()=>location.replace('/replacement'),1500)":req.url==='/worker'?"new Worker(URL.createObjectURL(new Blob(['postMessage(1)'],{type:'text/javascript'})))":req.url==='/mismatch'?"Object.defineProperty(navigator,'globalPrivacyControl',{get:()=>false,configurable:true})":"setTimeout(()=>fetch('/collect'),1500)";res.end(`<title>Local adversarial fixture</title><body>Measurement fixture<script>${script}</script>`);});
+ await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+(server.address() as any).port;
+ const cases=[{name:'ongoing_response',route:'/stream',condition:'absent',expected:null},{name:'aa_first',route:'/aa',condition:'absent',expected:null},{name:'aa_second',route:'/aa',condition:'absent',expected:null},{name:'overflow',route:'/aa',condition:'absent',expected:'request_overflow',maxRequests:1},{name:'drift',route:'/drift',condition:'absent',expected:'document_changed_after_commit'},{name:'worker',route:'/worker',condition:'enabled',expected:'worker_navigator_startup_unverified'},{name:'mismatch',route:'/mismatch',condition:'enabled',expected:'navigator_condition_mismatch'}];
+ const results=[];try{for(const c of cases){const r=await captureVisit({visit_id:'fixture_'+c.name,site_id:c.name,block:1,position:1,condition:c.condition,url:base+c.route},{fixture:true,endpointsMs:[1000,5000,10000],navigationTimeoutMs:5000,visitTimeoutMs:20000,maxRequests:c.maxRequests??20000,maxBytes:20*1024*1024});results.push(r);if(c.expected?!r.coverage.limitations.includes(c.expected):r.coverage.limitations.length)throw Error('fixture_failed:'+c.name);}}
+ finally{server.close();fs.writeFileSync(process.argv[2]!,JSON.stringify(results));}
+ const a=results[1].derived.windows,b=results[2].derived.windows;if(a.some((w:any,i:number)=>w.requests!==b[i].requests||!w.complete||!b[i].complete))throw Error('AA_fixture_failed');
+ console.log(JSON.stringify(results.map(r=>({id:r.visit.visit_id,status:r.status,limitations:r.coverage.limitations})),null,2));
+}
+main().catch(e=>{console.error(e);process.exitCode=1});

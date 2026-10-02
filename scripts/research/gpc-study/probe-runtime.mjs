@@ -1,0 +1,10 @@
+import fs from 'node:fs';import {execFileSync} from 'node:child_process';
+const root='artifacts/research/gpc-controlled-study-2026';
+const runtime=JSON.parse(fs.readFileSync(root+'/research_runtime.json'));
+const metadata=JSON.parse(execFileSync('aws',['lambda','invoke','--function-name',runtime.functionName,'--region',runtime.region,'--cli-binary-format','raw-in-base64-out','--payload',JSON.stringify({kind:'browser_probe'}),root+'/private/aws-browser-probe.json'],{encoding:'utf8'}));
+const probe=JSON.parse(fs.readFileSync(root+'/private/aws-browser-probe.json'));
+if(metadata.FunctionError)throw Error(probe.errorMessage);
+const local=JSON.parse(fs.readFileSync(root+'/browser_probe_linux.json')),expected=JSON.parse(fs.readFileSync(root+'/private/proxy-instance.json'));
+if(probe.browserVersion!==local.browserVersion||probe.native.present!==false||probe.arch!=='arm64'||probe.platform!=='linux'||probe.egressIpHash!==expected.publicIpHash)throw Error('runtime_probe_mismatch');
+fs.writeFileSync(root+'/private/egress-verification.json',JSON.stringify({verified:true,checkedAt:new Date().toISOString(),...probe},null,2)+'\n',{mode:0o600});
+console.log(JSON.stringify({verified:true,browser:probe.browserVersion,platform:probe.platform,architecture:probe.arch,nativeGpcPresent:probe.native.present}));

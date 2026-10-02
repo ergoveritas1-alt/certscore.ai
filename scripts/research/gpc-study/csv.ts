@@ -1,0 +1,2 @@
+import fs from 'node:fs';
+export function readCsv(file:string){const text=fs.readFileSync(file,'utf8').trim().split(/\r?\n/);const parse=(s:string)=>{const fields:string[]=[];let v='',q=false;for(let i=0;i<s.length;i++){const c=s[i];if(c==='"'){if(q&&s[i+1]==='"'){v+='"';i++;}else q=!q;}else if(c===','&&!q){fields.push(v);v='';}else v+=c;}fields.push(v);return fields;};const keys=parse(text.shift()!);return text.map(s=>Object.fromEntries(parse(s).map((v,i)=>[keys[i],v])));}
