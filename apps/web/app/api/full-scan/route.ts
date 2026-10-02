@@ -3,6 +3,7 @@ import { FullSiteRequestError } from "@website-signal-risk-scanner/shared";
 import { after, NextResponse } from "next/server";
 import {
   createDomainRequestSchema,
+  needsSearchResultsConfirmation,
   normalizeScanFrom,
   parseDomainBatchInput,
   type ScanFrom
@@ -152,6 +153,13 @@ export async function POST(request: Request) {
     }
 
     const intakeDomains = parsedBatch.valid;
+    if (["homepage", "manual-dashboard", "browser"].includes(provenance.source) &&
+      intakeDomains.some((item) => needsSearchResultsConfirmation(item.normalizedUrl, payload?.confirmedSearchResultsUrl))) {
+      return NextResponse.json({
+        code: "search_results_confirmation_required",
+        error: "This looks like a search results link. Check the address before starting the scan."
+      }, { status: 400 });
+    }
     const shouldBypassDnsValidation = shouldBypassDnsValidationForProductionLoadTest(provenance);
 
     if (!shouldBypassDnsValidation) {

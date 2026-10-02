@@ -8155,7 +8155,7 @@ export async function SharedScanDetailView({
                     {scanFailureExplanation(scanRecord.scan.errorMessage).detail}
                   </p>
                   <p className="text-sm leading-6 text-slate-600">{scanFailureExplanation(scanRecord.scan.errorMessage).nextStep}</p>
-                  <a href="/app" className="inline-block pt-2 text-sm font-medium text-sky-700 underline">Back to Overview</a>
+                  <Link href="/app#domain" className="inline-block pt-2 text-sm font-medium text-sky-700 underline">Scan a different URL</Link>
                 </div>
               </div>
             </section>

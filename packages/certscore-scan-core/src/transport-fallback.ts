@@ -104,6 +104,15 @@ export function navigationTransportRecoveryUrls(value: string): string[] {
   return [...new Set(candidates.filter((candidate): candidate is string => Boolean(candidate) && candidate !== value))];
 }
 
+/** Display-safe context for recovery notes; the typed attempt retains the URL. */
+export function navigationDiagnosticOrigin(value: string): string {
+  try {
+    return new URL(value).origin.slice(0, 140);
+  } catch {
+    return "unavailable target";
+  }
+}
+
 export function isLikelyInfrastructureHomepageTarget(value: string | null | undefined): boolean {
   if (!value) return false;
   try {

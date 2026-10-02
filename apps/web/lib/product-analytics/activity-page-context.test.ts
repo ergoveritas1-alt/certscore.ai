@@ -27,6 +27,9 @@ test("legacy server observations are requests; only retained confirmation upgrad
   assert.equal(activitySourceLabel(event), "Server");
   const current = {...event, event_name:"page_requested", feature:"authenticated_page_browser_confirmed", browser_family:"chrome", browser_confirmed_at:"2026-09-15T12:00:00Z"};
   assert.equal(activityActionLabel(current), "Browser-confirmed view");
+  assert.equal(activityActionLabel({ ...event, event_name: "action_clicked", feature: "billing_plan_selection" }), "Plan option clicked");
+  assert.equal(activityActionLabel({ ...event, event_name: "action_clicked", feature: "billing_management" }), "Billing option clicked");
+  assert.equal(activityActionLabel({ ...event, event_name: "form_succeeded", feature: "billing_checkout_completed" }), "Checkout completed");
   assert.equal(activitySourceLabel(current), "Server + browser");
   assert.equal(activitySourceLabel({...event, feature:"route", browser_family:"chrome"}), "Browser");
 });

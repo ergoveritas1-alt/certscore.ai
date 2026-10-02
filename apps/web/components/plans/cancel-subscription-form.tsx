@@ -11,7 +11,7 @@ function SubmitButton() {
   const { pending } = useFormStatus();
 
   return (
-    <Button disabled={pending} size="sm" type="submit" variant="secondary">
+    <Button data-analytics-feature="billing_cancellation" data-analytics-id="billing:cancel" disabled={pending} size="sm" type="submit" variant="secondary">
       {pending ? "Opening cancellation..." : "Cancel subscription"}
     </Button>
   );
@@ -19,7 +19,7 @@ function SubmitButton() {
 
 export function CancelSubscriptionForm({ action }: CancelSubscriptionFormProps) {
   return (
-    <form action={action}>
+    <form action={action} data-analytics-form="billing_cancel">
       <input name="intent" type="hidden" value="cancel_subscription" />
       <SubmitButton />
     </form>

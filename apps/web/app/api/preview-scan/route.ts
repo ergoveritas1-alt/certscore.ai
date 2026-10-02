@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { normalizeScanFrom, previewScanRequestSchema } from "@website-signal-risk-scanner/shared";
+import { needsSearchResultsConfirmation, normalizeScanFrom, previewScanRequestSchema } from "@website-signal-risk-scanner/shared";
 import { checkDomainDns, isDomainDnsPreflightError } from "../../../server/domains/domain-dns";
 import {
   normalizeLocalV2DagRunViaLambda,
@@ -26,6 +26,14 @@ export async function POST(request: Request) {
         },
         { status: 400 }
       );
+    }
+
+    if (["homepage", "manual-dashboard", "browser"].includes(request.headers.get("x-certscore-scan-source") ?? "") &&
+      needsSearchResultsConfirmation(result.data.normalizedUrl, payload?.confirmedSearchResultsUrl)) {
+      return NextResponse.json({
+        code: "search_results_confirmation_required",
+        error: "This looks like a search results link. Check the address before starting the scan."
+      }, { status: 400 });
     }
 
     const localV2DagScanProfile = normalizeLocalV2DagScanProfile(payload?.localV2ScanProfile ?? payload?.v2ScanProfile);

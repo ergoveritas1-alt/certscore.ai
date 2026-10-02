@@ -100,6 +100,8 @@ export default function PricingPage() {
                   className="w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]"
                   data-analytics-cta-type={canStartTrial ? "sign_in" : "contact_sales"}
                   data-analytics-event="pricing_cta_clicked"
+                  data-analytics-feature="billing_plan_selection"
+                  data-analytics-id={`plan:${trialPlan.code}:${canStartTrial ? "trial" : "contact_sales"}`}
                   data-analytics-plan={trialPlan.code}
                   href={canStartTrial ? "/login?mode=create_account" : "/contact-sales?source=pricing-paused&plan=trial"}
                   idleContent={
@@ -178,6 +180,8 @@ export default function PricingPage() {
                   className="w-fit rounded-full border-0 bg-[#0f8bd7] px-5 text-white shadow-[0_10px_22px_rgba(15,139,215,0.24)] hover:bg-[#0b78bf]"
                   data-analytics-cta-type={canStartPaidPlan ? "sign_in" : "contact_sales"}
                   data-analytics-event="pricing_cta_clicked"
+                  data-analytics-feature="billing_plan_selection"
+                  data-analytics-id={`plan:${plan.code}:${canStartPaidPlan ? "checkout" : "contact_sales"}`}
                   data-analytics-plan={plan.code}
                   href={canStartPaidPlan ? getPlanSignupHref(plan.code) : `/contact-sales?source=pricing-paused&plan=${plan.code}`}
                   idleContent={
@@ -200,7 +204,8 @@ export default function PricingPage() {
             <CardContent className="flex h-full flex-col justify-between gap-6 p-5">
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Enterprise</h2>
+                  <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{customPlan.label}</h2>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Enterprise workflows</p>
                 </div>
                 <div className="space-y-3">
                   <p className="text-sm font-semibold text-slate-900">Need API access or higher-volume workflows?</p>
@@ -231,6 +236,8 @@ export default function PricingPage() {
                 className="w-fit rounded-full border-0 bg-slate-950 px-5 text-white shadow-[0_10px_22px_rgba(15,23,42,0.22)] hover:bg-slate-800"
                 data-analytics-cta-type="contact_sales"
                 data-analytics-event="pricing_cta_clicked"
+                data-analytics-feature="billing_plan_selection"
+                data-analytics-id="plan:team:contact_sales"
                 data-analytics-plan="custom"
                 href="/contact-sales?source=pricing&plan=custom"
                 idleContent={

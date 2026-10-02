@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { extractHostname, isNonPublicTargetUrlError, normalizeUrl } from "../utils/url";
+export { needsSearchResultsConfirmation, searchResultsScanTarget } from "./search-results-url";
 
 export const hexColorSchema = z
   .string()

@@ -3,6 +3,7 @@
 import { useBrowserMarketplaceScope } from "../marketplace-browser/scope";
 import { type FullSiteFormValue } from "../scans/full-site-controls";
 import { Button, Input } from "@website-signal-risk-scanner/ui";
+import { needsSearchResultsConfirmation, searchResultsScanTarget } from "@website-signal-risk-scanner/shared/validators/search-results-url";
 import { usePathname, useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { getScanTargetType, type ScanSource, pushDataLayerEventBeforeNavigation } from "../../lib/analytics/data-layer";
@@ -151,6 +152,7 @@ export function buildScanSubmitBody(input: {
   allowRestrictedScanOptions: boolean;
   campaignAttribution: unknown;
   domain: string;
+  confirmedSearchResultsUrl?: string;
   forceNewScan: boolean;
   localV2ScanProfile: LocalV2ScanProfile;
   localV2RunViaLambda: boolean;
@@ -161,6 +163,7 @@ export function buildScanSubmitBody(input: {
   return JSON.stringify({
     ...(input.mode === "full" ? input.crawl : {}),
     domain: input.domain,
+    ...(input.confirmedSearchResultsUrl ? { confirmedSearchResultsUrl: input.confirmedSearchResultsUrl } : {}),
     campaignAttribution: input.campaignAttribution,
     forceNewScan: input.forceNewScan,
     localV2ScanProfile: input.localV2ScanProfile,
@@ -449,6 +452,7 @@ function StandardDomainScanForm({
     scanFrom: defaultScanFrom
   });
   const [domain, setDomain] = useState("");
+  const [showSearchResultsWarning, setShowSearchResultsWarning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"error" | "info">("error");
   const [localExtensionStatus, setLocalExtensionStatus] = useState<Bx01Status | null>(null);
@@ -465,6 +469,7 @@ function StandardDomainScanForm({
   const isSubmittingRef = useRef(false);
   const submissionProgressValueRef = useRef(0);
   const effectiveSubmitDomain = (domain || emptySubmitDomain).trim();
+  const searchResultsTarget = searchResultsScanTarget(effectiveSubmitDomain);
   const scanButtonArmed = isValidScanTarget(effectiveSubmitDomain);
   const showFreshRescanOption = mode === "full" && scanFrom !== "local_extension" && hasRecentReusableScan;
   const expectsRecentScanReuse = shouldExpectRecentScanReuse({ freshRescan, hasRecentReusableScan, mode });
@@ -547,7 +552,7 @@ function StandardDomainScanForm({
     }
 
     setDomain(pendingScan.domain);
-    void submitDomain(pendingScan.domain, pendingScan.requestId);
+    void submitDomain(pendingScan.domain, pendingScan.requestId, pendingScan.confirmedSearchResultsUrl);
   }, [mode]);
 
   useEffect(() => {
@@ -669,6 +674,7 @@ function StandardDomainScanForm({
 
   function resetValidationState() {
     setErrorMessage(null);
+    setShowSearchResultsWarning(false);
     setMessageTone("error");
     if (!isSubmittingRef.current) {
       setLocalExtensionStatus(null);
@@ -754,10 +760,16 @@ function StandardDomainScanForm({
     router.push(response.reportUrl ?? `/browser-scans/${response.browserScanId}`);
   }
 
-  async function submitDomain(rawDomain: string, recoveredRequestId?: string) {
+  async function submitDomain(rawDomain: string, recoveredRequestId?: string, confirmedSearchResultsUrl?: string) {
     if (isSubmittingRef.current) {
       return;
     }
+
+    if (needsSearchResultsConfirmation(rawDomain, confirmedSearchResultsUrl)) {
+      setShowSearchResultsWarning(true);
+      return;
+    }
+    setShowSearchResultsWarning(false);
 
     isSubmittingRef.current = true;
     setErrorMessage(null);
@@ -809,6 +821,7 @@ function StandardDomainScanForm({
       const campaignAttribution = captureCampaignAttribution().attribution;
       savePendingScanSession({
         campaignAttribution: campaignAttribution ?? undefined,
+        confirmedSearchResultsUrl,
         domain: submittedDomain,
         mode,
         requestId,
@@ -821,6 +834,7 @@ function StandardDomainScanForm({
         allowRestrictedScanOptions,
         campaignAttribution,
         domain: submittedDomain,
+        confirmedSearchResultsUrl,
         forceNewScan: showFreshRescanOption ? freshRescan : false,
         localV2ScanProfile,
         localV2RunViaLambda,
@@ -1061,6 +1075,16 @@ function StandardDomainScanForm({
           </Button>
         </div>
       </div>
+      {showSearchResultsWarning && searchResultsTarget ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="alert">
+          <p className="font-semibold">This looks like a search results link.</p>
+          <p>To scan a website from the results, open that website and copy its address here.</p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <button className="font-semibold underline" onClick={() => document.getElementById("domain")?.focus()} type="button">Edit address</button>
+            <button className="font-semibold underline" onClick={() => void submitDomain(effectiveSubmitDomain, undefined, searchResultsTarget)} type="button">Scan search results page anyway</button>
+          </div>
+        </div>
+      ) : null}
       {helperText && !compact ? (
         <div className="flex justify-start sm:justify-end">
           <p className="max-w-sm text-xs text-slate-500 sm:text-right">{helperText}</p>

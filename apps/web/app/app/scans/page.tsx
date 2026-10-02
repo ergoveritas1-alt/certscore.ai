@@ -1,4 +1,5 @@
 import type { PlanCode } from "@website-signal-risk-scanner/shared";
+import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { PendingScanStartedEvent } from "../../../components/analytics/data-layer-events";
 import { FreshRescanBadge } from "../../../components/scans/fresh-rescan-badge";
@@ -293,6 +294,9 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                               domainId={scan.domainId}
                             />
                           ) : null}
+                          {scan.status === "failed" ? (
+                            <Link className="text-sm font-semibold text-sky-700 underline" href="/app#domain">Scan a different URL</Link>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -413,6 +417,9 @@ export default async function ScansPage({ searchParams }: ScansPageProps) {
                           domainId={scan.domainId}
                         />
                       </div>
+                    ) : null}
+                    {scan.status === "failed" ? (
+                      <Link className="mt-4 inline-block text-sm font-semibold text-sky-700 underline" href="/app#domain">Scan a different URL</Link>
                     ) : null}
                   </article>
                 );

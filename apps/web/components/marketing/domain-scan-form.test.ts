@@ -29,6 +29,23 @@ test("scan submission does not expose a request-level GPC switch", () => {
   assert.equal("gpcObservation" in JSON.parse(buildScanSubmitBody(base)), false);
 });
 
+test("scan submission binds search-results confirmation to the requested URL", () => {
+  const target = "https://www.google.com/search?q=facebook";
+  const base = {
+    allowRestrictedScanOptions: false,
+    campaignAttribution: null,
+    domain: target,
+    forceNewScan: false,
+    localV2ScanProfile: "standard" as const,
+    localV2RunViaLambda: false,
+    mode: "full" as const,
+    requestId: "request-123",
+    scanFrom: "eu_ie" as const
+  };
+  assert.equal(JSON.parse(buildScanSubmitBody(base)).confirmedSearchResultsUrl, undefined);
+  assert.equal(JSON.parse(buildScanSubmitBody({ ...base, confirmedSearchResultsUrl: target })).confirmedSearchResultsUrl, target);
+});
+
 test("getScanSubmitDestination prefers public scanUrl for anonymous full scans", () => {
   assert.equal(
     getScanSubmitDestination("full", {

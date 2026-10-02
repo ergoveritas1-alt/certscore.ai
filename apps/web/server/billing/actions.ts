@@ -9,6 +9,7 @@ import { createStripeCheckoutForDashboardContext } from "./checkout";
 import { getBillingReturnUrl, getStripeBillingEnv, getStripeBillingMode } from "./stripe-config";
 import { getStripeClient } from "./stripe-client";
 import { loadBillingAccountForOrganization } from "./repository";
+import { recordBillingFunnelEvent } from "./funnel-analytics";
 
 const checkoutSchema = z.object({
   plan: z.enum(["individual", "pro"])
@@ -49,7 +50,7 @@ export async function startStripeCheckoutFormAction(formData: FormData): Promise
 }
 
 export async function openStripeBillingPortalFormAction(formData: FormData): Promise<void> {
-  const { organization } = await getDashboardContext();
+  const { organization, user } = await getDashboardContext();
   portalSchema.parse({
     intent: formData.get("intent") ?? undefined
   });
@@ -67,13 +68,21 @@ export async function openStripeBillingPortalFormAction(formData: FormData): Pro
     return_url: getBillingReturnUrl(returnPath)
   });
 
+  await recordBillingFunnelEvent({
+    feature: "billing_portal_opened",
+    organizationId: organization.id,
+    plan: organization.plan,
+    userEmail: user.email,
+    userId: user.id
+  });
+
   redirect(session.url);
 }
 
 export async function openStripeSubscriptionCancellationFormAction(formData: FormData): Promise<void> {
   requireStripeBillingEnabled();
 
-  const { organization } = await getDashboardContext();
+  const { organization, user } = await getDashboardContext();
   cancellationSchema.parse({
     intent: formData.get("intent")
   });
@@ -113,6 +122,14 @@ export async function openStripeSubscriptionCancellationFormAction(formData: For
       type: "subscription_cancel"
     },
     return_url: returnUrl
+  });
+
+  await recordBillingFunnelEvent({
+    feature: "billing_cancellation_opened",
+    organizationId: organization.id,
+    plan: organization.plan,
+    userEmail: user.email,
+    userId: user.id
   });
 
   redirect(session.url);

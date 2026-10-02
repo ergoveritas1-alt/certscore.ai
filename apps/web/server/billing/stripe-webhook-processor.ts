@@ -4,6 +4,7 @@ import type Stripe from "stripe";
 import { sendBillingAlertEmail } from "./billing-alert-email";
 import { getPlanForStripePriceId } from "./stripe-config";
 import { getStripeClient } from "./stripe-client";
+import { recordBillingFunnelEvent } from "./funnel-analytics";
 import {
   findOrganizationIdByStripeCustomer,
   markBillingEventFailed,
@@ -122,9 +123,10 @@ async function applySubscription(subscription: Stripe.Subscription) {
   });
 }
 
-async function applyCheckoutCompleted(session: Stripe.Checkout.Session) {
+async function applyCheckoutCompleted(session: Stripe.Checkout.Session, eventId: string) {
   const organizationId = getStringMetadataValue(session.metadata, "certscore_organization_id") ?? session.client_reference_id;
   const plan = getStringMetadataValue(session.metadata, "certscore_plan");
+  const userId = getStringMetadataValue(session.metadata, "certscore_user_id");
   const customerId = getCustomerId(session.customer as string | Stripe.Customer | Stripe.DeletedCustomer | null);
 
   if (!organizationId || (plan !== "individual" && plan !== "pro") || typeof session.subscription !== "string") {
@@ -135,18 +137,24 @@ async function applyCheckoutCompleted(session: Stripe.Checkout.Session) {
   const subscriptionPlan = getSubscriptionPlan(subscription);
   if (subscriptionPlan) {
     await applySubscription(subscription);
-    return;
+  } else {
+    await updateOrganizationBillingPlan({
+      currentPeriodEnd: null,
+      organizationId,
+      plan,
+      planStatus: "trialing",
+      stripeCustomerId: customerId,
+      stripePriceId: null,
+      stripeSubscriptionId: session.subscription,
+      stripeSubscriptionStatus: "checkout_completed"
+    });
   }
-
-  await updateOrganizationBillingPlan({
-    currentPeriodEnd: null,
+  await recordBillingFunnelEvent({
+    eventId,
+    feature: "billing_checkout_completed",
     organizationId,
-    plan,
-    planStatus: "trialing",
-    stripeCustomerId: customerId,
-    stripePriceId: null,
-    stripeSubscriptionId: session.subscription,
-    stripeSubscriptionStatus: "checkout_completed"
+    plan: subscriptionPlan ?? plan,
+    userId
   });
 }
 
@@ -204,10 +212,10 @@ async function applyInvoicePaymentState(invoice: Stripe.Invoice, paymentStatus: 
   });
 }
 
-async function applyBillingEvent(event: Stripe.Event) {
+async function applyBillingEvent(event: Stripe.Event, eventId: string) {
   switch (event.type) {
     case "checkout.session.completed":
-      await applyCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+      await applyCheckoutCompleted(event.data.object as Stripe.Checkout.Session, eventId);
       return;
     case "customer.subscription.created":
     case "customer.subscription.updated":
@@ -236,7 +244,7 @@ export async function processBillingEventQueueRow(row: BillingEventQueueRow) {
 
   try {
     const event = row.payload_json as Stripe.Event;
-    await applyBillingEvent(event);
+    await applyBillingEvent(event, row.id);
     await sendBillingAlertEmail(event).catch((error) => {
       console.error("Failed to send Stripe billing alert email.", error);
     });

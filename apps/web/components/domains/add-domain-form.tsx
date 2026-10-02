@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Input } from "@website-signal-risk-scanner/ui";
+import { needsSearchResultsConfirmation, searchResultsScanTarget } from "@website-signal-risk-scanner/shared/validators/search-results-url";
 import { useActionState, useEffect, useState } from "react";
 import { clearPendingScanStarted, markPendingScanStarted } from "../analytics/data-layer-events";
 import { buildRecentScanAvailabilityUrl } from "../marketing/domain-scan-form";
@@ -52,12 +53,14 @@ export function AddDomainForm({
 }: AddDomainFormProps) {
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [domain, setDomain] = useState("");
+  const [showSearchResultsWarning, setShowSearchResultsWarning] = useState(false);
   const [freshRescan, setFreshRescan] = useState(false);
   const [apiHasRecentReusableScan, setApiHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
   const effectiveSubmitDomain = domain.trim();
   const normalizedDomain = normalizeDomainHint(effectiveSubmitDomain);
+  const searchResultsTarget = searchResultsScanTarget(effectiveSubmitDomain);
   const hasRecentReusableScanHint = recentReusableScans.some(
     (scan) => normalizeDomainHint(scan.domain) === normalizedDomain && scan.scanFrom === scanFrom
   );
@@ -122,7 +125,16 @@ export function AddDomainForm({
   }, [effectiveSubmitDomain, hasRecentReusableScanHint, scanFrom]);
 
   return (
-    <form action={action} className="space-y-4" onSubmit={() => markPendingScanStarted("dashboard")}>
+    <form action={action} className="space-y-4" onSubmit={(event) => {
+      const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+      const confirmation = submitter?.name === "confirmedSearchResultsUrl" ? submitter.value : null;
+      if (needsSearchResultsConfirmation(domain, confirmation)) {
+        event.preventDefault();
+        setShowSearchResultsWarning(true);
+        return;
+      }
+      markPendingScanStarted("dashboard");
+    }}>
       <div>
         <div className="relative">
           <Input
@@ -130,7 +142,10 @@ export function AddDomainForm({
             className="h-12 rounded-[14px] border-2 border-sky-400 bg-white pl-4 pr-44 text-base font-semibold text-slate-950 shadow-[0_0_0_1px_rgba(255,255,255,0.9),0_10px_26px_rgba(14,165,233,0.12)] placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-400/30"
             id="domain"
             name="domain"
-            onChange={(event) => setDomain(event.target.value)}
+            onChange={(event) => {
+              setDomain(event.target.value);
+              setShowSearchResultsWarning(false);
+            }}
             placeholder={DOMAIN_INPUT_PLACEHOLDER}
             required
             type="text"
@@ -166,6 +181,17 @@ export function AddDomainForm({
           </div>
         </div>
       </div>
+
+      {showSearchResultsWarning && searchResultsTarget ? (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="alert">
+          <p className="font-semibold">This looks like a search results link.</p>
+          <p>To scan a website from the results, open that website and copy its address here.</p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <button className="font-semibold underline" onClick={() => document.getElementById("domain")?.focus()} type="button">Edit address</button>
+            <button className="font-semibold underline" name="confirmedSearchResultsUrl" type="submit" value={searchResultsTarget}>Scan search results page anyway</button>
+          </div>
+        </div>
+      ) : null}
 
       {isPending ? (
         <ScanSubmissionPendingIndicator />

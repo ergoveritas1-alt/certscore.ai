@@ -17,6 +17,7 @@ import {
   isPendingMainDocumentStatus,
   isTransientMainDocumentStatus,
   navigationTransportRecoveryUrls,
+  navigationDiagnosticOrigin,
 } from "./transport-fallback.js";
 
 test("HTTP transport fallback preserves the complete HTTPS target", () => {
@@ -65,6 +66,12 @@ test("entry navigation recovery stays on bounded apex/www and protocol variants"
     "https://www.example.com/path",
     "http://www.example.com/path",
   ]);
+});
+
+test("navigation diagnostic notes omit long query strings and remain bounded", () => {
+  const url = `https://www.google.com/search?q=${"private".repeat(200)}`;
+  assert.equal(navigationDiagnosticOrigin(url), "https://www.google.com");
+  assert.ok(`Entry navigation recovered through ${navigationDiagnosticOrigin(url)}`.length <= 240);
 });
 
 test("navigation failures distinguish target, TLS, and unresolved route failures", () => {
@@ -210,7 +217,7 @@ test("pre-consent navigation recovers through the equivalent HTTP entry URL", as
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   assert.ok(address && typeof address === "object");
-  const httpUrl = `http://127.0.0.1:${address.port}/`;
+  const httpUrl = `http://127.0.0.1:${address.port}/?q=${"private".repeat(100)}`;
   const httpsUrl = httpUrl.replace(/^http:/, "https:");
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-transport-fallback-"));
   try {
@@ -227,6 +234,8 @@ test("pre-consent navigation recovers through the equivalent HTTP entry URL", as
     assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
     assert.equal(result.screenshots[0]?.url, httpUrl);
     assert.ok(result.visualCapture.notes.some((note) => /recovered through http:/i.test(note)));
+    assert.ok(result.visualCapture.notes.every((note) => note.length <= 240));
+    assert.ok(result.visualCapture.notes.every((note) => !note.includes("private")));
     assert.ok(result.networkResponseEvents.some((event) => event.url === httpUrl && event.status === 200));
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));

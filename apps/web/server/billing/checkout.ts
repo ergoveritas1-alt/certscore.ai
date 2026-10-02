@@ -11,6 +11,7 @@ import { getCheckoutCancelPath, getPublicCheckoutPlanCode, normalizeCheckoutPlan
 import { getBillingReturnUrl, getStripePriceIdForPlan } from "./stripe-config";
 import { getStripeClient } from "./stripe-client";
 import { loadBillingAccountForOrganization, setOrganizationStripeCustomer } from "./repository";
+import { recordBillingFunnelEvent } from "./funnel-analytics";
 
 export type CheckoutResult = {
   plan: PlanCode;
@@ -57,6 +58,13 @@ export async function createStripeCheckoutForDashboardContext(input: {
       const portalSession = await stripe.billingPortal.sessions.create({
         customer: existingCustomerId,
         return_url: getBillingReturnUrl("/app/modify-plan")
+      });
+      await recordBillingFunnelEvent({
+        feature: "billing_portal_opened",
+        organizationId: organization.id,
+        plan,
+        userEmail: user.email,
+        userId: user.id
       });
       return {
         plan,
@@ -118,6 +126,14 @@ export async function createStripeCheckoutForDashboardContext(input: {
   if (!session.url) {
     throw new Error("Stripe did not return a checkout URL.");
   }
+
+  await recordBillingFunnelEvent({
+    feature: "billing_checkout_opened",
+    organizationId: organization.id,
+    plan,
+    userEmail: user.email,
+    userId: user.id
+  });
 
   return {
     plan,

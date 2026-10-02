@@ -11,6 +11,7 @@ const safeFields = new Set([
   "acceptanceRegistration", "refusalRegistration", "decisionEvidence", "captureCoverage",
   "actionControlProof", "afterActionCapture", "timing", "resolver", "limitations",
   "scanEvidenceLaneAssessment", "scan_evidence_lane_assessment", "usablePolicySurfaceUrls", "evidenceRefs",
+  "visualCapture", "notes",
   "gpcImpactCapture", "gpcImpactSemanticObservation", "gpcObservationSession", "semanticObservation", "gppDiagnostics", "stateTransitions",
 ]);
 

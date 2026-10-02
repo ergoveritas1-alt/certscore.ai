@@ -11,7 +11,7 @@ type ModifyPlanSelectFormProps = {
   plan: PlanCode;
 };
 
-function SubmitButton({ billingIntent, isCurrent }: { billingIntent: ModifyPlanSelectFormProps["billingIntent"]; isCurrent: boolean }) {
+function SubmitButton({ billingIntent, isCurrent, plan }: { billingIntent: ModifyPlanSelectFormProps["billingIntent"]; isCurrent: boolean; plan: PlanCode }) {
   const { pending } = useFormStatus();
 
   if (isCurrent) {
@@ -26,7 +26,14 @@ function SubmitButton({ billingIntent, isCurrent }: { billingIntent: ModifyPlanS
   const pendingLabel = billingIntent === "portal" ? "Opening..." : "Opening checkout...";
 
   return (
-    <Button disabled={pending} size="sm" type="submit" variant="secondary">
+    <Button
+      data-analytics-feature={billingIntent === "portal" ? "billing_management" : "billing_plan_selection"}
+      data-analytics-id={`plan:${plan}:${billingIntent}`}
+      disabled={pending}
+      size="sm"
+      type="submit"
+      variant="secondary"
+    >
       {pending ? pendingLabel : idleLabel}
     </Button>
   );
@@ -34,10 +41,10 @@ function SubmitButton({ billingIntent, isCurrent }: { billingIntent: ModifyPlanS
 
 export function ModifyPlanSelectForm({ action, billingIntent, isCurrent, plan }: ModifyPlanSelectFormProps) {
   return (
-    <form action={action}>
+    <form action={action} data-analytics-form={`billing_plan:${plan}:${billingIntent}`}>
       {billingIntent === "portal" ? <input name="intent" type="hidden" value="manage_billing" /> : null}
       <input name="plan" type="hidden" value={plan} />
-      <SubmitButton billingIntent={billingIntent} isCurrent={isCurrent} />
+      <SubmitButton billingIntent={billingIntent} isCurrent={isCurrent} plan={plan} />
     </form>
   );
 }

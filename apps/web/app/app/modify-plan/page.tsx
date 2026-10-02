@@ -1,9 +1,10 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
-import { PLAN_DEFINITIONS } from "@website-signal-risk-scanner/shared";
+import { getPlanDefinition, PLAN_DEFINITIONS } from "@website-signal-risk-scanner/shared";
 import Link from "next/link";
 import { CancelSubscriptionForm } from "../../../components/plans/cancel-subscription-form";
 import { ModifyPlanSelectForm } from "../../../components/plans/modify-plan-select-form";
 import { SCAN_ACCESS, formatScanThrottleIntervalLabel } from "../../../lib/scan-access";
+import { formatScanUsageResetDate } from "../../../lib/dashboard/scan-usage-reset";
 import { isSelfServePurchasingEnabled } from "../../../server/access-control";
 import { getDashboardContext } from "../../../server/auth";
 import {
@@ -12,6 +13,12 @@ import {
   startStripeCheckoutFormAction
 } from "../../../server/billing/actions";
 import { loadBillingAccountForOrganization } from "../../../server/billing/repository";
+import { getDashboardScanUsage } from "../../../server/dashboard/get-dashboard-scan-usage";
+import {
+  applyManualRescanLimitOverride,
+  getOrganizationManualRescanLimitOverride,
+  getPlanLimits
+} from "../../../server/plans/get-plan-limits";
 import { getPlanBillingIntent, getStripeBillingMode } from "../../../server/billing/stripe-config";
 
 const planDescriptions: Record<string, string> = {
@@ -55,27 +62,47 @@ function formatBillingDate(value: string | null | undefined) {
 }
 
 export default async function ModifyPlanPage({ searchParams }: ModifyPlanPageProps) {
-  const { organization } = await getDashboardContext();
+  const { organization, profile } = await getDashboardContext();
   const resolvedSearchParams = await searchParams;
   const billingMode = getStripeBillingMode();
   const selfServePurchasingEnabled = isSelfServePurchasingEnabled();
-  const billingAccount = await loadBillingAccountForOrganization(organization.id);
+  const [billingAccount, basePlanLimits, manualRescanLimitOverride] = await Promise.all([
+    loadBillingAccountForOrganization(organization.id),
+    getPlanLimits(organization.plan),
+    getOrganizationManualRescanLimitOverride(organization.id)
+  ]);
+  const planLimits = await applyManualRescanLimitOverride(basePlanLimits, manualRescanLimitOverride);
+  const scanUsage = await getDashboardScanUsage({
+    accountCreatedAt: profile.created_at,
+    monthlyLimit: planLimits.manualRescanLimitPerMonth,
+    organizationId: organization.id
+  });
+  const scansRemaining = scanUsage.monthlyLimit === null
+    ? null
+    : Math.max(0, scanUsage.monthlyLimit - scanUsage.monthlyScansUsed);
   const billingNotice = getBillingNotice(resolvedSearchParams?.billing);
   const hasActiveStripeSubscription = Boolean(
     billingAccount?.stripe_customer_id &&
       billingAccount?.stripe_subscription_id &&
       billingAccount?.stripe_subscription_status !== "canceled"
   );
+  const hasStripeBillingAccount = Boolean(billingAccount?.stripe_customer_id);
   const periodEndLabel = formatBillingDate(billingAccount?.plan_current_period_end);
 
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <Badge tone="neutral">Current plan: {organization.plan}</Badge>
+        <Badge tone="neutral">Current plan: {getPlanDefinition(organization.plan).label}</Badge>
         <h1 className="text-3xl font-semibold tracking-tight">Modify plan</h1>
         <p className="max-w-3xl text-sm leading-6 text-slate-600">
           Select the plan that fits your review workflow. Plans are based on page scans per month, with scan requests paced at one request
           every {formatScanThrottleIntervalLabel()}.
+        </p>
+        <p className="text-sm text-slate-600">
+          {scansRemaining === null
+            ? "Unlimited scans available"
+            : `${scansRemaining} of ${scanUsage.monthlyLimit} scans remaining this month`}
+          {`. Allowance resets ${formatScanUsageResetDate(scanUsage.monthlyPeriodEnd)} UTC.`}
         </p>
       </div>
 
@@ -101,10 +128,11 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
             <h2 className="text-base font-semibold text-slate-950">Billing and cancellation</h2>
-            <p>
-              You can manage payment methods, invoices, subscription changes, and cancellation from this page. Paid subscriptions renew
-              monthly until cancelled. Cancellation is handled through Stripe&apos;s secure billing portal.
-            </p>
+            <p>{hasStripeBillingAccount
+              ? "Manage payment methods, invoices, subscription changes, and cancellation through Stripe’s secure billing portal. Paid subscriptions renew monthly until cancelled."
+              : organization.plan === "team"
+                ? "No Stripe billing account is connected. Contact sales about billing changes to your Custom plan."
+                : "No Stripe billing account is connected. Choose Starter or Pro to begin checkout, or contact sales about a custom plan."}</p>
             {hasActiveStripeSubscription ? (
               <p className="text-slate-600">
                 Current Stripe subscription status: {billingAccount?.stripe_subscription_status ?? "active"}
@@ -115,15 +143,29 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
             )}
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
-            <form action={openStripeBillingPortalFormAction}>
-              <input name="intent" type="hidden" value="manage_billing" />
-              <button
-                className="app-raised-button inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-slate-900"
-                type="submit"
+            {hasStripeBillingAccount ? (
+              <form action={openStripeBillingPortalFormAction} data-analytics-form="billing_manage">
+                <input name="intent" type="hidden" value="manage_billing" />
+                <button
+                  className="app-raised-button inline-flex h-9 items-center justify-center rounded-md px-3 text-sm font-medium text-slate-900"
+                  data-analytics-feature="billing_management"
+                  data-analytics-id="billing:manage"
+                  type="submit"
+                >
+                  Manage billing
+                </button>
+              </form>
+            ) : null}
+            {!hasStripeBillingAccount && organization.plan === "team" ? (
+              <Link
+                className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
+                data-analytics-feature="billing_management"
+                data-analytics-id="billing:custom:contact_sales"
+                href="/contact-sales?source=modify-plan&plan=custom"
               >
-                Manage billing
-              </button>
-            </form>
+                Contact sales
+              </Link>
+            ) : null}
             {hasActiveStripeSubscription ? (
               <CancelSubscriptionForm action={openStripeSubscriptionCancellationFormAction} />
             ) : null}
@@ -177,6 +219,8 @@ export default async function ModifyPlanPage({ searchParams }: ModifyPlanPagePro
                   ) : billingIntent === "contact_sales" ? (
                     <Link
                       className="inline-flex h-9 items-center justify-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
+                      data-analytics-feature="billing_plan_selection"
+                      data-analytics-id="plan:team:contact_sales"
                       href="/contact-sales?source=modify-plan&plan=custom"
                     >
                       Contact sales

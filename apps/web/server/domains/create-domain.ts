@@ -2,7 +2,7 @@
 
 import { fullSiteInternalEnabled } from "@website-signal-risk-scanner/db";
 
-import { validateFullSiteRequest, fullSitePolicy, canUseFullSite, createDomainRequestSchema, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
+import { validateFullSiteRequest, fullSitePolicy, canUseFullSite, createDomainRequestSchema, needsSearchResultsConfirmation, normalizeScanFrom, parseDomainBatchInput, type ScanFrom } from "@website-signal-risk-scanner/shared";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getQueueAvailability } from "../../lib/env";
@@ -250,6 +250,9 @@ export async function createDomainAction(
   const scanFrom = normalizeScanFrom(formData.get("scanFrom"));
   const localV2DagRunViaLambda = normalizeLocalV2DagRunViaLambda(formData.get("localV2RunViaLambda"), process.env, scanFrom);
   const parsedBatch = parseDomainBatchInput(domainInput);
+  if (parsedBatch.valid.some((item) => needsSearchResultsConfirmation(item.normalizedUrl, formData.get("confirmedSearchResultsUrl")))) {
+    return { error: "This looks like a search results link. Check the address before starting the scan." };
+  }
   const requestHeaders = await headers();
   const requesterIpContext = getScanRequesterIpContext(requestHeaders);
   const provenance = {

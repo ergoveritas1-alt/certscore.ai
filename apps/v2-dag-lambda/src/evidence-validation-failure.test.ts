@@ -23,3 +23,12 @@ test("schema failure diagnostics identify canonical consent fields without retai
   assert.equal(result.message, "Evidence validation failed: consentUiObservations.[0].documentUrl (too_big)");
   assert.doesNotMatch(JSON.stringify(result), /private-query|example\.test/);
 });
+
+test("schema failure diagnostics identify visual note bounds without retaining note text", () => {
+  const error = Object.assign(new Error("private-query"), { name: "ZodError", issues: [
+    { path: ["visualCapture", "notes", 3], code: "too_big", message: "private-query" },
+  ] });
+  const result = evidenceValidationFailure(error)!;
+  assert.equal(result.message, "Evidence validation failed: visualCapture.notes.[3] (too_big)");
+  assert.doesNotMatch(JSON.stringify(result), /private-query/);
+});

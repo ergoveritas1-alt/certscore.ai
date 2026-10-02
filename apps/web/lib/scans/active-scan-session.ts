@@ -15,6 +15,7 @@ export type ActiveScanSession = {
 
 export type PendingScanSession = {
   campaignAttribution?: CampaignAttribution;
+  confirmedSearchResultsUrl?: string;
   domain: string;
   mode: "full" | "preview";
   requestId: string;
@@ -94,6 +95,7 @@ export function readPendingScanSession(nowMs = Date.now()): PendingScanSession |
     const parsed = JSON.parse(raw) as Partial<PendingScanSession>;
     if (
       typeof parsed.domain !== "string" ||
+      (parsed.confirmedSearchResultsUrl !== undefined && typeof parsed.confirmedSearchResultsUrl !== "string") ||
       typeof parsed.mode !== "string" ||
       (parsed.mode !== "full" && parsed.mode !== "preview") ||
       typeof parsed.requestId !== "string" ||

@@ -101,6 +101,7 @@ import {
   isNavigationTransportFailure,
   isPendingMainDocumentStatus,
   isTransientMainDocumentStatus,
+  navigationDiagnosticOrigin,
   navigationTransportRecoveryUrls,
 } from "../transport-fallback.js";
 import {
@@ -1222,7 +1223,7 @@ export async function preConsentRuntimeScanner(
           input.signal?.throwIfAborted();
           if (recoveryNavigationTimeout(remainingModuleBudgetMs(), 7_500) <= 0) throw lastError;
           navigationNotes.push(
-            `Entry navigation transport recovery attempt ${index}/${candidates.length - 1}: ${candidateUrl}`,
+            `Entry navigation transport recovery attempt ${index}/${candidates.length - 1}: ${navigationDiagnosticOrigin(candidateUrl)}`,
           );
           await measureRecovery("transport_alternate_reset", () =>
             // Await the reset commit before dispatching the next navigation.
@@ -1259,7 +1260,7 @@ export async function preConsentRuntimeScanner(
             );
           }
           if (index > 0) {
-            navigationNotes.push(`Entry navigation recovered through ${candidateUrl}`);
+            navigationNotes.push(`Entry navigation recovered through ${navigationDiagnosticOrigin(candidateUrl)}`);
           }
           navigationAttempts.push({
             url: candidateUrl,
@@ -1401,7 +1402,7 @@ export async function preConsentRuntimeScanner(
     if (input.executionProfile !== "inventory_only" && navigationResponse && [404, 410].includes(navigationResponse.status()) && remainingModuleBudgetMs() >= 1_500) {
       const alternateHostUrl = alternateWwwNavigationUrl(effectiveNavigationUrl);
       if (alternateHostUrl) {
-        navigationNotes.push(`Main document returned HTTP ${navigationResponse.status()}; tried the bounded apex/www alternative: ${alternateHostUrl}`);
+        navigationNotes.push(`Main document returned HTTP ${navigationResponse.status()}; tried the bounded apex/www alternative: ${navigationDiagnosticOrigin(alternateHostUrl)}`);
         const alternateResponse = await measureRecovery("not_found_alternate_host", () => page.goto(alternateHostUrl, {
           waitUntil: "commit",
           timeout: Math.max(1_000, Math.min(7_500, remainingModuleBudgetMs())),
@@ -3826,7 +3827,7 @@ export async function preConsentRuntimeScanner(
     if (navigationNotes.length > 0) {
       visualCapture = {
         ...visualCapture,
-        notes: unique([...visualCapture.notes, ...navigationNotes]),
+        notes: unique([...visualCapture.notes, ...navigationNotes.map((note) => note.slice(0, 240))]),
       };
     }
     if (graphCapture && pendingResponseCaptures.size && remainingModuleBudgetMs() > 0) {

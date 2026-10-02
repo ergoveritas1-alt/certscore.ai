@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createDomainRequestSchema, getDomainValidationReasonCode, parseDomainBatchInput } from "./domain";
+import { createDomainRequestSchema, getDomainValidationReasonCode, needsSearchResultsConfirmation, parseDomainBatchInput, searchResultsScanTarget } from "./domain";
 import { isNonPublicTargetUrlError, normalizeUrl } from "../utils/url";
 
 test("parseDomainBatchInput parses space, comma, and semicolon separated domains", () => {
@@ -53,4 +53,16 @@ test("domain validation preserves the non-public target reason without retaining
 test("normalizeUrl preserves globally reachable IPv4 and ordinary domains", () => {
   assert.equal(normalizeUrl("https://1.1.1.1"), "https://1.1.1.1/");
   assert.equal(normalizeUrl("example.com"), "https://example.com/");
+});
+
+test("search results warning requires confirmation for the exact normalized target", () => {
+  const google = "https://www.google.com/search?q=facebook&source=chrome-mobile";
+  const target = searchResultsScanTarget(google);
+  assert.equal(target, google);
+  assert.equal(needsSearchResultsConfirmation(google, null), true);
+  assert.equal(needsSearchResultsConfirmation(google, target), false);
+  assert.equal(needsSearchResultsConfirmation(`${google}&page=2`, target), true);
+  assert.equal(searchResultsScanTarget("https://www.google.com/maps?q=facebook"), null);
+  assert.equal(searchResultsScanTarget("https://www.google.com.evil.test/search?q=facebook"), null);
+  assert.equal(searchResultsScanTarget("https://example.com/search?q=facebook"), null);
 });
