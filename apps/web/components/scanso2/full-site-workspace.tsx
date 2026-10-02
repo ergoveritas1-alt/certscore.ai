@@ -372,9 +372,10 @@ export function FullSiteWorkspace({
               {[
                 { title: "Coverage", rows: [
                   ["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
-                  ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
-                  ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],
+                  ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
+                  ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],
                   ...(data?.coverage?.unknown ? [["Robots not verified", data.coverage.unknown]] : []),
+                  ...(data?.coverage?.outOfScope ? [["Outside crawl scope", data.coverage.outOfScope]] : []),
                   ["Page limit", requested.maxPages],
                   ["Excluded links", counts?.excluded ?? 0],
                   ["Stop reason", state?.stopReason === "max_pages" ? "Page limit reached" : state?.stopReason?.replaceAll("_", " ") ?? (running ? "In progress" : "Not stopped")],

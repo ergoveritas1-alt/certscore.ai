@@ -34,6 +34,13 @@ test("incomplete and oversized reports are not cached", () => {
   active.summary.counts.active = 1;
   assert.equal(writeFullSiteReportSessionCache(storage, "scan-a", "scope", active, 1000), false);
   assert.equal(readFullSiteReportSessionCache(storage, "scan-a", "scope", 2000), null);
-  const oversized = { ...fixture(), large: "x".repeat(1_500_000) } as FullSiteReportResponse;
+  const oversized = { ...fixture(), large: "x".repeat(4_000_000) } as FullSiteReportResponse;
   assert.equal(writeFullSiteReportSessionCache(storage, "scan-a", "scope", oversized, 1000), false);
+});
+
+test("a report larger than the old cutoff can be restored after refresh", () => {
+  const storage = memoryStorage();
+  const report = { ...fixture(), large: "x".repeat(1_600_000) } as FullSiteReportResponse;
+  assert.equal(writeFullSiteReportSessionCache(storage, "scan-a", "scope", report, 1000), true);
+  assert.deepEqual(readFullSiteReportSessionCache(storage, "scan-a", "scope", 2000), report);
 });

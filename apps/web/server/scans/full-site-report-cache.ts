@@ -50,11 +50,21 @@ export async function readFullSiteReportCache(scanId: string, sourceKey: string)
 
 export async function writeFullSiteReportCache(scanId: string, sourceKey: string, report: unknown) {
   const json = JSON.stringify(report);
-  if (Buffer.byteLength(json) > MAX_JSON_BYTES) return false;
+  const jsonBytes = Buffer.byteLength(json);
+  if (jsonBytes > MAX_JSON_BYTES) {
+    console.info("[full-site-report] cache skipped", { scanId, reason: "json_limit", jsonBytes });
+    return false;
+  }
   const payload = await compress(json);
-  if (payload.length > MAX_BYTES) return false;
+  if (payload.length > MAX_BYTES) {
+    console.info("[full-site-report] cache skipped", { scanId, reason: "compressed_limit", jsonBytes, compressedBytes: payload.length });
+    return false;
+  }
   // A changed source during assembly must never be saved under the earlier identity.
-  if (await fullSiteReportSourceKey(scanId) !== sourceKey) return false;
+  if (await fullSiteReportSourceKey(scanId) !== sourceKey) {
+    console.info("[full-site-report] cache skipped", { scanId, reason: "source_changed", jsonBytes, compressedBytes: payload.length });
+    return false;
+  }
   const slot = Number.parseInt(hash(scanId).slice(0, 8), 16) % 128;
   await query(`insert into full_site_report_cache(slot,scan_id,source_key,payload,payload_sha256)
     values($1,$2,$3,$4,$5) on conflict(slot) do update set scan_id=excluded.scan_id,

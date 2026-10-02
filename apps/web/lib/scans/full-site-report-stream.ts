@@ -1,7 +1,8 @@
-import type { FullSiteReportOverview, FullSiteReportResponse } from "../../server/scans/full-site-report";
+import type { FullSiteReportOverview, FullSiteReportResponse, FullSiteReportSupporting } from "../../server/scans/full-site-report";
 
 export type FullSiteReportFrame =
   | { type: "overview"; data: FullSiteReportOverview; elapsedMs: number }
+  | { type: "supporting"; data: FullSiteReportSupporting; elapsedMs: number }
   | { type: "report"; data: Omit<FullSiteReportResponse, keyof FullSiteReportOverview>; elapsedMs: number }
   | { type: "error"; message: string };
 
@@ -9,6 +10,7 @@ export type FullSiteReportFrame =
 export async function readFullSiteReportStream(
   response: Response,
   onOverview: (overview: FullSiteReportOverview) => void,
+  onSupporting?: (supporting: FullSiteReportSupporting) => void,
 ): Promise<FullSiteReportResponse> {
   if (!response.body) throw new Error("Report response was empty. Please retry.");
   const reader = response.body.getReader();
@@ -21,6 +23,7 @@ export async function readFullSiteReportStream(
     const frame = JSON.parse(line) as FullSiteReportFrame;
     if (frame.type === "error") throw new Error(frame.message);
     if (frame.type === "overview") { overview = frame.data; onOverview(overview); }
+    else if (frame.type === "supporting") onSupporting?.(frame.data);
     else if (frame.type === "report") {
       if (!overview) throw new Error("Report assessment was missing. Please retry.");
       report = { ...frame.data, ...overview };

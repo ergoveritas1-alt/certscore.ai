@@ -45,7 +45,7 @@ export async function GET(
       const [encoding, ...parameters] = value.trim().split(";");
       return encoding?.toLowerCase() === "gzip" && !parameters.some(parameter => /^\s*q=0(?:\.0*)?\s*$/i.test(parameter));
     });
-    return streamFullSiteReport(onOverview => loadFullSiteReport(scanId, params, false, { crawl, onOverview }), gzip);
+    return streamFullSiteReport((onOverview, onSupporting) => loadFullSiteReport(scanId, params, false, { crawl, onOverview, onSupporting }), gzip);
   }
   const report = params.has("graphPage") ? await loadFullSiteGraph(scanId, params.get("graphPage")!) : await loadFullSiteReport(scanId, params, false, { crawl });
   return NextResponse.json(report, {

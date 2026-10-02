@@ -1,7 +1,10 @@
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 
 const CACHE_KEY = "certscore:full-site-report:v1";
-const MAX_CHARS = 1_500_000;
+// A completed site report can exceed the previous 1.5M-character cutoff.
+// Storage quota errors remain caught below; this only allows a larger report
+// to survive a refresh in browsers with sufficient session storage.
+const MAX_CHARS = 4_000_000;
 const MAX_AGE_MS = 60 * 60 * 1000;
 
 type CachedReport = {

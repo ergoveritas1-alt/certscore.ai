@@ -12,6 +12,7 @@ import { loadFullSiteReviewedPolicies } from "./full-site-reviewed-policies";
 import { loadFullSiteRelationshipCounts } from "./full-site-relationship-counts";
 import { loadFullSiteScore } from "./full-site-score";
 import { fullSiteReportSourceKey, isDefaultFullSiteReport, readFullSiteReportCache, writeFullSiteReportCache } from "./full-site-report-cache";
+import type { CollectionSurfaceTableRow } from "../../components/scans/collection-surfaces-table";
 import { unscannedCrawlPageLimitation } from "../../lib/scans/full-site-crawl-limitation";
 import { classifyCrawlInventoryResource } from "../../lib/scans/full-site-inventory-classification";
 import {
@@ -38,8 +39,12 @@ export type FullSiteReportOverview = {
   finalizationStartedAt: ReturnType<typeof fullSiteFinalizationStartedAt>;
 };
 
-type ReportOptions = { crawl?: FullSiteCrawlRow | null; onOverview?: (overview: FullSiteReportOverview) => void; onIncompleteDetails?: () => void };
-const pendingReports = new Map<string, { result: Promise<FullSiteReportResponse | null>; overview?: FullSiteReportOverview; listeners: Set<NonNullable<ReportOptions["onOverview"]>> }>();
+export type FullSiteReportSupporting = {
+  collectionSurfaces: { pagesWithoutInventory: number; limitedPages: number; rows: CollectionSurfaceTableRow[] };
+  services: Array<{ key: string; name: string; resourceCount: number }>;
+};
+type ReportOptions = { crawl?: FullSiteCrawlRow | null; onOverview?: (overview: FullSiteReportOverview) => void; onSupporting?: (supporting: FullSiteReportSupporting) => void; onIncompleteDetails?: () => void };
+const pendingReports = new Map<string, { result: Promise<FullSiteReportResponse | null>; overview?: FullSiteReportOverview; supporting?: FullSiteReportSupporting; overviewListeners: Set<NonNullable<ReportOptions["onOverview"]>>; supportingListeners: Set<NonNullable<ReportOptions["onSupporting"]>> }>();
 
 export async function loadFullSiteReport(
   scanId: string,
@@ -66,27 +71,32 @@ export async function loadFullSiteReport(
   const pending = pendingReports.get(sourceKey);
   if (pending) {
     if (options.onOverview) {
-      pending.listeners.add(options.onOverview);
+      pending.overviewListeners.add(options.onOverview);
       if (pending.overview) options.onOverview(pending.overview);
+    }
+    if (options.onSupporting) {
+      pending.supportingListeners.add(options.onSupporting);
+      if (pending.supporting) options.onSupporting(pending.supporting);
     }
     return pending.result;
   }
-  const entry: { result: Promise<FullSiteReportResponse | null>; overview?: FullSiteReportOverview; listeners: Set<NonNullable<ReportOptions["onOverview"]>> } = {
-    result: Promise.resolve(null), listeners: new Set(options.onOverview ? [options.onOverview] : []),
+  const entry: { result: Promise<FullSiteReportResponse | null>; overview?: FullSiteReportOverview; supporting?: FullSiteReportSupporting; overviewListeners: Set<NonNullable<ReportOptions["onOverview"]>>; supportingListeners: Set<NonNullable<ReportOptions["onSupporting"]>> } = {
+    result: Promise.resolve(null), overviewListeners: new Set(options.onOverview ? [options.onOverview] : []), supportingListeners: new Set(options.onSupporting ? [options.onSupporting] : []),
   };
   const key = sourceKey;
   let complete = true;
   entry.result = (async () => {
     const result = await buildFullSiteReport(scanId, params, exportAllPages, { ...options,
       onIncompleteDetails: () => { complete = false; options.onIncompleteDetails?.(); },
-      onOverview: overview => { entry.overview = overview; for (const listener of entry.listeners) listener(overview); },
+      onOverview: overview => { entry.overview = overview; for (const listener of entry.overviewListeners) listener(overview); },
+      onSupporting: supporting => { entry.supporting = supporting; for (const listener of entry.supportingListeners) listener(supporting); },
     });
     let saved = false;
     if (result?.score && complete) {
       try { saved = await writeFullSiteReportCache(scanId, key, result); }
       catch { console.warn("[full-site-report] cache write unavailable", { scanId }); }
     }
-    console.info("[full-site-report]", { scanId, cache: "miss", saved, elapsedMs: Math.round(performance.now() - started) });
+    console.info("[full-site-report]", { scanId, cache: "miss", saved, complete, elapsedMs: Math.round(performance.now() - started) });
     return result;
   })().finally(() => { if (pendingReports.get(key) === entry) pendingReports.delete(key); });
   if (pendingReports.size < 16) pendingReports.set(key, entry);
@@ -453,6 +463,9 @@ async function buildFullSiteReport(
     group.resources.push({ context, key: row.key, name: row.occurrence.label, kind: row.occurrence.kind, pageIds: row.pageIds, occurrence: row.occurrence, purposes: row.purposes, relationships: row.relationships, eventCount: row.eventCount, inventoryEvidence: inventoryClassification(row) });
     serviceGroups.set(key, group);
   }
+  // Retained forms and service identities do not require graph-origin reads.
+  // Publish them before slower verified relationship details without inferring parentage.
+  options.onSupporting?.({ collectionSurfaces, services: [...serviceGroups.values()].map(service => ({ key: service.key, name: service.name, resourceCount: service.resources.length })) });
   const displayedResources = exportAllPages ? resources : resources.slice(offset, offset + limit);
   const relationshipPageIds = serviceEvidencePageIds({
     localAudit: process.env.NODE_ENV !== "production" && Boolean((crawl.policy_json as {localExecution?: boolean}).localExecution),
@@ -616,7 +629,7 @@ async function buildFullSiteReport(
       destinations: relationshipCounts.get(detailId ?? "")?.get(evidence.rows[0].id)?.destinations ?? [] } : null,
     selectedResource:
       aggregate.resources.find((r) => r.key === resourceKey) ?? null,
-    coverage: summarizeDiscoveredCoverage(records.map(row => row.target_url), crawl.robots_json as RobotsPolicy | null),
+    coverage: summarizeDiscoveredCoverage(records.map(row => row.target_url), crawl.robots_json as RobotsPolicy | null, crawl.hosts),
     timing: {
       crawlStartedAt: crawl.crawl_started_at
         ? new Date(crawl.crawl_started_at).toISOString()

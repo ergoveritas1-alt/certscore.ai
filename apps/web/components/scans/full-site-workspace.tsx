@@ -41,7 +41,7 @@ import { InventoryResourceProvider, InventoryResourceMobile, type InventoryGraph
 import type { ApiRuntimeEvidenceGraphProjection, ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 
 import { readFullSiteReportStream } from "../../lib/scans/full-site-report-stream";
-import type { FullSiteReportOverview, FullSiteReportResponse } from "../../server/scans/full-site-report";
+import type { FullSiteReportOverview, FullSiteReportResponse, FullSiteReportSupporting } from "../../server/scans/full-site-report";
 
 type Filters = {
   kind: string;
@@ -167,6 +167,7 @@ export function FullSiteWorkspace({
   const [data, setData] = useState<FullSiteReportResponse | null>(() => retainedReport?.scanId === scanId ? retainedReport.data : null),
     [error, setError] = useState<string | null>(null);
   const [partialOverview, setPartialOverview] = useState<FullSiteReportOverview | null>(null);
+  const [partialSupporting, setPartialSupporting] = useState<FullSiteReportSupporting | null>(null);
   const overview = data ?? partialOverview;
   const [detailPage, setDetailPage] = useState(""),
     [resource, setResource] = useState(""),
@@ -217,7 +218,10 @@ export function FullSiteWorkspace({
       loading = true;
       setIsFetching(true);
       let delay = Math.max(15000, pollMs);
-      const requestSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(60000)]);
+      // The verified relationship pass can exceed a minute on larger completed scans.
+      // Supporting data arrives earlier on this same request; allow it to finish
+      // rather than aborting and repeating the expensive read.
+      const requestSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]);
       try {
         const params = new URLSearchParams({
           ...filters,
@@ -246,6 +250,8 @@ export function FullSiteWorkspace({
         const next = response.headers.get("content-type")?.includes("application/x-ndjson")
           ? await readFullSiteReportStream(response, nextOverview => {
               if (!controller.signal.aborted) setPartialOverview(nextOverview);
+            }, supporting => {
+              if (!controller.signal.aborted) setPartialSupporting(supporting);
             })
           : (await response.json()) as FullSiteReportResponse;
         if (controller.signal.aborted) return;
@@ -421,9 +427,10 @@ export function FullSiteWorkspace({
     showDurationInSummary={initialPending}
     technology={technology}
     groups={[{ title: "Coverage", rows: [["Pages discovered", data?.coverage?.discovered ?? "Loading…"],
-                  ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
-                  ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],
+                  ["Robots-allowed", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.allowed : "Loading…"],
+                  ["Robots-blocked", data?.coverage ? data.coverage.unknown === data.coverage.discovered - data.coverage.outOfScope && data.coverage.unknown > 0 ? "Not verified" : data.coverage.blocked : "Loading…"],
                   ...(data?.coverage?.unknown ? [["Robots not verified", data.coverage.unknown]] : []),
+                  ...(data?.coverage?.outOfScope ? [["Outside crawl scope", data.coverage.outOfScope]] : []),
                   ["Page limit", requested.maxPages],
                   ...(sitemapLimited ? [["Sitemap discovery", "Limited — using discovered page links"]] : []),
                   ["Pages with capture limitations", data ? failedPages.length : "Loading…"],
@@ -560,6 +567,11 @@ export function FullSiteWorkspace({
               }}>
 
               {tab !== "pages" && inventoryView === "services" && data ? <FullSiteServices key={collapseVersion} scenario="pre_consent" services={data.services} pageName={pageName} pageChoices={data.pageChoices} homepageGraph={homepageGraph} /> : null}
+              {tab !== "pages" && inventoryView === "services" && !data && partialSupporting ? <div role="status" className="p-4 text-sm text-slate-700">
+                <p className="mb-2 text-xs text-slate-500">Identified services · Verifying resource relationships</p>
+                <ul className="divide-y divide-zinc-100">{partialSupporting.services.map(service => <li key={service.key} className="flex justify-between gap-3 py-2"><span>{service.name}</span><span className="tabular-nums text-slate-500">{service.resourceCount} resources</span></li>)}</ul>
+                {!partialSupporting.services.length ? <p>No named services were identified in the retained inventory.</p> : null}
+              </div> : null}
               <div hidden={tab !== "pages" && inventoryView !== "resources"}>
               <InventoryResourceProvider projection={homepageGraph} preload><table className="w-full min-w-[1000px] text-left text-xs">
                 <caption className="sr-only">
@@ -649,11 +661,11 @@ export function FullSiteWorkspace({
                 )}
               </table></InventoryResourceProvider></div>
             </div>
-            {<p className="mt-2 text-xs text-zinc-500">{!data ? "Loading inventory…" : isFetching ? "Updating inventory…" : tab !== "pages" && inventoryView === "services"
+            {<p className="mt-2 text-xs text-zinc-500">{!data ? partialSupporting ? "Verifying resource relationships…" : "Loading inventory…" : isFetching ? "Updating inventory…" : tab !== "pages" && inventoryView === "services"
                 ? `${data.networkOverview.identifiedServices} services`
                 : `${tab === "pages" ? data.pages.total : data.resources.total} rows${(tab === "pages" ? data.pages.total : data.resources.total) > 6 ? " · Up to 6 visible. Scroll for more." : ""}`}</p>}
           </section>
-          {tab === "resources" ? <CollectionSurfacesTable rows={data?.collectionSurfaces?.rows ?? []} loading={!data} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages} /> : null}
+          {tab === "resources" ? <CollectionSurfacesTable rows={data?.collectionSurfaces?.rows ?? partialSupporting?.collectionSurfaces.rows ?? []} loading={!data && !partialSupporting} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory ?? partialSupporting?.collectionSurfaces.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages ?? partialSupporting?.collectionSurfaces.limitedPages} /> : null}
           {tab === "resources" ? formDestinationEvidence : null}
           {tab === "resources" ? <SitewideEvidenceContext.Provider value={overview?.score?.evidencePages ? { pages: overview.score.evidencePages, limitedPages: overview.score.limitedPages } : null}><SiteIntegritySiteContext.Provider value={overview?.score?.siteIntegrity ?? null}>{evidenceDirectory}</SiteIntegritySiteContext.Provider></SitewideEvidenceContext.Provider> : null}
           {detailPage ? (

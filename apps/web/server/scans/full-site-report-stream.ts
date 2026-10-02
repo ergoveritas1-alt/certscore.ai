@@ -2,10 +2,10 @@ import "server-only";
 import { createGzip, constants } from "node:zlib";
 import { Readable } from "node:stream";
 import type { FullSiteReportFrame } from "../../lib/scans/full-site-report-stream";
-import type { FullSiteReportOverview, FullSiteReportResponse } from "./full-site-report";
+import type { FullSiteReportOverview, FullSiteReportResponse, FullSiteReportSupporting } from "./full-site-report";
 
 export function streamFullSiteReport(
-  load: (onOverview: (overview: FullSiteReportOverview) => void) => Promise<FullSiteReportResponse | null>,
+  load: (onOverview: (overview: FullSiteReportOverview) => void, onSupporting: (supporting: FullSiteReportSupporting) => void) => Promise<FullSiteReportResponse | null>,
   gzip = false,
 ) {
   const start = performance.now();
@@ -17,7 +17,10 @@ export function streamFullSiteReport(
         if (!cancelled) controller.enqueue(encoder.encode(`${JSON.stringify(frame)}\n`));
       };
       try {
-        const report = await load(data => send({ type: "overview", data, elapsedMs: Math.round(performance.now() - start) }));
+        const report = await load(
+          data => send({ type: "overview", data, elapsedMs: Math.round(performance.now() - start) }),
+          data => send({ type: "supporting", data, elapsedMs: Math.round(performance.now() - start) }),
+        );
         if (report) {
           // These fields were already delivered; do not transmit large score evidence twice.
           const { score, summary, finalizationStartedAt, ...details } = report;
