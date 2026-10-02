@@ -139,6 +139,62 @@ test(
         );
         return { id, userId, organizationId: org };
       }
+      const quota = await parent("quota.test", 300);
+      await db.query(
+        `update full_site_crawls set policy_json=jsonb_set(jsonb_set(policy_json,'{maxSectionPages}','2'::jsonb),'{maxQueryVariants}','3'::jsonb) where scan_id=$1`,
+        [quota.id],
+      );
+      await addFullSiteCandidates(quota.id, [
+        { url: "https://outside.test/en/hotel/external", source: "fixture" },
+        { url: "https://quota.test/en/hotel/one", source: "fixture" },
+        { url: "https://quota.test/en/hotel/two", source: "fixture" },
+        { url: "https://quota.test/en/hotel/zzz-overflow", source: "fixture" },
+        { url: "https://quota.test/en/business/one", source: "fixture" },
+        { url: "https://quota.test/en/business/two", source: "fixture" },
+        { url: "https://quota.test/path/[", source: "fixture" },
+        { url: "https://quota.test/path/[suite]", source: "fixture" },
+      ]);
+      const quotaPages = await db.loadFullSitePages(quota.id);
+      const byUrl = (suffix: string) => quotaPages.find((page) => page.target_url === `https://quota.test${suffix}`);
+      assert.equal(byUrl("/en/hotel/one")?.status, "queued");
+      assert.equal(byUrl("/en/hotel/two")?.status, "queued");
+      assert.equal(byUrl("/en/hotel/zzz-overflow")?.limitation, "section_trap_limit");
+      assert.equal(byUrl("/en/business/one")?.status, "queued");
+      assert.equal(byUrl("/en/business/two")?.status, "queued");
+      assert.equal(byUrl("/path/[")?.limitation, "malformed_path");
+      assert.equal(byUrl("/path/[suite]")?.status, "queued");
+      await db.query(
+        `update full_site_pages set section='en' where scan_id=$1 and target_url like 'https://quota.test/en/hotel/%'`,
+        [quota.id],
+      );
+      await db.query(
+        `update full_site_crawls set policy_json=jsonb_set(policy_json,'{maxSectionPages}','5'::jsonb) where scan_id=$1`,
+        [quota.id],
+      );
+      await addFullSiteCandidates(quota.id, [
+        { url: "https://quota.test/en/hotel/third", source: "fixture" },
+        { url: "https://quota.test/?page_id=1", source: "fixture" },
+        { url: "https://quota.test/?page_id=2", source: "fixture" },
+        { url: "https://quota.test/?page_id=3", source: "fixture" },
+      ]);
+      const renewed = await db.loadFullSitePages(quota.id);
+      assert.equal(renewed.find((page) => page.target_url.endsWith("/en/hotel/third"))?.status, "queued");
+      assert.equal(renewed.find((page) => page.target_url.endsWith("/?page_id=1"))?.status, "queued");
+      assert.equal(renewed.find((page) => page.target_url.endsWith("/?page_id=2"))?.status, "queued");
+      assert.equal(renewed.find((page) => page.target_url.endsWith("/?page_id=3"))?.limitation, "query_variant_limit");
+      await db.query(
+        `update full_site_crawls set policy_json=jsonb_set(policy_json,'{maxQueryVariants}','4'::jsonb) where scan_id=$1`,
+        [quota.id],
+      );
+      await addFullSiteCandidates(quota.id, [
+        { url: "https://quota.test/?page_id=4", source: "fixture" },
+      ]);
+      assert.equal(
+        (await db.loadFullSitePages(quota.id)).find((page) => page.target_url.endsWith("/?page_id=4"))?.status,
+        "queued",
+        "Previously excluded query variants must not consume admission quotas",
+      );
+      await db.query(`update full_site_crawls set status='completed',completed_at=now() where scan_id=$1`, [quota.id]);
       // Exercise the actual discovery fetch + guard, not a mock of their boundary.
       for (const scenario of ["redirect", "html", "malformed", "timeout", "oversized", "http_error", "rate_limit"] as const) {
         const host = `sitemap-${scenario.replaceAll("_", "-")}.test`;

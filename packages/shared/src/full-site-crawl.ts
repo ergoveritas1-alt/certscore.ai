@@ -49,7 +49,7 @@ export function fullSitePolicy(env: Record<string, string | undefined> = {}) {
     maxRetries: bounded("MAX_RETRIES", 1, 0, 2),
     sitemapDocuments: 25,
     discoveryBytes: 2 * 1024 * 1024,
-    maxQueryVariants: 20,
+    maxQueryVariants: 50,
     maxSectionPages: 50,
     maxBackoffSeconds: 900,
   };
@@ -300,13 +300,18 @@ export function aggregateFullSite(state: CrawlState, pages: CrawlPage[]) {
     active: 0,
     queued: 0,
   };
+  const excludedByReason: Record<string, number> = {};
   const durations: number[] = [];
   for (const page of pages) {
     if (page.status === "completed") counts.completed++;
     else if (page.status === "partial") counts.partial++;
     else if (["blocked", "failed"].includes(page.status))
       counts.blockedFailed++;
-    else if (["excluded", "cancelled"].includes(page.status)) counts.excluded++;
+    else if (["excluded", "cancelled"].includes(page.status)) {
+      counts.excluded++;
+      const reason = page.limitation ?? "other";
+      excludedByReason[reason] = (excludedByReason[reason] ?? 0) + 1;
+    }
     else {
       counts.pending++;
       if (page.status === "active") counts.active++;
@@ -381,6 +386,7 @@ export function aggregateFullSite(state: CrawlState, pages: CrawlPage[]) {
   return {
     state,
     counts,
+    excludedByReason,
     baselineComplete,
     resources: rows,
     totals: {

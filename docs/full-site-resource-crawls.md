@@ -56,8 +56,16 @@ serializes it to the UI and persists its validated snapshot with the parent.
 | Retries | 1 | `CERTSCORE_FULL_SITE_MAX_RETRIES`, 0–2 |
 | Sitemap documents | 25 | Bounded traversal, no external entity expansion |
 | Discovery response | 2 MiB | Bounded streaming read, 10-second request deadline |
-| Query variants / section targets | 20 / 50 | Conservative trap limits; each exclusion remains inspectable |
+| Query variants / section targets | 50 / 50 | Trap limits count only eligible targets; locale-prefixed paths use their content section; each exclusion remains inspectable |
 | Retry backoff | Increasing, up to 900 seconds | Longer Retry-After stops that crawl while retaining the shared site's full requested pause |
+
+On October 2, 2026, the owner approved the quota correction for the 300-page
+cotp.group request: excluded targets do not consume query or section admission
+budgets, language-prefixed paths use their content section, and the query-variant
+limit is 50. The cotp.group case could admit roughly 67 additional page attempts,
+estimated at $0.13–$0.67 per comparable scan or $13–$67/month for 100 such scans
+using the approved per-page planning range. The scan's requested page cap,
+concurrency, wait, and retry limits remain unchanged.
 
 The inventory collector retains the existing 15-second tiny or 35-second standard
 module budget and the homepage's actual fast/full passive protocol. It has a

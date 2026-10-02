@@ -17,6 +17,7 @@ import {
 import {
   crawlDisplayUrl,
   crawlExclusion,
+  crawlSection,
   normalizeCrawlUrl,
   parseCrawlRobots,
   robotsAllows,
@@ -193,6 +194,9 @@ test("normalization preserves application identity, limits scope/traps, redacts 
     crawlExclusion("https://sub.example.test/", ["www.example.test"]),
     "outside_validated_hostname_scope",
   );
+  assert.equal(crawlSection(base + "en/hotel/berlin"), "en/hotel");
+  assert.equal(crawlSection(base + "en/business-travelers"), "en/business-travelers");
+  assert.equal(crawlSection(base + "hotel/berlin"), "hotel");
   for (const path of ["/logout", "/checkout", "/file.pdf", "/?token=secret"])
     assert.ok(crawlExclusion(base + path.slice(1), ["www.example.test"]));
   assert.ok(
@@ -314,6 +318,7 @@ test("200 independent pages aggregate to bounded identities with exact event cou
 
 test("owner-approved crawl limits and robots subset boundaries", () => {
   const policy = fullSitePolicy();
+  assert.equal(policy.maxQueryVariants, 50);
   assert.deepEqual(policy.concurrency, { min: 1, max: 12, default: 4 });
   assert.equal(policy.wallClockSeconds, 14400);
   assert.equal(policy.pageSeconds, 20);

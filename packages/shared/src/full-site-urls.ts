@@ -56,7 +56,13 @@ export function crawlExclusion(
 }
 export function crawlSection(url: string) {
   const parsed = new URL(url);
-  return parsed.pathname.split("/").filter(Boolean)[0] ?? "/";
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  const first = segments[0];
+  // A language prefix is not a content section: keep the per-section trap
+  // budget for each topic within the locale.
+  if (first && /^(en|de|fr|es|it|nl|pt|pl)(?:-[a-z]{2})?$/i.test(first))
+    return segments[1] ? `${first.toLowerCase()}/${segments[1]}` : first.toLowerCase();
+  return first ?? "/";
 }
 export function crawlDisplayUrl(raw: string) {
   try {

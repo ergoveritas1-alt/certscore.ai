@@ -28,7 +28,7 @@ test("completion summary uses canonical distinct counts and neutral wording", ()
   assert.match(mail.text, /Distinct cookies observed: 1/);
   assert.match(mail.text, /2 complete, 0 partial/);
   assert.match(mail.text, /Total elapsed time: 60 seconds/);
-  assert.match(mail.text, /homepage audit only/);
+  assert.match(mail.text, /homepage audit with eligible evidence from scanned pages/);
   assert.doesNotMatch(mail.subject + mail.text, /full site/i);
 });
 
@@ -37,6 +37,7 @@ test("blocked crawl emails disclose limits and do not imply absence", () => {
     {
       ...state,
       status: "stopped",
+      stopReason: "robots_disallowed_all",
       robotsRestriction: "robots.txt prohibits crawling this site.",
     },
     [],
@@ -49,4 +50,29 @@ test("blocked crawl emails disclose limits and do not imply absence", () => {
   assert.match(mail.subject, /limited coverage/);
   assert.match(mail.text, /robots.txt prohibits/);
   assert.match(mail.text, /not evidence of absence/);
+});
+
+test("coverage email attributes exclusions and does not blame robots without blocked URLs", () => {
+  const skipped = page("language-section", []);
+  skipped.status = "excluded";
+  skipped.limitation = "section_trap_limit";
+  skipped.observation = null;
+  const aggregate = aggregateFullSite(
+    {
+      ...state,
+      status: "completed",
+      stopReason: "sitemap_discovery_limited",
+      robotsRestriction: "robots.txt restricts crawl coverage.",
+    },
+    [page("homepage", []), skipped],
+  );
+  const mail = buildScanCompletionEmail({
+    summary: { ...aggregate, resources: undefined },
+    domain: "example.test",
+    reportUrl: "https://certscore.ai/scan/fixture",
+  });
+  assert.match(mail.subject, /limited coverage/);
+  assert.match(mail.text, /1 section safety limit/);
+  assert.match(mail.text, /Sitemap discovery was limited/);
+  assert.doesNotMatch(mail.text, /robots.txt restricts/);
 });

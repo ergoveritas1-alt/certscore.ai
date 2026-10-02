@@ -118,6 +118,12 @@ function discoveryFetchFailure(error: unknown): CrawlDiscoveryDiagnostic["reason
   return "fetch_failed";
 }
 
+function hasMalformedStandaloneBracket(url: string): boolean {
+  return decodeURIComponent(new URL(url).pathname)
+    .split("/")
+    .some((segment) => segment === "[" || segment === "]");
+}
+
 async function retainDiscoveryDiagnostics(scanId: string, diagnostics: CrawlDiscoveryDiagnostic[]) {
   if (!diagnostics.length) return;
   const retained = diagnostics.slice(-32);
@@ -144,8 +150,8 @@ export async function addFullSiteCandidates(
       return;
     const policy = c.policy_json as FullSitePolicy;
     const existing = (
-      await client.query<{ target_url: string; section: string }>(
-        `select target_url,section from full_site_pages where scan_id=$1`,
+      await client.query<{ target_url: string; status: string }>(
+        `select target_url,status from full_site_pages where scan_id=$1`,
         [scanId],
       )
     ).rows;
@@ -153,12 +159,14 @@ export async function addFullSiteCandidates(
     const queryVariants = new Map<string, number>(),
       sections = new Map<string, number>();
     for (const row of existing) {
+      if (row.status === "excluded") continue;
       const url = new URL(row.target_url);
       queryVariants.set(
-        url.pathname,
-        (queryVariants.get(url.pathname) ?? 0) + 1,
+        `${url.hostname}${url.pathname}`,
+        (queryVariants.get(`${url.hostname}${url.pathname}`) ?? 0) + 1,
       );
-      sections.set(row.section, (sections.get(row.section) ?? 0) + 1);
+      const section = crawlSection(row.target_url);
+      sections.set(section, (sections.get(section) ?? 0) + 1);
     }
     // Round-robin sections by already-selected count at dispatch; deterministic discovery order within a section.
     for (const item of candidates.sort((a, b) => a.url.localeCompare(b.url))) {
@@ -182,18 +190,21 @@ export async function addFullSiteCandidates(
       let exclusion: string | null;
       try {
         exclusion = crawlExclusion(normalized, c.hosts);
+        if (!exclusion && hasMalformedStandaloneBracket(normalized))
+          exclusion = "malformed_path";
       } catch {
         exclusion = "malformed_path";
       }
       const url = new URL(normalized),
-        section = crawlSection(normalized);
+        section = crawlSection(normalized),
+        queryKey = `${url.hostname}${url.pathname}`;
       exclusion ??=
         c.robots_json &&
         !robotsAllows(normalized, c.robots_json as RobotsPolicy)
           ? "robots_disallowed"
           : null;
       exclusion ??=
-        (queryVariants.get(url.pathname) ?? 0) >= policy.maxQueryVariants
+        (queryVariants.get(queryKey) ?? 0) >= policy.maxQueryVariants
           ? "query_variant_limit"
           : null;
       exclusion ??=
@@ -217,11 +228,10 @@ export async function addFullSiteCandidates(
         ],
       );
       seen.add(normalized);
-      queryVariants.set(
-        url.pathname,
-        (queryVariants.get(url.pathname) ?? 0) + 1,
-      );
-      sections.set(section, (sections.get(section) ?? 0) + 1);
+      if (!exclusion) {
+        queryVariants.set(queryKey, (queryVariants.get(queryKey) ?? 0) + 1);
+        sections.set(section, (sections.get(section) ?? 0) + 1);
+      }
     }
   });
 }
