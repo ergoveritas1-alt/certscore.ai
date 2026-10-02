@@ -59,6 +59,7 @@ export type FullSitePageRow = {
   attempt_count: number;
   attempt_id: string | null;
   token_hash: string | null;
+  dispatch_lease_until: Date | null;
   observation_json: unknown;
   compact_json: unknown;
   completed_at: Date | null;
@@ -159,6 +160,8 @@ export async function claimFullSitePage(input: {
       p.attempt_id !== input.attemptId ||
       p.token_hash !== hash(input.token) ||
       p.status !== "dispatching" ||
+      !p.dispatch_lease_until ||
+      new Date(p.dispatch_lease_until).getTime() <= Date.now() ||
       input.region !== c.region
     )
       return null;
