@@ -29,7 +29,7 @@ export function FullSiteControls({
   const [values, setValues] = useState({
     maxPages: "10",
     concurrency: "4",
-    waitSeconds: "5",
+    waitSeconds: "3",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   useEffect(() => {

@@ -94,7 +94,7 @@ export function FullSiteServices({ services, pageName, pageChoices, homepageGrap
             {open ? [...branch.children].sort(compare).map(child => renderBranch(child, [...path, service.key], Boolean(branch.collection))) : null}
             {open ? branch.ownResources.map(row => {
               const page = pageChoices.find(page => page.id === row.pageIds[0]);
-              return <InventoryResourceProvider preload key={row.key} source={page?.source === "homepage" ? undefined : page?.graphSource} projection={page?.source === "homepage" ? homepageGraph : undefined}><ServiceResourceRows row={row} serviceContext={row.context ?? service.context} nested nestingDepth={path.length + 1} scenario={scenario} pageName={pageName}/></InventoryResourceProvider>;
+              return <InventoryResourceProvider key={row.key} source={page?.source === "homepage" ? undefined : page?.graphSource} projection={page?.source === "homepage" ? homepageGraph : undefined}><ServiceResourceRows row={row} serviceContext={row.context ?? service.context} nested nestingDepth={path.length + 1} scenario={scenario} pageName={pageName}/></InventoryResourceProvider>;
             }) : null}
           </Fragment>;
   };

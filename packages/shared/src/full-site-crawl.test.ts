@@ -129,7 +129,7 @@ test("trusted roles, explicit opt-in, defaults, inactive options and malformed b
     assert.throws(() => validateFullSiteRequest(input, false), { status: 403 });
   assert.deepEqual(validateFullSiteRequest({ fullSite: true }, true), {
     fullSite: true,
-    crawlOptions: { maxPages: 10, concurrency: 4, waitSeconds: 5 },
+    crawlOptions: { maxPages: 10, concurrency: 4, waitSeconds: 3 },
   });
   assert.equal(
     validateFullSiteRequest(
@@ -150,7 +150,7 @@ test("trusted roles, explicit opt-in, defaults, inactive options and malformed b
     { concurrency: 1.1 },
     { waitSeconds: Infinity },
     { waitSeconds: NaN },
-    { waitSeconds: 4.9 },
+    { waitSeconds: 2.9 },
     { waitSeconds: -1 },
     { unknown: 1 },
   ])
@@ -169,6 +169,8 @@ test("trusted roles, explicit opt-in, defaults, inactive options and malformed b
     fullSitePolicy({ CERTSCORE_FULL_SITE_MAX_PAGES: "2000" }).maxPages.max,
     2000,
   );
+  assert.equal(fullSitePolicy({ CERTSCORE_FULL_SITE_MIN_WAIT_SECONDS: "5" }).waitSeconds.default, 5);
+  assert.equal(fullSitePolicy({ CERTSCORE_FULL_SITE_MIN_WAIT_SECONDS: "1" }).waitSeconds.default, 3);
 });
 test("normalization preserves application identity, limits scope/traps, redacts values and respects robots", () => {
   const base = "https://www.example.test/";

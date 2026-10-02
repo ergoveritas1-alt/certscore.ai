@@ -33,7 +33,7 @@ export function fullSitePolicy(env: Record<string, string | undefined> = {}) {
   }
   const maxPages = bounded("MAX_PAGES", 500, 10, 2000);
   const maxConcurrency = bounded("MAX_CONCURRENCY", 12, 4, 12);
-  const minWait = bounded("MIN_WAIT_SECONDS", 5, 1, 60);
+  const minWait = bounded("MIN_WAIT_SECONDS", 3, 1, 60);
   return {
     maxPages: {
       min: 1,
@@ -41,7 +41,7 @@ export function fullSitePolicy(env: Record<string, string | undefined> = {}) {
       default: bounded("DEFAULT_PAGES", 10, 1, maxPages),
     },
     concurrency: { min: 1, max: maxConcurrency, default: 4 },
-    waitSeconds: { min: minWait, max: 300, default: Math.max(5, minWait) },
+    waitSeconds: { min: minWait, max: 300, default: Math.max(3, minWait) },
     discoveredUrls: bounded("MAX_DISCOVERED_URLS", 5000, maxPages, 20000),
     wallClockSeconds: bounded("MAX_SECONDS", 14400, 300, 86400),
     pageSeconds: 20,

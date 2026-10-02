@@ -29,6 +29,7 @@ import { InventoryPriorityHelp } from "./inventory-priority-help";
 import { InventoryResourceProvider, InventoryResourceMobile, type InventoryGraphSource } from "./inventory-resource-details";
 import type { ApiRuntimeEvidenceGraphProjection } from "@certscore/api-contracts";
 
+import { clearFullSiteReportCooldown, readFullSiteReportCooldown, saveFullSiteReportCooldown } from "../../lib/scans/full-site-report-cooldown";
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 
 type Filters = {
@@ -95,7 +96,7 @@ export function FullSiteTiming() {
 }
 
 function CrawlResourceScope({ homepage, source, children }: { homepage: boolean; source?: InventoryGraphSource; children: ReactNode }) {
-  return homepage ? children : <InventoryResourceProvider source={source} preload>{children}</InventoryResourceProvider>;
+  return homepage ? children : <InventoryResourceProvider source={source}>{children}</InventoryResourceProvider>;
 }
 
 export function FullSiteWorkspace({
@@ -148,6 +149,9 @@ export function FullSiteWorkspace({
     [offset, setOffset] = useState(0);
   const [data, setData] = useState<FullSiteReportResponse | null>(() => retainedReport?.scanId === scanId ? retainedReport.data : null),
     [error, setError] = useState<string | null>(null);
+  const [reportPauseUntil, setReportPauseUntil] = useState(0);
+  const reportPauseRef = useRef(0);
+  const reportPauseScanRef = useRef(scanId);
   const [detailPage, setDetailPage] = useState(""),
     [resource, setResource] = useState(""),
     [detailOffset, setDetailOffset] = useState(0);
@@ -162,6 +166,13 @@ export function FullSiteWorkspace({
     // This controller cancels report reads only; the background worker owns the crawl.
     const controller = new AbortController();
     terminal.current = false;
+    const cooldownStorage = (() => { try { return window.localStorage; } catch { return null; } })();
+    if (reportPauseScanRef.current !== scanId) {
+      reportPauseScanRef.current = scanId;
+      reportPauseRef.current = 0;
+    }
+    reportPauseRef.current = Math.max(reportPauseRef.current, readFullSiteReportCooldown(cooldownStorage, scanId));
+    setReportPauseUntil(reportPauseRef.current);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const burst = API_READ_RATE_POLICY.profiles.status.windows[0];
     const pollMs =
@@ -178,9 +189,16 @@ export function FullSiteWorkspace({
     let nextReadAt = 0;
     const load = async () => {
       if (loading || document.hidden || controller.signal.aborted || Date.now() < nextReadAt) return;
+      reportPauseRef.current = Math.max(reportPauseRef.current, readFullSiteReportCooldown(cooldownStorage, scanId));
+      if (Date.now() < reportPauseRef.current) {
+        setReportPauseUntil(reportPauseRef.current);
+        timer = setTimeout(() => void load(), reportPauseRef.current - Date.now());
+        return;
+      }
       loading = true;
       setIsFetching(true);
       let delay = Math.max(15000, pollMs);
+      let rateLimited = false;
       try {
         const params = new URLSearchParams({
           ...filters,
@@ -195,18 +213,21 @@ export function FullSiteWorkspace({
           { cache: "no-store", signal: controller.signal },
         );
         if (!response.ok) {
-          delay = Math.max(
-            delay,
-            Number(response.headers.get("retry-after") ?? 0) * 1000,
-          );
+          if (response.status === 429) {
+            rateLimited = true;
+            reportPauseRef.current = saveFullSiteReportCooldown(cooldownStorage, scanId, response.headers.get("retry-after"));
+            setReportPauseUntil(reportPauseRef.current);
+            delay = Math.max(delay, reportPauseRef.current - Date.now());
+          }
           throw new Error(
-            response.status === 429
-              ? "Report refresh temporarily paused. Please try again shortly."
-              : "Inventory updates are temporarily unavailable.",
+            response.status === 429 ? "Report read cooldown" : "Inventory updates are temporarily unavailable.",
           );
         }
         const next = (await response.json()) as FullSiteReportResponse;
         if (controller.signal.aborted) return;
+        reportPauseRef.current = 0;
+        clearFullSiteReportCooldown(cooldownStorage, scanId);
+        setReportPauseUntil(0);
         // Bind completion to this response and request, not stale component state after navigation.
         trackFullSiteCompletion(scanId, next.summary, homepageUrl);
         if (retainedReport?.scanId === scanId && filters === initialFilters && !offset && !detailPage) {
@@ -224,9 +245,14 @@ export function FullSiteWorkspace({
             next.summary.state.status,
           ) && next.summary.counts.active === 0;
       } catch (e) {
-        failures += 1;
-        delay = Math.max(delay, Math.min(120000, 15000 * 2 ** failures));
-        if (!controller.signal.aborted) setError((e as Error).message);
+        if (rateLimited) {
+          failures = 0;
+          if (!controller.signal.aborted) setError(null);
+        } else {
+          failures += 1;
+          delay = Math.max(delay, Math.min(120000, 15000 * 2 ** failures));
+          if (!controller.signal.aborted) setError((e as Error).message);
+        }
       }
       nextReadAt = Date.now() + delay;
       loading = false;
@@ -511,6 +537,7 @@ export function FullSiteWorkspace({
             </p>
           </div>
         ) : null}
+        {reportPauseUntil > Date.now() ? <p role="status" className="text-sm text-slate-600">Report updates are paused by a temporary read limit and will resume automatically.{running ? " The scan itself continues." : ""}</p> : null}
         {error ? (
           <p role="status" className="text-sm text-amber-800">
             {error} Retained results remain visible.
@@ -570,7 +597,7 @@ export function FullSiteWorkspace({
 
               {tab !== "pages" && inventoryView === "services" && data ? <FullSiteServices key={collapseVersion} scenario="pre_consent" services={data.services} pageName={pageName} pageChoices={data.pageChoices} homepageGraph={homepageGraph} /> : null}
               <div hidden={tab !== "pages" && inventoryView !== "resources"}>
-              <InventoryResourceProvider projection={homepageGraph} preload><table className="w-full min-w-[1000px] text-left text-xs">
+              <InventoryResourceProvider projection={homepageGraph}><table className="w-full min-w-[1000px] text-left text-xs">
                 <caption className="sr-only">
                   {tab === "pages" ? "Page observations" : "Resource evidence"};
                   additional pages receive inventory classification, not full diagnostic audits.

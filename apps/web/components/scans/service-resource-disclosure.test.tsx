@@ -13,6 +13,8 @@ test("resource graph button requires resolved displayable links, including paren
   const row = {name:"Fixture",kind:"request",eventCount:1,pageIds:[],purposes:[],relationships:[],occurrence:{kind:"request",label:"Fixture",details:{},evidenceRefs:[],graphNodeRefs:["request"]}} as unknown as React.ComponentProps<typeof ServiceResourceRows>["row"];
   const render = (projection?: typeof graph) => renderToStaticMarkup(<InventoryResourceProvider projection={projection}><table><tbody><ServiceResourceRows row={row} pageName={id=>id}/></tbody></table></InventoryResourceProvider>);
   assert.doesNotMatch(render(), /Show related resources/);
+  const deferred = renderToStaticMarkup(<InventoryResourceProvider source={{href:"/api/scans/fixture/full-site?graphPage=page",scanId:"page",sha256:"a".repeat(64)}}><table><tbody><ServiceResourceRows row={row} pageName={id=>id}/></tbody></table></InventoryResourceProvider>);
+  assert.match(deferred, /Load retained parent and child links/);
   assert.match(render(graph), /Show related resources/);
   const parentOnly = structuredClone(graph);
   parentOnly.graphs[0]!.edges = parentOnly.graphs[0]!.edges.filter(edge=>edge.to === "request");

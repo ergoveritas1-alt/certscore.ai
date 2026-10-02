@@ -50,7 +50,7 @@ serializes it to the UI and persists its validated snapshot with the parent.
 | --- | --- | --- |
 | Max pages | 10 | 1–500; `CERTSCORE_FULL_SITE_DEFAULT_PAGES`, `CERTSCORE_FULL_SITE_MAX_PAGES` (ceiling configurable 10–2000) |
 | Concurrency | 4 | 1–12; `CERTSCORE_FULL_SITE_MAX_CONCURRENCY` may lower the ceiling to 4–12 |
-| Wait between starts | 5 seconds | 5–300 seconds; `CERTSCORE_FULL_SITE_MIN_WAIT_SECONDS` (minimum configurable 1–60) |
+| Wait between starts | 3 seconds | 3–300 seconds; `CERTSCORE_FULL_SITE_MIN_WAIT_SECONDS` (minimum configurable 1–60). Existing scans retain their requested interval. |
 | Discovered candidates | 5000 | `CERTSCORE_FULL_SITE_MAX_DISCOVERED_URLS`, up to 20000 and at least the configured target ceiling |
 | Crawl wall clock | 14400 seconds (4 hours) | `CERTSCORE_FULL_SITE_MAX_SECONDS`, 300–86400 seconds |
 | Retries | 1 | `CERTSCORE_FULL_SITE_MAX_RETRIES`, 0–2 |

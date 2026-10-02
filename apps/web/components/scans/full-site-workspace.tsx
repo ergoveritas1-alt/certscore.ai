@@ -41,6 +41,7 @@ import { InventoryResourceProvider, InventoryResourceMobile, type InventoryGraph
 import type { ApiRuntimeEvidenceGraphProjection, ApiV2PreConsentRuntimePreview } from "@certscore/api-contracts";
 
 import { readFullSiteReportStream } from "../../lib/scans/full-site-report-stream";
+import { clearFullSiteReportCooldown, readFullSiteReportCooldown, saveFullSiteReportCooldown } from "../../lib/scans/full-site-report-cooldown";
 import type { FullSiteReportOverview, FullSiteReportResponse, FullSiteReportSupporting } from "../../server/scans/full-site-report";
 
 type Filters = {
@@ -107,7 +108,7 @@ export function FullSiteScanDuration() {
 }
 
 function CrawlResourceScope({ homepage, source, children }: { homepage: boolean; source?: InventoryGraphSource; children: ReactNode }) {
-  return homepage ? children : <InventoryResourceProvider source={source} preload>{children}</InventoryResourceProvider>;
+  return homepage ? children : <InventoryResourceProvider source={source}>{children}</InventoryResourceProvider>;
 }
 
 export function FullSiteWorkspace({
@@ -168,6 +169,9 @@ export function FullSiteWorkspace({
     [error, setError] = useState<string | null>(null);
   const [partialOverview, setPartialOverview] = useState<FullSiteReportOverview | null>(null);
   const [partialSupporting, setPartialSupporting] = useState<FullSiteReportSupporting | null>(null);
+  const [reportPauseUntil, setReportPauseUntil] = useState(0);
+  const reportPauseRef = useRef(0);
+  const reportPauseScanRef = useRef(scanId);
   const overview = data ?? partialOverview;
   const [detailPage, setDetailPage] = useState(""),
     [resource, setResource] = useState(""),
@@ -199,6 +203,13 @@ export function FullSiteWorkspace({
     // This controller cancels report reads only; the background worker owns the crawl.
     const controller = new AbortController();
     terminal.current = false;
+    const cooldownStorage = (() => { try { return window.localStorage; } catch { return null; } })();
+    if (reportPauseScanRef.current !== scanId) {
+      reportPauseScanRef.current = scanId;
+      reportPauseRef.current = 0;
+    }
+    reportPauseRef.current = Math.max(reportPauseRef.current, readFullSiteReportCooldown(cooldownStorage, scanId));
+    setReportPauseUntil(reportPauseRef.current);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const burst = API_READ_RATE_POLICY.profiles.status.windows[0];
     const pollMs =
@@ -215,9 +226,16 @@ export function FullSiteWorkspace({
     let nextReadAt = 0;
     const load = async () => {
       if (loading || document.hidden || controller.signal.aborted || Date.now() < nextReadAt) return;
+      reportPauseRef.current = Math.max(reportPauseRef.current, readFullSiteReportCooldown(cooldownStorage, scanId));
+      if (Date.now() < reportPauseRef.current) {
+        setReportPauseUntil(reportPauseRef.current);
+        timer = setTimeout(() => void load(), reportPauseRef.current - Date.now());
+        return;
+      }
       loading = true;
       setIsFetching(true);
       let delay = Math.max(15000, pollMs);
+      let rateLimited = false;
       // The verified relationship pass can exceed a minute on larger completed scans.
       // Supporting data arrives earlier on this same request; allow it to finish
       // rather than aborting and repeating the expensive read.
@@ -237,14 +255,14 @@ export function FullSiteWorkspace({
           { cache: "no-store", signal: requestSignal },
         );
         if (!response.ok) {
-          delay = Math.max(
-            delay,
-            Number(response.headers.get("retry-after") ?? 0) * 1000,
-          );
+          if (response.status === 429) {
+            rateLimited = true;
+            reportPauseRef.current = saveFullSiteReportCooldown(cooldownStorage, scanId, response.headers.get("retry-after"));
+            setReportPauseUntil(reportPauseRef.current);
+            delay = Math.max(delay, reportPauseRef.current - Date.now());
+          }
           throw new Error(
-            response.status === 429
-              ? "Report refresh temporarily paused. Please try again shortly."
-              : "Inventory updates are temporarily unavailable.",
+            response.status === 429 ? "Report read cooldown" : "Inventory updates are temporarily unavailable.",
           );
         }
         const next = response.headers.get("content-type")?.includes("application/x-ndjson")
@@ -255,6 +273,9 @@ export function FullSiteWorkspace({
             })
           : (await response.json()) as FullSiteReportResponse;
         if (controller.signal.aborted) return;
+        reportPauseRef.current = 0;
+        clearFullSiteReportCooldown(cooldownStorage, scanId);
+        setReportPauseUntil(0);
         // Bind completion to this response and request, not stale component state after navigation.
         trackFullSiteCompletion(scanId, next.summary, homepageUrl);
         if (retainedReport?.scanId === scanId && filters === initialFilters && !offset && !detailPage) {
@@ -275,10 +296,15 @@ export function FullSiteWorkspace({
             next.summary.state.status,
           ) && next.summary.counts.active === 0;
       } catch (e) {
-        failures += 1;
-        delay = Math.max(delay, Math.min(120000, 15000 * 2 ** failures));
-        if (!controller.signal.aborted) setError(requestSignal.reason?.name === "TimeoutError"
-          ? "Report loading took too long. Please retry." : (e as Error).message);
+        if (rateLimited) {
+          failures = 0;
+          if (!controller.signal.aborted) setError(null);
+        } else {
+          failures += 1;
+          delay = Math.max(delay, Math.min(120000, 15000 * 2 ** failures));
+          if (!controller.signal.aborted) setError(requestSignal.reason?.name === "TimeoutError"
+            ? "Report loading took too long. Please retry." : (e as Error).message);
+        }
       }
       nextReadAt = Date.now() + delay;
       loading = false;
@@ -534,6 +560,7 @@ export function FullSiteWorkspace({
           </div>
         ) : null}
         {partialOverview && !data && !error ? <p role="status" className="text-sm text-slate-600">Loading supporting details…</p> : null}
+        {reportPauseUntil > Date.now() ? <p role="status" className="text-sm text-slate-600">Report updates are paused by a temporary read limit and will resume automatically.{running ? " The scan itself continues." : ""}</p> : null}
         {error ? (
           <p role="status" className="text-sm text-amber-800">
             {error} <button type="button" className="ml-2 underline" onClick={() => setRefreshVersion(version => version + 1)} disabled={isFetching}>Retry report</button>{" "} {overview?.score ? "Showing the last loaded sitewide results." : "The sitewide score and inventory will appear when report access resumes."}
@@ -573,7 +600,7 @@ export function FullSiteWorkspace({
                 {!partialSupporting.services.length ? <p>No named services were identified in the retained inventory.</p> : null}
               </div> : null}
               <div hidden={tab !== "pages" && inventoryView !== "resources"}>
-              <InventoryResourceProvider projection={homepageGraph} preload><table className="w-full min-w-[1000px] text-left text-xs">
+              <InventoryResourceProvider projection={homepageGraph}><table className="w-full min-w-[1000px] text-left text-xs">
                 <caption className="sr-only">
                   {tab === "pages" ? "Page observations" : "Resource evidence"};
                   additional pages receive inventory classification, not full diagnostic audits.
