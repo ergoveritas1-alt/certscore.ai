@@ -46,3 +46,13 @@ test('current German ombudsman guidance qualifies without claiming a transfer vi
  assert.ok(assessOutdatedTransferDisclosure({...input,text}));
  assert.equal(getGdprEprivacyRowDeduction(project(text)),3);
 });
+
+test("unrelated German risk negation does not cancel current ombudsman guidance", () => {
+ const text="Section 702 des Foreign Intelligence Surveillance Act (FISA) sieht keine Beschränkungen der Überwachungsmaßnahmen der Geheimdienste und keine Garantien für Nicht-US-Bürger vor, Presidential Policy Directive 28 (PPD-28) gibt Betroffenen keine wirksamen Rechtsbehelfe gegen Maßnahmen der US-Behörden und sieht keine Schranken für die Sicherstellung verhältnismäßiger Maßnahmen vor, der im Privacy Shield vorgesehene Ombudsmann hat keine genügende Unabhängigkeit von der Exekutive; er kann keine bindenden Anordnungen gegenüber den Geheimdiensten treffen. Folglich stehen bei Zugriffen von US-Behörden auf Ihre personenbezogenen daten keine wirksamen Rechtsbehelfe oder eine unabhängige Datenschutz-Kontrollinstanz zur Verfügung. Bei einer Übermittlung Ihrer personenbezogenen Daten in die USA kann der Verlust der eigenen Datenhoheit nicht ausgeschlossen werden. Hierdurch sind die Rechte und Freiheiten von betroffenen Personen möglicherweise unzureichend geschützt.";
+ const assessment=assessOutdatedTransferDisclosure({...input,text});
+ assert.ok(assessment);
+ assert.equal(getGdprEprivacyRowDeduction(project(assessment.evidenceText,assessment)),3);
+ for (const text of ["Wir stützen uns nicht auf Privacy Shield für unsere Datenübermittlungen.", "Wir nutzen Privacy Shield nicht für unsere Datenübermittlungen.", "Wir nutzen nicht Privacy Shield für unsere Datenübermittlungen.", "Unser Anbieter ist nicht zertifiziert unter Privacy Shield."]) {
+  assert.equal(assessOutdatedTransferDisclosure({...input,text}),null,text);
+ }
+});

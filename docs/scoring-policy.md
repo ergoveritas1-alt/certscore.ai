@@ -151,3 +151,12 @@ deduction subsumes this smaller policy-quality deduction within the same cap.
 Stored historical reports are not bulk rewritten; new materializations carry the
 new policy versions. No new browser work, models, lanes or waits are introduced.
 Bounded assessment metadata is estimated below $0.10/month at 100,000 scans.
+
+Production verification also covers unrelated German risk negation: “nicht
+ausgeschlossen” must not cancel current ombudsman guidance. Explicit negation
+of reliance or certification remains neutral. Replaying the October 3 retained,
+hash-verified cotp.group policy through the canonical projection yields 97.
+The accompanying passive form fix retains styled native choices through a
+visible browser-associated label in the same form, preserving hidden/inert/CMP
+exclusions and existing field caps. It adds no interaction, wait, or model call;
+incremental compute is estimated below $0.10/month at 100,000 scans.

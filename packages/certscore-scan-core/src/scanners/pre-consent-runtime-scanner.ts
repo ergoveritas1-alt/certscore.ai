@@ -5411,7 +5411,24 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
     };
     const rows = inspectedFieldCandidates.flatMap((element, domOrder) => {
       const type = (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase();
-      if ((["hidden", "submit", "button", "reset", "image"].includes(type) && !["checkbox", "switch"].includes(element.getAttribute("role") ?? "")) || !isVisible(element) || isCmpOwned(element)) {
+      // Styled native choices may have a zero-sized transparent input while
+      // their browser-associated label is the visible control. Retain the
+      // native checked state without interacting or guessing a custom widget.
+      const visibleNativeChoiceLabel = element instanceof HTMLInputElement &&
+        ["checkbox", "radio"].includes(type) && element.form !== null &&
+        !element.closest('[hidden], [inert], [aria-hidden="true"]') &&
+        Array.from(element.labels ?? []).slice(0, 4).some(label => {
+          if (label.control !== element || label.closest("form") !== element.form ||
+            !isVisible(label) || isCmpOwned(label)) return false;
+          let ancestor: Element | null = label.parentElement;
+          for (let depth = 0; ancestor && depth < 12; depth++, ancestor = ancestor.parentElement) {
+            const style = window.getComputedStyle(ancestor);
+            if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) return false;
+            if (ancestor === document.body) return true;
+          }
+          return false;
+        });
+      if ((["hidden", "submit", "button", "reset", "image"].includes(type) && !["checkbox", "switch"].includes(element.getAttribute("role") ?? "")) || (!isVisible(element) && !visibleNativeChoiceLabel) || isCmpOwned(element)) {
         return [];
       }
       const nativeForm = (element as HTMLInputElement).form ?? element.closest("form");

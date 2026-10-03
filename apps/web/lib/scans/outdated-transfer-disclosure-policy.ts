@@ -2,9 +2,12 @@ import { z } from 'zod';
 import { evaluateLegalFrameworkValidity } from '@certscore/contracts';
 
 export const OUTDATED_TRANSFER_DISCLOSURE_POLICY = 'outdated_transfer_disclosure.v1' as const;
-const HISTORICAL_OR_CORRECTED = /\b(?:may|might|could|would|hypothetical|for example|zum beispiel|do not|does not|not certified|nicht|struck down|historical|historically|previously|formerly|invalidated|superseded|replaced|no longer|used to|was certified|was based|früher|ehemalig\w*|historisch\w*|ungültig|unwirksam|aufgehoben|ersetzt|nicht mehr)\b/iu;
+const HISTORICAL_OR_CORRECTED = /\b(?:may|might|could|would|hypothetical|for example|zum beispiel|do not|does not|not certified|struck down|historical|historically|previously|formerly|invalidated|superseded|replaced|no longer|used to|was certified|was based|früher|ehemalig\w*|historisch\w*|ungültig|unwirksam|aufgehoben|ersetzt|nicht mehr)\b/iu;
+// Negation must concern reliance/certification, not unrelated risk wording
+// such as “der Verlust ... kann nicht ausgeschlossen werden”.
+const NEGATED_GERMAN_RELIANCE = /\b(?:stützen|nutzen|verlassen|übermitteln|zertifiziert)[^.!?;]{0,80}\bnicht\b[^.!?;]{0,80}Privacy[\s–—-]+Shield\b|\bnicht\s+(?:auf|unter|nach|gemäß)\s+(?:(?:das|dem|den)\s+)?(?:EU[\s–—-]*US[\s–—-]*)?Privacy[\s–—-]+Shield\b|\bPrivacy[\s–—-]+Shield\s+nicht\b|\bnicht\s+zertifiziert\b/iu;
 function currentGuidance(text: string) {
-  if (HISTORICAL_OR_CORRECTED.test(text)) return false;
+  if (HISTORICAL_OR_CORRECTED.test(text) || NEGATED_GERMAN_RELIANCE.test(text)) return false;
   return /\b(?:we|our (?:provider|service provider|payment provider)|the (?:provider|company)).{0,120}\b(?:rely|relies|is certified|are certified|is based|transfer|transfers|use|uses)\b.{0,120}privacy[\s–—-]+shield\b/iu.test(text) ||
     /\b(?:wir|unser\w* (?:anbieter|dienstleister)).{0,120}\b(?:stützen|nutzen|verlassen|ist zertifiziert|sind zertifiziert|übermitteln)\b.{0,120}privacy[\s–—-]+shield\b/iu.test(text) ||
     /privacy[\s–—-]+shield.{0,120}\b(?:ombudsmann|ombudsman|ombudsperson)\b.{0,100}\b(?:hat|kann|ist|has|can|is)\b/iu.test(text);

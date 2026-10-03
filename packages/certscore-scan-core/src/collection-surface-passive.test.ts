@@ -46,7 +46,7 @@ for (const [count, locale, firstName, negativeChoice] of [
     try {
       const url = server.urlFor("branded-login-page");
       const controls = Array.from({ length: count }, (_, i) => count === 21 && i === 20
-        ? `<label><input type="checkbox" checked value="private-value-${i}">${negativeChoice}. Die <a href="/privacy">Datenschutzerklärung</a> habe ich zur Kenntnis genommen.</label>`
+        ? `<label><input type="checkbox" ${locale === 'de' ? 'style="opacity:0;width:0;height:0;position:absolute"' : ''} checked value="private-value-${i}">${negativeChoice}. Die <a href="/privacy">Datenschutzerklärung</a> habe ich zur Kenntnis genommen.</label>`
         : `<label>${count === 21 && i === 0 ? `${firstName}*` : `Field ${i}`}<input type="${i === 1 ? "password" : "text"}" value="private-value-${i}"></label>`).join("");
       let values: string[] = [];
       const result = await preConsentRuntimeScanner({
@@ -94,3 +94,39 @@ for (const [count, locale, firstName, negativeChoice] of [
     }
   });
 }
+
+test("styled native choice requires a visible same-form label and preserves hidden exclusions", async () => {
+  const server = await startStaticFixtureServer();
+  const directory = await mkdtemp(path.join(tmpdir(), "certscore-styled-choice-"));
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const url = server.urlFor("branded-login-page");
+    const body = `<html><head><style>input{opacity:0;width:0;height:0;position:absolute}</style></head><body>
+      <h1>Contact preferences</h1><p>Choose whether to receive our newsletter.</p>
+      <form><label><input type="checkbox" name="visible">Subscribe to newsletter</label>
+      <label hidden><input type="checkbox" name="hidden">Hidden newsletter</label>
+      <label aria-hidden="true"><input type="checkbox" name="aria-hidden">Hidden newsletter</label>
+      <label inert><input type="checkbox" name="inert">Inert newsletter</label>
+      <label><input hidden type="checkbox" name="explicit-hidden">Hidden newsletter</label>
+      <input type="checkbox" name="unlabelled"></form>
+      <form style="opacity:0"><label><input type="checkbox" name="transparent-form">Invisible newsletter</label></form>
+      <form style="display:none"><label><input type="checkbox" name="absent-form">Invisible newsletter</label></form>
+      <label><input type="checkbox" name="outside">Subscribe to newsletter outside form</label>
+      </body></html>`;
+    const result = await preConsentRuntimeScanner({
+      url, normalizedUrl: url, scanStartedAtMs: Date.now(), internalBudgetMs: 20_000,
+      artifactWriter: await createArtifactWriter(directory), browser, captureScope: "runtime_evidence",
+      waitMode: "fast", screenshotMode: "never", formSnapshotReviewer: async () => ({ safeForDisplay: true }),
+      routeFulfillers: [{ urlPattern: new RegExp(`^${url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`), contentType: "text/html", body }],
+    });
+    const fields = result.collectionSurfaceInventory!.forms.flatMap(form => form.fields);
+    assert.equal(fields.length, 1);
+    assert.equal(fields[0]?.label, "Subscribe to newsletter");
+    assert.equal(fields[0]?.checkedState, "unchecked");
+    assert.equal(fields[0]?.review?.preselectedMarketing, false);
+  } finally {
+    await browser.close();
+    await server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
