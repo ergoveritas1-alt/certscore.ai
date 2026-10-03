@@ -9396,6 +9396,15 @@ test("title-only guessed cookie routes are not projected as dedicated policies",
   assert.equal(assessment?.sourceDocumentSha256,createHash("sha256").update(text).digest("hex"));
   const unverified = raw.summarizePolicySurfaces(surfaces,"example.test",options);
   assert.equal(unverified.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment,undefined);
+  const originalHash = createHash("sha256").update(text.replaceAll(" ", "  ")).digest("hex");
+  const normalizedVerified = raw.summarizePolicySurfaces(surfaces.map(row => ({...row,surface:{...row.surface,
+    targetRelationship:"target_controller", documentTextCoverage:{status:"complete",sourceTextChars:text.length,retainedTextChars:text.length,limitationKeys:[]},
+    artifactRefs:[{artifactId:"policy_surface_text_hash",path:"/tmp/policy_surface_text_hash.txt",label:"policy_surface_text"}],
+  }})) as never,"example.test",{...options,policyTextEvidenceContext:{
+    artifactsById:new Map([["policy_surface_text_hash",{artifactId:"policy_surface_text_hash",text,sha256:originalHash,verificationStatus:"verified"}]]),
+    sourceBundle:{schemaVersion:"certscore.v2.canonical-evidence-bundle.v1",verificationStatus:"verified"},
+  }} as never);
+  assert.equal(normalizedVerified.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment?.sourceDocumentSha256,originalHash);
   const partial = wrapped.summarizePolicySurfaces(surfaces.map(row => ({...row,surface:{...row.surface,documentTextCoverage:{status:"truncated",sourceTextChars:2000,retainedTextChars:text.length,limitationKeys:["truncated"]}}})) as never,"example.test",options);
   assert.equal(partial.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment,undefined);
  });

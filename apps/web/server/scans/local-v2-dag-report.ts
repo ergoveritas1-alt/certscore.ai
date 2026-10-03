@@ -3200,10 +3200,11 @@ export function summarizePolicySurfaces(
         const verifiedPolicyText = retainedPolicyText?.text ?? null;
         const verifiedForAssessment = retainedPolicyText?.verificationStatus === "verified" &&
           options.policyTextEvidenceContext?.sourceBundle.verificationStatus === "verified" &&
-          verifiedPolicyText && retainedPolicyText.sha256 === createHash("sha256").update(verifiedPolicyText).digest("hex") &&
+          verifiedPolicyText && typeof retainedPolicyText.sha256 === "string" && /^[a-f0-9]{64}$/.test(retainedPolicyText.sha256) &&
           row.surface.documentTextCoverage?.status === "complete" && row.surface.targetRelationship === "target_controller";
         const outdatedTransferDisclosureAssessment = verifiedForAssessment ? assessOutdatedTransferDisclosure({
-          text: verifiedPolicyText, sourceDocumentSha256: createHash("sha256").update(verifiedPolicyText).digest("hex"),
+          // The loader verified original bytes; its text may be whitespace-normalized.
+          text: verifiedPolicyText, sourceDocumentSha256: retainedPolicyText!.sha256!,
           sourceUrl, scanDate: options.scanStartedAt,
         }) : null;
         const policyTexts = uniqueStrings([
