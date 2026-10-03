@@ -7,6 +7,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SinglePageResourceInventory } from "../../../components/scans/single-page-resource-inventory";
 import { SHADOW_REPORT } from "../../../components/scans/report-lab/shadow-report-data";
 import { inventoryLayoutFixture } from "./inventory-fixture";
+import { buildInventoryPreviewData } from "./inventory-preview-data";
+import { InventoryOverviewPreview } from "./inventory-overview-preview";
+
+test("sample report cannot impersonate a retained customer scan", () => {
+  const data = buildInventoryPreviewData("supplied");
+  assert.equal(data.snapshot.scan.host, "example.test");
+  assert.equal(data.snapshot.scan.id, "inventory-layout-preview");
+  const html = renderToStaticMarkup(<InventoryOverviewPreview data={data} signalSnapshot={null} scanNext={null} evidenceDirectory={null} />);
+  assert.match(html, /Sample report · not a saved scan/);
+  assert.match(html, /no privacy-policy document or form screenshot was captured/);
+  assert.match(html, /Site assessment · Sample data/);
+  assert.doesNotMatch(html, /pferdeklinik-roentorf|Share report/);
+});
 
 test("current preview uses service groups and consistent distinct-resource totals", () => {
   const fixture = inventoryLayoutFixture("supplied", SHADOW_REPORT.scan.id);

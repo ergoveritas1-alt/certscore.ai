@@ -8,7 +8,7 @@ import { buildUnifiedFindingDisplayPackets } from "../../../lib/scans/unified-fi
 import { selectSiteIntegrityFinding } from "../../../lib/scans/site-integrity-report";
 
 // Development-only layout data. Never persisted or used as canonical scan evidence.
-const homepage = { id: "preview-homepage", url: "https://www.pferdeklinik-roentorf.de/", homepage: true };
+const homepage = { id: "preview-homepage", url: "https://example.test/", homepage: true };
 const fixtureForm: CollectionSurfaceTableRow = {
   id: "layout-form", capturePhase: "after_accept_click", capturedAt: "2026-09-17T07:22:36Z", snapshot: { status: "unavailable" },
   form: { formRef: "layout-contact", structure: "native_form", surfaceType: "contact", title: "Illustrative contact form", pageUrl: "https://example.test/contact", method: "post", actionRelationship: "same_site", candidateFieldCount: 5, retainedFieldCount: 5, fieldsTruncated: false, confidence: 1, directVsInferred: "direct", evidenceRefs: [],
@@ -38,7 +38,7 @@ const priorities: SitePriorityFinding[] = [
 ];
 
 export function buildInventoryPreviewData(scenario: InventoryScenario) {
-  const fixture = inventoryLayoutFixture(scenario, SHADOW_REPORT.scan.id);
+  const fixture = inventoryLayoutFixture(scenario, "inventory-layout-preview");
   // Isolated synthetic contract, projected through the same concern/policy path.
   // Keep it outside the report snapshot, score, exports and real-site findings.
   const sampleIntegrityFinding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({
@@ -69,7 +69,7 @@ export function buildInventoryPreviewData(scenario: InventoryScenario) {
     resourceInventory: fixture.inventory,
     executiveRuntimeCards,
     timeline: SHADOW_REPORT.timeline.map(event => event.label === "Third-party request" ? { ...event, detail: "Third-party request first observed", tone: "neutral" as const } : event),
-    scan: { ...SHADOW_REPORT.scan, url: homepage.url, host: "www.pferdeklinik-roentorf.de", createdAt: "Sep 17, 2026, 7:22:36 AM UTC", origin: "California", originCode: "california", duration: "1m 35s", visualEvidenceHref: null },
+    scan: { ...SHADOW_REPORT.scan, id: "inventory-layout-preview", url: homepage.url, host: "example.test", createdAt: "Sep 17, 2026, 7:22:36 AM UTC", origin: "California", originCode: "california", duration: "1m 35s", visualEvidenceHref: null },
     metrics: { ...SHADOW_REPORT.metrics, vendors: 3, domains: 3 },
     consentVendor: "BST DSGVO Cookie notice plugin, non-TCF",
     consentControlBehavior: "The observed control is a contextual acknowledgment. Its presence does not prove that consent was registered.",
