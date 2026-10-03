@@ -9,6 +9,7 @@ export type ReleaseLink = {
 };
 
 export type ReleaseSection = {
+  example?: "session-replay";
   image?: { path: string; alt: string; width: number; height: number; caption: string };
   bullets?: readonly string[];
   heading: string;
@@ -48,6 +49,98 @@ export type ProductRelease = {
 };
 
 const releases: readonly ProductRelease[] = [
+{
+  "slug": "session-replay-detection",
+  "cardImage": { "path": "/images/releases/session-replay-social-card.png", "alt": "12.0%: 383 of 3,199 analyzed domains showed a session-replay service signal", "width": 1200, "height": 630 },
+  "headline": "See when session-replay technology appears on a website",
+  "shortDescription": "Identify observable session-replay service signals, inspect the retained evidence, and give your privacy review a clearer starting point.",
+  "publicationDate": "2026-10-03",
+  "category": "Scanner capability",
+  "ctaHeading": "See what appears on your website",
+  "ctaDescription": "Explore the cookies, trackers, consent behavior, session-replay signals and other privacy evidence CertScore.ai can observe from the public web.",
+  "seoTitle": "Session replay detection and evidence",
+  "metaDescription": "Identify session-replay service signals with CertScore.ai. Explore our study of 5,000 scans, the observed services and the evidence behind the findings.",
+  "primaryCta": {
+    "href": "/",
+    "label": "Scan your website"
+  },
+  "body": [
+    "Session-replay tools can help teams understand website journeys. Privacy reviewers need to know where these services appear and what the evidence actually shows.",
+    "CertScore.ai surfaces observable session-replay service signals and preserves supporting page, service and request context where available. A recognized service is a starting point for review; it does not prove that visitor sessions or field values were recorded."
+  ],
+  "socialImage": {
+    "path": "/images/releases/session-replay-social-card.png",
+    "alt": "12.0%: 383 of 3,199 analyzed domains showed an observable session-replay service signal.",
+    "width": 1200,
+    "height": 630
+  },
+  "sections": [
+    {
+      "id": "research",
+      "heading": "Nearly 1 in 8 analyzed websites showed a replay-service signal",
+      "paragraphs": [
+        "Across 5,000 selected production scans, 3,199 distinct destination domains had usable evidence. CertScore.ai observed a session-replay service signal on 383 of them \u2014 12.0%. Microsoft Clarity appeared on 265 of the 383 replay-positive domains (69.2%).",
+        "This is a production convenience sample, not a measure of the entire web. The 1,756 executions with unknown or insufficient evidence were excluded, not counted as negatives."
+      ],
+      "sourceLinks": [
+        {
+          "href": "/insights/session-replay-study-2026",
+          "label": "Read the original study and methodology"
+        }
+      ]
+    },
+    {
+      "id": "evidence",
+      "heading": "Start with the observed evidence",
+      "paragraphs": [
+        "Review the recognized service and its retained evidence in the scan report. Known product-specific requests may include a library download; a request alone does not establish recording or successful transmission."
+      ],
+      "example": "session-replay"
+    },
+    {
+      "id": "forms",
+      "heading": "Put form context beside the service signal",
+      "paragraphs": [
+        "In the study, 191 of 380 replay-positive domains with evaluable form evidence had a form or input surface on the same measured page (50.3%). The corresponding figure among evaluable domains without an observed replay signal was 1,331 of 2,781 (47.9%).",
+        "These descriptive results do not establish an unusual association. Co-presence does not establish that field values were entered, transmitted to the replay service or recorded."
+      ]
+    },
+    {
+      "id": "review",
+      "heading": "A practical review workflow",
+      "steps": [
+        "Run a public website scan and review the observed services and retained evidence.",
+        "Check the page context and any available Forms & fields evidence. Keep separate visits and pages distinct.",
+        "Ask the site owner to verify replay configuration, masking, consent settings and relevant disclosures. Retest after configuration changes."
+      ],
+      "paragraphs": [
+        "A bounded scan can miss services that load later, require interaction or are not recognized. \u201cNot observed\u201d does not mean \u201cnot installed.\u201d Findings guide review; they do not determine legal compliance."
+      ]
+    }
+  ],
+  "resourceLinks": [
+    {
+      "href": "/insights/session-replay-study-2026",
+      "label": "Session replay study: 5,000 production scans"
+    },
+    {
+      "href": "/guides/session-replay-risk",
+      "label": "Session replay review guide"
+    },
+    {
+      "href": "/guides/website-form-scanning",
+      "label": "Forms and field evidence"
+    },
+    {
+      "href": "/guides/third-party-cookie-checker",
+      "label": "Review cookies and trackers"
+    },
+    {
+      "href": "/methodology",
+      "label": "Scanning methodology"
+    }
+  ]
+},
 {
   "slug": "forms-capture",
   "headline": "See the forms on your website—and the privacy questions they raise",

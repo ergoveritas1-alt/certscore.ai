@@ -17,5 +17,5 @@ export const metadata: Metadata = {
 };
 
 export default function SessionReplayRiskGuidePage() {
-  return <AiVisibilityContent badge={guide.badge} intro={guide.intro} path={guide.path} schema={buildArticleSchema(guide)} sections={guide.sections} title={guide.title} />;
+  return <AiVisibilityContent relatedLinks={[{ href: "/insights/session-replay-study-2026", label: "Original study: session replay signals across 5,000 scans" }, { href: "/releases/session-replay-detection", label: "Session Replay Detection release" }]} badge={guide.badge} intro={guide.intro} path={guide.path} schema={buildArticleSchema(guide)} sections={guide.sections} title={guide.title} />;
 }

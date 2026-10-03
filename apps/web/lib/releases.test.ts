@@ -21,7 +21,7 @@ test("published releases include choice-path testing and MCP Light", () => {
   assert.ok(choicePathRelease);
   assert.equal(release.headline, "CertScore.ai MCP Light is now available");
   assert.equal(release.primaryCta.href, "/mcp/light");
-  assert.deepEqual(getPublishedReleases().map((item) => item.slug), ["forms-capture", "mcp-hosted-oauth", "accept-and-reject-path-testing", "mcp-light"]);
+  assert.deepEqual(getPublishedReleases().map((item) => item.slug), ["session-replay-detection", "forms-capture", "mcp-hosted-oauth", "accept-and-reject-path-testing", "mcp-light"]);
   assert.equal(getPublishedRelease("mcp-light-reject-path"), null);
 
   const copy = JSON.stringify(release);

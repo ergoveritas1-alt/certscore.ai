@@ -7,6 +7,8 @@ export const EDITORIAL_AUTHOR = {
 
 type EditorialDates = { datePublished?: string; dateModified: string };
 const dates: Record<string, EditorialDates> = {
+  "/insights/session-replay-study-2026": { datePublished: "2026-10-03", dateModified: "2026-10-03" },
+  "/guides/session-replay-risk": { dateModified: "2026-10-03" },
   "/guides/website-form-scanning": { datePublished: "2026-09-21", dateModified: "2026-09-21" },
   "/how-it-works": { dateModified: "2026-09-21" },
   "/": { dateModified: "2026-09-21" },
@@ -43,6 +45,7 @@ export function getEditorialDates(path: string): EditorialDates | undefined {
 }
 
 export function getSocialImage(path: string) {
+  if (path === "/insights/session-replay-study-2026") return { path: "/images/releases/session-replay-social-card.png", alt: "12.0%: 383 of 3,199 analyzed domains showed a session-replay service signal", width: 1200, height: 630 };
   const images: Record<string, string> = {
     "/guides/test-global-privacy-control": "gpc-testing",
     "/guides/google-analytics-meta-pixel-before-consent": "tracking-before-consent",

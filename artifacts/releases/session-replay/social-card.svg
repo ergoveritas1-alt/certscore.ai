@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#f0f9ff"/><rect x="0" y="0" width="1200" height="10" fill="#0284c7"/>
+<g font-family="Arial, sans-serif"><text x="70" y="76" font-size="27" font-weight="700" fill="#0f172a">CertScore.ai</text><text x="1130" y="76" text-anchor="end" font-size="18" fill="#475569">ORIGINAL RESEARCH · OCTOBER 2026</text>
+<text x="64" y="278" font-size="170" font-weight="700" letter-spacing="-8" fill="#075985">12.0%</text>
+<text x="72" y="349" font-size="36" font-weight="700" fill="#0f172a">of analyzed domains showed</text><text x="72" y="399" font-size="36" font-weight="700" fill="#0f172a">a session-replay service signal</text>
+<text x="72" y="456" font-size="24" fill="#475569">383 / 3,199 domains with usable evidence · 5,000 scans examined</text>
+<line x1="72" y1="508" x2="1128" y2="508" stroke="#bae6fd"/>
+<text x="72" y="553" font-size="22" fill="#334155">Service signal ≠ proof of recording or input capture.</text></g></svg>

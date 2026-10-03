@@ -1,0 +1,33 @@
+{
+  "productionBuild": "PASS; 207 static pages; Node heap override 14336 MB for local build only",
+  "typecheck": "PASS",
+  "preflight": {
+    "status": "PASS",
+    "tests": 1656,
+    "suitesByTestCount": [
+      139,
+      79,
+      64,
+      527,
+      439,
+      111,
+      47,
+      250
+    ]
+  },
+  "focusedLaunchTests": 12,
+  "focusedReplayTests": 5,
+  "dataReproduction": "PASS",
+  "httpPages": 5,
+  "internalLinkTargets": 47,
+  "viewportWidthsVerified": [
+    1440,
+    390,
+    320
+  ],
+  "keyboardDisclosures": "PASS: click and Space toggle",
+  "browserConsole": "No errors or new production warnings; earlier dev-only LCP warning for existing forms card",
+  "standaloneLinter": "No standalone lint script configured; Next build lint/type phase completed",
+  "formatter": "Prettier 3.6.2 check passed for new TSX/test/JSON; git diff --check passed",
+  "unrelatedBaselineReportFailures": 11
+}

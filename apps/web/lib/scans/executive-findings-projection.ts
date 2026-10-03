@@ -2882,7 +2882,7 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
       basis: firstPartyProxyObserved
         ? "Session recording collection appears proxied through the scanned first-party host."
         : collectionEndpointObserved === true
-          ? "A session-replay collection endpoint was directly retained during runtime collection."
+          ? "A request associated with a session-replay service was retained during runtime collection; it may include a library download."
           : "A session-replay runtime library or service endpoint was retained; recording and data transmission were not demonstrated."
     },
     inputSurfaceEvidence: { evaluated: false },
@@ -2900,7 +2900,7 @@ function buildSessionReplayEvidenceDetails(packet: UnifiedFindingDisplayPacket):
     limitations: [
       "Automated scan does not determine legal status.",
       collectionEndpointObserved === true
-        ? "A collection endpoint indicates transmission to the service, but does not establish the full contents captured or retained."
+        ? "A service-associated request does not by itself establish successful transmission, active recording or capture of field values."
         : "Library or settings traffic identifies a session-replay service signal, not proof that recording or data transmission occurred."
     ],
     runtimeRequestUrls: requestUrls,
@@ -4865,7 +4865,7 @@ function buildExecutiveShortSummary(
       const collectionObserved = evidenceDetails?.sessionReplayEvidence &&
         (evidenceDetails.sessionReplayEvidence as Record<string, unknown>).collectionEndpointObserved === true;
       return collectionObserved
-        ? `${vendorList} session-replay collection endpoint activity was observed during runtime collection.`
+        ? `${vendorList} session-replay service requests were observed; this does not establish active recording or capture of field values.`
         : `${vendorList} runtime/session-replay service signals were observed; retained evidence did not demonstrate recording or data transmission.`;
     }
 

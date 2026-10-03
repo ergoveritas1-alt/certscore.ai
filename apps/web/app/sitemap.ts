@@ -80,6 +80,7 @@ const staticPaths = [
   "/guides/website-privacy-policy-requirements",
   "/guides/website-signal-check",
   "/insights",
+  "/insights/session-replay-study-2026",
   "/insights/common-cookie-consent-issues",
   "/insights/common-privacy-policy-gaps"
 ];

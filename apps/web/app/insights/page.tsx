@@ -6,11 +6,12 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Insights",
   description:
-    "Explore structured CertScore.ai insights pages covering common cookie-consent and privacy-policy gaps found on public websites.",
+    "Explore original CertScore.ai research and practical insights into session-replay signals, cookie consent and privacy-policy evidence.",
   path: "/insights"
 });
 
 const insightPages = [
+  { href: "/insights/session-replay-study-2026", title: "Session replay signals: findings from 5,000 production scans", description: "Original CertScore.ai research: 12.0% of 3,199 domains with usable evidence showed an observable replay-service signal." },
   {
     href: "/insights/common-cookie-consent-issues",
     title: "Common cookie consent issues",
@@ -29,12 +30,10 @@ export default function InsightsIndexPage() {
       <div className="max-w-3xl space-y-4">
         <Badge tone="neutral">Insights</Badge>
         <h1 className="text-4xl font-semibold tracking-tight text-slate-900">
-          Structured insight pages for common website signal patterns
+          Original research and practical website privacy insights
         </h1>
         <p className="text-lg text-slate-600">
-          These pages explain the types of privacy and policy issues that automated
-          scanners commonly surface on public websites. They are designed as concise review material
-          for people and AI systems.
+          Explore original CertScore.ai measurements and evidence-based guides to the privacy and policy signals observed on public websites.
         </p>
       </div>
 

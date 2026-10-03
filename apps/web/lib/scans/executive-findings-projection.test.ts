@@ -3532,6 +3532,7 @@ test("projects concrete session replay vendor evidence into executive finding js
   assert.equal(finding?.evidenceVersion, "1.1");
   assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.observed, true);
   assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.collectionEndpointObserved, true);
+  assert.ok(finding?.evidenceDetails?.limitations?.includes("A service-associated request does not by itself establish successful transmission, active recording or capture of field values."));
   assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.libraryOnly, false);
   assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.maskingOrExclusionObserved, false);
   assert.equal(finding?.evidenceDetails?.sessionReplayEvidence?.sensitiveSurfaceOverlap, false);
@@ -3543,7 +3544,7 @@ test("projects concrete session replay vendor evidence into executive finding js
   assert.ok(finding?.evidencePreview.includes("Runtime vendor: Qualtrics SiteIntercept"));
   assert.equal(
     finding?.shortSummary,
-    "Qualtrics SiteIntercept session-replay collection endpoint activity was observed during runtime collection."
+    "Qualtrics SiteIntercept session-replay service requests were observed; this does not establish active recording or capture of field values."
   );
 });
 

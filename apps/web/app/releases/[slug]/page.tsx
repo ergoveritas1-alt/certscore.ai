@@ -1,3 +1,4 @@
+import { SessionReplayEvidenceExample } from "../../../components/marketing/session-replay-evidence-example";
 import { EditorialByline } from "../../../components/marketing/editorial-byline";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -87,6 +88,7 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
                 {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
               </div>
             ) : null}
+            {section.example === "session-replay" ? <SessionReplayEvidenceExample /> : null}
             {section.image ? (
               <figure className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
                 <img src={section.image.path} alt={section.image.alt} width={section.image.width} height={section.image.height} className="mx-auto h-auto max-w-full rounded-lg" loading="lazy" />

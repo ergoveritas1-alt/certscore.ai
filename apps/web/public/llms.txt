@@ -238,3 +238,7 @@ Send comments to support@certscore.ai.
 - How to read a consent report: a retained example: https://certscore.ai/guides/consent-report-example
 - Editorial policy: https://certscore.ai/editorial-policy
 - CCPA evidence review: https://certscore.ai/ccpa
+
+## Session replay launch and original research
+- https://certscore.ai/releases/session-replay-detection
+- https://certscore.ai/insights/session-replay-study-2026

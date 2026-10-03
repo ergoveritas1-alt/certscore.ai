@@ -1,0 +1,91 @@
+{
+  "result": "PASS",
+  "pages": {
+    "/releases": {
+      "status": 200,
+      "h1": 1,
+      "canonical": "https://certscore.ai/releases",
+      "description": "Product updates, new website privacy-detection capabilities, integrations and developer tools from CertScore.ai.",
+      "socialImage": "https://certscore.ai/images/social/website-privacy-scanner.png"
+    },
+    "/releases/session-replay-detection": {
+      "status": 200,
+      "h1": 1,
+      "canonical": "https://certscore.ai/releases/session-replay-detection",
+      "description": "Identify session-replay service signals with CertScore.ai. Explore our study of 5,000 scans, the observed services and the evidence behind the findings.",
+      "socialImage": "https://certscore.ai/images/releases/session-replay-social-card.png"
+    },
+    "/insights/session-replay-study-2026": {
+      "status": 200,
+      "h1": 1,
+      "canonical": "https://certscore.ai/insights/session-replay-study-2026",
+      "description": "Across 5,000 production scans, 383 of 3,199 domains with usable evidence showed a session-replay service signal. Explore the services, context and methodology.",
+      "socialImage": "https://certscore.ai/images/releases/session-replay-social-card.png"
+    },
+    "/insights": {
+      "status": 200,
+      "h1": 1,
+      "canonical": "https://certscore.ai/insights",
+      "description": "Explore original CertScore.ai research and practical insights into session-replay signals, cookie consent and privacy-policy evidence.",
+      "socialImage": "https://certscore.ai/images/social/website-privacy-scanner.png"
+    },
+    "/guides/session-replay-risk": {
+      "status": 200,
+      "h1": 1,
+      "canonical": "https://certscore.ai/guides/session-replay-risk",
+      "description": "Understand observable session-replay service signals, form context and the limits of a bounded website scan.",
+      "socialImage": "https://certscore.ai/images/social/website-privacy-scanner.png"
+    }
+  },
+  "linkedInternalRoutes": {
+    "/": 200,
+    "/benchmarks": 200,
+    "/browser-extension": 200,
+    "/ccpa": 200,
+    "/claude": 200,
+    "/compare": 200,
+    "/contact": 200,
+    "/contact-sales": 200,
+    "/developers": 200,
+    "/developers/mcp": 200,
+    "/developers/reference": 200,
+    "/developers/sdk": 200,
+    "/editorial-policy": 200,
+    "/findings": 200,
+    "/findings/session_recording_services_detected": 200,
+    "/gdpr": 200,
+    "/guides": 200,
+    "/guides/cookie-consent-enforcement-checker": 200,
+    "/guides/detect-tracking-before-consent": 200,
+    "/guides/session-replay-risk": 200,
+    "/guides/test-global-privacy-control": 200,
+    "/guides/third-party-cookie-checker": 200,
+    "/guides/website-form-scanning": 200,
+    "/how-it-works": 200,
+    "/insights/common-cookie-consent-issues": 200,
+    "/insights/common-privacy-policy-gaps": 200,
+    "/insights/session-replay-study-2026": 200,
+    "/login": 200,
+    "/methodology": 200,
+    "/monitor-site": 200,
+    "/pricing": 200,
+    "/privacy": 200,
+    "/privacy-request": 200,
+    "/regulatory": 200,
+    "/releases": 200,
+    "/releases/accept-and-reject-path-testing": 200,
+    "/releases/forms-capture": 200,
+    "/releases/mcp-hosted-oauth": 200,
+    "/releases/mcp-light": 200,
+    "/releases/session-replay-detection": 200,
+    "/security": 200,
+    "/solutions": 200,
+    "/solutions/cookie-consent-scanner": 200,
+    "/solutions/gdpr-website-compliance-scanner": 200,
+    "/solutions/privacy-policy-risk-scanner": 200,
+    "/terms": 200,
+    "/trust": 200
+  },
+  "sitemapAndRSS": "PASS",
+  "socialImage": "1200 x 630 PNG"
+}

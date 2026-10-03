@@ -91,19 +91,19 @@ export const aiGuideContent = {
     ]
   },
   sessionReplayRisk: {
-    badge: "Session recording guide",
+    badge: "Session replay guide",
     title: "Session replay risk: what website owners should review",
     description:
-      "Review the difference between session recording service detection and more sensitive session replay risk signals.",
+      "Understand observable session-replay service signals, form context and the limits of a bounded website scan.",
     path: "/guides/session-replay-risk",
     intro:
-      "Session replay risk means a website shows evidence of session recording technology or more sensitive replay behavior that should be reviewed. CertScore.ai distinguishes a session recording service detected from session replay on a sensitive input surface. The first signal means a recording-related vendor or script appeared in the scan. The second is rarer and more urgent when evidence suggests replay-related behavior near sensitive forms, account flows, checkout fields, or other input surfaces.",
+      "CertScore.ai identifies observable session-replay service signals and separately reviews input-surface context. A recognized vendor, script or request can help locate technology to review. It does not prove that recording was enabled or that visitor inputs were captured.",
     sections: [
       {
         title: "Two different signal levels",
         paragraphs: [
-          "A session recording service detected signal means the scan observed a vendor or script associated with session recording or behavioral analytics.",
-          "Session replay on a sensitive input surface is rarer and more urgent when evidence shows the behavior near sensitive forms, account flows, checkout fields, or other surfaces where user input deserves closer review."
+          "A session replay service signal means the scan observed evidence associated with a recognized replay or behavioral-analytics service. This can include a library download.",
+          "Separate input-surface findings provide context for review. Same-scan evidence alone does not establish that the service and field appeared on the same page, or that values were entered, transmitted or recorded."
         ]
       },
       {

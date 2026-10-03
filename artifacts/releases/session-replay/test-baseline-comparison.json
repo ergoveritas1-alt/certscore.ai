@@ -1,0 +1,24 @@
+{
+  "introducedFailures": [],
+  "unchangedBaseFailures": [
+    "projects surfaced unified findings into executive findings and regulatory lenses",
+    "splits RTB cookie-sync direct vendor counts from related redirect and inferred vendor context",
+    "projects blocking overlay context without violation framing",
+    "keeps scanned page URL separate from representative third-party request URLs",
+    "uses promotion-grade request classifications for pre-consent representative tracking anchors",
+    "labels Bing sync endpoints by endpoint vendor while preserving initiating vendor context",
+    "keeps direct pre-consent request attribution on hostname-supported vendors for nbcnews-style rows",
+    "labels Bing and Clarity sync-style related runtime requests with endpoint and initiating vendors",
+    "projects pre-consent tracking when tracker requests have timeline and non-essential classification evidence",
+    "projects first-party proxy pre-consent tracker evidence without using request URL as scan context",
+    "orders direct adtech anchors before first-party proxy anchors and reads redacted query keys"
+  ],
+  "focusedReplayTests": {
+    "pass": 5,
+    "fail": 0
+  },
+  "launchAndReleaseTests": {
+    "pass": 12,
+    "fail": 0
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "result": "PASS",
+  "method": "Offline full reproduction, independent CSV aggregation, ZIP comparison, removal of all date_of_birth labels",
+  "sourceInputSHA256": "d9b352993a4e5316e2c653f78bb87e3d0d4fe37e02ce60ee50bce35e5408af44",
+  "matchingOutputs": [
+    "session_replay_domains.csv",
+    "session_replay_vendors.csv",
+    "session_replay_forms.csv",
+    "statistics.json"
+  ],
+  "dateOfBirthLabelsRemoved": 1,
+  "mainServiceAndFormsResultsUnchanged": true,
+  "publishedPercentages": {
+    "replay": "12.0%",
+    "clarity": "69.2%",
+    "forms": "50.3%",
+    "comparison": "47.9%",
+    "email": "28.8%"
+  },
+  "publicData": {
+    "selected": 5000,
+    "completed": 4988,
+    "usableExecutions": 3244,
+    "unknownExecutions": 1756,
+    "domains": 3199,
+    "positive": 383,
+    "positiveFormsEvaluable": 380,
+    "positiveForms": 191,
+    "comparisonEvaluable": 2781,
+    "comparisonForms": 1331,
+    "emailDomains": 55,
+    "services": [
+      {
+        "name": "Microsoft Clarity",
+        "domains": 265
+      },
+      {
+        "name": "Hotjar",
+        "domains": 116
+      },
+      {
+        "name": "Contentsquare",
+        "domains": 18
+      },
+      {
+        "name": "FullStory",
+        "domains": 8
+      },
+      {
+        "name": "Quantum Metric",
+        "domains": 5
+      }
+    ],
+    "firstCreated": "2026-09-18T18:30:48.000305+00:00",
+    "lastCreated": "2026-10-01T08:27:40.661054+00:00",
+    "cutoff": "2026-10-01T08:30:00Z"
+  },
+  "archivePublished": false
+}
