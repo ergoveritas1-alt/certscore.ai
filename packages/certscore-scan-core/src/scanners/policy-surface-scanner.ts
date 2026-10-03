@@ -9088,11 +9088,11 @@ function extractCanonicalTopicWindowSectionsFromVisibleText(
         ? precedingBoundary + 2
         : Math.max(0, anchorStart - 320);
       const maximumEnd = Math.min(normalized.length, start + 1_000);
-      const followingBoundaries = [
-        normalized.indexOf(". ", anchorEnd),
-        normalized.indexOf("? ", anchorEnd),
-        normalized.indexOf("! ", anchorEnd),
-      ].filter((index) => index >= anchorEnd + 40 && index <= maximumEnd);
+      const followingBoundaries = Array.from(
+        normalized.slice(anchorEnd, maximumEnd).matchAll(/[.!?](?:\s+|$)/g),
+        (boundary) => anchorEnd + boundary.index!,
+      ).filter((index) => index >= anchorEnd + 40 &&
+        !/\b(?:Art|Abs|Nr|No|Mr|Ms|Dr|ff)\.$/i.test(normalized.slice(Math.max(0, index - 8), index + 1)));
       const end = followingBoundaries.length > 0
         ? Math.max(...followingBoundaries) + 1
         : maximumEnd;
@@ -9824,7 +9824,7 @@ function sectionEvidenceStatus(
     .find((match) => match.topic === profile.disclosureType && match.matchedLocale !== "en");
   if (localizedClassifierMatch) {
     return sharedArticle13DisclosureRejectReason(
-      evidenceContext,
+      excerpt,
       profile.disclosureType,
       { mode: "multilingual_classifier" },
     ) === null

@@ -1,3 +1,4 @@
+import { collectionFieldLabelCategory, collectionFieldAutocompleteCategory, isPositiveCollectionMarketingChoice } from './collection-field-labels';
 /** Inventory review metadata only: never a finding, legal conclusion or score. */
 export const COLLECTION_FIELD_REVIEW_VERSION = 'collection-field-review.v1' as const;
 export const FIELD_REVIEW_CATEGORIES = ['special_category','criminal_offence','government_identifier','financial_payment','credentials','personal_contact','identity_profile','location','marketing_contact','free_text','file_upload','operational','unknown'] as const;
@@ -11,7 +12,14 @@ export function classifyCollectionFieldReview(field:{label?:string;surfaceType?:
  const text=`${field.label??''} ${field.autocompleteToken??''}`.toLowerCase();
  const marketing=/\b(newsletters?|marketing|promotional|mailing list|email updates)\b/.test(text);
  let category:FieldReviewCategory='unknown';
- if(/\b(health|medical|diagnosis|symptoms?|race|ethnicity|religion|religious|political|trade union|union membership|genetic|biometric|sexual orientation|sex life)\b/.test(text))category='special_category';
+ const labelCategory = collectionFieldLabelCategory(field.label);
+ const autocompleteCategory = collectionFieldAutocompleteCategory(field.autocompleteToken);
+ const canonical = field.semanticCategory ?? autocompleteCategory ?? labelCategory;
+ const canonicalReview = legacyCollectionFieldCategory(canonical);
+ if(canonical === 'boolean_choice') category='unknown';
+ else if(canonicalReview !== 'unknown') category=canonicalReview === 'personal_contact' && (marketing || field.surfaceType === 'newsletter') ? 'marketing_contact' : canonicalReview;
+ else if(canonical === 'unknown' && (labelCategory !== undefined || autocompleteCategory !== undefined)) category=/^(?:company name|company|organization|organisation|job title|firmenname|nom de société|nombre de empresa|nome azienda|nome da empresa|bedrijfsnaam)$/u.test((field.label??'').toLowerCase().trim()) ? 'operational' : 'unknown';
+ else if(/\b(health|medical|diagnosis|symptoms?|race|ethnicity|religion|religious|political|trade union|union membership|genetic|biometric|sexual orientation|sex life)\b/.test(text))category='special_category';
  else if(/\b(criminal|convictions?|arrests?|offen[cs]es?|criminal background)\b/.test(text))category='criminal_offence';
  else if(/\b(ssn|social security|national id|passport|driver'?s? licen[cs]e|tax id|taxpayer identification)\b/.test(text))category='government_identifier';
  else if(/\b(credit card|debit card|card number|bank account|routing number|iban|cvv|cvc)\b|cc-number|cc-csc|cc-exp/.test(text))category='financial_payment';
@@ -23,7 +31,7 @@ export function classifyCollectionFieldReview(field:{label?:string;surfaceType?:
  else if(/\b(company name|product|quantity|order number|booking reference)\b/.test(text))category='operational';
  else if(/\b(name|date of birth|dob|birthday|age|gender|job title|employer)\b/.test(text))category='identity_profile';
  else category=legacyCollectionFieldCategory(field.semanticCategory);
- const preselectedMarketing=marketing&&field.checkedState==='checked'&&['checkbox','switch'].includes(field.controlKind??'')&&!/\b(no|not|unsubscribe|opt out|don't|do not)\b/.test(text);
+ const preselectedMarketing=field.checkedState==='checked'&&['checkbox','switch'].includes(field.controlKind??'')&&isPositiveCollectionMarketingChoice(field.label);
  return {version:COLLECTION_FIELD_REVIEW_VERSION,category,preselectedMarketing};
 }
 export function legacyCollectionFieldCategory(category?:string):FieldReviewCategory {

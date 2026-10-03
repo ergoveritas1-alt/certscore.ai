@@ -13,6 +13,7 @@ import { gpcOptOutObservationSchema } from "./gpc-opt-out-prototype";
 export { terminalLaneEvidenceSchema, type TerminalLaneEvidence } from "./terminal-lane-evidence";
 export * from "./gpc-impact";
 export * from "./collection-field-review";
+export * from "./collection-field-labels";
 import { siteMetadataSchema } from "./site-metadata";
 export * from "./site-metadata";
 import { z } from "zod";

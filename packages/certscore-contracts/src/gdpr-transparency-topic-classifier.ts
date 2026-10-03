@@ -73,12 +73,40 @@ type GdprTransparencySemanticRule = {
 const MAX_EXCERPT_CHARS = 360;
 const DEFAULT_MAX_MATCHES = 24;
 
+/** Reject incidental German topic words before they become retained witnesses.
+ * Shared by extraction and read-side validation; does not infer missing topics. */
+export function hasIncidentalGermanDisclosureTerms(value: string, topic: string | undefined): boolean {
+  if (!["controller_contact", "processing_purposes", "data_retention"].includes(topic ?? "")) return false;
+  const text = normalizeGdprTransparencyText(value);
+  if (/inhalts(?:ubersicht|verzeichnis)/.test(text) &&
+      !/(?:@[a-z0-9.-]+|\b(?:telefon|tel|e-mail)\s+\S|\b\d{5}\s+[a-z]|kundenservice|direktmarketing|\b(?:sobald|solange)\b|\bwir (?:verarbeiten|speichern|verwenden)|daten werden)/.test(text)) return true;
+  if (topic === "controller_contact") {
+    return /inhalts(?:ubersicht|verzeichnis)/.test(text) &&
+      !/(?:@[a-z0-9.-]+|\b(?:telefon|tel|e-mail)\s+\S|\b\d{5}\s+[a-z])/.test(text);
+  }
+  if (topic === "processing_purposes") {
+    return /implementierungskosten|stand(?:s)? der technik/.test(text) &&
+      !/kundenservice|kontaktanfragen|direktmarketing|beantwortung von anfragen|(?:daten|angaben).{0,80}(?:verarbeiten|verarbeitet|verwenden|verwendet).{0,80}(?:um|zur|zum|fur)\b/.test(text);
+  }
+  if (topic === "data_retention") {
+    return /verfahren eingerichtet|sicherheitsma(?:ß|ss)nahmen|wahrnehmung von betroffenenrechten/.test(text) &&
+      !/\b(?:sobald|solange|bis|nach|tage[n]?|wochen|monate[n]?|jahre[n]?|aufbewahrungsfristen|aufbewahrungspflichten)\b/.test(text);
+  }
+  return false;
+}
+
 // Shared with the retained-evidence validator: an explicit service-practice
 // statement is distinct from a visitor's generic Article 22 rights.
 export const AUTOMATED_DECISION_PRACTICES_PATTERN = /\b(?:we|[\p{L}][\p{L}\d'-]*) (?:do not|does not|is not intended to) make decisions about (?:natural persons|individuals|people) based solely on automated processing that produce legal or similarly significant effects\b/iu;
 
 /** Canonical precision-first clause rules for wording too variable to list as literal headings. */
 const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] = [
+  {
+    locale: "de",
+    matchedTerm: "benannte zwecke der verarbeitung",
+    pattern: /\bzwecke der verarbeitung\b.{0,180}\b(?:bereitstellung vertraglicher leistungen|kundenservice|kontaktanfragen und kommunikation|verwaltung und beantwortung von anfragen|direktmarketing)\b/i,
+    topic: "processing_purposes",
+  },
   {
     locale: "de",
     matchedTerm: "konkrete speicherdauer personenbezogener daten",
@@ -259,7 +287,7 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
   {
     locale: "de",
     matchedTerm: "personenbezogene daten werden einem auftragsverarbeiter übermittelt",
-    pattern: /\b(?:personenbezogen(?:e|en|er|es) daten|ihre daten|die daten)\b.{0,120}\b(?:an|gegenuber)\b.{0,100}\b(?:dienstleister|auftragsverarbeiter|anbieter|dritte|plattform|soziales? netzwerk)\b.{0,100}\b(?:ubermittelt|weitergegeben|offengelegt|zuganglich gemacht|verarbeitet)\b/i,
+    pattern: /\b(?:personenbezogen(?:e|en|er|es) daten|ihre daten|(?:die )?daten)\b.{0,120}\b(?:an|gegenuber)\b.{0,100}\b(?:dienstleister|auftragsverarbeitern?|anbieter|dritten?|plattform|soziales? netzwerk)\b.{0,100}\b(?:ubermittelt|weitergegeben|offengelegt|zuganglich gemacht|verarbeitet)\b/i,
     topic: "recipients_or_vendor_categories",
   },
   {
@@ -2048,7 +2076,7 @@ export function classifyGdprTransparencyTopics(
       continue;
     }
     const evidenceExcerpt = boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, term.phrase);
-    if (!evidenceExcerpt) continue;
+    if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, term.topic)) continue;
     selected.set(selectionKey, {
       classifierProvenance: "gdpr_transparency_topic_classifier.v1",
       confidence: confidenceFor(term),
@@ -2077,7 +2105,7 @@ export function classifyGdprTransparencyTopics(
     const evidenceExcerpt = rule.sectionOnly && input.section
       ? boundedSectionSemanticEvidenceExcerpt(input.section, rule)
       : boundedEvidenceExcerptFromIndex(evidenceSourceText, evidenceSearchIndex, semanticRuleAnchor(normalizedText, rule));
-    if (!evidenceExcerpt) continue;
+    if (!evidenceExcerpt || hasIncidentalGermanDisclosureTerms(evidenceExcerpt, rule.topic)) continue;
     selected.set(selectionKey, {
       classifierProvenance: "gdpr_transparency_topic_classifier.v1",
       confidence: rule.confidence ?? (rule.sectionOnly ? 0.88 : 0.86),
@@ -2367,7 +2395,7 @@ function hasRequiredTopicContext(
 }
 
 function hasPrivacyDisclosureContext(normalizedText: string) {
-  if (/\b(?:privacy|gdpr|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText)) {
+  if (/\b(?:privacy|gdpr|dsgvo|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText)) {
     return true;
   }
   return PRIVACY_EVIDENCE_LOCALE_REGISTRY.some((entry) =>

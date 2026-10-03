@@ -6,6 +6,43 @@ import { extractPolicySections, retainedPolicySectionsForObservation, retainedAr
 
 const sourceUrl = "https://example.test/privacy";
 
+test("German transfer proof retains the safeguards after an abbreviated legal citation", () => {
+  const visibleText = [
+    "Datenschutzerklärung. Allgemeine Informationen zur Verarbeitung personenbezogener Daten. ".repeat(20),
+    "Übermittlungen in Drittländer erfolgen nur unter den besonderen Voraussetzungen der Art. 44 ff. DSGVO und mit geeigneten Garantien.",
+  ].join(" ");
+  const sections = extractPolicySections({ html: `<main>${visibleText}</main>`, visibleText, sourceUrl });
+  const witness = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl)
+    .find(row => row.coverageArea === "international_transfers");
+  assert.equal(witness?.signalObserved, "observed");
+  assert.match(witness!.selectedPolicySectionExcerpt, /Art\. 44 ff\. DSGVO und mit geeigneten Garantien/);
+});
+
+test("German policy witnesses prefer substantive disclosures over security boilerplate and contents", () => {
+  const parts = [
+    ["Datenschutz Inhaltsübersicht", "Verantwortlicher Übersicht der Verarbeitungen Zwecke der Verarbeitung Löschung von Daten Sicherheitsmaßnahmen Kontaktaufnahme."],
+    ["Sicherheitsmaßnahmen", "Wir berücksichtigen den Stand der Technik, die Implementierungskosten und die Art, den Umfang, die Umstände und die Zwecke der Verarbeitung personenbezogener Daten. Des Weiteren haben wir Verfahren eingerichtet, die eine Wahrnehmung von Betroffenenrechten, die Löschung von Daten und Reaktionen auf die Gefährdung der Daten gewährleisten."],
+    ["Verantwortlicher", "Beispiel GmbH, Musterstraße 1, 12345 Berlin. E-Mail: datenschutz@example.test. Telefon: 030 123456."],
+    ["Zwecke der Verarbeitung", "Bereitstellung vertraglicher Leistungen und Kundenservice. Kontaktanfragen und Kommunikation. Direktmarketing. Verwaltung und Beantwortung von Anfragen."],
+    ["Löschung von Daten", "Die von uns verarbeiteten personenbezogenen Daten werden gelöscht, sobald der Zweck ihrer Verarbeitung entfällt und keine gesetzlichen Aufbewahrungspflichten bestehen."],
+  ];
+  const html = parts.map(([heading, body]) => `<h2>${heading}</h2><p>${body}</p>`).join("");
+  const sections = extractPolicySections({ html, visibleText: html.replace(/<[^>]+>/g, " "), sourceUrl });
+  const evidence = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl);
+  for (const [topic, expected] of [["controller_contact", /datenschutz@example\.test/], ["processing_purposes", /Kundenservice/], ["data_retention", /sobald/]] as const) {
+    const witness = evidence.find(row => row.coverageArea === topic)!;
+    assert.equal(witness?.signalObserved, "observed", topic);
+    assert.match(witness.selectedPolicySectionExcerpt, expected, topic);
+    assert.doesNotMatch(witness.selectedPolicySectionExcerpt, /Implementierungskosten|Inhaltsübersicht/);
+    assert.equal(witness.evidenceTextSha256, createHash("sha256").update(witness.selectedPolicySectionExcerpt).digest("hex"));
+  }
+  for (const [topic, text] of [["controller_contact", parts[0]!.join(". ")], ["processing_purposes", parts[1]!.join(". ")], ["data_retention", parts[1]!.join(". ")]] as const) {
+    for (const mode of ["scan_core", "multilingual_classifier", "retained_report"] as const) {
+      assert.notEqual(article13DisclosureRejectReason(text, topic, { mode }), null, `${topic}/${mode}`);
+    }
+  }
+});
+
 test("bounded inventories reserve late distinct disclosures rather than repeated topics", () => {
   const repeated = Array.from({ length: 95 }, (_, index) => `<h2>Processing ${index}</h2><p>We process your personal data to provide our services and respond to your requests. Our legal basis for processing personal data is consent and legitimate interests in operating our services.</p>`).join("");
   for (const [heading, body] of [

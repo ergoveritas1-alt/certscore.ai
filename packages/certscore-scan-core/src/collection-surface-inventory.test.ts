@@ -26,6 +26,44 @@ function row(index: number, overrides: Partial<CollectionSurfaceCaptureRow> = {}
   };
 }
 
+test("privacy choices survive per-form and page retention caps with their observed state", () => {
+  const rows = Array.from({ length: 84 }, (_, i) => row(i, {
+    groupKey: `form-${Math.floor(i / 21)}`,
+    ...(i % 21 === 20 ? {
+      inputType: "checkbox", controlKind: "checkbox" as const, checkedState: "unchecked" as const,
+      label: "Ja, ich möchte den Newsletter erhalten und erteile meine Einwilligung.",
+      required: true,
+      privacyDisclosure: { version: 1 as const, excerpts: [{ text: "Newsletter consent", association: "inside_form" as const, links: [] }], truncated: false },
+    } : { inputType: "email", label: "Email" }),
+  }));
+  const inventory = buildCollectionSurfaceInventory({ pageUrl: "https://example.test/", rows, inspectedFieldCandidateCount: rows.length, candidateScanTruncated: false }, Date.now());
+  assert.equal(inventory.coverage.retainedFieldCount, 60);
+  assert.equal(inventory.coverage.status, "limited");
+  for (const form of inventory.forms) {
+    const choice = form.fields.find(field => field.controlKind === "checkbox");
+    assert.ok(choice, form.formRef);
+    assert.equal(choice.checkedState, "unchecked");
+    assert.equal(choice.required, true);
+    assert.equal(choice.review?.preselectedMarketing, false);
+    assert.equal(choice.semanticCategory, "boolean_choice");
+    assert.equal(form.privacyDisclosure?.excerpts[0]?.text, "Newsletter consent");
+    assert.ok(form.fields.length <= 20);
+    assert.equal(form.candidateFieldCount, 21);
+    assert.equal(form.fieldsTruncated, true);
+  }
+});
+
+test("German contact labels have bounded semantics without matching incidental prose", () => {
+  for (const [label, expected] of [
+    ["Vorname*", "name"], ["Nachname*", "name"], ["Mobiltelefonnummer*", "phone"],
+    ["Firma Telefonnummer", "phone"], ["Straße/Nr.*", "address"], ["PLZ*", "address"], ["Ort*", "address"],
+    ["Firmenname", "unknown"], ["Dateiname", "unknown"], ["Anreise*", "unknown"], ["Transport", "unknown"],
+    ["Ich stimme der Verarbeitung meiner Adresse zu", "unknown"],
+  ] as const) assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, { label })), expected, label);
+  assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, { label: "Name", inputType: "checkbox" })), "boolean_choice");
+  assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, { label: "Email updates", elementType: "custom_control", inputType: "custom", controlKind: "switch" })), "boolean_choice");
+});
+
 test("classifies canonical collection semantics without retaining values", () => {
   assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, { autocompleteToken: "url", label: "Website URL to scan" })), "website_url");
   assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, { inputType: "email", label: "Correo electrónico" })), "email");

@@ -1,6 +1,7 @@
 import {
   AUTOMATED_DECISION_PRACTICES_PATTERN,
   classifyGdprTransparencyTopics,
+  hasIncidentalGermanDisclosureTerms,
   hasUnsupportedGenericPrivacyContact,
   normalizeGdprTransparencyText,
 } from "./gdpr-transparency-topic-classifier";
@@ -206,6 +207,9 @@ export function article13DisclosureRejectReason(
   const text = normalizeArticle13Whitespace(value);
   if (text.length < 35) {
     return "low_confidence_or_ambiguous";
+  }
+  if (hasIncidentalGermanDisclosureTerms(text, disclosureType)) {
+    return "insufficient_row_specific_terms";
   }
   if (disclosureType === "controller_contact" && hasUnsupportedGenericPrivacyContact(text)) {
     return looksLikeArticle13PageChrome(text, options) ? "page_chrome_or_navigation" : "insufficient_row_specific_terms";

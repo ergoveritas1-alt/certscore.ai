@@ -1,6 +1,8 @@
 import {
   COLLECTION_SURFACE_INVENTORY_VERSION,
   classifyCollectionFieldReview,
+  collectionFieldLabelCategory,
+  collectionFieldAutocompleteCategory,
   MAX_COLLECTION_SURFACE_FIELDS,
   MAX_COLLECTION_SURFACE_FIELDS_PER_FORM,
   MAX_COLLECTION_SURFACE_FORMS,
@@ -56,20 +58,27 @@ function normalizedText(...values: Array<string | null | undefined>) {
 }
 
 export function classifyCollectionSurfaceSemanticCategory(input: {
+  controlKind?: "checkbox" | "switch" | "radio";
   autocompleteToken?: string;
   inputType: string;
   elementType: "input" | "textarea" | "select" | "custom_control";
   label?: string;
 }): CollectionSurfaceSemanticCategory {
   const type = input.inputType.toLowerCase();
-  const autocomplete = normalizedText(input.autocompleteToken);
-  const evidence = normalizedText(type, autocomplete, input.label);
-  if (type === "url" || /(?:^|\s)url(?:$|\s)/.test(autocomplete)) return "website_url";
-  if (type === "search" || /(?:^|\s)search(?:$|\s)/.test(evidence)) return "search";
-  if (type === "email" || /(?:^|\s)email(?:$|\s)/.test(autocomplete)) return "email";
-  if (type === "tel" || /(?:^|\s)tel(?:$|\s)/.test(autocomplete)) return "phone";
-  if (type === "password" || /current-password|new-password/.test(autocomplete)) return "password";
-  if (type === "file") return "file_upload";
+  const evidence = normalizedText(input.label);
+  // Control shape is observed evidence; consent prose must not turn a choice
+  // into a name/address/free-text input or displace it under the field cap.
+  if (input.controlKind || ["checkbox", "radio", "switch"].includes(type)) return "boolean_choice";
+  const nativeCategory = ({ url: "website_url", search: "search", email: "email", tel: "phone", password: "password", file: "file_upload" } as Partial<Record<string, CollectionSurfaceSemanticCategory>>)[type];
+  if (nativeCategory) return nativeCategory;
+  const metadataCategory = collectionFieldAutocompleteCategory(input.autocompleteToken);
+  const labelCategory = collectionFieldLabelCategory(input.label);
+  if (metadataCategory !== undefined) {
+    if (labelCategory && labelCategory !== "unknown" && metadataCategory !== "unknown" &&
+        labelCategory !== metadataCategory && !(metadataCategory === "payment_card" && labelCategory === "name")) return "unknown";
+    return metadataCategory;
+  }
+  if (labelCategory !== undefined) return labelCategory;
   if (/cc-number|cc-csc|cc-exp|credit card|card number|payment card|\bcvv\b|\bcvc\b/.test(evidence)) return "payment_card";
   if (/\biban\b|bank account|routing number|account number/.test(evidence)) return "bank_account";
   if (/social security|\bssn\b|taxpayer identification/.test(evidence)) return "social_security_number";
@@ -77,8 +86,6 @@ export function classifyCollectionSurfaceSemanticCategory(input: {
   if (type === "date" && /birth|birthday|dob/.test(evidence) || /bday|date of birth|birth date|birthday|\bdob\b/.test(evidence)) return "date_of_birth";
   if (/medical|health|patient|diagnosis|prescription|insurance member/.test(evidence)) return "health";
   if (/geo|latitude|longitude|current location|coordinates/.test(evidence)) return "geolocation";
-  if (/name|given-name|family-name|honorific/.test(autocomplete) || /\b(?:full )?name\b/.test(evidence)) return "name";
-  if (/address|street-address|address-line|postal-code|country|shipping|billing/.test(autocomplete) || /\baddress\b/.test(evidence)) return "address";
   if (input.elementType === "textarea") return "free_text";
   if (input.elementType === "select") return "selection";
   if (type === "checkbox" || type === "radio") return "boolean_choice";
@@ -121,7 +128,9 @@ function normalizedMethod(value?: string): CollectionSurfaceInventory["forms"][n
   return method ? "other" : "unknown";
 }
 
-function fieldPriority(category: CollectionSurfaceSemanticCategory) {
+function fieldPriority(category: CollectionSurfaceSemanticCategory, controlKind?: string, inputType?: string) {
+  // Reserve bounded evidence for choices before ordinary personal/contact fields.
+  if (["checkbox", "switch"].includes(controlKind ?? inputType ?? "")) return 0;
   if (HIGH_SENSITIVITY_CATEGORIES.has(category)) return 0;
   if (["file_upload", "address", "email", "phone", "name"].includes(category)) return 1;
   if (category === "search") return 4;
@@ -170,7 +179,7 @@ export function buildCollectionSurfaceInventory(
       labels: rows.flatMap((row) => row.label ?? []).slice(0, 20),
     });
     const sortedFields = [...classified].sort((left, right) =>
-      fieldPriority(left.semanticCategory) - fieldPriority(right.semanticCategory) ||
+      fieldPriority(left.semanticCategory, left.row.controlKind, left.row.inputType) - fieldPriority(right.semanticCategory, right.row.controlKind, right.row.inputType) ||
       left.row.domOrder - right.row.domOrder
     );
     const fields = sortedFields.slice(0, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM).map(({ row, semanticCategory }, fieldIndex) => ({
@@ -195,6 +204,7 @@ export function buildCollectionSurfaceInventory(
       directVsInferred: "direct" as const,
     }));
     const hasSensitive = classified.some((field) => HIGH_SENSITIVITY_CATEGORIES.has(field.semanticCategory));
+    const privacyDisclosure = rows.find(row => row.privacyDisclosure)?.privacyDisclosure;
     return {
       groupKey,
       priority: surfacePriority(surfaceType, hasSensitive),
@@ -212,7 +222,7 @@ export function buildCollectionSurfaceInventory(
         retainedFieldCount: fields.length,
         fieldsTruncated: classified.length > fields.length,
         fields,
-        ...(rows[0]?.privacyDisclosure ? { privacyDisclosure: rows[0].privacyDisclosure } : {}),
+        ...(privacyDisclosure ? { privacyDisclosure } : {}),
         evidenceRefs: [{
           refId: `ref_collection_surface_form_${formIndex}`,
           artifactId: "collection_surface_inventory_pre_consent",
@@ -226,10 +236,16 @@ export function buildCollectionSurfaceInventory(
   const selectedForms = candidates
     .sort((left, right) => left.priority - right.priority || left.domOrder - right.domOrder)
     .slice(0, MAX_COLLECTION_SURFACE_FORMS);
-  let remainingFieldBudget = MAX_COLLECTION_SURFACE_FIELDS;
+  // Apply the same priority across the page: early routine forms must not exhaust
+  // the shared budget before a later form's choice or sensitive control.
+  const retainedFields = new Set(selectedForms.flatMap(({ form }, formOrder) =>
+    form.fields.map(field => ({ field, formOrder })))
+    .sort((a, b) => fieldPriority(a.field.semanticCategory, a.field.controlKind, a.field.inputType) -
+      fieldPriority(b.field.semanticCategory, b.field.controlKind, b.field.inputType) || a.formOrder - b.formOrder ||
+      (a.field.controlIndex ?? 0) - (b.field.controlIndex ?? 0))
+    .slice(0, MAX_COLLECTION_SURFACE_FIELDS).map(({ field }) => field));
   const forms = selectedForms.map(({ form }, retainedFormIndex) => {
-    const fields = form.fields.slice(0, remainingFieldBudget);
-    remainingFieldBudget -= fields.length;
+    const fields = form.fields.filter(field => retainedFields.has(field));
     return {
       ...form,
       formRef: `collection_form_${retainedFormIndex}`,
