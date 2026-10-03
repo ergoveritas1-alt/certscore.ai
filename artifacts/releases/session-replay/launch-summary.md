@@ -11,7 +11,7 @@ Prepared October 3, 2026 on `codex/session-replay-launch`. Local preparation onl
   - Headline: **Session replay signals appeared on nearly 1 in 8 websites we analyzed**
   - Subheadline: Across 5,000 production scans, 3,199 distinct destination domains had usable evidence. Of those, 383 showed an observable session-replay service signal.
 - Updated discovery: `/releases`, `/releases/feed.xml`, `/insights`, `/guides/session-replay-risk`, `/sitemap.xml`, `/llms.txt`, `/llms-full.txt`. Existing data-driven homepage release teaser picks up the new entry.
-- Scan CTA: `/`.
+- Inline scan prompts: `/insights/session-replay-study-2026#scan` and `/releases/session-replay-detection#try-release`. Both use the existing homepage `DomainScanForm` in full mode: URL input, Scan from selector, and scan button.
 - Public image: `/images/releases/session-replay-social-card.png` (1200 × 630).
 
 The release and study link to each other. The study includes three native HTML/CSS visuals: main statistic, service bars and contextual forms comparison. No chart dependencies or client-side chart JavaScript were added. The expandable report-style example is explicitly labeled illustrative; it is not fabricated scan evidence and identifies no third-party target.
@@ -107,6 +107,7 @@ This script runs the repository preflight, pushes the current committed branch, 
 - `artifacts/releases/session-replay/release-desktop.jpg`
 - `artifacts/releases/session-replay/release-mobile.jpg`
 - `artifacts/releases/session-replay/releases-desktop.jpg`
+- `artifacts/releases/session-replay/scan-form-mobile.jpg`
 - `artifacts/releases/session-replay/social-card.svg`
 - `artifacts/releases/session-replay/social-copy.md`
 - `artifacts/releases/session-replay/study-desktop.jpg`
@@ -116,3 +117,9 @@ This script runs the repository preflight, pushes the current committed branch, 
 - `artifacts/releases/session-replay/test-baseline-comparison.json`
 - `artifacts/releases/session-replay/verification-summary.json`
 - `artifacts/releases/session-replay/verify-data.py`
+
+## Inline scan prompt follow-up
+
+Owner requested the standard URL/region/button experience. Both new pages now reuse the canonical homepage form rather than a link to the homepage. Existing releases retain their previous CTA behavior. URL entry enabled the scan button; selecting California updated the selector; 390 px layout had no overflow. No scan was submitted. Shared form, region selector and launch/release tests: 34 passed; web typecheck passed. The in-app browser intermittently crashed during inspection, including before this change; verification succeeded in a fresh tab.
+
+Follow-up production build: **PASS**. Both forms hydrated with the URL field, region selector and scan button in the built release and study. HTTP/link/metadata checks passed again. No deployment performed. Updated mobile proof: `scan-form-mobile.jpg`.

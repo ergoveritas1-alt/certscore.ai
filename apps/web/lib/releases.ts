@@ -20,6 +20,7 @@ export type ReleaseSection = {
 };
 
 export type ProductRelease = {
+  scanForm?: boolean;
   body: readonly string[];
   cardImage?: {
     alt: string;
@@ -51,6 +52,7 @@ export type ProductRelease = {
 const releases: readonly ProductRelease[] = [
 {
   "slug": "session-replay-detection",
+  "scanForm": true,
   "cardImage": { "path": "/images/releases/session-replay-social-card.png", "alt": "12.0%: 383 of 3,199 analyzed domains showed a session-replay service signal", "width": 1200, "height": 630 },
   "headline": "See when session-replay technology appears on a website",
   "shortDescription": "Identify observable session-replay service signals, inspect the retained evidence, and give your privacy review a clearer starting point.",

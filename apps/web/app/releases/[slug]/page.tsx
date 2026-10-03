@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { DomainScanForm } from "../../../components/marketing/domain-scan-form";
 import { SessionReplayEvidenceExample } from "../../../components/marketing/session-replay-evidence-example";
 import { EditorialByline } from "../../../components/marketing/editorial-byline";
 import type { Metadata } from "next";
@@ -138,15 +140,23 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
             {release.ctaDescription}
           </p>
+          {release.scanForm ? (
+            <div className="mt-6">
+              <Suspense fallback={<p className="text-sm text-slate-600">Loading scan form…</p>}>
+                <DomainScanForm mode="full" variant="homepage-hero" scanSource="unknown" buttonLabel="Scan now" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
+              </Suspense>
+              <p className="mt-4 text-sm leading-6 text-slate-600">Start with a free scan of one public page. Results describe the scan’s conditions and coverage.</p>
+            </div>
+          ) : null}
           <div className="mt-6 flex flex-wrap gap-3">
-            <Link
+            {!release.scanForm ? <Link
               className="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
               data-analytics-feature="release_cta"
               data-analytics-id={`release:${release.slug}:product`}
               href={release.primaryCta.href}
             >
               {release.primaryCta.label}
-            </Link>
+            </Link> : null}
             {release.resourceLinks?.map((link) => (
               <Link
                 className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-sky-400 hover:text-sky-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"

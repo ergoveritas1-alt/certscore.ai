@@ -29,5 +29,14 @@
   "browserConsole": "No errors or new production warnings; earlier dev-only LCP warning for existing forms card",
   "standaloneLinter": "No standalone lint script configured; Next build lint/type phase completed",
   "formatter": "Prettier 3.6.2 check passed for new TSX/test/JSON; git diff --check passed",
-  "unrelatedBaselineReportFailures": 11
+  "unrelatedBaselineReportFailures": 11,
+  "inlineScanPromptFollowup": {
+    "productionBuild": "PASS",
+    "typecheck": "PASS",
+    "sharedFormRegionAndLaunchTests": 34,
+    "builtPageHydration": "URL field, Scan from and scan button visible on both pages",
+    "interaction": "URL enables submission; California selection verified; no scan submitted",
+    "mobile": "390 px, no horizontal overflow",
+    "scanInfrastructureChange": false
+  }
 }

@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { DomainScanForm } from "../../../components/marketing/domain-scan-form";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Badge } from "@website-signal-risk-scanner/ui";
@@ -378,19 +380,34 @@ export default function SessionReplayStudyPage() {
             </li>
           </ul>
         </section>
-        <aside className="rounded-2xl border border-sky-200 bg-sky-50 p-6 sm:p-8">
-          <h2 className={headingStyle}>See what appears on your website</h2>
-          <p className="mt-4 max-w-3xl leading-7 text-slate-700">
+        <aside
+          id="scan"
+          className="scroll-mt-24 rounded-2xl border border-sky-200 bg-sky-50 p-5 sm:p-8"
+        >
+          <h2 className={headingStyle}>Scan your website</h2>
+          <p className="mb-5 mt-4 leading-7 text-slate-700">
             See the cookies, trackers, consent behavior, session-replay signals
             and other privacy evidence CertScore.ai can observe from the public
             web.
           </p>
-          <Link
-            href="/"
-            className="mt-6 inline-flex rounded-lg bg-sky-700 px-5 py-3 font-semibold text-white hover:bg-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-sky-700"
+          <Suspense
+            fallback={
+              <p className="text-sm text-slate-600">Loading scan form…</p>
+            }
           >
-            Scan your website
-          </Link>
+            <DomainScanForm
+              mode="full"
+              variant="homepage-hero"
+              scanSource="unknown"
+              buttonLabel="Scan now"
+              inputLabel="Website URL"
+              inputPlaceholder="https://your-website.com"
+            />
+          </Suspense>
+          <p className="mt-4 text-sm leading-6 text-slate-600">
+            Start with a free scan of one public page. Results describe the
+            scan’s conditions and coverage.
+          </p>
           <div className="mt-6 flex flex-wrap gap-x-5 gap-y-3 text-sm">
             <Link
               href="/findings/session_recording_services_detected"
