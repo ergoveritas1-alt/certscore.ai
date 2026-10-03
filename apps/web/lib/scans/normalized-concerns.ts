@@ -1,3 +1,4 @@
+import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { formDestinationProjectionSchema, formDestinationCopy, qualifiesFormDestinationReview, FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
 import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL } from "@certscore/contracts";
 import { projectConsentControlBehavior } from "./consent-control-behavior";
@@ -3073,6 +3074,7 @@ function buildGdprTransparencyLegalFrameworkValidityConcerns(
       originType: "runtime_artifact",
       rawEvidence: {
         gdprTransparencyLegalFrameworkValidityEvidence: true,
+        outdatedTransferDisclosureAssessment: readOutdatedTransferDisclosureAssessment(match.outdatedTransferDisclosureAssessment),
         legalFrameworkValidityMatch: match,
         legalFrameworkValidityMatches: [match],
         pageType: "privacy_policy",

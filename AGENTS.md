@@ -1152,3 +1152,15 @@ Keep `AGENTS.md` focused on durable repo-wide guidance. Do not add one-off task 
   2. apply concern policy
   3. promote eligible concerns into unified findings
 - Avoid adding new raw signal-key or raw policy-row gating paths when the same rule can live in the normalized concern pipeline.
+
+### October 3, 2026 obsolete transfer disclosure scoring
+
+Owner-approved `outdated_transfer_disclosure.v1` deducts three points once
+sitewide within the existing policy-transparency cap for verified retained,
+target-owned policy wording presenting an obsolete transfer framework as current
+guidance. Use the versioned typed assessment -> normalized concern -> concern
+policy -> checklist -> central scoring registry path. Historical, explicitly
+corrected, uncertain, unverified, and legacy bare references remain score-neutral.
+This is a disclosure-quality finding, never proof of unlawful transfers. Keep the
+scorecard registry-driven. See `docs/scoring-policy.md`. No new scan, lane,
+model call, wait, or infrastructure is authorized by this scoring change.

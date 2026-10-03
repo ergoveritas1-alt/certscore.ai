@@ -9383,3 +9383,19 @@ test("title-only guessed cookie routes are not projected as dedicated policies",
   assert.equal(surfaces.length, 0);
   assert.equal(summarizePolicySurfaces(surfaces, "example.test").cookiePolicyPresent, false);
 });
+
+ test("obsolete current guidance requires a verified complete target-owned policy document", async () => {
+  const wrapped = await loadLocalV2DagReport();
+  const raw = await import("./local-v2-dag-report");
+  const text = "Privacy policy. Our service provider is certified under the EU-US Privacy Shield. We use this framework for transfers.";
+  const surfaces = wrapped.dedupePolicySurfaces([{observationId:"stale-current-policy", surfaceType:"privacy_policy", url:"https://example.test/privacy", normalizedUrl:"https://example.test/privacy", confidence:0.95, status:"fetched", textExcerpt:text}] as never,"https://example.test/");
+  const options = {scanStartedAt:"2026-10-03T00:00:00.000Z"};
+  const verified = wrapped.summarizePolicySurfaces(surfaces,"example.test",options);
+  const assessment = verified.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment;
+  assert.equal(assessment?.assessment,"obsolete_current_guidance");
+  assert.equal(assessment?.sourceDocumentSha256,createHash("sha256").update(text).digest("hex"));
+  const unverified = raw.summarizePolicySurfaces(surfaces,"example.test",options);
+  assert.equal(unverified.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment,undefined);
+  const partial = wrapped.summarizePolicySurfaces(surfaces.map(row => ({...row,surface:{...row.surface,documentTextCoverage:{status:"truncated",sourceTextChars:2000,retainedTextChars:text.length,limitationKeys:["truncated"]}}})) as never,"example.test",options);
+  assert.equal(partial.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment,undefined);
+ });

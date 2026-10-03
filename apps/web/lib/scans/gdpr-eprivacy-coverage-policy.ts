@@ -1,3 +1,4 @@
+import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { projectPreconsentTrackingTiming } from "./preconsent-tracking-timing";
 import { readChoicePathExecution } from "./choice-path-execution";
 import { checklistRemediation } from "./checklist-remediation";
@@ -7212,7 +7213,7 @@ function gdprTransparencyModelReviewEvidenceScore(
 function getGdprTransparencyStaleLegalFrameworkConcern(
   input: GdprEprivacyCoveragePolicyInput
 ) {
-  return (input.normalizedConcerns ?? []).find((concern) => {
+  const candidates = (input.normalizedConcerns ?? []).filter((concern) => {
     const rawEvidence = concern.evidenceBundle.rawEvidence;
     return concern.originKey.startsWith("gdpr_transparency.legal_framework_validity.") &&
       concern.originType === "runtime_artifact" &&
@@ -7224,7 +7225,8 @@ function getGdprTransparencyStaleLegalFrameworkConcern(
         "staleLegalFrameworkReferenceObserved",
         "stale_legal_framework_reference_observed"
       ]) === true;
-  }) ?? null;
+  });
+  return candidates.find(concern => concern.allowedNarrativeTier === "moderate" && readOutdatedTransferDisclosureAssessment(concern.evidenceBundle.rawEvidence?.outdatedTransferDisclosureAssessment)) ?? candidates[0] ?? null;
 }
 
 function deriveStaleTransferFrameworkOutcome(input: GdprEprivacyCoveragePolicyInput) {
@@ -7253,6 +7255,7 @@ function deriveStaleTransferFrameworkOutcome(input: GdprEprivacyCoveragePolicyIn
       ].filter((value): value is string => Boolean(value)),
       {
         retainedEvidence: {
+          outdatedTransferDisclosureAssessment: staleFrameworkConcern.allowedNarrativeTier === "moderate" ? readOutdatedTransferDisclosureAssessment(rawEvidence.outdatedTransferDisclosureAssessment) : null,
           gdprTransparencyLegalFrameworkValidityConcern: {
             canonicalConcernKey: staleFrameworkConcern.canonicalConcernKey,
             originKey: staleFrameworkConcern.originKey,

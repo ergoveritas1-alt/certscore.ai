@@ -93,6 +93,7 @@ export default function ScoringReviewPage() {
 
         <footer className="mt-5 space-y-2 text-xs leading-5 text-slate-500">
           <p>Caps are shared across rows in the same category. Repeated page observations do not multiply flat deductions. Identity-based deductions count each eligible identity once across the site.</p>
+          <p>Obsolete transfer guidance deducts {SCORING_RULES.find(rule => rule.id === "outdated_transfer_framework_reference")?.points} points once across the site only when verified retained policy text presents it as current guidance. Historical or explicitly corrected references remain neutral. This is a disclosure-quality finding, not proof of unlawful transfers.</p>
           <p>Missing or unverified evidence does not itself create a deduction. An inventory “Review” label does not automatically deduct points.</p>
           <p>Source of truth: scoring-policy.ts. Evidence eligibility remains governed by canonical concern policy. Stored historical reports retain their recorded policy version.</p>
         </footer>

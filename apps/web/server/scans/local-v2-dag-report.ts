@@ -1,3 +1,4 @@
+import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
 import { projectFormDestinations } from "./form-destination-projection";
@@ -3195,8 +3196,18 @@ export function summarizePolicySurfaces(
       article13Surfaces.flatMap((row) => {
         const sourceUrl =
           row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url;
+        const retainedPolicyText = resolvePolicySurfaceTextEvidence(row.surface, options.policyTextEvidenceContext);
+        const verifiedPolicyText = retainedPolicyText?.text ?? null;
+        const verifiedForAssessment = retainedPolicyText?.verificationStatus === "verified" &&
+          options.policyTextEvidenceContext?.sourceBundle.verificationStatus === "verified" &&
+          verifiedPolicyText && retainedPolicyText.sha256 === createHash("sha256").update(verifiedPolicyText).digest("hex") &&
+          row.surface.documentTextCoverage?.status === "complete" && row.surface.targetRelationship === "target_controller";
+        const outdatedTransferDisclosureAssessment = verifiedForAssessment ? assessOutdatedTransferDisclosure({
+          text: verifiedPolicyText, sourceDocumentSha256: createHash("sha256").update(verifiedPolicyText).digest("hex"),
+          sourceUrl, scanDate: options.scanStartedAt,
+        }) : null;
         const policyTexts = uniqueStrings([
-          readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext),
+          verifiedPolicyText,
           firstString(row.surface.textExcerpt),
           ...(row.surface.retainedPolicySections ?? []).map((section) =>
             firstString(section.textExcerpt)
@@ -3211,7 +3222,8 @@ export function summarizePolicySurfaces(
         return policyTexts.flatMap((policyText) =>
           evaluateLegalFrameworkValidity(policyText, options.scanStartedAt).map((match) => ({
             ...match,
-            evidenceText:
+            ...(outdatedTransferDisclosureAssessment?.canonicalId === match.canonicalId ? { outdatedTransferDisclosureAssessment } : {}),
+            evidenceText: outdatedTransferDisclosureAssessment?.canonicalId === match.canonicalId ? outdatedTransferDisclosureAssessment.evidenceText :
               buildPolicyEvidenceContextExcerpt(policyText, match.matchedAlias) ??
               match.matchedAlias,
             sourceUrl,

@@ -5,8 +5,8 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Versions: `gdpr-eprivacy-posture.v15`, `overall-posture.v5`, and
-`full-site-distinct-findings.v4`. The California GPC evidence policy remains v1;
+Versions: `gdpr-eprivacy-posture.v16`, `overall-posture.v6`, and
+`full-site-distinct-findings.v5`. The California GPC evidence policy remains v1;
 its existing eligible 15-point effect is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
@@ -131,3 +131,23 @@ No new scans, browser lanes, model calls or artifact reads are introduced by thi
 policy revision. Additional deterministic processing of already-read artifacts is
 estimated below $1/month at 1,000 three-page reports. The prior full-site artifact
 read/write estimate remains documented in `full-site-resource-crawls.md`.
+
+## Obsolete transfer guidance — October 3, 2026
+
+Owner-approved `outdated_transfer_disclosure.v1` deducts three points once
+sitewide, within the existing Policy transparency cap of 12. The scorecard
+renders the central registry. The verified retained target-owned policy document
+is interpreted during canonical materialization; a typed versioned assessment
+retains its document hash, source URL, scan date, and bounded supporting passage.
+Normalized concern -> concern policy -> checklist projection -> shared scoring
+is the only scoring path. A badge or raw reference cannot cause a deduction.
+
+The initial precision-first rules cover explicit English/German Privacy Shield
+reliance or current ombudsman guidance after the registry's invalidation date.
+Historical, superseded, explicitly corrected, uncertain, unsupported-language,
+unbound, malformed, or legacy references stay neutral. This assesses obsolete
+policy wording, never whether a particular transfer is unlawful. A missing-policy
+deduction subsumes this smaller policy-quality deduction within the same cap.
+Stored historical reports are not bulk rewritten; new materializations carry the
+new policy versions. No new browser work, models, lanes or waits are introduced.
+Bounded assessment metadata is estimated below $0.10/month at 100,000 scans.

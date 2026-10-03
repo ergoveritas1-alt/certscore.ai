@@ -1,3 +1,4 @@
+import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
 import { buildSiteIntegrityScoreEffects } from "./site-integrity-score-policy";
@@ -3726,8 +3727,13 @@ export function deriveConcernPolicy(input: {
 
   if (isGdprTransparencyLegalFrameworkValidityConcern(input.rawEvidence)) {
     negativeEvidenceFlags.add("stale_legal_framework_reference_observed");
+    // The typed assessment gates the approved disclosure-quality deduction; a
+    // reference alone stays an unscored review signal, never an inferred transfer violation.
+    const assessment = readOutdatedTransferDisclosureAssessment(input.rawEvidence?.outdatedTransferDisclosureAssessment);
+    const match = input.rawEvidence?.legalFrameworkValidityMatch as Record<string, unknown> | undefined;
+    const eligible = assessment && match?.canonicalId === assessment.canonicalId && match?.sourceUrl === assessment.sourceUrl && match?.evidenceText === assessment.evidenceText;
     return {
-      allowedNarrativeTier: "weak",
+      allowedNarrativeTier: eligible ? "moderate" : "weak",
       externalSurfacingEligibility: "audit_only",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
       promotionEligibility: "internal_only",

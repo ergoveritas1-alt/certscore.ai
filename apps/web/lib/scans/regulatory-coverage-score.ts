@@ -1,3 +1,4 @@
+import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { SCORING_POLICY_VERSION, SCORING_RULE_BY_ID, SCORING_FAMILIES, SCORE_FLOOR, SCORE_BASE } from "./scoring-policy";
 import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
 
@@ -92,7 +93,7 @@ const GDPR_EPRIVACY_ROW_WEIGHTS: Record<string, RegulatoryCoverageRowConfig> = {
   international_transfers_disclosure: { weight: 5 },
   legal_basis_disclosure_observed: { weight: 5 },
   options_settings_preferences_control: { weight: 7 },
-  outdated_transfer_framework_reference: { scoreEffect: "none" },
+  outdated_transfer_framework_reference: { weight: 3 },
   post_reject_tracking_reduction: { weight: 10 },
   pre_consent_cookies_storage: { weight: 12 },
   pre_consent_third_party_tracking: { weight: 14 },
@@ -323,6 +324,11 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
 
   const retained = getRetainedEvidence(row);
   if (retained.scoreEffect === "none" && !hasConfirmedPostRefusalContradiction(row)) return 0;
+  if (row.id === "outdated_transfer_framework_reference") {
+    const concern = asRecord(retained.gdprTransparencyLegalFrameworkValidityConcern);
+    return row.assessmentStatus === "review_signal" && concern?.regulatoryChecklistEligibility === "review_signal" &&
+      typeof concern.canonicalConcernKey === "string" && readOutdatedTransferDisclosureAssessment(retained.outdatedTransferDisclosureAssessment) ? policy.gapDeduction : 0;
+  }
   if (
     row.id === "pre_consent_cookies_storage" &&
     (row.assessmentStatus === "gap_observed" || row.assessmentStatus === "review_signal")
@@ -407,8 +413,11 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
     getGdprEprivacyRowDeduction(row) > 0
   ));
 
+  const scoredFlatRows = new Set<string>();
   for (const row of rows) {
     const config = GDPR_EPRIVACY_ROW_WEIGHTS[row.id];
+    // Legacy/bare references remain entirely neutral, including coverage weighting.
+    if (row.id === "outdated_transfer_framework_reference" && getGdprEprivacyRowDeduction(row) === 0) continue;
     if (!config || "scoreEffect" in config || isExcludedFromDenominator(row)) {
       continue;
     }
@@ -419,6 +428,10 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
 
     const deduction = getGdprEprivacyRowDeduction(row);
     if (deduction <= 0) continue;
+    if (row.id === "outdated_transfer_framework_reference") {
+      if (scoredFlatRows.has(row.id)) continue;
+      scoredFlatRows.add(row.id);
+    }
     const policy = GDPR_EPRIVACY_POSTURE_POLICIES[row.id];
     if (!policy) continue;
     if (

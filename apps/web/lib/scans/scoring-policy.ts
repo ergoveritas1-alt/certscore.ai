@@ -1,8 +1,8 @@
 import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS } from "./california-gpc-response-policy";
 
 /** Owner-approved September 6 and 17, 2026. Numeric policy shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v15";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v4";
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v16";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v5";
 export const SCORE_FLOOR = 0;
 export const SCORE_BASE = 100;
 export const SCORING_FAMILIES = {
@@ -24,6 +24,7 @@ export type ScoringRule = {
   identity?: { first: number; second: number; subsequentEach: number; unit: string };
 };
 export const SCORING_RULES: readonly ScoringRule[] = [
+  { id: "outdated_transfer_framework_reference", anchor: "outdated-transfer-disclosure", label: "Obsolete transfer framework presented as current guidance", family: "policy_transparency", siteWide: true, points: 3 },
   {"id": "pre_consent_cookies_storage", "anchor": "storage", "label": "Non-essential pre-consent cookies / storage", "family": "pre_consent_storage", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "identity"}},
   {"id": "pre_consent_third_party_tracking", "anchor": "tracking", "label": "Pre-consent tracking", "family": "pre_consent_tracking", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "vendor"}},
   {"id": "reject_all_path_availability", "anchor": "decline", "label": "Decline / Reject path", "family": "consent_controls", "siteWide": false, "points": 12},
