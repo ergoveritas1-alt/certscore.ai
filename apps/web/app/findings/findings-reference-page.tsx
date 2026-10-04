@@ -37,7 +37,7 @@ function getPageTitle(activeFinding?: FindingReferenceItem) {
 function getPageDescription(activeFinding?: FindingReferenceItem) {
   return activeFinding
     ? `${activeFinding.observed} Review the evidence context, methodology, common causes, and reviewer questions for this CertScore.ai finding.`
-    : "Review CertScore.ai findings, evidence, signals, and observations surfaced from public-web runtime scans.";
+    : "Explore CertScore.ai website findings for cookies, tracking, consent and privacy. Understand supporting evidence, review steps and what each signal means.";
 }
 
 function getPagePath(activeFinding?: FindingReferenceItem) {

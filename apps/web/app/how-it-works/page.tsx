@@ -10,7 +10,7 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "How It Works",
   description:
-    "See how CertScore.ai turns public website behavior and visible website surfaces into structured findings.",
+    "See how CertScore.ai scans public websites, collects browser and policy evidence, and turns supported privacy signals into findings for human review.",
   path: "/how-it-works"
 });
 

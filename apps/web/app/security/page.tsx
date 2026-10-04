@@ -7,7 +7,7 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Security and Vulnerability Reporting",
   description:
-    "Report suspected security vulnerabilities affecting CertScore.ai through the published security contact channel.",
+    "Report a suspected CertScore.ai security vulnerability through our published contact channel. Review disclosure guidance and information to include.",
   path: "/security"
 });
 

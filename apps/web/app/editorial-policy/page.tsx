@@ -4,7 +4,7 @@ import { AiVisibilityContent } from "../../components/marketing/ai-visibility-co
 import { createPageMetadata, createPublicArticleSchema, createBreadcrumbSchema } from "../../lib/seo";
 const content = {
   "title": "Editorial policy and evidence standards",
-  "description": "Who publishes CertScore.ai guides, how observations and examples are labeled, and how to report a correction.",
+  "description": "Read how CertScore.ai publishes and reviews guides, labels observed evidence and illustrative examples, explains limitations, and handles corrections.",
   "intro": "CertScore.ai publishes these guides as the organization that builds the scanner. They explain observable website behavior and how to review it. Organizational authorship is not a claim of independent legal or academic review.",
   "sections": [
     {

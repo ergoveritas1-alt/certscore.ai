@@ -14,7 +14,7 @@ import {
 
 export const metadata: Metadata = createPageMetadata({
   title: "Pricing",
-  description: "Simple page-scan pricing for CertScore.ai public-web observations.",
+  description: "Compare CertScore.ai website scan plans, page allowances and report features. Explore trial, paid and team options for your privacy review workflow.",
   path: "/pricing"
 });
 

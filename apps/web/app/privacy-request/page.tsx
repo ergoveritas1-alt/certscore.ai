@@ -9,7 +9,7 @@ import { createPageMetadata } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "Privacy Request",
   description:
-    "Submit a CertScore.ai privacy request for data access, deletion, correction, portability, objection, or opt-out.",
+    "Submit a privacy rights request to CertScore.ai for access, deletion, correction, portability, objection or opt-out using the form or privacy email.",
   path: "/privacy-request"
 });
 

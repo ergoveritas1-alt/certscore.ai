@@ -8,7 +8,7 @@ import {
 const config: GrowthContentPageConfig = {
   badge: "Guide",
   description:
-    "Review how a cookie consent enforcement checker can compare consent choices with observed browser behavior.",
+    "Learn how to check cookie consent enforcement by comparing consent choices with observed requests and storage. Review evidence and scan limitations.",
   intro:
     "A cookie consent enforcement checker helps teams review whether cookie and tracking behavior appears aligned with expected consent choices in the browser.",
   path: "/guides/cookie-consent-enforcement-checker",

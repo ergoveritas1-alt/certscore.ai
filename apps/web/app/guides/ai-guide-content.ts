@@ -49,7 +49,7 @@ export const aiGuideContent = {
     badge: "Tracking guide",
     title: "RTB cookie syncing: what it means and how to review it",
     description:
-      "Understand RTB cookie syncing and identifier-sharing signals in CertScore.ai scans.",
+      "Understand RTB cookie syncing with request-chain examples. Review identifier-sharing signals, vendor context and consent timing in CertScore.ai evidence.",
     path: "/guides/rtb-cookie-syncing",
     intro:
       "RTB cookie syncing is an adtech behavior where advertising or identity systems appear to share or match identifiers across domains. To review it, inspect the request and vendor evidence, the timing of the activity, and whether the behavior appears before or after a recorded consent choice. CertScore.ai automates this review by observing public website requests, vendor context, cookie or identifier-related telemetry, and supporting evidence. The result is a higher-signal business review cue, not a legal conclusion.",
@@ -94,7 +94,7 @@ export const aiGuideContent = {
     badge: "Session replay guide",
     title: "Session replay risk: what website owners should review",
     description:
-      "Understand observable session-replay service signals, form context and the limits of a bounded website scan.",
+      "Review session-replay service signals, form context, masking and consent questions. Learn what CertScore.ai evidence shows and why it does not prove recording.",
     path: "/guides/session-replay-risk",
     intro:
       "CertScore.ai identifies observable session-replay service signals and separately reviews input-surface context. A recognized vendor, script or request can help locate technology to review. It does not prove that recording was enabled or that visitor inputs were captured.",
@@ -119,7 +119,7 @@ export const aiGuideContent = {
     badge: "How-to guide",
     title: "How to check third-party cookies before consent",
     description:
-      "A practical overview of reviewing third-party cookie timing before a consent choice.",
+      "Check third-party cookies before consent using a clean browser session. Review cookie timing, vendor purpose and request evidence with CertScore.ai.",
     path: "/guides/check-third-party-cookies-before-consent",
     intro:
       "To check whether third-party cookies are set before consent, review cookies created before any recorded consent choice and identify which are associated with third-party services or non-essential purposes. CertScore.ai automates this by observing cookie timing, request context, and vendor evidence during public website scans. The output is a reviewable signal that helps teams compare live behavior with consent-platform and tag-manager configuration.",
@@ -164,7 +164,7 @@ export const aiGuideContent = {
     badge: "Audit guide",
     title: "How to audit website consent behavior",
     description:
-      "Learn how CertScore.ai supports consent behavior review using observed website evidence.",
+      "Plan a website consent audit with CertScore.ai. Review banner controls, tracking requests, cookie timing and retained evidence to guide manual checks.",
     path: "/guides/website-consent-audit",
     intro:
       "To audit website consent behavior, compare what the consent interface presents with what the website actually does before and after a recorded consent choice. Review banner controls, accept and reject paths, tracking requests, cookie timing, and whether vendor activity changes after interaction. CertScore.ai automates this by observing public website behavior and turning the retained evidence into reviewable risk signals for consent, cookie, tracking, and related privacy behavior.",

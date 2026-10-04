@@ -8,7 +8,7 @@ import {
 const config: GrowthContentPageConfig = {
   badge: "Guide",
   description:
-    "Learn how a third-party cookie checker helps review cookie timing, domains, and consent-related browser observations.",
+    "Learn how to review third-party cookies by domain, purpose and timing. Use CertScore.ai request and consent evidence to investigate observed website behavior.",
   intro:
     "A third-party cookie checker helps teams review whether cookies from outside the first-party site appear during public webpage loading and consent interactions.",
   path: "/guides/third-party-cookie-checker",

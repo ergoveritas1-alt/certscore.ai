@@ -7,7 +7,7 @@ import { createPageMetadata } from "../../lib/seo";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Contact Sales",
-  description: "Talk with CertScore.ai about website scanning, monitoring needs, pricing, and onboarding.",
+  description: "Contact CertScore.ai about website scanning, monitoring, pricing and onboarding. Send your questions or book a founder demo for your privacy review workflow.",
   path: "/contact-sales"
 });
 

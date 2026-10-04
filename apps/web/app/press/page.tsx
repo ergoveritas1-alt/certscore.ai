@@ -12,7 +12,7 @@ import { createPageMetadata, SITE_URL } from "../../lib/seo";
 
 const title = "Press and media information";
 const description =
-  "Press and media information about CertScore.ai, a website risk-signal scanner for observable public website behavior.";
+  "Find CertScore.ai company background, website scanning capabilities and media information. Learn how its evidence supports review of public website risks.";
 
 export const metadata: Metadata = {
   ...createPageMetadata({

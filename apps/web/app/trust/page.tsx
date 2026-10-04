@@ -7,7 +7,7 @@ import { createPageMetadata, createPublicWebPageSchema } from "../../lib/seo";
 
 const title = "Trust & Security";
 const description =
-  "Review CertScore.ai security, privacy, data-handling, operational resilience, and vulnerability-reporting practices.";
+  "Review CertScore.ai security, privacy and data-handling practices, operational resilience and vulnerability reporting to assess the service for your team.";
 
 export const metadata: Metadata = createPageMetadata({
   title,

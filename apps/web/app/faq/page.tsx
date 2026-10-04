@@ -9,7 +9,7 @@ import { createPageMetadata, SITE_URL } from "../../lib/seo";
 export const metadata: Metadata = createPageMetadata({
   title: "FAQ",
   description:
-    "Frequently asked questions about CertScore.ai, including scan scope, accuracy, plan limits, and monitoring.",
+    "Find answers about CertScore.ai website scans, report accuracy, coverage limits, pricing and monitoring. Learn what the evidence can and cannot establish.",
   path: "/faq"
 });
 

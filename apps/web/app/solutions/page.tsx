@@ -39,7 +39,7 @@ const solutions = [
 export const metadata: Metadata = createPageMetadata({
   title: "CertScore.ai Solutions",
   description:
-    "Browse CertScore.ai scanner pages for GDPR, cookie consent, and privacy policy risk review signals.",
+    "Explore CertScore.ai scanners for GDPR, cookie consent and privacy policy risk. Compare review workflows and the website evidence each helps you inspect.",
   path: "/solutions"
 });
 
@@ -48,7 +48,7 @@ export default function SolutionsPage() {
     createPublicWebPageSchema({
       title: "CertScore.ai Solutions",
       description:
-        "Browse CertScore.ai scanner pages for GDPR, cookie consent, and privacy policy risk review signals.",
+        "Explore CertScore.ai scanners for GDPR, cookie consent and privacy policy risk. Compare review workflows and the website evidence each helps you inspect.",
       path: "/solutions"
     }),
     createBreadcrumbSchema([
