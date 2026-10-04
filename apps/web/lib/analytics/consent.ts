@@ -1,5 +1,6 @@
 "use client";
 
+import { clearCampaignAttribution } from "../attribution/campaign-attribution";
 import { SCAN_CONVERSION_STORAGE_KEY } from "./scan-conversion-state";
 
 import {
@@ -74,6 +75,7 @@ export function saveAnalyticsConsent(choice: AnalyticsConsentChoice) {
       window.certscoreLoadUmami?.();
     }
   } else {
+    clearCampaignAttribution();
     window.certscoreUmamiEventQueue = [];
     try { window.sessionStorage.removeItem(SCAN_CONVERSION_STORAGE_KEY); } catch { /* Best-effort opt-out cleanup. */ }
   }

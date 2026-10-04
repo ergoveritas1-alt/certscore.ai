@@ -1,6 +1,6 @@
 "use client";
 
-import { getStoredCampaignAttribution, type CampaignAttribution } from "../attribution/campaign-attribution";
+import { getStoredCampaignAttribution, readCampaignAttributionFromSearch, type CampaignAttribution } from "../attribution/campaign-attribution";
 import { getStoredAnalyticsConsent } from "../analytics/consent";
 import { extractScanIdFromPath, type ProductAnalyticsPayload } from "./contract";
 
@@ -55,7 +55,8 @@ function viewportBand(): ProductAnalyticsPayload["viewportBand"] {
 }
 
 function campaignValue(name: keyof CampaignAttribution) {
-  return (new URLSearchParams(window.location.search).get(name) || getStoredCampaignAttribution()?.[name])?.slice(0, 120) || undefined;
+  const campaign = readCampaignAttributionFromSearch(window.location.search) ?? getStoredCampaignAttribution();
+  return campaign?.[name]?.slice(0, 120) || undefined;
 }
 
 export function trackProductEvent(input: Omit<ProductAnalyticsPayload, "actorId" | "entryRoute" | "language" | "route" | "scanId" | "sessionId" | "viewportBand"> & { route?: string; scanId?: string; anonymousAggregate?: boolean }) {

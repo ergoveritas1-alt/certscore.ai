@@ -7,7 +7,7 @@ import {
   pushDataLayerEventBeforeNavigation,
   pushDataLayerEventOnce
 } from "./data-layer";
-import { CAMPAIGN_ATTRIBUTION_STORAGE_KEY } from "../attribution/campaign-attribution";
+import { CAMPAIGN_SESSION_KEY } from "../attribution/campaign-attribution";
 
 type MockWindow = {
   certscoreAnalyticsConsent?: "granted" | "denied";
@@ -21,6 +21,7 @@ type MockWindow = {
     getItem: (key: string) => string | null;
     setItem: (key: string, value: string) => void;
   };
+  sessionStorage?: MockWindow["localStorage"];
   setTimeout: typeof setTimeout;
   clearTimeout: typeof clearTimeout;
 };
@@ -41,6 +42,8 @@ function installWindow(overrides: Partial<MockWindow> = {}) {
     clearTimeout,
     ...overrides
   };
+
+  mockWindow.sessionStorage = mockWindow.localStorage;
 
   Object.defineProperty(globalThis, "window", {
     configurable: true,
@@ -101,15 +104,15 @@ test("data-layer events dispatch after analytics consent is granted", () => {
   assert.deepEqual(gtagCalls, [["event", "contact_clicked", { cta_location: "header" }]]);
 });
 
-test("consented events include retained first-touch campaign attribution", () => {
+test("consented events include retained session campaign attribution", () => {
   const mockWindow = installWindow({ certscoreAnalyticsConsent: "granted", dataLayer: [] });
   storage.set(
-    CAMPAIGN_ATTRIBUTION_STORAGE_KEY,
-    JSON.stringify({
+    CAMPAIGN_SESSION_KEY,
+    JSON.stringify({ expiresAt: Date.now() + 60000, attribution: {
       utm_campaign: "privacy_agency_test",
       utm_medium: "newsletter",
       utm_source: "theadminbar"
-    })
+    } })
   );
 
   pushDataLayerEvent({
@@ -316,4 +319,17 @@ test("bootstrap defaults Google consent mode to denied before reading saved cons
   assert.match(script, /"ad_personalization":"denied"/);
   assert.match(script, /storedChoice === 'granted'/);
   assert.doesNotMatch(script, /ns\.html/);
+});
+
+ test("GA campaign parameters are flat and consent-gated once events are not consumed early", () => {
+  const calls: unknown[][] = [];
+  const w = installWindow({ certscoreAnalyticsConsent: "denied", gtag: (...args) => { calls.push(args); } });
+  pushDataLayerEventOnce("consent-transition-test", {event:"registration_completed",auth_method:"password"});
+  assert.equal(calls.length,0);
+  w.certscoreAnalyticsConsent="granted";
+  storage.set(CAMPAIGN_SESSION_KEY,JSON.stringify({expiresAt:Date.now()+60000,attribution:{utm_source:"linkedin",utm_campaign:"session_replay_2026"}}));
+  pushDataLayerEventOnce("consent-transition-test", {event:"registration_completed",auth_method:"password"});
+  pushDataLayerEventOnce("consent-transition-test", {event:"registration_completed",auth_method:"password"});
+  assert.equal(calls.length,1);
+  assert.deepEqual(calls[0], ["event","registration_completed",{auth_method:"password",utm_source:"linkedin",utm_campaign:"session_replay_2026"}]);
 });

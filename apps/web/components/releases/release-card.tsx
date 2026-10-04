@@ -43,6 +43,7 @@ export function ReleaseCard({
         <Link className="mt-5 inline-flex text-sm font-semibold text-sky-700 transition hover:text-sky-900" href={releasePath(release)}>
           Read release <span aria-hidden="true" className="ml-1">→</span>
         </Link>
+        {release.researchLink ? <p className="mt-3"><Link className="text-sm font-semibold text-sky-700 underline" href={release.researchLink.href}>{release.researchLink.label}</Link></p> : null}
       </div>
     </article>
   );

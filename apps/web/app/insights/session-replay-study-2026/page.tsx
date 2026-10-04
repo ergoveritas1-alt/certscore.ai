@@ -401,7 +401,7 @@ export default function SessionReplayStudyPage() {
             <DomainScanForm
               mode="full"
               variant="homepage-hero"
-              scanSource="unknown"
+              scanSource="study"
               buttonLabel="Scan now"
               inputLabel="Website URL"
               inputPlaceholder="https://your-website.com"

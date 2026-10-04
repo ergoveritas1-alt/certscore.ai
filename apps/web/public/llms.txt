@@ -1,6 +1,15 @@
 # CertScore.ai
 
-Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS with CertScore.ai.
+<!-- public-discovery:start -->
+## Current releases and original research
+
+- [See when session-replay technology appears on a website](https://certscore.ai/releases/session-replay-detection): Identify observable session-replay service signals, inspect the retained evidence, and give your privacy review a clearer starting point.
+- [See the forms on your website—and the privacy questions they raise](https://certscore.ai/releases/forms-capture): Find observed forms and fields, open available form screenshots, and give your next website privacy review a clearer starting point.
+- [Connect your agent to your CertScore.ai workspace with Hosted MCP OAuth](https://certscore.ai/releases/mcp-hosted-oauth): Connect an MCP-capable agent to your CertScore.ai workspace to scan public websites, retrieve reports, and access previous scans.
+- [Read the Session Replay study](https://certscore.ai/insights/session-replay-study-2026): Original research: 383 of 3,199 analyzed domains showed a replay-service signal (12.0%); based on 5,000 selected executions. A convenience sample, not web-wide prevalence or proof of recording.
+<!-- public-discovery:end -->
+
+Scan cookies, trackers, session-replay signals, CMPs, consent, privacy policy, GDPR, CCPA, and TLS with CertScore.ai.
 
 CertScore.ai is an automated website risk-signal scanner for public websites. It observes evidence-backed signals around consent behavior, session replay indicators, fingerprinting-related signals, accessibility, privacy disclosure gaps, and policy/runtime consistency.
 
@@ -238,7 +247,3 @@ Send comments to support@certscore.ai.
 - How to read a consent report: a retained example: https://certscore.ai/guides/consent-report-example
 - Editorial policy: https://certscore.ai/editorial-policy
 - CCPA evidence review: https://certscore.ai/ccpa
-
-## Session replay launch and original research
-- https://certscore.ai/releases/session-replay-detection
-- https://certscore.ai/insights/session-replay-study-2026

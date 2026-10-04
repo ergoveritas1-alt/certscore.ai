@@ -3,7 +3,7 @@ import test from "node:test";
 import { trackAcceptedScan, trackCompletedScan, trackFullSiteCompletion } from "./scan-conversions";
 import { consumeScanCompletion, rememberScanSubmission, SCAN_CONVERSION_STORAGE_KEY, SCAN_CONVERSION_TTL_MS } from "./scan-conversion-state";
 import { ANALYTICS_CONSENT_STORAGE_KEY, saveAnalyticsConsent } from "./consent";
-import { CAMPAIGN_ATTRIBUTION_STORAGE_KEY } from "../attribution/campaign-attribution";
+import { CAMPAIGN_SESSION_KEY } from "../attribution/campaign-attribution";
 import { AUTHENTIC_SAMPLE_REPORT_SCAN_ID } from "../marketing/sample-report";
 import { extractScanIdFromPath } from "../product-analytics/contract";
 
@@ -21,7 +21,7 @@ async function browser(choice: "granted" | "denied" | null, run: (ctx: { locatio
   const originalFetch = globalThis.fetch;
   const local = memory(), session = memory(), ga: unknown[] = [], events: Record<string, unknown>[] = [];
   if (choice) local.setItem(ANALYTICS_CONSENT_STORAGE_KEY, choice);
-  local.setItem(CAMPAIGN_ATTRIBUTION_STORAGE_KEY, JSON.stringify({ utm_source: "test" }));
+  session.setItem(CAMPAIGN_SESSION_KEY, JSON.stringify({ attribution: { utm_source: "test" }, expiresAt: Date.now() + 60000 }));
   const location = { pathname: "/solutions/cookie-consent-scanner", search: "?utm_source=test" };
   Object.defineProperty(globalThis, "window", { configurable: true, value: {
     localStorage: local, sessionStorage: session, location, innerWidth: 1000, dataLayer: ga,
@@ -137,5 +137,21 @@ test("full-site completion requires the matching terminal crawl with no active p
     trackFullSiteCompletion(a, { state: { scanId: a, status: "completed" }, counts: { active: 0 } }, "https://example.com/");
     assert.equal(events.length, 2);
     assert.equal(events[1]?.eventName, "scan_completed");
+  });
+});
+
+ test("editorial origin survives report navigation and completion remains exactly once", async () => {
+  await browser("granted", async ({ location, ga }) => {
+    location.pathname = "/insights/session-replay-study-2026";
+    await trackAcceptedScan({ scanId: a, reusedExistingScan: false, source: "study", targetType: "url" });
+    location.pathname = `/scan/${a}`;
+    trackCompletedScan(a);
+    trackCompletedScan(a);
+    const completed = ga.filter(event => (event as any).event === "scan_completed") as any[];
+    assert.equal(completed.length, 1);
+    assert.equal(completed[0].scan_source, "study");
+    assert.equal(completed[0].content_id, "session-replay-study-2026");
+    assert.equal(completed[0].page_type, "study");
+    assert.equal(completed[0].cta_location, "inline_scan");
   });
 });

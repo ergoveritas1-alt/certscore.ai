@@ -1,3 +1,5 @@
+import { CORE_MARKETING_POSITIONING } from "./core-positioning";
+import { SESSION_REPLAY_STUDY_LINK } from "./research-links";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -65,4 +67,13 @@ test("coordinated launch has discoverable canonical pages and a shared valid soc
   const png = readFileSync(`apps/web/public${release.socialImage.path}`);
   assert.equal(png.readUInt32BE(16), 1200);
   assert.equal(png.readUInt32BE(20), 630);
+});
+
+test("AI discovery keeps the shared positioning and current research near the top", () => {
+  for (const file of ["llms.txt", "llms-full.txt"]) {
+    const text = readFileSync(`apps/web/public/${file}`, "utf8");
+    assert.ok(text.includes(CORE_MARKETING_POSITIONING));
+    assert.ok(text.indexOf(SESSION_REPLAY_STUDY_LINK.href) < 2000);
+    assert.ok(text.includes(SESSION_REPLAY_STUDY_LINK.description));
+  }
 });

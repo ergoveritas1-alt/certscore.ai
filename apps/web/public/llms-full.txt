@@ -1,6 +1,15 @@
 # CertScore.ai full AI and API guide
 
-Scan cookies, trackers, CMPs, consent, privacy policy, GDPR, CCPA, and TLS with CertScore.ai.
+<!-- public-discovery:start -->
+## Current releases and original research
+
+- [See when session-replay technology appears on a website](https://certscore.ai/releases/session-replay-detection): Identify observable session-replay service signals, inspect the retained evidence, and give your privacy review a clearer starting point.
+- [See the forms on your website—and the privacy questions they raise](https://certscore.ai/releases/forms-capture): Find observed forms and fields, open available form screenshots, and give your next website privacy review a clearer starting point.
+- [Connect your agent to your CertScore.ai workspace with Hosted MCP OAuth](https://certscore.ai/releases/mcp-hosted-oauth): Connect an MCP-capable agent to your CertScore.ai workspace to scan public websites, retrieve reports, and access previous scans.
+- [Read the Session Replay study](https://certscore.ai/insights/session-replay-study-2026): Original research: 383 of 3,199 analyzed domains showed a replay-service signal (12.0%); based on 5,000 selected executions. A convenience sample, not web-wide prevalence or proof of recording.
+<!-- public-discovery:end -->
+
+Scan cookies, trackers, session-replay signals, CMPs, consent, privacy policy, GDPR, CCPA, and TLS with CertScore.ai.
 
 CertScore.ai is an automated public-web risk-signal scanner. It observes evidence-backed signals around consent behavior, session replay indicators, fingerprinting-related signals, accessibility, privacy disclosure gaps, and policy/runtime consistency.
 
@@ -459,7 +468,3 @@ Agent reporting: For GPC, lead with available `gpcResponse.observation` facts an
 For inventory, CCPA/CPRA workpapers or export requests, use the existing `scanId` with `certscore_get_report_evidence_page` and `workpaper="tracking"` when advertised by the server. Ordinary summaries use `privacyAuditSummary` and the returned GPC facts without an automatic extra read. The workpaper provides retained starting-page inventory, privacy-choice controls, notice passages, and GPC evidence. Preserve `workpaper="tracking"` with every `pagination.nextCursor`; use `download.url` for JSON and `download.csvUrl` for CSV. Keep private download links confidential; request a fresh link after expiry. Missing evidence in a bounded bundle is not evidence of absence: inspect `mcpMetadata.omittedSections` and retrieve the workpaper when needed. If the tool or selector is missing, refresh the existing connection's tool list or update the local MCP package; do not start a replacement scan.
 
 Report observed Do Not Sell/Share controls and notice passages as evidence. Control presence does not establish opt-out effectiveness, and notice passages do not assess adequacy. Preserve the actual scan origin and existing CertScore score; the regulatory focus does not change the evidence or produce a separate CCPA score.
-
-## Session replay launch and original research
-- https://certscore.ai/releases/session-replay-detection
-- https://certscore.ai/insights/session-replay-study-2026

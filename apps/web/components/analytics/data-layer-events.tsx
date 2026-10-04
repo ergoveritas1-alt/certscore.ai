@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
 import {
   type CtaLocation,
@@ -19,8 +19,10 @@ import {
   markCampaignLandingSeen
 } from "../../lib/attribution/campaign-attribution";
 import { trackCompletedScan } from "../../lib/analytics/scan-conversions";
-import { extractScanIdFromPath } from "../../lib/product-analytics/contract";
+import { extractScanIdFromPath, normalizeAnalyticsRoute } from "../../lib/product-analytics/contract";
 import { trackProductEvent } from "../../lib/product-analytics/client";
+
+import { ANALYTICS_CONSENT_CHANGE_EVENT, hasAnalyticsConsent } from "../../lib/analytics/consent";
 
 const PENDING_SCAN_STARTED_KEY = "certscore:analytics:pending-scan-started";
 
@@ -33,7 +35,7 @@ function isGuideCtaType(value: string | undefined): value is GuideCtaType {
 }
 
 function isScanSource(value: string | undefined): value is ScanSource {
-  return value === "homepage" || value === "header" || value === "dashboard" || value === "unknown";
+  return value === "homepage" || value === "header" || value === "dashboard" || value === "release" || value === "study" || value === "unknown";
 }
 
 function isReportCtaType(value: string | undefined): value is ReportCtaType {
@@ -66,18 +68,21 @@ function getGuidePageType(pathname: string): GuidePageType {
 
 export function DataLayerClickTracker() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const lastTrackedPathnameRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const landing = captureCampaignAttribution();
-    if (landing.isNewLanding) {
-      markCampaignLandingSeen();
-      pushDataLayerEvent({
-        event: "campaign_landing_page_viewed",
-        page_path: window.location.pathname
-      });
+    function captureLanding() {
+      const landing = captureCampaignAttribution();
+      if (hasAnalyticsConsent() && landing.isNewLanding) {
+        pushDataLayerEvent({ event: "campaign_landing_page_viewed", page_path: normalizeAnalyticsRoute(window.location.pathname) });
+        markCampaignLandingSeen();
+      }
     }
-  }, []);
+    captureLanding();
+    window.addEventListener(ANALYTICS_CONSENT_CHANGE_EVENT, captureLanding);
+    return () => window.removeEventListener(ANALYTICS_CONSENT_CHANGE_EVENT, captureLanding);
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     if (window.location.search.includes("certscore_registration=1")) {
@@ -262,7 +267,7 @@ export function PendingScanStartedEvent() {
 
 export function ScanCompletedEvent({ domain, scanId }: {
   scanId?: string;
-  scanSource: Extract<ScanSource, "homepage" | "dashboard" | "unknown">;
+  scanSource: Exclude<ScanSource, "header">;
   domain?: string | null;
 }) {
   const pathname = usePathname();

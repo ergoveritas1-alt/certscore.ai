@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Script from "next/script";
 import type { ReactNode } from "react";
@@ -83,7 +84,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
             websiteId: UMAMI_WEBSITE_ID
           })}
         </Script>
-        <DataLayerClickTracker />
+        <Suspense fallback={null}><DataLayerClickTracker /></Suspense>
         <ProductAnalyticsTracker />
         <AnalyticsConsentBanner />
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }} />

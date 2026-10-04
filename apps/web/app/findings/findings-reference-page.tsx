@@ -1,3 +1,4 @@
+import { SESSION_REPLAY_STUDY_LINK } from "../../lib/marketing/research-links";
 import { EditorialByline } from "../../components/marketing/editorial-byline";
 import { Badge } from "@website-signal-risk-scanner/ui";
 import Link from "next/link";
@@ -358,7 +359,8 @@ export function FindingsReferencePage({ activeFinding }: FindingsReferencePagePr
       </div>
 
       <div className="mt-10">
-        <FindingAtlasBrowser findings={findings} initialFindingId={initialFindingId} />
+        {activeFinding?.id === "session_recording_services_detected" ? <p className="mb-6 text-sm"><Link className="font-semibold text-sky-700 underline" href={SESSION_REPLAY_STUDY_LINK.href}>{SESSION_REPLAY_STUDY_LINK.label}</Link> — service signals and same-page form context, with coverage limitations.</p> : null}
+          <FindingAtlasBrowser findings={findings} initialFindingId={initialFindingId} />
       </div>
 
       {!activeFinding ? <FindingsRegistryDirectory findings={findings} /> : null}

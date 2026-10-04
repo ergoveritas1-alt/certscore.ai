@@ -143,7 +143,7 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
           {release.scanForm ? (
             <div className="mt-6">
               <Suspense fallback={<p className="text-sm text-slate-600">Loading scan form…</p>}>
-                <DomainScanForm mode="full" variant="homepage-hero" scanSource="unknown" buttonLabel="Scan now" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
+                <DomainScanForm mode="full" variant="homepage-hero" scanSource="release" buttonLabel="Scan now" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
               </Suspense>
               <p className="mt-4 text-sm leading-6 text-slate-600">Start with a free scan of one public page. Results describe the scan’s conditions and coverage.</p>
             </div>

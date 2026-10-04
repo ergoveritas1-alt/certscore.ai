@@ -1,3 +1,4 @@
+import { SESSION_REPLAY_STUDY_LINK } from "../../lib/marketing/research-links";
 import { SiteHeader } from "../layout/site-header";
 import { SiteFooter } from "../layout/site-footer";
 import { AiVisibilityContent } from "./ai-visibility-content";
@@ -13,6 +14,7 @@ export function HistoricalBenchmarkPage({ title, description, path, ids }: {
       showEvidenceExamples={false}
       schema={[createPublicArticleSchema({ title, description, path }), createBreadcrumbSchema([{ name: "Home", path: "/" }, { name: "Benchmarks", path: "/benchmarks" }, { name: title, path }])]}
       evidence={<section aria-labelledby="provenance-heading" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm leading-7 text-slate-700">
+        {path === "/benchmarks/session-replay-risk-2026" ? <p className="mb-4"><a className="font-semibold text-sky-800 underline" href={SESSION_REPLAY_STUDY_LINK.href}>{SESSION_REPLAY_STUDY_LINK.label}</a> for the October 2026 analysis with explicit denominators and exclusions. The historical counts below remain separate.</p> : null}
         <h2 id="provenance-heading" className="text-xl font-semibold text-slate-950">Historical aggregate — provenance incomplete</h2>
         <p className="mt-3">These counts were recorded in the source on May 18, 2026. That is the aggregate’s source date, not a verified scan date range. The declared scope was {archive.declaredScope}, with an approximate denominator of {archive.declaredSampleSize.toLocaleString()} scan records and possible rank-band overlap.</p>
         <p className="mt-3">The complete deduplicated scan manifest, exact scan dates, regions, scanner versions, and exclusion accounting are not established by this published aggregate. Counts are preserved for transparency; we do not present them as current website prevalence, a representative study, or a reproducible research dataset.</p>

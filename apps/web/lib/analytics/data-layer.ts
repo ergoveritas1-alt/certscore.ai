@@ -1,5 +1,6 @@
 "use client";
 
+import { getContentContext } from "./content-context";
 import { hasAnalyticsConsent } from "./consent";
 import { getStoredCampaignAttribution, type CampaignAttribution } from "../attribution/campaign-attribution";
 
@@ -10,11 +11,11 @@ export type GuideCtaType = "scan" | "contact" | "pricing" | "unknown";
 export type ReportCtaType = "share" | "email" | "monitor" | "checklist" | "sample_report" | "pricing" | "unknown";
 export type PricingCtaType = "free_scan" | "sample_report" | "one_time_review" | "monitoring" | "contact_sales" | "unknown";
 export type LeadFormType = "contact_sales" | "monitor_request" | "demo_request";
-export type ScanSource = "homepage" | "header" | "dashboard" | "unknown";
+export type ScanSource = "homepage" | "header" | "dashboard" | "release" | "study" | "unknown";
 export type ScanTargetType = "domain" | "url" | "unknown";
 export type McpLightAction = "copy" | "scan" | "connect" | "support";
 
-export type CertScoreDataLayerEvent =
+type BaseDataLayerEvent =
   | { event: "pricing_viewed"; page_path: "/pricing" }
   | { event: "sample_report_viewed"; page_path: "/sample-report" }
   | { event: "contact_clicked"; cta_location: CtaLocation }
@@ -27,12 +28,14 @@ export type CertScoreDataLayerEvent =
   | { event: "gpt_cta_clicked"; location: GptCtaLocation; destination: "certscore_gpt"; url: string }
   | { event: "lead_form_submit_attempted"; form_type: LeadFormType }
   | { event: "scan_started"; scan_source: ScanSource; scan_target_type: ScanTargetType; scan_status: "queued" }
-  | { event: "scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown">; scan_status: "completed" }
+  | { event: "scan_completed"; scan_source: Exclude<ScanSource, "header">; scan_status: "completed" }
   | { event: "campaign_landing_page_viewed"; page_path: string }
   | { event: "registration_completed"; auth_method: "password" | "google" | "unknown" }
-  | { event: "first_scan_completed"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown"> }
-  | { event: "second_distinct_domain_scanned"; scan_source: Extract<ScanSource, "homepage" | "dashboard" | "unknown"> }
+  | { event: "first_scan_completed"; scan_source: Exclude<ScanSource, "header"> }
+  | { event: "second_distinct_domain_scanned"; scan_source: Exclude<ScanSource, "header"> }
   | { event: "mcp_light_action"; action: McpLightAction; target: string };
+
+export type CertScoreDataLayerEvent = BaseDataLayerEvent & { page_type?: GuidePageType | "release" | "study"; content_id?: string; cta_location?: CtaLocation | "inline_scan" };
 
 export type CampaignAttributedDataLayerEvent = CertScoreDataLayerEvent & {
   campaign_attribution?: CampaignAttribution;
@@ -58,7 +61,9 @@ const pushedEventKeys = new Set<string>();
 
 function withCampaignAttribution(event: CertScoreDataLayerEvent): CampaignAttributedDataLayerEvent {
   const attribution = getStoredCampaignAttribution();
-  return attribution ? { ...event, campaign_attribution: attribution } : event;
+  const context = event.event === "scan_started" && !event.content_id
+    ? getContentContext(window.location?.pathname ?? "") : undefined;
+  return { ...context, ...event, ...(attribution ? { campaign_attribution: attribution } : {}) };
 }
 
 function pushGoogleAnalyticsEvent(event: CampaignAttributedDataLayerEvent, eventCallback?: () => void, eventTimeout?: number) {
@@ -66,9 +71,10 @@ function pushGoogleAnalyticsEvent(event: CampaignAttributedDataLayerEvent, event
     return;
   }
 
-  const { event: eventName, ...parameters } = event;
+  const { event: eventName, campaign_attribution, ...parameters } = event;
   window.gtag("event", eventName, {
     ...parameters,
+    ...campaign_attribution,
     ...(eventCallback ? { event_callback: eventCallback } : {}),
     ...(eventTimeout ? { event_timeout: eventTimeout } : {})
   });
@@ -129,7 +135,10 @@ function pushUmamiEvent(event: CertScoreDataLayerEvent) {
     return;
   }
 
+  const context = event.content_id ? { page_type: event.page_type!, content_id: event.content_id, cta_location: event.cta_location! }
+    : event.event === "scan_started" ? getContentContext(window.location?.pathname ?? "") : undefined;
   const umamiEvent = toUmamiEvent(event);
+  if (context) umamiEvent.properties = { ...umamiEvent.properties, ...context };
   if (typeof window.umami?.track === "function") {
     window.umami.track(umamiEvent.eventName, umamiEvent.properties);
     return;
@@ -193,7 +202,7 @@ export function pushDataLayerEventBeforeNavigation(event: CertScoreDataLayerEven
 }
 
 export function pushDataLayerEventOnce(key: string, event: CertScoreDataLayerEvent) {
-  if (typeof window === "undefined" || pushedEventKeys.has(key)) {
+  if (typeof window === "undefined" || !hasAnalyticsConsent() || pushedEventKeys.has(key)) {
     return;
   }
 
