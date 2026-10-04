@@ -63,16 +63,18 @@ local verification. Do not send synthetic conversions to production GA4.
   metadata intentionally does not claim a CTA interaction.
 - All 36 focused analytics/attribution regression tests passed. These checks cover
   application dispatch, not the real scan form/server/report flow or exact GA receipt.
-- QA DebugView still showed no debug devices/events during verification. Property
-  setup reported collection pending (up to 48 hours). Receipt and received parameter
-  counts remain unverified; do not describe this as a completed end-to-end GA test.
-- A subsequent retry confirmed a browser script-load event for the QA tag and
-  application event dispatch, but still no events in QA DebugView. The local
-  resource diagnostic did not show a GA collection request. The public tag URL
-  returned HTTP 200 with JavaScript in an independent HTTP check. This does not
-  establish whether browser restrictions, tag execution or new-property setup is
-  responsible; do not assume that waiting alone resolves it. Deployment remains
-  gated on verified QA receipt under the October 4 follow-up authorization.
+- Initial QA attempts produced local commands and a script-load event but no
+  Google runtime or collection requests. After the owner removed Ghostery and
+  Chrome reloaded the unchanged harness, Google's runtime initialized and GA4
+  collection requests appeared. QA DebugView then visibly received
+  `campaign_landing_page_viewed`, `scan_started`, and `scan_completed` on October
+  4 at approximately 16:26 UTC. This resolves the QA receipt deployment gate and
+  strongly isolates the browser extension as the earlier delivery blocker.
+- Receipt verification used simulated scan outcomes in the isolated QA property;
+  it does not claim verification of the production scanner journey or every
+  received parameter. The temporary harness's assertion journey assumes a fresh
+  run; running it after a delivery journey reuses event history and is not a valid
+  isolated regression result. Use the focused tests for repeatable regression.
 - No new event is added by the fix. Expected incremental metadata transfer cost is
   below $0.01/month at 10,000 campaign landings; the standard QA property adds no
   paid service or recurring infrastructure.
