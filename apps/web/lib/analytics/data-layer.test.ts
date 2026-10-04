@@ -135,7 +135,7 @@ test("consented events include retained session campaign attribution", () => {
 });
 
 test("editorial landings identify content without claiming a CTA interaction", () => {
-  for (const [pathname, pageType] of [["/insights/session-replay-study-2026", "study"], ["/releases/session-replay", "release"]]) {
+  for (const [pathname, pageType] of [["/insights/session-replay-study-2026", "study"], ["/releases/session-replay", "release"]] as const) {
     const calls: unknown[][] = [];
     installWindow({ certscoreAnalyticsConsent: "granted", location: { pathname }, gtag: (...args) => { calls.push(args); } });
     pushDataLayerEvent({ event: "campaign_landing_page_viewed", page_path: pathname });
