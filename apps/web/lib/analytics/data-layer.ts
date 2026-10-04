@@ -61,8 +61,11 @@ const pushedEventKeys = new Set<string>();
 
 function withCampaignAttribution(event: CertScoreDataLayerEvent): CampaignAttributedDataLayerEvent {
   const attribution = getStoredCampaignAttribution();
-  const context = event.event === "scan_started" && !event.content_id
-    ? getContentContext(window.location?.pathname ?? "") : undefined;
+  const editorial = !event.content_id ? getContentContext(window.location?.pathname ?? "") : undefined;
+  // A landing identifies content, but does not imply that its scan CTA was used.
+  const context = event.event === "scan_started" ? editorial
+    : event.event === "campaign_landing_page_viewed" && editorial
+      ? { page_type: editorial.page_type, content_id: editorial.content_id } : undefined;
   return { ...context, ...event, ...(attribution ? { campaign_attribution: attribution } : {}) };
 }
 

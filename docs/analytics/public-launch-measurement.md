@@ -48,6 +48,28 @@ The code does not configure GA4 property settings. In the production property:
 No production scans, lead submissions or registration records are needed for
 local verification. Do not send synthetic conversions to production GA4.
 
+### Isolated QA verification — October 4, 2026
+
+- Created `CertScore.ai — Analytics QA`, property `557335590`, in the existing
+  account. Its local-only test stream is `G-DT871NW3S6` (`16040550351`), with
+  stream URL `http://127.0.0.1:4319`. This ID must not replace the production tag.
+- A temporary localhost browser harness bundled the canonical consent,
+  attribution and conversion functions. Scan acceptance/completion were simulated;
+  no scanner invocation, production API write or production GA conversion occurred.
+- Thirteen browser assertions passed after correcting missing editorial metadata
+  on campaign landing events: denial, later grant, once-only landing/start/completion,
+  flat campaign retention, start/completion content and CTA retention, landing
+  content identity, reused-result suppression and revocation cleanup. Landing
+  metadata intentionally does not claim a CTA interaction.
+- All 36 focused analytics/attribution regression tests passed. These checks cover
+  application dispatch, not the real scan form/server/report flow or exact GA receipt.
+- QA DebugView still showed no debug devices/events during verification. Property
+  setup reported collection pending (up to 48 hours). Receipt and received parameter
+  counts remain unverified; do not describe this as a completed end-to-end GA test.
+- No new event is added by the fix. Expected incremental metadata transfer cost is
+  below $0.01/month at 10,000 campaign landings; the standard QA property adds no
+  paid service or recurring infrastructure.
+
 ## Campaign URLs
 
 Use the study URL for research posts, with:

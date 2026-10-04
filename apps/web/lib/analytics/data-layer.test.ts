@@ -10,6 +10,7 @@ import {
 import { CAMPAIGN_SESSION_KEY } from "../attribution/campaign-attribution";
 
 type MockWindow = {
+  location?: { pathname: string };
   certscoreAnalyticsConsent?: "granted" | "denied";
   certscoreLoadAnalytics?: () => void;
   certscoreLoadGoogleTag?: () => void;
@@ -131,6 +132,20 @@ test("consented events include retained session campaign attribution", () => {
       page_path: "/"
     }
   ]);
+});
+
+test("editorial landings identify content without claiming a CTA interaction", () => {
+  for (const [pathname, pageType] of [["/insights/session-replay-study-2026", "study"], ["/releases/session-replay", "release"]]) {
+    const calls: unknown[][] = [];
+    installWindow({ certscoreAnalyticsConsent: "granted", location: { pathname }, gtag: (...args) => { calls.push(args); } });
+    pushDataLayerEvent({ event: "campaign_landing_page_viewed", page_path: pathname });
+    assert.deepEqual(calls, [["event", "campaign_landing_page_viewed", {
+      page_type: pageType, content_id: pathname.split("/")[2], page_path: pathname
+    }]]);
+  }
+  const mock = installWindow({ certscoreAnalyticsConsent: "denied", location: { pathname: "/insights/session-replay-study-2026" } });
+  pushDataLayerEvent({ event: "campaign_landing_page_viewed", page_path: mock.location!.pathname });
+  assert.deepEqual(mock.dataLayer, []);
 });
 
 test("report CTA events dispatch after analytics consent is granted", () => {
