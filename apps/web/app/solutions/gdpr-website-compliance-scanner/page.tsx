@@ -11,50 +11,41 @@ const config: SolutionPageConfig = {
   metadataTitle: "GDPR Website Scanner: Cookies, Tracking & Consent",
   badge: "GDPR & ePrivacy website scanner",
   description:
-    "Scan public websites for GDPR-relevant consent, cookie, tracking, policy, and disclosure review signals. CertScore.ai provides evidence-backed observations for human and agentic review, not legal advice.",
+    "Check cookies, trackers, consent controls and privacy disclosures with a GDPR website scanner. Get retained evidence for review, not a compliance certificate.",
   intro:
-    "Check a public website for cookies and tracking before consent, available consent controls, and privacy policy signals. CertScore.ai turns browser observations into evidence for GDPR and ePrivacy review; it cannot certify compliance.",
+    "A GDPR website scanner checks public pages for cookies, tracking, consent controls and privacy disclosures that need review. Enter a URL below to run a free scan of one public page and inspect the retained evidence. Results help you investigate GDPR and ePrivacy risk signals; they do not certify compliance.",
   path: "/solutions/gdpr-website-compliance-scanner",
   primarySignals: [
     "Pre-consent tracking",
     "Third-party cookies before consent",
     "Consent UX and Accept/Reject behavior",
-      "Policy/runtime disclosure gaps",
-      "Session replay and fingerprinting-related signals"
+    "Policy/runtime disclosure gaps",
+    "Session replay and fingerprinting-related signals"
   ],
   sections: [
+    {
+      title: "What a GDPR website checker can show",
+      body: "Review observed cookies and storage, tracking requests, available Accept/Reject/Options controls, privacy disclosures, and session replay or fingerprinting-related signals. Each result is bounded by the scanned page, region, visit and available evidence."
+    },
+    {
+      title: "Example: investigate a request before consent",
+      body: "If a report flags a tracking request before consent, open its retained evidence and check the vendor, request timing and consent context. Give the implementation owner the affected page and evidence reference so they can inspect the tag trigger. This is a review example, not a finding about your website."
+    },
+    {
+      title: "Example: review forms alongside replay signals",
+      body: "A replay-service signal and a form inventory answer different questions. Inspect the service evidence and the form’s page before checking masking, consent configuration and the privacy notice. Even same-page co-presence does not prove that the service recorded inputs."
+    },
     {
       title: "What this scan cannot establish",
       body: "Public-page observation does not cover private account flows, every page, every region, or all future behavior. Bot defenses and unavailable controls can limit coverage. Accept and Reject observations are separate eligible sessions; an unverified decision stays unverified. A clean observation is not a compliance certificate."
     },
     {
-      title: "What to give your implementation team",
-      body: "Share the report's target and date, the affected vendor or storage identity, the consent state, and the retained evidence reference. Ask the team to inspect the relevant tag trigger, consent category, or embedded service, then compare a fresh scan after the change."
+      title: "From an observation to a fix",
+      body: "Share the report’s target, date, region, affected vendor or storage identity, consent state and retained evidence reference. Review the relevant tag trigger, consent category, embedded service or disclosure with its owner. After a change, compare a fresh scan under the same conditions."
     },
     {
-      title: "Direct answer",
-      body:
-        "A GDPR website compliance scanner reviews observable public website behavior that may be relevant to privacy and consent review. CertScore.ai focuses on evidence-backed risk signals, not legal conclusions."
-    },
-    {
-      title: "What CertScore.ai checks",
-      body:
-        "CertScore.ai checks request timing, cookies and storage, consent-state evidence, vendor behavior, session replay indicators, fingerprinting-related activity, and whether public disclosures appear aligned with observed behavior."
-    },
-    {
-      title: "What follows a confirmed choice",
-      body:
-        "Consent review often stops at the banner. Where an eligible control can be actioned safely, CertScore observes a first-layer choice and separately reports whether its registration was confirmed and whether non-essential activity changes afterward—evidence for GDPR/ePrivacy review, not a determination of compliance or violation."
-    },
-    {
-      title: "How teams use it",
-      body:
-        "Privacy, legal, marketing operations, and engineering teams can use CertScore.ai to triage live-site drift after tag-manager edits, CMP changes, launches, and vendor updates."
-    },
-    {
-      title: "Review posture",
-      body:
-        "CertScore.ai findings should be reviewed with retained evidence and internal policy context. A finding is a review signal; it is not proof of a GDPR violation or proof that a site is compliant."
+      title: "When to use a broader review",
+      body: "Start with one public page, then review important templates such as contact, booking and checkout pages within your access and crawl limits. A website scan cannot assess your internal processing records, contracts or every use of personal data. Combine technical evidence with your organization’s privacy review."
     }
   ],
   faqs: [
@@ -79,6 +70,8 @@ const config: SolutionPageConfig = {
     "CertScore.ai findings are automated observations backed by retained evidence. They are not legal advice, certification, or compliance determinations."
   ],
   relatedLinks: [
+    { href: "/insights/session-replay-study-2026", label: "Session replay study: evidence and limitations" },
+    { href: "/guides/website-form-scanning", label: "Review forms and field evidence" },
     { href: "/gdpr", label: "How to interpret GDPR website evidence" },
     { href: "/guides/cmp-verification", label: "CMP verification" },
     { href: "/guides/rtb-cookie-syncing", label: "RTB cookie syncing" },

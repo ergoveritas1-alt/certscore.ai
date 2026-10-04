@@ -64,3 +64,29 @@ Keep editorial dateModified tied to actual substantive changes. Verify canonical
 URLs, sitemap, RSS, internal links and visible copy after deployment. Inspect new
 URLs in Search Console and verify crawler access from actual logs; a robots allow
 rule and HTTP 200 do not establish indexing or rankings.
+
+## Search visibility review — October 4, 2026
+
+Authenticated Search Console review found 3,453 web impressions and 13 clicks
+for the displayed June 30–September 29 period. Query examples (sitewide, not
+filtered to the solution page): `gdpr website scanner` 127 impressions / position
+35.7; `gdpr scanner` 161 / 63.4; `gdpr compliance checker` 234 / 71.9. These are
+baseline observations, not evidence that later content edits improved ranking.
+
+The older aggregate “Crawled - currently not indexed” list contained 61 URLs:
+18 public content candidates and 43 asset, API or discovery resources. Read-only
+HTTP checks of all 18 public candidates reached 200 responses with one H1,
+matching final-page canonical URLs and no HTML robots noindex directive. Four
+old guide URLs redirect to their intended replacements. These checks establish
+basic page delivery, not indexing or a complete robots/header audit. The forms
+release's current URL Inspection result says **URL is on Google**, despite its
+presence in the older aggregate exclusion list. Do not rewrite or redirect that
+release merely to clear the stale exclusion row. Other candidates still need
+current URL Inspection before diagnosing an indexing defect.
+
+The GDPR solution copy now explains the one-page free scan, adds explicitly
+illustrative evidence-review examples and reduces repetitive sections. RTB and
+tracking-before-consent guides link contextually to the session replay study,
+while distinguishing service signals from active recording and consent testing.
+Editorial modification dates reflect these changes. No new runtime service,
+scan, model call or recurring infrastructure cost is introduced ($0 incremental).

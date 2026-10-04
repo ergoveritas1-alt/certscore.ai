@@ -65,8 +65,10 @@ export const aiGuideContent = {
         title: "Distinguish syncing from neighboring behavior",
         paragraphs: [
           "An advertising auction, measurement pixel, ordinary redirect, and cookie synchronization are not identical. A suggestive endpoint name does not prove matching or downstream use. Compare the direct chain with vendor documentation and the retained classification.",
-          "Cookie blocking can suppress storage while requests still occur. Conversely, a cookie already present does not prove it was sent in a sync request. Review transport and storage separately."
-        ]
+          "Cookie blocking can suppress storage while requests still occur. Conversely, a cookie already present does not prove it was sent in a sync request. Review transport and storage separately.",
+          "Session replay is a separate review topic: a replay-service request does not establish cookie syncing or active recording. Our session replay study explains how retained service signals and same-page form inventories were measured, with explicit coverage limits."
+        ],
+        sourceLinks: [{ href: "/insights/session-replay-study-2026", label: "Read the session replay study and measurement limits" }]
       },
       {
         title: "Turn the chain into an implementation check",
@@ -212,8 +214,10 @@ export const aiGuideContent = {
         title: "3. Separate requests, stored values, and purpose",
         paragraphs: [
           "A request shows communication; a cookie snapshot shows stored state. Record the vendor classification, request timing, cookie name/domain/path or storage origin/key, and the evidence reference. Review unclear vendor purposes with the implementation owner.",
-          "Check both the tag manager and scripts embedded directly in templates. Embedded media, analytics, advertising, and replay integrations can have different triggers. Do not classify every third-party service as non-essential solely because it is external."
-        ]
+          "Check both the tag manager and scripts embedded directly in templates. Embedded media, analytics, advertising, and replay integrations can have different triggers. Do not classify every third-party service as non-essential solely because it is external.",
+          "For replay integrations, distinguish a service request from evidence of active recording. Our session replay study measures observable service signals and same-page form context; it does not establish consent-gating effectiveness or capture of input values."
+        ],
+        sourceLinks: [{ href: "/insights/session-replay-study-2026", label: "See the session replay study’s evidence and limitations" }]
       },
       {
         title: "4. Build a useful evidence record",
