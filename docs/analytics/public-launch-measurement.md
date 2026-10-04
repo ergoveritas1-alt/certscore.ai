@@ -66,6 +66,13 @@ local verification. Do not send synthetic conversions to production GA4.
 - QA DebugView still showed no debug devices/events during verification. Property
   setup reported collection pending (up to 48 hours). Receipt and received parameter
   counts remain unverified; do not describe this as a completed end-to-end GA test.
+- A subsequent retry confirmed a browser script-load event for the QA tag and
+  application event dispatch, but still no events in QA DebugView. The local
+  resource diagnostic did not show a GA collection request. The public tag URL
+  returned HTTP 200 with JavaScript in an independent HTTP check. This does not
+  establish whether browser restrictions, tag execution or new-property setup is
+  responsible; do not assume that waiting alone resolves it. Deployment remains
+  gated on verified QA receipt under the October 4 follow-up authorization.
 - No new event is added by the fix. Expected incremental metadata transfer cost is
   below $0.01/month at 10,000 campaign landings; the standard QA property adds no
   paid service or recurring infrastructure.
