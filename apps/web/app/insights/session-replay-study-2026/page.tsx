@@ -230,16 +230,11 @@ export default function SessionReplayStudyPage() {
             </div>
             <figcaption className="mt-6 text-sm leading-6 text-slate-600">
               Both bars use a 0–100% scale and only domains with evaluable form
-              evidence. This descriptive comparison does not establish
-              significance or causality.
+              evidence. The observed difference is 2.4 percentage points. This
+              convenience sample does not support a web-wide estimate of that
+              difference or a causal conclusion.
             </figcaption>
           </figure>
-          <p className="mt-5 leading-7 text-slate-700">
-            Among the 191 same-page form/input domains with a replay signal,{" "}
-            {data.emailDomains} (
-            {percent(data.emailDomains, data.positiveForms)}) had retained
-            email-type fields.
-          </p>
           <p className="mt-4 rounded-lg border-l-4 border-sky-600 bg-sky-50 p-5 font-medium leading-7 text-slate-900">
             Co-presence does not establish that field values were entered,
             transmitted to the replay service or recorded.
@@ -304,13 +299,19 @@ export default function SessionReplayStudyPage() {
               </div>
             ))}
           </dl>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            The 1,756 excluded executions include the 12 that did not complete
+            and 1,744 completed executions without usable evidence.
+          </p>
           <div className="mt-6 space-y-4 leading-7 text-slate-700">
             <p>
               We used the most recent usable visit per destination registrable
               domain, with Public Suffix List private suffixes enabled.
               Redirects were attributed to the observed destination. This is a
               production convenience sample, not a random or representative
-              sample of the web.
+              sample of the web. We report descriptive proportions rather than
+              population confidence intervals or significance tests, which would
+              not account for this sample’s selection and coverage limitations.
             </p>
             <p>
               Retained runtime evidence was verified against its artifact
@@ -331,8 +332,10 @@ export default function SessionReplayStudyPage() {
               Form evidence required a hash-bound inventory from the same
               runtime lane and page. Limited inventories could support retained
               positive observations; missing controls under limited coverage
-              were not proof of absence. Three replay-positive domains lacked
-              evaluable form evidence and were excluded from that comparison.
+              were not proof of absence. Evaluable form evidence was unavailable
+              for 3 of 383 replay-positive domains and 35 of 2,816 domains
+              without an observed replay signal. Both groups were excluded
+              from the form comparison, leaving denominators of 380 and 2,781.
             </p>
           </div>
           <details className="mt-6 rounded-xl border border-slate-200 bg-white p-6">

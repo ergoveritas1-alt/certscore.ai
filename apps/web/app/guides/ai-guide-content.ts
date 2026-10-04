@@ -103,7 +103,7 @@ export const aiGuideContent = {
         title: "Two different signal levels",
         paragraphs: [
           "A session replay service signal means the scan observed evidence associated with a recognized replay or behavioral-analytics service. This can include a library download.",
-          "Separate input-surface findings provide context for review. Same-scan evidence alone does not establish that the service and field appeared on the same page, or that values were entered, transmitted or recorded."
+          "Same-scan co-presence alone does not establish that a replay service and an input surface appeared on the same page. The Session Replay study separately required page-bound replay evidence and a hash-verified form inventory from the same runtime lane and measured page to establish same-page co-presence. Neither level establishes that input values were entered, transmitted or recorded."
         ]
       },
       {

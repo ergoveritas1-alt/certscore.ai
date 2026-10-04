@@ -20,7 +20,7 @@ export function SessionReplayEvidenceExample() {
           <div>
             <dt className="text-slate-500">Example service</dt>
             <dd className="mt-1 font-medium text-slate-900">
-              Microsoft Clarity
+              Example replay service
             </dd>
           </div>
           <div>

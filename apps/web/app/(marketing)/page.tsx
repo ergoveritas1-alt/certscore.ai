@@ -193,7 +193,7 @@ export default async function MarketingHomePage() {
             </h1>
             <div className="max-w-[650px]">
               <p className="text-base leading-8 text-slate-300 sm:text-xl">
-                Scan public pages for cookies, trackers, privacy policy signals, and consent behavior. Review what appears before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits.
+                Scan public pages for cookies, trackers, session-replay signals, privacy policy signals, and consent behavior. Review what appears before consent and after eligible Accept or Reject clicks, with retained evidence and clear coverage limits.
               </p>
               <p className="relative top-[15px] mt-[20px] text-sm font-semibold text-sky-400">
                 Built for developers and agencies reviewing websites for GDPR/ePrivacy and CCPA concerns.
