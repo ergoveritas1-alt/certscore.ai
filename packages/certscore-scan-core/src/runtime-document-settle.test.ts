@@ -54,6 +54,45 @@ test("loading runtime documents wait for parsing and late embed requests to sett
   assertClean(events);
 });
 
+test("a timed-out request gate settles asynchronous embeds even after parsing completed", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const { page, events } = fixturePage("complete");
+  const tracker = createPassiveEvidenceActivityTracker();
+  const request = {};
+  tracker.markRequestStarted(request);
+  const promise = waitForLoadingRuntimeDocument({ page, timeoutMs: 10_000, tracker, awaitPendingActivity: true });
+  await Promise.resolve();
+  let completed = false;
+  void promise.then(() => { completed = true; });
+  t.mock.timers.tick(500);
+  await Promise.resolve();
+  assert.equal(completed, false);
+  tracker.markRequestFinished(request);
+  for (let i = 0; i < 10; i++) t.mock.timers.tick(25);
+  assert.deepEqual(await promise, { elapsedMs: 750, status: "settled", pendingActivityOnly: true });
+  assertClean(events);
+});
+
+test("an already quiet parsed document still skips a previously timed-out request gate", async () => {
+  const { page, events } = fixturePage("complete");
+  const result = await waitForLoadingRuntimeDocument({ page, timeoutMs: 10_000,
+    tracker: createPassiveEvidenceActivityTracker(0), awaitPendingActivity: true });
+  assert.equal(result.status, "already_ready");
+  assertClean(events);
+});
+
+test("parsed pages with never-ending requests share the original hard cap", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const { page, events } = fixturePage("complete");
+  const tracker = createPassiveEvidenceActivityTracker();
+  tracker.markRequestStarted({});
+  const promise = waitForLoadingRuntimeDocument({ page, timeoutMs: 30_000, tracker, awaitPendingActivity: true });
+  await Promise.resolve();
+  t.mock.timers.tick(10_000);
+  assert.deepEqual(await promise, { elapsedMs: 10_000, status: "timed_out", pendingActivityOnly: true });
+  assertClean(events);
+});
+
 test("the loading allowance has one ten-second cap even when a caller requests more", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
   const { page, events } = fixturePage();

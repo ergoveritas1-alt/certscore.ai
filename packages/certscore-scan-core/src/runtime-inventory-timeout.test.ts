@@ -9,6 +9,72 @@ import { deriveRuntimeCoverageSummary } from "./index.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer } from "./test-fixtures/static-server.js";
 
+test("fast runtime captures a delayed form and its masked image after the document already parsed", async (t) => {
+  const { createServer } = await import("node:http");
+  let embedResponse: import("node:http").ServerResponse | undefined;
+  let embedTimer: ReturnType<typeof setTimeout> | undefined;
+  let submits = 0;
+  let retainedValue: string | undefined;
+  const server = createServer((request, response) => {
+    if (request.method === "POST") submits++;
+    if (request.url === "/form-data") { embedResponse = response; return; }
+    response.writeHead(200, { "Content-Type": "text/html" });
+    response.end(`<html><body><h1>Contact us</h1><p>${"Public information. ".repeat(80)}</p><div id="contact"></div><script>
+      fetch('/form-data').then(r => r.json()).then(() => {
+        document.getElementById('contact').innerHTML = '<form style="width:400px;height:100px" method="post"><label>Business email<input type="email" required value="private@example.test"></label><button type="submit">Send</button></form>';
+      });
+    </script></body></html>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
+  const browser = await chromium.launch({ headless: true });
+  const root = await mkdtemp(path.join(tmpdir(), "certscore-parsed-embed-form-"));
+  const newContext = browser.newContext.bind(browser);
+  t.mock.method(browser, "newContext", async (...args) => {
+    const context = await newContext(...args);
+    const newPage = context.newPage.bind(context);
+    t.mock.method(context, "newPage", async () => {
+      const page = await newPage(), evaluate = page.evaluate.bind(page);
+      t.mock.method(page, "evaluate", async (fn, arg) => {
+        const result = await evaluate(fn, arg);
+        if (String(fn).replace(/\s+/g, "") === "()=>document.readyState") {
+          assert.equal(result, "complete");
+          assert.ok(embedResponse);
+          embedTimer = setTimeout(() => {
+            embedResponse!.writeHead(200, { "Content-Type": "application/json" });
+            embedResponse!.end('{"ready":true}');
+          }, 400);
+        }
+        return result;
+      });
+      return page;
+    });
+    return context;
+  });
+  try {
+    const result = await preConsentRuntimeScanner({ url, normalizedUrl: url, browser,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 20_000,
+      artifactWriter: await createArtifactWriter(root), captureScope: "runtime_evidence",
+      screenshotMode: "never", waitMode: "fast", formSnapshotReviewer: async () => ({ safeForDisplay: true }),
+      onInventoryPage: async page => { retainedValue = await page.locator('input').inputValue(); } });
+    assert.equal(result.moduleRun.timingBreakdown?.find(row => row.label === "passive evidence quiet wait")?.outcome, "timed_out");
+    assert.equal(result.moduleRun.timingBreakdown?.find(row => row.label === "runtime loading document settle")?.outcome, "completed");
+    assert.equal(result.collectionSurfaceInventory?.coverage.status, "complete");
+    assert.equal(result.collectionSurfaceInventory?.forms[0]?.fields[0]?.semanticCategory, "email");
+    assert.equal(result.collectionSurfaceSnapshots?.[0]?.status, "available");
+    assert.equal(result.collectionSurfaceSnapshots?.[0]?.valuesMasked, true);
+    assert.equal(result.consentUiObservations.length, 0);
+    assert.equal(submits, 0);
+    assert.equal(retainedValue, 'private@example.test');
+  } finally {
+    if (embedTimer) clearTimeout(embedTimer);
+    await browser.close();
+    server.closeAllConnections();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 for (const { gpc, pendingEmbed, stalledRead } of [
   { gpc: false, pendingEmbed: false, stalledRead: false },
   { gpc: true, pendingEmbed: false, stalledRead: false },

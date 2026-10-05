@@ -34,8 +34,12 @@ test("existing baseline and GPC browsers retain comparable windows on a continuo
     const sources=[];
     for (const lane of ['runtime_evidence','gpc_observation'] as const) {
       const outDir = path.join(out,lane);
-      const bundle = await runScan({scanId:'busy-pair',url,outDir,evidenceLane:lane,profile:'standard',scenarioResourceMode:'lean',retainGpcObservation:lane==='gpc_observation',preConsentScreenshotMode:'never'});
+      const bundle = await runScan({scanId:'busy-pair',url,outDir,evidenceLane:lane,profile:'standard',scenarioResourceMode:'lean',retainGpcObservation:lane==='gpc_observation',preConsentScreenshotMode:'never',formSnapshotReviewer:lane==='runtime_evidence'?async()=>({safeForDisplay:true}):undefined});
       assert.ok(bundle.gpcImpactCapture, lane);
+      if (lane === 'runtime_evidence') {
+        assert.equal(bundle.collectionSurfaceInventory?.coverage.status, 'limited');
+        assert.ok(bundle.collectionSurfaceInventory?.coverage.reasonCodes.includes('document_settle_incomplete'));
+      }
       assert.equal(bundle.gpcImpactCapture.expectedEnabled,lane==='gpc_observation');
       assert.equal(bundle.gpcImpactCapture.windows.at(-1)?.durationMs,1000,JSON.stringify(bundle.gpcImpactCapture));
       assert.ok(Buffer.byteLength(JSON.stringify(bundle.gpcImpactCapture))<2048);

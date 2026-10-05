@@ -2044,18 +2044,24 @@ export async function preConsentRuntimeScanner(
       ));
     }
 
-    // Only the isolated runtime sessions use this allowance. Ready documents
-    // skip it; loading documents get one parser + network-quiet wait before the
+    // Only the isolated runtime sessions use this allowance. Quiet, ready documents
+    // skip it; loading documents or a timed-out initial request gate get one
+    // parser + network-quiet wait before the
     // same atomic inventory. Preserve time for that capture inside the existing
     // module/parent deadlines, without a retry or a second browser session.
     let runtimeDocumentSettle: RuntimeDocumentSettleResult | undefined;
     const loadingDocumentSettleEligible = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only";
     if (loadingDocumentSettleEligible && remainingModuleBudgetMs() > 2_500) {
+      const initialQuietResult = await evidenceQuietPromise;
       runtimeDocumentSettle = await recordTiming(
         timingBreakdown,
         "runtime loading document settle",
-        "Loading documents only: await DOMContentLoaded and the existing 250ms request quiet interval, capped at 10000ms inside existing deadlines.",
+        "Loading documents or an unfinished initial request gate: await DOMContentLoaded and the existing 250ms request quiet interval, capped at 10000ms inside existing deadlines.",
         () => waitForLoadingRuntimeDocument({
+          // Form image capture is owned by baseline runtime. Do not extend the
+          // independently frozen GPC comparison or non-visual runtime protocol.
+          awaitPendingActivity: !input.globalPrivacyControlEnabled &&
+            Boolean(input.formSnapshotReviewer) && initialQuietResult.status === "timed_out",
           page,
           signal: input.signal,
           timeoutMs: Math.min(RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS, remainingModuleBudgetMs() - 2_500),
@@ -2107,7 +2113,12 @@ export async function preConsentRuntimeScanner(
       ]),
     );
     if (runtimeDocumentSettle && !["already_ready", "settled"].includes(runtimeDocumentSettle.status)) {
-      runtimeErrors.push(RUNTIME_PAGE_INVENTORY_UNSETTLED);
+      // A parsed-page form allowance cannot invalidate independently completed
+      // bounded runtime/GPC comparisons. Still retain limited form coverage.
+      // Parser, navigation, cancellation and access failures remain global.
+      if (!(runtimeDocumentSettle.pendingActivityOnly && runtimeDocumentSettle.status === "timed_out")) {
+        runtimeErrors.push(RUNTIME_PAGE_INVENTORY_UNSETTLED);
+      }
       if (pageEvidence.collectionSurfaceInventory) {
         pageEvidence.collectionSurfaceInventory.coverage.status = "limited";
         pageEvidence.collectionSurfaceInventory.coverage.reasonCodes.push("document_settle_incomplete");

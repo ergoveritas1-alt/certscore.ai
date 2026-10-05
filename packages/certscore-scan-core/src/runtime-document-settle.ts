@@ -8,11 +8,13 @@ export const RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS = 10_000;
 
 export type RuntimeDocumentSettleResult = {
   elapsedMs: number;
+  pendingActivityOnly?: true;
   status: "already_ready" | "settled" | "timed_out" | "cancelled" | "document_changed" | "unavailable";
 };
 
-/** One passive allowance for an unfinished parser, shared by baseline and GPC. */
+/** One passive allowance for an unfinished parser or timed-out request gate. */
 export function waitForLoadingRuntimeDocument(input: {
+  awaitPendingActivity?: boolean;
   page: Page;
   signal?: AbortSignal;
   timeoutMs: number;
@@ -27,6 +29,7 @@ export function waitForLoadingRuntimeDocument(input: {
   return new Promise(resolve => {
     let finished = false;
     let parsed = false;
+    let pendingActivityOnly = false;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
     const finish = (status: RuntimeDocumentSettleResult["status"]) => {
       if (finished) return;
@@ -37,7 +40,8 @@ export function waitForLoadingRuntimeDocument(input: {
       input.page.off("framenavigated", onNavigation);
       input.page.off("close", onClose);
       input.signal?.removeEventListener("abort", onAbort);
-      resolve({ elapsedMs: Math.max(0, Date.now() - startedAtMs), status });
+      resolve({ elapsedMs: Math.max(0, Date.now() - startedAtMs), status,
+        ...(pendingActivityOnly ? { pendingActivityOnly: true as const } : {}) });
     };
     const checkQuiet = () => {
       if (finished) return;
@@ -74,7 +78,16 @@ export function waitForLoadingRuntimeDocument(input: {
     void input.page.evaluate(() => document.readyState).then(state => {
       if (finished) return;
       if (state !== "loading" && !parsed) {
-        finish("already_ready");
+        const activity = input.tracker.snapshot();
+        if (input.awaitPendingActivity && (activity.inFlightRequestCount > 0 ||
+            activity.quietForMs < PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS)) {
+          // DOMContentLoaded does not complete asynchronous embeds. Reuse the
+          // same allowance only after the initial request gate timed out.
+          parsed = true;
+          pendingActivityOnly = true;
+        } else {
+          finish("already_ready");
+        }
       }
     }, () => finish("unavailable"));
   });
