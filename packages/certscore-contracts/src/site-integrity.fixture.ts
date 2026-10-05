@@ -1,4 +1,4 @@
-import type { SiteIntegrityObservation, SiteIntegrityProjection } from "./site-integrity";
+import { SITE_INTEGRITY_LIMITS, type SiteIntegrityObservation, type SiteIntegrityProjection } from "./site-integrity";
 
 /** Synthetic retained-contract fixture. No production website evidence. */
 export const siteIntegrityObservationFixture: SiteIntegrityObservation = {
@@ -27,4 +27,14 @@ export const siteIntegrityCodeProofFixture: import("./site-integrity").SiteInteg
   computedStyle: { position: "static", overflow: "hidden", fontSizePx: 16 },
   concealingRect: { left: 0, top: 100, right: 0, bottom: 100, width: 0, height: 0 },
   linkRect: { left: 0, top: 100, right: 120, bottom: 118, width: 120, height: 18 },
+};
+
+/** Full retained-link sample with code; never used to reconstruct historical proof. */
+export const siteIntegrityCodeProofObservationFixture: SiteIntegrityObservation = {
+  ...siteIntegrityObservationFixture,
+  links: Array.from({ length: SITE_INTEGRITY_LIMITS.retainedLinks }, (_, index) => ({
+    ...siteIntegrityObservationFixture.links[0]!,
+    evidenceRef: `site_integrity:link:${index}`,
+    codeProof: siteIntegrityCodeProofFixture,
+  })),
 };

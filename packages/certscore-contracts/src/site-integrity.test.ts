@@ -32,13 +32,17 @@ test("historical v1 scope cannot silently become an additional-page observation"
 
 
 import { siteIntegrityCodeProofFixture as proof } from "./site-integrity.fixture";
-import { siteIntegrityCodeProofSchema } from "./site-integrity";
+import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema } from "./site-integrity";
 test("optional code proof is bounded and cannot silently alter historical evidence", () => {
   assert.ok(siteIntegrityCodeProofSchema.safeParse(proof).success);
   const withProof = {...observation, links: [{...observation.links[0]!, codeProof: proof}]};
   assert.ok(siteIntegrityObservationSchema.safeParse(withProof).success);
   assert.equal(siteIntegrityObservationSchema.parse(observation).links[0]!.codeProof, undefined);
-  assert.equal(siteIntegrityObservationSchema.safeParse({...observation, links: Array.from({length: 12}, (_, index) => ({...observation.links[0]!, evidenceRef: `site_integrity:link:${index}`, codeProof: proof}))}).success, false);
+  const allLinks = Array.from({length: SITE_INTEGRITY_LIMITS.retainedLinks}, (_, index) => ({...observation.links[0]!, evidenceRef: `site_integrity:link:${index}`, codeProof: proof}));
+  assert.ok(allLinks.reduce((total, link) => total + new TextEncoder().encode(JSON.stringify(link.codeProof)).length, 0) > 2048, "the old shared allowance discarded later excerpts");
+  assert.equal(siteIntegrityObservationSchema.safeParse({...observation, links: allLinks}).success, true);
+  assert.equal(siteIntegrityObservationSchema.safeParse({...observation, links: [...allLinks, {...allLinks[0]!, evidenceRef: "site_integrity:link:12"}]}).success, false);
+  assert.equal(SITE_INTEGRITY_LIMITS.codeProofPageBytes, SITE_INTEGRITY_LIMITS.retainedLinks * SITE_INTEGRITY_LIMITS.codeProofBytes);
   assert.equal(siteIntegrityObservationSchema.safeParse({...observation, links: [{...observation.links[0]!, codeProof: proof, codeProofUnavailableReason: "capture_limit"}]}).success, false);
   for (const change of [{highlightedLine: 99}, {lines: Array(14).fill("x".repeat(300))}, {sanitized: false}, {rawHtml: "unsafe"}, {linkRect: {...proof.linkRect, left: Infinity}}]) {
     assert.equal(siteIntegrityCodeProofSchema.safeParse({...proof, ...change}).success, false);

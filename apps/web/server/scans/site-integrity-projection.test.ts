@@ -90,7 +90,7 @@ test("limited samples score retained verified links, while empty samples stay ne
 });
 
 
-import { siteIntegrityCodeProofFixture } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
+import { siteIntegrityCodeProofFixture, siteIntegrityCodeProofObservationFixture } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
 test("code proof survives verified persistence and canonical finding projection without changing score", () => {
   const bundle = {...siteIntegrityBundleFixture, siteIntegrityObservation: {...observation, links: observation.links.map((link, index) => index === 0 ? {...link, codeProof: siteIntegrityCodeProofFixture} : link)}};
   const projection = projectSiteIntegrity(bundle, source, observation.documentUrl);
@@ -101,4 +101,24 @@ test("code proof survives verified persistence and canonical finding projection 
   const evidence = {...pageEvidence, siteIntegrityObservation: {...pageEvidence.siteIntegrityObservation, links: bundle.siteIntegrityObservation.links}};
   assert.deepEqual(projectAdditionalPageSiteIntegrity(evidence, {...packet, sourceHash: hash(evidence)}, scanId)?.observation.links[0]?.codeProof, siteIntegrityCodeProofFixture);
   assert.equal(projectAdditionalPageSiteIntegrity(evidence, packet, scanId), null, "changed proof bytes require matching retained hash");
+});
+
+test("all twelve code excerpts survive verified homepage and additional-page finding projection", () => {
+  const codeObservation = siteIntegrityCodeProofObservationFixture;
+  const homepage = projectSiteIntegrity({ ...siteIntegrityBundleFixture, siteIntegrityObservation: codeObservation }, source, observation.documentUrl);
+  const evidence = { ...pageEvidence, siteIntegrityObservation: { ...codeObservation, contractVersion: "certscore.site-integrity-observation.v2", scope: "additional_page_main_document", documentUrl: capture.finalUrl } };
+  const additional = projectAdditionalPageSiteIntegrity(evidence, { ...packet, sourceHash: hash(evidence) }, scanId);
+  for (const projection of [homepage, additional]) {
+    assert.ok(projection);
+    assert.deepEqual(projection.observation.links, codeObservation.links);
+    const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() }));
+    assert.ok(finding);
+    assert.deepEqual(finding.evidence.observation.links, codeObservation.links);
+    assert.equal(finding.scoreEffects?.[0]?.deductionPoints, 40);
+    const withoutCode = { ...projection, observation: { ...projection.observation, links: projection.observation.links.map(({ codeProof, ...link }) => link) } };
+    const baseline = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: withoutCode }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() }));
+    assert.deepEqual(finding.scoreEffects, baseline?.scoreEffects);
+  }
+  const drifted = { ...evidence, siteIntegrityObservation: { ...evidence.siteIntegrityObservation, links: evidence.siteIntegrityObservation.links.slice(0, -1) } };
+  assert.equal(projectAdditionalPageSiteIntegrity(drifted, { ...packet, sourceHash: hash(evidence) }, scanId), null);
 });
