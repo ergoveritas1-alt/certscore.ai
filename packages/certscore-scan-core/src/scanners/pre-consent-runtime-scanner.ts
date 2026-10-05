@@ -115,11 +115,17 @@ import {
   PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS,
   waitForPassiveEvidenceQuietWindow,
 } from "../passive-evidence-quiet-window.js";
+import {
+  RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS,
+  waitForLoadingRuntimeDocument,
+  type RuntimeDocumentSettleResult,
+} from "../runtime-document-settle.js";
 
 const SOURCE_SCANNER = "pre_consent_runtime";
 const SCENARIO = "fresh_pre_consent";
 export const PRE_CONSENT_RUNTIME_PREVIEW_CHECKPOINT_MS = 6_000;
 export const RUNTIME_PAGE_INVENTORY_LOADING = "Runtime page inventory captured while the document was loading; later DOM content may be missing.";
+export const RUNTIME_PAGE_INVENTORY_UNSETTLED = "Runtime page inventory captured without a completed loading-document settle window; later DOM content may be missing.";
 export const RUNTIME_PAGE_INVENTORY_UNAVAILABLE = "Runtime page inventory unavailable after bounded capture; empty fallback rows do not establish absence.";
 type BrowserDocumentIdentityState = { current?: BrowserDocumentIdentity };
 const browserDocumentIdentityByPage = new WeakMap<Page, BrowserDocumentIdentity>();
@@ -2038,6 +2044,32 @@ export async function preConsentRuntimeScanner(
       ));
     }
 
+    // Only the isolated runtime sessions use this allowance. Ready documents
+    // skip it; loading documents get one parser + network-quiet wait before the
+    // same atomic inventory. Preserve time for that capture inside the existing
+    // module/parent deadlines, without a retry or a second browser session.
+    let runtimeDocumentSettle: RuntimeDocumentSettleResult | undefined;
+    const loadingDocumentSettleEligible = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only";
+    if (loadingDocumentSettleEligible && remainingModuleBudgetMs() > 2_500) {
+      runtimeDocumentSettle = await recordTiming(
+        timingBreakdown,
+        "runtime loading document settle",
+        "Loading documents only: await DOMContentLoaded and the existing 250ms request quiet interval, capped at 10000ms inside existing deadlines.",
+        () => waitForLoadingRuntimeDocument({
+          page,
+          signal: input.signal,
+          timeoutMs: Math.min(RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS, remainingModuleBudgetMs() - 2_500),
+          tracker: passiveEvidenceActivity,
+        }),
+        result => result.status === "already_ready" ? "skipped"
+          : result.status === "settled" ? "completed"
+          : result.status === "timed_out" ? "timed_out" : "failed",
+      );
+    } else if (loadingDocumentSettleEligible) {
+      recordInstantTiming(timingBreakdown, "runtime loading document settle skipped",
+        "Existing module budget leaves no loading-document allowance after reserving the atomic inventory capture.");
+    }
+
     gpcObservationSession?.prepareFinalization();
     const [pageEvidence, initialConsentObservation, lateAccessibilityObservation, gpcSignalObservation] = await recordTiming(
       timingBreakdown,
@@ -2074,6 +2106,13 @@ export async function preConsentRuntimeScanner(
           : Promise.resolve(undefined),
       ]),
     );
+    if (runtimeDocumentSettle && !["already_ready", "settled"].includes(runtimeDocumentSettle.status)) {
+      runtimeErrors.push(RUNTIME_PAGE_INVENTORY_UNSETTLED);
+      if (pageEvidence.collectionSurfaceInventory) {
+        pageEvidence.collectionSurfaceInventory.coverage.status = "limited";
+        pageEvidence.collectionSurfaceInventory.coverage.reasonCodes.push("document_settle_incomplete");
+      }
+    }
     retainedGpcSignalObservation = gpcSignalObservation;
     impactCapture?.finish(gpcSignalObservation);
     // Sparse-page confirmation is already required later in this session. Keep
@@ -4330,7 +4369,7 @@ function boundedPreConsentTimingBreakdown(
   const requiredIndexes = new Set<number>();
   compacted.forEach((entry, index) => {
     if (
-      /^(?:browser launch|browser context|page navigation|passive evidence quiet wait|network idle wait|page evidence: consent UI|early screenshot capture|early consent control geometry|page evidence: consent UI CMP recapture|consent gate|bounded same-session consent packet recovery total|late consent control screenshot|DOM artifact write)/.test(entry.label)
+      /^(?:browser launch|browser context|page navigation|passive evidence quiet wait|runtime loading document settle|network idle wait|page evidence: consent UI|early screenshot capture|early consent control geometry|page evidence: consent UI CMP recapture|consent gate|bounded same-session consent packet recovery total|late consent control screenshot|DOM artifact write)/.test(entry.label)
     ) {
       requiredIndexes.add(index);
     }

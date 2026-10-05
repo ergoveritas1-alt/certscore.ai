@@ -294,11 +294,15 @@ test("CollectionSurfaceAssessment v1 preserves verified provenance and fails clo
   assert.equal(observed.sourceLane, "runtime_evidence");
   assert.equal(observed.forms.length, 1);
 
-  const loadingInventory = { ...inventory, forms: [], coverage: { ...inventory.coverage, status: "limited" as const, candidateFormCount: 0, retainedFormCount: 0, candidateFieldCount: 0, retainedFieldCount: 0, inspectedFormCandidateCount: 0, inspectedFieldCandidateCount: 0, reasonCodes: ["document_still_loading"] } };
-  const loading = deriveCollectionSurfaceAssessment({ bundle: { ...bundle, collectionSurfaceInventory: loadingInventory }, canonicalDocumentUrl: "https://example.com/contact", scanId: "scan-1" });
-  assert.equal(loading.assessmentStatus, "limited", "unfinished empty DOM never becomes verified no-forms evidence");
-  assert.deepEqual(loading.limitationKeys, ["document_still_loading"]);
-
+  for (const reason of ["document_still_loading", "document_settle_incomplete"]) {
+    const incompleteInventory = { ...inventory, forms: [], coverage: { ...inventory.coverage, status: "limited" as const, candidateFormCount: 0, retainedFormCount: 0, candidateFieldCount: 0, retainedFieldCount: 0, inspectedFormCandidateCount: 0, inspectedFieldCandidateCount: 0, reasonCodes: [reason] } };
+    const incomplete = deriveCollectionSurfaceAssessment({ bundle: { ...bundle, collectionSurfaceInventory: incompleteInventory }, canonicalDocumentUrl: "https://example.com/contact", scanId: "scan-1" });
+    assert.equal(incomplete.assessmentStatus, "limited", "unfinished empty inventory never becomes verified no-forms evidence");
+    assert.deepEqual(incomplete.limitationKeys, [reason]);
+    assert.deepEqual(incomplete.coverage, incompleteInventory.coverage);
+    assert.match(incomplete.sourceHash ?? "", /^[a-f0-9]{64}$/);
+    assert.notEqual(incomplete.sourceHash, observed.sourceHash);
+  }
 
   const drifted = deriveCollectionSurfaceAssessment({
     bundle,

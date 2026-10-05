@@ -401,5 +401,7 @@ test("full-site inventory pages do not collect GPC impact metadata", async () =>
     });
     assert.equal(result.gpcImpactCapture, undefined);
     assert.equal(result.gpcObservationSession, undefined);
+    assert.equal(result.moduleRun.timingBreakdown?.some(row => row.label.startsWith("runtime loading document settle")), false,
+      "additional inventory pages do not receive another loading-document allowance");
   } finally { await rm(tempRoot, { recursive: true, force: true }); }
 });

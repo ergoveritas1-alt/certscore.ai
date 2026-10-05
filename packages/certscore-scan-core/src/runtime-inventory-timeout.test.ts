@@ -9,6 +9,98 @@ import { deriveRuntimeCoverageSummary } from "./index.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer } from "./test-fixtures/static-server.js";
 
+for (const { gpc, pendingEmbed } of [
+  { gpc: false, pendingEmbed: false },
+  { gpc: true, pendingEmbed: false },
+  { gpc: false, pendingEmbed: true },
+]) {
+  test(`${gpc ? "GPC" : "baseline"} captures a streamed late form with ${pendingEmbed ? "limited unsettled" : "settled"} embed coverage`, async (t) => {
+    const { createServer } = await import("node:http");
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const pending = new Set<import("node:http").ServerResponse>();
+    let submits = 0;
+    const server = createServer((request, response) => {
+      if (request.method === "POST") submits++;
+      if (request.method === "HEAD") { response.writeHead(200); response.end(); return; }
+      if (request.url === "/form-data") {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        if (pendingEmbed) { response.write('{"ready":'); return; }
+        const timer = setTimeout(() => response.end(JSON.stringify({ ready: true })), 400);
+        timers.add(timer);
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.write(`<html><body><h1>Contact us</h1><p>${"Visible public content. ".repeat(80)}</p><div id="contact">Form placeholder</div>`);
+      pending.add(response);
+      response.on("close", () => pending.delete(response));
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
+    const browser = await chromium.launch({ headless: true });
+    const root = await mkdtemp(path.join(tmpdir(), "certscore-late-embed-form-"));
+    const newContext = browser.newContext.bind(browser);
+    t.mock.method(browser, "newContext", async (...args) => {
+      const context = await newContext(...args);
+      const newPage = context.newPage.bind(context);
+      t.mock.method(context, "newPage", async () => {
+        const page = await newPage();
+        const evaluate = page.evaluate.bind(page);
+        t.mock.method(page, "evaluate", async (fn, arg) => {
+          const result = await evaluate(fn, arg);
+          if (String(fn).replace(/\s+/g, "") === "()=>document.readyState") {
+            // Deliver the streamed tail after the real loading-state read so
+            // machine speed cannot move this fixture across the checkpoint.
+            const timer = setTimeout(() => {
+              for (const response of pending) response.end(`<script>
+                ${pendingEmbed ? `document.getElementById('contact').innerHTML = '<form method="post"><label>Business email<input type="email" required></label><button type="submit">Send</button></form>';` : ""}
+                fetch('/form-data').then(r => r.json()).then(() => {
+                  document.getElementById('contact').innerHTML = '<form method="post"><label>Business email<input type="email" required></label><button type="submit">Send</button></form>';
+                });
+              </script></body></html>`);
+            }, 250);
+            timers.add(timer);
+          }
+          return result;
+        });
+        return page;
+      });
+      return context;
+    });
+    try {
+      const result = await preConsentRuntimeScanner({
+        url, normalizedUrl: url, browser, scanStartedAtMs: Date.now(), internalBudgetMs: pendingEmbed ? 6_000 : 20_000,
+        artifactWriter: await createArtifactWriter(root), captureScope: "runtime_evidence",
+        screenshotMode: "never", waitMode: "fast", globalPrivacyControlEnabled: gpc,
+      });
+      assert.equal(result.collectionSurfaceInventory?.forms.length, 1);
+      assert.equal(result.collectionSurfaceInventory?.forms[0]?.fields[0]?.semanticCategory, "email");
+      assert.equal(result.collectionSurfaceInventory?.coverage.status, pendingEmbed ? "limited" : "complete");
+      assert.equal(result.moduleRun.status, pendingEmbed ? "partial" : "completed", result.moduleRun.errors.join("; "));
+      assert.equal(result.collectionSurfaceInventory?.coverage.reasonCodes.includes("document_settle_incomplete"), pendingEmbed);
+      assert.equal(result.collectionSurfaceInventory?.coverage.reasonCodes.includes("document_still_loading"), false);
+      const coverage = deriveRuntimeCoverageSummary({
+        enabledModules: ["preConsentRuntimeScanner"], modulesRun: [result.moduleRun],
+        cookieEvents: result.cookieEvents, cookieSnapshots: result.cookieSnapshots,
+        networkEvents: result.networkEvents, normalizedVendorObservations: [], observedJourneys: [],
+      });
+      assert.equal(coverage.limitationKeys.includes("runtime_page_inventory_document_unsettled"), pendingEmbed);
+      assert.ok(result.networkEvents.some(event => event.url?.endsWith("/form-data")));
+      const wait = result.moduleRun.timingBreakdown?.find(row => row.label === "runtime loading document settle");
+      assert.equal(wait?.outcome, pendingEmbed ? "timed_out" : "completed");
+      assert.ok((wait?.durationMs ?? 0) > 500 && (wait?.durationMs ?? 0) < 10_000);
+      assert.equal(submits, 0, "capture remains passive");
+      assert.equal(result.screenshots.length, 0);
+      assert.equal(result.consentUiObservations.length, 0);
+    } finally {
+      for (const timer of timers) clearTimeout(timer);
+      await browser.close();
+      server.closeAllConnections();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
 for (const failure of ["timeout", "rejected", "recovered", "timeout_recovered"] as const) {
   test(`runtime inventory ${failure} retains honest coverage despite usable network evidence`, async (t) => {
     const server = await startStaticFixtureServer();
@@ -113,6 +205,9 @@ for (const streaming of [true, false]) {
       assert.equal(coverage.coverageStatus, streaming ? "limited_partial" : "usable");
       assert.equal(coverage.limitationKeys.includes("runtime_page_inventory_document_loading"), streaming);
       if (streaming) assert.match(coverage.notes.join(" "), /absence is not established/);
+      const settle = result.moduleRun.timingBreakdown?.find(row => row.label === "runtime loading document settle");
+      assert.equal(settle?.outcome, streaming ? "timed_out" : "skipped");
+      assert.equal(result.collectionSurfaceInventory.coverage.reasonCodes.includes("document_settle_incomplete"), streaming);
     } finally {
       await browser.close();
       server.closeAllConnections();

@@ -856,6 +856,14 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     collectionFields,
     runtimeEvidenceGraph: inventoryProjection.runtimeEvidenceGraph,
     collectionLimitations: canonical.collectionSurfaceAssessment?.limitationKeys.map(displayLabel) ?? [],
+    collectionCoverage: {
+      pagesWithoutInventory: canonical.collectionSurfaceAssessment ? 0 : 1,
+      limitedPages: canonical.collectionSurfaceAssessment && (
+        canonical.collectionSurfaceAssessment.assessmentStatus === "limited" ||
+        canonical.collectionSurfaceAssessment.assessmentStatus === "not_testable" ||
+        canonical.collectionSurfaceAssessment.coverage?.status !== "complete"
+      ) ? 1 : 0,
+    },
     collectionStatus: canonical.collectionSurfaceAssessment?.assessmentStatus
       ? displayLabel(canonical.collectionSurfaceAssessment.assessmentStatus)
       : "Unavailable",

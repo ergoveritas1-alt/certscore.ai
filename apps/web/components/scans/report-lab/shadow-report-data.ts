@@ -160,6 +160,7 @@ export type ShadowReportData = {
   inventorySummary?: import("../report-inventory-summary").ReportInventoryMetric[];
   afterAcceptFormsLimited?: boolean;
   collectionTableRows?: import("../collection-surfaces-table").CollectionSurfaceTableRow[];
+  collectionCoverage?: { pagesWithoutInventory: number; limitedPages: number };
   scan: {
     benchmark: string;
     createdAt: string;

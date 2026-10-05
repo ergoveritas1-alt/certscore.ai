@@ -59,6 +59,7 @@ import {
   preConsentRuntimeScanner,
   RUNTIME_PAGE_INVENTORY_UNAVAILABLE,
   RUNTIME_PAGE_INVENTORY_LOADING,
+  RUNTIME_PAGE_INVENTORY_UNSETTLED,
   readRapidFirstLayerConsentUiObservation,
   readDeclaredDocumentLanguage,
   reconcileConsentUiRecapture,
@@ -2007,6 +2008,10 @@ export function deriveRuntimeCoverageSummary(input: {
     if (preConsentRun.errors.includes(RUNTIME_PAGE_INVENTORY_UNAVAILABLE)) {
       limitationKeys.push("runtime_page_inventory_unavailable");
       notes.push("Bounded runtime page inventory capture did not complete; absence of scripts, storage or collection surfaces is not established. Independently retained runtime observations remain available.");
+    }
+    if (preConsentRun.errors.includes(RUNTIME_PAGE_INVENTORY_UNSETTLED)) {
+      limitationKeys.push("runtime_page_inventory_document_unsettled");
+      notes.push("The loading-document settle window did not complete; later scripts, frames and collection surfaces may be missing. Retained observations remain available; absence is not established.");
     }
   }
 
