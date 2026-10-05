@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { signCertScoreAccessToken } from "../packages/certscore-mcp-auth/src/index";
@@ -96,6 +99,23 @@ async function listHttpTools(mcpUrl: string, bearerToken?: string) {
   }
 }
 
+export async function listLocalLightTools() {
+  // Light has its own advertised schema, including hidden legacy wait options.
+  // Filtering the full profile compares the wrong contract even with matching names.
+  const { createCertScoreMcpServer } = await import(pathToFileURL(resolve("packages/certscore-mcp/dist/certscore-mcp.mjs")).href);
+  const server = createCertScoreMcpServer({ toolProfile: "light" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "certscore-mcp-local-light-diff", version: "0.1.0" });
+  try {
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    return await client.listTools();
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}
+
 async function main() {
   const mcpUrl = getArg("--mcp-url") || process.env.CERTSCORE_MCP_HTTP_URL || DEFAULT_MCP_URL;
   const bearerToken = getArg("--bearer-token") || process.env.CERTSCORE_MCP_HTTP_BEARER_TOKEN || makeLocalBearer(mcpUrl);
@@ -107,8 +127,9 @@ async function main() {
   }
 
   const lightMcpUrl = `${new URL(mcpUrl).origin}/mcp/light`;
-  const [localTools, httpTools, lightHttpTools] = await Promise.all([
+  const [localTools, localLightTools, httpTools, lightHttpTools] = await Promise.all([
     listLocalTools(),
+    listLocalLightTools(),
     listHttpTools(mcpUrl, bearerToken),
     listHttpTools(lightMcpUrl)
   ]);
@@ -124,9 +145,7 @@ async function main() {
     assert.equal(httpJson, localJson, "Remote Streamable HTTP tools/list differs from the shared stdio MCP tool list.");
   }
 
-  const localLightTools = {
-    tools: localTools.tools.filter((tool) => LIGHT_TOOL_NAMES.has(tool.name))
-  };
+  assert.deepEqual(localLightTools.tools.map(tool => tool.name).sort(), [...LIGHT_TOOL_NAMES].sort(), "Built Light profile must expose exactly the supported four tools.");
   const localLightJson = stableJson(stableToolsPayload(localLightTools));
   const lightHttpJson = stableJson(stableToolsPayload(lightHttpTools));
   if (lightHttpJson !== localLightJson) {
@@ -147,7 +166,9 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-  process.exitCode = 1;
-});
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+    process.exitCode = 1;
+  });
+}
