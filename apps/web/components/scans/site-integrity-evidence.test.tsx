@@ -60,7 +60,7 @@ test("site integrity displays affected pages and explicitly unavailable and limi
 
 
 import { HiddenLinkCodeEvidence } from "./site-integrity-evidence";
-import { siteIntegrityCodeProofFixture as proof } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
+import { siteIntegrityCodeProofFixture as proof, siteIntegrityCodeProofObservationFixture } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
 test("code evidence is collapsed, escaped and explicit about sanitization and missing historical proof", () => {
   const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({ runtimeArtifacts: {siteIntegrity: siteIntegrityProjectionFixture}, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() }))!;
   const old = renderToStaticMarkup(<HiddenLinkCodeEvidence finding={finding} domain="pharmacy.example" />);
@@ -76,4 +76,17 @@ test("code evidence is collapsed, escaped and explicit about sanitization and mi
   assert.doesNotMatch(html, /<a href="https:/);
   const panel = renderToStaticMarkup(<SiteIntegrityEvidence finding={withProof} />);
   assert.match(panel, /View code evidence/);
+});
+
+test("the destination view renders code for every retained hidden link", () => {
+  const projection = { ...siteIntegrityProjectionFixture, observation: siteIntegrityCodeProofObservationFixture };
+  const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() }))!;
+  const code = renderToStaticMarkup(<HiddenLinkCodeEvidence finding={finding} domain="pharmacy.example" />);
+  assert.match(code, /View code evidence \(12 links\)/);
+  assert.equal((code.match(/aria-label="Sanitized DOM excerpt for pharmacy.example"/g) ?? []).length, 12);
+  assert.doesNotMatch(code, /Code excerpt not retained|<details[^>]* open|<a href="https:/);
+  const panel = renderToStaticMarkup(<SiteIntegrityEvidence finding={finding} />);
+  assert.equal((panel.match(/aria-label="Sanitized DOM excerpt for pharmacy.example"/g) ?? []).length, 12);
+  assert.match(panel, /40-point score deduction/);
+  assert.doesNotMatch(panel, /Code excerpt not retained/);
 });

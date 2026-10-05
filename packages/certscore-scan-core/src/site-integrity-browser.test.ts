@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createArtifactWriter } from "./artifact-writer.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
+import { SITE_INTEGRITY_LIMITS } from "@certscore/contracts";
 
 test("runtime capture retains concealed outbound links, excludes ordinary hidden UI, and never follows destinations", { timeout: 60_000 }, async () => {
   const server = createServer((_request, response) => {
@@ -43,12 +44,12 @@ test("runtime capture retains concealed outbound links, excludes ordinary hidden
     assert.deepEqual(observation.links.map(link => link.concealment), ["zero_size_container", "offscreen_position", "zero_font_size"]);
     for (const link of observation.links) {
       if (!link.codeProof) { assert.equal(link.codeProofUnavailableReason, "capture_limit"); continue; }
-      assert.ok(new TextEncoder().encode(JSON.stringify(link.codeProof)).length <= 2048);
+      assert.ok(new TextEncoder().encode(JSON.stringify(link.codeProof)).length <= SITE_INTEGRITY_LIMITS.codeProofBytes);
       assert.match(link.codeProof.lines.join("\n"), /href=/);
       assert.doesNotMatch(link.codeProof.lines.join("\n"), /onclick|data-private|<script|<style|Pharmacy promotion/);
     }
     assert.ok(observation.links[0]!.codeProof);
-    assert.ok(observation.links.reduce((total, link) => total + (link.codeProof ? new TextEncoder().encode(JSON.stringify(link.codeProof)).length : 0), 0) <= 2048);
+    assert.ok(observation.links.reduce((total, link) => total + (link.codeProof ? new TextEncoder().encode(JSON.stringify(link.codeProof)).length : 0), 0) <= SITE_INTEGRITY_LIMITS.codeProofPageBytes);
     const offscreen = observation.links[1]!.codeProof!;
     assert.ok(offscreen);
     assert.equal(offscreen.computedStyle.position, "absolute");
@@ -62,6 +63,45 @@ test("runtime capture retains concealed outbound links, excludes ordinary hidden
     assert.equal(additional.siteIntegrityObservation?.contractVersion, "certscore.site-integrity-observation.v2");
     assert.deepEqual(additional.siteIntegrityObservation?.links, observation.links);
     assert.equal((await run(true)).siteIntegrityObservation, undefined, "GPC cannot produce the baseline integrity observation");
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("every retained hidden link keeps its surrounding code, including repeated destinations", { timeout: 60_000 }, async () => {
+  const domains = ["pharmacy.example", "other-pharmacy.example", "promotion.example", "mobile.example"];
+  const server = createServer((_request, response) => {
+    response.setHeader("Content-Type", "text/html");
+    response.end(`<!doctype html><html lang="en"><title>Hidden-link excerpt fixture</title><body>
+      <h1>Public services</h1><p>Opening hours and contact information.</p>
+      <section><div style="position:absolute;left:-9999px;top:-9999px">
+        ${Array.from({ length: SITE_INTEGRITY_LIMITS.retainedLinks }, (_, index) =>
+          `<a href="https://${domains[Math.min(index, domains.length - 1)]}/private-path?token=never-retain" onclick="never-retain" data-private="never-retain">Private link text ${index}</a>`).join("\n")}
+      </div></section>
+    </body></html>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const root = await mkdtemp(path.join(tmpdir(), "certscore-site-integrity-excerpts-"));
+  try {
+    const result = await preConsentRuntimeScanner({ url, normalizedUrl: url, scanStartedAtMs: Date.now(), internalBudgetMs: 10_000,
+      artifactWriter: await createArtifactWriter(root), captureScope: "runtime_evidence", screenshotMode: "never", waitMode: "fast" });
+    const observation = result.siteIntegrityObservation;
+    assert.ok(observation, JSON.stringify(result.moduleRun));
+    assert.equal(observation.links.length, SITE_INTEGRITY_LIMITS.retainedLinks);
+    for (const link of observation.links) {
+      assert.ok(link.codeProof, `${link.evidenceRef}: ${link.destinationDomain} needs retained surrounding code`);
+      assert.equal(link.codeProofUnavailableReason, undefined);
+      assert.match(link.codeProof.lines.join("\n"), /<section>/);
+      assert.match(link.codeProof.lines[link.codeProof.highlightedLine]!, /position:absolute;left:-9999px;top:-9999px/);
+      assert.ok(link.codeProof.lines.some(line => line.includes(`https://${link.destinationDomain}/[redacted]`)));
+      assert.ok(new TextEncoder().encode(JSON.stringify(link.codeProof)).length <= SITE_INTEGRITY_LIMITS.codeProofBytes);
+    }
+    assert.ok(observation.links.reduce((total, link) => total + new TextEncoder().encode(JSON.stringify(link.codeProof)).length, 0) <= SITE_INTEGRITY_LIMITS.codeProofPageBytes);
+    assert.doesNotMatch(JSON.stringify(observation), /never-retain|private-path|token=|onclick|data-private|Private link text/);
+    assert.ok(result.networkEvents.every(event => !domains.some(domain => event.requestUrl.includes(domain))));
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });

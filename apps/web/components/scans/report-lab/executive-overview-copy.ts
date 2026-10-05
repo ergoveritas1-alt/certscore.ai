@@ -1,5 +1,6 @@
 export const EXECUTIVE_OVERVIEW_MIN_LENGTH = 340;
-export const EXECUTIVE_OVERVIEW_MAX_LENGTH = 430;
+// Cap the complete assessment, including any projected priority introduction.
+export const EXECUTIVE_OVERVIEW_MAX_LENGTH = 450;
 
 type ExecutiveOverviewInput = {
   acceptPath?: {
@@ -20,6 +21,10 @@ type ExecutiveOverviewInput = {
   limitedCount: number;
   limitedItems: string[];
   positiveCount: number;
+  priorityIntroduction?: {
+    summary: string;
+    title: string;
+  } | null;
   rejectPath?: {
     afterClickCoverage?: "complete" | "partial";
     note?: string | null;
@@ -51,13 +56,14 @@ function fitExecutiveOverview(sentences: string[]) {
   }
   if (copy.length <= EXECUTIVE_OVERVIEW_MAX_LENGTH) return copy;
 
-  const clipped = copy.slice(0, EXECUTIVE_OVERVIEW_MAX_LENGTH - 1);
-  const sentenceBoundary = clipped.lastIndexOf(". ");
-  if (sentenceBoundary >= EXECUTIVE_OVERVIEW_MIN_LENGTH) {
-    return clipped.slice(0, sentenceBoundary + 1);
+  const completeSentences = copy.split(/(?<=[.!?])\s+(?=[A-Z])/);
+  let bounded = "";
+  for (const sentence of completeSentences) {
+    const next = bounded ? `${bounded} ${sentence}` : sentence;
+    if (next.length > EXECUTIVE_OVERVIEW_MAX_LENGTH) break;
+    bounded = next;
   }
-  const wordBoundary = clipped.lastIndexOf(" ");
-  return `${clipped.slice(0, wordBoundary).replace(/[,:;]$/, "")}.`;
+  return bounded || "See Priority review for the retained assessment details.";
 }
 
 export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
@@ -157,5 +163,8 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
     : input.positiveCount > 0
       ? "Other retained checks included positive observations."
       : null;
-  return fitExecutiveOverview([opening, focus, acceptOutcome ?? "", rejectOutcome ?? "", activity ?? "", positive ?? "", limitation]);
+  const introduction = input.priorityIntroduction
+    ? `${input.priorityIntroduction.title}: ${input.priorityIntroduction.summary}`
+    : "";
+  return fitExecutiveOverview([introduction, opening, focus, acceptOutcome ?? "", rejectOutcome ?? "", activity ?? "", positive ?? "", limitation]);
 }

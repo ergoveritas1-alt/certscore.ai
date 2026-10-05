@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 /** Observations only: concealment is not proof of compromise or data processing. */
-export const SITE_INTEGRITY_LIMITS = { inspectedLinks: 1000, retainedLinks: 12, ancestorDepth: 6, captureBudgetMs: 20, codeProofBytes: 2048, codeProofPageBytes: 2048 } as const;
+const retainedLinks = 12;
+const codeProofBytes = 2048;
+// Owner-approved October 5, 2026: each retained link gets the full excerpt allowance.
+export const SITE_INTEGRITY_LIMITS = { inspectedLinks: 1000, retainedLinks, ancestorDepth: 6, captureBudgetMs: 20, codeProofBytes, codeProofPageBytes: retainedLinks * codeProofBytes } as const;
 export const SITE_INTEGRITY_FINDING_ID = "site_integrity_hidden_outbound_links";
 export const SITE_INTEGRITY_SIGNAL = "site_integrity.hidden_outbound_links";
 export const SITE_INTEGRITY_POLICY_VERSION = "certscore.site-integrity-policy.v4";

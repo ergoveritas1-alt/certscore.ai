@@ -167,3 +167,35 @@ test("observed after-click facts are not described as an unperformed Reject test
   assert.match(copy, /Two requests were recorded after Reject/);
   assert.doesNotMatch(copy, /testing did not complete|tracking was not tested/);
 });
+
+test("the complete assessment cap includes a projected CMS introduction", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    findings: Array.from({ length: 5 }, () => ({ title: "Decline consent control", summary: "Reject was not observed." })),
+    priorityIntroduction: {
+      title: "Unsupported CMS branch",
+      summary: "WordPress declares 4.5.33: WordPress 4.1–4.6 security updates ended (>= 4.1.0 < 4.7.0). The version is declared, not runtime-confirmed; verify the installed release and any backported fixes.",
+    },
+    acceptPath: {
+      state: "incomplete",
+      observationWindowMs: 3_000,
+      afterClickCoverage: "complete",
+      note: "The Accept control was clicked. During 3.01s of after-click observation, 3 requests were retained and 1 main-document storage write was observed. A post-click storage snapshot was retained.",
+    },
+  });
+  assertBounded(copy);
+  assert.match(copy, /^Unsupported CMS branch: WordPress declares 4\.5\.33/);
+  assert.match(copy, /not runtime-confirmed/);
+  assert.match(copy, /The Accept control was clicked\.$/);
+  assert.doesNotMatch(copy, /confirmed Accept path|During 3\.01s/);
+});
+
+test("oversized projected introductions are not cut into a partial assertion", () => {
+  const copy = buildExecutiveOverview({
+    ...baseInput,
+    findings: [{ title: "Review", summary: "A projected issue needs review." }],
+    priorityIntroduction: { title: "Review", summary: `${"Retained context ".repeat(50)}requires verification.` },
+  });
+  assert.ok(copy.length <= EXECUTIVE_OVERVIEW_MAX_LENGTH);
+  assert.equal(copy, "See Priority review for the retained assessment details.");
+});

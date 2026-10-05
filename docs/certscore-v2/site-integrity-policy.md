@@ -86,7 +86,7 @@ highlights the concealing element, explains measured concealment, marks
 sanitization, and keeps provenance behind “Capture details.” Markup is escaped
 text, never rendered as executable HTML or an outbound link.
 
-The final code-proof limit is **2 KiB total per page**, within the existing
+The initial code-proof limit was **2 KiB total per page**, within the existing
 12-link cap. This is a bounded sample of code excerpts; remaining links preserve
 all existing evidence. At 100,000 ten-page scans/month, eight retained copies and
 30-day retention, the maximum extra excerpt storage is about 16.4 GB (about
@@ -95,9 +95,37 @@ at $0.09/GB. Allowing for availability metadata, the planning estimate is about
 $0.65/month, below the $1 approval threshold. Existing provisioned database
 capacity, capture-time ceiling, request count, browser runs and model usage stay
 unchanged. Re-estimate before raising page limits, copy counts, retention or
-transfer assumptions. This replaces the preliminary 2 KiB-per-link estimate.
+transfer assumptions. This replaced the preliminary 2 KiB-per-link estimate.
 
 Validation includes actual Chromium capture with external CSS, redaction and
 page-byte limits; strict schema/historical compatibility; verified homepage and
 additional-page projection, hash-drift rejection and unchanged scoring; escaped,
 collapsed rendering and local interactive preview.
+
+## Owner-approved per-link code allowance (October 5, 2026)
+
+The owner approved retaining up to **2 KiB per link for all 12 retained links**,
+with a derived **24 KiB total per page** ceiling. The earlier shared 2 KiB page
+allowance was consumed by the first few excerpts, leaving later links without
+surrounding code. Capture and validation use the same canonical limits; the
+existing typed proof, document/hash verification, normalized concern, policy,
+unified finding and report rendering preserve each excerpt. Eligibility and
+scoring do not depend on excerpt availability.
+
+At 100,000 ten-page scans/month, eight retained copies and 30-day retention, the
+maximum incremental 22 KiB/page adds about 180.2 GB of retained bytes/month
+($4.14 at $0.023/GB-month), plus about 22.5 GB for one full-volume transfer
+($2.03 at $0.09/GB). The incremental planning estimate is **$6–7/month**, approved
+by the owner up to $7/month. Actual usage depends on the number and length of
+hidden-link excerpts. Longer retention, more serialized copies, additional
+transfers or larger scan volume require a new estimate. The passive 20 ms
+capture ceiling, per-link 2 KiB limit, 12-link limit, browser sessions, requests,
+invocations, model calls and provisioned capacity are unchanged.
+
+Historical reports retain their original evidence. Excerpts discarded under the
+old allowance cannot be reconstructed; a fresh scan after rollout is required.
+Time exhaustion or an individually oversized excerpt still records the existing
+explicit `capture_limit` reason. Regression coverage captures all 12 hidden
+links in Chromium, including repeated destinations, checks redaction and passive
+execution, and verifies homepage/additional-page projection and report rendering
+without changing score or accepting drifted evidence hashes.
