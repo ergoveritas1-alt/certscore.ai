@@ -18,6 +18,10 @@ import {
 import { buildPulseError } from "./error";
 import { renderPulseMarkdown } from "./markdown";
 import { normalizePulseUrl } from "./request";
+import { LIGHT_MCP_NEW_SCAN_POLICY } from "../../server/pulse/anonymous-scan-quota";
+import { MCP_LIGHT_QUOTA_SUMMARY } from "../mcp-light-quota-copy";
+import { PUBLIC_CERTSCORE_MCP_VERSION, PUBLIC_CERTSCORE_MCP_CASK_VERSION, PUBLIC_CERTSCORE_SDK_VERSION } from "../public-integration-versions";
+import { certScoreMcpToolContracts } from "@certscore/api-contracts";
 
 test("OpenAPI route returns valid Pulse API JSON", async () => {
   const response = openApiGET(new Request("https://certscore.ai/api/v1/openapi.json"));
@@ -522,17 +526,17 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   const docs = [lightPage, fullMcpPage, readme, llms, llmsFull];
   const setupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
   const canaryUrl = "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html";
-  const firstRunPrompt = `Scan ${canaryUrl}. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.`;
-  const verificationPrompt = `List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan ${canaryUrl} and report whether the result was new or reused.`;
+  const firstRunPrompt = `Review ${canaryUrl} for website privacy risks. Explain the main findings, supporting evidence, coverage limits, and what to inspect next.`;
+  const verificationPrompt = "List the available CertScore tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.";
   const disclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
   for (const source of docs) {
     assert.match(source, /https:\/\/mcp\.certscore\.ai\/mcp\/light/);
     assert.match(source, /Streamable HTTP/);
     assert.match(source, /browser login/);
-    assert.match(source, /50 (?:genuinely )?new scans per UTC day across (?:the public )?Light/i);
-    assert.match(source, /5[^\n]{0,80}rolling 10(?:-minute| minutes)/i);
-    assert.match(source, /reused eligible results do not consume quota|Reused eligible results do not consume quota/i);
+    assert.match(source, /MCP_LIGHT_QUOTA_SUMMARY|developers\/mcp#light-usage-limits/);
+    assert.doesNotMatch(source, /50 (?:genuinely )?new scans per UTC day across (?:the public )?Light/i);
+    assert.match(source, /MCP_LIGHT_QUOTA_SUMMARY|reused eligible results do not consume quota/i);
     assert.ok(source.includes(setupCommand));
     assert.ok(source.includes(firstRunPrompt));
     assert.ok(source.includes(verificationPrompt));
@@ -542,8 +546,8 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
     assert.match(source, /certscore_get_scan_bundle/);
     assert.match(source, /scanId/);
     assert.match(source, /retryAfterSeconds/);
-    assert.match(source, /retry certscore_scan_site/);
-    assert.match(source, /do not call certscore_get_scan_status until a scanId exists|Never poll until .*scanId.* exists/);
+    assert.match(source, /retry `?certscore_scan_site`?/);
+    assert.match(source, /(?:do not call certscore_get_scan_status until (?:a )?scanId exists|Never poll until .*scanId.* exists)/i);
     assert.match(source, /terminal status/);
     assert.match(source, /new or reused/);
     assert.match(source, /truncation or omitted sections|truncated/);
@@ -581,7 +585,7 @@ test("Light MCP onboarding is no-auth, copyable, and agent-complete", () => {
   for (const source of [lightPage, fullMcpPage]) {
     assert.match(source, /Which route should I choose\?/);
     assert.match(source, /Start with Light MCP/);
-    assert.match(source, /Set up Authenticated MCP/);
+    assert.match(source, /Hosted OAuth/);
     for (const heading of ["Setup method", "Authentication", "Account", "Quota", "Available tools", "Intended user", "Website \/ access limits", "Upgrade path"]) {
       assert.ok(source.includes(heading), `MCP comparison should include ${heading}`);
     }
@@ -674,7 +678,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(llmsFull, new RegExp(CORE_MARKETING_POSITIONING.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(gtmPositioning, new RegExp(CORE_MARKETING_POSITIONING.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(homepage, /CORE_MARKETING_POSITIONING/);
-  assert.match(aiVisibilityContent, /CORE_MARKETING_POSITIONING/);
+  assert.match(aiVisibilityContent, /getTopFindingAtlasItems/);
   assert.match(llms, /support@certscore\.ai/);
   assert.match(llmsFull, /support@certscore\.ai/);
   assert.ok(aiDiscovery.searchableTopics.includes("CMP and consent scanner"));
@@ -698,7 +702,7 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   ]) {
     assert.equal(sitemapPathSet.has(technicalPath), false, `${technicalPath} should not be a search landing page`);
   }
-  assert.ok(sitemapEntries.every((entry) => entry.lastModified === undefined));
+  assert.ok(sitemapEntries.every((entry) => entry.lastModified === undefined || Number.isFinite(new Date(entry.lastModified).getTime())));
 
   assert.equal(aiDiscovery.aiDiscovery.developerHub, "https://certscore.ai/developers");
   assert.equal(aiDiscovery.organization.supportUrl, "https://certscore.ai/contact");
@@ -723,15 +727,15 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.sdk.docs, "https://certscore.ai/developers/sdk");
   assert.equal(aiDiscovery.sdk.distribution, "npm");
   assert.equal(aiDiscovery.sdk.status, "published");
-  assert.equal(aiDiscovery.sdk.currentVersion, "0.2.11");
-  assert.equal(aiDiscovery.sdk.install, "npm install @certscore/sdk@0.2.11");
+  assert.equal(aiDiscovery.sdk.currentVersion, PUBLIC_CERTSCORE_SDK_VERSION);
+  assert.equal(aiDiscovery.sdk.install, `npm install @certscore/sdk@${PUBLIC_CERTSCORE_SDK_VERSION}`);
   assert.equal(aiDiscovery.mcp.docs, "https://certscore.ai/developers/mcp");
   assert.equal(aiDiscovery.mcp.distribution, "homebrew");
   assert.equal(aiDiscovery.mcp.binary, "certscore-mcp");
   assert.equal(aiDiscovery.mcp.packageStatus, "homebrew_developer_preview");
-  assert.equal(aiDiscovery.mcp.currentVersion, "0.2.21");
+  assert.equal(aiDiscovery.mcp.currentVersion, PUBLIC_CERTSCORE_MCP_CASK_VERSION);
   assert.equal(aiDiscovery.mcp.hosted.endpoint, "https://mcp.certscore.ai/mcp");
-  assert.equal(aiDiscovery.mcp.hosted.currentVersion, "0.2.21");
+  assert.equal(aiDiscovery.mcp.hosted.currentVersion, PUBLIC_CERTSCORE_MCP_VERSION);
   assert.match(aiDiscovery.mcp.hosted.authentication, /PKCE/);
   assert.equal(aiDiscovery.mcp.anonymous.endpoint, "https://mcp.certscore.ai/mcp/anonymous");
   assert.equal(aiDiscovery.mcp.anonymous.authentication, "none");
@@ -745,12 +749,14 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.equal(aiDiscovery.mcp.light.registryApiLookup, "https://registry.modelcontextprotocol.io/v0.1/servers?search=ai.certscore%2Fmcp-light");
   assert.equal(aiDiscovery.mcp.light.registryStatus, "active");
   assert.equal(aiDiscovery.mcp.light.registryLatest, true);
-  assert.equal(aiDiscovery.mcp.light.dailyNewScanLimit, 50);
-  assert.equal(aiDiscovery.mcp.light.limitKey, "requester_and_public_light_surface_utc_day");
-  assert.equal(aiDiscovery.mcp.light.rollingNewScanLimit, 5);
+  assert.equal(aiDiscovery.mcp.light.dailyNewScanLimit, LIGHT_MCP_NEW_SCAN_POLICY.surface.dailyLimit);
+  assert.equal(aiDiscovery.mcp.light.limitKey, "public_light_surface_utc_day_with_session_and_ip_limits");
+  assert.equal(aiDiscovery.mcp.light.rollingNewScanLimit, LIGHT_MCP_NEW_SCAN_POLICY.surface.burstLimit);
+  assert.deepEqual(aiDiscovery.mcp.light.newScanPolicy, LIGHT_MCP_NEW_SCAN_POLICY);
+  assert.equal(aiDiscovery.mcp.light.quotaDocumentation, "https://certscore.ai/developers/mcp#light-usage-limits");
   assert.equal(aiDiscovery.mcp.light.rollingWindowSeconds, 600);
   assert.equal(aiDiscovery.mcp.light.recentReuseDoesNotConsumeQuota, true);
-  assert.equal(aiDiscovery.mcp.light.version, "0.2.21");
+  assert.equal(aiDiscovery.mcp.light.version, PUBLIC_CERTSCORE_MCP_VERSION);
   assert.equal(aiDiscovery.mcp.light.privacyUrl, "https://certscore.ai/privacy");
   assert.equal(aiDiscovery.mcp.light.termsUrl, "https://certscore.ai/terms");
   assert.equal(aiDiscovery.mcp.light.iconUrl, "https://certscore.ai/certscore-mark-dark.png");
@@ -761,25 +767,14 @@ test("Developer API docs are discoverable by crawlers and agent manifests", asyn
   assert.match(aiDiscovery.mcp.light.longDescription, /completed Reject click with independently verified tracking evidence/);
   assert.deepEqual(aiDiscovery.capabilities.choicePathResults, ["postAcceptObservation", "postRefusalObservation", "gpcResponse"]);
   assert.match(aiDiscovery.mcp.light.longDescription, /not legal advice, certification, or a compliance determination/);
-  assert.deepEqual(aiDiscovery.mcp.light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"]);
+  assert.deepEqual(aiDiscovery.mcp.light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"]);
+  assert.deepEqual(aiDiscovery.mcp.light.prompts, ["certscore_launch_review", "certscore_compare_scans", "certscore_remediation_checklist"]);
+  assert.deepEqual(aiDiscovery.mcp.light.resources, ["certscore://project-instructions", "certscore://example-report"]);
   assert.equal(
     aiDiscovery.mcp.install,
     "brew tap ergoveritas1-alt/certscore https://github.com/ergoveritas1-alt/certscore.ai && brew install --cask certscore-mcp"
   );
-  assert.deepEqual(aiDiscovery.mcp.currentTools, [
-    "certscore_scan_site",
-    "certscore_get_scan",
-    "certscore_get_scan_status",
-    "certscore_get_report",
-    "certscore_get_evidence",
-    "certscore_get_scan_bundle",
-    "certscore_export_findings",
-    "certscore_list_findings",
-    "certscore_get_pre_consent_cookies_trackers",
-    "certscore_explain_finding",
-    "certscore_get_latest_domain_scan",
-    "certscore_get_latest_domain_pre_consent_cookies_trackers"
-  ]);
+  assert.deepEqual([...aiDiscovery.mcp.currentTools].sort(), certScoreMcpToolContracts.map(tool => tool.name).sort());
   assert.deepEqual(aiDiscovery.mcp.verify, [
     "certscore-mcp --version",
     "certscore-mcp --help",
@@ -1006,4 +1001,26 @@ test("Pulse feedback endpoint validates supported ratings before persistence", a
   const body = await response.json();
   assert.equal(body.type, "certscore_pulse_error");
   assert.equal(body.feedback.email, "support@certscore.ai");
+});
+
+
+test("Light quota copy derives every advertised creation limit from admission policy", () => {
+  const policy = LIGHT_MCP_NEW_SCAN_POLICY;
+  assert.ok(MCP_LIGHT_QUOTA_SUMMARY.includes(`${policy.session.dailyLimit} new scans per session per UTC day`));
+  assert.ok(MCP_LIGHT_QUOTA_SUMMARY.includes(`${policy.ip.dailyLimit}-scan requester-IP limit`));
+  assert.ok(MCP_LIGHT_QUOTA_SUMMARY.includes(`${policy.surface.dailyLimit}-scan Light limit`));
+  assert.ok(MCP_LIGHT_QUOTA_SUMMARY.includes(`${policy.session.burstLimit} per session, ${policy.ip.burstLimit} per requester IP and ${policy.surface.burstLimit} across Light`));
+  assert.match(MCP_LIGHT_QUOTA_SUMMARY, /Reused eligible results do not consume quota/);
+});
+
+test("Light agent discovery publishes the live admission policy and complete supported catalog", async () => {
+  const discovery = await aiDiscoveryGET(new Request("https://certscore.ai/.well-known/certscore-ai.json")).json();
+  const light = discovery.mcp.light;
+  assert.deepEqual(light.newScanPolicy, LIGHT_MCP_NEW_SCAN_POLICY);
+  assert.equal(light.dailyNewScanLimit, LIGHT_MCP_NEW_SCAN_POLICY.surface.dailyLimit);
+  assert.equal(light.rollingNewScanLimit, LIGHT_MCP_NEW_SCAN_POLICY.surface.burstLimit);
+  assert.equal(light.quotaDocumentation, "https://certscore.ai/developers/mcp#light-usage-limits");
+  assert.deepEqual(light.tools, ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"]);
+  assert.deepEqual(light.prompts, ["certscore_launch_review", "certscore_compare_scans", "certscore_remediation_checklist"]);
+  assert.deepEqual(light.resources, ["certscore://project-instructions", "certscore://example-report"]);
 });

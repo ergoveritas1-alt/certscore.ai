@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.14
+
+- Retrieve focused retained report evidence with `getReportEvidencePage(scanId, { section })`.
+- Type the section selector, selection metadata and selector-preserving pagination.
+
 ## 0.2.13
 
 - Type retained privacy choices and notice passages as `ScanResource.privacyAuditEvidence`.

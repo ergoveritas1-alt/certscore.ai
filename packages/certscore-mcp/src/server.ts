@@ -1,4 +1,5 @@
-import { registerAdoptionFeatures, EXAMPLE_SCAN_ID } from "./adoption.js";
+import { registerAdoptionFeatures, EXAMPLE_SCAN_ID, LIGHT_REVIEW_INSTRUCTIONS } from "./adoption.js";
+import { LIGHT_TOOL_NAMES, REVIEW_PROMPT_NAMES } from "./review-navigation.js";
 import { withResponseGuidance } from "./response-guidance.js";
 import { randomUUID } from "node:crypto";
 import { captureMcpResponse, withResponseCapture } from "./response-capture.js";
@@ -427,19 +428,19 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
         route: options.toolProfile === "light" ? "light" : options.grantedOAuthScopes ? "hosted_oauth" : options.anonymousSurface ? "anonymous" : "scoped_api_key",
         scopesGranted: options.grantedOAuthScopes ?? null,
         createAllowedByScope: options.grantedOAuthScopes ? options.grantedOAuthScopes.includes("scan:create") : null,
-        resources: options.toolProfile === "light" ? [] : ["certscore://connection", "certscore://project-instructions", "certscore://reconnect", "certscore://example-report"],
-        prompts: options.toolProfile === "light" ? [] : ["certscore_launch_review", "certscore_compare_scans", "certscore_remediation_checklist"],
+        resources: options.toolProfile === "light" ? ["certscore://project-instructions", "certscore://example-report"] : ["certscore://connection", "certscore://project-instructions", "certscore://reconnect", "certscore://example-report"],
+        prompts: [...REVIEW_PROMPT_NAMES],
         quotaRemaining: null,
         quotaNote: "Remaining allowance is not loaded at handshake. Scan creation enforces current workspace and requester limits; inspect quota errors rather than assuming a fresh allowance.",
         recommendedNextTool: options.grantedOAuthScopes && !options.grantedOAuthScopes.includes("scan:create") ? "certscore_get_latest_domain_scan" : "certscore_scan_site",
         sequence: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"],
         guidance: options.toolProfile === "light"
-          ? "Light supports eligible public scans, not workspace history. For workspace access connect https://mcp.certscore.ai/mcp using OAuth. Reuse an existing Hosted OAuth connection rather than adding duplicate names."
+          ? LIGHT_REVIEW_INSTRUCTIONS
           : "Start a scan, poll only while active at the returned interval, then fetch its bundle. If scan:create is missing, reauthorize with scan:read scan:create mcp. Reuse existing endpoint installations; client names are labels, not verified identities."
       }
     })
   });
-  if (options.toolProfile !== "light") registerAdoptionFeatures(server,
+  registerAdoptionFeatures(server,
     async () => {
       try {
         return await clientForRequest({}).getConnectionStatus();
@@ -459,13 +460,13 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
       } catch {
         return { example: true, available: false, scanId: EXAMPLE_SCAN_ID, nextAction: "The retained example is unavailable. Do not create a replacement scan automatically." };
       }
-    });
+    }, { toolProfile: options.toolProfile });
   const sdkCreateToolError = (server as any).createToolError.bind(server) as (message: string) => ReturnType<typeof toInvalidArgumentsToolError>;
   (server as any).createToolError = (message: string) => message.includes("Input validation error:")
     ? toInvalidArgumentsToolError(message)
     : sdkCreateToolError(message);
   const registeredToolNames = new Set<string>();
-  const lightTools = new Set<CertScoreMcpToolName>(["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"]);
+  const lightTools = new Set<CertScoreMcpToolName>(LIGHT_TOOL_NAMES);
   const scanIdTools = new Set<CertScoreMcpToolName>([
     "certscore_explain_finding",
     "certscore_export_findings",
@@ -567,11 +568,14 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   const registerTool = (name: CertScoreMcpToolName, contract: unknown, handler: unknown) => {
     if (options.toolProfile === "light" && !lightTools.has(name)) return;
     const typedHandler = handler as (input: unknown, extra: McpRequestExtra) => Promise<unknown>;
-    registerMcpTool(name, contract, async (input: unknown, extra: McpRequestExtra) => {
+    const advertisedContract = options.toolProfile === "light" && name === "certscore_scan_site"
+      ? { ...(contract as any), inputSchema: Object.fromEntries(Object.entries((contract as any).inputSchema).filter(([key]) => !["waitForCompletion", "maxWaitSeconds"].includes(key))) }
+      : contract;
+    registerMcpTool(name, advertisedContract, async (input: unknown, extra: McpRequestExtra) => {
       const scanId = input && typeof input === "object" && !Array.isArray(input)
         ? (input as { scanId?: unknown }).scanId : null;
       return scanIdTools.has(name) && !isCanonicalScanId(scanId)
-        ? toInvalidScanIdToolError() : withResponseGuidance(name, input, await typedHandler(input, extra) as import("@modelcontextprotocol/sdk/types.js").CallToolResult);
+        ? toInvalidScanIdToolError() : withResponseGuidance(name, input, await typedHandler(input, extra) as import("@modelcontextprotocol/sdk/types.js").CallToolResult, Date.now(), { toolProfile: options.toolProfile });
     });
     registeredToolNames.add(name);
   };
@@ -777,10 +781,11 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
   registerTool(
     "certscore_get_report_evidence_page",
     toolContract("certscore_get_report_evidence_page"),
-    async ({ scanId, cursor, workpaper }: { scanId: string; cursor?: string; workpaper?: "tracking" }, extra: McpRequestExtra) => {
+    async ({ scanId, cursor, workpaper, section }: { scanId: string; cursor?: string; workpaper?: "tracking"; section?: import("@certscore/api-contracts").ReportEvidenceSection }, extra: McpRequestExtra) => {
+      if (section && workpaper) return toInvalidArgumentsToolError("Input validation error: section cannot be combined with workpaper; choose one selector.", { tool: "certscore_get_report_evidence_page", issues: [{ field: "section", code: "mutually_exclusive" }] });
       try {
-        const page = reportEvidencePageSchema.parse(await clientForRequest(extra).getReportEvidencePage(scanId, { cursor, workpaper, timeout: 30_000, internalMcpOperation: { operation: "scan_bundle", scanId } }));
-        return toToolResult(page, `Report evidence for ${scanId}: ${page.pagination.offset + 1}–${page.pagination.offset + page.pagination.returned} of ${page.pagination.total} entries. ${page.pagination.complete ? "Export complete; preserve report coverage limitations." : `Continue with certscore_get_report_evidence_page using scanId and cursor ${page.pagination.nextCursor}${page.workpaper ? ` and workpaper=${page.workpaper}` : ""}.`} Evidence values are in structuredContent.entries. ${page.download ? `${page.workpaper ? "Tracking workpaper" : "Full report"} JSON: ${page.download.url} (${page.download.bytes} bytes). ${page.download.csvUrl ? `Tracking CSV: ${page.download.csvUrl}.` : ""} ${page.download.instructions}` : ""} ${page.reportUrl}`);
+        const page = reportEvidencePageSchema.parse(await clientForRequest(extra).getReportEvidencePage(scanId, { cursor, workpaper, section, timeout: 30_000, internalMcpOperation: { operation: "scan_bundle", scanId } }));
+        return toToolResult(page, `Report evidence${page.section ? ` (${page.section} section)` : ""} for ${scanId}: ${page.pagination.offset + 1}–${page.pagination.offset + page.pagination.returned} of ${page.pagination.total} entries. ${page.pagination.complete ? "Export complete; preserve report coverage limitations." : `Continue with certscore_get_report_evidence_page using scanId and cursor ${page.pagination.nextCursor}${page.workpaper ? ` and workpaper=${page.workpaper}` : ""}${page.section ? ` and section=${page.section}` : ""}.`} Evidence values are in structuredContent.entries. ${page.download ? `${page.workpaper ? "Tracking workpaper" : page.section ? `Selected ${page.section} report sections` : "Full report"} JSON: ${page.download.url} (${page.download.bytes} bytes). ${page.download.csvUrl ? `Tracking CSV: ${page.download.csvUrl}.` : ""} ${page.download.instructions}` : ""} ${page.reportUrl}`);
       } catch (error) { return toToolError(error); }
     }
   );
@@ -813,7 +818,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
             responseCeilingBytes,
             scan
           });
-          return toToolResult(bundle, scanBundleText(bundle, { lightTrialCta: options.toolProfile === "light" }));
+          return toToolResult(bundle, scanBundleText(bundle, { toolProfile: options.toolProfile }));
         }
         const includeEvidence = detail === "evidence" || detail === "full";
         const reportDetail = detail === "full" ? "full" : includeEvidence ? "evidence" : "summary";
@@ -838,7 +843,7 @@ export function createCertScoreMcpServer(options: CertScoreMcpOptions = {}) {
           responseCeilingBytes,
           scan
         });
-        return toToolResult(bundle, scanBundleText(bundle, { lightTrialCta: options.toolProfile === "light" }));
+        return toToolResult(bundle, scanBundleText(bundle, { toolProfile: options.toolProfile }));
       } catch (error) {
         return toToolError(error);
       }

@@ -1,5 +1,7 @@
 import { privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 
+import { bundleReviewNavigation } from "./review-navigation.js";
+
 import { withResponseCapture, transferResponseCapture } from "./response-capture.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { getCertScoreErrorContext, CertScoreError, type FindingList, type JobStatus, type PreConsentCookiesTrackers, type PulseDetail, type PulseFormat, type PulseResult, type ScanResource, type TopFinding } from "@certscore/sdk";
@@ -30,14 +32,12 @@ const MAX_TOOL_TEXT_CHARS = 8_000;
 const LEGAL_REVIEW_DISCLAIMER = "CertScore results are automated public-web observations for human and agentic review, not legal advice, certification, or a compliance determination.";
 const SCAN_PROVENANCE_GROUNDING = "retrievalMode describes how the current tool response obtained the scan; creationDecision describes whether the original scan request created or reused a scan only when that decision is retained. Never infer an unknown creationDecision from scan_id_lookup. For a reused or retrieved existing scan, use only persisted scanFrom and timestamps. Never infer its original scan region from the current request, the user's location, or a default execution region. If persisted region or timestamps are unavailable, report them as unavailable.";
 const INTERPRETATION_STATEMENT = "The CertScore score covers observable public-web scan signals only. Do not infer technologies that are not listed in the returned evidence or any legal compliance status.";
-const SCAN_BUNDLE_RESPONSE_CONTRACT = `Response contract: Report only observed CertScore evidence and CertScore classifications. criticality, priority, and confidence are CertScore metadata; regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination. Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline. A confirmed post-action observation with termination.kind=evidence_satisfied means the observer intentionally stopped after retaining qualifying evidence; do not treat that termination as uncertainty about the returned observation. Keep any separately returned coverage limitation scoped to what was not measured. Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing, and do not infer violations or compliance beyond what CertScore observed. ${SCAN_PROVENANCE_GROUNDING}`;
 const CHOICE_PATH_INTERPRETATION_STATEMENT = "Count execution.status succeeded and succeeded_with_confirmation as successful paths, with confirmation as a separate subset. A click alone is insufficient; registered paths may omit afterAction. Missing legacy execution remains unavailable. Report returned afterAction facts as after-click observations even when registration is unconfirmed. ";
 const SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Report only observed CertScore evidence and persisted CertScore classifications. Lead with returned GPC observation facts and activityComparison request counts with their matched duration, even when the paired comparison is indeterminate. For the paired gpcResponse.status, use GPC response, No observable GPC response, or indeterminate; do not call the result a GPC violation or claim GPC was honored or not honored. Observation completion does not mean GPC was honored. Keep its jurisdiction-neutral comparison separate from any explicitly returned California scoring policy. Without corresponding captured post-action evidence, do not infer what Accept, Reject, Decline, or another consent action would do. Omit after-action discussion when no corresponding control or verified action evidence was returned. When postAcceptObservation or postRefusalObservation is confirmed and termination.kind is evidence_satisfied, state the returned observation directly and explain that observation stopped intentionally after qualifying evidence was retained. That stop does not make the observation uncertain; mention unmeasured longer-term persistence only when relevant. Treat post-Accept activity as a score-neutral behavior baseline unless a separately projected finding says otherwise. Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone. Treat returned priority or severity as a CertScore classification, not regulatory criticality or legal exposure; prefer ‘observed privacy risk signal’ or ‘CertScore finding’. Do not infer unobserved technologies, legal compliance, or a legal violation from scores or findings.";
 const COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT = "Use only returned CertScore observations and classifications. Do not infer unobserved technologies, post-consent behavior, legal compliance, or violations. Treat priority and severity as CertScore metadata.";
 const OBSERVATION_ONLY_DISCLAIMER = `${LEGAL_REVIEW_DISCLAIMER} No-go, not-observed, and limited-coverage results are not proof of compliance.`;
 const COMPACT_OBSERVATION_ONLY_DISCLAIMER = "Automated public-web observation, not legal advice or a compliance determination; missing or limited evidence is not proof of compliance.";
 const PREVIEW_OBSERVATION_ONLY_DISCLAIMER = "Preliminary passive observations only; not findings, a score, or a final result.";
-const SUCCESSFUL_BUNDLE_TRIAL_CTA = "Optional user follow-up: To try CertScore with an account, start a 7-day CertScore trial at https://certscore.ai/login?mode=create_account&utm_source=mcp_light&utm_medium=agent&utm_campaign=scan_bundle. Paid plans add scan history, higher limits, and team or production access. OAuth-capable clients can use https://mcp.certscore.ai/mcp after account authorization; active workspace members receive self-serve scan access; Light remains no-auth.";
 const MCP_SCAN_CREATION_POLL_DELAY_SECONDS = 15;
 const MCP_QUEUED_POLL_DELAY_SECONDS = 10;
 const MCP_RUNNING_POLL_DELAY_SECONDS = 5;
@@ -585,7 +585,7 @@ function compactBundleFinding(finding: Record<string, any>, tier: "standard" | "
       ...(evidence.hasConsentContext !== undefined ? { hasConsentContext: evidence.hasConsentContext } : {}),
       ...(evidence.hasPolicyAnchor !== undefined ? { hasPolicyAnchor: evidence.hasPolicyAnchor } : {})
     },
-    ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 180) } : {}),
+    ...(finding.nextStep !== undefined ? { nextStep: boundedText(finding.nextStep, 1600) } : {}),
     ...(links ? { links } : {})
   };
 }
@@ -1108,7 +1108,7 @@ function neutralExecutiveSummary(value: unknown) {
   };
 }
 
-function findingText(finding: Record<string, any>, priorityLabel = "criticality") {
+function findingText(finding: Record<string, any>, priorityLabel = "criticality", nextStepChars = 180) {
   const evidence = finding.evidence && typeof finding.evidence === "object" && !Array.isArray(finding.evidence)
     ? finding.evidence as Record<string, unknown>
     : {};
@@ -1116,7 +1116,7 @@ function findingText(finding: Record<string, any>, priorityLabel = "criticality"
     ? finding.reviewLenses.slice(0, 2).join(", ")
     : "not classified";
   const nextStep = typeof finding.nextStep === "string" && finding.nextStep.trim()
-    ? `; canonical next step=${boundedText(finding.nextStep.trim(), 180)}`
+    ? `; canonical next step=${boundedText(finding.nextStep.trim(), nextStepChars)}`
     : "";
   const identity = typeof finding.id === "string" ? `; findingId=${finding.id}` : "";
   if (finding.plainEnglish == null && evidence.summary == null) {
@@ -1176,7 +1176,7 @@ function reportUrlFor(value: Record<string, any>) {
 function canonicalScanProvenanceText(value: Record<string, any>) {
   const present = (field: unknown) => typeof field === "string" && field.trim() ? field.trim() : "unavailable";
   const numeric = (field: unknown) => typeof field === "number" && Number.isFinite(field) ? String(field) : "unavailable";
-  return `Canonical scan provenance: scanId=${present(extractScanId(value))}; scanFrom/execution region=${present(value.scanFrom)}; completedAt=${present(value.completedAt)}; startedAt=${present(value.startedAt)}; createdAt=${present(value.createdAt)}; retrieval mode=${present(value.provenance?.retrievalMode)}; original creation decision=${present(value.provenance?.creationDecision)}; scan age seconds=${numeric(value.provenance?.scanAgeSeconds)}; compatibility provenance mode=${present(value.provenance?.mode)}.`;
+  return `Canonical scan provenance: scanId=${present(extractScanId(value))}; scanFrom/execution region=${present(value.scanFrom)}; completedAt=${present(value.completedAt)}; startedAt=${present(value.startedAt)}; createdAt=${present(value.createdAt)}; retrieval mode=${present(value.provenance?.retrievalMode)}; original creation decision=${present(value.provenance?.creationDecision)}; scan age seconds=${numeric(value.provenance?.scanAgeSeconds)}; compatibility provenance mode=${present(value.provenance?.mode)}. Never infer its original scan region from the current request, the user's location, or a default execution region.`;
 }
 
 /** Present only the API's retained disposition; never infer blockers from raw evidence. */
@@ -1485,19 +1485,19 @@ export function markdownReportText(value: Record<string, any>) {
   );
 }
 
-export function scanBundleText(bundle: Record<string, any>, options: { lightTrialCta?: boolean } = {}) {
+export function scanBundleText(bundle: Record<string, any>, options: { toolProfile?: "full" | "light"; lightTrialCta?: boolean } = {}) {
   const noGoText = canonicalNoGoText(bundle);
   if (noGoText) return noGoText;
   const score = typeof bundle.score === "number" ? `; CertScore score=${bundle.score}` : "";
-  const footer = [...(options.lightTrialCta ? [SUCCESSFUL_BUNDLE_TRIAL_CTA] : []), OBSERVATION_ONLY_DISCLAIMER,
-    (bundle.postAcceptObservation || bundle.postRefusalObservation ? CHOICE_PATH_INTERPRETATION_STATEMENT : "") + SCAN_BUNDLE_INTERPRETATION_STATEMENT];
+  const light = options.toolProfile === "light" || options.lightTrialCta === true;
+  const footer = [bundle.interpretationGuidance?.statement ??
+    ((bundle.postAcceptObservation || bundle.postRefusalObservation ? CHOICE_PATH_INTERPRETATION_STATEMENT : "") + SCAN_BUNDLE_INTERPRETATION_STATEMENT), OBSERVATION_ONLY_DISCLAIMER];
   const lines = [
-    SCAN_BUNDLE_RESPONSE_CONTRACT,
     `CertScore scan bundle for ${bundle.domain ?? "unknown domain"}; status=${bundle.status ?? "unknown"}${score}; scanId=${bundle.scanId ?? "unknown"}.`,
     `Risk: ${bundle.riskLevel ?? "unknown"}. Finding IDs (returned): ${Array.isArray(bundle.findings) ? bundle.findings.slice(0, 20).map((finding: Record<string, any>) => String(finding.id ?? "unknown").slice(0, 120)).join(", ") || "none" : "unavailable"}.`,
     bundle.preConsentCookiesTrackers
       ? `Pre-consent inventory: total=${bundle.preConsentCookiesTrackers.total ?? "unknown"}; returned=${bundle.preConsentCookiesTrackers.rows?.length ?? "unknown"}. Counts describe retained coverage, not consent compliance.`
-      : `Pre-consent inventory: ${bundle.mcpMetadata?.omittedSections?.includes("preConsentCookiesTrackers") ? "omitted to fit the response byte limit" : "not included in this response"}. Call certscore_get_pre_consent_cookies_trackers with scanId=${bundle.scanId ?? "unknown"} for retained rows and counts; no new scan is needed.`,
+      : `Pre-consent inventory: ${bundle.mcpMetadata?.omittedSections?.includes("preConsentCookiesTrackers") ? "omitted to fit the response byte limit" : "not included in this response"}. ${light ? "Call certscore_get_report_evidence_page with workpaper=tracking" : "Call certscore_get_pre_consent_cookies_trackers"} with scanId=${bundle.scanId ?? "unknown"} for retained rows and counts; no new scan is needed.`,
     canonicalScanProvenanceText(bundle),
     `Full report: ${bundle.reportUrl ?? (bundle.scanId ? `https://certscore.ai/scan/${encodeURIComponent(String(bundle.scanId))}` : "not available")}.`
   ];
@@ -1513,6 +1513,27 @@ export function scanBundleText(bundle: Record<string, any>, options: { lightTria
   if (coverage) {
     append(`Coverage: ${coverage.scopeSummary ?? coverage.summary ?? "Review limitations before interpreting absence."}`);
   }
+  const findings = Array.isArray(bundle.findings) ? bundle.findings : [];
+  const findingTotal = bundle.findingsMetadata?.total ?? findings.length;
+  const findingReturned = bundle.findingsMetadata?.returned ?? bundle.findingsMetadata?.shown ?? findings.length;
+  append(`Canonical projected findings: ${findingReturned} of ${findingTotal} returned${bundle.findingsMetadata?.truncated ? " (truncated)" : ""}. These are already-projected review signals, not inferred technologies or legal conclusions.`);
+  let findingsRendered = 0;
+  for (const [index, finding] of findings.entries()) {
+    const next = findingText(finding, "CertScore priority/classification", 1600);
+    const remaining = findings.length - index - 1;
+    const reserve = remaining > 0
+      ? `${remaining} additional returned finding${remaining === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`
+      : null;
+    if ([...lines, next, ...(reserve ? [reserve] : []), ...footer].join("\n").length > MAX_TOOL_TEXT_CHARS) break;
+    lines.push(next);
+    findingsRendered += 1;
+  }
+  if (findingsRendered < findings.length) {
+    append(`${findings.length - findingsRendered} additional returned finding${findings.length - findingsRendered === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`);
+  }
+
+  const navigation = bundleReviewNavigation(bundle);
+  if (navigation) append(`Evidence index (response delivery): ${navigation.evidenceIndex.map(section => `${section.label}=${section.delivery}${section.returned !== undefined ? ` (${section.returned}/${section.total})` : ""}${section.retrieval ? ` [section=${section.retrieval.arguments.section}]` : ""}`).join("; ")}. Focused reads use certscore_get_report_evidence_page with this scanId and the indicated section. Not returned is not evidence of absence.`);
   const counts = bundle.summary?.counts;
   if (counts && typeof counts === "object" && Number.isInteger(counts.thirdPartyDomainsObserved) && Number.isInteger(counts.classifiedTrackerVendors)) {
     append(`Observed external domains: ${counts.thirdPartyDomainsObserved}; classified tracker vendors: ${counts.classifiedTrackerVendors}. External contact alone does not establish tracking.`);
@@ -1607,24 +1628,6 @@ export function scanBundleText(bundle: Record<string, any>, options: { lightTria
     }
   }
 
-  const findings = Array.isArray(bundle.findings) ? bundle.findings : [];
-  const findingTotal = bundle.findingsMetadata?.total ?? findings.length;
-  const findingReturned = bundle.findingsMetadata?.returned ?? bundle.findingsMetadata?.shown ?? findings.length;
-  append(`Canonical projected findings: ${findingReturned} of ${findingTotal} returned${bundle.findingsMetadata?.truncated ? " (truncated)" : ""}. These are already-projected review signals, not inferred technologies or legal conclusions.`);
-  let findingsRendered = 0;
-  for (const [index, finding] of findings.entries()) {
-    const next = findingText(finding, "CertScore priority/classification");
-    const remaining = findings.length - index - 1;
-    const reserve = remaining > 0
-      ? `${remaining} additional returned finding${remaining === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`
-      : null;
-    if ([...lines, next, ...(reserve ? [reserve] : []), ...footer].join("\n").length > MAX_TOOL_TEXT_CHARS) break;
-    lines.push(next);
-    findingsRendered += 1;
-  }
-  if (findingsRendered < findings.length) {
-    append(`${findings.length - findingsRendered} additional returned finding${findings.length - findingsRendered === 1 ? " was" : "s were"} omitted from TextContent to preserve the size limit; see structuredContent or the report URL.`);
-  }
 
   const inventory = bundle.preConsentCookiesTrackers;
   if (inventory && typeof inventory === "object") {
@@ -1923,7 +1926,13 @@ export function buildScanBundle(input: {
     refresh();
   };
 
+  const navigation = bundleReviewNavigation(bundle);
+  if (navigation) bundle.reviewNavigation = navigation;
   captureFullPayloadBytes();
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.reviewNavigation) {
+    delete bundle.reviewNavigation;
+    refresh();
+  }
   for (const section of ["privacyAuditEvidence", "privacyAuditSummary"]) {
     if (bundle.mcpMetadata.actualBytes > maxBytes && bundle[section]) {
       markBudgetOmitted(section, "privacy_workpaper_omitted_to_byte_limit");

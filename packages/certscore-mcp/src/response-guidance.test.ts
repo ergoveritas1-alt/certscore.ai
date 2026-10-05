@@ -26,6 +26,12 @@ test('pagination advances and ends without an extra call', () => {
   page.pagination.truncated = false;
   assert.equal(metadata(guide('certscore_list_findings', page)).pagination.nextOffset, null);
 });
+
+test('focused report continuation keeps the section selector and stops at completion', () => {
+  const payload = { scanId: 'retained', section: 'gpc', pagination: { complete: false, nextCursor: 'cursor' } };
+  assert.deepEqual(metadata(guide('certscore_get_report_evidence_page', payload)).nextAction.arguments, { scanId: 'retained', cursor: 'cursor', section: 'gpc' });
+  assert.equal(metadata(guide('certscore_get_report_evidence_page', { ...payload, pagination: { complete: true, nextCursor: null } })).nextAction.tool, null);
+});
 test('domain lookup uses retained nested identity and never invents scan age', () => {
   const g = metadata(guide('certscore_get_latest_domain_scan', { scan: { scanId: 'retained', status: 'completed', completedAt: 'invalid' } }));
   assert.equal(g.scanId, 'retained'); assert.equal(g.ageSeconds, null); assert.equal(g.creationDecision, 'not_requested');
@@ -82,4 +88,19 @@ test('routine guidance text stays under 800 bytes while full metadata remains av
  const text=result.content.at(-1); assert.equal(text?.type,'text');
  assert.ok(Buffer.byteLength(text!.text as string)<800);
  assert.ok(metadata(result).purpose);
+});
+
+test('Light follow-ups are callable and stay within retained evidence, including status responses', () => {
+  const light = (tool: string, payload: Record<string, unknown>) => withResponseGuidance(tool, {}, result(payload), undefined, { toolProfile: 'light' });
+  const bundle = light('certscore_get_scan_bundle', { scanId: 'retained', status: 'completed', findings: [{ id: 'finding' }], gpcResponse: {} });
+  const g = metadata(bundle);
+  assert.equal(g.optionalFollowUps.length, 2);
+  assert.ok(g.optionalFollowUps.every((action: any) => action.tool === 'certscore_get_report_evidence_page' && action.arguments.scanId === 'retained' && action.createsScan === false));
+  assert.match((bundle.content.at(-1) as any).text, /optionalFollowUps/);
+  for (const tool of ['certscore_scan_site', 'certscore_get_scan_status']) {
+    assert.deepEqual(metadata(light(tool, { scanId: 'retained', status: 'completed', topFindings: [{ id: 'finding' }] })).optionalFollowUps, []);
+  }
+  for (const state of [{ status: 'failed' }, { status: 'completed_limited', resultDisposition: 'no_go' }]) {
+    assert.deepEqual(metadata(light('certscore_get_scan_bundle', { scanId: 'retained', findings: [{ id: 'finding' }], ...state })).optionalFollowUps, []);
+  }
 });

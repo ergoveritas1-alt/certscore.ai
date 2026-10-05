@@ -9,8 +9,8 @@ CertScore.ai MCP Light is live in the [GitHub MCP Registry](https://github.com/m
 | Endpoint | `https://mcp.certscore.ai/mcp/light` |
 | Transport | Streamable HTTP |
 | Authentication | None |
-| Tools | `certscore_scan_site` → `certscore_get_scan_status` → `certscore_get_scan_bundle` |
-| Current hosted version | `0.2.25` |
+| Tools | `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page` |
+| Current hosted version | `0.2.26` |
 
 [Start with MCP Light](https://certscore.ai/mcp/light?utm_source=github&utm_medium=mcp_registry&utm_campaign=github_mcp_registry_launch) · [Install in Cursor](https://cursor.com/link/mcp/install?name=CertScore.ai&config=eyJ1cmwiOiJodHRwczovL21jcC5jZXJ0c2NvcmUuYWkvbWNwL2xpZ2h0In0%3D) · [Read the installation reference](../../docs/mcp-light-install.md)
 
@@ -24,7 +24,7 @@ codex mcp add certscore --url https://mcp.certscore.ai/mcp/light
 
 Then ask:
 
-> Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Continue through the returned scan lifecycle, retrieve the completed findings bundle, and summarize the score, risk level, findings, evidence links, coverage limitations, and report URL. State whether the result was new or reused. Treat the results as automated public-web observations, not legal advice or certification.
+> Review https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html for website privacy risks. Explain the main findings, supporting evidence, coverage limits, and what to inspect next.
 
 ErgoVeritas is a stable, owned canary with intentional test signals. For an ordinary review, substitute any public HTTP or HTTPS URL you are authorized to assess.
 
@@ -37,16 +37,16 @@ Light:
 https://mcp.certscore.ai/mcp/light
 
 Authentication: None
-Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
+Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, certscore_get_report_evidence_page
 ```
 
-Light allows up to 50 genuinely new scans per UTC day across the public Light surface and up to 5 per rolling 10 minutes, with additional IP/provider safeguards. Reused eligible results do not consume quota.
+Light applies session, requester-IP and shared creation limits. See the current policy at https://certscore.ai/developers/mcp#light-usage-limits. Reused eligible results do not consume quota.
 
 Light is a free website privacy scanner and cookie checker for public websites. It can return canonical evidence and findings for pre-consent cookies and storage, trackers and vendors, cookie banners, CMP and consent controls, the jurisdiction-neutral GPC comparison, Accept and Reject Path post-action observations or explicit limitations, privacy-policy and transparency surfaces, GDPR/ePrivacy and CCPA/CPRA review signals, and HTTPS/TLS transport observations. Typical uses include release privacy preflight, public vendor-domain review, landing-page tracker inspection, audit triage, and evidence collection before human privacy review.
 
-Detailed first-run prompt:
+First-run prompt:
 
-> Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.
+> Review https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html for website privacy risks. Explain the main findings, supporting evidence, coverage limits, and what to inspect next.
 
 Canonical Light workflow:
 
@@ -65,9 +65,9 @@ Recommended bundle budgets are `maxBytes=5000` for `summary`, `maxBytes=8000` fo
 
 Verification prompt:
 
-> List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, and certscore_get_scan_bundle are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.
+> List the available CertScore tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.
 
-Success means the tool list contains the four Light tools (scan, status, bundle and report evidence), no authorization page appears, and `certscore_scan_site` returns a stable `scanId` plus an explicit new-or-reused decision. An eligible reused result reports that quota was not consumed.
+Connection verification succeeds when the four Light tools are listed without an authorization page and the retained example can be retrieved with its original date and coverage. An unavailable historical example does not authorize a replacement scan. For your first website review, scan creation separately returns a stable scan ID and a new-or-reused decision; eligible reuse consumes no new-scan quota.
 
 CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.
 
@@ -77,7 +77,7 @@ Scans describe observable behavior at a point in time. Public sites may behave d
 
 | Route | Access | Best for |
 | --- | --- | --- |
-| Light MCP — no authentication | No account, API key, bearer token, browser login, or OAuth; four tools; up to 50 new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free | First-time users, testing, and discovery |
+| Light MCP — no authentication | No account, API key, bearer token, browser login, or OAuth; four tools; current session, requester-IP and shared limits: https://certscore.ai/developers/mcp#light-usage-limits; eligible reuse is free | First-time users, testing, and discovery |
 | Hosted MCP — OAuth | Hosted Streamable HTTP with OAuth scopes, higher volume, history, and approved advanced tools | Production, team, and managed remote clients |
 | Local MCP — scoped API key | Local stdio with a scoped key and tools allowed by its scopes | Backend, local, and controlled automation workflows |
 
@@ -91,14 +91,14 @@ MCP scan-resource reads use the same weighted, rolling policy as the direct Cert
 
 The sections below document the broader authenticated and local package surfaces. The Light contract exposes `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, and `certscore_get_report_evidence_page`.
 
-- `certscore_scan_site` - Creates a public-website privacy scan or reuses an eligible recent completed scan. Coverage includes pre-consent storage, trackers, consent and CMP signals, privacy-policy disclosures, transport security, and GDPR/ePrivacy or CCPA/CPRA review signals. The response contains a stable scanId, lifecycle status, retry timing, and sometimes a bounded preliminary preConsentPreview; preliminary data contains no final findings or score. Results are automated public-web observations, not legal advice, certification, or a compliance determination. Tool and workflow documentation: https://certscore.ai/developers/mcp.
+- `certscore_scan_site` - Use for a user-requested website launch review, vendor assessment, cookie/tracker inventory, consent/GPC investigation or privacy-policy review. A public URL or domain is enough. Creates a privacy scan or reuses an eligible recent completed scan; default freshness=latest saves new-scan quota. Use refresh only for an explicitly requested fresh scan or post-fix recheck. Retain scanId, poll certscore_get_scan_status only while active at retryAfterSeconds, then read certscore_get_scan_bundle. A preliminary preConsentPreview is not final findings or totals. Coverage includes pre-consent storage, trackers, consent and CMP signals, privacy-policy disclosures, transport security and GDPR/ePrivacy or CCPA/CPRA review signals. Results are automated observations, not legal advice, certification, or a compliance determination. https://certscore.ai/developers/mcp.
 
   Workflow note: a new scan may include `preConsentPreview` when the runtime lane completes or reaches its six-second checkpoint. The preview separates captured totals from bounded returned identities. `trackingVendorCount` excludes infrastructure, security, and consent-management vendors, which appear in `operationalVendors`; the compatibility preview count is not comparable to the completed inventory's broader `trackerCount`. Continue with `certscore_get_scan_status`, never poll in parallel, and never resubmit `certscore_scan_site` while the scan is active. Then call `certscore_get_scan_bundle` at completed or completed_limited.
 - `certscore_get_scan` - Retrieve the API v2 public-safe scan resource, including completed-limited no-go disposition, reason-specific guidance, and timing when available.
 - `certscore_get_scan_status` - Returns lifecycle status for a stable CertScore scanId. Active responses include phase, heartbeat, estimated progress, retryAfterSeconds, and sometimes a bounded preliminary preConsentPreview. Terminal responses include completion status, CertScore score and risk metadata when available, coverage, persisted execution region and timestamps, report URL, and a next-action field. Preliminary observations are distinct from completed findings.
 - `certscore_get_report` - Focused follow-up: retrieve a bounded Pulse report with high-signal TextContent and typed structuredContent, including customer-safe no-go messaging. For broad privacy questions, use certscore_get_scan_bundle first because it combines canonical findings, limitations, and pre-consent rows without redundant calls.
 - `certscore_get_evidence` - Focused follow-up: retrieve a bounded public-safe evidence packet with a concise TextContent digest and typed structuredContent. For broad privacy questions, use certscore_get_scan_bundle first. Excludes raw cookie values, raw bodies, sensitive payloads, full DOM, and unredacted query values.
-- `certscore_get_scan_bundle` - Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. The default summary distinguishes observed external domains from classified tracker vendors and states the public-page scope. Use detail=evidence to inspect bounded retained request examples and policy-surface candidates even when there are no findings; use certscore_get_report_evidence_page for deeper report evidence. Available sections also include retained privacy-choice controls and notice topics in privacyAuditSummary (full evidence in detail=full), canonical findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets report returned, total, truncated, and omitted-section metadata. Accept and Reject results distinguish registered decisions from retained after-click facts. Their execution reports succeeded for a completed click and bounded observation, and succeeded_with_confirmation when the consent decision is also verified. Optional afterAction summaries remain useful when registration is unconfirmed; absent or failed capture remains explicitly limited. Consume canonical findings for any scoring effect. Results are automated public-web observations, not legal advice, certification, or a compliance determination.
+- `certscore_get_scan_bundle` - Main answer for a completed or completed-limited scan: canonical findings, next steps, supporting evidence, score, date/region, coverage and report URL. An existing scanId is enough; no new scan is created. The evidence index describes response delivery, never evidence absence. Optional next actions lead to deeper report tables, tracking workpapers and JSON/CSV exports. Use detail=evidence for request examples and policy candidates, including scans with no findings; detail=full adds bounded retained context. Preserve returned/total counts and omission metadata. Accept/Reject execution succeeded means a completed click and bounded observation; succeeded_with_confirmation additionally verifies the consent decision. Retained after-click facts remain distinct from registered decisions. Absent or failed capture remains explicitly limited. Use canonical findings for scoring effects. A later missing finding does not prove a fix. Results are automated public-web observations, not legal advice, certification, or a compliance determination.
 
   Count both execution success statuses; registered successful paths may omit afterAction, and missing historical execution means unavailable.
 
@@ -134,6 +134,10 @@ No-go results lead with the retained access blocker, “Not scored,” evidence 
 The value is labeled `CertScore score`, never a compliance score. It covers observable public-web scan signals only. Clients must not infer technologies absent from the returned evidence, compare the value with a hypothetical compliant baseline, or infer legal compliance status.
 
 Every `failed`, `expired`, or `rate_limited` status includes a bounded `error` object with `code`, `message`, `retryable`, `retryAfterSeconds`, and `recommendedNextAction`.
+
+## Light Review Follow-ups
+
+Completed bundles include an evidence index and optional next actions for task-relevant report evidence and tracking JSON/CSV exports. Delivery labels describe the response, not evidence absence. Summarize whether the result was new or reused. Retain the baseline scan ID, date and execution region for a later explicitly requested fresh recheck; missing findings do not verify a fix. Offer remediation or the same review for another user-selected site only when useful. Light provides the optional certscore_launch_review, certscore_compare_scans and certscore_remediation_checklist prompts and certscore://project-instructions resource. certscore://example-report tests retrieval without creating a scan.
 
 ## Light Bundle Detail and Byte Budgets
 
@@ -442,7 +446,7 @@ Direct JSON endpoint: `GET /api/v2/scans/{scanId}/report-evidence?cursor={nextCu
 
 - `certscore_get_connection_status` - Read current authenticated connection mode, granted scopes, workspace access, rolling scan quota and recovery action. No scan ID is needed and no scan is created. Use this to diagnose read-only access or quota limits; reconnect only for expired, revoked or expanded access.
 
-- `certscore_get_report_evidence_page` - Use workpaper=tracking for the starting-page tracking inventory, privacy choices/notices and GPC evidence, with JSON and CSV downloads. The workpaper selector also applies to every continuation request. Otherwise retrieve scan report display content as paginated JSON, without internal diagnostic JSON downloads. The response also offers a single-file full JSON download; private JSON download links expire after five minutes and need no OAuth header; use pagination if your host blocks file downloads. Repeated display records use reportContentRef JSON Pointers. Includes evidence tables, full-site page and resource inventories, all retained additional-page form fields, form snapshot download references, and retained limitations. Snapshot images are downloaded separately from the returned URLs, with OAuth bearer authentication for workspace scans. Available on OAuth and Light. Start with scanId; follow pagination.nextCursor until complete. Pages share a snapshot; restart if it changes. Each entry has a JSON Pointer path and value; oversized strings use numbered parts. Export completion is not complete observation coverage. Use the concise scan bundle for summaries; use this tool for exhaustive report evidence. No new scan is created.
+- `certscore_get_report_evidence_page` - For a focused question, use section=consent, gpc, policy, tracking, transport or forms. This returns selected retained report sections plus shared scan, score, findings and coverage context. Preserve section on cursor continuation; unselected or not-returned fields are not evidence of absence. Use workpaper=tracking separately for the starting-page tracking inventory, privacy choices/notices and GPC evidence, with JSON and CSV downloads. Never combine section and workpaper. The workpaper selector also applies to every continuation request. Otherwise retrieve scan report display content as paginated JSON, without internal diagnostic JSON downloads. The response also offers a single-file full JSON download; private JSON download links expire after five minutes and need no OAuth header; use pagination if your host blocks file downloads. Repeated display records use reportContentRef JSON Pointers. Includes evidence tables, full-site page and resource inventories, all retained additional-page form fields, form snapshot download references, and retained limitations. Snapshot images are downloaded separately from the returned URLs, with OAuth bearer authentication for workspace scans. Available on OAuth and Light. Start with scanId; follow pagination.nextCursor until complete. Pages share a snapshot; restart if it changes. Each entry has a JSON Pointer path and value; oversized strings use numbered parts. Export completion is not complete observation coverage. Use the concise scan bundle for summaries; use this tool for exhaustive report evidence. No new scan is created.
 
 Report-evidence export pages contain up to 64 KB of JSON entries and cost one terminal-read unit on both hosted MCP and the API. Existing 120-unit/10-minute and daily limits remain enforced, including repeated cursors. Full evidence reports, findings exports and bundles remain four units. If a larger export reaches a limit, retain the last nextCursor, wait for Retry-After, and resume rather than restarting.
 
@@ -491,3 +495,8 @@ request counts when present. Keep the matched duration with those counts. Report
 Do Not Sell/Share control presence and retained notice passages as observations;
 do not infer opt-out effectiveness, notice adequacy, sale/sharing, or GPC honoring.
 Historical records remain unchanged and the score is the existing CertScore score.
+
+
+### Focused report sections (0.2.26)
+
+For a specific question, call `certscore_get_report_evidence_page` with the existing `scanId` and one `section`: `consent`, `gpc`, `policy`, `tracking`, `transport`, or `forms`. Preserve that selector with every returned cursor. Shared scan identity, score, findings and coverage remain unchanged. Selection happens before deduplication, so references stay inside the selected document. `selection.notReturnedFields` describes missing delivery, never verified absence. JSON download links preserve the selected section. Use `workpaper="tracking"` separately for the starting-page workpaper and CSV; never combine `section` and `workpaper`. No additional scan, model call or evidence capture is performed.

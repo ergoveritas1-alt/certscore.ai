@@ -20,7 +20,7 @@ Website Privacy Preflight connects Cursor to the existing no-auth CertScore.ai M
 - Authentication: none
 - Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page`
 
-MCP Light allows up to 50 new scans per day. The separate anonymous REST API allows 20 new scans per day. With the default `freshness=latest`, an eligible recent completed scan may be reused without consuming the MCP Light new-scan allowance.
+Light creation limits apply per session, requester IP and shared surface; see https://certscore.ai/developers/mcp#light-usage-limits. Eligible reuse does not consume the new-scan allowance. The separate anonymous REST API allows 20 new scans per day. With the default `freshness=latest`, an eligible recent completed scan may be reused without consuming the MCP Light new-scan allowance.
 
 Ask Cursor to run a Website Privacy Preflight for a public URL. The skill retains the scan ID, polls only while the scan is active, stops at a documented terminal state, retrieves a bounded findings bundle when usable, and reports evidence as observations rather than legal conclusions.
 

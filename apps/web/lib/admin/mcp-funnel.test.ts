@@ -82,3 +82,9 @@ test("session funnel uses mature cohorts, exact identity, ordered same-scan retr
     await db.query('rollback');
   } finally {await db.end();}
 });
+
+
+test("Light paged report evidence counts as result retrieval", () => {
+  assert.ok(MCP_FUNNEL_RESULT_TOOLS.includes("certscore_get_report_evidence_page"));
+  assert.ok(!(MCP_FUNNEL_RESULT_TOOLS as readonly string[]).includes("certscore_get_scan_status"));
+});

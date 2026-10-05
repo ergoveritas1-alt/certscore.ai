@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export const REPORT_EVIDENCE_SECTIONS = ["consent", "gpc", "policy", "tracking", "transport", "forms"] as const;
+export const reportEvidenceSectionSchema = z.enum(REPORT_EVIDENCE_SECTIONS);
+export type ReportEvidenceSection = z.infer<typeof reportEvidenceSectionSchema>;
+
 export const reportEvidencePageSchema = z.object({
   type: z.literal("certscore_report_evidence_page"),
   version: z.literal(1),
@@ -7,6 +11,13 @@ export const reportEvidencePageSchema = z.object({
   snapshot: z.string().regex(/^[a-f0-9]{64}$/),
   reportUrl: z.string(),
   workpaper: z.literal("tracking").optional(),
+  section: reportEvidenceSectionSchema.optional(),
+  selection: z.object({
+    version: z.literal("certscore.report-evidence-selection.v1"),
+    fields: z.array(z.string()).max(30),
+    notReturnedFields: z.array(z.string()).max(30),
+    interpretation: z.string(),
+  }).strict().optional(),
   download: z.object({
     url: z.string().url(),
     csvUrl: z.string().url().optional(),

@@ -10,6 +10,9 @@ test("tracking downloads use the download authorization path; invalid format com
   assert.deepEqual(parse("workpaper=tracking&format=csv"), { tracking: true, csv: true, download: true });
   assert.deepEqual(parse("workpaper=tracking&format=download"), { tracking: true, csv: false, download: true });
   for (const q of ["format=csv", "workpaper=other", "format=pdf", "format="]) assert.equal(parse(q), null);
+  assert.deepEqual(parse("section=gpc"), { tracking: false, csv: false, download: false, section: "gpc" });
+  assert.deepEqual(parse("section=policy&format=download"), { tracking: false, csv: false, download: true, section: "policy" });
+  for (const q of ["section=other", "section=", "section=gpc&section=consent", "section=gpc&workpaper=tracking", "section=forms&format=csv"]) assert.equal(parse(q), null);
 });
 
 test("a tracking cursor cannot be reused for a different report representation", () => {

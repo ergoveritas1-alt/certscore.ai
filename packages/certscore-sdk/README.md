@@ -344,3 +344,8 @@ Historical records can omit these fields. Controls are observed, not exercised;
 notice passages are not an adequacy assessment. Per-vendor sale, sharing and GPC
 honoring remain `not_assessed`. GPC observation and activity comparison do not
 change the existing California scoring policy.
+
+
+### Focused report evidence (0.2.14)
+
+Call `client.getReportEvidencePage(scanId, { section: "gpc" })` to retrieve selected retained report sections with shared scan, score, findings and coverage context. Supported sections are `consent`, `gpc`, `policy`, `tracking`, `transport`, and `forms`. Preserve `section` on every cursor request; it cannot be combined with `workpaper`. Missing or unselected fields do not establish absence. The returned JSON download also preserves selection. No scan is created.

@@ -189,22 +189,22 @@ test("MCP contracts expose the current scoped tool surface", () => {
   assert.ok(certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_pre_consent_cookies_trackers")?.inputSchema.maxRows);
 });
 
-test("Light tool descriptions are factual, bounded, and free of model-behavior instructions", () => {
+test("Light tool descriptions explain task selection and lifecycle within the supported workflow", () => {
   const scanSite = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_scan_site");
   const status = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_status");
   const bundle = certScoreMcpToolContracts.find((tool) => tool.name === "certscore_get_scan_bundle");
   assert.ok(scanSite);
   assert.ok(status);
   assert.ok(bundle);
-  assert.match(scanSite.description, /Creates a public-website privacy scan or reuses an eligible recent completed scan/i);
+  assert.match(scanSite.description, /Creates a privacy scan or reuses an eligible recent completed scan/i);
   assert.match(scanSite.description, /preConsentPreview/);
-  assert.match(scanSite.description, /preliminary data contains no final findings or score/i);
+  assert.match(scanSite.description, /preliminary preConsentPreview is not final findings or totals/i);
   assert.match(scanSite.description, /https:\/\/certscore\.ai\/developers\/mcp/);
   assert.match(status.description, /Returns lifecycle status for a stable CertScore scanId/i);
   assert.match(status.description, /retryAfterSeconds/);
   assert.match(status.description, /Preliminary observations are distinct from completed findings/i);
-  assert.match(bundle.description, /Returns the completed or completed-limited CertScore evidence bundle/i);
-  assert.match(bundle.description, /Accept and Reject results distinguish registered decisions from retained after-click facts/i);
+  assert.match(bundle.description, /Main answer for a completed or completed-limited scan/i);
+  assert.match(bundle.description, /Retained after-click facts remain distinct from registered decisions/i);
   assert.match(bundle.description, /absent or failed capture remains explicitly limited/i);
   for (const concept of [
     /pre-consent storage/,
@@ -217,8 +217,10 @@ test("Light tool descriptions are factual, bounded, and free of model-behavior i
     assert.match(scanSite.description, concept);
   }
   for (const tool of [scanSite, status, bundle]) {
-    assert.doesNotMatch(tool.description, /\b(?:never|must|should|do not|call|wait|continue polling|stop polling)\b/i);
-    assert.doesNotMatch(tool.description, /certscore_(?:scan_site|get_scan_status|get_scan_bundle)/);
+    assert.ok(tool.description.length < 1500);
+    for (const [name] of tool.description.matchAll(/certscore_[a-z_]+/g)) {
+      assert.ok(["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"].includes(name), `Unsupported Light follow-up: ${name}`);
+    }
     assert.doesNotMatch(tool.description, /ignore (?:all |any )?(?:previous|prior) instructions/i);
   }
 });

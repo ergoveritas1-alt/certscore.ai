@@ -1,6 +1,6 @@
 # CertScore.ai MCP Light submission packets
 
-Repository release preparation (September 26, 2026): hosted/npm MCP `0.2.25`, Claude package `0.2.25`, Cursor package `1.0.5`, and OpenAI package `2.0.1`. These packaged guides surface factual GPC observations and activity counts, distinguish path execution from consent confirmation, and retrieve tracking workpapers on request. Hosted/npm deployment is independent of directory publication. The dated submission and approval records below remain historical; these new plugin versions have not been submitted or approved through third-party portals.
+Current release preparation (October 5, 2026): hosted/npm MCP `0.2.26` adds focused report sections, Light review prompts and retained-example connection testing. Claude, Cursor and OpenAI package versions remain independent; no directory submission or approval is implied. The dated records below remain historical.
 
 September 14 update: production Light also exposes `certscore_get_report_evidence_page`. Earlier dated verification records below are historical, not current catalog assertions. Current catalog: https://certscore.ai/developers/mcp.
 
@@ -18,7 +18,7 @@ These packets are the canonical copy and status reference for external directory
 | Transport | Streamable HTTP |
 | Authentication | None |
 | Core workflow | `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle` |
-| Quota | 50 new scans/UTC day Light; reuse free |
+| Quota | Scoped daily and rolling limits; eligible reuse free; see https://certscore.ai/developers/mcp#light-usage-limits |
 | Website | `https://certscore.ai/mcp/light` |
 | Repository | `https://github.com/ergoveritas1-alt/certscore.ai` |
 | Documentation | `https://certscore.ai/developers/mcp` |
@@ -27,7 +27,7 @@ These packets are the canonical copy and status reference for external directory
 | Support | `https://certscore.ai/contact` and `support@certscore.ai` |
 | Light manifest | `packages/certscore-mcp/server-light.json` |
 
-Light permits 50 genuinely new scans per UTC day across requester and shared public-Light scopes, subject to a 5-new-scan rolling 10-minute limit across the same scopes. An eligible completed scan from the prior 24 hours may be reused; reuse does not consume the new-scan allowance.
+Light applies session, requester-IP and shared daily and rolling limits: https://certscore.ai/developers/mcp#light-usage-limits. An eligible completed scan from the prior 24 hours may be reused; reuse does not consume the new-scan allowance.
 
 Short description:
 
@@ -60,7 +60,7 @@ Paste-ready fields:
 | Server URL | `https://mcp.certscore.ai/mcp/light` |
 | Authentication | None |
 | Core workflow | `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle` |
-| Quota | 50 new scans/UTC day Light; reuse free |
+| Quota | Scoped daily and rolling limits; eligible reuse free; see https://certscore.ai/developers/mcp#light-usage-limits |
 | Website | `https://certscore.ai/mcp/light` |
 | Repository | `https://github.com/ergoveritas1-alt/certscore.ai` |
 
@@ -91,7 +91,7 @@ Core scan/status/bundle workflow (the catalog also includes certscore_get_report
 
 ## Quota and usage
 
-Quota: 50 new scans/UTC day Light; reuse free. The allowance applies across requester and shared public-Light scopes, with a rolling limit of 5 new scans per 10 minutes across the same scopes. Eligible completed scans from the prior 24 hours can be reused without consuming the new-scan allowance.
+Quota: Session, requester-IP and shared daily and rolling limits; see https://certscore.ai/developers/mcp#light-usage-limits. Eligible completed scans from the prior 24 hours can be reused without consuming the new-scan allowance.
 
 Start a scan, follow its status until terminal, then retrieve the scan bundle for retained privacy observations, findings, evidence links, and coverage limitations. Results are automated observations for human and agentic review, not legal advice, certification, or a compliance determination.
 
@@ -397,7 +397,7 @@ Product-owner decision required: either keep Docker out of scope, or separately 
 
 - Deploy the discovery update and 400 × 400 icon through the repository-controlled AWS workflow.
 - Confirm the public icon returns an image response and is exactly 400 × 400.
-- Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.25`.
+- Confirm `https://mcp.certscore.ai/healthz` reports hosted version `0.2.26`.
 - Confirm the Light endpoint requires no authentication and lists exactly `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, and `certscore_get_report_evidence_page`.
 - Confirm the Claude package is `0.2.25`, the Cursor package is `1.0.5`, and the OpenAI package is `2.0.1`.
 - Re-run the relevant official validator immediately before each submission.

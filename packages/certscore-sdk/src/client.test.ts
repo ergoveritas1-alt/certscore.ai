@@ -810,3 +810,17 @@ test("tracking workpaper retrieval forwards the workspace credential, selector a
     assert.equal(new Headers(mock.callDetails[0]!.headers).get("authorization"), "Bearer test-key");
   } finally { mock.restore(); }
 });
+
+test("focused evidence forwards section and cursor through the existing authorized read", async () => {
+  const mock = installFetch([{ status: 200, body: { type: "certscore_report_evidence_page", section: "gpc", entries: [] } }]);
+  try {
+    const page = await new CertScoreClient({ apiKey: "test-key" }).getReportEvidencePage("scan_123", { section: "gpc", cursor: "cursor" });
+    assert.equal(page.section, "gpc");
+    assert.equal(mock.calls.length, 1);
+    const url = new URL(mock.calls[0]!);
+    assert.equal(url.searchParams.get("section"), "gpc");
+    assert.equal(url.searchParams.get("cursor"), "cursor");
+    assert.equal(url.searchParams.has("workpaper"), false);
+    assert.equal(new Headers(mock.callDetails[0]!.headers).get("authorization"), "Bearer test-key");
+  } finally { mock.restore(); }
+});

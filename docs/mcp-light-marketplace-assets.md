@@ -6,14 +6,14 @@ These platform-neutral assets are the source copy for Cursor, Claude Code, Cline
 
 - Product: CertScore.ai MCP Light
 - Registry name: `ai.certscore/mcp-light`
-- Hosted MCP version: `0.2.25`
+- Hosted MCP version: `0.2.26`
 - Publisher and legal owner: CertScore.ai, LLC
 - Remote endpoint: `https://mcp.certscore.ai/mcp/light`
 - Transport: Streamable HTTP
 - Authentication: none
-- New-scan allowance: 50 genuinely new scans per UTC day across requester and shared public-Light scopes, plus a 5-new-scan rolling 10-minute limit
+- New-scan allowance: session, requester-IP and shared limits, with daily and rolling windows; current policy: https://certscore.ai/developers/mcp#light-usage-limits
 - Reuse: an eligible recent completed scan may be reused; reuse does not consume quota
-- Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
+- Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page`
 
 ## Short description
 

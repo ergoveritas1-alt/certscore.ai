@@ -1,4 +1,6 @@
 import { API_READ_RATE_POLICY_OPENAPI_EXTENSION } from "@website-signal-risk-scanner/shared";
+import { REPORT_EVIDENCE_SECTIONS } from "@certscore/api-contracts";
+import { LIGHT_MCP_NEW_SCAN_POLICY } from "../../../server/pulse/anonymous-scan-quota";
 import { CORE_MARKETING_POSITIONING } from "../../../lib/marketing/core-positioning";
 import {
   PUBLIC_CERTSCORE_MCP_CASK_VERSION,
@@ -147,10 +149,12 @@ const discoveryDocument = {
       transport: "streamable_http",
       endpoint: "https://mcp.certscore.ai/mcp/light",
       authentication: "none",
-      dailyNewScanLimit: 50,
-      limitKey: "requester_and_public_light_surface_utc_day",
-      rollingNewScanLimit: 5,
-      rollingWindowSeconds: 600,
+      dailyNewScanLimit: LIGHT_MCP_NEW_SCAN_POLICY.surface.dailyLimit,
+      limitKey: "public_light_surface_utc_day_with_session_and_ip_limits",
+      rollingNewScanLimit: LIGHT_MCP_NEW_SCAN_POLICY.surface.burstLimit,
+      rollingWindowSeconds: LIGHT_MCP_NEW_SCAN_POLICY.burstWindowSeconds,
+      newScanPolicy: LIGHT_MCP_NEW_SCAN_POLICY,
+      quotaDocumentation: "https://certscore.ai/developers/mcp#light-usage-limits",
       recentReuseDoesNotConsumeQuota: true,
       privacyUrl: "https://certscore.ai/privacy",
       termsUrl: "https://certscore.ai/terms",
@@ -159,7 +163,10 @@ const discoveryDocument = {
       darkBackgroundIconUrl: "https://certscore.ai/certscore-mark-light.png",
       clineMarketplaceIconUrl: "https://certscore.ai/images/mcp-directory/certscore-mcp-light-cline-400.png",
       version: PUBLIC_CERTSCORE_MCP_VERSION,
-      tools: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle"],
+      tools: ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"],
+      prompts: ["certscore_launch_review", "certscore_compare_scans", "certscore_remediation_checklist"],
+      resources: ["certscore://project-instructions", "certscore://example-report"],
+      reportEvidenceSections: [...REPORT_EVIDENCE_SECTIONS],
       intendedUse: "Frictionless no-account public website scans for new and low-volume agents."
     },
     anonymous: {

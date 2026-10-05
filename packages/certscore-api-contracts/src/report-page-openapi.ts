@@ -36,6 +36,50 @@ export const reportEvidencePageOpenApi = {
       "const": "tracking",
       "type": "string"
     },
+    "section": {
+      "type": "string",
+      "enum": [
+        "consent",
+        "gpc",
+        "policy",
+        "tracking",
+        "transport",
+        "forms"
+      ]
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "fields",
+        "notReturnedFields",
+        "interpretation"
+      ],
+      "properties": {
+        "version": {
+          "const": "certscore.report-evidence-selection.v1",
+          "type": "string"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30
+        },
+        "notReturnedFields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30
+        },
+        "interpretation": {
+          "type": "string"
+        }
+      }
+    },
     "download": {
       "type": "object",
       "additionalProperties": false,

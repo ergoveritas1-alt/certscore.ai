@@ -1,3 +1,4 @@
+import { MCP_LIGHT_QUOTA_SUMMARY } from "../../../lib/mcp-light-quota-copy";
 import { PUBLIC_CERTSCORE_MCP_VERSION } from "../../../lib/public-integration-versions";
 import { MCP_OAUTH_ELIGIBILITY, MCP_OAUTH_AUTHORIZATION, MCP_OAUTH_RECONNECT } from "../../../lib/mcp-public-copy";
 import type { Metadata } from "next";
@@ -12,9 +13,8 @@ const description =
 const lightEndpoint = "https://mcp.certscore.ai/mcp/light";
 const openAiMcpDemoPath = "/videos/openai-mcp-certscore-demo.mp4";
 const codexSetupCommand = "codex mcp add certscore --url https://mcp.certscore.ai/mcp/light";
-const firstRunPrompt = "Use CertScore to scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. Poll only while the scan is active, then summarize the returned findings, evidence links, scan region and time, coverage limits, and report URL. Treat any pre-consent preview as preliminary and the results as observations, not legal conclusions.";
-const detailedFirstRunPrompt = "Scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html. If certscore_scan_site includes preConsentPreview, treat it as a partial preview and continue the workflow. Distinguish captured totals from bounded returned identities; use trackingVendorCount for non-operational tracking vendors and keep operationalVendors separate. Do not compare the compatibility preview trackerCount with the completed inventory's broader trackerCount. Never report preview counts as final totals. If certscore_scan_site returns a queued, running, or finalizing result, retain the returned scanId and poll certscore_get_scan_status using scanId only. If certscore_scan_site returns a retryable error without a scanId, wait for retryAfterSeconds and retry certscore_scan_site; do not call certscore_get_scan_status until a scanId exists. Once the scan reaches a terminal status, call certscore_get_scan_bundle with detail=findings and maxBytes=8000. Summarize whether the result was new or reused, the score, risk level, findings, evidence links, coverage limitations, and report URL. Explain truncation or omitted sections when present. Treat results as automated public-web observations, not legal conclusions, certifications, or compliance determinations.";
-const verificationPrompt = "List the available CertScore tools and confirm that certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, and certscore_get_report_evidence_page are available. Then scan https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html and report whether the result was new or reused.";
+const firstRunPrompt = "Review https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html for website privacy risks. Explain the main findings, supporting evidence, coverage limits, and what to inspect next.";
+const verificationPrompt = "List the available CertScore tools. Read certscore://example-report if resources are supported; otherwise call certscore_get_scan_bundle with scanId=9ba99a8c-b1ad-44c1-985f-92cef760ab40. Report the retained example’s original date and coverage. If unavailable, report that; do not create a new scan to test the connection.";
 const agentDisclaimer = "CertScore results are automated observations from a public-web scan. No-go, not-observed, and limited-coverage results are not proof of compliance, absence of risk, or legal status. Review the retained evidence and applicable context before relying on a finding.";
 
 export const metadata: Metadata = createPageMetadata({
@@ -39,19 +39,19 @@ export default function DeveloperMcpPage() {
         <section aria-labelledby="route-choice" className="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">Start here</p>
           <h2 className="mt-2 text-3xl font-semibold text-slate-950" id="route-choice">Which route should I choose?</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Choose Hosted OAuth to scan public websites, retrieve reports and access previous scans in your workspace. Start the connection in your MCP client and follow its authorization prompts.</p>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">Start with Light MCP to review a public website without an account, API key or OAuth. Choose Hosted OAuth when you need private workspace reports, history or a dedicated allowance.</p>
           <div className="mt-6 grid gap-5 lg:grid-cols-2">
             <article className="rounded-xl border-2 border-sky-400 bg-sky-50 p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Recommended for agents</p>
-              <h3 className="mt-2 text-xl font-semibold text-slate-950">CertScore Hosted OAuth — scan and reports</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-700">Scan public websites, retrieve reports, access previous scans and check your connection through your authorized workspace.</p>
-              <a className="mt-5 inline-flex rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800" href="#hosted-oauth-start">Connect Hosted OAuth</a>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-800">Public website reviews</p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950">Light MCP</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-700">Scan public sites, inspect retained evidence, export inventories and prepare remediation checklists. No account required; scoped usage limits apply.</p>
+              <Link className="mt-5 inline-flex rounded-md bg-sky-700 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-800" href="/mcp/light">Start with Light MCP</Link>
             </article>
             <article className="rounded-xl border border-slate-200 bg-white p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Account-free preview</p>
-              <h3 className="mt-2 text-xl font-semibold text-slate-950">Light MCP</h3>
-              <p className="mt-3 text-sm leading-7 text-slate-600">Public scanning and report retrieval with a shared limited allowance. No account or access to private workspace scans.</p>
-              <Link className="mt-5 inline-flex rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="/mcp/light">Try Light MCP</Link>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Workspace access</p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950">CertScore Hosted OAuth — scan and reports</h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600">Access previous scans and private reports through your authorized workspace, with its existing allowance.</p>
+              <a className="mt-5 inline-flex rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-sky-400 hover:text-sky-800" href="#hosted-oauth-start">Connect Hosted OAuth</a>
             </article>
           </div>
           <a
@@ -107,7 +107,7 @@ export default function DeveloperMcpPage() {
         </section>
 
         <p className="text-sm text-sky-700"><Link href="/releases/mcp-hosted-oauth">New: connect your agent to your CertScore.ai workspace</Link></p>
-        <Section id="hosted-oauth-start" eyebrow="Recommended setup" title="CertScore Hosted OAuth — scan and reports">
+        <Section id="hosted-oauth-start" eyebrow="Workspace setup" title="CertScore Hosted OAuth — scan and reports">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">Connect your agent to <code>https://mcp.certscore.ai/mcp</code> to scan public websites, retrieve reports and access previous scans. {MCP_OAUTH_ELIGIBILITY}</p>
           <ol className="mt-4 list-decimal space-y-2 pl-6 text-sm leading-7 text-slate-600">
             <li>Add the Hosted OAuth endpoint in your agent’s connectors settings. Use the Cursor configuration below when connecting Cursor.</li>
@@ -120,7 +120,7 @@ export default function DeveloperMcpPage() {
         <Section id="agent-workflows" eyebrow="Use again" title="Reusable agent workflows">
           <p className="text-sm leading-7 text-slate-600">Hosts that support MCP prompts and resources can discover these alongside the scan/report tools. If your host displays tools only, paste the instructions below into its chat.</p>
           <h3 className="mt-4 font-semibold">Optional project instructions</h3>
-          <CodeBlock>{`When I request a launch or privacy review, use CertScore Hosted OAuth for the public URL I provide. Reuse a suitable retained result unless fresh observations are needed. Poll active scans at the returned interval, then summarize the bundle with findings, coverage and report link. Do not run unsolicited or scheduled scans.`}</CodeBlock>
+          <CodeBlock>{`When I request a launch, vendor or privacy review, use CertScore MCP Light for the public URL I provide. Use Hosted OAuth when workspace history or private reports are needed. Reuse a suitable retained result unless I request fresh observations. Poll active scans at the returned interval, then summarize the bundle with findings, coverage and report link. Inspect task-relevant workpapers when needed. Do not run unsolicited or scheduled scans.`}</CodeBlock>
           <p className="mt-3 text-sm text-slate-600">Save this in your project instructions only if you want that workflow. MCP resource: <code>certscore://project-instructions</code>; prompt: <code>certscore_launch_review</code>.</p>
           <h3 className="mt-4 font-semibold">Compare retained scans</h3>
           <CodeBlock>{`Compare CertScore scan [BEFORE_SCAN_ID] with [AFTER_SCAN_ID]. Fetch both bundles without creating a scan. Verify target, region, timestamps and coverage match. Summarize newly returned, persistent and no-longer-returned finding IDs. A finding missing from a later scan is not proof of resolution. Include both report links and limitations.`}</CodeBlock>
@@ -148,8 +148,8 @@ export default function DeveloperMcpPage() {
               </colgroup>
               <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr><th className="px-4 py-3 font-semibold">Route</th><th className="px-4 py-3 font-semibold">Setup method</th><th className="px-4 py-3 font-semibold">Authentication</th><th className="px-4 py-3 font-semibold">Account</th><th className="px-4 py-3 font-semibold">Quota</th><th className="px-4 py-3 font-semibold">Available tools</th><th className="px-4 py-3 font-semibold">Intended user</th><th className="px-4 py-3 font-semibold">Website / access limits</th><th className="px-4 py-3 font-semibold">Upgrade path</th></tr></thead>
               <tbody className="divide-y divide-slate-100 text-slate-600">
-                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">Up to 50 new scans per UTC day across Light and 5 per rolling 10 minutes; eligible reuse is free</td><td className="px-4 py-3">certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, certscore_get_report_evidence_page</td><td className="px-4 py-3">First-time users, testing, and discovery</td><td className="px-4 py-3">Public HTTP or HTTPS websites; public reports only</td><td className="px-4 py-3">Authenticate for volume, history, teams, or advanced tools</td></tr>
-                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Hosted MCP — OAuth</td><td className="px-4 py-3">Connect the hosted endpoint from an OAuth-capable client</td><td className="px-4 py-3">OAuth authorization code with PKCE</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on access</td><td className="px-4 py-3">Scan/report tools, previous scans and connection status</td><td className="px-4 py-3">Recommended for agents, individuals and teams</td><td className="px-4 py-3">Active workspaces can start scans within their existing allowance</td><td className="px-4 py-3">Registered client and active workspace membership required; usage limits apply</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Light MCP — no authentication</td><td className="px-4 py-3">One Codex command or remote Streamable HTTP URL</td><td className="px-4 py-3">None</td><td className="px-4 py-3">Not required</td><td className="px-4 py-3">{MCP_LIGHT_QUOTA_SUMMARY}</td><td className="px-4 py-3">certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle, certscore_get_report_evidence_page</td><td className="px-4 py-3">Agents reviewing public sites without an account</td><td className="px-4 py-3">Public HTTP or HTTPS websites; public reports only</td><td className="px-4 py-3">Authenticate for volume, history, teams, or advanced tools</td></tr>
+                <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Hosted MCP — OAuth</td><td className="px-4 py-3">Connect the hosted endpoint from an OAuth-capable client</td><td className="px-4 py-3">OAuth authorization code with PKCE</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on access</td><td className="px-4 py-3">Scan/report tools, previous scans and connection status</td><td className="px-4 py-3">Workspace history, teams and higher volume</td><td className="px-4 py-3">Active workspaces can start scans within their existing allowance</td><td className="px-4 py-3">Registered client and active workspace membership required; usage limits apply</td></tr>
                 <tr><td className="min-w-56 px-4 py-3 font-semibold text-slate-900">Local MCP — scoped API key</td><td className="px-4 py-3">Install and run the local stdio server</td><td className="px-4 py-3">Scoped API key in the client environment</td><td className="px-4 py-3">Required</td><td className="px-4 py-3">Higher-volume allowance based on key access</td><td className="px-4 py-3">Tools permitted by the key scopes</td><td className="px-4 py-3">Backend, local, and controlled automation</td><td className="px-4 py-3">Protect and rotate keys; scan creation is support-gated</td><td className="px-4 py-3">Request more scopes, tools, or volume</td></tr>
               </tbody>
             </table>
@@ -214,7 +214,7 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
           <h3 className="mt-6 font-semibold text-slate-950">Codex setup</h3>
           <CodeBlock>{codexSetupCommand}</CodeBlock>
           <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
-            Light allows up to 50 genuinely new scans per UTC day across the public Light surface and 5 per rolling 10 minutes. Reused eligible results do not consume quota.
+            <span id="light-usage-limits">{MCP_LIGHT_QUOTA_SUMMARY}</span>
           </p>
         </Section>
 
@@ -225,9 +225,7 @@ Tools: certscore_scan_site, certscore_get_scan_status, certscore_get_scan_bundle
             canary intentionally contains test signals, so its findings are useful for exercising the API rather than evaluating a production site.
           </p>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">{agentDisclaimer}</p>
-          <h3 className="mt-5 font-semibold text-slate-950">Detailed prompt for tool-driven clients</h3>
-          <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">Use this version when the agent needs explicit rules for previews, retryable responses, and bounded bundle output.</p>
-          <CodeBlock>{detailedFirstRunPrompt}</CodeBlock>
+          <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600">Light supplies the scan workflow in its tool descriptions and optional <code>certscore://project-instructions</code> resource. The completed bundle offers an evidence index and relevant follow-ups. Summarize whether the result was new or reused. Ask for a remediation checklist, tracking export, another user-selected site, or a later fresh recheck using the retained baseline scan ID.</p>
         </Section>
 
         <Section eyebrow="Choose a tool" title="Match each request to the retained result">
@@ -262,6 +260,7 @@ For CertScore scan [SCAN_ID], retrieve the report evidence supporting the named 
         </Section>
 
         <Section eyebrow="JSON evidence" title="Retrieve every field of the scan report">
+          <p className="mb-3 text-sm leading-7 text-slate-600">For a focused question, use the existing scan ID with <code>section=consent</code>, <code>gpc</code>, <code>policy</code>, <code>tracking</code>, <code>transport</code>, or <code>forms</code>. Keep the selected section with every cursor. Shared scan, score, findings and coverage context stays included; unselected or not-returned fields do not establish absence. Use <code>workpaper=tracking</code> separately for starting-page JSON/CSV exports.</p>
           <p className="text-sm leading-7 text-slate-600">OAuth and Light both expose <code>certscore_get_report_evidence_page</code>. Start with <code>scanId</code>, then pass <code>pagination.nextCursor</code> as <code>cursor</code> until <code>pagination.complete</code> is true. Entries carry JSON Pointer paths and values; oversized strings have numbered parts. Keep one snapshot and restart if it changes. Use the scan bundle for concise summaries.</p>
           <p className="mt-3 text-sm leading-7 text-slate-600">A complete export preserves the report’s findings, evidence tables and limitations; it does not mean the scan observed everything. Full-site exports also include additional-page forms and fields, page and resource inventories, services, and available snapshot download URLs. Full-report downloads may use confidential, short-lived report-only links returned by the tool; do not publish or log those links or attach OAuth credentials to them. If the host cannot download a file, continue via nextCursor. Separate workspace image downloads require the OAuth bearer credential. Raw artifacts outside the report and inline image bytes are excluded. Light reads eligible public scans; OAuth also reads reports in the authorized workspace.</p>
         </Section>
@@ -276,7 +275,7 @@ For CertScore scan [SCAN_ID], retrieve the report evidence supporting the named 
             <li>Stop polling at a terminal status, then call <code>certscore_get_scan_bundle</code>.</li>
             <li>Use <code>detail=findings</code> for a compact finding review.</li>
             <li>Use <code>detail=evidence</code> for evidence digests and references.</li>
-            <li>If truncated, follow <code>recommendedNextAction</code> or increase <code>maxBytes</code>.</li>
+            <li>If truncated, inspect <code>recommendedNextAction</code>. Increase <code>maxBytes</code> within the Light ceiling only when needed, or page through retained report evidence.</li>
             <li>Summarize findings together with coverage limitations and the report URL.</li>
           </ol>
           <CodeBlock>{`certscore_scan_site
@@ -305,9 +304,7 @@ full      maxBytes=12000 or higher`}</CodeBlock>
         <Section eyebrow="Verify" title="Confirm the Light connection">
           <CodeBlock>{verificationPrompt}</CodeBlock>
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
-            Success means the tool list contains the four Light tools, no authorization page appears, and
-            <code className="mx-1 rounded bg-white px-1">certscore_scan_site</code> returns a stable <code>scanId</code> plus an explicit
-            new-or-reused decision. An eligible reused result reports that quota was not consumed.
+            Connection verification succeeds when the four Light tools are listed without an authorization page and the retained example can be retrieved with its original date and coverage. If the historical example is unavailable, report that without starting a replacement scan.
           </p>
         </Section>
 

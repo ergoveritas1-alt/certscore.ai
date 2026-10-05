@@ -1,6 +1,6 @@
 export const MCP_FUNNEL_FOLLOW_UP_MINUTES = [10, 30, 60] as const;
 export const MCP_FUNNEL_RESULT_TOOLS = [
-  "certscore_get_scan_bundle", "certscore_get_scan", "certscore_get_report", "certscore_get_evidence",
+  "certscore_get_report_evidence_page", "certscore_get_scan_bundle", "certscore_get_scan", "certscore_get_report", "certscore_get_evidence",
   "certscore_export_findings", "certscore_list_findings", "certscore_explain_finding",
   "certscore_get_pre_consent_cookies_trackers", "certscore_get_latest_domain_scan",
   "certscore_get_latest_domain_pre_consent_cookies_trackers",

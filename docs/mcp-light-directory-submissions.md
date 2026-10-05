@@ -1,6 +1,6 @@
 # CertScore.ai MCP Light directory submission copy
 
-Repository release preparation (September 26, 2026): hosted/npm MCP `0.2.25`, Claude package `0.2.25`, Cursor package `1.0.5`, and OpenAI package `2.0.1`. These packaged guides surface factual GPC observations and activity counts, distinguish path execution from consent confirmation, and retrieve tracking workpapers on request. Hosted/npm deployment is independent of directory publication. The dated submission and approval records below remain historical; these new plugin versions have not been submitted or approved through third-party portals.
+Current release preparation (October 5, 2026): hosted/npm MCP `0.2.26` adds focused report sections, Light review prompts and retained-example connection testing. Claude, Cursor and OpenAI package versions remain independent; no directory submission or approval is implied. The dated records below remain historical.
 
 Use MCP Light as the recommended discovery entry in community directories: `CertScore.ai MCP Light`, registry name `ai.certscore/mcp-light`. Do not list the authenticated MCP as a second name for this product. Mention it only as an optional higher-volume CertScore service where a directory permits upgrade information.
 
@@ -20,7 +20,7 @@ CertScore.ai MCP Light is a free, no-auth website privacy scanner and cookie che
 
 Give CertScore.ai a public website to collect structured, evidence-backed privacy findings for launch review, vendor review, audit triage, or human compliance review. Results include a CertScore score and supporting evidence for human and agentic review; they are not legal advice, certification, or a compliance determination.
 
-No account, API key, bearer token, browser login, or OAuth is required. Light permits up to 50 genuinely new scans per UTC day across both the requester and the shared public Light surface, subject to a 5-new-scan rolling 10-minute requester and shared-surface limit. An eligible completed scan from the prior 24 hours may be reused; reuse does not consume the new-scan allowance.
+No account, API key, bearer token, browser login, or OAuth is required. Light applies session, requester-IP and shared new-scan limits. See the current policy at https://certscore.ai/developers/mcp#light-usage-limits. Eligible reuse does not consume the new-scan allowance.
 
 ## Links
 
@@ -48,8 +48,8 @@ Privacy; Developer Tools; Website Analysis; Security; Compliance Review; Agent T
 - Transport: Streamable HTTP
 - URL: `https://mcp.certscore.ai/mcp/light`
 - Authentication: none
-- Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
-- Quota: 50 new scans/UTC day Light; reuse free
+- Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page`
+- Quota: Scoped daily and rolling limits; eligible reuse free; see https://certscore.ai/developers/mcp#light-usage-limits
 - Manifest: `packages/certscore-mcp/server-light.json`
 
 The separate `ai.certscore/mcp` manifest and `https://mcp.certscore.ai/mcp` endpoint describe the full authenticated/local CertScore MCP. It remains active and must not be deprecated yet. Do not substitute those values into a Light listing.

@@ -9,8 +9,8 @@ CertScore.ai MCP Light is a hosted Streamable HTTP MCP server for scanning publi
 - Endpoint: `https://mcp.certscore.ai/mcp/light`
 - Transport: Streamable HTTP
 - Authentication: none
-- Version: `0.2.25`
-- Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`
+- Version: `0.2.26`
+- Tools: `certscore_scan_site`, `certscore_get_scan_status`, `certscore_get_scan_bundle`, `certscore_get_report_evidence_page`
 
 Do not substitute `https://mcp.certscore.ai/mcp`, which is the authenticated CertScore MCP service.
 
@@ -83,7 +83,7 @@ Known-good prompt:
 
 > Use CertScore.ai MCP Light to check https://example.com. Prefer a recent reusable result, follow returned retry guidance until terminal, then summarize the evidence-backed privacy findings and limitations. Do not present the result as legal advice, certification, or a compliance determination.
 
-Light permits 50 genuinely new scans per UTC day across requester and shared public-Light scopes, subject to a 5-new-scan rolling 10-minute limit. An eligible completed scan from the prior 24 hours may be reused; reuse does not consume the new-scan allowance.
+Light applies session, requester-IP and shared daily and rolling limits: https://certscore.ai/developers/mcp#light-usage-limits. An eligible completed scan from the prior 24 hours may be reused; reuse does not consume the new-scan allowance.
 
 Results are automated public-web observations for human and agentic review; they are not legal advice, certification, or a compliance determination.
 

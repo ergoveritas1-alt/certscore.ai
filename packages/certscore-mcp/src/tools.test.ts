@@ -1079,15 +1079,11 @@ test("scan bundle text exposes compact row evidence, neutral score terminology, 
     }
   } as any);
   const text = scanBundleText(bundle);
-  const responseContract = text.split("\n")[0] ?? "";
-
-  assert.match(responseContract, /^Response contract: Report only observed CertScore evidence and CertScore classifications\./);
-  assert.ok(text.indexOf(responseContract) < text.indexOf("CertScore score=56"));
-  assert.ok(text.indexOf(responseContract) < text.indexOf("Canonical projected findings:"));
-  assert.match(responseContract, /criticality, priority, and confidence are CertScore metadata/i);
-  assert.match(responseContract, /regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination/i);
-  assert.match(responseContract, /Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline/i);
-  assert.match(responseContract, /Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing/i);
+  assert.match(text.split("\n")[0] ?? "", /^CertScore scan bundle/);
+  assert.match(text, /Report only observed CertScore evidence and persisted CertScore classifications/);
+  assert.match(text, /not regulatory criticality or legal exposure/i);
+  assert.match(text, /Without corresponding captured post-action evidence, do not infer/i);
+  assert.match(text, /Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone/i);
   assert.match(text, /CertScore score=56/);
   assert.doesNotMatch(text, /compliance score/i);
   assert.match(text, /retrieval mode=scan_id_lookup/i);
@@ -1280,44 +1276,41 @@ test("terminal failed status keeps preliminary preview as diagnostic context wit
   assert.equal(value.preConsentPreview.observationOnlyDisclaimer, "Preliminary passive observations only; not findings, a score, or a final result.");
 });
 
-test("successful bundle offers an optional attributed trial path without changing Light authentication", () => {
-  const text = scanBundleText({
-    status: "completed",
-    scanId: "scan_trial_cta",
-    domain: "example.test",
-    score: 88,
-    findings: [],
-    findingsMetadata: { total: 0, returned: 0 },
-  }, { lightTrialCta: true });
-
-  assert.match(text, /Optional user follow-up/);
-  assert.match(text, /7-day CertScore trial/);
-  assert.match(text, /utm_source=mcp_light/);
-  assert.match(text, /https:\/\/mcp\.certscore\.ai\/mcp after account authorization/);
-  assert.match(text, /Light remains no-auth/);
+test("Light bundle leads with findings, retains useful actions and omits a universal trial pitch", () => {
+  const nextStep = "Inspect the retained cookie identity and timing, distinguish a directly observed write from snapshot presence, then confirm the vendor purpose and manually verify the configured consent behavior before proposing a change.";
+  const text = scanBundleText({ status: "completed", scanId: "retained", domain: "example.test", score: 88,
+    findings: [{ id: "retained-finding", label: "Storage review", plainEnglish: "Storage was observed.", nextStep }],
+    findingsMetadata: { total: 1, returned: 1 },
+  }, { toolProfile: "light" });
+  assert.match(text, /^CertScore scan bundle/);
+  assert.ok(text.includes(nextStep));
+  assert.ok(text.indexOf("retained-finding") < text.indexOf("Evidence index"));
+  assert.doesNotMatch(text, /7-day CertScore trial|utm_source=mcp_light|certscore_get_pre_consent_cookies_trackers/);
+  assert.match(text, /certscore_get_report_evidence_page/);
+  assert.ok(text.length <= 8000);
 });
 
-test("successful bundle reserves the optional trial path when detailed findings fill TextContent", () => {
-  const text = scanBundleText({
-    status: "completed",
-    scanId: "scan_trial_cta_full",
-    domain: "example.test",
-    score: 41,
-    findings: Array.from({ length: 40 }, (_, index) => ({
-      id: `finding_${index}`,
-      title: `Finding ${index}`,
-      summary: "Detailed retained observation. ".repeat(80),
-      priority: "high",
-      confidence: "good",
-    })),
-    findingsMetadata: { total: 40, returned: 40 },
-    preConsentCookiesTrackers: { returned: 0, total: 8, truncated: true, rows: [] },
-  }, { lightTrialCta: true });
+test("bundle retains complete practical next steps and navigation within the output contract", () => {
+  const nextStep = "Inspect the retained cookie identity and timing, distinguish a directly observed write from snapshot presence, then confirm the vendor purpose and manually verify the configured consent behavior before proposing a change.";
+  const finding = { ...publicFinding("retained-finding"), nextStep };
+  const bundle = buildScanBundle({ detail: "findings", maxBytes: 25000,
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [finding] }, report,
+    scan: { type: "certscore_scan", scanId: "scan_123", domain: "example.com", status: "completed", score: 72 } as any,
+  });
+  assert.equal(bundle.findings[0]?.nextStep, nextStep);
+  assert.equal(bundle.reviewNavigation?.baseline.scanId, "scan_123");
+  assert.ok(mcpScanBundleOutputSchema.safeParse(bundle).success);
+  assert.ok(bundle.mcpMetadata.actualBytes <= 25000);
+});
 
-  assert.ok(text.length <= 8_000);
-  assert.match(text, /7-day CertScore trial/);
-  assert.match(text, /OAuth-capable clients/);
-  assert.match(text, /Light remains no-auth/);
+test("Light bundle preserves bounded findings and makes text omissions explicit", () => {
+  const text = scanBundleText({ status: "completed", scanId: "retained", domain: "example.test",
+    findings: Array.from({ length: 40 }, (_, i) => ({ id: `finding_${i}`, label: `Finding ${i}`, plainEnglish: "Retained observation. ".repeat(30), nextStep: "Review the evidence. ".repeat(30) })),
+    findingsMetadata: { total: 40, returned: 40 },
+  }, { toolProfile: "light" });
+  assert.ok(text.length <= 8000);
+  assert.match(text, /additional returned finding.*omitted from TextContent/);
+  assert.doesNotMatch(text, /7-day CertScore trial/);
 });
 
 test("scan bundle surfaces canonical post-Accept findings and observation metadata", () => {
@@ -1607,7 +1600,7 @@ test("scan bundle text remains bounded while preserving interpretation guidance"
   const text = scanBundleText(bundle);
 
   assert.ok(text.length <= 8_000);
-  assert.match(text.split("\n")[0] ?? "", /^Response contract:/);
+  assert.match(text.split("\n")[0] ?? "", /^CertScore scan bundle/);
   assert.match(text, /additional returned pre-consent rows? .*omitted from TextContent/i);
   assert.match(text, /automated public-web observations for human and agentic review/i);
   assert.match(text, /Omit after-action discussion when no corresponding control or verified action evidence was returned/i);

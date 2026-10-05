@@ -1,5 +1,6 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { transferResponseCapture } from './response-capture.js';
+import { bundleReviewNavigation } from './review-navigation.js';
 
 const record = (value: unknown): Record<string, any> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
 const string = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value.slice(0, 1000) : null;
@@ -22,7 +23,7 @@ const toolPurposes: Record<string, string> = {
 };
 
 /** Presentation metadata only: never derive findings, eligibility or quota from observations. */
-export function withResponseGuidance(tool: string, input: unknown, result: CallToolResult, now = Date.now()): CallToolResult {
+export function withResponseGuidance(tool: string, input: unknown, result: CallToolResult, now = Date.now(), options: { toolProfile?: 'full' | 'light' } = {}): CallToolResult {
   if (result.isError || !result.structuredContent) return result;
   const args = record(input), payload = record(result.structuredContent);
   const scan = payload.scan === null ? {} : Object.keys(record(payload.scan)).length ? record(payload.scan) : payload;
@@ -45,7 +46,7 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
   else if (noGo) nextAction = { tool: null, arguments: null, instruction: string(scan.recommendedNextAction) ?? 'Review the retained no-go reason. Do not continue polling this scan.' };
   else if (scanId && active) nextAction = { tool: 'certscore_get_scan_status', arguments: { scanId }, retryAfterSeconds: scan.retryAfterSeconds ?? null, instruction: 'Wait for the returned polling interval before checking status.' };
   else if (scanId && ready && payload.resultDisposition !== 'no_go' && ['certscore_scan_site', 'certscore_get_scan', 'certscore_get_scan_status', 'certscore_get_latest_domain_scan'].includes(tool)) nextAction = { tool: 'certscore_get_scan_bundle', arguments: { scanId }, instruction: 'Fetch the report bundle to summarize this completed scan.' };
-  else if (tool === 'certscore_get_report_evidence_page' && typeof pagination.nextCursor === 'string') nextAction = { tool, arguments: { scanId, cursor: pagination.nextCursor, ...(payload.workpaper === "tracking" ? { workpaper: "tracking" } : {}) }, instruction: 'Fetch the next report evidence page. Keep the same snapshot until export is complete.' };
+  else if (tool === 'certscore_get_report_evidence_page' && typeof pagination.nextCursor === 'string') nextAction = { tool, arguments: { scanId, cursor: pagination.nextCursor, ...(payload.workpaper === "tracking" ? { workpaper: "tracking" } : {}), ...(payload.section ? { section: payload.section } : {}) }, instruction: 'Fetch the next report evidence page. Keep the same snapshot and selector until export is complete.' };
   else if (tool === 'certscore_list_findings' && nextOffset !== null) nextAction = { tool, arguments: { scanId, offset: nextOffset, limit: pagination.limit }, instruction: 'Fetch the next page if more findings are needed.' };
   else if (payload.scan === null) nextAction = { tool: 'certscore_scan_site', arguments: null, instruction: 'No eligible retained scan was returned. Start a scan only if requested, using the intended public website URL.' };
   else if (['failed', 'cancelled', 'canceled', 'no_go'].includes(status ?? '') || payload.resultDisposition === 'no_go') nextAction = { tool: null, arguments: null, instruction: string(payload.recommendedNextAction) ?? 'Review the terminal error or no-go reason. Do not continue polling this scan.' };
@@ -58,6 +59,12 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
   const findingIds = (Array.isArray(payload.findings) ? payload.findings : Array.isArray(payload.topFindings) ? payload.topFindings : [])
     .slice(0, 20).map((item: unknown) => string(record(item).id)).filter(Boolean);
   if (tool === 'certscore_explain_finding' && string(payload.id)) findingIds.push(string(payload.id));
+  const navigation = tool === 'certscore_get_scan_bundle' ? bundleReviewNavigation(payload) : null;
+  const optionalFollowUps = options.toolProfile === 'light' ? navigation?.nextActions ?? []
+    : !noGo && ready && scanId && findingIds.length ? [
+      { tool: 'certscore_explain_finding', arguments: { scanId, findingId: findingIds[0] }, reason: 'Explain a returned finding using retained evidence.' },
+      { prompt: 'certscore_remediation_checklist', arguments: { scanId }, reason: 'Prepare a proposed checklist; do not claim remediation is verified.' }
+    ] : [];
   const guidance = {
     version: 'certscore.mcp-response-guidance.v1', tool, purpose: toolPurposes[tool] ?? null, scanId, status,
     score: typeof scan.score === 'number' ? scan.score : typeof summary.score === 'number' ? summary.score : null,
@@ -71,17 +78,15 @@ export function withResponseGuidance(tool: string, input: unknown, result: CallT
     returnedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(record(payload.preConsentCookiesTrackers).rows) ? payload.preConsentCookiesTrackers.rows.length : null,
     evidenceLimits: { truncated: record(payload.evidenceMetadata).truncated ?? record(payload.mcpMetadata).truncated ?? null, total: record(payload.evidenceMetadata).total ?? null, returned: record(payload.evidenceMetadata).returned ?? null },
     pagination: Object.keys(pagination).length ? { ...pagination, nextOffset, complete: !hasMore } : null,
-    optionalFollowUps: !noGo && !active && scanId && findingIds.length ? [
-      { tool: 'certscore_explain_finding', arguments: { scanId, findingId: findingIds[0] }, reason: 'Explain a returned finding using retained evidence.' },
-      { prompt: 'certscore_remediation_checklist', arguments: { scanId }, reason: 'Prepare a proposed checklist; do not claim remediation is verified.' }
-    ] : [],
+    optionalFollowUps,
     nextAction, actionCategory,
   };
   // Keep full machine metadata; avoid repeating the entire envelope in model-visible text.
   const compact = Object.fromEntries(Object.entries({
     scanId, status, score: guidance.score, risk: guidance.risk, reportUrl: guidance.reportUrl,
     quotaConsumed: guidance.quotaConsumed, nextAction,
-    ...(guidance.pagination ? { pagination: guidance.pagination } : {})
+    ...(guidance.pagination ? { pagination: guidance.pagination } : {}),
+    ...(navigation && options.toolProfile === 'light' ? { optionalFollowUps, optionalReview: navigation.optionalReview } : {})
   }).filter(([,value]) => value !== null));
   const overview = `CertScore guidance: ${JSON.stringify(compact)}`;
   const explanation = tool === 'certscore_explain_finding'

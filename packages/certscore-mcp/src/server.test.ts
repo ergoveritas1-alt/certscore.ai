@@ -246,6 +246,12 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
       tools.tools.map((tool) => tool.name).sort(),
       ["certscore_get_report_evidence_page", "certscore_get_scan_bundle", "certscore_get_scan_status", "certscore_scan_site"]
     );
+    assert.deepEqual((await client.listPrompts()).prompts.map(prompt => prompt.name).sort(), ["certscore_compare_scans", "certscore_launch_review", "certscore_remediation_checklist"]);
+    assert.deepEqual((await client.listResources()).resources.map(resource => resource.uri).sort(), ["certscore://example-report", "certscore://project-instructions"]);
+    const example = await client.readResource({ uri: "certscore://example-report" });
+    assert.equal(JSON.parse(example.contents[0]!.text as string).example, true);
+    const compare = await client.getPrompt({ name: "certscore_compare_scans", arguments: { beforeScanId: "00000000-0000-4000-8000-000000000123", afterScanId: "00000000-0000-4000-8000-000000000124" } });
+    assert.match((compare.messages[0]!.content as { text: string }).text, /certscore_get_report_evidence_page/);
     const scanSiteTool = tools.tools.find((tool) => tool.name === "certscore_scan_site");
     assert.deepEqual(scanSiteTool?.annotations, {
       title: "Scan site",
@@ -256,12 +262,12 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     });
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("error"));
     assert.ok(scanSiteTool?.outputSchema?.required?.includes("recommendedNextAction"));
-    assert.match(scanSiteTool?.description ?? "", /Creates a public-website privacy scan or reuses an eligible recent completed scan/);
+    assert.match(scanSiteTool?.description ?? "", /Creates a privacy scan or reuses an eligible recent completed scan/);
     assert.match(scanSiteTool?.description ?? "", /preConsentPreview/);
-    assert.match(scanSiteTool?.description ?? "", /preliminary data contains no final findings or score/i);
+    assert.match(scanSiteTool?.description ?? "", /preliminary preConsentPreview is not final findings or totals/i);
     assert.match(scanSiteTool?.description ?? "", /https:\/\/certscore\.ai\/developers\/mcp/);
-    assert.match((scanSiteTool?.inputSchema.properties?.waitForCompletion as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
-    assert.match((scanSiteTool?.inputSchema.properties?.maxWaitSeconds as { description?: string })?.description ?? "", /Deprecated compatibility field; accepted but ignored/);
+    assert.equal(scanSiteTool?.inputSchema.properties?.waitForCompletion, undefined);
+    assert.equal(scanSiteTool?.inputSchema.properties?.maxWaitSeconds, undefined);
     const freshnessSchema = scanSiteTool?.inputSchema.properties?.freshness as { description?: string; enum?: string[] } | undefined;
     assert.deepEqual(freshnessSchema?.enum, ["latest", "refresh"]);
     assert.equal(
@@ -307,13 +313,12 @@ test("CertScore Light exposes only the focused no-account workflow", async () =>
     assert.ok(bundleTool?.outputSchema?.required?.includes("scoreLabel"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("interpretationGuidance"));
     assert.ok(bundleTool?.outputSchema?.required?.includes("scanFrom"));
-    assert.match(bundleTool?.description ?? "", /Returns the completed or completed-limited CertScore evidence bundle/);
-    assert.match(bundleTool?.description ?? "", /persisted execution provenance/);
-    assert.match(bundleTool?.description ?? "", /Accept and Reject results distinguish registered decisions from retained after-click facts/i);
+    assert.match(bundleTool?.description ?? "", /Main answer for a completed or completed-limited scan/);
+    assert.match(bundleTool?.description ?? "", /date\/region/);
+    assert.match(bundleTool?.description ?? "", /Retained after-click facts remain distinct from registered decisions/i);
     assert.match(bundleTool?.description ?? "", /not legal advice, certification, or a compliance determination/i);
     for (const tool of [scanSiteTool, statusTool, bundleTool]) {
-      assert.doesNotMatch(tool?.description ?? "", /\b(?:never|must|should|do not|call|wait|continue polling|stop polling)\b/i);
-      assert.doesNotMatch(tool?.description ?? "", /certscore_(?:scan_site|get_scan_status|get_scan_bundle)/);
+      assert.match(tool?.description ?? "", /observations/i);
     }
     const inventorySchema = bundleTool?.outputSchema?.properties?.preConsentCookiesTrackers as {
       properties?: { rows?: { items?: { properties?: Record<string, unknown> } }; returned?: unknown; total?: unknown; truncated?: unknown };
@@ -446,8 +451,8 @@ test("Light registry metadata and distribution copy stay aligned", () => {
     assert.match(source, /https:\/\/mcp\.certscore\.ai\/mcp\/light/);
     assert.match(source, /Streamable HTTP/);
     assert.match(source, /Authentication: none|Authentication \| None/i);
-    assert.match(source, /50 genuinely new scans per UTC day/);
-    assert.match(source, /5-new-scan rolling 10-minute/);
+    assert.match(source, /https:\/\/certscore\.ai\/developers\/mcp#light-usage-limits/);
+    assert.doesNotMatch(source, /50 genuinely new scans per UTC day|5-new-scan rolling 10-minute/);
     assert.match(source, /does not consume (?:the )?new-scan allowance|reuse does not consume (?:the )?(?:new-scan allowance|quota)/i);
     assert.match(source, /certscore_scan_site/);
     assert.match(source, /certscore_get_scan_status/);
@@ -515,7 +520,8 @@ test("Claude Code Light plugin preserves the remote scan workflow", () => {
   };
 
   assert.equal(plugin.name, "certscore-mcp-light");
-  assert.equal(plugin.version, CERTSCORE_MCP_VERSION);
+  // The installable plugin and hosted MCP runtime have independent releases.
+  assert.equal(plugin.version, "0.2.25");
   assert.deepEqual(mcp.mcpServers, {
     certscore: { type: "http", url: "https://mcp.certscore.ai/mcp/light" }
   });
@@ -1400,18 +1406,11 @@ test("certscore_get_scan_bundle returns a compact canonical summary by default",
         assert.match(headers.get("x-certscore-mcp-internal-proof") ?? "", /^[A-Za-z0-9_-]+$/);
       }
       const text = raw.content[0]?.type === "text" ? raw.content[0].text : "";
-      const responseContract = text.split("\n")[0] ?? "";
-      assert.match(responseContract, /^Response contract:/);
-      assert.match(text, /scanFrom\/execution region=eu_ie/);
-      assert.match(text, /completedAt=2026-08-15T03:39:36\.015Z/);
-      assert.match(text, /retrieval mode=scan_id_lookup/);
-      assert.match(text, /original creation decision=unknown/);
-      assert.ok(text.indexOf(responseContract) < text.indexOf("CertScore score=72"));
-      assert.ok(text.indexOf(responseContract) < text.indexOf("Canonical projected findings:"));
-      assert.match(responseContract, /criticality, priority, and confidence are CertScore metadata/i);
-      assert.match(responseContract, /regulatory review lenses are non-determinative CertScore review context—not legal severity, legal exposure, or a compliance determination/i);
-      assert.match(responseContract, /Absence of captured consent-action evidence does not establish what happens after Accept, Reject, or Decline/i);
-      assert.match(responseContract, /Do not extrapolate an observed embed, vendor, or request into unobserved cookies, fingerprinting, tracking, or processing/i);
+      assert.match(text.split("\n")[0] ?? "", /^CertScore scan bundle/);
+      assert.match(text, /scanFrom/);
+      assert.match(text, /not regulatory criticality or legal exposure/i);
+      assert.match(text, /Without corresponding captured post-action evidence, do not infer/i);
+      assert.match(text, /Do not infer extra cookies, fingerprinting or tracking from an embed, vendor or request alone/i);
       assert.match(text, /Canonical projected findings: 1 of 1 returned/);
       assert.match(text, /Tracking started before consent/);
       assert.match(text, /tracker: Example Analytics/);
@@ -1930,7 +1929,7 @@ test("initialize explains OAuth scopes and Light routing without inventing quota
   await withMcpClient(async client => {
     const {setup} = JSON.parse(client.getInstructions()!);
     assert.equal(setup.route,"light");
-    assert.match(setup.guidance,/Light supports eligible public scans, not workspace history/);
+    assert.match(setup.guidance,/No account, API key or OAuth is needed/);
   },{toolProfile:"light"});
 });
 
@@ -2011,5 +2010,35 @@ test("tracking workpaper retrieval preserves selection, downloads and continuati
         assert.equal(new URL(fetch.calls[1]).searchParams.get("cursor"), cursor);
       }, { toolProfile });
     } finally { fetch.restore(); }
+  }
+});
+
+test("focused report evidence preserves selector through SDK reads and rejects mixed selectors before fetch", async () => {
+  const scanId = "9ba99a8c-b1ad-44c1-985f-92cef760ab40";
+  const base = { type: "certscore_report_evidence_page", version: 1, scanId, snapshot: "a".repeat(64), section: "gpc",
+    reportUrl: `https://certscore.ai/scan/${scanId}`, entries: [{ path: "", value: { gpcResponse: { status: "indeterminate" } } }],
+    pagination: { offset: 0, returned: 1, total: 2, complete: false, nextCursor: "cursor" },
+    coverage: { scope: "public_report_projection", exportTruncated: false, observationCompleteness: "see_report_coverage", exclusions: ["unselected_report_sections"] },
+    reconstruction: "Retain the section and coverage limitations.",
+  };
+  for (const toolProfile of ["full", "light"] as const) {
+    const mock = installFetch([{ status: 200, body: base }, { status: 200, body: { ...base, pagination: { offset: 1, returned: 1, total: 2, complete: true, nextCursor: null } } }]);
+    try {
+      await withMcpClient(async client => {
+        const first = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, section: "gpc" } });
+        assert.equal(first.isError, undefined);
+        const guidance = first._meta?.["ai.certscore/responseGuidance"] as any;
+        assert.deepEqual(guidance.nextAction.arguments, { scanId, cursor: "cursor", section: "gpc" });
+        assert.match((first.content as any[])[0].text, /gpc section/);
+        const second = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: guidance.nextAction.arguments });
+        assert.equal(second.isError, undefined);
+        assert.equal((second._meta?.["ai.certscore/responseGuidance"] as any).nextAction.tool, null);
+        const invalid = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, section: "gpc", workpaper: "tracking" } });
+        assert.equal(invalid.isError, true);
+      }, { toolProfile });
+      assert.equal(mock.calls.length, 2);
+      for (const call of mock.calls) assert.equal(new URL(call).searchParams.get("section"), "gpc");
+      assert.equal(new URL(mock.calls[1]!).searchParams.get("cursor"), "cursor");
+    } finally { mock.restore(); }
   }
 });

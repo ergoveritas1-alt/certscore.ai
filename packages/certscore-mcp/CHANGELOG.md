@@ -1,5 +1,12 @@
 # certscore-mcp
 
+## 0.2.26
+
+- Add Light review prompts, project instructions and scan-free retained-example connection testing.
+- Lead bundles with canonical findings, longer next steps and a delivery-only evidence index.
+- Keep Light follow-ups within its four tools and offer user-directed remediation, site reviews and rechecks.
+- Add focused report evidence sections with selector-bound pagination and downloads.
+
 ## 0.2.25
 
 - Lead GPC answers with returned observations and matched-window counts even when the paired comparison is indeterminate.

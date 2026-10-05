@@ -9,7 +9,7 @@ CertScore.ai MCP Light is the no-account, low-friction remote MCP for evidence-b
 | Endpoint | `https://mcp.certscore.ai/mcp/light` |
 | Transport | Streamable HTTP |
 | Authentication | None; do not send an API key, bearer token, or OAuth configuration |
-| Version | `0.2.25` |
+| Version | `0.2.26` |
 
 Configure an MCP client as a remote HTTP server with the endpoint above. Product configuration formats differ, so use the client's current remote-MCP UI or documentation rather than adapting a local stdio example.
 
@@ -51,7 +51,7 @@ If a retryable error is returned without a `scanId`, wait for `retryAfterSeconds
 
 ## Quota and reuse
 
-Light permits up to 50 genuinely new scans per UTC day across both the requester and the shared public Light surface. It also applies a 5-new-scan rolling 10-minute limit across both scopes, with additional abuse safeguards.
+Light applies session, requester-IP and shared new-scan limits. See the current policy at https://certscore.ai/developers/mcp#light-usage-limits. Eligible reuse does not consume the new-scan allowance.
 
 With the default `freshness=latest`, an eligible completed scan from the prior 24 hours may be reused. Reuse is reported in the scan response and does not consume the new-scan allowance. `freshness=refresh` bypasses recent-result reuse, but it does not bypass validation, quota, or throttling.
 

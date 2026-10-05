@@ -975,6 +975,8 @@ export interface ReportEvidencePage {
   snapshot: string;
   reportUrl: string;
   workpaper?: "tracking";
+  section?: "consent" | "gpc" | "policy" | "tracking" | "transport" | "forms";
+  selection?: { version: "certscore.report-evidence-selection.v1"; fields: string[]; notReturnedFields: string[]; interpretation: string };
   download?: { url: string; csvUrl?: string; mediaType: "application/json"; expiresAt?: string; bytes: number; authentication: "same_access_rules_as_mcp" | "short_lived_report_link" | "public"; instructions: string };
   entries: Array<{ path: string; value: unknown; stringPart?: number; stringParts?: number }>;
   pagination: { offset: number; returned: number; total: number; complete: boolean; nextCursor: string | null };

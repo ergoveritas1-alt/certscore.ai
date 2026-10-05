@@ -1,6 +1,6 @@
 import { privacyAuditSummarySchema } from "./privacy-audit.js";
 import { z } from "zod";
-import { reportEvidencePageSchema } from "./report-page.js";
+import { reportEvidencePageSchema, reportEvidenceSectionSchema } from "./report-page.js";
 import { mcpTaskContextSchema } from "@website-signal-risk-scanner/shared/dist/mcp-product-context.js";
 import {
   apiV2DomainLatestScanSchema,
@@ -386,6 +386,19 @@ export const mcpEvidenceOutputSchema = z
 export const mcpScanBundleOutputSchema: z.ZodType<Record<string, unknown>> = z
   .object({
     type: z.literal("certscore_scan_bundle"),
+    reviewNavigation: z.object({
+      version: z.literal("certscore.mcp-review-navigation.v1"),
+      scope: z.literal("returned_canonical_projection"),
+      baseline: z.object({ scanId: z.string(), url: z.string().nullable(), completedAt: z.string().nullable(), scanFrom: apiV2ScanFromSchema.nullable(), reportUrl: z.string().nullable() }).strict(),
+      evidenceIndex: z.array(z.object({
+        key: z.enum(["findings", "tracking", "privacy", "gpc", "accept", "reject", "transport", "report"]),
+        label: z.string(), delivery: z.enum(["included", "omitted", "not_returned"]),
+        returned: z.number().int().nonnegative().optional(), total: z.number().int().nonnegative().optional(),
+        retrieval: z.object({ tool: z.literal("certscore_get_report_evidence_page"), arguments: z.object({ scanId: z.string(), section: reportEvidenceSectionSchema }).strict(), createsScan: z.literal(false) }).strict().optional(),
+      }).strict()).max(8),
+      nextActions: z.array(z.object({ tool: z.literal("certscore_get_report_evidence_page"), arguments: z.object({ scanId: z.string(), workpaper: z.literal("tracking").optional() }).strict(), createsScan: z.literal(false), reason: z.string() }).strict()).max(2),
+      optionalReview: z.string(), interpretation: z.string(),
+    }).strict().optional(),
     privacyAuditSummary: privacyAuditSummarySchema.optional(),
     privacyAuditEvidence: apiV2ScanResourceSchema.shape.privacyAuditEvidence,
     detail: z.enum(["summary", "findings", "evidence", "full"]),
@@ -545,7 +558,7 @@ export const certScoreMcpToolContracts: ReadonlyArray<{
   {
     name: "certscore_scan_site",
     title: "Scan site",
-    description: "Creates a public-website privacy scan or reuses an eligible recent completed scan. Coverage includes pre-consent storage, trackers, consent and CMP signals, privacy-policy disclosures, transport security, and GDPR/ePrivacy or CCPA/CPRA review signals. The response contains a stable scanId, lifecycle status, retry timing, and sometimes a bounded preliminary preConsentPreview; preliminary data contains no final findings or score. Results are automated public-web observations, not legal advice, certification, or a compliance determination. Tool and workflow documentation: https://certscore.ai/developers/mcp.",
+    description: "Use for a user-requested website launch review, vendor assessment, cookie/tracker inventory, consent/GPC investigation or privacy-policy review. A public URL or domain is enough. Creates a privacy scan or reuses an eligible recent completed scan; default freshness=latest saves new-scan quota. Use refresh only for an explicitly requested fresh scan or post-fix recheck. Retain scanId, poll certscore_get_scan_status only while active at retryAfterSeconds, then read certscore_get_scan_bundle. A preliminary preConsentPreview is not final findings or totals. Coverage includes pre-consent storage, trackers, consent and CMP signals, privacy-policy disclosures, transport security and GDPR/ePrivacy or CCPA/CPRA review signals. Results are automated observations, not legal advice, certification, or a compliance determination. https://certscore.ai/developers/mcp.",
     inputSchema: mcpScanSiteInputSchema,
     outputSchema: mcpScanSiteOutputSchema,
     annotations: { title: "Scan site", ...scanCreationAnnotations }
@@ -585,15 +598,15 @@ export const certScoreMcpToolContracts: ReadonlyArray<{
   {
     name: "certscore_get_report_evidence_page",
     title: "Get report evidence page",
-    description: "Use workpaper=tracking for the starting-page tracking inventory, privacy choices/notices and GPC evidence, with JSON and CSV downloads. The workpaper selector also applies to every continuation request. Otherwise retrieve scan report display content as paginated JSON, without internal diagnostic JSON downloads. The response also offers a single-file full JSON download; private JSON download links expire after five minutes and need no OAuth header; use pagination if your host blocks file downloads. Repeated display records use reportContentRef JSON Pointers. Includes evidence tables, full-site page and resource inventories, all retained additional-page form fields, form snapshot download references, and retained limitations. Snapshot images are downloaded separately from the returned URLs, with OAuth bearer authentication for workspace scans. Available on OAuth and Light. Start with scanId; follow pagination.nextCursor until complete. Pages share a snapshot; restart if it changes. Each entry has a JSON Pointer path and value; oversized strings use numbered parts. Export completion is not complete observation coverage. Use the concise scan bundle for summaries; use this tool for exhaustive report evidence. No new scan is created.",
-    inputSchema: { scanId: z.string().uuid(), cursor: z.string().max(100).optional(), workpaper: z.literal("tracking").optional() },
+    description: "For a focused question, use section=consent, gpc, policy, tracking, transport or forms. This returns selected retained report sections plus shared scan, score, findings and coverage context. Preserve section on cursor continuation; unselected or not-returned fields are not evidence of absence. Use workpaper=tracking separately for the starting-page tracking inventory, privacy choices/notices and GPC evidence, with JSON and CSV downloads. Never combine section and workpaper. The workpaper selector also applies to every continuation request. Otherwise retrieve scan report display content as paginated JSON, without internal diagnostic JSON downloads. The response also offers a single-file full JSON download; private JSON download links expire after five minutes and need no OAuth header; use pagination if your host blocks file downloads. Repeated display records use reportContentRef JSON Pointers. Includes evidence tables, full-site page and resource inventories, all retained additional-page form fields, form snapshot download references, and retained limitations. Snapshot images are downloaded separately from the returned URLs, with OAuth bearer authentication for workspace scans. Available on OAuth and Light. Start with scanId; follow pagination.nextCursor until complete. Pages share a snapshot; restart if it changes. Each entry has a JSON Pointer path and value; oversized strings use numbered parts. Export completion is not complete observation coverage. Use the concise scan bundle for summaries; use this tool for exhaustive report evidence. No new scan is created.",
+    inputSchema: { scanId: z.string().uuid(), cursor: z.string().max(100).optional(), workpaper: z.literal("tracking").optional(), section: reportEvidenceSectionSchema.optional() },
     outputSchema: reportEvidencePageSchema,
     annotations: { title: "Get report evidence page", ...accountedInternalReadAnnotations }
   },
   {
     name: "certscore_get_scan_bundle",
     title: "Get scan bundle",
-    description: "Returns the completed or completed-limited CertScore evidence bundle for a stable scanId as concise TextContent and matching structuredContent. The default summary distinguishes observed external domains from classified tracker vendors and states the public-page scope. Use detail=evidence to inspect bounded retained request examples and policy-surface candidates even when there are no findings; use certscore_get_report_evidence_page for deeper report evidence. Available sections also include retained privacy-choice controls and notice topics in privacyAuditSummary (full evidence in detail=full), canonical findings, pre-consent cookie and tracker evidence, coverage limitations, persisted execution provenance, and retrieval URLs. Detail tiers and byte budgets report returned, total, truncated, and omitted-section metadata. Accept and Reject results distinguish registered decisions from retained after-click facts. Their execution reports succeeded for a completed click and bounded observation, and succeeded_with_confirmation when the consent decision is also verified. Optional afterAction summaries remain useful when registration is unconfirmed; absent or failed capture remains explicitly limited. Consume canonical findings for any scoring effect. Results are automated public-web observations, not legal advice, certification, or a compliance determination.",
+    description: "Main answer for a completed or completed-limited scan: canonical findings, next steps, supporting evidence, score, date/region, coverage and report URL. An existing scanId is enough; no new scan is created. The evidence index describes response delivery, never evidence absence. Optional next actions lead to deeper report tables, tracking workpapers and JSON/CSV exports. Use detail=evidence for request examples and policy candidates, including scans with no findings; detail=full adds bounded retained context. Preserve returned/total counts and omission metadata. Accept/Reject execution succeeded means a completed click and bounded observation; succeeded_with_confirmation additionally verifies the consent decision. Retained after-click facts remain distinct from registered decisions. Absent or failed capture remains explicitly limited. Use canonical findings for scoring effects. A later missing finding does not prove a fix. Results are automated public-web observations, not legal advice, certification, or a compliance determination.",
     inputSchema: mcpGetScanBundleInputSchema,
     outputSchema: mcpScanBundleOutputSchema,
     annotations: { title: "Get scan bundle", ...accountedInternalReadAnnotations }
