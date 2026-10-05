@@ -635,6 +635,11 @@ WC01 display, executive summary, checklist, and top-finding code must not infer 
 
 Display copy may explain retained evidence and the already-determined policy/checklist status. Display copy must not create, upgrade, suppress, or infer findings, and must not change status, severity, eligibility, or regulatory posture.
 
+Before introducing any new customer-facing disclaimer or coverage caveat, check
+with the product owner and obtain approval for the proposed wording and placement.
+Keep diagnostic limitations in retained internal evidence unless their customer
+presentation is already approved. Routine status labels are not new disclaimers.
+
 Executive summaries and top findings may rank, allowlist, suppress, or group already-projected findings only. Top findings should be traceable to unified finding IDs or checklist/regulatory projection rows. Do not create executive-only findings from raw signals or display context.
 
 DB repair and backfill scripts may repair records, but must not create findings that bypass normalized concern construction, concern policy, and unified finding/checklist projection.

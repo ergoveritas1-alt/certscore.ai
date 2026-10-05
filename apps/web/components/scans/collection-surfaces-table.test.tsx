@@ -86,7 +86,7 @@ test("limited form inventory exposes retained counts and omitted fields instead 
   const html = renderToStaticMarkup(<CollectionSurfacesTable limitedPages={1} rows={[{ ...row, form: { ...row.form, fieldsTruncated: true, candidateFieldCount: 21, retainedFieldCount: 20 } }]} />);
   assert.match(html, /20 of 21/);
   assert.match(html, /1 field\(s\) were omitted by the capture limit/);
-  assert.match(html, /1 page\(s\) have limited form coverage/);
+  assert.doesNotMatch(html, /have limited form coverage|Missing evidence does not establish that a page has no forms/);
 });
 
 test("form disclosure stays collapsed, escapes text, and preserves form-specific sources", () => {

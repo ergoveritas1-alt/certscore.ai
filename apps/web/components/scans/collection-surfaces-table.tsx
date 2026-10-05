@@ -156,10 +156,6 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
         <h2 id={`${prefix}-title`} className="text-xl font-semibold">Forms & fields</h2>
         <div className="flex items-center gap-2"><span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.some(row => row.capturePhase) ? rows.length === 1 ? "form observation" : "form observations" : rows.length === 1 ? "form" : "forms"}`} /></span>{!loading ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire forms table with all fields and evidence as JSON" payload={JSON.stringify(rows, null, 2)} /> : null}</div>
       </div>
-      {pagesWithoutInventory > 0 || limitedPages > 0 ? <p className="mb-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-        {pagesWithoutInventory > 0 ? `${pagesWithoutInventory} page(s) have no retained form inventory. ` : ""}
-        {limitedPages > 0 ? `${limitedPages} page(s) have limited form coverage. ` : ""}Missing evidence does not establish that a page has no forms.
-      </p> : null}
       {afterAcceptLimited ? <p className="mb-3 text-xs text-zinc-500">After Accept form capture was limited. Some forms or disclosures may not have been retained.</p> : null}
       {loading ? <p role="status" className="py-4 text-sm text-zinc-500">Loading form inventory…</p> : rows.length === 0 ?
         <p className="py-4 text-sm text-zinc-500">{scanning ? "Form inventory will appear as pages finish scanning." : pagesWithoutInventory > 0 || limitedPages > 0 || afterAcceptLimited ? "No form rows are available in the retained evidence." : "No forms were observed on the inventoried pages."}</p> :
