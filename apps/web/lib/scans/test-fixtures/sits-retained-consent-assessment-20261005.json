@@ -1,0 +1,159 @@
+{
+  "sourceScanId": "9d7cf554-2d89-44dc-a8b5-56c012f00892",
+  "capturedAt": "2026-10-05T18:09:26.778Z",
+  "assessment": {
+    "scan": {
+      "noGo": false,
+      "scanId": "9d7cf554-2d89-44dc-a8b5-56c012f00892",
+      "finalUrl": "https://sits.com/en",
+      "scanStatus": "completed",
+      "requestedUrl": "https://sits.com/en"
+    },
+    "surface": {
+      "status": "unknown",
+      "evidenceRefs": [],
+      "lastObservedAtMs": null,
+      "firstObservedAtMs": null
+    },
+    "controls": {
+      "accept": {
+        "layer": "first_layer",
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "runtime_page_inventory_document_unsettled",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "lastObservedAtMs": null,
+        "firstObservedAtMs": null
+      },
+      "reject": {
+        "layer": "first_layer",
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "runtime_page_inventory_document_unsettled",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "lastObservedAtMs": null,
+        "firstObservedAtMs": null
+      },
+      "options": {
+        "layer": "first_layer",
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "runtime_page_inventory_document_unsettled",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "lastObservedAtMs": null,
+        "firstObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "layer": "first_layer",
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "runtime_page_inventory_document_unsettled",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "lastObservedAtMs": null,
+        "firstObservedAtMs": null
+      }
+    },
+    "coverage": {
+      "status": "limited",
+      "reasonCodes": [
+        "runtime_page_inventory_document_unsettled",
+        "consent-control-capture.v3",
+        "canonical_consent_coverage_incomplete"
+      ],
+      "requiredChannels": [
+        "dom_inventory",
+        "geometry"
+      ],
+      "completedChannels": [
+        "dom_inventory",
+        "accessibility_tree",
+        "geometry",
+        "dom_snapshot",
+        "cmp_runtime"
+      ],
+      "incompleteChannels": []
+    },
+    "document": {
+      "reasonCodes": [],
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://sits.com/en",
+      "observedDocumentIds": [
+        "https://sits.com/en"
+      ],
+      "canonicalDocumentToken": "536072C336D49EE2CEBF3FCA291F8E39",
+      "observedDocumentTokens": [
+        "536072C336D49EE2CEBF3FCA291F8E39"
+      ]
+    },
+    "evidence": [],
+    "provenance": {
+      "computedAt": "2026-10-05T18:09:26.778Z",
+      "sourceHash": "fnv1a-4a7d796b",
+      "projectorId": "wc01.consent-control-assessment",
+      "contractVersion": "2.2",
+      "projectorVersion": "2.2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1"
+    },
+    "limitations": [
+      {
+        "code": "surface_inspection_incomplete",
+        "detail": "No complete pre-interaction surface inspection was retained.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options"
+        ]
+      }
+    ],
+    "artifactType": "consent_control_assessment",
+    "contradictions": [],
+    "evidencePolicy": "structured_control_evidence.v1",
+    "visualEvidence": {
+      "status": "available",
+      "reasonCodes": [],
+      "artifactRefs": [
+        "screenshot_pre_consent_settled"
+      ]
+    },
+    "artifactVersion": "2.2",
+    "assessmentStatus": "limited"
+  }
+}

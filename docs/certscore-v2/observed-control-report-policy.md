@@ -1,8 +1,13 @@
 # Observed control report policy
 
-Policy: `observed_control_report.v1`
+Policy: `observed_control_report.v2` (supersedes v1's complete-inspection or confirmed-surface summary gate)
 
 Owner approval: September 27, 2026 for local development; production deployment authorized September 27, 2026.
+
+On October 5, 2026, the owner required binary control summaries on usable visits
+even when retained inspection is limited and surface presence is unresolved.
+The v2 reporting convention implements that instruction; it does not change
+assessment conclusions, consent-action authorization, findings or scoring.
 
 ## Meaning and canonical path
 
@@ -11,10 +16,11 @@ The customer summary shows Accept, Reject and Options as **Observed** or
 retained visit. It is not proof the website lacks that control.
 
 The shared projector consumes a schema-valid, scan-bound retained
-ConsentControlAssessment. It requires matched document identity and either a
-retained consent surface or a completed inspection. Known no-go, blocked,
+ConsentControlAssessment. It requires matched document identity and complete or
+limited inspection coverage. Surface presence need not be confirmed and overall
+inspection need not be complete. Known no-go, blocked,
 error/loading, inaccessible and blank-page conditions suppress the summary.
-Missing or malformed assessments also suppress it. These visits must not become
+Missing, malformed or unavailable assessments also suppress it. These visits must not become
 three negative controls. Page usability comes from canonical retained assessment
 facts, not a model reviewer or screenshot-only interpretation.
 

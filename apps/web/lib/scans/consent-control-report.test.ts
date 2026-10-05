@@ -45,8 +45,33 @@ test("no-go, blocked, error and unbound visits cannot create negative control la
   assert.equal(projectConsentControlReport({ controls: { accept: { state: "observed" } } }), null);
 });
 
-test("missing surface with incomplete capture is unavailable, not three negative controls", () => {
+test("usable limited visit reports unidentified controls even when the surface is unknown", () => {
   const a = limited(); a.surface.status = "unknown";
+  for (const c of Object.values(a.controls)) c.state = "unknown";
+  const before = structuredClone(a);
+  const report = projectConsentControlReport(a, "scan-1");
+  assert.equal(report?.policyVersion, "observed_control_report.v2");
+  assert.deepEqual(consentControlReportLabels(report), {
+    accept: "Not observed", reject: "Not observed", options: "Not observed",
+  });
+  assert.deepEqual(a, before);
+  assert.equal(isAfterActionReportEligible(a, "accept"), false);
+  assert.equal(isAfterActionReportEligible(a, "reject"), false);
+});
+
+test("a limited visit preserves identified controls without requiring a known surface", () => {
+  const a = limited(); a.surface.status = "unknown";
+  assert.deepEqual(consentControlReportLabels(projectConsentControlReport(a)), {
+    accept: "Observed", reject: "Not observed", options: "Observed",
+  });
+});
+
+test("unavailable inspections and document-level access failures omit the summary", () => {
+  for (const status of ["none", "not_applicable"] as const) {
+    const a = limited(); a.surface.status = "unknown"; a.coverage.status = status;
+    assert.equal(projectConsentControlReport(a), null);
+  }
+  const a = limited(); a.document.reasonCodes = ["navigation_error"];
   assert.equal(projectConsentControlReport(a), null);
   assert.deepEqual(consentControlReportLabels(null), { accept: "", reject: "", options: "" });
 });

@@ -3173,6 +3173,7 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
     // The runtime lane may still be loading after the independent consent
     // lane completed. Keep its inventory limitation on runtime evidence only.
     "runtime_page_inventory_document_loading",
+    "runtime_page_inventory_document_unsettled",
   ]);
   const materialLimitationKeys = (input.runtimeCoverage?.limitationKeys ?? []).filter(
     (key) => key !== "post_consent_flow_runtime_disabled" &&

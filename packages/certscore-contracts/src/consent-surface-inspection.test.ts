@@ -518,15 +518,22 @@ function independentEmptyConsentWithLoadingRuntime() {
   return input;
 }
 
-test("independent completed consent inspection preserves the loading runtime's limited inventory", () => {
-  const input = independentEmptyConsentWithLoadingRuntime();
-  const original = structuredClone(input);
-  const outcome = deriveConsentSurfaceInspectionOutcome(input);
-  assert.equal(outcome.coverageStatus, "complete");
-  assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
-  assert.deepEqual(outcome.limitationKeys, []);
-  assert.deepEqual(input, original, "assessment must not erase retained runtime limitations");
-});
+for (const runtimeLimitation of ["runtime_page_inventory_document_loading", "runtime_page_inventory_document_unsettled"]) {
+  test(`independent completed consent inspection preserves ${runtimeLimitation} on runtime evidence only`, () => {
+    const input = independentEmptyConsentWithLoadingRuntime();
+    input.runtimeCoverage!.limitationKeys = ["pre_consent_runtime_partial", runtimeLimitation];
+    const original = structuredClone(input);
+    const outcome = deriveConsentSurfaceInspectionOutcome(input);
+    assert.equal(outcome.coverageStatus, "complete");
+    assert.equal(outcome.outcome, "no_surface_observed_complete_coverage");
+    assert.deepEqual(outcome.limitationKeys, []);
+    assert.deepEqual(input, original, "assessment must not erase retained runtime limitations");
+    input.consentUiObservations![0]!.documentReadyState = "loading";
+    const incomplete = deriveConsentSurfaceInspectionOutcome(input);
+    assert.equal(incomplete.coverageStatus, "limited");
+    assert.ok(incomplete.limitationKeys.includes(runtimeLimitation), "unverified consent inspection retains its limitations");
+  });
+}
 
 for (const condition of ["loading", "missing_geometry", "inaccessible_frame", "no_go"] as const) {
   test(`runtime scoping does not complete consent proof with ${condition}`, () => {

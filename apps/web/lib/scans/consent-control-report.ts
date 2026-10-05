@@ -1,6 +1,6 @@
 import { consentControlAssessmentSchema } from "@certscore/contracts";
 
-export const CONSENT_CONTROL_REPORT_POLICY = "observed_control_report.v1" as const;
+export const CONSENT_CONTROL_REPORT_POLICY = "observed_control_report.v2" as const;
 export type ConsentControlReport = {
   policyVersion: typeof CONSENT_CONTROL_REPORT_POLICY;
   scanId: string;
@@ -25,13 +25,13 @@ export function projectConsentControlReport(value: unknown, expectedScanId?: str
   if (!parsed.success) return null;
   const a = parsed.data;
   if (expectedScanId && a.scan.scanId !== expectedScanId) return null;
-  const reasons = [...a.coverage.reasonCodes, ...a.limitations.map(l => l.code),
+  const reasons = [...a.document.reasonCodes, ...a.coverage.reasonCodes, ...a.limitations.map(l => l.code),
     ...Object.values(a.controls).flatMap(c => c.reasonCodes)];
   if (a.scan.noGo || a.document.identityStatus !== "matched" || reasons.some(r => UNUSABLE_VISIT.has(r))) return null;
-  // An actual retained consent surface or a completed inspection is required.
-  // Empty, missing and failed captures cannot manufacture three negative labels.
-  if (a.surface.status !== "observed_actionable" && a.surface.status !== "observed_non_actionable" &&
-    a.coverage.status !== "complete") return null;
+  // A usable, document-bound limited visit still reports what was identified.
+  // Overall inspection completeness and surface uncertainty must not hide the
+  // binary summary or upgrade the underlying unknown states into proven absence.
+  if (a.coverage.status === "none" || a.coverage.status === "not_applicable") return null;
   const state = (key: "accept" | "reject" | "options") =>
     a.controls[key].state === "observed" ? "observed" as const : "not_observed" as const;
   return {
