@@ -811,6 +811,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     limitedCount: summaryCounts.technical_limitation,
     limitedItems: reportableChecklistRows.filter((row) => checklistStatus(row) === "Limited").map((row) => row.label),
     positiveCount: summaryCounts.positive_signal,
+    priorityIntroduction: formDestinationPriority ?? cmsPriority,
     rejectPath,
     timeline,
     transportPositiveCount: evidenceRows.filter((row) => CHECKLIST_GROUPS.transport.has(row.id) && row.status === "Observed").length,
@@ -924,6 +925,6 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     trackingExternalRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.tracking.has(row.id)),
     trackerVendors: [...vendorSurface.resolvedVendorNames, ...vendorSurface.unresolvedVendorHosts],
     transportRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.transport.has(row.id)),
-    verdict: formDestinationPriority ? `${formDestinationPriority.title}: ${formDestinationPriority.summary} ${verdict}` : cmsPriority ? `${cmsPriority.title}: ${cmsPriority.summary} ${verdict}` : verdict,
+    verdict,
   };
 }
