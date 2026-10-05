@@ -9,12 +9,14 @@ import { deriveRuntimeCoverageSummary } from "./index.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer } from "./test-fixtures/static-server.js";
 
-for (const { gpc, pendingEmbed } of [
-  { gpc: false, pendingEmbed: false },
-  { gpc: true, pendingEmbed: false },
-  { gpc: false, pendingEmbed: true },
+for (const { gpc, pendingEmbed, stalledRead } of [
+  { gpc: false, pendingEmbed: false, stalledRead: false },
+  { gpc: true, pendingEmbed: false, stalledRead: false },
+  { gpc: false, pendingEmbed: true, stalledRead: false },
+  { gpc: false, pendingEmbed: false, stalledRead: true },
+  { gpc: true, pendingEmbed: false, stalledRead: true },
 ]) {
-  test(`${gpc ? "GPC" : "baseline"} captures a streamed late form with ${pendingEmbed ? "limited unsettled" : "settled"} embed coverage`, async (t) => {
+  test(`${gpc ? "GPC" : "baseline"} captures a streamed late form with ${pendingEmbed ? "limited unsettled" : "settled"} embed coverage${stalledRead ? " and a stalled readiness read" : ""}`, async (t) => {
     const { createServer } = await import("node:http");
     const timers = new Set<ReturnType<typeof setTimeout>>();
     const pending = new Set<import("node:http").ServerResponse>();
@@ -59,6 +61,10 @@ for (const { gpc, pendingEmbed } of [
               </script></body></html>`);
             }, 250);
             timers.add(timer);
+            if (stalledRead) await new Promise<void>(resolve => {
+              const readTimer = setTimeout(resolve, 900);
+              timers.add(readTimer);
+            });
           }
           return result;
         });

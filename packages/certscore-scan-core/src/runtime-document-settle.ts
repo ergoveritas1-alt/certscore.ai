@@ -28,13 +28,11 @@ export function waitForLoadingRuntimeDocument(input: {
     let finished = false;
     let parsed = false;
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
-    let readTimer: ReturnType<typeof setTimeout> | undefined;
     const finish = (status: RuntimeDocumentSettleResult["status"]) => {
       if (finished) return;
       finished = true;
       clearTimeout(deadlineTimer);
       if (pollTimer) clearTimeout(pollTimer);
-      if (readTimer) clearTimeout(readTimer);
       input.page.off("domcontentloaded", onParsed);
       input.page.off("framenavigated", onNavigation);
       input.page.off("close", onClose);
@@ -69,15 +67,15 @@ export function waitForLoadingRuntimeDocument(input: {
     input.page.on("framenavigated", onNavigation);
     input.page.on("close", onClose);
     input.signal?.addEventListener("abort", onAbort, { once: true });
-    readTimer = setTimeout(() => finish("unavailable"), Math.min(500, timeoutMs));
+    // A busy parser can delay evaluate itself. Give that read the same bounded
+    // allowance as parsing; an independent DOMContentLoaded event can establish
+    // readiness while it is pending. Never turn a slow read into an early exit.
+    checkQuiet();
     void input.page.evaluate(() => document.readyState).then(state => {
       if (finished) return;
-      if (readTimer) clearTimeout(readTimer);
-      if (state !== "loading") {
+      if (state !== "loading" && !parsed) {
         finish("already_ready");
-        return;
       }
-      checkQuiet();
     }, () => finish("unavailable"));
   });
 }

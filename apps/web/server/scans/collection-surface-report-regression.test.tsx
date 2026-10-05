@@ -5,8 +5,9 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.shared-runtime";
-import { collectionSurfaceAssessmentSchema, type CollectionSurfaceAssessment } from "@certscore/contracts";
+import { collectionSurfaceAssessmentSchema, type CanonicalEvidenceBundle, type CollectionSurfaceAssessment } from "@certscore/contracts";
 import retained from "../../lib/scans/test-fixtures/loading-form-inventory-20261005.json";
+import captured from "../../lib/scans/test-fixtures/sits-retained-form-inventory-20261005.json";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 import { buildPersistedScanReportProjection, readPersistedScanReportProjection, SCAN_REPORT_PROJECTION_VERSION } from "./scan-report-projection-contract";
@@ -83,3 +84,60 @@ for (const state of ["loading", "unsettled", "unverifiable", "missing", "complet
     }
   });
 }
+
+test("actual retained SITS forms survive assessment, persistence and both report renderings", async () => {
+  const { deriveCollectionSurfaceAssessment } = await import("./local-v2-dag-report");
+  const { buildTimelineReportModel } = await import("../../components/scans/report-lab/timeline-report-model");
+  const { ShadowScanReport } = await import("../../components/scans/report-lab/shadow-scan-report");
+  const scanId = "local-sits-form-verification-20261005";
+  const assessment = deriveCollectionSurfaceAssessment({
+    bundle: { scanId, collectionSurfaceInventory: captured.inventory,
+      scanLaneRuns: [{ laneId: "runtime_evidence", executionOutcome: "completed" }],
+    } as unknown as CanonicalEvidenceBundle,
+    canonicalDocumentUrl: captured.url, scanId, assessedAt: captured.capturedAt,
+  });
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.forms.length, 2);
+  const record = {
+    scan: { id: scanId, status: "completed", domainHostname: "sits.com", pageUrl: captured.url,
+      createdAt: captured.capturedAt, completedAt: captured.capturedAt, scanConfigJson: null },
+    domainBenchmark: null, signals: [], validationFindings: [], trackerVendors: [],
+    policyEnrichment: [], policyReviewQueue: [], preconsentViolations: [], events: [],
+    snapshot: { certscore_overall: 100 }, runtimeArtifacts: null,
+    canonicalReportProjection: {
+      artifactVersion: "persisted-canonical-report-projection-v2", checklistRows: [],
+      collectionSurfaceAssessment: assessment, derivedContext: {}, globalUnifiedFindings: [],
+      legacyScoreAssessmentInput: { scanId }, normalizedConcerns: [],
+      ownerUnifiedFindings: [], topFindingIds: [],
+    },
+  } as unknown as ScanDetailResponse;
+  const persisted = buildPersistedScanReportProjection(record);
+  const hydrated = readPersistedScanReportProjection({ scan: record.scan, snapshot: {
+    report_projection_computed_at: captured.capturedAt, report_projection_payload: persisted.payload,
+    report_projection_payload_sha256: persisted.sha256, report_projection_payload_size_bytes: persisted.sizeBytes,
+    report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+  } });
+  assert.ok(hydrated);
+  const report = buildTimelineReportModel(hydrated);
+  if (report.resultDisposition === "no_go") throw new Error("Expected usable report");
+  assert.equal(report.metrics.forms, 2);
+  assert.equal(report.metrics.fields, 9);
+  assert.ok(report.collectionTableRows);
+  assert.deepEqual(report.collectionTableRows.map(row => row.form), assessment.forms);
+  assert.equal(report.collectionCoverage?.limitedPages, 1);
+  const router = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
+  for (const mode of ["authenticated", "public"] as const) {
+    const html = renderToStaticMarkup(
+      <AppRouterContext.Provider value={router}>
+        <PathnameContext.Provider value={mode === "public" ? "/scan/fixture" : "/app/scans/fixture"}>
+          <ShadowScanReport mode={mode} variant="timeline" report={report} />
+        </PathnameContext.Provider>
+      </AppRouterContext.Provider>,
+    );
+    const section = html.match(/<section id="report-forms"[\s\S]*?<\/section>/)?.[0];
+    assert.ok(section);
+    assert.match(section, /Business Email/);
+    assert.match(section, /Company Name/);
+    assert.doesNotMatch(section, /no retained rows|no forms observed/);
+  }
+});

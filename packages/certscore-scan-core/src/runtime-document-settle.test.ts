@@ -90,11 +90,32 @@ for (const terminal of ["cancelled", "document_changed", "unavailable"] as const
   });
 }
 
-test("a stalled readiness read fails closed within 500ms", async (t) => {
+test("a stalled readiness read fails closed at the shared ten-second cap", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
   const { page, events } = fixturePage("loading", true);
   const promise = waitForLoadingRuntimeDocument({ page, timeoutMs: 10_000, tracker: createPassiveEvidenceActivityTracker() });
   t.mock.timers.tick(500);
-  assert.deepEqual(await promise, { elapsedMs: 500, status: "unavailable" });
+  let completed = false;
+  void promise.then(() => { completed = true; });
+  await Promise.resolve();
+  assert.equal(completed, false, "a busy parser must receive the approved allowance");
+  t.mock.timers.tick(9_500);
+  assert.deepEqual(await promise, { elapsedMs: 10_000, status: "timed_out" });
+  assertClean(events);
+});
+
+test("DOMContentLoaded and request quiet can settle while the readiness read is stalled", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const { page, events } = fixturePage("loading", true);
+  const tracker = createPassiveEvidenceActivityTracker();
+  const request = {};
+  const promise = waitForLoadingRuntimeDocument({ page, timeoutMs: 10_000, tracker });
+  t.mock.timers.tick(750);
+  events.emit("domcontentloaded");
+  tracker.markRequestStarted(request);
+  t.mock.timers.tick(500);
+  tracker.markRequestFinished(request);
+  for (let i = 0; i < 10; i++) t.mock.timers.tick(25);
+  assert.deepEqual(await promise, { elapsedMs: 1_500, status: "settled" });
   assertClean(events);
 });

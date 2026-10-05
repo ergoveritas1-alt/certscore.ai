@@ -1,0 +1,339 @@
+{
+  "capturedAt": "2026-10-05T17:56:49.577Z",
+  "url": "https://sits.com/en/",
+  "verificationScope": "Owner-requested passive local scanner verification before release; runtime-owned evidence only.",
+  "inventory": {
+    "contractVersion": "certscore.collection-surface-inventory.v1",
+    "inventoryId": "collection_surface_inventory_pre_consent",
+    "sourceLane": "runtime_evidence",
+    "sourceScanner": "pre_consent_runtime",
+    "scenario": "fresh_pre_consent",
+    "observedAtMs": 22526,
+    "consentStateAtTime": "pre_consent",
+    "pageUrl": "https://sits.com/en/",
+    "coverage": {
+      "status": "limited",
+      "documentScope": "main_document",
+      "interactionMode": "none",
+      "candidateFormCount": 2,
+      "retainedFormCount": 2,
+      "candidateFieldCount": 9,
+      "retainedFieldCount": 9,
+      "inspectedFormCandidateCount": 2,
+      "inspectedFieldCandidateCount": 19,
+      "candidateScanTruncated": false,
+      "retentionTruncated": false,
+      "reasonCodes": [
+        "document_settle_incomplete"
+      ]
+    },
+    "forms": [
+      {
+        "formRef": "collection_form_0",
+        "structure": "native_form",
+        "surfaceType": "generic_form",
+        "pageUrl": "https://sits.com/en/",
+        "method": "post",
+        "actionRelationship": "third_party",
+        "actionHostname": "forms-eu1.hsforms.com",
+        "candidateFieldCount": 8,
+        "retainedFieldCount": 8,
+        "fieldsTruncated": false,
+        "fields": [
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "identity_profile",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_0",
+            "controlIndex": 1,
+            "elementType": "input",
+            "inputType": "text",
+            "semanticCategory": "name",
+            "label": "First Name*",
+            "autocompleteToken": "given-name",
+            "required": true,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_0",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          },
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "identity_profile",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_1",
+            "controlIndex": 2,
+            "elementType": "input",
+            "inputType": "text",
+            "semanticCategory": "name",
+            "label": "Last Name*",
+            "autocompleteToken": "family-name",
+            "required": true,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_1",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          },
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "personal_contact",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_2",
+            "controlIndex": 3,
+            "elementType": "input",
+            "inputType": "email",
+            "semanticCategory": "email",
+            "label": "Business Email*",
+            "autocompleteToken": "email",
+            "required": true,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_2",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          },
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "location",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_3",
+            "controlIndex": 5,
+            "elementType": "select",
+            "inputType": "select",
+            "semanticCategory": "address",
+            "label": "Country*",
+            "required": true,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_3",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          },
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "personal_contact",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_4",
+            "controlIndex": 7,
+            "elementType": "input",
+            "inputType": "tel",
+            "semanticCategory": "phone",
+            "label": "Phone Number",
+            "autocompleteToken": "tel",
+            "required": false,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_4",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          },
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "unknown",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_5",
+            "controlIndex": 6,
+            "elementType": "select",
+            "inputType": "select",
+            "semanticCategory": "selection",
+            "required": false,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_5",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          },
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "free_text",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_6",
+            "controlIndex": 9,
+            "elementType": "textarea",
+            "inputType": "textarea",
+            "semanticCategory": "free_text",
+            "label": "Request",
+            "required": false,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_6",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          },
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "unknown",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_0_field_7",
+            "controlIndex": 4,
+            "elementType": "input",
+            "inputType": "text",
+            "semanticCategory": "unknown",
+            "label": "Company Name*",
+            "autocompleteToken": "organization",
+            "required": true,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_0_7",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.68,
+            "directVsInferred": "direct"
+          }
+        ],
+        "privacyDisclosure": {
+          "version": 1,
+          "excerpts": [
+            {
+              "text": "I have taken note of the privacy policy and agree that my personal data may be stored and processed for the purpose of handling my request.",
+              "association": "inside_form",
+              "links": [
+                {
+                  "label": "privacy policy",
+                  "url": "http://sits.com/en/privacy-statement/"
+                }
+              ]
+            },
+            {
+              "text": "Yes, I would like to receive marketing updates about the product, news and events from SITS. I can withdraw this consent at any time (optional).",
+              "association": "inside_form",
+              "links": []
+            }
+          ],
+          "truncated": false
+        },
+        "evidenceRefs": [
+          {
+            "refId": "ref_collection_surface_form_0",
+            "artifactId": "collection_surface_inventory_pre_consent",
+            "eventType": "main_document_dom_form"
+          }
+        ],
+        "confidence": 0.92,
+        "directVsInferred": "direct"
+      },
+      {
+        "formRef": "collection_form_1",
+        "structure": "native_form",
+        "surfaceType": "generic_form",
+        "pageUrl": "https://sits.com/en/",
+        "method": "post",
+        "actionRelationship": "third_party",
+        "actionHostname": "forms-eu1.hsforms.com",
+        "candidateFieldCount": 1,
+        "retainedFieldCount": 1,
+        "fieldsTruncated": false,
+        "fields": [
+          {
+            "review": {
+              "version": "collection-field-review.v1",
+              "category": "personal_contact",
+              "preselectedMarketing": false
+            },
+            "fieldRef": "collection_form_1_field_0",
+            "controlIndex": 16,
+            "elementType": "input",
+            "inputType": "email",
+            "semanticCategory": "email",
+            "label": "Business Email*",
+            "autocompleteToken": "email",
+            "required": true,
+            "disabled": false,
+            "readOnly": false,
+            "evidenceRefs": [
+              {
+                "refId": "ref_collection_surface_1_0",
+                "artifactId": "collection_surface_inventory_pre_consent",
+                "eventType": "main_document_dom_control"
+              }
+            ],
+            "confidence": 0.9,
+            "directVsInferred": "direct"
+          }
+        ],
+        "evidenceRefs": [
+          {
+            "refId": "ref_collection_surface_form_1",
+            "artifactId": "collection_surface_inventory_pre_consent",
+            "eventType": "main_document_dom_form"
+          }
+        ],
+        "confidence": 0.92,
+        "directVsInferred": "direct"
+      }
+    ],
+    "evidenceRefs": [
+      {
+        "refId": "ref_collection_surface_inventory_pre_consent",
+        "artifactId": "collection_surface_inventory_pre_consent",
+        "eventType": "main_document_dom_inventory"
+      }
+    ],
+    "confidence": 0.94,
+    "directVsInferred": "direct"
+  }
+}

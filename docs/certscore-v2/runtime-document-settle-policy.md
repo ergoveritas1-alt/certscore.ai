@@ -16,6 +16,9 @@ a substantive but still-parsing document satisfied the initial navigation gate.
 - The parser and request wait share one ten-second cap. The existing module,
   parent scan, Lambda and coordinator deadlines remain authoritative. Reserve
   2.5 seconds of the internal module budget for the inventory itself.
+- The initial readiness read shares that cap. A busy parser delaying the read
+  must not short-circuit the allowance; a same-document DOMContentLoaded event
+  plus request quiet can independently complete it while the read is pending.
 - Cancellation, main-frame navigation, page closure or an unavailable read ends
   the wait. All listeners and timers are removed at the terminal outcome.
 - Capture uses the existing browser context, atomic inventory and retention
@@ -52,3 +55,10 @@ baseline/GPC capture, ready-document skipping, the hard cap, pending requests,
 cancellation, document changes and unavailable reads. Retained incomplete
 assessments are checked through persisted report projection and public and
 authenticated report rendering. No production rescan is required for these tests.
+
+Before the busy-read correction was committed, an owner-requested passive scan
+of `https://sits.com/en/` retained two forms and nine fields, including the
+contact form's privacy and optional marketing disclosures. The retained local
+inventory also passes assessment, persistence and public/authenticated rendering
+regressions. Ongoing requests still limit coverage at the unchanged cap; that
+limitation preserves the observed form rows instead of erasing them.
