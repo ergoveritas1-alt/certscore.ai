@@ -5,6 +5,7 @@ import {
   type WebBotAuthKeyMaterial,
 } from "@website-signal-risk-scanner/web-bot-auth";
 import type { BrowserContext } from "playwright";
+import { chromiumHttpUserAgent } from "./playwright-runtime.js";
 
 const DEFAULT_EXPIRES_SECONDS = 60;
 const MAX_EXPIRES_SECONDS = 300;
@@ -99,7 +100,8 @@ export async function installWebBotAuthRoute(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<WebBotAuthRouteInstallation> {
   const config = resolveWebBotAuthRoutingConfig(env);
-  if (!config) {
+  const httpUserAgent = chromiumHttpUserAgent(env);
+  if (!config && !httpUserAgent) {
     const telemetry: WebBotAuthRouteTelemetry = {
       enabled: false,
       signedHttpsRequestCount: 0,
@@ -115,34 +117,39 @@ export async function installWebBotAuthRoute(
   }
 
   const telemetry: WebBotAuthRouteTelemetry = {
-    enabled: true,
+    enabled: Boolean(config),
     signedHttpsRequestCount: 0,
     signedNavigationRequestCount: 0,
   };
 
   await context.route("**/*", async (route) => {
-    const signed = signedHeadersForUrl(config, route.request().url());
-    if (!signed) {
+    const signed = config ? signedHeadersForUrl(config, route.request().url()) : null;
+    if (!signed && !httpUserAgent) {
       await route.fallback();
       return;
     }
-    telemetry.signedHttpsRequestCount += 1;
-    if (route.request().isNavigationRequest()) {
-      telemetry.signedNavigationRequestCount += 1;
+    if (signed) {
+      telemetry.signedHttpsRequestCount += 1;
+      if (route.request().isNavigationRequest()) {
+        telemetry.signedNavigationRequestCount += 1;
+      }
     }
+    // Explicit route header overrides survive Chromium document redirects;
+    // context extraHTTPHeaders alone can lose User-Agent on the redirected hop.
     await route.fallback({
       headers: {
         ...route.request().headers(),
-        ...signed.headers,
+        ...(httpUserAgent ? { "user-agent": httpUserAgent } : {}),
+        ...signed?.headers,
       },
     });
   });
 
   return {
-    enabled: true,
-    expiresSeconds: config.expiresSeconds,
-    keyId: config.keyMaterial.thumbprint,
-    signatureAgentUrl: config.signatureAgentUrl,
+    enabled: Boolean(config),
+    expiresSeconds: config?.expiresSeconds ?? null,
+    keyId: config?.keyMaterial.thumbprint ?? null,
+    signatureAgentUrl: config?.signatureAgentUrl ?? null,
     snapshot: () => ({ ...telemetry }),
   };
 }

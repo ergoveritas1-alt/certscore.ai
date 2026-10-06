@@ -93,6 +93,17 @@ test("can configure Chromium context identity for regional Lambda parity runs", 
   });
 });
 
+test("HTTP crawler identity preserves native navigator identity and regional language", () => {
+  const options = chromiumContextOptions({
+    CERTSCORE_V2_DAG_LAMBDA_HTTP_USER_AGENT: " ConsentCheckBot/1.0 ",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT: "legacy bot identity",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE: "en-IE,en;q=0.9",
+  });
+  assert.equal(options.userAgent, undefined);
+  assert.deepEqual(options.extraHTTPHeaders, { "Accept-Language": "en-IE,en;q=0.9", "User-Agent": "ConsentCheckBot/1.0" });
+  assert.equal(chromiumContextOptions({ CERTSCORE_HTTP_USER_AGENT: "ConsentCheckBot/1.0" }).extraHTTPHeaders?.["User-Agent"], "ConsentCheckBot/1.0");
+});
+
 test("can launch with an explicit Chromium executable path for slim runtime images", () => {
   const env = { CERTSCORE_CHROMIUM_EXECUTABLE_PATH: " /usr/bin/chromium " };
 

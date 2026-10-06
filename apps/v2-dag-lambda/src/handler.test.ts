@@ -2719,6 +2719,17 @@ test("handler exposes bounded Lambda runtime diagnostics for quality A/B runs", 
   assert.equal(JSON.stringify(diagnostics).includes("proxy.example"), false);
 });
 
+test("runtime diagnostics distinguish crawler HTTP identity from native navigator identity", () => {
+  const diagnostics = buildLocalV2DagLambdaRuntimeDiagnostics({
+    CERTSCORE_V2_DAG_LAMBDA_HTTP_USER_AGENT: "ConsentCheckBot/1.0",
+    CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT: "legacy ConsentCheckBot/1.0",
+  });
+  assert.equal(diagnostics.chromiumContextOptions.userAgent, null);
+  assert.equal(diagnostics.chromiumContextOptions.userAgentConfigured, false);
+  assert.equal(diagnostics.chromiumContextOptions.httpUserAgent, "ConsentCheckBot/1.0");
+  assert.equal(diagnostics.chromiumContextOptions.browserIdentityMode, "native_navigator_crawler_http.v1");
+});
+
 test("regional egress guard fails closed when the proxy public region is wrong", () => {
   assert.equal(egressRegionMatchesExpected("California", "California"), true);
   assert.equal(egressRegionMatchesExpected("california", "California"), true);

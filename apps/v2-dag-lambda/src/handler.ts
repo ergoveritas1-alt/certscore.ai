@@ -4630,6 +4630,7 @@ function scanProxyEnabledEnv(env: NodeJS.ProcessEnv = process.env) {
 }
 
 function chromiumContextDiagnostics(env: NodeJS.ProcessEnv) {
+  const options = chromiumContextOptions(env);
   const acceptLanguage = firstTrimmedRuntimeEnv(env, [
     "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_ACCEPT_LANGUAGE",
     "CERTSCORE_CHROMIUM_ACCEPT_LANGUAGE",
@@ -4642,16 +4643,18 @@ function chromiumContextDiagnostics(env: NodeJS.ProcessEnv) {
     "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_TIMEZONE_ID",
     "CERTSCORE_CHROMIUM_TIMEZONE_ID",
   ]);
-  const userAgent = firstTrimmedRuntimeEnv(env, [
-    "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT",
-    "CERTSCORE_CHROMIUM_USER_AGENT",
-  ]);
+  const userAgent = options.userAgent;
+  const httpUserAgent = options.extraHTTPHeaders?.["User-Agent"];
   return {
     acceptLanguage: acceptLanguage ?? null,
     locale: locale ?? null,
     timezoneId: timezoneId ?? null,
     userAgent: userAgent ? userAgent.slice(0, 240) : null,
     userAgentConfigured: Boolean(userAgent),
+    ...(httpUserAgent ? {
+      httpUserAgent: httpUserAgent.slice(0, 240),
+      browserIdentityMode: "native_navigator_crawler_http.v1",
+    } : {}),
     viewport: { width: 1366, height: 900 }
   };
 }

@@ -57,7 +57,7 @@ const SCANNER_WEB_BOT_AUTH_SECRET_ID = "consentcheck/web-bot-auth-private-key-pe
 const SCANNER_IDENTITY_ENVIRONMENT = {
   CERTSCORE_POST_ACCEPT_WORKER_ENABLED: "1",
   CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED: "1",
-  CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT:
+  CERTSCORE_V2_DAG_LAMBDA_HTTP_USER_AGENT:
     "Mozilla/5.0 (compatible; ConsentCheckBot/1.0; +https://consentcheck.site/bot)",
   SCANNER_CRAWLER_NAME: "ConsentCheckBot",
   SCANNER_CRAWLER_PUBLIC_URL: "https://consentcheck.site/bot",

@@ -48,8 +48,18 @@ export function chromiumProxyOptions(env: NodeJS.ProcessEnv = process.env): Laun
   };
 }
 
+export function chromiumHttpUserAgent(env: NodeJS.ProcessEnv = process.env) {
+  return firstTrimmedEnv(env, [
+    "CERTSCORE_V2_DAG_LAMBDA_HTTP_USER_AGENT",
+    "CERTSCORE_HTTP_USER_AGENT",
+  ]);
+}
+
 export function chromiumContextOptions(env: NodeJS.ProcessEnv = process.env): BrowserContextOptions {
-  const userAgent = firstTrimmedEnv(env, [
+  // Identify the crawler on the wire without exposing that token to CMP
+  // navigator-based bot shortcuts. Chromium supplies its native JS identity.
+  const httpUserAgent = chromiumHttpUserAgent(env);
+  const userAgent = httpUserAgent ? undefined : firstTrimmedEnv(env, [
     "CERTSCORE_V2_DAG_LAMBDA_CHROMIUM_USER_AGENT",
     "CERTSCORE_CHROMIUM_USER_AGENT",
   ]);
@@ -72,7 +82,12 @@ export function chromiumContextOptions(env: NodeJS.ProcessEnv = process.env): Br
     ...(userAgent ? { userAgent } : {}),
     ...(locale ? { locale } : {}),
     ...(timezoneId ? { timezoneId } : {}),
-    ...(acceptLanguage ? { extraHTTPHeaders: { "Accept-Language": acceptLanguage } } : {}),
+    ...(acceptLanguage || httpUserAgent ? {
+      extraHTTPHeaders: {
+        ...(acceptLanguage ? { "Accept-Language": acceptLanguage } : {}),
+        ...(httpUserAgent ? { "User-Agent": httpUserAgent } : {}),
+      },
+    } : {}),
   };
 }
 
