@@ -3,6 +3,7 @@ import test from "node:test";
 import { createServer } from "node:http";
 import { chromium } from "playwright";
 import { startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
+import { capturePostAcceptFormInventory } from "./post-accept-form-inventory.js";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE } from "./post-accept-cmp-recipes.js";
 import { projectPostAcceptEvidenceForReport, postAcceptEvidencePacketSchema } from "@certscore/contracts";
@@ -47,6 +48,24 @@ test("registered Accept captures two delayed forms, masks entered values, and pr
     assert.equal(projectPostAcceptEvidenceForReport({ packet }).formSnapshotCapture, undefined);
     assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...packet, formSnapshotCapture: { ...images, exactTargetSha256: "b".repeat(64) } }).success, false);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("bounded post-Accept inventory retains live forms without page-wide evidence or field values", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent(`<form class="cmp"><input name="consent"></form>
+      <form action="https://forms.example.test/contact" method="post" aria-label="Contact">
+        ${Array.from({ length: 8 }, (_, index) => `<label>Field ${index}<input name="field-${index}" value="private-${index}"></label>`).join("")}
+      </form><form action="https://forms.example.test/newsletter" method="post" aria-label="Newsletter">
+        <label>Email<input type="email" name="email" value="person@example.test"></label></form>`);
+    const inventory = await capturePostAcceptFormInventory(page, Date.now(), [".cmp"]);
+    assert.equal(inventory.forms.length, 2);
+    assert.deepEqual(inventory.forms.map(form => form.fields.length), [8, 1]);
+    assert.equal(inventory.forms[0]?.actionHostname, "forms.example.test");
+    assert.equal(JSON.stringify(inventory).includes("private-"), false);
+    assert.equal(JSON.stringify(inventory).includes("person@example.test"), false);
+  } finally { await browser.close(); }
 });
 
 test("optional form images freeze without extending deadlines or retaining navigation-mismatched pixels", async () => {
@@ -103,12 +122,15 @@ test("document proof starts while independently mounted fields settle", async ()
   try {
     await page.route("https://fixture.test/**", route => route.fulfill({ contentType: "text/html", body: `
       <script>setTimeout(() => document.body.insertAdjacentHTML('beforeend',
-        '<form><label>Email<input type="email" name="email"></label></form>'), 650)</script>` }));
+        '<form><label>Email<input type="email" name="email"></label></form>'), 1700)</script>` }));
     await page.goto("https://fixture.test/");
     const startedAt = Date.now();
     const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(),
       parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
-      deadlineAtMs: startedAt + 3000, reviewer: async () => ({ safeForDisplay: true }) });
+      deadlineAtMs: startedAt + 3000, reviewer: async () => {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return { safeForDisplay: true };
+      } });
     while (!capture.done() && Date.now() - startedAt < 3500) await new Promise(resolve => setTimeout(resolve, 25));
     assert.ok(sessionStartedAtMs - startedAt < 200, "document proof should overlap the field wait");
     assert.equal(capture.finish()?.snapshots[0]?.status, "available");
