@@ -26,8 +26,8 @@ export async function captureMaskedFormScreenshot(page: Page, element: ElementHa
       for (const animation of state.animations) {
         if (animation.playState === "paused") animation.play();
       }
-      if (state.previous === null) state.root.removeAttribute(state.attribute);
-      else state.root.setAttribute(state.attribute, state.previous);
+      if (state.previous === null) state.markerRoot.removeAttribute(state.attribute);
+      else state.markerRoot.setAttribute(state.attribute, state.previous);
       for (const entry of state.scrollPositions) entry.element.scrollTo({ left: entry.x, top: entry.y, behavior: "instant" });
       scrollTo({ left: state.position.x, top: state.position.y, behavior: "instant" });
     }).catch(() => {});
@@ -39,11 +39,15 @@ export async function captureMaskedFormScreenshot(page: Page, element: ElementHa
         style = await element.evaluateHandle((root, { deadlineAtMs, marker }) => {
           if (Date.now() >= deadlineAtMs || !(root instanceof Element)) return null;
           const position = { x: scrollX, y: scrollY };
-          // Animating ancestors and siblings can move the form even when its
-          // own CSS is paused. Freeze the current animation frame (including
-          // transitions) without finishing it or waiting for page-wide settle.
-          // This runs after runtime inventory; resume only what we paused.
-          const animations = document.getAnimations();
+          // CSS freezes the whole page so sibling movement cannot shift the
+          // form. Inspect only the form subtree and ancestors for script-owned
+          // animations; a page-wide getAnimations() can consume the window on
+          // animation-heavy sites such as SITS.
+          const animationSet = new Set<Animation>();
+          for (let current: Element | null = root; current; current = current.parentElement) {
+            for (const animation of current.getAnimations({ subtree: current === root })) animationSet.add(animation);
+          }
+          const animations = Array.from(animationSet);
           if (animations.length > 1000) throw new Error("Form screenshot animation inventory exceeded");
           const runningAnimations = animations.filter(animation => animation.playState === "running");
           for (const animation of runningAnimations) animation.pause();
@@ -52,14 +56,15 @@ export async function captureMaskedFormScreenshot(page: Page, element: ElementHa
             scrollPositions.push({ element: parent, x: parent.scrollLeft, y: parent.scrollTop });
           }
           const attribute = "data-certscore-form-capture";
-          const previous = root.getAttribute(attribute);
-          root.setAttribute(attribute, marker);
+          const markerRoot = document.documentElement;
+          const previous = markerRoot.getAttribute(attribute);
+          markerRoot.setAttribute(attribute, marker);
           const node = document.createElement("style");
-          const scope = `[${attribute}="${marker}"]`;
+          const scope = `html[${attribute}="${marker}"]`;
           node.textContent = `${scope},${scope} *,${scope}::before,${scope}::after,${scope} *::before,${scope} *::after{animation-play-state:paused!important;transition-property:none!important;caret-color:transparent!important}`;
           document.documentElement.appendChild(node);
 
-          return { node, root, attribute, previous, position, scrollPositions, animations: runningAnimations };
+          return { node, markerRoot, attribute, previous, position, scrollPositions, animations: runningAnimations };
         }, { deadlineAtMs: deadline, marker: randomUUID() });
         // A page with a throttled or permanently pending animation may never
         // settle every animation.ready promise. The injected paused CSS and

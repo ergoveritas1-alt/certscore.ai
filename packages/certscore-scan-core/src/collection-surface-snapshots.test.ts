@@ -75,7 +75,8 @@ test("pending animation readiness cannot consume the masked screenshot window", 
         pause() { this.playState = "paused"; },
         play() { this.playState = "running"; },
       };
-      document.getAnimations = () => [animation as unknown as Animation];
+      document.getAnimations = () => { throw new Error("page-wide animation inventory must not run"); };
+      document.querySelector("form")!.getAnimations = () => [animation as unknown as Animation];
     });
     const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1, candidateScanTruncated: false,
       rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input", inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
@@ -168,7 +169,7 @@ test("footer form capture uses off-screen pixels without scrolling", async () =>
       session.send = (async (method: string, params: any) => { if (method === "Page.captureScreenshot") {
         beyond = params.captureBeyondViewport;
         assert.equal(params.optimizeForSpeed, true);
-        assert.equal(await page.locator('main').evaluate(el => getComputedStyle(el).animationPlayState), 'running');
+        assert.equal(await page.locator('main').evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
         assert.equal(await page.locator('form').evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
       } return (send as Function)(method, params); }) as typeof session.send;
       return session;
@@ -178,6 +179,7 @@ test("footer form capture uses off-screen pixels without scrolling", async () =>
     assert.equal(result[0]?.status, "available");
     assert.equal(beyond, true);
     assert.equal(await page.locator("form").getAttribute("data-certscore-form-capture"), "existing");
+    assert.equal(await page.locator("main").evaluate(el => getComputedStyle(el).animationPlayState), "running");
     assert.equal(await page.evaluate(() => scrollY), 0);
     assert.equal(await page.locator("input").inputValue(), "private");
   } finally { await browser.close(); }
