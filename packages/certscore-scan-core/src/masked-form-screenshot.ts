@@ -61,10 +61,15 @@ export async function captureMaskedFormScreenshot(page: Page, element: ElementHa
 
           return { node, root, attribute, previous, position, scrollPositions, animations: runningAnimations };
         }, { deadlineAtMs: deadline, marker: randomUUID() });
-        // pause() completes at the next animation frame. Read the crop only
-        // after that pause has taken effect, within the existing capture deadline.
-        await style.evaluate(async (state: any) => {
-          if (state) await Promise.all(state.animations.map((animation: Animation) => animation.ready.catch(() => {})));
+        // A page with a throttled or permanently pending animation may never
+        // settle every animation.ready promise. The injected paused CSS and
+        // synchronous pause state are sufficient to proceed to the strict
+        // before/after layout check without waiting for unrelated frames.
+        stage = "verify_animation_pause";
+        await style.evaluate((state: any) => {
+          if (state?.animations.some((animation: Animation) => animation.playState !== "paused")) {
+            throw new Error("Form screenshot animation did not pause");
+          }
         });
         if (Date.now() >= deadline) {
           await cleanupStyle();

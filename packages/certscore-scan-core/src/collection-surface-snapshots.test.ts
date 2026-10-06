@@ -63,6 +63,29 @@ test("animated forms capture within the existing budget and stalled review termi
   } finally { await browser.close(); }
 });
 
+test("pending animation readiness cannot consume the masked screenshot window", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form style="width:320px;height:120px"><label>Email<input type="email" name="email" value="private@example.test"></label></form>');
+    await page.evaluate(() => {
+      const animation = {
+        playState: "running",
+        ready: new Promise(() => {}),
+        pause() { this.playState = "paused"; },
+        play() { this.playState = "running"; },
+      };
+      document.getAnimations = () => [animation as unknown as Animation];
+    });
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1, candidateScanTruncated: false,
+      rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input", inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    const started = Date.now();
+    const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => ({ safeForDisplay: true }), undefined, undefined, started + 750);
+    assert.equal(result[0]?.status, "available");
+    assert.ok(Date.now() - started < 750);
+  } finally { await browser.close(); }
+});
+
 test("a slow second review preserves the first safety-approved screengrab", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
