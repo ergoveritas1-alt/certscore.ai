@@ -77,11 +77,11 @@ test("optional form images freeze without extending deadlines or retaining navig
       actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0, deadlineAtMs: Date.now() + 100,
       reviewer: async () => ({safeForDisplay:true}) });
     const before = performance.now();
-    assert.equal(handle.finish(), undefined);
+    assert.equal(await handle.finish(), undefined);
     assert.ok(performance.now() - before < 30);
     await page.setContent('<form><input name="email" type="email"></form>');
     await new Promise(resolve => setTimeout(resolve, 120));
-    assert.equal(handle.finish(), undefined);
+    assert.equal(await handle.finish(), undefined);
   } finally { await browser.close(); }
 });
 
@@ -99,7 +99,7 @@ test("registered form discovery tolerates layout animation while retained fields
       parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
       deadlineAtMs: startedAt + 3000, reviewer: async () => ({ safeForDisplay: true }) });
     while (!capture.done() && Date.now() - startedAt < 3500) await new Promise(resolve => setTimeout(resolve, 25));
-    const result = capture.finish();
+    const result = await capture.finish();
     assert.ok(result, "visible fields must not wait for unrelated layout stability");
     assert.equal(result.snapshots[0]?.status, "available");
     assert.ok(result.capturedAtMs <= 3000);
@@ -133,12 +133,75 @@ test("document proof starts while independently mounted fields settle", async ()
       } });
     while (!capture.done() && Date.now() - startedAt < 3500) await new Promise(resolve => setTimeout(resolve, 25));
     assert.ok(sessionStartedAtMs - startedAt < 200, "document proof should overlap the field wait");
-    assert.equal(capture.finish()?.snapshots[0]?.status, "available");
+    assert.equal((await capture.finish())?.snapshots[0]?.status, "available");
     assert.equal(sessionCount, 1, "the screenshot should reuse its loader-bound document session");
   } finally {
     (context as any).newCDPSession = originalSession;
     await browser.close();
   }
+});
+
+test("pixel proof stays in the Accept window while bounded safety review finishes afterward", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  let reviewStarted: (() => void) | undefined;
+  const reviewing = new Promise<void>(resolve => { reviewStarted = resolve; });
+  try {
+    await page.route("https://fixture.test/**", route => route.fulfill({ contentType: "text/html",
+      body: '<form><label>Email<input type="email" name="email" value="private@example.test"></label></form>' }));
+    await page.goto("https://fixture.test/");
+    const startedAt = Date.now();
+    const deadlineAtMs = startedAt + 900;
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(),
+      parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
+      deadlineAtMs, reviewer: async () => {
+        reviewStarted!();
+        await new Promise(resolve => setTimeout(resolve, 1100));
+        return { safeForDisplay: true };
+      } });
+    await Promise.race([reviewing, new Promise<never>((_, reject) => setTimeout(() => reject(new Error("pixels were not captured before deadline")), 800))]);
+    await new Promise(resolve => setTimeout(resolve, Math.max(0, deadlineAtMs - Date.now() + 20)));
+    const result = await capture.finish();
+    assert.ok(result, "approved pixels should survive the end of the browser window");
+    assert.ok(result.capturedAtMs < 900, "packet time must reflect the browser proof, not late review");
+    assert.equal(result.snapshots[0]?.status, "available");
+    assert.ok(result.snapshots[0]?.data);
+  } finally { await browser.close(); }
+});
+
+test("a timed-out second crop preserves the first document-proved screengrab", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const context = page.context();
+  const originalSession = context.newCDPSession.bind(context);
+  let captures = 0;
+  (context as any).newCDPSession = async (...args: Parameters<typeof originalSession>) => {
+    const session = await originalSession(...args);
+    const originalSend = session.send.bind(session);
+    (session as any).send = async (...sendArgs: Parameters<typeof originalSend>) => {
+      if (sendArgs[0] === "Page.captureScreenshot" && ++captures === 2) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      return originalSend(...sendArgs);
+    };
+    return session;
+  };
+  try {
+    await page.route("https://fixture.test/**", route => route.fulfill({ contentType: "text/html",
+      body: '<form><label>Email<input type="email" name="email"></label></form><form><label>Name<input name="name"></label></form>' }));
+    await page.goto("https://fixture.test/");
+    const startedAt = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(),
+      parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
+      deadlineAtMs: startedAt + 1600, reviewer: async () => ({ safeForDisplay: true }) });
+    while (!capture.done() && Date.now() - startedAt < 1800) await new Promise(resolve => setTimeout(resolve, 25));
+    const result = await capture.finish();
+    assert.ok(result);
+    assert.equal(captures, 2);
+    assert.equal(result.snapshots[0]?.status, "available");
+    assert.equal(result.snapshots[1]?.status, "unavailable");
+    assert.ok(result.capturedAtMs < 1600);
+  } finally { (context as any).newCDPSession = originalSession; await browser.close(); }
 });
 
 test("navigation during image review discards all prior-document form pixels", async () => {
@@ -156,6 +219,6 @@ test("navigation during image review discards all prior-document form pixels", a
     await Promise.race([startedReview,new Promise<never>((_,reject)=>setTimeout(()=>reject(new Error("review did not start")),2000))]);
     await page.goto("https://fixture.test/changed");
     release!();
-    assert.equal(handle.finish(),undefined);
+    assert.equal(await handle.finish(),undefined);
   } finally {release?.();await browser.close();}
 });

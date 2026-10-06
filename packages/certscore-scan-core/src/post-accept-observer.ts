@@ -1152,7 +1152,7 @@ export async function runPostAcceptObserver(
       targetUrl: observationTargetUrl,
     });
     formCapture = formCaptureHandle?.finish();
-    formSnapshotCapture = formSnapshotHandle?.finish();
+    formSnapshotCapture = await formSnapshotHandle?.finish();
     timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
     timing.observationExitReason = observationResult.reason;
     observationCoverageSufficient = observationResult.completed;
@@ -1239,7 +1239,7 @@ export async function runPostAcceptObserver(
   } finally {
     // Finalization already froze the optional sample. Cleanup must run even if
     // a capture-side failure interrupted packet construction.
-    try { formSnapshotHandle?.finish(); } catch { /* Optional image work is bounded and cannot block cleanup. */ }
+    try { await formSnapshotHandle?.finish(); } catch { /* Optional image work is bounded and cannot block cleanup. */ }
     try { formCaptureHandle?.finish(); } catch { /* Optional form evidence cannot block browser cleanup. */ }
     if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
     finishOptionalRuntimeGraph(graphCapture, "post_accept", "action_capture_closed");

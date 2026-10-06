@@ -6,21 +6,27 @@ import { collectionSurfaceSnapshotSchema, type CollectionSurfaceInventory, type 
 
 export type FormSnapshotReviewer = (input: { bytes: Buffer; mimeType: "image/jpeg"; signal?: AbortSignal }) => Promise<{ safeForDisplay: boolean }>;
 export type FormSnapshotInventory = Pick<CollectionSurfaceInventory, "pageUrl" | "forms">;
+export type FormSnapshotCaptureOptions = {
+  pixelSignal?: AbortSignal;
+  reviewDeadlineAtMs?: number;
+  onMaskedPixelsCaptured?: () => Promise<void>;
+};
 export const FORM_SNAPSHOT_BUDGET_MS = 2500;
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
 
 /** Same-session, masked, low-resolution crops. No form action, values, or pixel-derived findings. */
-export async function captureCollectionSurfaceSnapshots(page: Page, inventory: FormSnapshotInventory, review: FormSnapshotReviewer, signal?: AbortSignal, boundSession?: CDPSession, deadlineAtMs?: number): Promise<CollectionSurfaceSnapshot[]> {
+export async function captureCollectionSurfaceSnapshots(page: Page, inventory: FormSnapshotInventory, review: FormSnapshotReviewer, signal?: AbortSignal, boundSession?: CDPSession, deadlineAtMs?: number, options?: FormSnapshotCaptureOptions): Promise<CollectionSurfaceSnapshot[]> {
   const controller = new AbortController();
-  const boundedSignal = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  const reviewSignal = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
+  const pixelSignal = options?.pixelSignal ?? reviewSignal;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = Math.min(Date.now() + FORM_SNAPSHOT_BUDGET_MS, deadlineAtMs ?? Number.POSITIVE_INFINITY);
+  const reviewDeadline = Math.max(deadline, Math.min(Date.now() + FORM_SNAPSHOT_BUDGET_MS, options?.reviewDeadlineAtMs ?? deadline));
   const completed = new Map<string, CollectionSurfaceSnapshot>();
   try {
     return await Promise.race([
-      captureWithinBudget(page, inventory, review, deadline, boundedSignal, boundSession, snapshot => {
-        if (!boundedSignal.aborted) completed.set(snapshot.formRef, snapshot);
-      }),
+      captureWithinBudget(page, inventory, review, deadline, pixelSignal, reviewSignal, reviewDeadline, boundSession,
+        snapshot => { if (!reviewSignal.aborted) completed.set(snapshot.formRef, snapshot); }, options?.onMaskedPixelsCaptured),
       new Promise<CollectionSurfaceSnapshot[]>(resolve => {
         timer = setTimeout(() => {
           controller.abort();
@@ -32,13 +38,13 @@ export async function captureCollectionSurfaceSnapshots(page: Page, inventory: F
             mimeType: "image/jpeg", valuesMasked: true, status: "unavailable",
             reason: signal?.aborted ? "capture_cancelled" : "capture_budget_exhausted",
           })));
-        }, Math.max(1, deadline - Date.now()));
+        }, Math.max(1, reviewDeadline - Date.now()));
       }),
     ]);
   } finally { if (timer) clearTimeout(timer); }
 }
 
-async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory, review: FormSnapshotReviewer, deadline: number, signal: AbortSignal, boundSession: CDPSession | undefined, onCompleted: (snapshot: CollectionSurfaceSnapshot) => void): Promise<CollectionSurfaceSnapshot[]> {
+async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory, review: FormSnapshotReviewer, deadline: number, pixelSignal: AbortSignal, reviewSignal: AbortSignal, reviewDeadline: number, boundSession: CDPSession | undefined, onCompleted: (snapshot: CollectionSurfaceSnapshot) => void, onMaskedPixelsCaptured?: () => Promise<void>): Promise<CollectionSurfaceSnapshot[]> {
   const sourceInventoryHash = hash(JSON.stringify(inventory));
   const results: Array<CollectionSurfaceSnapshot | Promise<CollectionSurfaceSnapshot>> = [];
   let reusableSession = boundSession;
@@ -46,8 +52,8 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
   for (const form of inventory.forms) {
     const base = { contractVersion: "certscore.collection-surface-snapshot.v1" as const, formRef: form.formRef, pageUrl: inventory.pageUrl, capturedAt: new Date().toISOString(), sourceInventoryHash, mimeType: "image/jpeg" as const, valuesMasked: true as const };
     const unavailable = (reason: NonNullable<CollectionSurfaceSnapshot["reason"]>) => collectionSurfaceSnapshotSchema.parse({ ...base, status: "unavailable", reason });
-    if (signal?.aborted || Date.now() >= deadline || page.url() !== inventory.pageUrl || !form.fields.length || form.fields.some(f => f.controlIndex === undefined)) {
-      results.push(retain(unavailable(signal?.aborted ? "capture_cancelled" : Date.now() >= deadline ? "capture_budget_exhausted" : page.url() !== inventory.pageUrl ? "document_changed" : "control_identity_unavailable"))); continue;
+    if (pixelSignal.aborted || Date.now() >= deadline || page.url() !== inventory.pageUrl || !form.fields.length || form.fields.some(f => f.controlIndex === undefined)) {
+      results.push(retain(unavailable(pixelSignal.aborted ? "capture_cancelled" : Date.now() >= deadline ? "capture_budget_exhausted" : page.url() !== inventory.pageUrl ? "document_changed" : "control_identity_unavailable"))); continue;
     }
     let stage: NonNullable<CollectionSurfaceSnapshot["reason"]> = "control_binding_changed";
     let target: Awaited<ReturnType<Page["evaluateHandle"]>> | undefined;
@@ -80,7 +86,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
         while (cropRoot && controls.some(el => !cropRoot!.contains(el))) cropRoot = cropRoot.parentElement;
         return cropRoot;
       }, { fields: form.fields, structure: form.structure, url: inventory.pageUrl });
-      if (signal.aborted || Date.now() >= deadline) {
+      if (pixelSignal.aborted || Date.now() >= deadline) {
         results.push(retain(unavailable("capture_budget_exhausted"))); continue;
       }
       const element = target.asElement();
@@ -88,11 +94,15 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       const remaining = Math.max(1, deadline - Date.now());
       stage = "screenshot_failed";
       const original = await captureMaskedFormScreenshot(page, element, remaining, reusableSession);
-      if (signal?.aborted || page.url() !== inventory.pageUrl || Date.now() >= deadline) { results.push(retain(unavailable(signal?.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : "capture_budget_exhausted"))); continue; }
+      if (pixelSignal.aborted || page.url() !== inventory.pageUrl || Date.now() >= deadline) { results.push(retain(unavailable(pixelSignal.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : "capture_budget_exhausted"))); continue; }
+      // Prove each masked crop against the original document immediately. A
+      // later form may exhaust the pixel window without invalidating this one.
+      await onMaskedPixelsCaptured?.();
+      if (pixelSignal.aborted || page.url() !== inventory.pageUrl || Date.now() >= deadline) { results.push(retain(unavailable("capture_budget_exhausted"))); continue; }
       stage = "image_processing_failed";
       const { data, info } = await sharp(original, { limitInputPixels: 40_000_000 }).resize({ width: 640, height: 960, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 45 }).toBuffer({ resolveWithObject: true });
       if (data.byteLength > 96 * 1024) { results.push(retain(unavailable("image_size_exceeded"))); continue; }
-      const boundedSignal = AbortSignal.any([AbortSignal.timeout(Math.max(1, deadline - Date.now())), ...(signal ? [signal] : [])]);
+      const boundedSignal = AbortSignal.any([AbortSignal.timeout(Math.max(1, reviewDeadline - Date.now())), reviewSignal]);
       results.push((async () => {
         let onAbort: (() => void) | undefined;
         try {
@@ -104,11 +114,11 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
               if (boundedSignal.aborted) onAbort();
             }),
           ]);
-          if (signal?.aborted) return unavailable("capture_cancelled");
+          if (reviewSignal.aborted) return unavailable("capture_cancelled");
           if (boundedSignal.aborted) return unavailable("review_timed_out");
           if (page.url() !== inventory.pageUrl) return unavailable("document_changed");
           return collectionSurfaceSnapshotSchema.parse(outcome.safeForDisplay ? { ...base, status: "available", width: info.width, height: info.height, sizeBytes: data.byteLength, sha256: hash(data), data: data.toString("base64") } : { ...base, status: "withheld", reason: "review_withheld" });
-        } catch { return unavailable(signal?.aborted ? "capture_cancelled" : boundedSignal.aborted ? "review_timed_out" : "review_failed"); }
+        } catch { return unavailable(reviewSignal.aborted ? "capture_cancelled" : boundedSignal.aborted ? "review_timed_out" : "review_failed"); }
         finally { if (onAbort) boundedSignal.removeEventListener("abort", onAbort); }
       })().then(retain));
     } catch (error) {
@@ -117,7 +127,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       reusableSession = undefined;
       if (error instanceof Error && error.message === "Form screenshot bounds unavailable") stage = "form_not_visible";
       if (error instanceof Error && error.message === "Form screenshot bounds exceeded") stage = "form_bounds_exceeded";
-      results.push(retain(unavailable(signal?.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : stage))); }
+      results.push(retain(unavailable(pixelSignal.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : stage))); }
     finally { await target?.dispose().catch(() => {}); }
   }
   return Promise.all(results);

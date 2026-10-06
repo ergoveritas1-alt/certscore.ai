@@ -4,10 +4,11 @@ import { buildCollectionSurfaceInventory } from "./collection-surface-inventory.
 /** A bounded form-only DOM sample for the registered Accept window. It never
  * reads field values or page-wide text; the later screenshot independently
  * rebinds every retained control before taking masked pixels. */
-export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs: number, cmpSelectors: string[]) {
-  const snapshot = await page.evaluate((selectors) => {
+export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs: number, cmpSelectors: string[], deadlineAtMs = Date.now()) {
+  const snapshot = await page.evaluate(({ selectors, deadlineAtMs }) => {
     const scope = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
     scope.__name ??= function(target) { return target; };
+    const read = () => {
     const candidates = document.querySelectorAll('input,textarea,select,[role="checkbox"],[role="switch"]');
     const groupRefs = new WeakMap<Element, string>();
     let nextGroup = 0, truncated = candidates.length > 250;
@@ -66,6 +67,31 @@ export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs
     }
     return { pageUrl: location.href, documentReadyState: document.readyState,
       inspectedFieldCandidateCount: Math.min(candidates.length, 250), candidateScanTruncated: truncated, rows };
-  }, cmpSelectors);
+    };
+    return new Promise<ReturnType<typeof read>>(resolve => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let finished = false, queued = false;
+      const observer = new MutationObserver(() => {
+        if (finished || queued) return;
+        queued = true;
+        queueMicrotask(() => { queued = false; poll(); });
+      });
+      const poll = () => {
+        if (finished) return;
+        const current = read();
+        if (current.rows.length || Date.now() >= deadlineAtMs) {
+          finished = true;
+          observer.disconnect();
+          if (timer) clearTimeout(timer);
+          resolve(current);
+          return;
+        }
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(poll, Math.min(50, Math.max(1, deadlineAtMs - Date.now())));
+      };
+      observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "style", "hidden", "aria-hidden"] });
+      poll();
+    });
+  }, { selectors: cmpSelectors, deadlineAtMs });
   return buildCollectionSurfaceInventory(snapshot, scanStartedAtMs);
 }
