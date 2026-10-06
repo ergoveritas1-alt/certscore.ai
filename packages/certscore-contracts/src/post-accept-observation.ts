@@ -1,3 +1,4 @@
+import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema } from "./post-accept-form-snapshots";
 import { postAcceptFormCaptureSchema } from "./post-accept-form-capture";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
@@ -147,6 +148,7 @@ export const postAcceptStorageWriteSchema = postRefusalStorageWriteBaseSchema.om
 }).superRefine(validateActionStorageName);
 
 const postAcceptEvidencePacketBaseSchema = z.object({
+  formSnapshotCapture: postAcceptFormSnapshotCaptureSchema.optional(),
   formCapture: postAcceptFormCaptureSchema.optional(),
   afterActionCapture: afterActionCaptureSchema.optional(),
   runtimeEvidenceGraph: packetRuntimeGraphSchema.optional(),
@@ -212,6 +214,13 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  const images = packet.formSnapshotCapture;
+  if (images && (packet.acceptanceRegistration.status !== "confirmed" || !packet.acceptanceRegistration.acceptanceExercised ||
+    images.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 || images.exactTargetSha256 !== packet.exactTargetSha256 ||
+    images.actionDispatchedAtMs !== packet.acceptanceRegistration.actionDispatchedAtMs ||
+    images.acceptanceRegisteredAtMs !== packet.acceptanceRegistration.acceptanceRegisteredAtMs ||
+    images.capturedAtMs > images.acceptanceRegisteredAtMs + packet.observationWindowMs || images.capturedAtMs > packet.timing.readyAtMs ||
+    packet.interactionDiagnostics?.click.outcome !== "completed")) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form snapshots require confirmed same-target completed Accept inside the original action window"});
   if (packet.formCapture && (packet.formCapture.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 ||
     packet.formCapture.exactTargetSha256 !== packet.exactTargetSha256 ||
     packet.interactionDiagnostics?.navigation.documentCommitted !== true ||
@@ -487,6 +496,7 @@ const postAcceptReportActivityRowSchema = z.object({
 });
 
 export const postAcceptReportProjectionSchema = z.object({
+  formSnapshotCapture: postAcceptFormSnapshotProjectionSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
   execution: choicePathExecutionSchema.optional(),
   registeredObservationCompletion: registeredObservationCompletionSchema.optional(),
@@ -525,6 +535,11 @@ export const postAcceptReportProjectionSchema = z.object({
     "aborted",
   ]),
 }).superRefine((projection, context) => {
+  const images = projection.formSnapshotCapture;
+  if (images && (!projection.packetSha256 || !projection.acceptanceExercised || projection.registrationStatus !== "confirmed" ||
+    images.exactTargetSha256 !== projection.actionControlProof?.authorizedTargetSha256 ||
+    images.acceptanceRegisteredAtMs !== projection.acceptanceRegisteredAtMs || projection.interactionDiagnostics?.click.outcome !== "completed" ||
+    images.capturedAtMs > images.acceptanceRegisteredAtMs + projection.observationWindowMs)) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form image projection requires verified registered packet provenance"});
   if (projection.registeredObservationCompletion && (
     projection.registeredObservationCompletion.action !== "accept" ||
     projection.registeredObservationCompletion.startedAtMs !== projection.acceptanceRegisteredAtMs ||
@@ -564,7 +579,7 @@ export function projectPostAcceptEvidenceForReport(input: {
     !hasSemanticConsentWitness(packet.acceptanceRegistration.witnesses)) {
     // Do not reinterpret or mutate stored legacy artifacts; project them neutrally.
     return projectPostAcceptEvidenceForReport({ ...input, packet: {
-      ...packet, productionProjectable: false, observations: [],
+      ...packet, formSnapshotCapture: undefined, productionProjectable: false, observations: [],
       limitations: [...packet.limitations.slice(0, 23), "semantic_registration_unverified_legacy_packet"],
       acceptanceRegistration: { ...packet.acceptanceRegistration, status: "unconfirmed",
         acceptanceExercised: false, reason: "semantic_registration_unverified_legacy_packet" },
@@ -630,6 +645,9 @@ export function projectPostAcceptEvidenceForReport(input: {
       observationCount: packet.observations.length,
     }),
     ...(packet.formCapture && input.packetSha256 ? {formCapture: packet.formCapture} : {}),
+    ...(packet.formSnapshotCapture && input.packetSha256 ? { formSnapshotCapture: {
+      ...packet.formSnapshotCapture, snapshots: packet.formSnapshotCapture.snapshots.map(({ data: _data, ...metadata }) => metadata),
+    } } : {}),
     ...(packet.afterActionCapture ? {
       afterActionCapture: packet.afterActionCapture,
       afterActionRequests: packet.network.requests.filter((row) => packet.afterActionCapture!.requestIds.includes(row.requestId)),

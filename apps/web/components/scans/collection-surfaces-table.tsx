@@ -10,18 +10,8 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { FIELD_REVIEW_POLICY, legacyCollectionFieldCategory, type CollectionSurfaceAssessment } from "@certscore/contracts";
 
 type Form = CollectionSurfaceAssessment["forms"][number];
-export type CollectionSurfaceTableRow = {
-  id: string;
-  form: Form;
-  capturedAt: string;
-  capturePhase?: "after_accept_click";
-  captureLimited?: boolean;
-  captureProvenance?: {
-    packetSha256: string; sessionId: string; frameRef: string; documentToken: string;
-    exactTargetSha256: string; actionDispatchedAtMs: number; capturedAtMs: number;
-  };
-  snapshot: { status: "available"; url: string } | { status: "unavailable" | "withheld" | "pending"; reason?: string };
-};
+import type { CollectionSurfaceTableRow } from "../../lib/scans/collection-surface-table-row";
+export type { CollectionSurfaceTableRow } from "../../lib/scans/collection-surface-table-row";
 
 function pageHref(value: string) {
   try {
@@ -182,7 +172,7 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
                     <th scope="row" className="w-10 px-3 py-2 font-medium"><InspectButton open={open} controls={detailId} name={title} onClick={() => setExpanded(current => {
                       const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next;
                     })} /></th>
-                    <td className="px-3 py-2 capitalize">{label(form.surfaceType)}{row.capturePhase ? <span className="block whitespace-nowrap text-xs normal-case text-zinc-500">After Accept click</span> : null}{samePageRows.length > 1 ? <span className="block text-zinc-500 normal-case">Page observation {occurrence} of {samePageRows.length}</span> : null}</td>
+                    <td className="px-3 py-2 capitalize">{label(form.surfaceType)}{row.capturePhase ? <span className="block whitespace-nowrap text-xs normal-case text-zinc-500">{row.capturePhase === "after_accept" ? "After Accept" : "After Accept click"}</span> : null}{samePageRows.length > 1 ? <span className="block text-zinc-500 normal-case">Page observation {occurrence} of {samePageRows.length}</span> : null}</td>
                     <td className="px-3 py-2 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
                     <td className="px-3 py-2">{controlsSummary(form.fields)}{form.fields.some(f=>f.review?.preselectedMarketing) ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Expand to review preselected marketing controls" className="ml-1 text-amber-700">⚠</span> : null}{form.fieldsTruncated ? <span className="block text-zinc-500">Partial inventory</span> : null}</td>
                     <td className="px-3 py-2">{form.fields.length ? <FieldReview field={[...form.fields].sort((a,b)=>reviewRank(b)-reviewRank(a))[0]!}/> : "—"}</td>
@@ -200,7 +190,7 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
                       <div><dt className="text-zinc-500">Form confidence</dt><dd>{Math.round(form.confidence * 100)}% · {form.directVsInferred}</dd></div>
                       <div><dt className="text-zinc-500">Evidence references</dt><dd className="break-all">{form.evidenceRefs.length ? JSON.stringify(form.evidenceRefs) : "Not retained"}</dd></div>
                     </dl>
-                    {row.capturePhase ? <p className="my-2 max-w-xl text-xs text-zinc-500">Observed after the Accept click. This does not establish consent registration.{row.captureLimited ? " Capture was limited; other fields or forms may be missing." : ""}</p> : null}
+                    {row.capturePhase === "after_accept_click" ? <p className="my-2 max-w-xl text-xs text-zinc-500">Observed after the Accept click. This does not establish consent registration.{row.captureLimited ? " Capture was limited; other fields or forms may be missing." : ""}</p> : null}
                     <FormPrivacyDisclosure form={form} />
                     {form.fields.length ? <table className="w-full text-left text-xs">
                       <caption className="sr-only">Fields in {title}</caption>

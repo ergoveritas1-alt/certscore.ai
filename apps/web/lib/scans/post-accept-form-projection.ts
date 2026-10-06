@@ -1,6 +1,7 @@
+import { projectConsentControlReport } from "./consent-control-report";
 import { postAcceptReportProjectionSchema } from '@certscore/contracts';
 import { isAfterActionReportEligible, retainedConsentAssessment } from './after-action-report-eligibility';
-import type { CollectionSurfaceTableRow } from '../../components/scans/collection-surfaces-table';
+import type { CollectionSurfaceTableRow } from './collection-surface-table-row';
 
 /** Inventory evidence only: never contributes findings, control states or scoring. */
 export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfaceTableRow[]; limited: boolean } {
@@ -9,7 +10,25 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
   const root = value as Record<string, unknown>;
   const runtime = (root.runtimeArtifacts ?? root) as Record<string, unknown>;
   const parsed = postAcceptReportProjectionSchema.safeParse(runtime.postAcceptEvidenceProjection ?? runtime.post_accept_evidence_projection);
-  if (!parsed.success || !parsed.data.formCapture) return empty;
+  if (!parsed.success) return empty;
+  const images = parsed.data.formSnapshotCapture;
+  if (images) {
+    const scanId = projectConsentControlReport(retainedConsentAssessment(value))?.scanId;
+    if (!scanId) return empty;
+    return { limited: false, rows: images.inventory.forms.map(form => {
+      const snapshot = images.snapshots.find(snapshot => snapshot.formRef === form.formRef);
+      return { id: `after_accept:${images.sessionId}:${form.formRef}`, form,
+        capturedAt: snapshot?.capturedAt ?? "", capturePhase: "after_accept" as const,
+        captureProvenance: {packetSha256: parsed.data.packetSha256!, sessionId: images.sessionId,
+          frameRef:"main", documentToken:images.documentIdentity.token, exactTargetSha256:images.exactTargetSha256,
+          actionDispatchedAtMs:images.actionDispatchedAtMs,capturedAtMs:images.capturedAtMs},
+        snapshot: snapshot?.status === "available" ? {status:"available" as const,
+          url:`/api/scans/${scanId}/form-snapshot?formRef=${encodeURIComponent(`after_accept:${form.formRef}`)}`} :
+          {status:snapshot?.status ?? "unavailable" as const,reason:snapshot?.reason},
+      };
+    }) };
+  }
+  if (!parsed.data.formCapture) return empty;
   const capture = parsed.data.formCapture;
   return { limited: capture.status === 'limited', rows: capture.frames.flatMap(frame => frame.forms.map(form => ({
     id: `after_accept:${capture.sessionId}:${form.formRef}`, form,

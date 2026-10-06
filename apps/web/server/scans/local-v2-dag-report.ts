@@ -1,3 +1,5 @@
+import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
+import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
@@ -14,7 +16,7 @@ import { projectRuntimeEvidenceGraphs } from "./runtime-evidence-graph-projectio
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { verifiedFormSnapshots } from "./form-snapshot-evidence";
+import { verifiedPostAcceptFormSnapshots, verifyPostAcceptPacketFormImages, verifiedFormSnapshots } from "./form-snapshot-evidence";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -6036,7 +6038,7 @@ function buildMaterializedLocalV2Detail(
   );
   const postAcceptReportProjection = bundle.postAcceptEvidence
     ? projectPostAcceptEvidenceForReport({
-        packet: bundle.postAcceptEvidence,
+        packet: verifyPostAcceptPacketFormImages(bundle.postAcceptEvidence),
         ...(postAcceptPacketPointer?.sha256
           ? { packetSha256: postAcceptPacketPointer.sha256 }
           : {}),
@@ -6766,7 +6768,7 @@ export async function materializeLocalV2DagScanDetail(
 }
 
 export async function loadSinglePageFormSnapshot(scanRecord: ScanDetailResponse, formRef: string) {
-  if (!/^collection_form_\d+$/.test(formRef) || scanRecord.scan.status !== "completed") return null;
+  if (!/^(?:after_accept:)?collection_form_\d+$/.test(formRef) || scanRecord.scan.status !== "completed") return null;
   const input = getLocalV2DagReportInput(scanRecord);
   if (!input?.scanArtifactSha256 || !input.scanArtifactSizeBytes) return null;
   const verification = { expectedSha256: input.scanArtifactSha256, expectedSizeBytes: input.scanArtifactSizeBytes };
@@ -6774,6 +6776,29 @@ export async function loadSinglePageFormSnapshot(scanRecord: ScanDetailResponse,
     ? await readLocalV2DagBundle(input.outDir, verification)
     : input.scanArtifactUri ? await readLocalV2DagBundleFromS3({ ...verification, uri: input.scanArtifactUri }) : null;
   if (!bundle || bundle.scanId !== scanRecord.scan.id) return null;
+  if (formRef.startsWith("after_accept:")) {
+    const row = projectPostAcceptForms(scanRecord).rows.find(row => row.form.formRef === formRef.slice("after_accept:".length));
+    if (row?.snapshot.status !== "available" || !bundle.postAcceptEvidence || bundle.postAcceptEvidence.parentScanId !== scanRecord.scan.id) return null;
+    const pointer = getLocalV2DagLambdaArtifactPointer(scanRecord, "postAcceptPacketUri");
+    if (!pointer?.sha256 || !pointer.sizeBytes || pointer.sha256 !== row.captureProvenance?.packetSha256) return null;
+    const raw = shouldReadLocalV2DagReportOutDir(input) && input.outDir
+      ? JSON.parse(verifyLocalV2DagLambdaArtifactBody({
+          body: await readFile(path.join(input.outDir, "lanes", "accept_observation", "PostAcceptEvidencePacket.json")),
+          expectedSha256: pointer.sha256, expectedSizeBytes: pointer.sizeBytes,
+        }).toString("utf8")) as unknown
+      : await readLocalV2DagJsonArtifactFromS3({ uri:pointer.uri, expectedSha256:pointer.sha256, expectedSizeBytes:pointer.sizeBytes });
+    const packet = postAcceptEvidencePacketSchema.safeParse(raw);
+    if (!packet.success || packet.data.parentScanId !== scanRecord.scan.id) return null;
+    const verified = verifiedPostAcceptFormSnapshots(packet.data.formSnapshotCapture);
+    const provenance = row.captureProvenance;
+    if (!verified || !provenance || verified.capture.sessionId !== provenance.sessionId ||
+      verified.capture.documentIdentity.token !== provenance.documentToken ||
+      verified.capture.exactTargetSha256 !== provenance.exactTargetSha256 ||
+      verified.capture.actionDispatchedAtMs !== provenance.actionDispatchedAtMs ||
+      verified.capture.capturedAtMs !== provenance.capturedAtMs ||
+      JSON.stringify(verified.capture.inventory.forms.find(form => form.formRef === row.form.formRef)) !== JSON.stringify(row.form)) return null;
+    return verified.images.find(item => item.snapshot.formRef === row.form.formRef)?.bytes ?? null;
+  }
   return verifiedFormSnapshots(bundle).find(item => item.snapshot.formRef === formRef)?.bytes ?? null;
 }
 

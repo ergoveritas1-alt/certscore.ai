@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Frame, Page } from "playwright";
+import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { PRIVACY_EVIDENCE_LOCALE_REGISTRY, POST_ACCEPT_FORM_CAPTURE_MAX_BYTES, postAcceptFormCaptureSchema, type PostAcceptFormCapture } from "@certscore/contracts";
 import { buildCollectionSurfaceInventory, type CollectionSurfaceCaptureRow } from "./collection-surface-inventory";
 
@@ -57,7 +58,7 @@ export function startPostAcceptFormCapture(input: {
           if (!shown) { if (active()) capture.inspectedFrameCount++; return; }
         }
         if (!active()) return;
-        const snapshot = await frame.evaluate(({ hints }) => {
+        const snapshot = await frame.evaluate(({ hints, cmpSelectors }) => {
           // tsx/esbuild name preservation otherwise references a helper outside the serialized callback.
           const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
           globalWithNameHelper.__name ??= function(target) { return target; };
@@ -96,7 +97,7 @@ export function startPostAcceptFormCapture(input: {
           for (let i = 0; i < Math.min(candidates.length, 40); i++) {
             if (performance.now() >= stopAt) { truncated = true; break; }
             const node = candidates[i] as HTMLInputElement;
-            if (['hidden', 'submit', 'button', 'reset', 'image'].includes(node.type) || !visible(node)) continue;
+            if (['hidden', 'submit', 'button', 'reset', 'image'].includes(node.type) || !visible(node) || cmpSelectors.some(selector => node.closest(selector))) continue;
             const group = node.form ?? node.closest('form, [role="form"]');
             if (!group) { truncated = true; continue; }
             if (!groups.has(group)) groups.set(group, groups.size);
@@ -133,7 +134,7 @@ export function startPostAcceptFormCapture(input: {
             });
           }
           return { pageUrl, documentToken, documentReadyState: document.readyState, rows, candidateScanTruncated: truncated || visibilityLimited, inspectedFieldCandidateCount: Math.min(candidates.length,40) };
-        }, { hints });
+        }, { hints, cmpSelectors: KNOWN_CMP_REGISTRY.flatMap(cmp => cmp.formExclusionSelectors ?? cmp.domSelectors ?? []) });
         if (!active()) return;
         if (!snapshot || frame.isDetached() || epoch !== (epochs.get(frame) ?? 0)) { reasons.add("frame_unavailable"); return; }
         const capturedAtMs = Date.now() - input.parentScanStartedAtMs;

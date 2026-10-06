@@ -349,6 +349,7 @@ export async function captureConsentControlGeometry(
     consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
     controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     registrySelectors,
+    nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
   };
   const initialPageUrl = page.url();
   const mainFrame = page.mainFrame();
@@ -1283,6 +1284,7 @@ function collectConsentGeometryInPage(input: {
   consentPatternSource: string;
   controlLabelPatternSource: string;
   registrySelectors: string[];
+  nonFirstLayerSurfaceSelector: string;
 }): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
   globalWithNameHelper.__name ??= function(target) {
@@ -1365,6 +1367,7 @@ function collectConsentGeometryInPage(input: {
       const tagName = element.tagName.toLowerCase();
       const role = (element.getAttribute("role") || "").toLowerCase();
       return (
+        !element.closest(input.nonFirstLayerSurfaceSelector) &&
         !isPageChromeContext(element) &&
         tagName !== "html" &&
         tagName !== "body" &&
@@ -1414,6 +1417,7 @@ function collectConsentGeometryInPage(input: {
       };
   }
   const documentControls = deepQuerySelectorAll(controlSelector)
+    .filter(element => !element.closest(input.nonFirstLayerSurfaceSelector))
     .filter((element) => {
       const label = labelFor(element);
       const attrs = compactText([
@@ -1444,7 +1448,7 @@ function collectConsentGeometryInPage(input: {
   const containerControls = containerControlInventories.flatMap(controls => controls.slice(0, 80));
   const seenControlElements = new Set<Element>();
   const controlElements = [...containerControls, ...documentControls].filter((element) => {
-    if (seenControlElements.has(element)) {
+    if (element.closest(input.nonFirstLayerSurfaceSelector) || seenControlElements.has(element)) {
       return false;
     }
     seenControlElements.add(element);

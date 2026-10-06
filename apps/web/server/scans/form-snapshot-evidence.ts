@@ -1,5 +1,29 @@
 import { createHash } from "node:crypto";
-import { collectionSurfaceInventorySchema, collectionSurfaceSnapshotSchema, type CollectionSurfaceSnapshot } from "@certscore/contracts";
+import { collectionSurfaceInventorySchema, collectionSurfaceSnapshotSchema, postAcceptFormSnapshotCaptureSchema,
+  type PostAcceptEvidencePacket, type CollectionSurfaceSnapshot } from "@certscore/contracts";
+
+export function verifiedPostAcceptFormSnapshots(value: unknown) {
+  const parsed = postAcceptFormSnapshotCaptureSchema.safeParse(value);
+  if (!parsed.success) return null;
+  const capture = parsed.data;
+  const inventoryHash = createHash("sha256").update(JSON.stringify(capture.inventory)).digest("hex");
+  const images: Array<{ snapshot: CollectionSurfaceSnapshot; bytes: Buffer | null }> = [];
+  for (const snapshot of capture.snapshots) {
+    if (snapshot.sourceInventoryHash !== inventoryHash) return null;
+    if (snapshot.status !== "available") { images.push({ snapshot, bytes: null }); continue; }
+    const bytes = Buffer.from(snapshot.data!, "base64");
+    if (bytes.length !== snapshot.sizeBytes || createHash("sha256").update(bytes).digest("hex") !== snapshot.sha256 ||
+      bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+    images.push({ snapshot, bytes });
+  }
+  return { capture, images };
+}
+
+/** Preserve independently valid action evidence when optional pixels fail verification. */
+export function verifyPostAcceptPacketFormImages(packet: PostAcceptEvidencePacket): PostAcceptEvidencePacket {
+  return !packet.formSnapshotCapture || verifiedPostAcceptFormSnapshots(packet.formSnapshotCapture)
+    ? packet : { ...packet, formSnapshotCapture: undefined };
+}
 
 /** Verify retained image bytes against the exact canonical inventory before serving. */
 export function verifiedFormSnapshots(raw: { collectionSurfaceInventory?: unknown; collectionSurfaceSnapshots?: unknown[] }) {

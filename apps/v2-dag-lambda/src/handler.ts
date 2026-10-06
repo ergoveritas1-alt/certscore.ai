@@ -2292,6 +2292,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       });
     }
     return runPostAcceptObserver({
+      formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
       runtimeGraph: payload.runtimeGraph,
       onLifecycleEvent: () => { void checkpoint("action_dispatched"); },
       allowCanonicalAcceptDiscovery: config.resolver.kind === "canonical_cmp_registry",

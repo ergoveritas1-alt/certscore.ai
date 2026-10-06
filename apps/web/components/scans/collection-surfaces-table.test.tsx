@@ -112,3 +112,10 @@ test("after-click form observations retain context without claiming consent or a
   const empty=renderToStaticMarkup(<CollectionSurfacesTable afterAcceptLimited rows={[]} />);
   assert.doesNotMatch(empty,/No forms were observed|no forms observed/);
 });
+
+test("registered After Accept snapshots expose the actual image without an unconfirmed-click disclaimer", () => {
+  const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[{ ...row, capturePhase: "after_accept" }]} />);
+  assert.match(html, />After Accept</);
+  assert.match(html, /View form: Contact us/);
+  assert.doesNotMatch(html, /does not establish consent registration|Some forms or disclosures|have limited form coverage/);
+});

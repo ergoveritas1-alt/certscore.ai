@@ -1,3 +1,4 @@
+import { revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
 import { installFormDestinationTracing } from "../form-destination-trace.js";
 import { CMS_ASSET_PATTERNS, SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
@@ -199,6 +200,7 @@ const CANONICAL_NECESSARY_PREFERENCE_CATEGORY_LABELS = unique(
 const CANONICAL_CMP_CONTAINER_SELECTORS = unique(
   KNOWN_CMP_REGISTRY.flatMap((definition) => definition.domSelectors ?? []),
 ).slice(0, 250);
+const NON_FIRST_LAYER_SURFACE_SELECTOR = KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(",");
 const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
   "base64",
@@ -1447,6 +1449,13 @@ export async function preConsentRuntimeScanner(
     // evidence quality is more important than shaving a few seconds here.
     const consentUiCaptureTimeoutMs = fastWait ? 7_000 : 8_000;
     const earlyScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent.png");
+    let deferredDialogRevealed = false;
+    const revealDeferredDialog = async () => {
+      if (input.captureScope !== "consent_proof" || deferredDialogRevealed || remainingModuleBudgetMs() < 300) return;
+      deferredDialogRevealed = await recordBoundedTiming(timingBreakdown, "registered passive dialog reveal",
+        "Borlabs v3 configured interaction-deferred first layer: observe a one-pixel viewport scroll without choosing consent.",
+        250, () => revealBorlabsDeferredDialog(page), () => false);
+    };
     const captureInitialConsentUiObservation = () => {
       consentUiInspectionAttempted = true;
       return recordBoundedTiming(
@@ -1775,6 +1784,8 @@ export async function preConsentRuntimeScanner(
       "network capture",
       `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation and the bounded evidence-aware quiet window.`,
     );
+
+    await revealDeferredDialog();
 
     // Retain one cheap, explicitly post-settle inventory before the atomic
     // page snapshot can consume the remaining module budget. The initial
@@ -2632,6 +2643,7 @@ export async function preConsentRuntimeScanner(
         navigationStartedAtMs,
         resolveStablePartialProofPacket,
         stablePartialProofPacket: stablePartialProofPacketBeforeAdaptiveGate,
+        beforeInventory: revealDeferredDialog,
         onTenSecondGate: (
           earlyScreenshotCaptured &&
           (input.screenshotCaptureMode ?? "viewport_first") === "viewport_first"
@@ -5288,7 +5300,7 @@ async function capturePostSettlePageEvidence(input: {
 
 async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIntegrity: false | "starting_page_main_document" | "additional_page_main_document" = false): Promise<ConsolidatedPageEvidenceSnapshot> {
   const before = currentBrowserDocumentIdentity(page);
-  const cmpSelectors = KNOWN_CMP_REGISTRY.flatMap((definition) => definition.domSelectors ?? []).slice(0, 100);
+  const cmpSelectors = KNOWN_CMP_REGISTRY.flatMap((definition) => definition.formExclusionSelectors ?? definition.domSelectors ?? []).slice(0, 100);
   const snapshot = await page.evaluate(({ cmpSelectors, maxFieldCandidates, captureSiteIntegrity, integrityLimits, privacyHints }) => {
     // tsx/esbuild can preserve nested browser-callback names by emitting calls to
     // its module-scoped __name helper. Playwright serializes only this callback,
@@ -6266,6 +6278,7 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
   stablePartialProofPacket: boolean;
   resolveStablePartialProofPacket?: (observation: ConsentUiObservation) => boolean;
   onTenSecondGate?: () => Promise<ConsentUiObservation>;
+  beforeInventory?: () => Promise<void>;
   page: Page;
   scanStartedAtMs: number;
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
@@ -6373,6 +6386,7 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
       );
     }
 
+    await input.beforeInventory?.();
     const rapidObservation = await readRapidFirstLayerConsentUiObservation(
       input.page,
       input.scanStartedAtMs,
@@ -7369,6 +7383,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     rejectedNoContextLabels: string[];
   };
   type RapidConsentInventoryInput = {
+    nonFirstLayerSurfaceSelector: string;
     canonicalCmpContainerSelectors: string[];
     canonicalConsentInventoryLabels: string[];
     canonicalConsentContextHints: string[];
@@ -7522,6 +7537,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       : document.querySelectorAll(semanticControlSelector);
     let visitedCandidates = 0;
     for (const element of candidates) {
+      if (element.closest(input.nonFirstLayerSurfaceSelector)) continue;
       if (probeBudgetExpired()) break;
       visitedCandidates += 1;
       if (visitedCandidates > 5_000) break;
@@ -7640,6 +7656,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     };
   }`;
   const inventoryInput: RapidConsentInventoryInput = {
+    nonFirstLayerSurfaceSelector: NON_FIRST_LAYER_SURFACE_SELECTOR,
     canonicalCmpContainerSelectors: CANONICAL_CMP_CONTAINER_SELECTORS,
     canonicalConsentInventoryLabels: CANONICAL_CONSENT_INVENTORY_LABELS,
     canonicalConsentContextHints: CANONICAL_CONSENT_CONTEXT_HINTS,
@@ -9237,6 +9254,7 @@ function axStringValue(value: AccessibilityNodeValue | undefined) {
 }
 
 const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
+    const nonFirstLayerSurfaceSelector = ${JSON.stringify(NON_FIRST_LAYER_SURFACE_SELECTOR)};
     window.__certscoreConsentInventory = (allowFullDocumentCmpControls, canonicalConsentInventoryLabels = [], canonicalConsentContextHints = [], canonicalCmpControlSelectors = []) => {
       const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
       const customControlSelectors = [
@@ -9662,6 +9680,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         .slice(0, 1_200);
       const seen = new Set();
       const controls = candidates.flatMap((element) => {
+        if (element.closest?.(nonFirstLayerSurfaceSelector)) return [];
         if (!isVisible(element)) {
           rememberCandidate(element, "", "hidden");
           return [];
@@ -10385,7 +10404,7 @@ function uniqueRejectionReasons(
   return unique([...values]) as NonNullable<ConsentUiObservation["inventoryDiagnostics"]>["rejectionReasons"];
 }
 
-async function captureCollectionSurfaceInventory(
+export async function captureCollectionSurfaceInventory(
   page: Page,
   scanStartedAtMs: number,
   pageUrl: string,

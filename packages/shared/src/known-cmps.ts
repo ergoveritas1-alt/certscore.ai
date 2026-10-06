@@ -29,7 +29,7 @@ export type KnownCmpActionConfirmation =
   | { kind: "local_storage_equals"; expectedValue: string; key: string }
   | {
       kind: "cmp_api_consent_state_changed";
-      provider: "termly" | "transcend";
+      provider: "termly" | "transcend" | "borlabs";
     }
   | {
       kind: "tcf_purposes_or_cmp_cookie_changed";
@@ -59,6 +59,11 @@ export type KnownCmpActionCapability = {
 };
 
 export type KnownCmpDefinition = {
+  /** Content-specific opt-in controls are not first-layer visitor consent choices. */
+  nonFirstLayerSurfaceSelectors?: string[];
+  /** Exclude actual consent dialogs from collection inventory, not blocked content. */
+  formExclusionSelectors?: string[];
+
   /** Passive control recognition only; never an action/dispatch recipe. */
   observationControlRecipes?: Array<{ recipeId: string; controlSelector: string; containerSelectors: string[] }>;
 
@@ -568,6 +573,14 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: ["Borlabs Cookie", "Borlabs Cookie CMP", "BorlabsCookie"],
     canonicalName: "Borlabs Cookie",
+    formExclusionSelectors: ["#BorlabsCookieBox", "[class*='brlbs-cmpnt-dialog']"],
+    nonFirstLayerSurfaceSelectors: [".brlbs-cmpnt-content-blocker", "[data-borlabs-cookie-content-blocker]", "[data-borlabs-cookie-content-blocker-id]", "[data-borlabs-cookie-accept-service]"],
+    acceptControlTargets: [{ scopeSelector: ".brlbs-cmpnt-dialog-box-entrance", resolution: "scoped_accessible_control" }],
+    rejectControlTargets: [{ scopeSelector: ".brlbs-cmpnt-dialog-box-entrance", resolution: "scoped_accessible_control" }],
+    acceptConfirmation: { kind: "cmp_api_consent_state_changed", provider: "borlabs" },
+    rejectConfirmation: { kind: "cmp_api_consent_state_changed", provider: "borlabs" },
+    recipeVersion: "v3-api-state-1",
+    interactionDocumentationUrls: ["https://borlabs.io/docs/javascript-api-v3/"],
     cookieNames: ["borlabs-cookie", "borlabsCookie"],
     domains: ["borlabs.io"],
     domSelectors: ["#BorlabsCookieBox", "[data-borlabs-cookie-consent-required]", "[class*='brlbs-' i]"],

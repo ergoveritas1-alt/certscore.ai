@@ -297,3 +297,14 @@ test("ambiguous recurring names need direct vendor context, never an ancestor or
     ]) assert.equal(resolveCanonicalCookieKnowledge(name, context).category, "unknown", `${name} ${JSON.stringify(context)}`);
   }
 });
+
+
+test("WPML's documented exact language cookie is functional and does not classify unrelated names", () => {
+  const language = resolveCanonicalCookieKnowledge("wp-wpml_current_language");
+  assert.equal(language.category, "infrastructure");
+  assert.equal(language.essentiality, "essential");
+  assert.equal(language.vendor, "WPML");
+  for (const name of ["wp-wpml_current_language_tracking", "wp-wpml_custom", "custom_language"]) {
+    assert.equal(resolveCanonicalCookieKnowledge(name).essentiality, "unknown");
+  }
+});

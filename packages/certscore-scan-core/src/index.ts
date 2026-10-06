@@ -1,3 +1,4 @@
+import { revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
 export { buildGpcProductionAssessment, buildGpcProductionObservation } from "./gpc-production-observation.js";
 export { buildGpcImpactAssessment } from "./gpc-impact-assessment.js";
 export { buildGpcActivityComparison } from "./gpc-activity-comparison.js";
@@ -3482,6 +3483,10 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         if (passiveSettleTimeoutMs !== null) {
           await page.waitForTimeout(passiveSettleTimeoutMs).catch(() => undefined);
         }
+      }
+      if (input.recoverConsentEvidence && optionalTimeoutForStep(250) !== null) {
+        // Recovery owns this fresh consent session and its existing settle window.
+        await revealBorlabsDeferredDialog(page);
       }
       const recoverySettleTimeoutMs = input.recoverConsentEvidence
         ? optionalTimeoutForStep(500, 100)

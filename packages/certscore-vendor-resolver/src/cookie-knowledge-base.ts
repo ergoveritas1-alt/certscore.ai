@@ -34,6 +34,16 @@ type CookieKnowledgeRule = Omit<CanonicalCookieKnowledge, "name"> & {
 };
 
 const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
+  // WPML's exact current-language cookie supports AJAX language filtering.
+  // https://wpml.org/documentation/support/browser-cookies-stored-wpml/
+  {
+    pattern: /^wp-wpml_current_language$/,
+    category: "infrastructure",
+    dataTypes: ["current site language"],
+    description: "WPML language cookie used to preserve the current language for AJAX language filtering.",
+    essentiality: "essential",
+    vendor: "WPML",
+  },
   // Frequency-reviewed September 7, 2026. Primary sources and deferred candidates:
   // docs/operations/unknown-purpose-opportunity-assessment.md
   // Google's published cookie table lists these exact legacy Analytics names.

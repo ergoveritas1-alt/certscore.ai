@@ -169,7 +169,7 @@ export interface PostRefusalActionRecipe {
       }
     | {
         kind: "cmp_api_consent_state_changed";
-        provider: "termly" | "transcend";
+        provider: "termly" | "transcend" | "borlabs";
       }
     | {
       kind: "canonical_reject_transition";
@@ -2974,7 +2974,7 @@ function selectCanonicalRejectConfirmationRecipe(
   return undefined;
 }
 
-const POST_REFUSAL_RECIPE_CANDIDATE_MAX = 24;
+const POST_REFUSAL_RECIPE_CANDIDATE_MAX = 25;
 
 function validatedActionRecipes(input: PostRefusalObserverInput): PostRefusalActionRecipe[] {
   const recipes = input.recipeCandidates?.length ? input.recipeCandidates : [input.recipe];
@@ -3250,7 +3250,8 @@ async function waitForRefusalConfirmation(
         snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
       );
       const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
-      if (snapshot?.decision === "denied" && (changed || freshEvent)) {
+      if (snapshot?.decision === "denied" && (changed || freshEvent) &&
+        (confirmation.provider !== "borlabs" || (baseline.canonicalState !== undefined && freshEvent))) {
         return {
           stateHash: hashValue(snapshot.canonicalState),
           witnessType: "cmp_api_state",

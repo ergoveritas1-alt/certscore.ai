@@ -1006,6 +1006,7 @@ test("canonical reject recipe set selects the one actionable deterministic contr
       "Cookiebot",
       "CookieYes",
       "DSGVO All in One / tarteaucitron",
+      "Borlabs Cookie",
       "Sourcepoint",
       "Didomi",
       "Quantcast Choice",

@@ -1,13 +1,17 @@
 # Proposal: forms withheld until Accept
 
-Status: proposed; not implemented or approved for production.
+Status: implementation approved October 6, 2026; local SITS capture verified; production deployment remains on hold.
+
+Owner approval: “Approve bounded After Accept form screengrabs.” The approved scope
+is at most two masked, safety-reviewed images in the existing Accept lane, up to
+$20/month at 100,000 affected scans, with no new lane or timeout extension.
 
 SITS withholds both HubSpot forms on a verified fresh, unaccepted visit. Fixing
 its navigator-based bot auto-grant restores that visit and the consent controls,
 but also removes the accidentally unblocked forms from pre-consent evidence.
 Earlier bot-accepted images cannot be reused as fresh pre-consent evidence.
 
-## Proposed bounded implementation
+## Approved bounded implementation
 
 Use only the existing authorized Accept observation lane and its canonical
 one-click recipe. After confirmed registration, retain typed form inventory and
@@ -60,3 +64,50 @@ Root AGENTS.md requires explicit product-owner cost approval before implementing
 or deploying an incremental change estimated at $1/month or more. General scan
 reliability or earlier runtime-settle approval does not approve this new action
 evidence capture scope.
+
+
+The implementation retains image bytes in the existing verified Accept packet,
+not separate image writes. Persisted report projection contains metadata only;
+the existing throttled form-image endpoint verifies the original packet
+bytes and inventory/image hashes before serving. One bounded presence gate
+requires a stable eligible field set for 250 ms within the existing registered After Accept observation
+window, followed by one inventory sample and the existing shared image budget.
+There is no late result, report refresh, accepted-session score effect, or new
+customer disclaimer. Failed optional image verification preserves valid action
+facts. Borlabs registration uses the documented service-state API and a fresh
+saved-decision event. Content-specific unblock controls and CMP preference forms
+are excluded through the shared registry. Adding the Borlabs recipe raises the
+Reject candidate bound from 24 to 25 without adding a browser action or window.
+Its one additional bounded selector/API inspection is estimated below $0.10/month
+at 100,000 scans; this is covered by the approved overall ceiling. One-off local
+verification model usage is estimated below $1 total.
+
+The image deadline uses the existing confirmed-observation window anchored to
+acceptance registration, and remains capped by the original worker result budget.
+Confirmation time must not be subtracted from that unchanged observation window.
+
+
+## Local verification result — October 6, 2026
+
+The six-lane local SITS run completed in 13,025 ms and retained two safe actual
+After Accept images, for the eight-field contact form and one-field newsletter.
+Original packet SHA/size, inventory/image integrity, metadata-only materialization,
+canonical report eligibility, image serving and negative provenance checks passed.
+HTTP ConsentCheckBot identity was retained with native navigator identity and
+fresh unaccepted passive state. Accept, Reject and Options projected Observed.
+Both independent actions registered through the Borlabs service API and a fresh
+saved-decision event. No form was submitted.
+
+Canonical scoring replay produced 85: only the existing 15-point confirmed
+After Reject measurement/advertising deduction applied. Accepted activity remained
+score-neutral. The exact WPML current-language cookie was corrected in the canonical
+cookie registry using WPML documentation; scoring weights did not change. GPC
+remained indeterminate and neutral. The local harness used filesystem service
+doubles and a local-only HTTP/2 launch override; it did not deploy, invoke AWS
+workers, write production data or replace a historical score. Detailed evidence
+is in artifacts/sits-local-registered-window-20261006/README.md.
+
+Optional form presence/capture can defer an existing early Accept exit while it
+uses the already configured three-second registered observation window. It does
+not add ten seconds or change all-scan deadlines. Runs without a registered Accept
+do not start this image work; no image-specific tail is permitted.

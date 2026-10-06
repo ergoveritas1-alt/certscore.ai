@@ -1,3 +1,5 @@
+import { startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
+import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
@@ -153,7 +155,7 @@ export interface PostAcceptActionRecipe {
       }
     | {
         kind: "cmp_api_consent_state_changed";
-        provider: "termly" | "transcend";
+        provider: "termly" | "transcend" | "borlabs";
       }
     | {
         kind: "canonical_accept_transition";
@@ -165,6 +167,7 @@ export interface PostAcceptActionRecipe {
 }
 
 export interface PostAcceptObserverInput {
+  formSnapshotReviewer?: FormSnapshotReviewer;
   runtimeGraph?: { scanId: string; mode: "capture_only" | "project" };
   scanId: string;
   parentScanId?: string;
@@ -366,6 +369,8 @@ export async function runPostAcceptObserver(
   let observationCoverageSufficient = false;
   let selectedRecipe: PostAcceptActionRecipe | undefined;
   let actionControlProof: ConsentActionControlProof | undefined;
+  let formSnapshotHandle: ReturnType<typeof startRegisteredPostAcceptFormSnapshots> | undefined;
+  let formSnapshotCapture: PostAcceptEvidencePacket["formSnapshotCapture"];
   let formCaptureHandle: ReturnType<typeof startPostAcceptFormCapture> | undefined;
   let formCapture: PostAcceptEvidencePacket["formCapture"];
   let afterActionCapture: PostAcceptEvidencePacket["afterActionCapture"];
@@ -428,6 +433,7 @@ export async function runPostAcceptObserver(
       ...finishOptionalRuntimeGraph(graphCapture, "post_accept", confirmed ? undefined : "action_not_confirmed"),
       artifactVersion: "certscore.post_accept_evidence.v2",
       ...(formCapture ? { formCapture } : {}),
+      ...(formSnapshotCapture ? { formSnapshotCapture } : {}),
       ...(afterActionCapture ? { afterActionCapture } : {}),
       ...(terminalDecisionEvidence ? { terminalDecisionEvidence } : {}),
       decisionEvidence,
@@ -1125,6 +1131,13 @@ export async function runPostAcceptObserver(
       witnesses,
     };
 
+    if (input.formSnapshotReviewer && diagnostics.click.outcome === "completed" && !actionDocumentChanged) {
+      formSnapshotHandle = startRegisteredPostAcceptFormSnapshots({ page,
+        exactTargetUrl: normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl), parentScanStartedAtMs,
+        actionDispatchedAtMs, acceptanceRegisteredAtMs, reviewer: input.formSnapshotReviewer,
+        deadlineAtMs: Math.min(parentScanStartedAtMs + acceptanceRegisteredAtMs + observationWindowMs,
+          resultBudgetDeadlineAtMs ?? Number.POSITIVE_INFINITY), signal: effectiveSignal });
+    }
     const observationStartedAtMs = Date.now();
     const observationResult = await waitForPostAcceptObservation({
       confirmation: selectedRecipe.confirmation,
@@ -1134,10 +1147,12 @@ export async function runPostAcceptObserver(
       page,
       parentScanStartedAtMs,
       acceptanceRegisteredAtEpochMs,
+      canExitEarly: () => !formSnapshotHandle || formSnapshotHandle.done(),
       signal: effectiveSignal,
       targetUrl: observationTargetUrl,
     });
     formCapture = formCaptureHandle?.finish();
+    formSnapshotCapture = formSnapshotHandle?.finish();
     timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
     timing.observationExitReason = observationResult.reason;
     observationCoverageSufficient = observationResult.completed;
@@ -1224,6 +1239,7 @@ export async function runPostAcceptObserver(
   } finally {
     // Finalization already froze the optional sample. Cleanup must run even if
     // a capture-side failure interrupted packet construction.
+    try { formSnapshotHandle?.finish(); } catch { /* Optional image work is bounded and cannot block cleanup. */ }
     try { formCaptureHandle?.finish(); } catch { /* Optional form evidence cannot block browser cleanup. */ }
     if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
     finishOptionalRuntimeGraph(graphCapture, "post_accept", "action_capture_closed");
@@ -2064,7 +2080,8 @@ async function waitForAcceptanceConfirmation(
         snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
       );
       const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
-      if (snapshot?.decision === "granted" && (changed || freshEvent)) {
+      if (snapshot?.decision === "granted" && (changed || freshEvent) &&
+        (confirmation.provider !== "borlabs" || (baseline.canonicalState !== undefined && freshEvent))) {
         return {
           stateHash: hashValue(snapshot.canonicalState),
           witnessType: "cmp_api_state",
@@ -2174,6 +2191,7 @@ async function waitForPostAcceptObservation(input: {
   confirmation: PostAcceptActionRecipe["confirmation"];
   confirmedState: ConfirmationState;
   getCapturedRequests: () => CapturedRequest[];
+  canExitEarly?: () => boolean;
   observationWindowMs: number;
   page: Page;
   parentScanStartedAtMs: number;
@@ -2215,12 +2233,17 @@ async function waitForPostAcceptObservation(input: {
       };
     }
 
+    // Keep yielding while optional images overlap the original window. An
+    // expired early-signal deadline must not create a zero-delay busy loop.
+    const canExitEarly = input.canExitEarly?.() ?? true;
+    const currentDeadlineAtMs = canExitEarly
+      ? earlyExitDeadlineAtMs ?? observationDeadlineAtMs : observationDeadlineAtMs;
     if (Date.now() - lastTcfPollAtMs >= 100) {
       lastTcfPollAtMs = Date.now();
       lastTcfData = await pollWithinPostAcceptObservationDeadline(
         () => readTcfData(input.page).catch(() => undefined),
         undefined,
-        earlyExitDeadlineAtMs ?? observationDeadlineAtMs,
+        currentDeadlineAtMs,
       );
       lastTcfObservedAtEpochMs = lastTcfData ? Date.now() : undefined;
       if (acceptanceContradictionObserved(
@@ -2249,7 +2272,7 @@ async function waitForPostAcceptObservation(input: {
     const writes = await pollWithinPostAcceptObservationDeadline(
       () => readStorageWrites(input.page),
       [],
-      earlyExitDeadlineAtMs ?? observationDeadlineAtMs,
+      currentDeadlineAtMs,
     );
     if (writes
       .filter((write) => write.observedAtEpochMs > input.acceptanceRegisteredAtEpochMs)
@@ -2265,7 +2288,7 @@ async function waitForPostAcceptObservation(input: {
       retainFirstSignal("non_essential_storage_write_observed");
     }
 
-    if (earlyExitDeadlineAtMs !== undefined && Date.now() >= earlyExitDeadlineAtMs) {
+    if (earlyExitDeadlineAtMs !== undefined && Date.now() >= earlyExitDeadlineAtMs && (input.canExitEarly?.() ?? true)) {
       return {
         completed: true,
         reason: firstSignalReason!,
@@ -2277,7 +2300,7 @@ async function waitForPostAcceptObservation(input: {
 
     const nextDeadlineAtMs = Math.min(
       observationDeadlineAtMs,
-      earlyExitDeadlineAtMs ?? observationDeadlineAtMs,
+      currentDeadlineAtMs,
     );
     await waitForDelay(
       Math.min(25, Math.max(0, nextDeadlineAtMs - Date.now())),

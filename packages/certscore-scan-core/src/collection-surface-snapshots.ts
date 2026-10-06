@@ -5,11 +5,12 @@ import type { Page } from "playwright";
 import { collectionSurfaceSnapshotSchema, type CollectionSurfaceInventory, type CollectionSurfaceSnapshot } from "@certscore/contracts";
 
 export type FormSnapshotReviewer = (input: { bytes: Buffer; mimeType: "image/jpeg"; signal?: AbortSignal }) => Promise<{ safeForDisplay: boolean }>;
+export type FormSnapshotInventory = Pick<CollectionSurfaceInventory, "pageUrl" | "forms">;
 export const FORM_SNAPSHOT_BUDGET_MS = 2500;
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
 
 /** Same-session, masked, low-resolution crops. No form action, values, or pixel-derived findings. */
-export async function captureCollectionSurfaceSnapshots(page: Page, inventory: CollectionSurfaceInventory, review: FormSnapshotReviewer, signal?: AbortSignal): Promise<CollectionSurfaceSnapshot[]> {
+export async function captureCollectionSurfaceSnapshots(page: Page, inventory: FormSnapshotInventory, review: FormSnapshotReviewer, signal?: AbortSignal): Promise<CollectionSurfaceSnapshot[]> {
   const controller = new AbortController();
   const boundedSignal = AbortSignal.any([controller.signal, ...(signal ? [signal] : [])]);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -34,7 +35,7 @@ export async function captureCollectionSurfaceSnapshots(page: Page, inventory: C
   } finally { if (timer) clearTimeout(timer); }
 }
 
-async function captureWithinBudget(page: Page, inventory: CollectionSurfaceInventory, review: FormSnapshotReviewer, deadline: number, signal: AbortSignal): Promise<CollectionSurfaceSnapshot[]> {
+async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory, review: FormSnapshotReviewer, deadline: number, signal: AbortSignal): Promise<CollectionSurfaceSnapshot[]> {
   const sourceInventoryHash = hash(JSON.stringify(inventory));
   const results: Array<CollectionSurfaceSnapshot | Promise<CollectionSurfaceSnapshot>> = [];
   for (const form of inventory.forms) {

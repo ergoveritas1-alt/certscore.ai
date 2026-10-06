@@ -1,6 +1,6 @@
 import type { Frame, Page } from "playwright";
 
-export type CmpApiConsentProvider = "termly" | "transcend";
+export type CmpApiConsentProvider = "termly" | "transcend" | "borlabs";
 
 export type CmpApiConsentSnapshot = {
   canonicalState: string;
@@ -13,6 +13,38 @@ export async function readCmpApiConsentSnapshot(
   provider: CmpApiConsentProvider,
 ): Promise<CmpApiConsentSnapshot | undefined> {
   return scope.evaluate(async ({ provider }) => {
+    if (provider === "borlabs") {
+      const target = window as unknown as {
+        BorlabsCookie?: { Consents?: { hasConsent?: (id: string, group: string) => boolean } };
+        borlabsCookieConfig?: { services?: Record<string, { id?: string; serviceGroupId?: string }> };
+        __certscoreBorlabsConsentEvents?: { sequence: number };
+      };
+      const api = target.BorlabsCookie?.Consents;
+      const services = target.borlabsCookieConfig?.services;
+      if (typeof api?.hasConsent !== "function" || !services || typeof services !== "object") return undefined;
+      const configured = Object.entries(services);
+      if (!configured.length || configured.length > 96) return undefined;
+      if (!target.__certscoreBorlabsConsentEvents) {
+        const tracker = { sequence: 0 };
+        Object.defineProperty(target, "__certscoreBorlabsConsentEvents", { value: tracker, enumerable: false });
+        window.addEventListener("borlabs-cookie-consent-saved", () => { tracker.sequence += 1; });
+      }
+      const entries: Array<[string, string, boolean]> = [];
+      for (const [id, service] of configured) {
+        if (!service || service.id !== id || typeof service.serviceGroupId !== "string" ||
+          !/^[a-z0-9_-]{1,100}$/i.test(id) || !/^[a-z0-9_-]{1,100}$/i.test(service.serviceGroupId)) return undefined;
+        const granted = api.hasConsent(id, service.serviceGroupId);
+        if (typeof granted !== "boolean") return undefined;
+        entries.push([service.serviceGroupId, id, granted]);
+      }
+      entries.sort((left, right) => (left[0] + ":" + left[1]).localeCompare(right[0] + ":" + right[1]));
+      const optional = entries.filter(([group]) => group !== "essential");
+      if (!optional.length) return undefined;
+      const decision = optional.every(([, , granted]) => granted) ? "granted" as const
+        : optional.every(([, , granted]) => !granted) ? "denied" as const : "mixed" as const;
+      return { canonicalState: JSON.stringify(entries), decision,
+        eventSequence: target.__certscoreBorlabsConsentEvents!.sequence };
+    }
     if (provider === "termly") {
       const target = window as unknown as {
         Termly?: {
