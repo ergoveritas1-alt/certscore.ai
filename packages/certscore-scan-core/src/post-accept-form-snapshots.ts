@@ -24,10 +24,30 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
   timer.unref?.();
   void (async () => {
     let stage = "presence";
+    const stageStartedAtMs = Date.now();
+    const stageTimingsMs: Record<string, number> = {};
+    const nextStage = (name: string) => { stageTimingsMs[stage] = Date.now() - stageStartedAtMs; stage = name; };
     let presenceDiagnostics: { maxVisibleFields: number; visibleFields: number; stableForMs: number } | undefined;
+    let snapshotDiagnostics: Array<{ status: string; reason?: string }> | undefined;
     let cdp: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
+    let documentBinding: Promise<{ session: NonNullable<typeof cdp>; token: string | undefined }> | undefined;
     try {
       if (!active()) return;
+      // Start document proof while the independently mounted fields settle.
+      // Its loader is checked again after pixels, so an intervening navigation
+      // still discards the capture.
+      documentBinding = input.page.context().newCDPSession(input.page).then(async session => {
+        try {
+          const before = await session.send("Page.getFrameTree");
+          return { session, token: before.frameTree.frame.loaderId };
+        } catch (error) {
+          await session.detach().catch(() => {});
+          throw error;
+        }
+      });
+      void documentBinding.then(({ session }) => {
+        if (done || frozen || signal.aborted) void session.detach().catch(() => {});
+      }).catch(() => {});
       const exclusion = KNOWN_CMP_REGISTRY.flatMap(cmp => cmp.formExclusionSelectors ?? cmp.domSelectors ?? []).join(",");
       // One bounded presence gate; require a brief stable field set before the
       // single inventory sample, so independently mounted forms can coalesce.
@@ -69,12 +89,12 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       presenceDiagnostics = diagnostics;
       if (!present) return;
       if (!active()) return;
-      stage = "document_binding";
-      cdp = await input.page.context().newCDPSession(input.page);
-      const before = await cdp.send("Page.getFrameTree");
-      const token = before.frameTree.frame.loaderId;
+      nextStage("document_binding");
+      const binding = await documentBinding;
+      cdp = binding.session;
+      const token = binding.token;
       if (!token || !active()) return;
-      stage = "inventory";
+      nextStage("inventory");
       const raw = await captureCollectionSurfaceInventory(input.page, input.parentScanStartedAtMs, input.exactTargetUrl);
       const inventory = postAcceptFormInventorySchema.parse({
         contractVersion: "certscore.post_accept_form_inventory.v1", sourceLane: "accept_observation",
@@ -84,12 +104,14 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
         })),
       });
       if (!inventory.forms.length || inventory.pageUrl !== input.exactTargetUrl || !active()) return;
-      stage = "images";
-      const snapshots = await captureCollectionSurfaceSnapshots(input.page, inventory, input.reviewer, signal);
+      nextStage("images");
+      const snapshots = await captureCollectionSurfaceSnapshots(input.page, inventory, input.reviewer, signal, cdp, input.deadlineAtMs - 150);
+      snapshotDiagnostics = snapshots.map(snapshot => ({ status: snapshot.status, ...(snapshot.reason ? { reason: snapshot.reason } : {}) }));
       if (!active()) return;
+      nextStage("final_document_binding");
       const after = await cdp.send("Page.getFrameTree");
       if (after.frameTree.frame.loaderId !== token || !active()) return;
-      stage = "packet_validation";
+      nextStage("packet_validation");
       result = postAcceptFormSnapshotCaptureSchema.parse({
         contractVersion: "certscore.post_accept_form_snapshots.v1", phase: "after_accept",
         sessionId: randomUUID(), exactTargetSha256: createHash("sha256").update(input.exactTargetUrl).digest("hex"),
@@ -100,7 +122,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
     } catch (error) {
       console.warn("[post-accept-form-snapshots]", JSON.stringify({stage, failureClass:error instanceof Error ? error.name : "unknown", issues: (error as {issues?: Array<{path: unknown; code: unknown}>}).issues?.map(issue => ({path:issue.path,code:issue.code})), deadlineExpired:Date.now() >= input.deadlineAtMs}));
     }
-    finally { if (!result) console.warn("[post-accept-form-snapshot-incomplete]", JSON.stringify({stage, changed, aborted:signal.aborted, deadlineExpired:Date.now() >= input.deadlineAtMs, presence:presenceDiagnostics})); done = true; await cdp?.detach().catch(() => {}); }
+    finally { if (!result) console.warn("[post-accept-form-snapshot-incomplete]", JSON.stringify({stage, stageTimingsMs, elapsedMs:Date.now()-stageStartedAtMs, changed, aborted:signal.aborted, deadlineExpired:Date.now() >= input.deadlineAtMs, presence:presenceDiagnostics, snapshots:snapshotDiagnostics})); done = true; if (!cdp) void documentBinding?.then(({session}) => session.detach()).catch(() => {}); await cdp?.detach().catch(() => {}); }
   })();
   return {
     done: () => done || !active(),

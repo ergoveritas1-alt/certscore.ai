@@ -1,20 +1,20 @@
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
-import type { ElementHandle, Page } from "playwright";
+import type { CDPSession, ElementHandle, Page } from "playwright";
 
 /** Capture current pixels without Playwright's page-wide font/stability wait.
  * Redact every input rectangle before the image can leave this function. A
  * changed document/layout or unbounded control inventory discards the image. */
-export async function captureMaskedFormScreenshot(page: Page, element: ElementHandle, timeoutMs: number): Promise<Buffer> {
+export async function captureMaskedFormScreenshot(page: Page, element: ElementHandle, timeoutMs: number, boundSession?: CDPSession): Promise<Buffer> {
   const deadline = Date.now() + timeoutMs;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let pixelTimer: ReturnType<typeof setTimeout> | undefined;
-  const acquisition = page.context().newCDPSession(page);
+  const acquisition = boundSession ? Promise.resolve(boundSession) : page.context().newCDPSession(page);
   let acquisitionTimer: ReturnType<typeof setTimeout> | undefined;
   const session = await Promise.race([acquisition, new Promise<never>((_, reject) => {
     acquisitionTimer = setTimeout(() => reject(new Error("Form screenshot session deadline")), Math.max(1, deadline - Date.now()));
   })]).catch(error => {
-    void acquisition.then(client => client.detach()).catch(() => {});
+    if (!boundSession) void acquisition.then(client => client.detach()).catch(() => {});
     throw error;
   }).finally(() => { if (acquisitionTimer) clearTimeout(acquisitionTimer); });
   let stage = "pause_animation";
@@ -134,8 +134,9 @@ export async function captureMaskedFormScreenshot(page: Page, element: ElementHa
   } finally {
     if (timer) clearTimeout(timer);
     if (pixelTimer) clearTimeout(pixelTimer);
-    // Detaching also stops a timed-out CDP operation; no late image is retained.
-    await session.detach().catch(() => {});
+    // The caller owns a bound session and detaches it after the final loader
+    // check. A newly acquired session remains local to this screenshot.
+    if (!boundSession) await session.detach().catch(() => {});
     await cleanupStyle();
   }
 }

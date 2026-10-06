@@ -63,6 +63,28 @@ test("animated forms capture within the existing budget and stalled review termi
   } finally { await browser.close(); }
 });
 
+test("a slow second review preserves the first safety-approved screengrab", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form><label>Email<input type="email"></label></form><form><label>Name<input type="text"></label></form>');
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 2, candidateScanTruncated: false, rows: [
+      { groupKey: "first", structure: "native_form", elementType: "input", inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 },
+      { groupKey: "second", structure: "native_form", elementType: "input", inputType: "text", label: "Name", required: false, disabled: false, readOnly: false, domOrder: 1 },
+    ] }, Date.now());
+    let reviews = 0;
+    const result = await captureCollectionSurfaceSnapshots(page, inventory, () => {
+      reviews++;
+      return reviews === 1 ? Promise.resolve({ safeForDisplay: true }) : new Promise(() => {});
+    }, undefined, undefined, Date.now() + 1800);
+    assert.equal(result.length, 2);
+    assert.equal(result[0]?.status, "available");
+    assert.ok(result[0]?.data);
+    assert.equal(result[1]?.status, "unavailable");
+    assert.equal(result[1]?.data, undefined);
+  } finally { await browser.close(); }
+});
+
 test("pending page fonts cannot prevent a masked form snapshot", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();

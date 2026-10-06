@@ -87,6 +87,38 @@ test("registered form discovery tolerates layout animation while retained fields
   } finally { await browser.close(); }
 });
 
+test("document proof starts while independently mounted fields settle", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const context = page.context();
+  const originalSession = context.newCDPSession.bind(context);
+  let sessionStartedAtMs = 0;
+  let sessionCount = 0;
+  (context as any).newCDPSession = async (...args: Parameters<typeof originalSession>) => {
+    sessionStartedAtMs ||= Date.now();
+    sessionCount++;
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return originalSession(...args);
+  };
+  try {
+    await page.route("https://fixture.test/**", route => route.fulfill({ contentType: "text/html", body: `
+      <script>setTimeout(() => document.body.insertAdjacentHTML('beforeend',
+        '<form><label>Email<input type="email" name="email"></label></form>'), 650)</script>` }));
+    await page.goto("https://fixture.test/");
+    const startedAt = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(),
+      parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
+      deadlineAtMs: startedAt + 3000, reviewer: async () => ({ safeForDisplay: true }) });
+    while (!capture.done() && Date.now() - startedAt < 3500) await new Promise(resolve => setTimeout(resolve, 25));
+    assert.ok(sessionStartedAtMs - startedAt < 200, "document proof should overlap the field wait");
+    assert.equal(capture.finish()?.snapshots[0]?.status, "available");
+    assert.equal(sessionCount, 1, "the screenshot should reuse its loader-bound document session");
+  } finally {
+    (context as any).newCDPSession = originalSession;
+    await browser.close();
+  }
+});
+
 test("navigation during image review discards all prior-document form pixels", async () => {
   const browser = await chromium.launch({headless:true});
   const page = await browser.newPage();
