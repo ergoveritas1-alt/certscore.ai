@@ -61,6 +61,11 @@ export async function captureMaskedFormScreenshot(page: Page, element: ElementHa
 
           return { node, root, attribute, previous, position, scrollPositions, animations: runningAnimations };
         }, { deadlineAtMs: deadline, marker: randomUUID() });
+        // pause() completes at the next animation frame. Read the crop only
+        // after that pause has taken effect, within the existing capture deadline.
+        await style.evaluate(async (state: any) => {
+          if (state) await Promise.all(state.animations.map((animation: Animation) => animation.ready.catch(() => {})));
+        });
         if (Date.now() >= deadline) {
           await cleanupStyle();
           throw new Error("Form screenshot deadline");

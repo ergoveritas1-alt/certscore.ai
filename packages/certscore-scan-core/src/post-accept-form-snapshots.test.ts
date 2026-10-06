@@ -66,6 +66,27 @@ test("optional form images freeze without extending deadlines or retaining navig
   } finally { await browser.close(); }
 });
 
+test("registered form discovery tolerates layout animation while retained fields remain stable", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.route("https://fixture.test/**", route => route.fulfill({ contentType: "text/html", body: `
+      <style>@keyframes move { from { transform: translateY(0); } to { transform: translateY(80px); } }
+      form { animation: move 1s linear infinite alternate; width: 400px; padding: 20px; }</style>
+      <form><label>Email<input type="email" name="email"></label></form>` }));
+    await page.goto("https://fixture.test/");
+    const startedAt = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(),
+      parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
+      deadlineAtMs: startedAt + 3000, reviewer: async () => ({ safeForDisplay: true }) });
+    while (!capture.done() && Date.now() - startedAt < 3500) await new Promise(resolve => setTimeout(resolve, 25));
+    const result = capture.finish();
+    assert.ok(result, "visible fields must not wait for unrelated layout stability");
+    assert.equal(result.snapshots[0]?.status, "available");
+    assert.ok(result.capturedAtMs <= 3000);
+  } finally { await browser.close(); }
+});
+
 test("navigation during image review discards all prior-document form pixels", async () => {
   const browser = await chromium.launch({headless:true});
   const page = await browser.newPage();

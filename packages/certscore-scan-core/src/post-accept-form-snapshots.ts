@@ -24,16 +24,23 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
   timer.unref?.();
   void (async () => {
     let stage = "presence";
+    let presenceDiagnostics: { maxVisibleFields: number; visibleFields: number; stableForMs: number } | undefined;
     let cdp: Awaited<ReturnType<ReturnType<Page["context"]>["newCDPSession"]>> | undefined;
     try {
       if (!active()) return;
       const exclusion = KNOWN_CMP_REGISTRY.flatMap(cmp => cmp.formExclusionSelectors ?? cmp.domSelectors ?? []).join(",");
       // One bounded presence gate; require a brief stable field set before the
       // single inventory sample, so independently mounted forms can coalesce.
-      const present = await input.page.evaluate<boolean>(String.raw`new Promise(resolve => {
+      const presence = await input.page.evaluate<{ present: boolean; maxVisibleFields: number; visibleFields: number; stableForMs: number }>(String.raw`new Promise(resolve => {
         const deadline = ${input.deadlineAtMs - 500};
         const selector = ${JSON.stringify(exclusion)};
         let previous = "", changedAt = Date.now();
+        let maxVisibleFields = 0, nextIdentity = 0;
+        const identities = new WeakMap();
+        const identity = node => {
+          if (!identities.has(node)) identities.set(node, ++nextIdentity);
+          return identities.get(node);
+        };
         const poll = () => {
           const controls = Array.from(document.querySelectorAll('input,textarea,select')).slice(0,250)
             .filter(control => {
@@ -44,14 +51,22 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
               return bounds.width > 0 && bounds.height > 0 && style.display !== "none" &&
                 style.visibility !== "hidden" && Number(style.opacity || "1") > 0;
             });
-          const signature = controls.map(control => {const root=control.closest('form,[role="form"]'),rect=root.getBoundingClientRect();return [control.tagName,control.getAttribute('id'),control.getAttribute('name'),control.getAttribute('type'),rect.x,rect.y,rect.width,rect.height].join(':');}).join('|');
+          // Fields must coalesce, but page animation and unrelated layout shifts
+          // must not consume the capture window. Pixel acquisition separately
+          // freezes animation and verifies the exact crop and input masks.
+          const signature = controls.map(control => [identity(control),identity(control.closest('form,[role="form"]')),control.tagName,control.getAttribute('id'),control.getAttribute('name'),control.getAttribute('type')].join(':')).join('|');
           if (signature !== previous) { previous = signature; changedAt = Date.now(); }
-          if (controls.length && Date.now() - changedAt >= 250) return resolve(true);
-          if (Date.now() >= deadline) return resolve(false);
+          maxVisibleFields = Math.max(maxVisibleFields, controls.length);
+          const stableForMs = Date.now() - changedAt;
+          const diagnostics = { maxVisibleFields, visibleFields: controls.length, stableForMs };
+          if (controls.length && stableForMs >= 250) return resolve({ present: true, ...diagnostics });
+          if (Date.now() >= deadline) return resolve({ present: false, ...diagnostics });
           setTimeout(poll, Math.min(50, Math.max(1,deadline-Date.now())));
         };
         poll();
       })`);
+      const { present, ...diagnostics } = presence;
+      presenceDiagnostics = diagnostics;
       if (!present) return;
       if (!active()) return;
       stage = "document_binding";
@@ -85,7 +100,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
     } catch (error) {
       console.warn("[post-accept-form-snapshots]", JSON.stringify({stage, failureClass:error instanceof Error ? error.name : "unknown", issues: (error as {issues?: Array<{path: unknown; code: unknown}>}).issues?.map(issue => ({path:issue.path,code:issue.code})), deadlineExpired:Date.now() >= input.deadlineAtMs}));
     }
-    finally { if (!result) console.warn("[post-accept-form-snapshot-incomplete]", JSON.stringify({stage, changed, aborted:signal.aborted, deadlineExpired:Date.now() >= input.deadlineAtMs})); done = true; await cdp?.detach().catch(() => {}); }
+    finally { if (!result) console.warn("[post-accept-form-snapshot-incomplete]", JSON.stringify({stage, changed, aborted:signal.aborted, deadlineExpired:Date.now() >= input.deadlineAtMs, presence:presenceDiagnostics})); done = true; await cdp?.detach().catch(() => {}); }
   })();
   return {
     done: () => done || !active(),
