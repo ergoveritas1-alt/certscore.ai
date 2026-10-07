@@ -193,6 +193,7 @@ export interface PostAcceptObserverInput {
   browser?: Browser;
   signal?: AbortSignal;
   onLifecycleEvent?: (event: { type: "action_dispatched"; atMs: number }) => void;
+  onLateFormDetected?: () => void;
   outDir?: string;
   interactionAuthorization: PostRefusalInteractionAuthorization;
   productionProjectable?: boolean;
@@ -321,6 +322,7 @@ export async function runPostAcceptObserver(
       resultBudgetDeadlineAtMs += LATE_FORM_CAPTURE_EXTENSION_MS;
       lateFormBudgetExtended = true;
       scheduleResultBudget();
+      try { input.onLateFormDetected?.(); } catch { /* Progress reporting cannot change observed evidence. */ }
     }
     return resultBudgetDeadlineAtMs;
   };
@@ -1166,8 +1168,19 @@ export async function runPostAcceptObserver(
       targetUrl: observationTargetUrl,
     });
     formCapture = formCaptureHandle?.finish();
-    formSnapshotCapture = await formSnapshotHandle?.finish();
-    timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
+    if (!formSnapshotHandle) timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
+    // The storage read and optional masked-image completion are independent
+    // same-session reads after the observation window. Overlap their browser
+    // work so an image cannot spend the result's finalization allowance.
+    const [finishedSnapshot, postActionStorage] = await Promise.all([
+      formSnapshotHandle?.finish().then(capture => {
+        timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
+        return capture;
+      }) ?? Promise.resolve(undefined),
+      captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies,
+        (d) => { storageCollectionDiagnostics.postAction = d; }),
+    ]);
+    formSnapshotCapture = finishedSnapshot;
     timing.observationExitReason = observationResult.reason;
     observationCoverageSufficient = observationResult.completed;
     if (!observationResult.completed) {
@@ -1178,7 +1191,6 @@ export async function runPostAcceptObserver(
     } else if (observationResult.reason !== "window_elapsed") {
       limitations.push(`observation_early_exit:${observationResult.reason}`);
     }
-    const postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies, (d) => { storageCollectionDiagnostics.postAction = d; });
     void graphCapture?.snapshotStorage();
     const postActionCapturedAtMs = elapsed(parentScanStartedAtMs);
     const requests = classifyRequests(

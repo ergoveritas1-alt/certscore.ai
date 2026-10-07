@@ -66,3 +66,39 @@ test('versioned late-form metadata reaches the same After Accept image URL witho
   assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,formSnapshotCapture:{...value.formSnapshotCapture,
     lateForm:{...value.formSnapshotCapture.lateForm,detectedAtMs:1000}}}}).rows,[]);
 });
+
+test('later same-document form inventory enriches rows without inventing a second image',()=>{
+  const email={fieldRef:'collection_form_0_field_0',controlIndex:0,elementType:'input',inputType:'email',semanticCategory:'email',
+    label:'Email',required:false,disabled:false,readOnly:false,evidenceRefs:[],confidence:0.9,directVsInferred:'direct'};
+  const name={...email,fieldRef:'collection_form_0_field_1',controlIndex:1,inputType:'text',semanticCategory:'name',label:'Name'};
+  const first={...form,formRef:'collection_form_0',candidateFieldCount:1,retainedFieldCount:1,fields:[email]};
+  const later={...first,candidateFieldCount:2,retainedFieldCount:2,fields:[email,name]};
+  const second={...form,formRef:'collection_form_1',candidateFieldCount:1,retainedFieldCount:1,
+    fields:[{...email,fieldRef:'collection_form_1_field_0',controlIndex:2}]};
+  const inventory={contractVersion:'certscore.post_accept_form_inventory.v1',sourceLane:'accept_observation',phase:'after_accept',
+    coverage:'bounded_sample',pageUrl:form.pageUrl,forms:[first]};
+  const value={...projection,formCapture:undefined,observationWindowMs:3000,acceptanceRegisteredAtMs:110,
+    acceptanceExercised:true,registrationStatus:'confirmed',status:'confirmed_clean',evidenceDisposition:'confirmed',indeterminateReason:null,
+    formSnapshotCapture:{contractVersion:'certscore.post_accept_form_snapshots.v5',phase:'after_accept',sessionId:randomUUID(),
+      exactTargetSha256:'a'.repeat(64),actionDispatchedAtMs:100,acceptanceRegisteredAtMs:110,capturedAtMs:3600,
+      lateForm:{baseCaptureDeadlineAtMs:3110,detectedAtMs:2500,extensionMs:9500},
+      documentIdentity:{source:'cdp_loader_id',token:'loader'},inventory,
+      postCaptureInventory:{capturedAtMs:4300,documentIdentity:{source:'cdp_loader_id',token:'loader'},
+        inventory:{...inventory,forms:[later,second]}},
+      snapshots:[{contractVersion:'certscore.collection-surface-snapshot.v1',formRef:'collection_form_0',pageUrl:form.pageUrl,
+        capturedAt:'2026-10-06T10:00:00.000Z',sourceInventoryHash:'c'.repeat(64),mimeType:'image/jpeg',valuesMasked:true,
+        status:'available',width:640,height:400,sha256:'d'.repeat(64),sizeBytes:1000}]}};
+  const source={consentControlAssessment:observedControlAssessment,postAcceptEvidenceProjection:value};
+  const rows=projectPostAcceptForms(source).rows;
+  assert.equal(rows.length,2);
+  assert.equal(rows[0]?.form.fields.length,2);
+  assert.equal(rows[0]?.snapshot.status,'available');
+  assert.equal(rows[1]?.snapshot.status,'unavailable');
+  assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,
+    formSnapshotCapture:{...value.formSnapshotCapture,postCaptureInventory:{...value.formSnapshotCapture.postCaptureInventory,
+      documentIdentity:{source:'cdp_loader_id',token:'other'}}}}}).rows,[]);
+  assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,
+    formSnapshotCapture:{...value.formSnapshotCapture,postCaptureInventory:{...value.formSnapshotCapture.postCaptureInventory,
+      inventory:{...value.formSnapshotCapture.postCaptureInventory.inventory,
+        forms:[{...later,fields:[{...email,controlIndex:99},name]},second]}}}}}).rows,[]);
+});

@@ -43,6 +43,7 @@ import {
   POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
   POST_ACCEPT_WORKER_FEATURE_FLAG,
   POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+  POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS,
   POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS,
   POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS,
   POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
@@ -77,6 +78,7 @@ import {
   parseLocalV2DagLambdaDispatchPayload,
   parseEgressProbeResponse,
   postRefusalParentDispatchSha256,
+  verifiedPostAcceptLateFormProgress,
   publishVerifiedPreConsentRuntimePreview,
   runLocalV2DagLambdaPostRefusalArtifactChain,
   runLocalV2DagLambdaPostAcceptArtifactChain,
@@ -499,6 +501,30 @@ test("Accept worker late-banner budget remains bounded while the coordinator tai
   assert.ok(POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS < 30_000);
   assert.equal(POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS, 6_000);
   assert.ok(POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS < POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS);
+  assert.equal(POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS, 12_000);
+});
+
+test("only a scan-bound late-form progress marker can extend the Accept tail", async () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded" }));
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-artifacts";
+  const marker = { contractVersion: "certscore.post_accept_late_form_progress.v1",
+    scanId: payload.scanId, parentDispatchSha256: postRefusalParentDispatchSha256(payload),
+    targetSha256: createHash("sha256").update(payload.targetUrl).digest("hex") };
+  try {
+    const client = { send: async (command: GetObjectCommand) => {
+      assert.equal(command.input.Bucket, "test-artifacts");
+      assert.match(command.input.Key ?? "", /\/lanes\/accept_observation\/LateFormCaptureProgress\.json$/);
+      return { Body: Buffer.from(JSON.stringify(marker)) };
+    } };
+    assert.equal(await verifiedPostAcceptLateFormProgress(payload, client), true);
+    assert.equal(await verifiedPostAcceptLateFormProgress(payload, { send: async () => ({
+      Body: Buffer.from(JSON.stringify({ ...marker, parentDispatchSha256: "0".repeat(64) })) }) }), false);
+    assert.equal(await verifiedPostAcceptLateFormProgress(payload, { send: async () => { throw new Error("missing"); } }), false);
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+  }
 });
 
 test("complete consent inventory exposes Accept availability without changing Reject v1", () => {

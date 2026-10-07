@@ -153,15 +153,42 @@ test("a form layout change during capture discards pixels before review", async 
   } finally { await browser.close(); }
 });
 
+test("a one-time layout shift rebinds and safely recaptures within the same deadline", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form style="width:400px;height:150px"><label>Search<input type="text" value="private"></label></form>');
+    const context = page.context(), createSession = context.newCDPSession.bind(context);
+    let captures = 0, reviews = 0;
+    context.newCDPSession = async (...args) => {
+      const session = await createSession(...args), send = session.send.bind(session);
+      session.send = (async (method: string, params: unknown) => {
+        const result = await (send as Function)(method, params);
+        if (method === "Page.captureScreenshot" && ++captures === 1) {
+          await page.locator("input").evaluate(el => { (el as HTMLElement).style.marginLeft = "50px"; });
+        }
+        return result;
+      }) as typeof session.send;
+      return session;
+    };
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input",
+        inputType: "text", label: "Search", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => { reviews++; return { safeForDisplay: true }; },
+      undefined, undefined, Date.now() + 2500);
+    assert.equal(captures, 2);
+    assert.equal(reviews, 1, "only the re-bound, safely masked image reaches review");
+    assert.equal(result[0]?.status, "available");
+    assert.equal(result[0]?.valuesMasked, true);
+  } finally { await browser.close(); }
+});
 
-test("footer form capture uses off-screen pixels without scrolling", async () => {
+
+test("footer form capture uses a bounded viewport crop and restores scrolling", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   try {
     await page.setContent('<main style="height:18000px;animation-play-state:running"></main><form data-certscore-form-capture="existing" style="width:400px;height:100px"><label>Search<input type="text" value="private"></label></form>');
-    await page.evaluate(() => addEventListener("scroll", () => {
-      document.querySelector("form")!.style.width = "420px";
-    }, { once: true }));
     const createSession = page.context().newCDPSession.bind(page.context());
     let beyond: boolean | undefined;
     page.context().newCDPSession = async (...args) => {
@@ -177,11 +204,120 @@ test("footer form capture uses off-screen pixels without scrolling", async () =>
     const inventory = buildCollectionSurfaceInventory({ pageUrl: 'about:blank', inspectedFieldCandidateCount: 1, candidateScanTruncated: false, rows: [{ groupKey: 'native_form_0', structure: 'native_form', elementType: 'input', inputType: 'text', label: 'Search', required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
     const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => ({ safeForDisplay: true }));
     assert.equal(result[0]?.status, "available");
-    assert.equal(beyond, true);
+    assert.equal(beyond, false);
     assert.equal(await page.locator("form").getAttribute("data-certscore-form-capture"), "existing");
     assert.equal(await page.locator("main").evaluate(el => getComputedStyle(el).animationPlayState), "running");
     assert.equal(await page.evaluate(() => scrollY), 0);
     assert.equal(await page.locator("input").inputValue(), "private");
+  } finally { await browser.close(); }
+});
+
+test("a form taller than the viewport uses a masked visible crop", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  try {
+    await page.setContent('<main style="height:7000px"></main><form style="width:700px;height:1100px;background:rgb(255,0,0)"><label>Email<input type="email" value="private@example.test"></label></form>');
+    const createSession = page.context().newCDPSession.bind(page.context());
+    let beyond: boolean | undefined;
+    page.context().newCDPSession = async (...args) => {
+      const session = await createSession(...args), send = session.send.bind(session);
+      session.send = (async (method: string, params: any) => {
+        if (method === "Page.captureScreenshot") beyond = params.captureBeyondViewport;
+        return (send as Function)(method, params);
+      }) as typeof session.send;
+      return session;
+    };
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input",
+        inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => ({ safeForDisplay: true }));
+    assert.equal(result[0]?.status, "available");
+    assert.equal(result[0]?.valuesMasked, true);
+    assert.equal(beyond, false);
+    const center = await sharp(Buffer.from(result[0]!.data!, "base64")).extract({ left: 300, top: 600, width: 1, height: 1 }).raw().toBuffer();
+    assert.ok(center[0]! > 180 && center[1]! < 100 && center[2]! < 100, "crop must show the form rather than the page top");
+    assert.equal(await page.evaluate(() => scrollY), 0);
+  } finally { await browser.close(); }
+});
+
+test("After Accept keeps a safe upper crop when the form grows below it", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  try {
+    await page.setContent('<form style="width:700px;height:600px;background:rgb(255,0,0)"><label>Email<input type="email" value="private@example.test"></label></form>');
+    const createSession = page.context().newCDPSession.bind(page.context());
+    page.context().newCDPSession = async (...args) => {
+      const session = await createSession(...args), send = session.send.bind(session);
+      session.send = (async (method: string, params: unknown) => {
+        const result = await (send as Function)(method, params);
+        if (method === "Page.captureScreenshot") await page.locator("form").evaluate(form => { (form as HTMLElement).style.height = "800px"; });
+        return result;
+      }) as typeof session.send;
+      return session;
+    };
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input",
+        inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => ({ safeForDisplay: true }),
+      undefined, undefined, undefined, { maxCropHeight: 480 });
+    assert.equal(result[0]?.status, "available");
+    assert.ok(result[0]?.data);
+  } finally { await browser.close(); }
+});
+
+test("After Accept hides moving controls during capture and still masks both positions", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form style="width:500px;height:600px"><label>Email<input type="email" style="background:rgb(255,0,0);width:200px;height:40px" value="private@example.test"></label></form>');
+    const createSession = page.context().newCDPSession.bind(page.context());
+    page.context().newCDPSession = async (...args) => {
+      const session = await createSession(...args), send = session.send.bind(session);
+      session.send = (async (method: string, params: unknown) => {
+        if (method === "Page.captureScreenshot") {
+          assert.deepEqual(await page.locator("input").evaluate(input => ({
+            clipPath: getComputedStyle(input).clipPath,
+            visibility: getComputedStyle(input).visibility,
+          })), { clipPath: "inset(100%)", visibility: "visible" });
+          const inputBounds = await page.locator("input").boundingBox();
+          assert.ok(inputBounds);
+          const result = await (send as Function)(method, params) as { data: string };
+          const clip = (params as { clip: { x: number; y: number; scale: number } }).clip;
+          const x = Math.floor((inputBounds.x + inputBounds.width / 2 - clip.x) * clip.scale);
+          const y = Math.floor((inputBounds.y + inputBounds.height / 2 - clip.y) * clip.scale);
+          const rawPixel = await sharp(Buffer.from(result.data, "base64")).extract({ left: x, top: y, width: 1, height: 1 }).removeAlpha().raw().toBuffer();
+          assert.ok(rawPixel[0]! > 230 && rawPixel[1]! > 230 && rawPixel[2]! > 230,
+            "browser clipping must remove the red input pixels before the screenshot returns");
+          await page.locator("input").evaluate(input => { (input as HTMLElement).style.marginTop = "80px"; });
+          return result;
+        }
+        return (send as Function)(method, params);
+      }) as typeof session.send;
+      return session;
+    };
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input",
+        inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => ({ safeForDisplay: true }),
+      undefined, undefined, undefined, { maxCropHeight: 480, hideControlsDuringCapture: true });
+    assert.equal(result[0]?.status, "available");
+    assert.equal(await page.locator("input").evaluate(input => getComputedStyle(input).clipPath), "none");
+  } finally { await browser.close(); }
+});
+
+test("After Accept withholds pixels if a control defeats the browser redaction rule", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form><label>Email<input type="email" style="clip-path:none!important;-webkit-clip-path:none!important" value="private@example.test"></label></form>');
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input",
+        inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    let reviewed = false;
+    const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => { reviewed = true; return { safeForDisplay: true }; },
+      undefined, undefined, undefined, { hideControlsDuringCapture: true });
+    assert.equal(result[0]?.status, "unavailable");
+    assert.equal(reviewed, false);
   } finally { await browser.close(); }
 });
 
@@ -287,7 +423,7 @@ test("ancestor and sibling animations freeze for one capture and resume without 
 
 test("the total budget also bounds a stalled control-binding operation", async () => {
   const inventory = buildCollectionSurfaceInventory({ pageUrl: "https://example.test/", inspectedFieldCandidateCount: 1, candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input", inputType: "text", label: "Search", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
-  const page = { url: () => inventory.pageUrl, evaluateHandle: () => new Promise(() => {}) } as unknown as import("playwright").Page;
+  const page = { url: () => inventory.pageUrl, evaluate: () => new Promise(() => {}) } as unknown as import("playwright").Page;
   const start = Date.now();
   const result = await captureCollectionSurfaceSnapshots(page, inventory, async () => { throw new Error("must not review"); });
   assert.equal(result[0]?.reason, "capture_budget_exhausted");
@@ -336,5 +472,45 @@ test("a canceled idle form animation does not discard a safely masked screenshot
     const bytes = await captureMaskedFormScreenshot(page, root!, 1000);
     assert.equal(bytes[0], 0xff);
     assert.equal(bytes[1], 0xd8);
+  } finally { await browser.close(); }
+});
+
+test("an animation that remains running after pause fails before pixels are captured", async () => {
+  const { captureMaskedFormScreenshot } = await import("./masked-form-screenshot");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form><input type="email" value="private@example.test"></form>');
+    await page.locator("form").evaluate(form => {
+      (globalThis as any).__name = (value: unknown) => value;
+      const animation = { playState: "running", pause() {}, play() {} };
+      Object.defineProperty(form, "getAnimations", { value: () => [animation] });
+    });
+    const root = await page.locator("form").elementHandle();
+    await assert.rejects(captureMaskedFormScreenshot(page, root!, 1000), /animation did not pause/);
+    assert.equal(await page.locator("html").getAttribute("data-certscore-form-capture"), null);
+  } finally { await browser.close(); }
+});
+
+test("combined binding withholds pixels when a form animation cannot pause", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form><label>Email<input type="email" value="private@example.test"></label></form>');
+    await page.locator("form").evaluate(form => {
+      (globalThis as any).__name = (value: unknown) => value;
+      const animation = { playState: "running", pause() {}, play() {} };
+      Object.defineProperty(form, "getAnimations", { value: () => [animation] });
+    });
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form",
+        elementType: "input", inputType: "email", label: "Email", required: false,
+        disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    const snapshots = await captureCollectionSurfaceSnapshots(page, inventory, async () => {
+      throw new Error("unsafe pixels must not reach review");
+    });
+    assert.equal(snapshots[0]?.status, "unavailable");
+    assert.equal(snapshots[0]?.data, undefined);
+    assert.equal(await page.locator("html").getAttribute("data-certscore-form-capture"), null);
   } finally { await browser.close(); }
 });

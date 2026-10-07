@@ -1,16 +1,29 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Page } from "playwright";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
-import { postAcceptFormSnapshotCaptureSchema, postAcceptFormInventorySchema, type PostAcceptFormSnapshotCapture } from "@certscore/contracts";
+import { postAcceptFormSnapshotCaptureSchema, postAcceptFormInventorySchema,
+  postAcceptImageInventoryMatchesLaterInventory, type PostAcceptFormSnapshotCapture } from "@certscore/contracts";
 import { capturePostAcceptFormInventory } from "./post-accept-form-inventory.js";
 import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 
-export const LATE_FORM_CAPTURE_EXTENSION_MS = 1_500;
-const LATE_FORM_REMAINING_WINDOW_MS = 1_200;
-const LATE_FORM_MINIMUM_AGE_MS = 1_800;
+export const LATE_FORM_CAPTURE_EXTENSION_MS = 9_500;
+const LATE_FORM_REMAINING_WINDOW_MS = 2_000;
+const LATE_FORM_MINIMUM_AGE_MS = 1_000;
+const LATER_INVENTORY_WAIT_MS = 900;
+const LATER_INVENTORY_RETRY_MS = 650;
+
+function retainedFormInventory(raw: Awaited<ReturnType<typeof capturePostAcceptFormInventory>>) {
+  return postAcceptFormInventorySchema.parse({
+    contractVersion: "certscore.post_accept_form_inventory.v1", sourceLane: "accept_observation",
+    phase: "after_accept", coverage: "bounded_sample", pageUrl: raw.pageUrl, forms: raw.forms.slice(0, 2).map(form => ({ ...form,
+      evidenceRefs: form.evidenceRefs.map(ref => ({...ref, refId: `after_accept:${ref.refId}`, artifactId: "post_accept_form_inventory"})),
+      fields: form.fields.map(field => ({...field, evidenceRefs: field.evidenceRefs.map(ref => ({...ref, refId: `after_accept:${ref.refId}`, artifactId: "post_accept_form_inventory"}))})),
+    })),
+  });
+}
 
 /** Optional registered form pixels use the original action window, or one
- * owner-approved 1.5-second extension after a late form is actually seen.
+ * owner-approved bounded extension after a late form is actually seen.
  * Consent observations keep their original window. */
 export function startRegisteredPostAcceptFormSnapshots(input: {
   page: Page; exactTargetUrl: string; parentScanStartedAtMs: number;
@@ -66,7 +79,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       const exclusionSelectors = KNOWN_CMP_REGISTRY.flatMap(cmp => cmp.formExclusionSelectors ?? cmp.domSelectors ?? []);
       // One browser roundtrip waits for late mounted fields and returns their
       // bounded inventory; the document proof was already started in parallel.
-      const raw = await capturePostAcceptFormInventory(input.page, input.parentScanStartedAtMs, exclusionSelectors, input.deadlineAtMs - 150);
+      let raw = await capturePostAcceptFormInventory(input.page, input.parentScanStartedAtMs, exclusionSelectors, input.deadlineAtMs - 150);
       inventoryDiagnostics = { forms: raw.forms.length, fields: raw.forms.reduce((count, form) => count + form.fields.length, 0) };
       if (!raw.forms.length) return;
       const detectedAtEpochMs = Date.now();
@@ -82,6 +95,10 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
         }
       }
       if (!active()) return;
+      // Start masking and safety review on the first directly observed form.
+      // A settle-and-resample round trip delayed SITS pixels until too close
+      // to the bound worker deadline. Later fields are not inferred from
+      // this early crop; independent form evidence may retain them separately.
       nextStage("document_binding");
       const binding = await documentBinding;
       cdp = binding.session;
@@ -89,34 +106,76 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       const token = binding.token;
       if (!token || !active()) return;
       nextStage("inventory");
-      const inventory = postAcceptFormInventorySchema.parse({
-        contractVersion: "certscore.post_accept_form_inventory.v1", sourceLane: "accept_observation",
-        phase: "after_accept", coverage: "bounded_sample", pageUrl: raw.pageUrl, forms: raw.forms.slice(0, 2).map(form => ({ ...form,
-          evidenceRefs: form.evidenceRefs.map(ref => ({...ref, refId: `after_accept:${ref.refId}`, artifactId: "post_accept_form_inventory"})),
-          fields: form.fields.map(field => ({...field, evidenceRefs: field.evidenceRefs.map(ref => ({...ref, refId: `after_accept:${ref.refId}`, artifactId: "post_accept_form_inventory"}))})),
-        })),
-      });
+      const inventory = retainedFormInventory(raw);
       if (!inventory.forms.length || inventory.pageUrl !== input.exactTargetUrl || !active()) return;
+      let laterInventoryWork: Promise<{capturedAtMs:number; documentIdentity:{source:"cdp_loader_id";token:string}; inventory:typeof inventory} | undefined> | undefined;
+      const originalFieldCount = inventory.forms.reduce((count, form) => count + form.fields.length, 0);
+      const sampleLaterInventory = async (delayMs: number) => {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        if (!active()) return undefined;
+        const laterRaw = await capturePostAcceptFormInventory(input.page, input.parentScanStartedAtMs, exclusionSelectors, Date.now());
+        if (!active()) return undefined;
+        const later = retainedFormInventory(laterRaw);
+        const after = await boundSession.send("Page.getFrameTree");
+        if (!active() || after.frameTree.frame.loaderId !== token ||
+          !postAcceptImageInventoryMatchesLaterInventory(inventory, later)) return undefined;
+        const laterFieldCount = later.forms.reduce((count, form) => count + form.fields.length, 0);
+        if (later.forms.length <= inventory.forms.length && laterFieldCount <= originalFieldCount) return undefined;
+        return { capturedAtMs: Date.now() - input.parentScanStartedAtMs,
+          documentIdentity: { source: "cdp_loader_id" as const, token }, inventory: later };
+      };
       nextStage("images");
       const snapshots = await captureCollectionSurfaceSnapshots(input.page, inventory, input.reviewer, input.signal, boundSession,
         captureDeadlineAtMs - 75, {
           pixelSignal: signal,
-          reviewDeadlineAtMs: input.deadlineAtMs + 1500,
+          maxCropHeight: 480,
+          hideControlsDuringCapture: true,
+          ...(lateFormExtensionActive ? { pixelBudgetMs: Math.max(1, captureDeadlineAtMs - Date.now()) } : {}),
+          reviewDeadlineAtMs: lateFormExtensionActive ? captureDeadlineAtMs : input.deadlineAtMs + 1500,
           onMaskedPixelsCaptured: async () => {
             if (!active()) return;
             const after = await boundSession.send("Page.getFrameTree");
             if (after.frameTree.frame.loaderId !== token) { changed = true; pixelProvedAtMs = undefined; return; }
-            if (active()) pixelProvedAtMs = Date.now() - input.parentScanStartedAtMs;
+            if (active()) {
+              pixelProvedAtMs = Date.now() - input.parentScanStartedAtMs;
+              // Read the later form DOM while image moderation runs. This is
+              // the same session and existing late-form deadline, with no
+              // additional browser lane or screenshot.
+              if (lateFormExtensionActive && !laterInventoryWork) {
+                laterInventoryWork = (async () => {
+                  const first = await sampleLaterInventory(LATER_INVENTORY_WAIT_MS);
+                  if (first?.inventory.forms.length === 2 || Date.now() + LATER_INVENTORY_RETRY_MS >= captureDeadlineAtMs) return first;
+                  const second = await sampleLaterInventory(LATER_INVENTORY_RETRY_MS);
+                  if (!first) return second;
+                  if (!second) return first;
+                  const count = (value: typeof first) => value.inventory.forms.reduce((total, form) => total + form.fields.length, 0);
+                  return second.inventory.forms.length > first.inventory.forms.length || count(second) > count(first) ? second : first;
+                })().catch(() => undefined);
+              }
+            }
           },
         });
       snapshotDiagnostics = snapshots.map(snapshot => ({ status: snapshot.status, ...(snapshot.reason ? { reason: snapshot.reason } : {}) }));
       if (pixelProvedAtMs === undefined || changed || input.signal?.aborted || input.page.isClosed() || input.page.url() !== input.exactTargetUrl) return;
+      let postCaptureInventory: Awaited<NonNullable<typeof laterInventoryWork>>;
+      if (laterInventoryWork && Date.now() < captureDeadlineAtMs) {
+        let waitTimer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          postCaptureInventory = await Promise.race([
+            laterInventoryWork,
+            new Promise<undefined>(resolve => { waitTimer = setTimeout(() => resolve(undefined),
+              Math.max(1, captureDeadlineAtMs - Date.now())); }),
+          ]);
+        } finally { if (waitTimer) clearTimeout(waitTimer); }
+      }
+      if (postCaptureInventory && postCaptureInventory.capturedAtMs < pixelProvedAtMs) postCaptureInventory = undefined;
       nextStage("packet_validation");
       result = postAcceptFormSnapshotCaptureSchema.parse({
         ...(lateFormExtensionActive ? {
-          contractVersion: "certscore.post_accept_form_snapshots.v2",
+          contractVersion: postCaptureInventory ? "certscore.post_accept_form_snapshots.v5" : "certscore.post_accept_form_snapshots.v4",
           lateForm: { baseCaptureDeadlineAtMs: input.deadlineAtMs - input.parentScanStartedAtMs,
             detectedAtMs: lateFormDetectedAtMs, extensionMs: LATE_FORM_CAPTURE_EXTENSION_MS },
+          ...(postCaptureInventory ? { postCaptureInventory } : {}),
         } : { contractVersion: "certscore.post_accept_form_snapshots.v1" }),
         phase: "after_accept",
         sessionId: randomUUID(), exactTargetSha256: createHash("sha256").update(input.exactTargetUrl).digest("hex"),

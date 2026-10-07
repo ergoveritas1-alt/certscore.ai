@@ -143,6 +143,44 @@ test("late form pixels project only with versioned bounded extension proof", () 
     formSnapshotCapture: { ...capture, capturedAtMs: 4700 } }).success, false);
   assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...packet,
     formSnapshotCapture: { ...capture, contractVersion: "certscore.post_accept_form_snapshots.v1", lateForm: undefined } }).success, false);
+  const extended = { ...capture, contractVersion: "certscore.post_accept_form_snapshots.v3",
+    capturedAtMs: 6000, lateForm: { ...capture.lateForm, extensionMs: 5500 } };
+  const extendedPacket = { ...packet, timing: { ...packet.timing, totalMs: 7000, readyAtMs: 7000 }, formSnapshotCapture: extended };
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(extendedPacket).success, true);
+  assert.equal(projectPostAcceptEvidenceForReport({ packet: postAcceptEvidencePacketSchema.parse(extendedPacket), packetSha256: "b".repeat(64) }).formSnapshotCapture?.contractVersion,
+    "certscore.post_accept_form_snapshots.v3");
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...extendedPacket,
+    formSnapshotCapture: { ...extended, lateForm: { ...extended.lateForm, extensionMs: 5501 } } }).success, false);
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...extendedPacket,
+    timing: { ...extendedPacket.timing, totalMs: 9000, readyAtMs: 9000 },
+    formSnapshotCapture: { ...extended, capturedAtMs: 8621 } }).success, false);
+  const latest = { ...extended, contractVersion: "certscore.post_accept_form_snapshots.v4",
+    capturedAtMs: 10000, lateForm: { ...extended.lateForm, extensionMs: 9500 } };
+  const latestPacket = { ...extendedPacket, timing: { ...extendedPacket.timing, totalMs: 11000, readyAtMs: 11000 },
+    formSnapshotCapture: latest };
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(latestPacket).success, true);
+  assert.equal(projectPostAcceptEvidenceForReport({ packet: postAcceptEvidencePacketSchema.parse(latestPacket), packetSha256: "b".repeat(64) }).formSnapshotCapture?.contractVersion,
+    "certscore.post_accept_form_snapshots.v4");
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...latestPacket,
+    formSnapshotCapture: { ...latest, lateForm: { ...latest.lateForm, extensionMs: 9501 } } }).success, false);
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...latestPacket,
+    timing: { ...latestPacket.timing, totalMs: 14000, readyAtMs: 14000 },
+    formSnapshotCapture: { ...latest, capturedAtMs: 12621 } }).success, false);
+  const later = { ...latest, contractVersion: "certscore.post_accept_form_snapshots.v5",
+    postCaptureInventory: { capturedAtMs: 10500, documentIdentity: latest.documentIdentity,
+      inventory: { ...inventory, forms: [{ ...form, candidateFieldCount: 1, retainedFieldCount: 1,
+        fields: [{ fieldRef: "collection_form_0_field_0", controlIndex: 0, elementType: "input", inputType: "email",
+          semanticCategory: "email", label: "Email", required: false, disabled: false, readOnly: false,
+          evidenceRefs: [], confidence: 0.9, directVsInferred: "direct" }] }] } } };
+  const laterPacket = { ...latestPacket, timing: { ...latestPacket.timing, totalMs: 12000, readyAtMs: 12000 },
+    formSnapshotCapture: later };
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(laterPacket).success, true);
+  assert.equal(projectPostAcceptEvidenceForReport({ packet: postAcceptEvidencePacketSchema.parse(laterPacket), packetSha256: "b".repeat(64) }).formSnapshotCapture?.contractVersion,
+    "certscore.post_accept_form_snapshots.v5");
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...laterPacket, formSnapshotCapture: { ...later,
+    postCaptureInventory: { ...later.postCaptureInventory, documentIdentity: { source: "cdp_loader_id", token: "other" } } } }).success, false);
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...laterPacket,
+    timing: { ...laterPacket.timing, totalMs: 10200, readyAtMs: 10200 } }).success, false);
 });
 
 test("Accept packet and report projection preserve bounded collection diagnostics", () => {

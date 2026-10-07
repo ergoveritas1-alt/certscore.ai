@@ -215,16 +215,18 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
   const images = packet.formSnapshotCapture;
-  const imageCaptureDeadlineAtMs = images?.contractVersion === "certscore.post_accept_form_snapshots.v2"
+  const imageCaptureDeadlineAtMs = images && images.contractVersion !== "certscore.post_accept_form_snapshots.v1"
     ? images.lateForm.baseCaptureDeadlineAtMs + images.lateForm.extensionMs
     : (images?.acceptanceRegisteredAtMs ?? 0) + packet.observationWindowMs;
   if (images && (packet.acceptanceRegistration.status !== "confirmed" || !packet.acceptanceRegistration.acceptanceExercised ||
     images.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 || images.exactTargetSha256 !== packet.exactTargetSha256 ||
     images.actionDispatchedAtMs !== packet.acceptanceRegistration.actionDispatchedAtMs ||
     images.acceptanceRegisteredAtMs !== packet.acceptanceRegistration.acceptanceRegisteredAtMs ||
-    (images.contractVersion === "certscore.post_accept_form_snapshots.v2" &&
+    (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
       images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + packet.observationWindowMs) ||
     images.capturedAtMs > imageCaptureDeadlineAtMs || images.capturedAtMs > packet.timing.readyAtMs ||
+    (images.contractVersion === "certscore.post_accept_form_snapshots.v5" &&
+      images.postCaptureInventory.capturedAtMs > packet.timing.readyAtMs) ||
     packet.interactionDiagnostics?.click.outcome !== "completed")) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form snapshots require confirmed same-target completed Accept inside the bounded image window"});
   if (packet.formCapture && (packet.formCapture.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 ||
     packet.formCapture.exactTargetSha256 !== packet.exactTargetSha256 ||
@@ -541,13 +543,13 @@ export const postAcceptReportProjectionSchema = z.object({
   ]),
 }).superRefine((projection, context) => {
   const images = projection.formSnapshotCapture;
-  const imageCaptureDeadlineAtMs = images?.contractVersion === "certscore.post_accept_form_snapshots.v2"
+  const imageCaptureDeadlineAtMs = images && images.contractVersion !== "certscore.post_accept_form_snapshots.v1"
     ? images.lateForm.baseCaptureDeadlineAtMs + images.lateForm.extensionMs
     : (images?.acceptanceRegisteredAtMs ?? 0) + projection.observationWindowMs;
   if (images && (!projection.packetSha256 || !projection.acceptanceExercised || projection.registrationStatus !== "confirmed" ||
     images.exactTargetSha256 !== projection.actionControlProof?.authorizedTargetSha256 ||
     images.acceptanceRegisteredAtMs !== projection.acceptanceRegisteredAtMs || projection.interactionDiagnostics?.click.outcome !== "completed" ||
-    (images.contractVersion === "certscore.post_accept_form_snapshots.v2" &&
+    (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
       images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + projection.observationWindowMs) ||
     images.capturedAtMs > imageCaptureDeadlineAtMs)) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form image projection requires verified registered packet provenance"});
   if (projection.registeredObservationCompletion && (

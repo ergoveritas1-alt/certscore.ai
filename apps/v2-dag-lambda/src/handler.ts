@@ -105,6 +105,7 @@ export const POST_ACCEPT_WORKER_FEATURE_FLAG =
 export const POST_REFUSAL_REJECT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 500;
 export const POST_ACCEPT_WORKER_DEFAULT_DISPATCH_DELAY_MS = 1_000;
 export const POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS = 6_000;
+export const POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS = 12_000;
 export const POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS =
   POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS;
 export const POST_ACCEPT_WORKER_OBSERVER_RESULT_BUDGET_MS = 20_000;
@@ -2277,6 +2278,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   await mkdir(options.artifactRoot, { recursive: true });
   const checkpoint = actionWorkerCheckpoints(options.artifactRoot, "accept");
   await checkpoint("observation_started");
+  let lateFormProgressUpload: Promise<void> | undefined;
   const recipes = config.resolver.kind === "canonical_cmp_registry"
     ? buildCanonicalPostAcceptActionRecipes()
     : [buildPostAcceptCmpActionRecipe({
@@ -2295,6 +2297,15 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
       runtimeGraph: payload.runtimeGraph,
       onLifecycleEvent: () => { void checkpoint("action_dispatched"); },
+      onLateFormDetected: () => {
+        const body = JSON.stringify({ contractVersion: "certscore.post_accept_late_form_progress.v1",
+          scanId: payload.scanId, parentDispatchSha256: payload.parentDispatchSha256,
+          targetSha256: createHash("sha256").update(payload.targetUrl).digest("hex") });
+        lateFormProgressUpload = (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({
+          Body: body, Bucket: requireArtifactBucket(), ContentType: "application/json",
+          Key: `${artifactKeyPrefix(payload)}/LateFormCaptureProgress.json`,
+        }), { abortSignal: AbortSignal.timeout(1_200) }).then(() => undefined).catch(() => undefined);
+      },
       allowCanonicalAcceptDiscovery: config.resolver.kind === "canonical_cmp_registry",
       actionSearchTimeoutMs: config.actionSearchTimeoutMs,
       confirmationTimeoutMs: config.confirmationTimeoutMs,
@@ -2322,6 +2333,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
       url: payload.targetUrl,
     });
   });
+  await lateFormProgressUpload;
   const body = Buffer.from(JSON.stringify(postAcceptEvidencePacketSchema.parse(packet)));
   await checkpoint("packet_validated");
   const sha256 = createHash("sha256").update(body).digest("hex");
@@ -2719,10 +2731,36 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   // Accept and Reject have independent absolute post-passive deadlines and
   // are joined concurrently, including packet verification. This prevents
   // either lane from consuming the other's bounded chance to retain an
-  // already-terminal result. Accept retains its six-second tail; Reject has
-  // an eight-second tail for slower, independently confirmed refusal flows.
+  // already-terminal result. Accept extends its six-second tail only with a
+  // scan-bound late-form progress marker; Reject retains its eight-second cap.
   let joinedPostRefusalPacket: PostRefusalEvidencePacket | undefined;
   let joinedPostAcceptPacket: PostAcceptEvidencePacket | undefined;
+  let postAcceptMaxTailWaitMs = POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS;
+  const awaitPostAcceptWithinTail = async (workerPromise: Promise<void>, workerAlreadySettled = false): Promise<boolean> => {
+    if (postAcceptMaxTailWaitMs === POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS) {
+      const completedAtNormalLimit = await awaitPostRefusalWorkerWithinTailBudget({
+        abortController: new AbortController(),
+        maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+        passiveLaneBarrierCompletedAtMs,
+        workerAlreadySettled,
+        workerPromise,
+      });
+      if (completedAtNormalLimit) return true;
+      if (await verifiedPostAcceptLateFormProgress(payload, options.s3GetClient)) {
+        postAcceptMaxTailWaitMs += POST_ACCEPT_LATE_FORM_ADDITIONAL_TAIL_WAIT_MS;
+      } else {
+        postAcceptAbortController.abort(new Error("Accept Path exceeded its post-primary join budget."));
+        return false;
+      }
+    }
+    return awaitPostRefusalWorkerWithinTailBudget({
+      abortController: postAcceptAbortController,
+      maxTailWaitMs: postAcceptMaxTailWaitMs,
+      passiveLaneBarrierCompletedAtMs,
+      workerAlreadySettled,
+      workerPromise,
+    });
+  };
   const joinPostRefusalWithinBarrier = async (): Promise<boolean | null> => {
     if (!postRefusalWorkerPromise) return null;
     try {
@@ -2774,13 +2812,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         const workerCompleted = await timeLambdaPhase(
           phaseTimings,
           "post_accept_barrier_join",
-          () => awaitPostRefusalWorkerWithinTailBudget({
-            abortController: postAcceptAbortController,
-            maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
-            passiveLaneBarrierCompletedAtMs,
-            workerAlreadySettled: postAcceptState.settled,
-            workerPromise: postAcceptWorkerPromise!,
-          }),
+          () => awaitPostAcceptWithinTail(postAcceptWorkerPromise!, postAcceptState.settled),
         );
         if (!workerCompleted) return false;
       }
@@ -2789,18 +2821,13 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       const packetCompleted = await timeLambdaPhase(
         phaseTimings,
         "post_accept_packet_join",
-        () => awaitPostRefusalWorkerWithinTailBudget({
-          abortController: postAcceptAbortController,
-          maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
-          passiveLaneBarrierCompletedAtMs,
-          workerPromise: readPostAcceptPacketFromArtifactResult(postAcceptState.result!, {
+        () => awaitPostAcceptWithinTail(readPostAcceptPacketFromArtifactResult(postAcceptState.result!, {
             awsRegion: payload.awsRegion,
             s3GetClient: options.s3GetClient,
             signal: postAcceptAbortController.signal,
           }).then((verifiedPacket) => {
             packet = verifiedPacket;
-          }),
-        }),
+          })),
       );
       if (packetCompleted && packet) joinedPostAcceptPacket = packet;
       return packetCompleted && Boolean(packet);
@@ -2825,7 +2852,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   if (postAcceptCompletedInsideBarrier === false && !postAcceptState.cancelledNoAccept) {
     postAcceptState.error = "accept_path_exceeded_post_primary_join_budget";
     postAcceptState.outcomeObservedAtMs = passiveLaneBarrierCompletedAtMs +
-      POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS;
+      postAcceptMaxTailWaitMs;
     postAcceptState.settled = true;
     postAcceptState.timedOut = true;
   }
@@ -2879,7 +2906,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         contractVersion: "certscore.post_accept_lane_outcome.v1",
         completedAt: outcomeCompletedAt,
         evidenceJoined: postAcceptJoin === "joined",
-        maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+        maxTailWaitMs: postAcceptMaxTailWaitMs,
         status: postAcceptJoin,
         ...(postAcceptJoin === "timed_out"
           ? { limitationCode: "accept_path_timeout" }
@@ -2899,6 +2926,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   const laneTimingSummary = buildLocalV2DagLambdaLaneTimingSummary({
     coordinatorStartedAtMs,
     generatedAtMs: Date.now(),
+    postAcceptMaxTailWaitMs,
     passiveLaneBarrierCompletedAtMs,
     passiveWorkerResults: workerResults,
     postRefusal: {
@@ -2931,7 +2959,7 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       addedInitialBarrierWaitMs: laneTimingSummary.acceptLaneAddedWaitMs ?? 0,
       featureEnabled: postAcceptState.started,
       join: postAcceptJoin,
-      maxTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+      maxTailWaitMs: postAcceptMaxTailWaitMs,
       productionProjectable: joinedPostAcceptPacket?.productionProjectable === true,
       workerError: postAcceptState.error ?? null,
     },
@@ -3348,6 +3376,7 @@ function latestIsoTimestamp(left: string, right: string): string {
 export function buildLocalV2DagLambdaLaneTimingSummary(input: {
   coordinatorStartedAtMs: number;
   generatedAtMs: number;
+  postAcceptMaxTailWaitMs?: number;
   passiveLaneBarrierCompletedAtMs: number;
   passiveWorkerResults: LocalV2DagLambdaShardResult[];
   postRefusal: {
@@ -3500,7 +3529,7 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
     ...(input.postAccept ? {
       acceptCompletedBeforeOrAtPassiveBarrier: acceptTailDeltaMs === null ? null : acceptTailDeltaMs <= 0,
       acceptLaneAddedWaitMs: Math.min(
-        POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
+        input.postAcceptMaxTailWaitMs ?? POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS,
         Math.max(0, Math.round(acceptTailDeltaMs ?? 0)),
       ),
       acceptLaneJoin: input.postAccept.join,
@@ -3510,7 +3539,7 @@ export function buildLocalV2DagLambdaLaneTimingSummary(input: {
     coordinatorStartedAt: new Date(input.coordinatorStartedAtMs).toISOString(),
     generatedAt: new Date(input.generatedAtMs).toISOString(),
     lanes,
-    ...(input.postAccept ? { maxAcceptTailWaitMs: POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS } : {}),
+    ...(input.postAccept ? { maxAcceptTailWaitMs: input.postAcceptMaxTailWaitMs ?? POST_ACCEPT_WORKER_MAX_TAIL_WAIT_MS } : {}),
     maxRejectTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
     passiveLaneBarrierCompletedAt: new Date(passiveLaneBarrierCompletedAtMs).toISOString(),
     rejectCompletedBeforeOrAtPassiveBarrier: rejectTailDeltaMs === null ? null : rejectTailDeltaMs <= 0,
@@ -3967,6 +3996,25 @@ async function readPostAcceptPacketFromArtifactResult(
     throw new Error("Local v2 DAG Lambda post-accept packet parent scan identity mismatch.");
   }
   return packet;
+}
+
+export async function verifiedPostAcceptLateFormProgress(
+  payload: LocalV2DagLambdaDispatchPayload,
+  s3GetClient?: S3GetClient,
+): Promise<boolean> {
+  try {
+    const response = await (s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new GetObjectCommand({
+      Bucket: requireArtifactBucket(),
+      Key: `${artifactKeyPrefix(payload)}/lanes/accept_observation/LateFormCaptureProgress.json`,
+    }), { abortSignal: AbortSignal.timeout(500) });
+    const body = await streamToBuffer(response.Body);
+    if (body.byteLength > 512) return false;
+    const progress = JSON.parse(body.toString("utf8")) as Record<string, unknown>;
+    return progress.contractVersion === "certscore.post_accept_late_form_progress.v1" &&
+      progress.scanId === payload.scanId &&
+      progress.parentDispatchSha256 === postRefusalParentDispatchSha256(payload) &&
+      progress.targetSha256 === createHash("sha256").update(payload.targetUrl).digest("hex");
+  } catch { return false; }
 }
 
 export async function mirrorWorkerArtifactsIntoFinalArtifactRoot(input: {

@@ -1,6 +1,6 @@
 # Proposal: forms withheld until Accept
 
-Status: implementation approved October 6, 2026; local SITS capture verified; production deployment remains on hold.
+Status: bounded implementation and live SITS report projection verified in an isolated AWS canary on October 7, 2026; production release pending.
 
 Owner approval: “Approve bounded After Accept form screengrabs.” The approved scope
 is at most two masked, safety-reviewed images in the existing Accept lane, up to
@@ -152,3 +152,57 @@ deferred Borlabs configuration present but its consent API and dialog absent.
 This isolates the current end-to-end verification blocker to page/CMP loading
 on workstation egress, before the changed form timing code can execute. No
 production deployment or scan followed these attempts.
+
+## October 7, 2026: final bounded late-form trial
+
+Subsequent owner approvals increased the late-form-only image window by four
+worker seconds with up to eight coordinator-tail seconds, then by four more
+worker seconds and four more coordinator-tail seconds. The current capture
+contract is `certscore.post_accept_form_snapshots.v4`: one verified late-form
+trigger may extend the original three-second image window by at most 9.5
+seconds. The Accept worker result budget can extend from 20 to 29.5 seconds
+only on that trigger. The coordinator's normal six-second tail can extend to
+18 seconds only after it verifies a scan-bound late-form progress marker.
+Historical v1–v3 captures retain their original limits. No extra lane, browser
+session, form action, rescan, model interpretation or later report publication
+was added.
+
+The incremental owner-approved upper estimates at 100,000 affected scans per
+month are $20 for two masked images, $7.35 for the first 1.5 seconds, $60 for
+the next four worker/eight coordinator seconds, and $39.20 for the final four
+worker/four coordinator seconds: $126.55/month if every affected scan reaches
+those separate upper bounds. The actual affected-scan rate is not yet measured.
+Ordinary scans retain the original timing. Lane timing and the extended-tail
+cap are retained so production cohorts can measure frequency after rollout.
+
+Workstation requests to SITS intermittently failed at HTTP/2 navigation before
+its CMP loaded. The isolated eu-west-1 canary used the same regional VPC and
+Lambda memory as production. A direct Accept worker and two full sharded
+coordinator runs retained a reviewed, masked 640×230 SITS form crop. Original
+packet, bundle, geometry and image hashes verified. The final coordinator
+joined the image into its single canonical bundle, and WC01's retained
+assessment marked Accept observed and projected an available After Accept
+form-snapshot URL. The canary's separate structured form capture remained
+limited; the verified image inventory contained one form and one field. This
+is a bounded visible crop, not evidence that SITS has only one form or field.
+
+A later same-session DOM inventory now runs after the first masked pixels,
+overlapping the existing image safety review and staying inside the already
+approved late-form worker deadline. Version 5 retains both observation times,
+the matching CDP loader and the original imaged controls. It may enrich the
+report table only when every original control still identifies the same form;
+the image remains bound to its original inventory and hash. Failed or
+document-mismatched later sampling falls back to the valid earlier image.
+There is no new browser lane, screenshot, model call or maximum timeout beyond
+the previously approved $126.55/month upper estimate at 100,000 affected scans.
+
+The isolated October 7 canary 25 confirmed a fresh Borlabs Accept and joined
+one reviewed, masked 640×230 contact-form image into the canonical bundle.
+The image inventory first observed one field. The later verified inventory
+retained two SITS forms with eight and one fields; WC01 projects both form
+rows, with an available image only for the first. The separate legacy
+structured capture still reported `frame_unavailable`. Original packet and
+image hashes, document binding, consent-control eligibility and report
+projection verified. The newsletter form has no screengrab in this run.
+Production rollout remains on hold until the owner settles whether that
+single-image result meets the requested release scope.
