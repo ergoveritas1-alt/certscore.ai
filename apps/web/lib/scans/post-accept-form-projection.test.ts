@@ -48,3 +48,21 @@ test('verified registered form metadata produces After Accept image URLs without
   assert.equal(observedControlAssessment.controls.accept.state,'observed');
   assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,registrationStatus:'unconfirmed',acceptanceExercised:false}}).rows,[]);
 });
+
+test('versioned late-form metadata reaches the same After Accept image URL without changing consent findings',()=>{
+  const inventory={contractVersion:'certscore.post_accept_form_inventory.v1',sourceLane:'accept_observation',phase:'after_accept',coverage:'bounded_sample',pageUrl:form.pageUrl,forms:[{...form,formRef:'collection_form_0'}]};
+  const value={...projection,formCapture:undefined,observationWindowMs:3000,packetSha256:'b'.repeat(64),
+    acceptanceRegisteredAtMs:110,acceptanceExercised:true,registrationStatus:'confirmed',status:'confirmed_clean',evidenceDisposition:'confirmed',indeterminateReason:null,
+    formSnapshotCapture:{contractVersion:'certscore.post_accept_form_snapshots.v2',phase:'after_accept',sessionId:randomUUID(),exactTargetSha256:'a'.repeat(64),
+      actionDispatchedAtMs:100,acceptanceRegisteredAtMs:110,capturedAtMs:3600,
+      lateForm:{baseCaptureDeadlineAtMs:3110,detectedAtMs:2500,extensionMs:1500},documentIdentity:{source:'cdp_loader_id',token:'loader'},inventory,
+      snapshots:[{contractVersion:'certscore.collection-surface-snapshot.v1',formRef:'collection_form_0',pageUrl:form.pageUrl,capturedAt:'2026-10-06T10:00:00.000Z',
+        sourceInventoryHash:'c'.repeat(64),mimeType:'image/jpeg',valuesMasked:true,status:'available',width:640,height:400,sha256:'d'.repeat(64),sizeBytes:1000}]}};
+  const source={consentControlAssessment:observedControlAssessment,postAcceptEvidenceProjection:value};
+  const rows=projectPostAcceptForms(source).rows;
+  assert.equal(rows.length,1);
+  assert.equal(rows[0]?.snapshot.status,'available');
+  assert.equal(observedControlAssessment.controls.accept.state,'observed');
+  assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,formSnapshotCapture:{...value.formSnapshotCapture,
+    lateForm:{...value.formSnapshotCapture.lateForm,detectedAtMs:1000}}}}).rows,[]);
+});

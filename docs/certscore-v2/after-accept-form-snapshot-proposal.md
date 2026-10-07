@@ -111,3 +111,34 @@ Optional form presence/capture can defer an existing early Accept exit while it
 uses the already configured three-second registered observation window. It does
 not add ten seconds or change all-scan deadlines. Runs without a registered Accept
 do not start this image work; no image-specific tail is permitted.
+
+## October 7, 2026: approved late-form window
+
+The owner approved one targeted extension of at most 1.5 seconds, estimated at
+up to $7.35/month additional Lambda compute at 100,000 affected scans/month,
+on top of the previously approved $20/month form-image allowance. The $0
+alternative is the original three-second limit with possible missed late forms.
+This approval adds no browser lane, scan, retry, form action, model call, or
+general scan timeout increase.
+
+The extension activates only after a real form is detected at least 1.8 seconds
+after confirmed Accept and with at most 1.2 seconds left in the original image
+window. The Accept worker's result timer and this optional image capture move
+together once, by no more than 1.5 seconds. No-form and early-form visits keep
+their original deadlines. The consent observation duration, scoring, action
+authorization, and coordinator tail policy do not change. Safety review remains
+bounded by the original image deadline plus 1.5 seconds; late or unverifiable
+images remain unavailable.
+
+Extended captures use `certscore.post_accept_form_snapshots.v2` with the original
+image deadline, actual detection offset and fixed extension. The packet and
+persisted projection independently reject a missing or invalid late-form anchor
+or pixels outside that bound. Historical v1 captures retain their original
+three-second rule.
+
+Local tests verify a late form with deliberately slow browser binding, the
+Accept result timer, masked JPEG bytes, packet integrity and report projection.
+The actual SITS form DOM also yielded two locally masked images. A signed local
+SITS scan still did not reach its CMP on workstation egress, so the registered
+SITS Accept path and production image serving remain unverified. Deployment is
+on hold pending that end-to-end evidence.

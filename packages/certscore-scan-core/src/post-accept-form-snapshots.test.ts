@@ -35,6 +35,7 @@ test("registered Accept captures two delayed forms, masks entered values, and pr
     });
     assert.equal(packet.acceptanceRegistration.status, "confirmed");
     const images = packet.formSnapshotCapture; assert.ok(images);
+    assert.equal(images.contractVersion, "certscore.post_accept_form_snapshots.v1");
     assert.equal(images.inventory.sourceLane, "accept_observation");
     assert.equal(images.phase, "after_accept");
     assert.equal(images.snapshots.filter(snapshot => snapshot.status === "available").length, 2);
@@ -47,6 +48,39 @@ test("registered Accept captures two delayed forms, masks entered values, and pr
     assert.ok(projection.formSnapshotCapture?.snapshots.every(snapshot => !("data" in snapshot)));
     assert.equal(projectPostAcceptEvidenceForReport({ packet }).formSnapshotCapture, undefined);
     assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...packet, formSnapshotCapture: { ...images, exactTargetSha256: "b".repeat(64) } }).success, false);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("late form extends the Accept result budget once without extending consent observations", async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader("Content-Type", "text/html");
+    response.end(`<section aria-label="Cookie and analytics preferences"><p>We use analytics cookies.</p>
+      <button data-certscore-consent-action="accept">Accept</button></section><script>
+      document.querySelector('button').onclick=()=>{localStorage.setItem('certscore:analytics-consent:v1','granted');
+        document.querySelector('section').remove();
+        setTimeout(()=>document.body.insertAdjacentHTML('beforeend',
+          '<form method="post"><label>Email<input type="email" name="email"></label></form>'),2450);};
+      </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    const packet = await runPostAcceptObserver({ url: `http://127.0.0.1:${address.port}/`,
+      scanId: "late-form-budget", parentScanId: "late-form-budget-parent",
+      interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+      recipe: CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE, actionSearchTimeoutMs: 500, confirmationTimeoutMs: 500,
+      observationWindowMs: 3000, resultBudgetMs: 3200, productionProjectable: true,
+      formSnapshotReviewer: async () => { await new Promise(resolve => setTimeout(resolve, 900)); return { safeForDisplay: true }; },
+    });
+    assert.equal(packet.acceptanceRegistration.status, "confirmed");
+    assert.equal(packet.cancellation.requested, false);
+    assert.ok(packet.timing.readyAtMs > 3200, "the late image should finish after the original result budget");
+    assert.equal(packet.formSnapshotCapture?.contractVersion, "certscore.post_accept_form_snapshots.v2");
+    assert.equal(packet.formSnapshotCapture?.snapshots[0]?.status, "available");
+    assert.ok(postAcceptEvidencePacketSchema.safeParse(packet).success);
+    const projection = projectPostAcceptEvidenceForReport({ packet, packetSha256: "a".repeat(64) });
+    assert.equal(projection.formSnapshotCapture?.snapshots[0]?.status, "available");
+    assert.equal(projection.observationWindowMs, 3000);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
 
@@ -71,13 +105,15 @@ test("bounded post-Accept inventory retains live forms without page-wide evidenc
 test("optional form images freeze without extending deadlines or retaining navigation-mismatched pixels", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  let extensionCalls = 0;
   try {
     await page.goto("about:blank");
     const handle = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: "about:blank", parentScanStartedAtMs: Date.now(),
       actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0, deadlineAtMs: Date.now() + 100,
-      reviewer: async () => ({safeForDisplay:true}) });
+      reviewer: async () => ({safeForDisplay:true}), onLateFormDetected: () => { extensionCalls++; return Date.now() + 1500; } });
     const before = performance.now();
     assert.equal(await handle.finish(), undefined);
+    assert.equal(extensionCalls, 0);
     assert.ok(performance.now() - before < 30);
     await page.setContent('<form><input name="email" type="email"></form>');
     await new Promise(resolve => setTimeout(resolve, 120));
@@ -167,6 +203,36 @@ test("late mounted SITS-shaped forms retain masked pixels inside the original th
     assert.ok(result.snapshots.every(snapshot => snapshot.status !== "available" || snapshot.data?.length));
     assert.ok(result.capturedAtMs <= 3000);
   } finally { await browser.close(); }
+});
+
+test("a late form gets one bounded extension while ordinary scans keep the original deadline", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const originalEvaluateHandle = page.evaluateHandle.bind(page);
+  let extensionCalls = 0;
+  try {
+    await page.route("https://fixture.test/**", route => route.fulfill({ contentType: "text/html", body: `
+      <script>setTimeout(() => document.body.insertAdjacentHTML('beforeend',
+        '<form><label>Email<input type="email" name="email" value="private@example.test"></label></form>'),2450)</script>` }));
+    await page.goto("https://fixture.test/");
+    (page as any).evaluateHandle = async (...args: Parameters<typeof originalEvaluateHandle>) => {
+      await new Promise(resolve => setTimeout(resolve, 650));
+      return originalEvaluateHandle(...args);
+    };
+    const startedAt = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(),
+      parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
+      deadlineAtMs: startedAt + 3000, reviewer: async () => ({ safeForDisplay: true }),
+      onLateFormDetected: () => { extensionCalls++; return startedAt + 4500; } });
+    await new Promise(resolve => setTimeout(resolve, 3050));
+    const result = await capture.finish();
+    assert.equal(extensionCalls, 1);
+    assert.ok(result, "finish must preserve a detected form after the original deadline");
+    assert.equal(result.contractVersion, "certscore.post_accept_form_snapshots.v2");
+    assert.equal(result.snapshots[0]?.status, "available");
+    assert.ok(result.capturedAtMs > 3000 && result.capturedAtMs <= 4500);
+    assert.equal(result.contractVersion === "certscore.post_accept_form_snapshots.v2" && result.lateForm.extensionMs, 1500);
+  } finally { (page as any).evaluateHandle = originalEvaluateHandle; await browser.close(); }
 });
 
 test("pixel proof stays in the Accept window while bounded safety review finishes afterward", async () => {

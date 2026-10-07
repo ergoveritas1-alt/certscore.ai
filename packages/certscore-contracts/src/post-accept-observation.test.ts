@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash, randomUUID } from "node:crypto";
 import {
   postAcceptEvidencePacketSchema,
   postAcceptReportProjectionSchema,
@@ -104,6 +105,45 @@ function confirmedPacket() {
     limitations: [],
   };
 }
+
+test("late form pixels project only with versioned bounded extension proof", () => {
+  const base = confirmedPacket();
+  const targetHash = createHash("sha256").update(base.targetUrl).digest("hex");
+  const form = { formRef: "collection_form_0", structure: "native_form", surfaceType: "contact",
+    pageUrl: base.targetUrl, method: "post", actionRelationship: "self",
+    candidateFieldCount: 0, retainedFieldCount: 0, fieldsTruncated: false, fields: [],
+    confidence: 1, directVsInferred: "direct" };
+  const inventory = { contractVersion: "certscore.post_accept_form_inventory.v1", sourceLane: "accept_observation",
+    phase: "after_accept", coverage: "bounded_sample", pageUrl: base.targetUrl, forms: [form] };
+  const capture = { contractVersion: "certscore.post_accept_form_snapshots.v2", phase: "after_accept",
+    sessionId: randomUUID(), exactTargetSha256: targetHash,
+    actionDispatchedAtMs: 100, acceptanceRegisteredAtMs: 120, capturedAtMs: 3600,
+    lateForm: { baseCaptureDeadlineAtMs: 3120, detectedAtMs: 2500, extensionMs: 1500 },
+    documentIdentity: { source: "cdp_loader_id", token: "loader" }, inventory,
+    snapshots: [{ contractVersion: "certscore.collection-surface-snapshot.v1", formRef: form.formRef,
+      pageUrl: base.targetUrl, capturedAt: "2026-09-01T00:00:03.600Z", status: "unavailable",
+      reason: "capture_budget_exhausted", sourceInventoryHash: "a".repeat(64), mimeType: "image/jpeg", valuesMasked: true }] };
+  const packet = postAcceptEvidencePacketSchema.parse({ ...base, exactTargetSha256: targetHash,
+    actionControlProof: { ...base.actionControlProof, authorizedTargetSha256: targetHash },
+    interactionDiagnostics: { resolver: { snapshots: [], truncated: false },
+      navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: true },
+      click: { outcome: "completed", reResolvedBeforeDispatch: false, confirmationCheckedAfterError: false } },
+    observationWindowMs: 3000, timing: { ...base.timing, totalMs: 4000, readyAtMs: 4000, observationMs: 3000 },
+    formSnapshotCapture: capture });
+  const projection = projectPostAcceptEvidenceForReport({ packet, packetSha256: "b".repeat(64) });
+  assert.equal(projection.formSnapshotCapture?.contractVersion, "certscore.post_accept_form_snapshots.v2");
+  assert.equal(projection.formSnapshotCapture?.capturedAtMs, 3600);
+  for (const lateForm of [
+    { ...capture.lateForm, detectedAtMs: 1000 },
+    { ...capture.lateForm, baseCaptureDeadlineAtMs: 4000 },
+    { ...capture.lateForm, extensionMs: 2000 },
+  ]) assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...packet,
+    formSnapshotCapture: { ...capture, lateForm } }).success, false);
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...packet,
+    formSnapshotCapture: { ...capture, capturedAtMs: 4700 } }).success, false);
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...packet,
+    formSnapshotCapture: { ...capture, contractVersion: "certscore.post_accept_form_snapshots.v1", lateForm: undefined } }).success, false);
+});
 
 test("Accept packet and report projection preserve bounded collection diagnostics", () => {
   const diagnostics = { policyVersion: "action_storage_collection_diagnostics.v1" as const,

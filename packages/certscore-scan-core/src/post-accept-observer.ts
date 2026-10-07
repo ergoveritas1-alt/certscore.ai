@@ -1,4 +1,4 @@
-import { startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
+import { LATE_FORM_CAPTURE_EXTENSION_MS, startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
@@ -298,19 +298,32 @@ export async function runPostAcceptObserver(
   const branchStartedAtMs = Date.now();
   const parentScanStartedAtMs = input.scanStartedAtMs ?? branchStartedAtMs;
   const resultBudgetMs = boundedMs(input.resultBudgetMs, 0, 0, 30_000);
-  const resultBudgetDeadlineAtMs = resultBudgetMs > 0
+  let resultBudgetDeadlineAtMs = resultBudgetMs > 0
     ? branchStartedAtMs + resultBudgetMs
     : undefined;
   const resultBudgetAbortController = new AbortController();
   let resultBudgetExhausted = false;
   let resultBudgetTimer: NodeJS.Timeout | undefined;
-  if (resultBudgetDeadlineAtMs !== undefined) {
+  let lateFormBudgetExtended = false;
+  const scheduleResultBudget = () => {
+    if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
+    if (resultBudgetDeadlineAtMs === undefined) return;
     resultBudgetTimer = setTimeout(() => {
       resultBudgetExhausted = true;
       resultBudgetAbortController.abort(new Error("Post-Accept observer result budget exhausted."));
     }, Math.max(0, resultBudgetDeadlineAtMs - Date.now()));
     resultBudgetTimer.unref?.();
-  }
+  };
+  scheduleResultBudget();
+  const extendResultBudgetForLateForm = () => {
+    if (resultBudgetDeadlineAtMs === undefined) return undefined;
+    if (!lateFormBudgetExtended && !resultBudgetAbortController.signal.aborted && !input.signal?.aborted) {
+      resultBudgetDeadlineAtMs += LATE_FORM_CAPTURE_EXTENSION_MS;
+      lateFormBudgetExtended = true;
+      scheduleResultBudget();
+    }
+    return resultBudgetDeadlineAtMs;
+  };
   const effectiveSignal = resultBudgetDeadlineAtMs === undefined
     ? input.signal
     : input.signal
@@ -1136,7 +1149,8 @@ export async function runPostAcceptObserver(
         exactTargetUrl: normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl), parentScanStartedAtMs,
         actionDispatchedAtMs, acceptanceRegisteredAtMs, reviewer: input.formSnapshotReviewer,
         deadlineAtMs: Math.min(parentScanStartedAtMs + acceptanceRegisteredAtMs + observationWindowMs,
-          resultBudgetDeadlineAtMs ?? Number.POSITIVE_INFINITY), signal: effectiveSignal });
+          resultBudgetDeadlineAtMs ?? Number.POSITIVE_INFINITY), signal: effectiveSignal,
+        onLateFormDetected: extendResultBudgetForLateForm });
     }
     const observationStartedAtMs = Date.now();
     const observationResult = await waitForPostAcceptObservation({

@@ -11,8 +11,7 @@ export const postAcceptFormInventorySchema = z.object({
 import { collectionSurfaceSnapshotSchema, collectionSurfaceSnapshotMetadataSchema,
   type CollectionSurfaceSnapshot } from "./collection-surface-snapshot";
 
-export interface PostAcceptFormSnapshotCapture {
-  contractVersion: "certscore.post_accept_form_snapshots.v1";
+type PostAcceptFormSnapshotCommon = {
   phase: "after_accept";
   sessionId: string;
   exactTargetSha256: string;
@@ -22,13 +21,24 @@ export interface PostAcceptFormSnapshotCapture {
   documentIdentity: { source: "cdp_loader_id"; token: string };
   inventory: z.output<typeof postAcceptFormInventorySchema>;
   snapshots: CollectionSurfaceSnapshot[];
-}
-export type PostAcceptFormSnapshotProjection = Omit<PostAcceptFormSnapshotCapture, "snapshots"> & {
+};
+export type PostAcceptFormSnapshotCapture = PostAcceptFormSnapshotCommon & (
+  | { contractVersion: "certscore.post_accept_form_snapshots.v1"; lateForm?: never }
+  | { contractVersion: "certscore.post_accept_form_snapshots.v2"; lateForm: {
+      baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 1500;
+    } }
+);
+type PostAcceptFormSnapshotProjectionCommon = Omit<PostAcceptFormSnapshotCommon, "snapshots"> & {
   snapshots: Array<Omit<CollectionSurfaceSnapshot, "data">>;
 };
+export type PostAcceptFormSnapshotProjection = PostAcceptFormSnapshotProjectionCommon & (
+  | { contractVersion: "certscore.post_accept_form_snapshots.v1"; lateForm?: never }
+  | { contractVersion: "certscore.post_accept_form_snapshots.v2"; lateForm: {
+      baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 1500;
+    } }
+);
 // Packet pixels and persisted metadata share the same provenance contract.
 const common = {
-  contractVersion: z.literal("certscore.post_accept_form_snapshots.v1"),
   phase: z.literal("after_accept"),
   sessionId: z.string().uuid(),
   exactTargetSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -38,6 +48,11 @@ const common = {
   documentIdentity: z.object({ source: z.literal("cdp_loader_id"), token: z.string().min(1).max(128) }).strict(),
   inventory: postAcceptFormInventorySchema,
 };
+const lateFormSchema = z.object({
+  baseCaptureDeadlineAtMs: z.number().int().nonnegative(),
+  detectedAtMs: z.number().int().nonnegative(),
+  extensionMs: z.literal(1500),
+}).strict();
 function validateBinding(value: PostAcceptFormSnapshotProjection, ctx: z.RefinementCtx) {
   if (value.actionDispatchedAtMs > value.acceptanceRegisteredAtMs || value.acceptanceRegisteredAtMs > value.capturedAtMs ||
     value.inventory.forms.length > 2 || value.inventory.forms.length === 0 ||
@@ -51,10 +66,23 @@ function validateBinding(value: PostAcceptFormSnapshotProjection, ctx: z.Refinem
     new Set(value.snapshots.map(snapshot => snapshot.formRef)).size !== value.snapshots.length) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "After-Accept form images require bounded registered inventory binding" });
   }
+  if (value.contractVersion === "certscore.post_accept_form_snapshots.v2" &&
+    (value.lateForm.baseCaptureDeadlineAtMs < value.acceptanceRegisteredAtMs ||
+      value.lateForm.detectedAtMs < value.acceptanceRegisteredAtMs + 1800 ||
+      value.lateForm.detectedAtMs < value.lateForm.baseCaptureDeadlineAtMs - 1200 ||
+      value.lateForm.detectedAtMs > value.lateForm.baseCaptureDeadlineAtMs ||
+      value.capturedAtMs < value.lateForm.detectedAtMs ||
+      value.capturedAtMs > value.lateForm.baseCaptureDeadlineAtMs + value.lateForm.extensionMs)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Extended form pixels require a late detected form and bounded capture time" });
+  }
 }
-export const postAcceptFormSnapshotCaptureSchema: z.ZodType<PostAcceptFormSnapshotCapture, z.ZodTypeDef, unknown> = z.object({
-  ...common, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotSchema)).max(2),
-}).strict().superRefine(validateBinding);
-export const postAcceptFormSnapshotProjectionSchema: z.ZodType<PostAcceptFormSnapshotProjection, z.ZodTypeDef, unknown> = z.object({
-  ...common, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotMetadataSchema)).max(2),
-}).strict().superRefine(validateBinding);
+const captureCommon = { ...common, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotSchema)).max(2) };
+const projectionCommon = { ...common, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotMetadataSchema)).max(2) };
+export const postAcceptFormSnapshotCaptureSchema: z.ZodType<PostAcceptFormSnapshotCapture, z.ZodTypeDef, unknown> = z.union([
+  z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v1") }).strict(),
+  z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v2"), lateForm: lateFormSchema }).strict(),
+]).superRefine(validateBinding);
+export const postAcceptFormSnapshotProjectionSchema: z.ZodType<PostAcceptFormSnapshotProjection, z.ZodTypeDef, unknown> = z.union([
+  z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v1") }).strict(),
+  z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v2"), lateForm: lateFormSchema }).strict(),
+]).superRefine(validateBinding);

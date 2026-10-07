@@ -16,6 +16,11 @@ test("After Accept images require phase-owned inventory, exact form binding and 
   const capture = {contractVersion:"certscore.post_accept_form_snapshots.v1",phase:"after_accept",sessionId:randomUUID(),exactTargetSha256:sha(base.pageUrl),
     actionDispatchedAtMs:100,acceptanceRegisteredAtMs:110,capturedAtMs:200,documentIdentity:{source:"cdp_loader_id",token:"document"},inventory,snapshots:[image]};
   assert.deepEqual(verifiedPostAcceptFormSnapshots(capture)?.images[0]?.bytes,bytes);
+  const extended = { ...capture, contractVersion: "certscore.post_accept_form_snapshots.v2",
+    capturedAtMs: 3600, lateForm: { baseCaptureDeadlineAtMs: 3120, detectedAtMs: 2500, extensionMs: 1500 } };
+  assert.deepEqual(verifiedPostAcceptFormSnapshots(extended)?.images[0]?.bytes, bytes);
+  assert.equal(verifiedPostAcceptFormSnapshots({ ...extended,
+    lateForm: { ...extended.lateForm, detectedAtMs: 1000 } }), null);
   for (const change of [{sourceInventoryHash:"a".repeat(64)},{sha256:"b".repeat(64)},{data:Buffer.from("changed").toString("base64")},{formRef:"collection_form_99"},{status:"withheld"}]) {
     assert.equal(verifiedPostAcceptFormSnapshots({...capture,snapshots:[{...image,...change}]}),null);
   }
