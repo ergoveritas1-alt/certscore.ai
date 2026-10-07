@@ -142,3 +142,13 @@ The actual SITS form DOM also yielded two locally masked images. A signed local
 SITS scan still did not reach its CMP on workstation egress, so the registered
 SITS Accept path and production image serving remain unverified. Deployment is
 on hold pending that end-to-end evidence.
+
+An October 7 follow-up rebuilt the branch and reran the local six-lane SITS
+parity harness with its prior HTTP/1 browser setting and existing local policy
+key. The scan completed, but neither action lane found a consent dialog or
+attempted a click. A separate fresh single-browser visit timed out waiting for
+DOMContentLoaded after 15 seconds; the document remained `loading`, with
+deferred Borlabs configuration present but its consent API and dialog absent.
+This isolates the current end-to-end verification blocker to page/CMP loading
+on workstation egress, before the changed form timing code can execute. No
+production deployment or scan followed these attempts.
