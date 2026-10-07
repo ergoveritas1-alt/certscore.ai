@@ -8,6 +8,7 @@ import { ServicesSignalSnapshot } from "./services-signal-snapshot";
 import { summarizeSiteIntegrityLinks, type SiteIntegritySiteReport } from "../../lib/scans/site-integrity-report";
 import { InventoryTileHeading, inventoryTileDisclosure, inventoryTilePadding } from "./inventory-tile-heading";
 import { ScanLiveValue } from "./scan-live-value";
+import { isAfterAcceptForm } from "../../lib/scans/collection-surface-table-row";
 
 export type InventoryAssessmentCounts = { nonEssential: number; review: number; contextual: number; essential: number; unclassified?: number };
 export type ReportInventoryMetric = { label: string; value: number | null | undefined; lowerBound?: boolean; counts?: InventoryAssessmentCounts; note?: string; overview?: NetworkInventoryOverview };
@@ -56,8 +57,9 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
   onViewEvidence?: () => void;
   siteIntegrity?: SiteIntegritySiteReport;
 }) {
-  const afterAcceptCount = forms.filter(row => row.capturePhase === "after_accept_click").length;
-  const formObservationCount = (formCount ?? forms.filter(row => !row.capturePhase).length) + afterAcceptCount;
+  const afterAcceptCount = forms.filter(isAfterAcceptForm).length;
+  const preConsentCount = formCount ?? forms.filter(row => !row.capturePhase).length;
+  const formObservationCount = preConsentCount + afterAcceptCount;
   const network = metrics.find(metric => metric.overview);
   const overview = network?.overview;
   const technical: ReportInventoryMetric[] = overview ? [
@@ -76,9 +78,9 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
     <div className="grid grid-cols-3 items-stretch divide-x divide-slate-200 border-b border-slate-200 bg-slate-50/50">
       <ServicesSignalSnapshot overview={overview} card />
       {formObservationCount > 0 ? <details className="group/forms min-w-0">
-        <summary className={inventoryTileDisclosure}><InventoryTileHeading label={afterAcceptCount ? "Form observations" : "Forms"} value={formObservationCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
+        <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={formObservationCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
         <div className="border-t border-slate-100 px-3 pb-3 sm:px-4">
-        {afterAcceptCount ? <p className="mt-3 text-xs text-slate-500">Includes {afterAcceptCount} after Accept click; the same form may appear in both visits.</p> : null}
+        {afterAcceptCount ? <p className="mt-3 text-xs text-slate-500">{preConsentCount} pre-consent · {afterAcceptCount} after Accept click</p> : null}
         <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs leading-5 text-slate-600" aria-label="Observed forms">{forms.map(({ id, form, capturePhase }) => <li key={id}><p className="break-words font-medium">{form.title || form.surfaceType.replaceAll("_", " ")}</p><p>{form.retainedFieldCount} {form.retainedFieldCount === 1 ? "field" : "fields"} · {form.method}{capturePhase ? " · After Accept click" : ""}</p></li>)}</ul>
         <a href="#report-forms" className="mt-3 inline-block text-xs text-sky-700 hover:underline" onClick={event => { event.preventDefault(); onViewEvidence?.(); document.getElementById("report-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>View forms ↗</a>
         </div>

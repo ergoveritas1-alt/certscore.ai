@@ -5,6 +5,34 @@ import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ReportInventorySummary, ReportRuntimeSummary } from "./report-inventory-summary";
 import { projectExecutiveRuntimeCards } from "../../lib/scans/executive-runtime-cards";
+import { isAfterAcceptForm, type CollectionSurfaceTableRow } from "../../lib/scans/collection-surface-table-row";
+
+const formRow: CollectionSurfaceTableRow = {
+  id: "baseline:form", capturedAt: "", snapshot: { status: "unavailable" },
+  form: { formRef: "form_0", structure: "native_form", surfaceType: "contact", title: "Contact", pageUrl: "https://example.test/", method: "post", actionRelationship: "same_site", candidateFieldCount: 1, retainedFieldCount: 1, fieldsTruncated: false, confidence: 1, directVsInferred: "direct", evidenceRefs: [], fields: [] },
+};
+
+test("executive Forms tally includes both captured and structured After Accept observations", () => {
+  for (const capturePhase of ["after_accept", "after_accept_click"] as const) {
+    const rows = [0, 1].map(index => ({ ...formRow, id: `${capturePhase}:${index}`, capturePhase }));
+    // Both single-page and full-site reports feed the same inventory card.
+    const html = renderToStaticMarkup(<ReportInventorySummary metrics={[]} formCount={0} forms={rows.filter(isAfterAcceptForm)} />);
+    const tile = html.slice(html.indexOf("group/forms"), html.indexOf("Observed forms"));
+    assert.match(tile, />Forms</);
+    assert.match(tile, />2</);
+    assert.match(tile, /0 pre-consent · 2 after Accept click/);
+  }
+});
+
+test("Forms tally adds post-Accept rows once to the baseline count", () => {
+  const rows = [formRow, { ...formRow, id: "after_accept:form", capturePhase: "after_accept" as const }];
+  for (const formCount of [1, undefined]) {
+    const html = renderToStaticMarkup(<ReportInventorySummary metrics={[]} formCount={formCount} forms={rows} />);
+    assert.match(html, /1 pre-consent · 1 after Accept click/);
+    assert.equal((html.match(/>Contact</g) ?? []).length, 2);
+    assert.match(html.slice(html.indexOf("group/forms"), html.indexOf("Observed forms")), />2</);
+  }
+});
 
 test("inventory breakdown uses distinct counts rather than repeated events", () => {
   const html = renderToStaticMarkup(<ReportInventorySummary metrics={[{ label: "Network requests", value: 805, counts: {nonEssential:0,review:205,unclassified:296,contextual:304,essential:0}, overview: {identifiedServices:6,distinctResources:196,unattributedResources:145,distinctStorage:0,distinctEmbeds:3,distinctClassifications:{requests:{nonEssential:0,review:46,unclassified:74,contextual:76,essential:0},storage:{nonEssential:0,review:0,unclassified:0,contextual:0,essential:0},embeds:{nonEssential:0,review:0,unclassified:0,contextual:3,essential:0}}} }]} />);

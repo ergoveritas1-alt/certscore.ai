@@ -12,3 +12,7 @@ export type CollectionSurfaceTableRow = {
   };
   snapshot: { status: "available"; url: string } | { status: "unavailable" | "withheld" | "pending"; reason?: string };
 };
+
+export function isAfterAcceptForm(row: CollectionSurfaceTableRow): boolean {
+  return row.capturePhase === "after_accept" || row.capturePhase === "after_accept_click";
+}

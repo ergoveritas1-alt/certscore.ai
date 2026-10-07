@@ -3,6 +3,7 @@ import type { ChoicePathExecution } from "@certscore/contracts";
 import type { ExternalScanNoGoProjection } from "@website-signal-risk-scanner/shared";
 import type { GpcResponseAssessment } from "@certscore/contracts";
 import type { ExecutiveRejectPathProjection } from "../executive-summary-card";
+import type { ActionTimelineProjection } from "../../../lib/scans/action-timeline-projection";
 
 export const SHADOW_REPORT_SCAN_ID = "333757ef-ddc0-4d68-aef8-f220859706c9";
 
@@ -198,6 +199,7 @@ export type ShadowReportData = {
   acceptPath?: ExecutiveAcceptPathProjection | null;
   choicePathComparison?: ChoicePathComparison | null;
   rejectPath?: ExecutiveRejectPathProjection | null;
+  actionTimelines?: { accept: ActionTimelineProjection | null; reject: ActionTimelineProjection | null };
   coverage: {
     concern: number;
     contextual: number;

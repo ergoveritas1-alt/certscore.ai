@@ -10,11 +10,19 @@ export function SitePriorityReview({ findings, pending, sitewideAvailable, scann
     const list = listRef.current;
     if (!list) return;
     const summaries = Array.from(list.children).slice(0, 3).map(row => row.querySelector("summary")).filter((row): row is HTMLElement => Boolean(row));
-    const measure = () => setListHeight(summaries.reduce((height, row) => height + row.getBoundingClientRect().height + 1, 1));
+    const measure = () => {
+      const collapsedHeight = summaries.reduce((height, row) => height + row.getBoundingClientRect().height + 1, 1);
+      const singleIssueExpanded = findings.length === 1 && summaries[0]?.closest("details")?.open;
+      setListHeight(collapsedHeight * (singleIssueExpanded ? 2 : 1));
+    };
     const observer = new ResizeObserver(measure);
     summaries.forEach(row => observer.observe(row));
+    list.addEventListener("toggle", measure, true);
     measure();
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      list.removeEventListener("toggle", measure, true);
+    };
   }, [findings]);
   return <section aria-label="Sitewide priority review" className="my-3 border-y border-zinc-200 bg-white py-3">
     <div className="flex items-center justify-between gap-3">

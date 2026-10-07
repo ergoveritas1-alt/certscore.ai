@@ -1,4 +1,5 @@
 import { projectPostAcceptForms } from "../../../lib/scans/post-accept-form-projection";
+import { projectSuccessfulActionTimeline } from "../../../lib/scans/action-timeline-projection";
 import { readPrivacyAuditEvidence } from "../../../lib/scans/report-review-focus";
 import { projectFormDestinationPriority } from "../../../lib/scans/form-destination-report";
 import { formDestinationProjectionSchema } from "@certscore/contracts";
@@ -755,6 +756,11 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const rejectPath = buildExecutiveRejectPathProjection(
     reportableChecklistRows.find((item) => item.id === "post_reject_tracking_reduction"),
   );
+  const actionTimelines = {
+    accept: projectSuccessfulActionTimeline(runtimeArtifacts?.postAcceptEvidenceProjection, retainedConsentAssessment(scanRecord), "accept"),
+    reject: projectSuccessfulActionTimeline(runtimeArtifacts?.postRefusalEvidenceProjection, retainedConsentAssessment(scanRecord), "reject",
+      rejectPath?.state === "issue_observed" || rejectPath?.state === "review_signal" ? "concern" : "neutral"),
+  };
   const choicePathComparison = buildChoicePathComparison(
     acceptPath,
     rejectPath,
@@ -876,6 +882,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     gpcLaneStatus,
     privacyAuditEvidence: readPrivacyAuditEvidence(runtimeArtifacts, scanRecord.scan.id),
     acceptPath,
+    actionTimelines,
     choicePathComparison,
     consentRows: [
       ...evidenceRows.filter((row) => CHECKLIST_GROUPS.consent.has(row.id)),

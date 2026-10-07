@@ -51,10 +51,12 @@ export function buildRuntimeInventoryPurposeCounts(
 export function RuntimeObservationTimeline({
   dominant = false,
   compact = false,
+  responsive = false,
   events,
 }: {
   dominant?: boolean;
   compact?: boolean;
+  responsive?: boolean;
   events: RuntimeObservationTimelineEvent[];
 }) {
   const consentEvent = events.find((event) => /consent/i.test(event.label));
@@ -65,7 +67,7 @@ export function RuntimeObservationTimeline({
 
   return (
     <div className="overflow-x-auto pb-0" data-density="compact">
-      <div className={`${dominant ? "min-w-[58rem]" : "min-w-[48rem]"} relative ${compact ? "pt-2" : "pt-6"}`}>
+      <div className={`${responsive ? "min-w-0" : dominant ? "min-w-[58rem]" : "min-w-[48rem]"} relative ${compact ? "pt-2" : "pt-6"}`} style={responsive ? { minWidth: `${Math.max(events.length, 2) * 9}rem` } : undefined}>
         <div className={`absolute left-0 right-0 ${compact ? "top-[1.55rem]" : "top-[2.55rem]"} h-px bg-zinc-300`} />
         <div
           className="relative grid gap-4"
@@ -92,7 +94,7 @@ export function RuntimeObservationTimeline({
                 {event.at}
               </p>
               <div className={`${compact ? "mt-2" : "mt-4"} flex min-h-5 items-start gap-2`}>
-                <p className={`${dominant ? "text-base" : "text-sm"} font-semibold text-zinc-950`}>{event.label}</p>
+                <p className={`${dominant ? "text-base" : "text-sm"} font-semibold ${event.tone === "concern" ? "text-rose-800" : "text-zinc-950"}`}>{event.label}</p>
                 {event.vendor ? (
                   <VendorBrandChip
                     className="!h-7 !w-7 [&>span]:!h-4 [&>span]:!w-4"
@@ -102,11 +104,11 @@ export function RuntimeObservationTimeline({
                   />
                 ) : null}
               </div>
-              <p className="mt-0.5 max-w-[11rem] overflow-hidden text-[11px] leading-4 text-zinc-500 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+              <p className={`mt-0.5 max-w-[11rem] overflow-hidden text-[11px] leading-4 ${event.tone === "concern" ? "text-rose-700" : "text-zinc-500"} [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]`}>
                 {event.detail}
               </p>
               {event === firstConcern && leadMs !== null ? (
-                <span className="absolute -top-10 left-0 whitespace-nowrap rounded-md bg-rose-50 px-2 py-1 text-[0.65rem] font-semibold text-rose-800">
+                <span className={`${compact ? "mt-1 inline-block" : "absolute -top-10 left-0 whitespace-nowrap"} rounded-md bg-rose-50 px-2 py-1 text-[0.65rem] font-semibold text-rose-800`}>
                   {Math.round(leadMs / 10) / 100}s before consent surface
                 </span>
               ) : null}
