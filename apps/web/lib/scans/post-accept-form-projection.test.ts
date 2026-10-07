@@ -94,6 +94,13 @@ test('later same-document form inventory enriches rows without inventing a secon
   assert.equal(rows[0]?.form.fields.length,2);
   assert.equal(rows[0]?.snapshot.status,'available');
   assert.equal(rows[1]?.snapshot.status,'unavailable');
+  const secondCapture={...value.formSnapshotCapture,contractVersion:"certscore.post_accept_form_snapshots.v6",
+    postCaptureSnapshots:{capturedAtMs:5000,snapshots:[{...value.formSnapshotCapture.snapshots[0],formRef:second.formRef}]}};
+  const withSecond=projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,formSnapshotCapture:secondCapture}}).rows;
+  assert.equal(withSecond[1]?.snapshot.status,"available");
+  assert.equal(withSecond[0]?.captureProvenance?.capturedAtMs,3600);
+  assert.equal(withSecond[1]?.captureProvenance?.capturedAtMs,5000);
+
   assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,
     formSnapshotCapture:{...value.formSnapshotCapture,postCaptureInventory:{...value.formSnapshotCapture.postCaptureInventory,
       documentIdentity:{source:'cdp_loader_id',token:'other'}}}}}).rows,[]);

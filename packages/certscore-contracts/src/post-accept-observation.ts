@@ -225,8 +225,9 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
       images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + packet.observationWindowMs) ||
     images.capturedAtMs > imageCaptureDeadlineAtMs || images.capturedAtMs > packet.timing.readyAtMs ||
-    (images.contractVersion === "certscore.post_accept_form_snapshots.v5" &&
+    ((images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6") &&
       images.postCaptureInventory.capturedAtMs > packet.timing.readyAtMs) ||
+    (images.contractVersion === "certscore.post_accept_form_snapshots.v6" && images.postCaptureSnapshots.capturedAtMs > packet.timing.readyAtMs) ||
     packet.interactionDiagnostics?.click.outcome !== "completed")) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form snapshots require confirmed same-target completed Accept inside the bounded image window"});
   if (packet.formCapture && (packet.formCapture.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 ||
     packet.formCapture.exactTargetSha256 !== packet.exactTargetSha256 ||
@@ -659,6 +660,10 @@ export function projectPostAcceptEvidenceForReport(input: {
     ...(packet.formCapture && input.packetSha256 ? {formCapture: packet.formCapture} : {}),
     ...(packet.formSnapshotCapture && input.packetSha256 ? { formSnapshotCapture: {
       ...packet.formSnapshotCapture, snapshots: packet.formSnapshotCapture.snapshots.map(({ data: _data, ...metadata }) => metadata),
+      ...(packet.formSnapshotCapture.contractVersion === "certscore.post_accept_form_snapshots.v6" ? {
+        postCaptureSnapshots: {...packet.formSnapshotCapture.postCaptureSnapshots,
+          snapshots: packet.formSnapshotCapture.postCaptureSnapshots.snapshots.map(({data:_data,...metadata})=>metadata)},
+      } : {}),
     } } : {}),
     ...(packet.afterActionCapture ? {
       afterActionCapture: packet.afterActionCapture,

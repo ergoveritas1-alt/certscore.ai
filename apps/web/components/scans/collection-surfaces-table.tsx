@@ -28,12 +28,11 @@ export function fieldsInPageOrder(fields: Form["fields"]) {
     : fields;
 }
 
-export type FormSortKey = "form" | "type" | "fields" | "controls" | "sensitivity" | "method" | "destination" | "page" | "snapshot";
+export type FormSortKey = "form" | "type" | "fields" | "controls" | "sensitivity" | "method" | "destination" | "page" | "snapshot" | "disclosure";
 const columns: Array<{ key: FormSortKey; label: string }> = [
-  { key: "form", label: "Form" }, { key: "type", label: "Type" }, { key: "fields", label: "Fields" },
-  { key: "controls", label: "Checkboxes / toggles" }, { key: "sensitivity", label: "Field review" },
-  { key: "method", label: "Method" }, { key: "destination", label: "Declared destination" },
-  { key: "page", label: "Captured on page" }, { key: "snapshot", label: "Snapshot" },
+  { key: "form", label: "Form" }, { key: "type", label: "Form" }, { key: "fields", label: "Fields" },
+  { key: "sensitivity", label: "Data type" }, { key: "disclosure", label: "Privacy disclosure" }, { key: "destination", label: "Destination" },
+  { key: "page", label: "Page" }, { key: "snapshot", label: "Screenshot" },
 ];
 export function sortCollectionSurfaces(rows: CollectionSurfaceTableRow[], key: FormSortKey, direction: "asc" | "desc") {
   const value = (row: CollectionSurfaceTableRow): string | number => {
@@ -47,6 +46,7 @@ export function sortCollectionSurfaces(rows: CollectionSurfaceTableRow[], key: F
       case "destination": return row.form.actionHostname ?? row.form.actionRelationship;
       case "page": return row.form.pageUrl;
       case "snapshot": return row.snapshot.status;
+      case "disclosure": return row.form.privacyDisclosure?.excerpts.length ?? 0;
     }
   };
   return [...rows].sort((a, b) => {
@@ -65,7 +65,7 @@ function reviewPolicy(field: Form["fields"][number]) { return FIELD_REVIEW_POLIC
 function reviewRank(field: Form["fields"][number]) { return ({ highest:4, high:3, personal:2, contextual:1, unknown:0 })[reviewPolicy(field).tier]; }
 function FieldReview({ field }: { field: Form["fields"][number] }) {
  const policy=reviewPolicy(field),rank=reviewRank(field);
- return <span title={`${policy.label}. Field review indicator; no score effect.`} className={`inline-flex items-center gap-1 ${rank>=3 ? "text-rose-700" : rank===2 ? "text-slate-600" : "text-slate-500"}`}>{rank>=3 ? <span role="img" aria-label="Field requires review">⚠</span> : rank===2 ? <span role="img" aria-label="Field review information">ⓘ</span> : null}{policy.label}</span>;
+ return <span title={`${policy.label}. Field review indicator; no score effect.`} className={`inline-flex items-center gap-1 ${rank>=3 ? "text-rose-700" : rank===2 ? "text-slate-600" : "text-slate-500"}`}>{rank>=3 ? <span role="img" aria-label="Field requires review">⚠</span> : rank===2 ? <span role="img" aria-label="Field review information">ⓘ</span> : null}<span className="line-clamp-2 max-h-8 max-w-40 overflow-hidden leading-4">{policy.label}</span></span>;
 }
 function ControlState({ field }: { field: Form["fields"][number] }) {
  const kind=field.controlKind ?? field.inputType;
@@ -74,18 +74,18 @@ function ControlState({ field }: { field: Form["fields"][number] }) {
  return <span className="inline-flex items-center gap-1">{state}{field.review?.preselectedMarketing ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Marketing control was selected at capture. Review the opt-in; this does not establish valid consent." className="text-amber-700">⚠</span> : null}</span>;
 }
 
-export function FormPrivacyDisclosure({ form }: { form: Form }) {
+export function FormPrivacyDisclosure({ form, open = false }: { form: Form; open?: boolean }) {
   const disclosure = form.privacyDisclosure;
-  return <details className="my-3 max-w-xl rounded-lg border border-zinc-200 bg-white p-3">
-    <summary className="cursor-pointer text-xs font-medium">Privacy disclosure <span className="ml-2 font-normal text-zinc-500">{disclosure?.excerpts.length ? `${disclosure.excerpts.length} excerpt${disclosure.excerpts.length === 1 ? "" : "s"}` : "Not retained"}</span></summary>
+  return <details open={open || undefined} className="my-3 max-w-xl rounded-lg border border-zinc-200 bg-white p-3">
+    <summary className="cursor-pointer text-xs font-medium">Privacy disclosure <span className="ml-2 font-normal text-zinc-500">{disclosure?.excerpts.length ? `${disclosure.excerpts.length} excerpt${disclosure.excerpts.length === 1 ? "" : "s"}` : "Not captured"}</span></summary>
     <div className="mt-3 space-y-3 text-xs text-zinc-600">
       {disclosure?.excerpts.length ? disclosure.excerpts.map((excerpt, index) => <div key={index}>
         <blockquote className="border-l-2 border-sky-200 pl-3 text-zinc-800">{excerpt.text}</blockquote>
         <p className="mt-2 text-zinc-500">{excerpt.association === "inside_form" ? "Within this form" : excerpt.association === "described_by" ? "Explicitly linked to this form" : "Beside this form"}</p>
         {excerpt.links.map((link, i) => pageHref(link.url) ? <a key={i} href={pageHref(link.url)} target="_blank" rel="noopener noreferrer" className="mr-3 mt-2 inline-block text-sky-700 underline">{link.label}</a> : null)}
-      </div>) : <p>No disclosure text was retained for this form. This does not establish that a notice was absent.</p>}
-      {disclosure?.truncated ? <p>Capture limits apply; this may not include the full notice.</p> : null}
-      {disclosure?.excerpts.length ? <p>Captured wording describes the site’s stated use of data; it does not establish agreement or compliance. {pageHref(form.pageUrl) ? <a href={pageHref(form.pageUrl)} target="_blank" rel="noopener noreferrer" className="text-sky-700 underline">Source page</a> : null}</p> : null}
+      </div>) : <p>No disclosure text captured.</p>}
+      {disclosure?.truncated ? <p>Partial excerpt</p> : null}
+      {disclosure?.excerpts.length ? <p>{pageHref(form.pageUrl) ? <a href={pageHref(form.pageUrl)} target="_blank" rel="noopener noreferrer" className="text-sky-700 underline">Source page</a> : null}</p> : null}
     </div>
   </details>;
 }
@@ -134,6 +134,7 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const rowLimit = useTableRowLimit(3, expanded.size > 0 && rows.length < 4 ? 4 : 0);
   const prefix = useId();
+  const [disclosureOpen, setDisclosureOpen] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<{ title: string; url: string } | null>(null);
   const [sort, setSort] = useState<{ key: FormSortKey; direction: "asc" | "desc" }>({ key: "page", direction: "asc" });
   const sortedRows = useMemo(() => sortCollectionSurfaces(rows, sort.key, sort.direction), [rows, sort]);
@@ -146,11 +147,12 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
         <h2 id={`${prefix}-title`} className="text-xl font-semibold">Forms & fields</h2>
         <div className="flex items-center gap-2"><span className="text-xs text-zinc-500"><ScanLiveValue active={scanning && !loading} value={loading ? "Loading…" : `${rows.length} ${rows.some(row => row.capturePhase) ? rows.length === 1 ? "form observation" : "form observations" : rows.length === 1 ? "form" : "forms"}`} /></span>{!loading ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire forms table with all fields and evidence as JSON" payload={JSON.stringify(rows, null, 2)} /> : null}</div>
       </div>
+      {rows.some(row => row.capturePhase) ? <p className="mb-3 text-sm font-semibold text-sky-800">{rows.every(row => row.capturePhase) ? "Forms observed after the Accept click" : "Includes forms observed after the Accept click"}</p> : null}
       {afterAcceptLimited ? <p className="mb-3 text-xs text-zinc-500">After Accept form capture was limited. Some forms or disclosures may not have been retained.</p> : null}
       {loading ? <p role="status" className="py-4 text-sm text-zinc-500">Loading form inventory…</p> : rows.length === 0 ?
         <p className="py-4 text-sm text-zinc-500">{scanning ? "Form inventory will appear as pages finish scanning." : pagesWithoutInventory > 0 || limitedPages > 0 || afterAcceptLimited ? "No form rows are available in the retained evidence." : "No forms were observed on the inventoried pages."}</p> :
         <div ref={rowLimit.ref} style={rowLimit.style} className="max-h-[240px] overflow-auto" tabIndex={0} aria-label="Scrollable collection surfaces">
-          <table className="w-full text-left text-xs">
+          <table className="w-full min-w-[780px] text-left text-xs">
             <caption className="sr-only">One row per captured form, with expandable field details</caption>
             <thead className="sticky top-0 z-10 bg-zinc-50 text-[10px] uppercase tracking-wider text-zinc-500">
               <tr>{columns.map(column => column.key === "form" ? <th key={column.key} scope="col" className="w-10 border-b px-3 py-2"><span className="sr-only">View details</span></th> : <th key={column.key} scope="col" aria-sort={sort.key === column.key ? sort.direction === "asc" ? "ascending" : "descending" : "none"} className="whitespace-nowrap border-b px-3 py-2">
@@ -165,42 +167,43 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
                 const samePageRows = rows.filter(item => item.form.pageUrl === form.pageUrl);
                 const occurrence = samePageRows.findIndex(item => item.id === row.id) + 1;
                 const open = expanded.has(row.id);
-                const title = form.title ?? `${label(form.surfaceType)} ${occurrence}`;
+                const title = form.title ?? `${form.surfaceType === "generic_form" ? "Form" : label(form.surfaceType)} ${occurrence}`;
                 const detailId = `${prefix}-fields-${row.id}`;
                 return <Fragment key={row.id}>
                   <tr className="border-b border-zinc-100">
                     <th scope="row" className="w-10 px-3 py-2 font-medium"><InspectButton open={open} controls={detailId} name={title} onClick={() => setExpanded(current => {
                       const next = new Set(current); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next;
                     })} /></th>
-                    <td className="px-3 py-2 capitalize">{label(form.surfaceType)}{row.capturePhase ? <span className="block whitespace-nowrap text-xs normal-case text-zinc-500">{row.capturePhase === "after_accept" ? "After Accept" : "After Accept click"}</span> : null}{samePageRows.length > 1 ? <span className="block text-zinc-500 normal-case">Page observation {occurrence} of {samePageRows.length}</span> : null}</td>
-                    <td className="px-3 py-2 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
-                    <td className="px-3 py-2">{controlsSummary(form.fields)}{form.fields.some(f=>f.review?.preselectedMarketing) ? <span role="img" aria-label="Preselected marketing opt-in — review" title="Expand to review preselected marketing controls" className="ml-1 text-amber-700">⚠</span> : null}{form.fieldsTruncated ? <span className="block text-zinc-500">Partial inventory</span> : null}</td>
+                    <td className="min-w-40 px-3 py-2"><span className="block max-w-48 truncate font-medium capitalize" title={title}>{title}</span>{row.capturePhase ? <span className="mt-0.5 inline-block whitespace-nowrap rounded bg-sky-100 px-1.5 text-[10px] font-semibold leading-4 text-sky-800">After Accept click</span> : <span className="block text-zinc-500">Page observation</span>}</td>
+                    <td className="whitespace-nowrap px-3 py-2 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
                     <td className="px-3 py-2">{form.fields.length ? <FieldReview field={[...form.fields].sort((a,b)=>reviewRank(b)-reviewRank(a))[0]!}/> : "—"}</td>
-                    <td className="px-3 py-2 uppercase">{form.method}</td>
-                    <td className="px-3 py-2"><span className="block max-w-52 truncate" title={form.actionHostname}>{form.actionHostname ?? (form.method === "dialog" ? "No submission (dialog)" : "Destination not observed")}</span>{form.actionHostname ? <span className="block text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
-                    <td className="px-3 py-2"><a className="block max-w-64 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl}</a></td>
-                    <td className="whitespace-nowrap px-3 py-2">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-1.5 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500">{row.capturePhase ? "Fields captured" : row.snapshot.status === "pending" ? "Snapshot pending" : row.snapshot.status === "withheld" ? "Snapshot withheld" : "Snapshot unavailable"}{!row.capturePhase && row.snapshot.status !== "pending" ? <span className="mt-1 block max-w-56 whitespace-normal text-xs">{formSnapshotExplanation(row.snapshot.status === "available" ? undefined : row.snapshot.reason)}</span> : null}</span>}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{form.privacyDisclosure?.excerpts.length ? <button type="button" aria-label={`View privacy disclosure: ${title}`} onClick={() => {
+                      setExpanded(current => new Set(current).add(row.id)); setDisclosureOpen(row.id);
+                    }} className="text-sky-800 underline decoration-sky-300 underline-offset-2">View disclosure</button> : <span className="text-zinc-500">Not captured</span>}</td>
+                    <td className="px-3 py-2"><span className="block max-w-44 truncate" title={form.actionHostname}>{form.actionHostname ?? (form.method === "dialog" ? "No submission" : "Not captured")}</span>{form.actionHostname ? <span className="block whitespace-nowrap text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
+                    <td className="px-3 py-2"><a className="block max-w-44 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl.replace(/^https?:\/\//, "")}</a></td>
+                    <td className="whitespace-nowrap px-3 py-2">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-1.5 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500" title={formSnapshotExplanation(row.snapshot.status === "available" ? undefined : row.snapshot.reason)}>{row.snapshot.status === "pending" ? "Pending" : row.snapshot.status === "withheld" ? "Withheld" : "Not captured"}</span>}</td>
                   </tr>
                   <tr data-expanded-details id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={columns.length} className="p-4">
                     <h3 className="mb-2 font-semibold">{title}</h3>
-                    {samePageRows.length > 1 ? <p className="mb-2 text-zinc-600">Observation {occurrence} of {samePageRows.length} on this page. Separate captures are retained; they may show the same form.</p> : null}
-                    <p className="mb-2 text-zinc-500">Observation reference: {row.id}</p>
-                    <p className="mb-3 text-zinc-500">{label(form.structure)} · {row.captureProvenance ? `Observed ${row.captureProvenance.capturedAtMs - row.captureProvenance.actionDispatchedAtMs} ms after Accept click` : row.capturedAt ? `Captured ${row.capturedAt}` : "Capture time not retained"}</p>
-                    <dl className="mb-3 grid gap-2 text-xs sm:grid-cols-2">
-                      <div><dt className="text-zinc-500">Form confidence</dt><dd>{Math.round(form.confidence * 100)}% · {form.directVsInferred}</dd></div>
-                      <div><dt className="text-zinc-500">Evidence references</dt><dd className="break-all">{form.evidenceRefs.length ? JSON.stringify(form.evidenceRefs) : "Not retained"}</dd></div>
-                    </dl>
                     {row.capturePhase === "after_accept_click" ? <p className="my-2 max-w-xl text-xs text-zinc-500">Observed after the Accept click. This does not establish consent registration.{row.captureLimited ? " Capture was limited; other fields or forms may be missing." : ""}</p> : null}
-                    <FormPrivacyDisclosure form={form} />
+                    <p className="mb-3 text-xs text-zinc-600">{form.method.toUpperCase()} · Checkboxes / toggles: {controlsSummary(form.fields)}{form.fields.some(field => field.review?.preselectedMarketing) ? " · Preselected marketing opt-in — review" : ""}</p>
+                    <FormPrivacyDisclosure form={form} open={disclosureOpen === row.id} />
                     {form.fields.length ? <table className="w-full text-left text-xs">
                       <caption className="sr-only">Fields in {title}</caption>
-                      <thead><tr>{["Field", "Element", "Input type", "Category", "Field review", "Required", "Selection", "State", "Autocomplete", "Confidence", "Evidence refs"].map(h => <th key={h} scope="col" className="border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>
+                      <thead><tr>{["Field", "Input type", "Data type", "Required", "Selection", "State"].map(h => <th key={h} scope="col" className="whitespace-nowrap border-b border-slate-200 px-2 py-2 font-medium">{h}</th>)}</tr></thead>
                       <tbody>{fieldsInPageOrder(form.fields).map(field => <tr key={field.fieldRef} className="border-b border-slate-100">
-                        <th scope="row" className="px-2 py-2 font-medium">{field.label ?? field.fieldRef}</th>
-                        <td className="px-2 py-2">{field.elementType}</td><td className="px-2 py-2">{field.controlKind ?? field.inputType}</td><td className="px-2 py-2 capitalize">{label(field.semanticCategory)}</td>
-                        <td className="px-2 py-2"><FieldReview field={field}/></td><td className="px-2 py-2">{field.required ? "Yes" : "No"}</td><td className="px-2 py-2"><ControlState field={field}/></td><td className="px-2 py-2">{[field.disabled ? "Disabled" : "", field.readOnly ? "Read only" : ""].filter(Boolean).join(", ") || "Enabled"}</td><td className="px-2 py-2">{field.autocompleteToken ?? "Not specified"}</td><td className="px-2 py-2">{Math.round(field.confidence * 100)}% · {field.directVsInferred}</td><td className="max-w-64 break-all px-2 py-2">{field.evidenceRefs.length ? JSON.stringify(field.evidenceRefs) : "Not retained"}</td>
+                        <th scope="row" className="max-w-56 px-2 py-2 font-medium"><span className="block line-clamp-2 max-h-8 overflow-hidden leading-4" title={field.label ?? field.fieldRef}>{field.label ?? "Unlabelled field"}</span></th>
+                        <td className="whitespace-nowrap px-2 py-2">{field.controlKind ?? field.inputType}</td>
+                        <td className="px-2 py-2"><FieldReview field={field}/></td>
+                        <td className="whitespace-nowrap px-2 py-2">{field.required ? "Yes" : "No"}</td>
+                        <td className="whitespace-nowrap px-2 py-2"><ControlState field={field}/></td>
+                        <td className="px-2 py-2"><span className="block line-clamp-2 max-h-8 overflow-hidden leading-4">{[field.disabled ? "Disabled" : "", field.readOnly ? "Read only" : ""].filter(Boolean).join(", ") || "Enabled"}</span></td>
                       </tr>)}</tbody>
                     </table> : <p>No field details were retained.</p>}
+                    <details className="mt-3 text-xs text-zinc-600"><summary className="cursor-pointer">Technical evidence</summary>
+                      <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded border bg-white p-3">{JSON.stringify({observationRef:row.id,captureProvenance:row.captureProvenance,formRef:form.formRef,method:form.method,confidence:form.confidence,directVsInferred:form.directVsInferred,evidenceRefs:form.evidenceRefs,fields:form.fields},null,2)}</pre>
+                    </details>
                     {form.fieldsTruncated ? <p className="mt-3 text-amber-800">{form.candidateFieldCount - form.retainedFieldCount} field(s) were omitted by the capture limit.</p> : null}
                   </td></tr>
                 </Fragment>;

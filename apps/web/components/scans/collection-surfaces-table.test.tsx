@@ -11,7 +11,7 @@ const row: CollectionSurfaceTableRow = {
 };
 test("form rows expose page provenance, collapsed field details, and retained snapshot links", () => {
   const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[row, { ...row, id: "other-page:form", form: { ...row.form, pageUrl: "https://example.test/other" } }]} />);
-  assert.match(html, /Form confidence/); assert.match(html, /100% · direct/); assert.match(html, /Evidence references/);
+  assert.match(html, /Technical evidence/); assert.match(html, /&quot;confidence&quot;: 1/); assert.match(html, /&quot;evidenceRefs&quot;/);
   assert.match(html, /Forms &amp; fields/); assert.match(html, /2 forms/);
   assert.match(html, /aria-expanded="false"/); assert.match(html, /hidden=""/);
   assert.match(html, /Your email/); assert.match(html, /https:\/\/example.test\/other/); assert.match(html, /View form: Contact us/);
@@ -97,7 +97,7 @@ test("form disclosure stays collapsed, escapes text, and preserves form-specific
   assert.match(html, /href="https:\/\/example.test\/privacy"/);
   assert.doesNotMatch(html, /<script>|<details[^>]*open/);
   const legacy = renderToStaticMarkup(<CollectionSurfacesTable rows={[row]} />);
-  assert.match(legacy, /does not establish that a notice was absent/);
+  assert.match(legacy, /No disclosure text captured/);
 });
 
 
@@ -115,7 +115,20 @@ test("after-click form observations retain context without claiming consent or a
 
 test("registered After Accept snapshots expose the actual image without an unconfirmed-click disclaimer", () => {
   const html = renderToStaticMarkup(<CollectionSurfacesTable rows={[{ ...row, capturePhase: "after_accept" }]} />);
-  assert.match(html, />After Accept</);
+  assert.match(html, />After Accept click</);
   assert.match(html, /View form: Contact us/);
   assert.doesNotMatch(html, /does not establish consent registration|Some forms or disclosures|have limited form coverage/);
+});
+
+
+test("form summary exposes disclosure and screenshot status with compact post-click context", () => {
+  const html=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,capturePhase:"after_accept",snapshot:{status:"unavailable"}}]}/>);
+  assert.match(html,/Forms observed after the Accept click/);
+  assert.match(html,/Privacy disclosure/);
+  assert.match(html,/Data type/);
+  assert.match(html,/Screenshot/);
+  assert.match(html,/Not captured/);
+  assert.doesNotMatch(html,/Fields captured|Page observation 1 of|Declared destination|Captured on page/);
+  const withNotice=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form:{...row.form,privacyDisclosure:{version:1,truncated:false,excerpts:[{text:"Personal data is used for support.",association:"inside_form",links:[]}]}}}]}/>);
+  assert.match(withNotice,/View privacy disclosure: Contact us/);
 });

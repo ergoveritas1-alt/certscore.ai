@@ -325,3 +325,56 @@ test("navigation during image review discards all prior-document form pixels", a
     assert.equal(await handle.finish(),undefined);
   } finally {release?.();await browser.close();}
 });
+
+
+test("After Accept inventory retains only form-associated privacy disclosures and sanitized links", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.route("https://form-notice.test/**", route => route.fulfill({contentType:"text/html",body:`
+      <form class="cmp"><input name="consent"><p>Privacy CMP notice must be excluded.</p></form>
+      <section><form aria-label="Contact"><label>Email<input name="email" value="private-entered-value"></label>
+        <label><input type="checkbox">I agree to personal data processing to handle your request.
+          <a href="/privacy?secret=query#private">Privacy policy</a></label>
+        <textarea>private-message</textarea></form></section>
+      <section><form aria-label="Newsletter"><input type="email" name="email"></form>
+        <p>Personal data is used for newsletter subscriptions. <a href="/privacy">Privacy policy</a></p></section>
+      <form aria-label="Unrelated"><input name="search"></form>
+      <footer>Privacy footer must not be attributed.</footer>`}));
+    await page.goto("https://form-notice.test/");
+    const inventory = await capturePostAcceptFormInventory(page, Date.now(), [".cmp"]);
+    const contact = inventory.forms.find(form => form.title === "Contact");
+    const newsletter = inventory.forms.find(form => form.title === "Newsletter");
+    assert.match(contact?.privacyDisclosure?.excerpts[0]?.text ?? "", /handle your request/);
+    assert.equal(contact?.privacyDisclosure?.excerpts[0]?.links[0]?.url, "https://form-notice.test/privacy");
+    assert.equal(newsletter?.privacyDisclosure?.excerpts[0]?.association, "adjacent_notice");
+    assert.equal(inventory.forms.find(form => form.title === "Unrelated")?.privacyDisclosure, undefined);
+    assert.doesNotMatch(JSON.stringify(inventory), /private-entered-value|private-message|secret=query|CMP notice|Privacy footer/);
+    assert.ok(new TextEncoder().encode(JSON.stringify(inventory.forms.map(form=>form.privacyDisclosure).filter(Boolean))).length <= 1030);
+  } finally { await browser.close(); }
+});
+
+test("a later second form receives its own reviewed inventory-bound image inside the existing window", async () => {
+  const browser=await chromium.launch({headless:true}); const page=await browser.newPage();
+  let reviews=0;
+  try {
+    await page.route("https://late-second.test/**",route=>route.fulfill({contentType:"text/html",body:`<script>
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form aria-label="Contact"><label>Email<input type="email" name="email"></label><p>Personal data is used for support.</p></form>'),2450);
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form aria-label="Newsletter"><label>Email<input type="email" name="newsletter" value="private@example.test"></label><p>Personal data is used for newsletters.</p></form>'),3300);
+      </script>`}));
+    await page.goto("https://late-second.test/"); const started=Date.now();
+    const capture=startRegisteredPostAcceptFormSnapshots({page,exactTargetUrl:page.url(),parentScanStartedAtMs:started,
+      actionDispatchedAtMs:0,acceptanceRegisteredAtMs:0,deadlineAtMs:started+3000,
+      reviewer:async()=>{reviews++;await new Promise(resolve=>setTimeout(resolve,1100));return {safeForDisplay:true};}});
+    await new Promise(resolve=>setTimeout(resolve,3050));const result=await capture.finish();
+    assert.ok(result);assert.equal(result.contractVersion,"certscore.post_accept_form_snapshots.v6");
+    assert.equal(result.inventory.forms.length,1);assert.equal(result.postCaptureInventory.inventory.forms.length,2);
+    assert.equal(result.snapshots[0]?.status,"available");assert.equal(result.postCaptureSnapshots.snapshots[0]?.status,"available");
+    assert.equal(result.postCaptureSnapshots.snapshots[0]?.formRef,"collection_form_1");
+    assert.notEqual(result.postCaptureSnapshots.snapshots[0]?.sourceInventoryHash,result.snapshots[0]?.sourceInventoryHash);
+    assert.ok(result.postCaptureSnapshots.capturedAtMs>=result.postCaptureInventory.capturedAtMs);
+    assert.ok(result.postCaptureSnapshots.capturedAtMs<=12500);assert.equal(reviews,2);
+    assert.match(result.postCaptureInventory.inventory.forms[1]?.privacyDisclosure?.excerpts[0]?.text??"",/newsletters/);
+    assert.doesNotMatch(JSON.stringify(result.postCaptureInventory.inventory),/private@example/);
+  }finally{await browser.close();}
+});

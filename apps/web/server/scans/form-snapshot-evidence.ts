@@ -7,14 +7,20 @@ export function verifiedPostAcceptFormSnapshots(value: unknown) {
   if (!parsed.success) return null;
   const capture = parsed.data;
   const inventoryHash = createHash("sha256").update(JSON.stringify(capture.inventory)).digest("hex");
-  const images: Array<{ snapshot: CollectionSurfaceSnapshot; bytes: Buffer | null }> = [];
-  for (const snapshot of capture.snapshots) {
-    if (snapshot.sourceInventoryHash !== inventoryHash) return null;
-    if (snapshot.status !== "available") { images.push({ snapshot, bytes: null }); continue; }
+  const images: Array<{ snapshot: CollectionSurfaceSnapshot; bytes: Buffer | null; capturedAtMs: number }> = [];
+  const groups = [{snapshots:capture.snapshots,inventoryHash,capturedAtMs:capture.capturedAtMs},
+    ...(capture.contractVersion === "certscore.post_accept_form_snapshots.v6" ? [{
+      snapshots:capture.postCaptureSnapshots.snapshots,
+      inventoryHash:createHash("sha256").update(JSON.stringify(capture.postCaptureInventory.inventory)).digest("hex"),
+      capturedAtMs:capture.postCaptureSnapshots.capturedAtMs,
+    }] : [])];
+  for (const group of groups) for (const snapshot of group.snapshots) {
+    if (snapshot.sourceInventoryHash !== group.inventoryHash) return null;
+    if (snapshot.status !== "available") { images.push({ snapshot, bytes: null, capturedAtMs:group.capturedAtMs }); continue; }
     const bytes = Buffer.from(snapshot.data!, "base64");
     if (bytes.length !== snapshot.sizeBytes || createHash("sha256").update(bytes).digest("hex") !== snapshot.sha256 ||
       bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
-    images.push({ snapshot, bytes });
+    images.push({ snapshot, bytes, capturedAtMs:group.capturedAtMs });
   }
   return { capture, images };
 }

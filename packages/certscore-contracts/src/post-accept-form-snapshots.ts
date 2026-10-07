@@ -41,6 +41,10 @@ export type PostAcceptFormSnapshotCapture = PostAcceptFormSnapshotCommon & (
   | { contractVersion: "certscore.post_accept_form_snapshots.v5"; lateForm: {
       baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 9500;
     }; postCaptureInventory: PostCaptureInventory }
+  | { contractVersion: "certscore.post_accept_form_snapshots.v6"; lateForm: {
+      baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 9500;
+    }; postCaptureInventory: PostCaptureInventory;
+    postCaptureSnapshots: { capturedAtMs: number; snapshots: CollectionSurfaceSnapshot[] } }
 );
 type PostAcceptFormSnapshotProjectionCommon = Omit<PostAcceptFormSnapshotCommon, "snapshots"> & {
   snapshots: Array<Omit<CollectionSurfaceSnapshot, "data">>;
@@ -59,6 +63,10 @@ export type PostAcceptFormSnapshotProjection = PostAcceptFormSnapshotProjectionC
   | { contractVersion: "certscore.post_accept_form_snapshots.v5"; lateForm: {
       baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 9500;
     }; postCaptureInventory: PostCaptureInventory }
+  | { contractVersion: "certscore.post_accept_form_snapshots.v6"; lateForm: {
+      baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 9500;
+    }; postCaptureInventory: PostCaptureInventory;
+    postCaptureSnapshots: { capturedAtMs: number; snapshots: Array<Omit<CollectionSurfaceSnapshot, "data">> } }
 );
 // Packet pixels and persisted metadata share the same provenance contract.
 const common = {
@@ -121,12 +129,27 @@ function validateBinding(value: PostAcceptFormSnapshotProjection, ctx: z.Refinem
       value.capturedAtMs > value.lateForm.baseCaptureDeadlineAtMs + value.lateForm.extensionMs)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Extended form pixels require a late detected form and bounded capture time" });
   }
-  if (value.contractVersion === "certscore.post_accept_form_snapshots.v5" &&
+  if ((value.contractVersion === "certscore.post_accept_form_snapshots.v5" || value.contractVersion === "certscore.post_accept_form_snapshots.v6") &&
     (value.postCaptureInventory.capturedAtMs < value.capturedAtMs ||
       value.postCaptureInventory.capturedAtMs > value.lateForm.baseCaptureDeadlineAtMs + value.lateForm.extensionMs ||
       value.postCaptureInventory.documentIdentity.token !== value.documentIdentity.token ||
       !postAcceptImageInventoryMatchesLaterInventory(value.inventory, value.postCaptureInventory.inventory))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Later form inventory must match the imaged document and retained controls" });
+  }
+  if (value.contractVersion === "certscore.post_accept_form_snapshots.v6") {
+    const extra = value.postCaptureSnapshots;
+    if (extra.capturedAtMs < value.postCaptureInventory.capturedAtMs ||
+      extra.capturedAtMs > value.lateForm.baseCaptureDeadlineAtMs + value.lateForm.extensionMs ||
+      extra.snapshots.length + value.snapshots.length > 2 ||
+      new Set(extra.snapshots.map(snapshot => snapshot.formRef)).size !== extra.snapshots.length ||
+      extra.snapshots.some(snapshot =>
+        value.inventory.forms.some(form => form.formRef === snapshot.formRef) ||
+        !value.postCaptureInventory.inventory.forms.some(form => form.formRef === snapshot.formRef) ||
+        snapshot.pageUrl !== value.inventory.pageUrl ||
+        (snapshot.status === "available" && (!snapshot.sha256 || !snapshot.sizeBytes || !snapshot.width || !snapshot.height || snapshot.reason)) ||
+        (snapshot.reason !== undefined && (snapshot.status === "withheld") !== (snapshot.reason === "review_withheld")))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Later form images require their own bounded inventory binding and a two-image total" });
+    }
   }
 }
 const captureCommon = { ...common, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotSchema)).max(2) };
@@ -137,6 +160,10 @@ export const postAcceptFormSnapshotCaptureSchema: z.ZodType<PostAcceptFormSnapsh
   z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v3"), lateForm: extendedLateFormSchema }).strict(),
   z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v4"), lateForm: finalLateFormSchema }).strict(),
   z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v5"), lateForm: finalLateFormSchema, postCaptureInventory: postCaptureInventorySchema }).strict(),
+  z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v6"), lateForm: finalLateFormSchema,
+    postCaptureInventory: postCaptureInventorySchema, postCaptureSnapshots: z.object({
+      capturedAtMs: z.number().int().nonnegative(), snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotSchema)).min(1).max(1),
+    }).strict() }).strict(),
 ]).superRefine(validateBinding);
 export const postAcceptFormSnapshotProjectionSchema: z.ZodType<PostAcceptFormSnapshotProjection, z.ZodTypeDef, unknown> = z.union([
   z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v1") }).strict(),
@@ -144,4 +171,8 @@ export const postAcceptFormSnapshotProjectionSchema: z.ZodType<PostAcceptFormSna
   z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v3"), lateForm: extendedLateFormSchema }).strict(),
   z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v4"), lateForm: finalLateFormSchema }).strict(),
   z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v5"), lateForm: finalLateFormSchema, postCaptureInventory: postCaptureInventorySchema }).strict(),
+  z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v6"), lateForm: finalLateFormSchema,
+    postCaptureInventory: postCaptureInventorySchema, postCaptureSnapshots: z.object({
+      capturedAtMs: z.number().int().nonnegative(), snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotMetadataSchema)).min(1).max(1),
+    }).strict() }).strict(),
 ]).superRefine(validateBinding);

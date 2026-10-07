@@ -206,3 +206,54 @@ image hashes, document binding, consent-control eligibility and report
 projection verified. The newsletter form has no screengrab in this run.
 Production rollout remains on hold until the owner settles whether that
 single-image result meets the requested release scope.
+
+
+## October 7 follow-up: late second image, disclosure and form UX
+
+The first retained canary25 report was an Accept/form test with Reject disabled.
+Its score of 100 cannot establish that an earlier Reject finding is resolved.
+Read-only production inspection of the latest six completed SITS scans found
+score 85 on each. The latest (078379ab-8ed9-48b8-b490-267675876cef) retained
+confirmed Borlabs refusal and seven HubSpot request observations beginning
+201–1,294 ms afterward. The approved post-Reject scoring rule remains 15;
+no scoring eligibility or weight changes are part of this form work.
+
+The fast After Accept DOM probe omitted privacy disclosures. It now retains
+form-associated public notice excerpts using the existing canonical locale hints,
+two-excerpt/600-character/two-link limits, five milliseconds of shared work,
+and 1 KiB per-sample cap. Field values, unrelated form notices, CMP text and
+footer/navigation text remain excluded. This stays within the existing overall
+capture deadline. Estimated additional compute/storage/transfer is below
+$0.50/month at 100,000 scans; the read-only AWS inspection was below $0.01.
+
+Capture v6 may photograph one newly discovered second form from the already
+required later inventory. The original image/inventory hash stays unchanged;
+the second image binds independently to the later inventory hash, same loader,
+and its own post-pixel capture offset. Both images together remain capped at
+two, inside the previously approved 9.5-second late extension. No new lane,
+invocation, action, timeout or model call beyond the approved two image reviews
+is added. Metadata projection removes both sets of image bytes, and serving
+checks the matching image timestamp, inventory binding, packet and pixel hashes.
+
+An actual workstation scan confirmed Accept and retained two reviewed masked
+SITS images, two field inventories (8 and 1 fields), and the contact form's
+request-handling notice, policy link and optional marketing wording. No
+newsletter disclosure was retained. The second crop initially exposed a wrapped
+browser crop-change error that bypassed the existing single layout retry; the
+retry now recognizes that error while preserving all mask/layout safety checks
+and the existing deadline. The successful capture completed in 15.676 seconds.
+The local direct-observer evidence remains artifact-only and non-production.
+It does not replace or combine with older reports from another scan/session.
+
+The shared form table uses at most two summary lines per cell, a dedicated
+privacy-disclosure status/action, explicit After Accept click context, and six
+field-detail columns. Submission method, control summary and full technical
+provenance remain in details/JSON. These are evidence descriptions, not new
+findings or score effects. Historical capture evidence is unchanged.
+
+The owner authorized committing, merging and deploying the complete release on
+October 7 after the successful two-image local verification. Production rollout
+must pass the full release gate, preserve the approved timing/cost bounds, and
+verify a fresh canonical production report and both image-serving paths.
+Temporary localhost review routes and live evidence remain ignored local
+artifacts and are not part of the production image.

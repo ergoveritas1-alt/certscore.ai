@@ -184,6 +184,22 @@ test("a one-time layout shift rebinds and safely recaptures within the same dead
 });
 
 
+test("a wrapped post-pixel crop change safely retries once before review", async () => {
+  const browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  const originalEvaluate=page.evaluate.bind(page);let shifted=false,reviews=0;
+  try {
+    await page.setContent('<form style="width:400px;height:150px"><label>Email<input type="email" value="private"></label></form>');
+    (page as any).evaluate=async (...args:any[])=>{
+      if(!shifted && args[1]?.crop){shifted=true;throw new Error("page.evaluate: Error: Form screenshot crop changed");}
+      return (originalEvaluate as any)(...args);
+    };
+    const inventory=buildCollectionSurfaceInventory({pageUrl:"about:blank",inspectedFieldCandidateCount:1,candidateScanTruncated:false,
+      rows:[{groupKey:"native_form_0",structure:"native_form",elementType:"input",inputType:"email",label:"Email",required:false,disabled:false,readOnly:false,domOrder:0}]},Date.now());
+    const result=await captureCollectionSurfaceSnapshots(page,inventory,async()=>{reviews++;return {safeForDisplay:true};},undefined,undefined,Date.now()+2500);
+    assert.equal(shifted,true);assert.equal(reviews,1);assert.equal(result[0]?.status,"available");assert.equal(result[0]?.valuesMasked,true);
+  }finally{(page as any).evaluate=originalEvaluate;await browser.close();}
+});
+
 test("footer form capture uses a bounded viewport crop and restores scrolling", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });

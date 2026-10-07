@@ -15,16 +15,19 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
   if (images) {
     const scanId = projectConsentControlReport(retainedConsentAssessment(value))?.scanId;
     if (!scanId) return empty;
-    const displayedInventory = images.contractVersion === "certscore.post_accept_form_snapshots.v5"
+    const displayedInventory = (images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6")
       ? images.postCaptureInventory.inventory : images.inventory;
     return { limited: false, rows: displayedInventory.forms.map(form => {
-      const snapshot = images.snapshots.find(snapshot => snapshot.formRef === form.formRef);
+      const laterSnapshot = images.contractVersion === "certscore.post_accept_form_snapshots.v6"
+        ? images.postCaptureSnapshots.snapshots.find(snapshot=>snapshot.formRef===form.formRef) : undefined;
+      const snapshot = images.snapshots.find(snapshot => snapshot.formRef === form.formRef) ?? laterSnapshot;
       return { id: `after_accept:${images.sessionId}:${form.formRef}`, form,
         capturedAt: snapshot?.capturedAt ?? "", capturePhase: "after_accept" as const,
         captureProvenance: {packetSha256: parsed.data.packetSha256!, sessionId: images.sessionId,
           frameRef:"main", documentToken:images.documentIdentity.token, exactTargetSha256:images.exactTargetSha256,
           actionDispatchedAtMs:images.actionDispatchedAtMs,
-          capturedAtMs:snapshot ? images.capturedAtMs : images.contractVersion === "certscore.post_accept_form_snapshots.v5"
+          capturedAtMs:laterSnapshot && images.contractVersion === "certscore.post_accept_form_snapshots.v6"
+            ? images.postCaptureSnapshots.capturedAtMs : snapshot ? images.capturedAtMs : (images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6")
             ? images.postCaptureInventory.capturedAtMs : images.capturedAtMs},
         snapshot: snapshot?.status === "available" ? {status:"available" as const,
           url:`/api/scans/${scanId}/form-snapshot?formRef=${encodeURIComponent(`after_accept:${form.formRef}`)}`} :

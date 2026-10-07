@@ -150,7 +150,7 @@ export async function capturePreparedMaskedFormScreenshot(page: Page, prepared: 
     const clip = prepared.before.bounds;
     const viewport = prepared.before.viewport;
     console.warn("[form-snapshot-capture]", JSON.stringify({ stage,
-      code: error instanceof Error && error.message.startsWith("Form screenshot ") ? error.message.slice(0, 100) : "browser_operation_failed",
+      code: error instanceof Error && error.message.includes("Form screenshot crop changed") ? "crop_changed" : error instanceof Error && error.message.startsWith("Form screenshot ") ? error.message.slice(0, 100) : "browser_operation_failed",
       deadlineExpired: Date.now() >= deadline,
       elapsedMs: Date.now() - startedAtMs, capturePixelsMs,
       captureBeyondViewport: !(clip.x >= viewport.x && clip.y >= viewport.y &&

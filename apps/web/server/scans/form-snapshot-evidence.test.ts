@@ -25,6 +25,20 @@ test("After Accept images require phase-owned inventory, exact form binding and 
     assert.equal(verifiedPostAcceptFormSnapshots({...capture,snapshots:[{...image,...change}]}),null);
   }
   assert.equal(verifiedPostAcceptFormSnapshots({...capture,inventory:{...inventory,sourceLane:"runtime_evidence"}}),null);
+  const second={...base.forms[0]!,formRef:"collection_form_1",fields:base.forms[0]!.fields.map(field=>({...field,fieldRef:"collection_form_1_field_0",controlIndex:1}))};
+  const laterInventory={...inventory,forms:[...inventory.forms,second]};
+  const later={...capture,contractVersion:"certscore.post_accept_form_snapshots.v6",capturedAtMs:3600,
+    lateForm:{baseCaptureDeadlineAtMs:3110,detectedAtMs:2500,extensionMs:9500},
+    postCaptureInventory:{capturedAtMs:4300,documentIdentity:capture.documentIdentity,inventory:laterInventory},
+    postCaptureSnapshots:{capturedAtMs:5000,snapshots:[{...image,formRef:second.formRef,sourceInventoryHash:sha(JSON.stringify(laterInventory))}]}};
+  const verified=verifiedPostAcceptFormSnapshots(later);assert.equal(verified?.images.length,2);
+  assert.deepEqual(verified?.images[1]?.bytes,bytes);assert.equal(verified?.images[1]?.capturedAtMs,5000);
+  for(const change of [{sourceInventoryHash:image.sourceInventoryHash},{sha256:"b".repeat(64)},{formRef:image.formRef}])
+    assert.equal(verifiedPostAcceptFormSnapshots({...later,postCaptureSnapshots:{...later.postCaptureSnapshots,
+      snapshots:[{...later.postCaptureSnapshots.snapshots[0],...change}]}}),null);
+  assert.equal(verifiedPostAcceptFormSnapshots({...later,postCaptureSnapshots:{...later.postCaptureSnapshots,capturedAtMs:4299}}),null);
+  assert.equal(verifiedPostAcceptFormSnapshots({...later,postCaptureSnapshots:{...later.postCaptureSnapshots,capturedAtMs:12611}}),null);
+
 });
 
 test("form images require inventory, document and byte integrity and never expose withheld bytes", () => {

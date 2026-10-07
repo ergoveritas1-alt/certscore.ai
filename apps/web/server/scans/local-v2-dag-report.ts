@@ -6791,13 +6791,13 @@ export async function loadSinglePageFormSnapshot(scanRecord: ScanDetailResponse,
     if (!packet.success || packet.data.parentScanId !== scanRecord.scan.id) return null;
     const verified = verifiedPostAcceptFormSnapshots(packet.data.formSnapshotCapture);
     const provenance = row.captureProvenance;
-    const displayedInventory = verified?.capture.contractVersion === "certscore.post_accept_form_snapshots.v5"
+    const displayedInventory = verified && (verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v5" || verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v6")
       ? verified.capture.postCaptureInventory.inventory : verified?.capture.inventory;
     if (!verified || !provenance || verified.capture.sessionId !== provenance.sessionId ||
       verified.capture.documentIdentity.token !== provenance.documentToken ||
       verified.capture.exactTargetSha256 !== provenance.exactTargetSha256 ||
       verified.capture.actionDispatchedAtMs !== provenance.actionDispatchedAtMs ||
-      verified.capture.capturedAtMs !== provenance.capturedAtMs ||
+      verified.images.find(item => item.snapshot.formRef === row.form.formRef)?.capturedAtMs !== provenance.capturedAtMs ||
       JSON.stringify(displayedInventory?.forms.find(form => form.formRef === row.form.formRef)) !== JSON.stringify(row.form)) return null;
     return verified.images.find(item => item.snapshot.formRef === row.form.formRef)?.bytes ?? null;
   }

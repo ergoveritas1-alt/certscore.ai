@@ -181,6 +181,23 @@ test("late form pixels project only with versioned bounded extension proof", () 
     postCaptureInventory: { ...later.postCaptureInventory, documentIdentity: { source: "cdp_loader_id", token: "other" } } } }).success, false);
   assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...laterPacket,
     timing: { ...laterPacket.timing, totalMs: 10200, readyAtMs: 10200 } }).success, false);
+  const laterForm = later.postCaptureInventory.inventory.forms[0];
+  assert.ok(laterForm);
+  const second={...laterForm,formRef:"collection_form_1",
+    fields:laterForm.fields.map(field=>({...field,fieldRef:"second_email",controlIndex:1}))};
+  const twoImages={...later,contractVersion:"certscore.post_accept_form_snapshots.v6",
+    postCaptureInventory:{...later.postCaptureInventory,inventory:{...later.postCaptureInventory.inventory,forms:[...later.postCaptureInventory.inventory.forms,second]}},
+    postCaptureSnapshots:{capturedAtMs:10800,snapshots:[{...later.snapshots[0],formRef:second.formRef,status:"available",reason:undefined,
+      data:"/9j/2Q==",width:1,height:1,sizeBytes:4,sha256:"c".repeat(64)}]}};
+  const imagePacket={...laterPacket,formSnapshotCapture:twoImages};
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(imagePacket).success,true);
+  const imageProjection=projectPostAcceptEvidenceForReport({packet:postAcceptEvidencePacketSchema.parse(imagePacket),packetSha256:"b".repeat(64)}).formSnapshotCapture;
+  assert.ok(imageProjection?.contractVersion==="certscore.post_accept_form_snapshots.v6");
+  assert.equal("data" in imageProjection.postCaptureSnapshots.snapshots[0]!,false);
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({...imagePacket,timing:{...imagePacket.timing,totalMs:10700,readyAtMs:10700}}).success,false);
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({...imagePacket,formSnapshotCapture:{...twoImages,
+    postCaptureSnapshots:{...twoImages.postCaptureSnapshots,snapshots:[twoImages.postCaptureSnapshots.snapshots[0],twoImages.postCaptureSnapshots.snapshots[0]]}}}).success,false);
+
 });
 
 test("Accept packet and report projection preserve bounded collection diagnostics", () => {

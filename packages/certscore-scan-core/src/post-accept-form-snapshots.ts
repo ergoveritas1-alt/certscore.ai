@@ -120,7 +120,9 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
         if (!active() || after.frameTree.frame.loaderId !== token ||
           !postAcceptImageInventoryMatchesLaterInventory(inventory, later)) return undefined;
         const laterFieldCount = later.forms.reduce((count, form) => count + form.fields.length, 0);
-        if (later.forms.length <= inventory.forms.length && laterFieldCount <= originalFieldCount) return undefined;
+        const disclosureEnriched = later.forms.some(form => form.privacyDisclosure?.excerpts.length &&
+          JSON.stringify(form.privacyDisclosure) !== JSON.stringify(inventory.forms.find(original => original.formRef === form.formRef)?.privacyDisclosure));
+        if (later.forms.length <= inventory.forms.length && laterFieldCount <= originalFieldCount && !disclosureEnriched) return undefined;
         return { capturedAtMs: Date.now() - input.parentScanStartedAtMs,
           documentIdentity: { source: "cdp_loader_id" as const, token }, inventory: later };
       };
@@ -169,13 +171,32 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
         } finally { if (waitTimer) clearTimeout(waitTimer); }
       }
       if (postCaptureInventory && postCaptureInventory.capturedAtMs < pixelProvedAtMs) postCaptureInventory = undefined;
+      let postCaptureSnapshots: {capturedAtMs:number; snapshots:typeof snapshots} | undefined;
+      const newForms = postCaptureInventory?.inventory.forms.filter(form => !inventory.forms.some(original => original.formRef === form.formRef)) ?? [];
+      if (postCaptureInventory && newForms.length && snapshots.length < 2 && active() && Date.now() + 750 < captureDeadlineAtMs) {
+        let laterPixelProvedAtMs: number | undefined;
+        const extra = await captureCollectionSurfaceSnapshots(input.page, {...postCaptureInventory.inventory,
+          forms:newForms.slice(0,2-snapshots.length)}, input.reviewer, input.signal, boundSession,
+          captureDeadlineAtMs - 75, {pixelSignal:signal, maxCropHeight:480, hideControlsDuringCapture:true,
+            pixelBudgetMs:Math.max(1,captureDeadlineAtMs-Date.now()), reviewDeadlineAtMs:captureDeadlineAtMs,
+            sourceInventoryHash:createHash("sha256").update(JSON.stringify(postCaptureInventory.inventory)).digest("hex"),
+            onMaskedPixelsCaptured:async()=>{
+              if (!active()) return;
+              const after=await boundSession.send("Page.getFrameTree");
+              if (after.frameTree.frame.loaderId !== token) {changed=true;return;}
+              if (active()) laterPixelProvedAtMs=Date.now()-input.parentScanStartedAtMs;
+            }});
+        if (laterPixelProvedAtMs !== undefined && !changed) postCaptureSnapshots={capturedAtMs:laterPixelProvedAtMs,snapshots:extra};
+      }
+      if (changed || input.signal?.aborted || input.page.isClosed() || input.page.url() !== input.exactTargetUrl) return;
       nextStage("packet_validation");
       result = postAcceptFormSnapshotCaptureSchema.parse({
         ...(lateFormExtensionActive ? {
-          contractVersion: postCaptureInventory ? "certscore.post_accept_form_snapshots.v5" : "certscore.post_accept_form_snapshots.v4",
+          contractVersion: postCaptureSnapshots ? "certscore.post_accept_form_snapshots.v6" : postCaptureInventory ? "certscore.post_accept_form_snapshots.v5" : "certscore.post_accept_form_snapshots.v4",
           lateForm: { baseCaptureDeadlineAtMs: input.deadlineAtMs - input.parentScanStartedAtMs,
             detectedAtMs: lateFormDetectedAtMs, extensionMs: LATE_FORM_CAPTURE_EXTENSION_MS },
           ...(postCaptureInventory ? { postCaptureInventory } : {}),
+          ...(postCaptureSnapshots ? { postCaptureSnapshots } : {}),
         } : { contractVersion: "certscore.post_accept_form_snapshots.v1" }),
         phase: "after_accept",
         sessionId: randomUUID(), exactTargetSha256: createHash("sha256").update(input.exactTargetUrl).digest("hex"),

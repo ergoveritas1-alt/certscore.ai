@@ -216,7 +216,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       })().then(retain));
     } catch (error) {
       if (options?.layoutRetryAllowed !== false && error instanceof Error &&
-        error.message.startsWith("Form screenshot layout changed:") &&
+        (error.message.includes("Form screenshot layout changed:") || error.message.includes("Form screenshot crop changed")) &&
         !pixelSignal.aborted && page.url() === inventory.pageUrl && Date.now() + 750 < deadline) {
         const retry = await captureCollectionSurfaceSnapshots(page, { pageUrl: inventory.pageUrl, forms: [form] }, review,
           signal, reusableSession, deadline, { ...options, layoutRetryAllowed: false,
