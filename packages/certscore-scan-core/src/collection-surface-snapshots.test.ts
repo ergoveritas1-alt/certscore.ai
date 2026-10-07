@@ -320,3 +320,21 @@ test("pre-populated credentials, contact values, textareas, selects and editable
     assert.equal(await page.locator('[contenteditable]').textContent(), "private note");
   } finally { await browser.close(); }
 });
+
+test("a canceled idle form animation does not discard a safely masked screenshot", async () => {
+  const { captureMaskedFormScreenshot } = await import("./masked-form-screenshot");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent('<form><label>Email<input type="email" value="private@example.test"></label></form>');
+    await page.locator("form").evaluate(form => {
+      (globalThis as any).__name = (value: unknown) => value;
+      const animation = { playState: "running", pause() { this.playState = "idle"; }, play() {} };
+      Object.defineProperty(form, "getAnimations", { value: () => [animation] });
+    });
+    const root = await page.locator("form").elementHandle();
+    const bytes = await captureMaskedFormScreenshot(page, root!, 1000);
+    assert.equal(bytes[0], 0xff);
+    assert.equal(bytes[1], 0xd8);
+  } finally { await browser.close(); }
+});

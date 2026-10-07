@@ -72,7 +72,7 @@ export async function captureMaskedFormScreenshot(page: Page, element: ElementHa
         // before/after layout check without waiting for unrelated frames.
         stage = "verify_animation_pause";
         await style.evaluate((state: any) => {
-          if (state?.animations.some((animation: Animation) => animation.playState !== "paused")) {
+          if (state?.animations.some((animation: Animation) => animation.playState === "running")) {
             throw new Error("Form screenshot animation did not pause");
           }
         });

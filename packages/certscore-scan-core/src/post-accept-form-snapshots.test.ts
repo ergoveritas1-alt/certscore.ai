@@ -141,6 +141,34 @@ test("document proof starts while independently mounted fields settle", async ()
   }
 });
 
+test("late mounted SITS-shaped forms retain masked pixels inside the original three-second window", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.route("https://fixture.test/**", route => route.fulfill({ contentType: "text/html", body: `
+      <style>@keyframes float {from { transform:translateY(0) } to { transform:translateY(8px) }}
+      .busy {animation:float 1s ease-in-out infinite alternate}</style>
+      <div class="busy">Moving page content</div>
+      <script>setTimeout(() => document.body.insertAdjacentHTML('beforeend',
+        '<form action="https://forms-eu1.hsforms.com/contact" method="post" aria-label="Contact">'+
+        Array.from({length:8},(_,i)=>'<label>Field '+i+'<input name="field-'+i+'" value="private-value"></label>').join('')+
+        '</form><form action="https://forms-eu1.hsforms.com/newsletter" method="post" aria-label="Newsletter">'+
+        '<label>Email<input type="email" name="email" value="secret@example.test"></label></form>'),2450)</script>` }));
+    await page.goto("https://fixture.test/");
+    const startedAt = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(),
+      parentScanStartedAtMs: startedAt, actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0,
+      deadlineAtMs: startedAt + 3000, reviewer: async () => ({ safeForDisplay: true }) });
+    while (!capture.done() && Date.now() - startedAt < 3500) await new Promise(resolve => setTimeout(resolve, 10));
+    const result = await capture.finish();
+    assert.ok(result, "late forms should yield a document-bound capture");
+    assert.equal(result.inventory.forms.length, 2);
+    assert.equal(result.snapshots.filter(snapshot => snapshot.status === "available").length, 2);
+    assert.ok(result.snapshots.every(snapshot => snapshot.status !== "available" || snapshot.data?.length));
+    assert.ok(result.capturedAtMs <= 3000);
+  } finally { await browser.close(); }
+});
+
 test("pixel proof stays in the Accept window while bounded safety review finishes afterward", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
