@@ -239,8 +239,93 @@
       "lastOutcome": "no_go",
       "state": "blocked",
       "url": "https://salesforce.com"
+    },
+    "https://weather.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T20:10:12.846Z",
+      "lastContactAt": "2026-10-08T20:10:12.846Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://weather.com"
+    },
+    "https://adobe.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-05T20:10:30.696Z",
+      "lastContactAt": "2026-10-08T20:10:30.696Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "homepage_response_403",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://adobe.com"
+    },
+    "https://chase.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T20:10:55.866Z",
+      "lastContactAt": "2026-10-08T20:10:55.866Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://chase.com"
+    },
+    "https://att.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T20:11:14.235Z",
+      "lastContactAt": "2026-10-08T20:11:14.235Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://att.com"
+    },
+    "https://target.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T20:11:50.491Z",
+      "lastContactAt": "2026-10-08T20:11:50.491Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://target.com"
+    },
+    "https://healthline.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T20:12:10.462Z",
+      "lastContactAt": "2026-10-08T20:12:10.462Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://healthline.com"
+    },
+    "https://forbes.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T20:12:30.255Z",
+      "lastContactAt": "2026-10-08T20:12:30.255Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://forbes.com"
+    },
+    "https://hubspot.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T20:12:46.163Z",
+      "lastContactAt": "2026-10-08T20:12:46.163Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://hubspot.com"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-08T04:12:55.620Z"
+  "updatedAt": "2026-10-08T20:14:55.041Z"
 }

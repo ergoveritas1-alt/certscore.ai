@@ -1,6 +1,9 @@
 # Next scan-speed changes: local readiness, October 8, 2026
 
-Status: implemented and verified locally; not deployed. Baseline: `fc648684`.
+Status: deployed at `90e6f90a` and verified in production. Baseline: `fc648684`.
+See [the production verification receipt](2026-10-08-next-scan-speed-production-verification.md)
+for measured results and unresolved work. The local measurements below do not
+establish a whole-scan improvement.
 
 ## Implemented scope
 
@@ -80,8 +83,10 @@ versions. Follow the canonical change-aware preflight, live-SHA comparison,
 single-build/replication and digest/health verification before promotion.
 
 A controlled fresh production request-to-scanner-to-report-to-browser comparison
-remains outstanding. Do not sum independent lane savings or present replay/local
-initialization results as whole-scan gains. Use an owned canary first; SITS remains
+is now recorded in the production verification receipt. The first pair did not
+show a speedup. Do not sum independent lane savings or present replay/local
+initialization results as whole-scan gains. SITS remains
 subject to its diagnostic contact hold and needs a new per-run exception for a
-fresh diagnostic contact. No AWS canary or public-site contact was made for this
-implementation.
+fresh diagnostic contact. No AWS canary or public-site contact was made during
+the original local implementation; release calibration and owned production
+verification are separately recorded in the production receipt.
