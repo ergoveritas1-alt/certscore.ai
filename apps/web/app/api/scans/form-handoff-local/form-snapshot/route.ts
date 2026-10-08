@@ -6,9 +6,12 @@ export const dynamic="force-dynamic";
 export async function GET(request:Request){
   if(process.env.NODE_ENV!=="development")return new Response(null,{status:404});
   const source=new URL(request.url).searchParams.get('source');
-  const artifact=source==='sits'?'sits-local-accept-handoff-20261007':'post-accept-form-handoff-local';
-  const packet=postAcceptEvidencePacketSchema.parse(JSON.parse(await readFile(path.resolve(process.cwd(),
-    `../../artifacts/${artifact}/PostAcceptEvidencePacket.json`),'utf8')));
+  // Keep both file reads literal: a dynamic directory makes Next's dependency
+  // tracer walk the entire ignored diagnostics tree during production builds.
+  const bytes=source==='sits'
+    ? await readFile(path.resolve(process.cwd(),'../../artifacts/sits-local-accept-handoff-20261007/PostAcceptEvidencePacket.json'),'utf8')
+    : await readFile(path.resolve(process.cwd(),'../../artifacts/post-accept-form-handoff-local/PostAcceptEvidencePacket.json'),'utf8');
+  const packet=postAcceptEvidencePacketSchema.parse(JSON.parse(bytes));
   const formRef=new URL(request.url).searchParams.get('formRef');
   const image=verifiedPostAcceptFormSnapshots(packet.formSnapshotCapture)?.images.find(image=>image.snapshot.formRef===formRef);
   if(!image?.bytes)return new Response(null,{status:404});

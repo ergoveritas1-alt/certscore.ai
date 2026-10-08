@@ -27,6 +27,10 @@ Historical evidence, scores and customer records are not rewritten.
   optimizations. The custom extension-alias configuration had disabled the
   automatic worker; local full-gate compilation exhausted the 8 GiB heap.
   This changes compilation only and preserves the existing runtime and heap caps.
+  The local dependency tracer also traversed the ignored diagnostics tree.
+  Temporarily preserving that tree outside the repository allowed compilation
+  to finish in 36 seconds at a 4 GiB cap; Docker already excludes these inputs.
+  The development image reader now uses two explicit file paths.
 
 ## Verification
 
