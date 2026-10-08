@@ -48,6 +48,21 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
     timer = setTimeout(() => controller.abort(), Math.max(1, captureDeadlineAtMs - Date.now()));
     timer.unref?.();
   };
+  const extendForDetectedForm = (raw: Awaited<ReturnType<typeof capturePostAcceptFormInventory>>, detectedAtEpochMs: number) => {
+    if (!raw.forms.length || raw.pageUrl !== input.exactTargetUrl || !active() || lateFormExtensionActive ||
+      detectedAtEpochMs >= input.deadlineAtMs ||
+      detectedAtEpochMs < input.parentScanStartedAtMs + input.acceptanceRegisteredAtMs + LATE_FORM_MINIMUM_AGE_MS ||
+      detectedAtEpochMs < input.deadlineAtMs - LATE_FORM_REMAINING_WINDOW_MS) return;
+    // Validate the bounded inventory before it can request any extra budget.
+    retainedFormInventory(raw);
+    const hardDeadlineAtMs = input.onLateFormDetected?.() ?? input.deadlineAtMs + LATE_FORM_CAPTURE_EXTENSION_MS;
+    const extendedDeadlineAtMs = Math.min(input.deadlineAtMs + LATE_FORM_CAPTURE_EXTENSION_MS, hardDeadlineAtMs);
+    if (extendedDeadlineAtMs <= input.deadlineAtMs) return;
+    captureDeadlineAtMs = extendedDeadlineAtMs;
+    lateFormExtensionActive = true;
+    lateFormDetectedAtMs = detectedAtEpochMs - input.parentScanStartedAtMs;
+    scheduleCaptureDeadline();
+  };
   scheduleCaptureDeadline();
   const work = (async () => {
     let stage = "inventory_wait";
@@ -79,21 +94,10 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       const exclusionSelectors = KNOWN_CMP_REGISTRY.flatMap(cmp => cmp.formExclusionSelectors ?? cmp.domSelectors ?? []);
       // One browser roundtrip waits for late mounted fields and returns their
       // bounded inventory; the document proof was already started in parallel.
-      let raw = await capturePostAcceptFormInventory(input.page, input.parentScanStartedAtMs, exclusionSelectors, input.deadlineAtMs - 150);
+      let raw = await capturePostAcceptFormInventory(input.page, input.parentScanStartedAtMs, exclusionSelectors, input.deadlineAtMs - 150,
+        { onDetected: extendForDetectedForm, signal });
       inventoryDiagnostics = { forms: raw.forms.length, fields: raw.forms.reduce((count, form) => count + form.fields.length, 0) };
       if (!raw.forms.length) return;
-      const detectedAtEpochMs = Date.now();
-      if (detectedAtEpochMs >= input.parentScanStartedAtMs + input.acceptanceRegisteredAtMs + LATE_FORM_MINIMUM_AGE_MS &&
-        detectedAtEpochMs >= input.deadlineAtMs - LATE_FORM_REMAINING_WINDOW_MS && active()) {
-        const hardDeadlineAtMs = input.onLateFormDetected?.() ?? input.deadlineAtMs + LATE_FORM_CAPTURE_EXTENSION_MS;
-        const extendedDeadlineAtMs = Math.min(input.deadlineAtMs + LATE_FORM_CAPTURE_EXTENSION_MS, hardDeadlineAtMs);
-        if (extendedDeadlineAtMs > input.deadlineAtMs) {
-          captureDeadlineAtMs = extendedDeadlineAtMs;
-          lateFormExtensionActive = true;
-          lateFormDetectedAtMs = detectedAtEpochMs - input.parentScanStartedAtMs;
-          scheduleCaptureDeadline();
-        }
-      }
       if (!active()) return;
       // Start masking and safety review on the first directly observed form.
       // A settle-and-resample round trip delayed SITS pixels until too close

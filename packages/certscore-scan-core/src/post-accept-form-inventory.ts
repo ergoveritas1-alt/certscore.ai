@@ -1,12 +1,55 @@
 import type { Page } from "playwright";
+import { randomUUID } from "node:crypto";
 import { PRIVACY_EVIDENCE_LOCALE_REGISTRY } from "@certscore/contracts";
-import { buildCollectionSurfaceInventory } from "./collection-surface-inventory.js";
+import { buildCollectionSurfaceInventory, type CollectionSurfaceCaptureSnapshot } from "./collection-surface-inventory.js";
+
+// One binding per browser page; completed captures remove their handler. Keeping
+// the inert binding avoids accumulating exposed functions across bounded reads.
+const detectionBindings = new WeakMap<Page, { name: string; ready: Promise<void>;
+  handlers: Map<string, (snapshot: CollectionSurfaceCaptureSnapshot, detectedAtEpochMs: number) => void> }>();
 
 /** A bounded form-only DOM sample for the registered Accept window. It never
  * reads field values or page-wide text; the later screenshot independently
  * rebinds every retained control before taking masked pixels. */
-export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs: number, cmpSelectors: string[], deadlineAtMs = Date.now()) {
-  const snapshot = await page.evaluate(({ selectors, deadlineAtMs, privacyHints }) => {
+export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs: number, cmpSelectors: string[], deadlineAtMs = Date.now(), detection?: {
+  onDetected: (inventory: ReturnType<typeof buildCollectionSurfaceInventory>, detectedAtEpochMs: number) => void;
+  signal: AbortSignal;
+}) {
+  const detectionId = randomUUID();
+  let binding = detectionBindings.get(page);
+  if (detection && !binding) {
+    const name = `certscoreForm_${randomUUID().replaceAll("-", "")}`;
+    const handlers = new Map<string, (snapshot: CollectionSurfaceCaptureSnapshot, detectedAtEpochMs: number) => void>();
+    const ready = page.exposeBinding(name, (source, id, snapshot, detectedAtEpochMs) => {
+      if (source.page === page && source.frame === page.mainFrame()) handlers.get(id)?.(snapshot, detectedAtEpochMs);
+    });
+    binding = { name, ready, handlers };
+    detectionBindings.set(page, binding);
+  }
+  const bindingName = detection ? binding?.name : undefined;
+  let delivered = false;
+  let deliver: (snapshot: import("./collection-surface-inventory.js").CollectionSurfaceCaptureSnapshot) => void = () => {};
+  const detected = new Promise<import("./collection-surface-inventory.js").CollectionSurfaceCaptureSnapshot>(resolve => { deliver = resolve; });
+  const aborted = () => { rejectAbort(detection?.signal.reason ?? new Error("Form inventory capture cancelled")); };
+  let rejectAbort: (reason: unknown) => void = () => {};
+  const cancelled = new Promise<never>((_, reject) => { rejectAbort = reject; });
+  try {
+  if (bindingName && detection) {
+    detection.signal.addEventListener("abort", aborted, { once: true });
+    if (detection.signal.aborted) aborted();
+    await Promise.race([binding!.ready, cancelled]);
+    binding!.handlers.set(detectionId, (snapshot, detectedAtEpochMs) => {
+      if (delivered || detection.signal.aborted ||
+        !Number.isSafeInteger(detectedAtEpochMs) || detectedAtEpochMs > Date.now() || detectedAtEpochMs >= deadlineAtMs ||
+        snapshot?.pageUrl !== page.url()) return;
+      const inventory = buildCollectionSurfaceInventory(snapshot, scanStartedAtMs);
+      if (!inventory.forms.length) return;
+      detection.onDetected(inventory, detectedAtEpochMs);
+      delivered = true;
+      deliver(snapshot);
+    });
+  }
+  const evaluation = page.evaluate(({ selectors, deadlineAtMs, privacyHints, bindingName, detectionId }) => {
     const scope = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
     scope.__name ??= function(target) { return target; };
     const read = () => {
@@ -152,7 +195,7 @@ export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs
     return { pageUrl: location.href, documentReadyState: document.readyState,
       inspectedFieldCandidateCount: Math.min(candidates.length, 250), candidateScanTruncated: truncated, rows };
     };
-    return new Promise<ReturnType<typeof read>>(resolve => {
+    return new Promise<ReturnType<typeof read> & { detectedAtEpochMs?: number }>(resolve => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       let finished = false, queued = false;
       const observer = new MutationObserver(() => {
@@ -163,11 +206,18 @@ export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs
       const poll = () => {
         if (finished) return;
         const current = read();
-        if (current.rows.length || Date.now() >= deadlineAtMs) {
+        const detectedAtEpochMs = Date.now();
+        if (current.rows.length || detectedAtEpochMs >= deadlineAtMs) {
           finished = true;
           observer.disconnect();
           if (timer) clearTimeout(timer);
-          resolve(current);
+          // Notify the worker before awaiting the evaluation return. Only a
+          // directly observed, in-window field can activate the late allowance.
+          if (bindingName && current.rows.length && detectedAtEpochMs < deadlineAtMs) {
+            const notify = (globalThis as unknown as Record<string, (...args: unknown[]) => Promise<void>>)[bindingName];
+            void notify?.(detectionId, current, detectedAtEpochMs).catch(() => {});
+          }
+          resolve({ ...current, detectedAtEpochMs });
           return;
         }
         if (timer) clearTimeout(timer);
@@ -176,6 +226,15 @@ export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs
       observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "style", "hidden", "aria-hidden"] });
       poll();
     });
-  }, { selectors: cmpSelectors, deadlineAtMs, privacyHints: [...new Set(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [...entry.privacyPolicyLabels, ...entry.contextHints]).map(hint => hint.toLocaleLowerCase()))] });
+  }, { selectors: cmpSelectors, deadlineAtMs, bindingName, detectionId, privacyHints: [...new Set(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [...entry.privacyPolicyLabels, ...entry.contextHints]).map(hint => hint.toLocaleLowerCase()))] });
+  const snapshot = await (detection ? Promise.race([evaluation, detected, cancelled]) : evaluation);
+  if (detection && !delivered && "detectedAtEpochMs" in snapshot && typeof snapshot.detectedAtEpochMs === "number" &&
+    snapshot.detectedAtEpochMs < deadlineAtMs && !detection.signal.aborted) {
+    detection.onDetected(buildCollectionSurfaceInventory(snapshot, scanStartedAtMs), snapshot.detectedAtEpochMs);
+  }
   return buildCollectionSurfaceInventory(snapshot, scanStartedAtMs);
+  } finally {
+    detection?.signal.removeEventListener("abort", aborted);
+    binding?.handlers.delete(detectionId);
+  }
 }

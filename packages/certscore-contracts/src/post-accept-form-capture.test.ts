@@ -18,3 +18,12 @@ test('form capture rejects false coverage, invalid time, unsafe frames, and dupl
     {...capture,frames:[{...capture.frames[0],documentUrl:'javascript:alert(1)'}]},
   ]) assert.equal(postAcceptFormCaptureSchema.safeParse(invalid).success,false);
 });
+
+test('windowed capture requires terminal coverage and preserves legacy samples',()=>{
+  const windowed={...capture,version:'post_accept_form_capture.v2',window:{startedAtMs:100,endedAtMs:3100,terminalSampleCompleted:true}};
+  assert.equal(postAcceptFormCaptureSchema.safeParse(windowed).success,true);
+  for(const invalid of [{...windowed,window:undefined},{...windowed,window:{...windowed.window,terminalSampleCompleted:false}},
+    {...windowed,window:{...windowed.window,endedAtMs:100}}, {...capture,window:windowed.window}]) {
+    assert.equal(postAcceptFormCaptureSchema.safeParse(invalid).success,false);
+  }
+});

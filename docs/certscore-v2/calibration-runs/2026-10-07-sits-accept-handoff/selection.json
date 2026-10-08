@@ -1,0 +1,22 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-08T01:14:26.107Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "sits-local-accept-handoff-20261007-one-run",
+  "selected": [
+    {
+      "url": "https://sits.com/en/",
+      "role": "owner_authorized_single_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "third_party_attribution"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Product owner explicitly approved one local Accept-only SITS test using ConsentCheckBot. One-run hold and cooldown exception only; no retry, form submission or deployment; global hold remains unchanged.",
+    "appliedToUrls": [
+      "https://sits.com/en/"
+    ]
+  }
+}

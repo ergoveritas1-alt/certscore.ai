@@ -1,0 +1,12 @@
+{
+  "allowed": true,
+  "target": "https://sits.com/en/",
+  "contexts": 1,
+  "clicks": 1,
+  "navigationAttempts": 1,
+  "runKey": "sits-local-accept-handoff-20261007-one-run",
+  "reason": "Product owner explicitly approved one local Accept-only SITS test using ConsentCheckBot. One-run hold and cooldown exception only; no retry, form submission or deployment; global hold remains unchanged.",
+  "centralCheckedAt": "2026-10-08T01:13:19.559872+00:00",
+  "registryCheck": "passed",
+  "estimatedTotalTransientCostUsdUpperBound": 0.06
+}

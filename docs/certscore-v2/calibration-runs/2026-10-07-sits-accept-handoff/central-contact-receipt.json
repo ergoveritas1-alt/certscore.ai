@@ -1,0 +1,11 @@
+{
+  "runKey": "sits-local-accept-handoff-20261007-one-run",
+  "method": "pnpm v2:calibration-contact-persist --ecs-oneoff",
+  "contactsPersisted": 1,
+  "recordedAt": "2026-10-08T01:17:53.558376+00:00",
+  "customerScansCreated": 0,
+  "globalHoldChanged": false,
+  "estimatedTotalTransientCostUsdUpperBound": 0.06,
+  "repositoryLedgerCandidateReviewed": true,
+  "repositoryLedgerCandidateCommitted": true
+}

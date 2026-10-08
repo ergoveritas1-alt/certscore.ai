@@ -1,5 +1,6 @@
 import { EvidenceHeaderStatus } from "../evidence-header-status";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
+import { ViewerTimestamp } from "../../time/viewer-timestamp";
 import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { GpcObservedFacts } from "../gpc-observed-facts";
@@ -151,6 +152,12 @@ function reportScanFrom(value: string): ServerScanFrom {
   return value === "eu_de" || value === "california" ? value : "eu_ie";
 }
 
+function ReportCreatedAt({ scan }: { scan: ShadowReportData["scan"] }) {
+  return scan.createdAtIso
+    ? <ViewerTimestamp value={scan.createdAtIso} fallback={scan.createdAt} includeSeconds />
+    : <>{scan.createdAt}</>;
+}
+
 function ReportIdentity({
   allowRestrictedScanOptions = false,
   compact = false,
@@ -175,7 +182,7 @@ function ReportIdentity({
   const reviewFocusControl = report.resultDisposition === "no_go" ? null : <RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />;
   if (workspaceIdentity) return <FullSiteIdentity
     scanId={report.scan.id} host={report.scan.host} url={report.scan.url}
-    createdAt={report.scan.createdAt} duration={<FullSiteScanDuration />} visualEvidenceHref={visualEvidence}
+    createdAt={<ReportCreatedAt scan={report.scan} />} duration={<FullSiteScanDuration />} visualEvidenceHref={visualEvidence}
     region={<span className="inline-flex items-center gap-2 rounded-md border border-zinc-300 bg-white px-2 py-1"><ScanFromMarker {...getScanFromMarkerInput(report.scan.originCode)} selected />Scanned from {report.scan.origin}</span>}
     reviewFocusControl={reviewFocusControl}
     actions={hideShare ? null : <ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
@@ -206,7 +213,7 @@ function ReportIdentity({
         ) : null}
       </div>
       <div className="min-w-0">
-        <p className="text-xs font-medium text-zinc-500">{report.scan.createdAt}{report.scan.duration !== "Unavailable" ? <span className="ml-2 tabular-nums">({report.scan.duration} scan)</span> : null}</p>
+        <p className="text-xs font-medium text-zinc-500"><ReportCreatedAt scan={report.scan} />{report.scan.duration !== "Unavailable" ? <span className="ml-2 tabular-nums">({report.scan.duration} scan)</span> : null}</p>
         <div className={`${compact ? "mt-1" : "mt-2"} flex items-center justify-between gap-3`}>
           <div className="flex min-w-0 items-center gap-2">
             <VendorBrandLogo
@@ -1294,7 +1301,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
   return <ReportInventoryNavigation><div className="mx-auto max-w-[1500px] px-4 py-4 text-zinc-900 sm:px-6" data-single-page-report>
     <header className="pb-1">
       <div className="mt-1 sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-center sm:gap-x-4 lg:gap-x-6 sm:[&>div:first-child]:contents sm:[&>div:first-child>header]:contents sm:[&>div:first-child>header>div:last-child]:col-span-full">
-        <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url} createdAt={report.scan.createdAt} duration={<span className="ml-2 tabular-nums">({report.scan.duration} scan)</span>} visualEvidenceHref={report.scan.visualEvidenceHref}
+        <div><FullSiteIdentity scanId={report.scan.id} host={report.scan.host} url={report.scan.url} createdAt={<ReportCreatedAt scan={report.scan} />} duration={<span className="ml-2 tabular-nums">({report.scan.duration} scan)</span>} visualEvidenceHref={report.scan.visualEvidenceHref}
           region={<span className="rounded-md border border-zinc-300 bg-white px-2 py-1">Scanned from {report.scan.origin}</span>}
           reviewFocusControl={<RegulatoryReviewFocus focus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />}
           timing={<ReportCoverageTiming duration={report.scan.duration} showDurationInSummary={false} technology={describeSiteTechnology(report.siteMetadata?.observation)}
@@ -1306,7 +1313,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
       </div>
     </header>
-    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1} statusLabel="Completed"
+    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1} statusLabel="Completed"
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview report={report} />} homepageVerdict={report.verdict} />
     <SitePriorityReview findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />

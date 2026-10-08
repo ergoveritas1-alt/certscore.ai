@@ -4,8 +4,8 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { PRIVACY_EVIDENCE_LOCALE_REGISTRY, POST_ACCEPT_FORM_CAPTURE_MAX_BYTES, postAcceptFormCaptureSchema, type PostAcceptFormCapture } from "@certscore/contracts";
 import { buildCollectionSurfaceInventory, type CollectionSurfaceCaptureRow } from "./collection-surface-inventory";
 
-/** One opportunistic DOM sample, never a readiness barrier or an interaction.
- * Captured means sampled at this instant, not exhaustive form absence or consent. */
+/** Bounded structured samples overlap the existing Accept window. They never
+ * click forms, await screenshots or extend the action result deadline. */
 export function startPostAcceptFormCapture(input: {
   page: Page; exactTargetUrl: string; parentScanStartedAtMs: number;
   actionDispatchedAtMs: number; windowMs: number; signal?: AbortSignal; documentChangedBeforeStart?: boolean;
@@ -13,7 +13,7 @@ export function startPostAcceptFormCapture(input: {
   const { page } = input;
   const sessionId = randomUUID();
   const capture: PostAcceptFormCapture = {
-    version: "post_accept_form_capture.v1", phase: "after_accept_click", sessionId,
+    version: "post_accept_form_capture.v2", phase: "after_accept_click", sessionId,
     exactTargetSha256: createHash("sha256").update(input.exactTargetUrl).digest("hex"),
     actionDispatchedAtMs: input.actionDispatchedAtMs,
     status: "limited", reasonCodes: [], inspectedFrameCount: 0, candidateFrameCount: 0, frames: [],
@@ -30,11 +30,17 @@ export function startPostAcceptFormCapture(input: {
   page.on("framenavigated", navigated);
   const reasons = new Set<PostAcceptFormCapture["reasonCodes"][number]>();
   const targetMatches = () => { try { const url = new URL(page.url()); url.hash = ""; return url.href === input.exactTargetUrl; } catch { return false; } };
-  const deadline = input.parentScanStartedAtMs + input.actionDispatchedAtMs + input.windowMs;
+  let deadline = input.parentScanStartedAtMs + input.actionDispatchedAtMs + input.windowMs;
+  capture.window = { startedAtMs: input.actionDispatchedAtMs, endedAtMs: deadline - input.parentScanStartedAtMs,
+    terminalSampleCompleted: false };
   const active = () => Date.now() < deadline && !frozen && !input.signal?.aborted && !page.isClosed() && !mainChanged && targetMatches();
   const hints = [...new Set(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [...entry.privacyPolicyLabels, ...entry.contextHints]).map(s => s.toLowerCase()))];
   const collect = async () => {
     if (!active()) return;
+    done = false;
+    const sampleStartedAtMs = Date.now();
+    capture.inspectedFrameCount = 0;
+    reasons.clear();
     const frames = page.frames(); sampledFrames = frames; capture.candidateFrameCount = frames.length;
     if (frames.length > 3) reasons.add("capture_limit");
     // Evaluations overlap the existing action observation and each other.
@@ -148,18 +154,36 @@ export function startPostAcceptFormCapture(input: {
           fields: form.fields.map(field => ({...field, evidenceRefs:[{refId:`${frameRef}_${field.fieldRef}`,artifactId:"post_accept_forms",eventType:"after_accept_field"}]})),
         }));
         const frameRow = {frameRef, documentToken:snapshot.documentToken, documentUrl:snapshot.pageUrl, capturedAtMs, forms};
-        if (Buffer.byteLength(JSON.stringify({...capture, frames:[...capture.frames,frameRow]})) > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES - 200) { reasons.add("capture_limit"); return; }
-        capture.frames.push(frameRow); retained.set(frameRef,{frame,epoch});
+        const nextFrames = [...capture.frames.filter(row => row.frameRef !== frameRef), frameRow];
+        if (Buffer.byteLength(JSON.stringify({...capture, frames:nextFrames})) > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES - 200) { reasons.add("capture_limit"); return; }
+        capture.frames = nextFrames; retained.set(frameRef,{frame,epoch});
       } catch { if (!frozen) reasons.add("frame_unavailable"); }
     }));
-    if (!frozen) done = true;
+    if (!frozen) {
+      done = true;
+      if (active() && sampleStartedAtMs >= deadline - 300) capture.window!.terminalSampleCompleted = true;
+      if (active() && Date.now() < deadline - 150) schedule();
+    }
   };
-  const timer = setTimeout(() => { void collect(); }, Math.min(250, Math.max(0, input.windowMs / 2)));
+  let timer: ReturnType<typeof setTimeout>;
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { void collect(); }, Math.max(0, Math.min(500, deadline - 150 - Date.now())));
+    timer.unref?.();
+  };
+  timer = setTimeout(() => { void collect(); }, Math.min(250, Math.max(0, input.windowMs / 2)));
   timer.unref?.();
-  return { finish(): PostAcceptFormCapture {
+  return {
+    continueThrough(confirmedAtMs: number, windowMs: number) {
+      if (frozen || mainChanged || input.signal?.aborted) return;
+      deadline = input.parentScanStartedAtMs + confirmedAtMs + windowMs;
+      capture.window = { startedAtMs: confirmedAtMs, endedAtMs: deadline - input.parentScanStartedAtMs, terminalSampleCompleted: false };
+      if (done) schedule();
+    },
+    finish(): PostAcceptFormCapture {
     if (result) return result;
     clearTimeout(timer); frozen = true; page.off("framenavigated", navigated);
-    if (!done || capture.inspectedFrameCount < capture.candidateFrameCount && !reasons.size) reasons.add("window_ended");
+    if (!done || !capture.window!.terminalSampleCompleted || capture.inspectedFrameCount < capture.candidateFrameCount && !reasons.size) reasons.add("window_ended");
     if (page.frames().some(frame => !sampledFrames.includes(frame))) reasons.add("frame_unavailable");
     if (input.signal?.aborted) { reasons.add("cancelled"); capture.frames = []; }
     if (mainChanged || page.isClosed() || !targetMatches()) { reasons.add("document_changed"); capture.frames = []; }

@@ -34,6 +34,18 @@ test("Forms tally adds post-Accept rows once to the baseline count", () => {
   }
 });
 
+test("incomplete empty form inventory displays Not captured while verified empty inventory displays zero",()=>{
+  const summary={contractVersion:'certscore.forms-summary.v1' as const,scope:'starting_page_reportable_observations' as const,
+    totalObserved:0,preConsentObserved:0,afterAcceptObserved:0,preConsentCapture:'complete' as const,afterAcceptCapture:'limited' as const,
+    countStatus:'not_captured' as const};
+  const incomplete=renderToStaticMarkup(<ReportInventorySummary metrics={[]} formCount={0} formsSummary={summary}/>);
+  assert.match(incomplete,/Not captured/);
+  assert.doesNotMatch(incomplete,/>0</);
+  const complete=renderToStaticMarkup(<ReportInventorySummary metrics={[]} formCount={0} formsSummary={{...summary,afterAcceptCapture:'retained',countStatus:'captured'}}/>);
+  assert.doesNotMatch(complete,/Not captured/);
+  assert.match(complete,/>0</);
+});
+
 test("inventory breakdown uses distinct counts rather than repeated events", () => {
   const html = renderToStaticMarkup(<ReportInventorySummary metrics={[{ label: "Network requests", value: 805, counts: {nonEssential:0,review:205,unclassified:296,contextual:304,essential:0}, overview: {identifiedServices:6,distinctResources:196,unattributedResources:145,distinctStorage:0,distinctEmbeds:3,distinctClassifications:{requests:{nonEssential:0,review:46,unclassified:74,contextual:76,essential:0},storage:{nonEssential:0,review:0,unclassified:0,contextual:0,essential:0},embeds:{nonEssential:0,review:0,unclassified:0,contextual:3,essential:0}}} }]} />);
   assert.match(html, /Services/);
@@ -54,7 +66,7 @@ test("inventory totals show non-essential and review classifications, including 
     { label: "Cookies & storage", value: 4, counts: { nonEssential: 0, review: 1, contextual: 3, essential: 0 } },
     { label: "Embedded frames", value: 2, counts: { nonEssential: 0, review: 0, contextual: 2, essential: 0 } },
   ]} />);
-  const tiles = html.slice(html.indexOf('aria-label="Inventory totals"'), html.indexOf('group/technical'));
+  const tiles = html.slice(html.indexOf('aria-label="Inventory totals"'));
   assert.match(tiles, /text-xs font-semibold">3<\/span> non-essential/);
   assert.match(tiles, /text-xs font-semibold">2<\/span> review/);
   assert.match(tiles, /text-xs font-semibold">1<\/span> review/);
@@ -112,7 +124,7 @@ test("overview, breakdown and legend keep the same terminology and order", () =>
     { label: "Network requests", value: 196 },
   ];
   const html = renderToStaticMarkup(<ReportInventorySummary metrics={metrics} />);
-  for (const fragment of [html.slice(html.indexOf('aria-label="Inventory totals"'), html.indexOf('group/technical')), html.slice(html.indexOf('group/technical'))]) {
+  for (const fragment of [html.slice(html.indexOf('aria-label="Inventory totals"')), html.slice(html.indexOf('group/technical'),html.indexOf('group/forms')>0?html.indexOf('group/forms'):html.indexOf('aria-label="Inventory totals"'))]) {
     assert.ok(fragment.indexOf(">Requests<") < fragment.indexOf(">Cookies &amp; storage<"));
     assert.ok(fragment.indexOf(">Cookies &amp; storage<") < fragment.indexOf(">Embedded frames<"));
   }

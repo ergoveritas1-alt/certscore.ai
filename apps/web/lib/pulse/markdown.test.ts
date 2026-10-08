@@ -3,6 +3,15 @@ import test from "node:test";
 import { PULSE_STANDARD_DISCLAIMER } from "./constants";
 import { renderPulseMarkdown } from "./markdown";
 
+test("Pulse and MCP-facing markdown do not turn incomplete form capture into zero forms",()=>{
+  const markdown=renderPulseMarkdown({domain:'fixture.test',scanId:'fixture',scanStatus:'completed',meta:{detail:'standard'},
+    summary:{score:85},topFindings:[],links:{},formsSummary:{contractVersion:'certscore.forms-summary.v1',
+      scope:'starting_page_reportable_observations',totalObserved:0,preConsentObserved:0,afterAcceptObserved:0,
+      preConsentCapture:'complete',afterAcceptCapture:'limited',countStatus:'not_captured'}});
+  assert.match(markdown,/Forms observed \(starting page\): not captured; pre-consent: 0; after Accept click: not captured/);
+  assert.doesNotMatch(markdown,/Forms observed \(starting page\): 0/);
+});
+
 test("Pulse markdown includes cautious no-finding copy, feedback, links, and disclaimer", () => {
   const markdown = renderPulseMarkdown({
     meta: {

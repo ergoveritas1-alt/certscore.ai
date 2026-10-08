@@ -1,0 +1,17 @@
+{
+  "entries": {
+    "https://sits.com/en/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T01:14:43.879Z",
+      "lastContactAt": "2026-10-08T01:14:43.879Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "One owner-authorized diagnostic exception; global SITS hold remains unchanged. Not a release calibration cohort.",
+      "state": "cooldown",
+      "url": "https://sits.com/en/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-08T01:16:25.304Z"
+}

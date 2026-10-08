@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-10-08T01:14:43.879Z",
+  "runKey": "sits-local-accept-handoff-20261007-one-run",
+  "results": [
+    {
+      "url": "https://sits.com/en/",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "startedAt": "2026-10-08T01:14:32.628Z",
+      "completedAt": "2026-10-08T01:14:43.879Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

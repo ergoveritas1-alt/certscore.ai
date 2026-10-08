@@ -49,17 +49,19 @@ export function ReportRuntimeSummary({ cards }: { cards: ExecutiveRuntimeCard[] 
 }
 
 /** Inventory only. Risk and remediation remain in canonical priority findings. */
-export function ReportInventorySummary({ metrics, updating = false, siteIntegrity, formCount, forms = [], onViewEvidence }: {
+export function ReportInventorySummary({ metrics, updating = false, siteIntegrity, formCount, formsSummary, formCountStatus, forms = [], onViewEvidence }: {
   metrics: ReportInventoryMetric[];
   updating?: boolean;
   formCount?: number;
+  formsSummary?: import("@certscore/api-contracts").ScanFormsSummary | null;
+  formCountStatus?: "captured" | "limited" | "not_captured";
   forms?: import("./collection-surfaces-table").CollectionSurfaceTableRow[];
   onViewEvidence?: () => void;
   siteIntegrity?: SiteIntegritySiteReport;
 }) {
-  const afterAcceptCount = forms.filter(isAfterAcceptForm).length;
-  const preConsentCount = formCount ?? forms.filter(row => !row.capturePhase).length;
-  const formObservationCount = preConsentCount + afterAcceptCount;
+  const afterAcceptCount = formsSummary?.afterAcceptObserved ?? forms.filter(isAfterAcceptForm).length;
+  const preConsentCount = formsSummary?.preConsentObserved ?? formCount ?? forms.filter(row => !row.capturePhase).length;
+  const formObservationCount = formsSummary?.totalObserved ?? preConsentCount + afterAcceptCount;
   const network = metrics.find(metric => metric.overview);
   const overview = network?.overview;
   const technical: ReportInventoryMetric[] = overview ? [
@@ -75,7 +77,19 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
   }
   const hiddenLinkDestinations = [...destinationCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label="Inventory summary">
-    <div className="grid grid-cols-3 items-stretch divide-x divide-slate-200 border-b border-slate-200 bg-slate-50/50">
+    {technical.length ? <details className="group/technical border-b border-slate-200 bg-slate-50/70">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs marker:hidden hover:bg-slate-100/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
+        <span className="flex items-center gap-2 font-medium text-zinc-700"><DisclosureChevron className="text-zinc-400 group-open/technical:rotate-180" />Pre-consent resource counts & classifications</span>
+      </summary>
+      <div className="overflow-x-auto border-t border-zinc-100 bg-white px-4 py-3">
+        <p className="mb-4 max-w-3xl text-xs leading-5 text-zinc-500">{overview ? "Each resource is counted once. Services group requests, cookies/storage and frames." : "Retained inventory counts and classifications."}</p>
+        <div className="grid grid-cols-1 gap-4 divide-y divide-zinc-200 md:min-w-[508px] md:grid-cols-3 md:gap-0 md:divide-x md:divide-y-0">{technical.map((metric, index) => <div key={metric.label} className={`min-w-0 py-0 ${index ? "pt-4 md:pt-0 md:pl-4" : ""} ${index < technical.length - 1 ? "md:pr-4" : ""}`}>
+          <p className="mb-2 text-xs font-semibold text-zinc-700">{metric.label}<span className="ml-2 font-normal text-zinc-500 tabular-nums">{metric.value?.toLocaleString() ?? "Unavailable"}</span></p>
+          <ClassificationCounts counts={metric.counts} />
+        </div>)}</div>
+      </div>
+    </details> : null}
+    <div className="grid grid-cols-3 items-stretch divide-x divide-slate-200 border-b border-slate-200 bg-white">
       <ServicesSignalSnapshot overview={overview} card />
       {formObservationCount > 0 ? <details className="group/forms min-w-0">
         <summary className={inventoryTileDisclosure}><InventoryTileHeading label="Forms" value={formObservationCount} chevron={<DisclosureChevron className="group-open/forms:rotate-180" />} /></summary>
@@ -84,7 +98,9 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
         <ul className="mt-3 max-h-48 space-y-2 overflow-y-auto text-xs leading-5 text-slate-600" aria-label="Observed forms">{forms.map(({ id, form, capturePhase }) => <li key={id}><p className="break-words font-medium">{form.title || form.surfaceType.replaceAll("_", " ")}</p><p>{form.retainedFieldCount} {form.retainedFieldCount === 1 ? "field" : "fields"} · {form.method}{capturePhase ? " · After Accept click" : ""}</p></li>)}</ul>
         <a href="#report-forms" className="mt-3 inline-block text-xs text-sky-700 hover:underline" onClick={event => { event.preventDefault(); onViewEvidence?.(); document.getElementById("report-forms")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>View forms ↗</a>
         </div>
-      </details> : <div className={`min-w-0 ${inventoryTilePadding}`}><InventoryTileHeading label="Forms" value={<InventoryCount value={formCount} updating={updating} label="Form count" />} /></div>}
+      </details> : <div className={`min-w-0 ${inventoryTilePadding}`}><InventoryTileHeading label="Forms" value={(formsSummary?.countStatus ?? formCountStatus) === "not_captured"
+        ? <span className="text-base font-medium text-slate-500">Not captured</span>
+        : <InventoryCount value={formsSummary?.totalObserved ?? formCount} updating={updating} label="Form count" />} /></div>}
       {(hiddenLinks?.count ?? 0) > 0 ? <details className="group/hidden-links min-w-0">
         <summary className={inventoryTileDisclosure}>
           <InventoryTileHeading label="Hidden links" value={<>{hiddenLinks?.count != null && hiddenLinks.lowerBound ? "≥" : ""}<ScanLiveValue value={hiddenLinks?.count} active={updating} /></>} chevron={<DisclosureChevron className="group-open/hidden-links:rotate-180" />} />
@@ -119,18 +135,6 @@ export function ReportInventorySummary({ metrics, updating = false, siteIntegrit
       </div>
     </div>
     {metrics.filter(metric => metric.note).map(metric => <p key={metric.label} className="border-t border-zinc-100 px-4 py-2 text-xs leading-5 text-slate-600">{metric.note}</p>)}
-    {technical.length ? <details className="group/technical border-t border-zinc-200">
-      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs marker:hidden hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
-        <span className="flex items-center gap-2 font-medium text-zinc-700"><DisclosureChevron className="text-zinc-400 group-open/technical:rotate-180" />Resource counts & classifications</span>
-      </summary>
-      <div className="overflow-x-auto border-t border-zinc-100 bg-white px-4 py-3">
-        <p className="mb-4 max-w-3xl text-xs leading-5 text-zinc-500">{overview ? "Each resource is counted once. Services group requests, cookies/storage and frames." : "Retained inventory counts and classifications."}</p>
-        <div className="grid grid-cols-1 gap-4 divide-y divide-zinc-200 md:min-w-[508px] md:grid-cols-3 md:gap-0 md:divide-x md:divide-y-0">{technical.map((metric, index) => <div key={metric.label} className={`min-w-0 py-0 ${index ? "pt-4 md:pt-0 md:pl-4" : ""} ${index < technical.length - 1 ? "md:pr-4" : ""}`}>
-          <p className="mb-2 text-xs font-semibold text-zinc-700">{metric.label}<span className="ml-2 font-normal text-zinc-500 tabular-nums">{metric.value?.toLocaleString() ?? "Unavailable"}</span></p>
-          <ClassificationCounts counts={metric.counts} />
-        </div>)}</div>
-      </div>
-    </details> : null}
   </section>;
 }
 

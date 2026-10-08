@@ -1,5 +1,5 @@
 import { collectionSurfaceAssessmentSchema, postAcceptReportProjectionSchema } from "@certscore/contracts";
-import { scanFormsSummarySchema, scanScoreExplanationSchema } from "@certscore/api-contracts";
+import { formCountStatus, scanFormsSummarySchema, scanScoreExplanationSchema } from "@certscore/api-contracts";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 import { deriveCanonicalOverallScoreExplanationForReport, CANONICAL_OVERALL_SCORE_VERSION } from "../../server/scans/canonical-overall-score";
@@ -25,8 +25,13 @@ export function projectScanFormsSummary(scan: ScanDetailResponse) {
     Boolean(packet.data.formSnapshotCapture || packet.data.formCapture);
   const afterAcceptObserved = retained ? afterAccept.rows.length : null;
   if (preConsentObserved === null && afterAcceptObserved === null) return null;
+  const totalObserved = (preConsentObserved ?? 0) + (afterAcceptObserved ?? 0);
+  const afterAcceptExpected = isAfterActionReportEligible(retainedConsentAssessment(scan), "accept") && packet.success &&
+    packet.data.interactionDiagnostics?.click.outcome === "completed";
+  const incomplete = preConsentCapture !== "complete" || afterAcceptExpected && (!retained || afterAccept.limited);
   return scanFormsSummarySchema.parse({ contractVersion: "certscore.forms-summary.v1",
-    scope: "starting_page_reportable_observations", totalObserved: (preConsentObserved ?? 0) + (afterAcceptObserved ?? 0),
+    scope: "starting_page_reportable_observations", totalObserved,
+    countStatus: formCountStatus(totalObserved, incomplete),
     preConsentObserved, afterAcceptObserved, preConsentCapture,
     afterAcceptCapture: !retained ? "unavailable" : afterAccept.limited ? "limited" : "retained" });
 }

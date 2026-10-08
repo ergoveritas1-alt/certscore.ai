@@ -77,3 +77,28 @@ test('sample completion after the deadline remains limited instead of invalidati
   assert.deepEqual(result.frames,[]);
   assert.equal(capture.finish(),result);
 });
+
+test('structured capture retains late fields and disclosures through the confirmed window without pixels', async () => {
+  const browser = await chromium.launch({headless:true});
+  const page = await browser.newPage();
+  try {
+    await page.route('https://structured.test/**',route=>route.fulfill({contentType:'text/html',body:`<script>
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form aria-label="Contact"><input name="email" type="email"><p>See our <a href="/privacy">Privacy policy</a></p></form>'),1000);
+      setTimeout(()=>document.querySelector('form').insertAdjacentHTML('beforeend','<input name="name">'),1550);
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form aria-label="Newsletter"><input name="newsletter" type="email"></form>'),1900);
+      </script>`}));
+    await page.goto('https://structured.test/'); const started=Date.now();
+    const capture=startPostAcceptFormCapture({page,exactTargetUrl:page.url(),parentScanStartedAtMs:started,actionDispatchedAtMs:0,windowMs:2000});
+    await new Promise(resolve=>setTimeout(resolve,400));
+    capture.continueThrough(400,2000);
+    await new Promise(resolve=>setTimeout(resolve,2100));
+    const result=capture.finish();
+    assert.equal(result.version,'post_accept_form_capture.v2');
+    assert.equal(result.status,'captured',JSON.stringify(result));
+    assert.equal(result.window?.terminalSampleCompleted,true);
+    assert.deepEqual(result.frames[0]?.forms.map(form=>form.fields.length),[2,1]);
+    assert.match(result.frames[0]?.forms[0]?.privacyDisclosure?.excerpts[0]?.text??'',/Privacy policy/);
+    assert.ok(result.frames.every(frame=>frame.capturedAtMs<=2400));
+    assert.doesNotMatch(JSON.stringify(result),/image\/|base64/);
+  } finally {await browser.close();}
+});

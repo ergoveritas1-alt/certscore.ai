@@ -9,7 +9,7 @@ export function FullSiteIdentity({ scanId, host, url, createdAt, duration, regio
   scanId: string;
   host: string;
   url?: string | null;
-  createdAt: string;
+  createdAt: ReactNode;
   duration?: ReactNode;
   region: ReactNode;
   visualEvidenceHref?: string | null;

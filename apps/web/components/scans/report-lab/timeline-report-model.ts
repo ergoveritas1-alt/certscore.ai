@@ -626,6 +626,7 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
   return {
     benchmark: scanRecord.domainBenchmark?.industry ?? "Comparable public websites",
     createdAt: formatTimestamp(scanRecord.scan.createdAt),
+    createdAtIso: scanRecord.scan.createdAt,
     startedAt: formatTimestamp(scanRecord.scan.startedAt),
     completedAt: formatTimestamp(scanRecord.scan.completedAt),
     duration: formatHeaderDuration(retainedScanDurationMs(scanRecord)),

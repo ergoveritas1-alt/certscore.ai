@@ -11,6 +11,7 @@ export const scanReportSummaryOpenApi = {
       afterAcceptObserved: { type: ["integer", "null"], minimum: 0 },
       preConsentCapture: { type: "string", enum: ["complete", "limited", "unavailable"] },
       afterAcceptCapture: { type: "string", enum: ["retained", "limited", "unavailable"] },
+      countStatus: { type: "string", enum: ["captured", "limited", "not_captured"], description: "Retained count coverage. not_captured means no rows retained from incomplete inspection; totalObserved is not verified absence." },
     },
   },
   ScoreExplanation: {

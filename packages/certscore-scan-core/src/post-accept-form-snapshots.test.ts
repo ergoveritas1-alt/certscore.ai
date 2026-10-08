@@ -244,6 +244,95 @@ test("a late form gets one bounded extension while ordinary scans keep the origi
   } finally { (page as any).evaluate = originalEvaluate; await browser.close(); }
 });
 
+test("in-window field detection survives an evaluation response delivered after the deadline", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const evaluate = page.evaluate.bind(page);
+  let extensionCalls = 0;
+  try {
+    await page.route("https://late-response.test/**", route => route.fulfill({ contentType: "text/html", body:
+      `<script>setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form><label>Email<input type="email"></label></form>'),2450)</script>` }));
+    await page.goto("https://late-response.test/");
+    (page as any).evaluate = async (...args: any[]) => {
+      const result = await (evaluate as any)(...args);
+      if (args[1]?.bindingName) await new Promise(resolve => setTimeout(resolve, 750));
+      return result;
+    };
+    const started = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(), parentScanStartedAtMs: started,
+      actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0, deadlineAtMs: started + 3000,
+      reviewer: async () => ({ safeForDisplay: true }), onLateFormDetected: () => { extensionCalls++; return started + 12500; } });
+    await new Promise(resolve => setTimeout(resolve, 3100));
+    const result = await capture.finish();
+    assert.ok(result, "a delayed response must not lose already-notified visible fields");
+    assert.equal(extensionCalls, 1);
+    assert.equal(result.inventory.forms[0]?.fields.length, 1);
+    assert.equal(result.snapshots[0]?.status, "available");
+    assert.ok(result.lateForm && result.lateForm.detectedAtMs < 3000);
+  } finally { (page as any).evaluate = evaluate; await browser.close(); }
+});
+
+test("forms first mounted outside the original window cannot activate an extension", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  let extensions = 0;
+  try {
+    await page.route("https://outside-window.test/**", route => route.fulfill({ contentType: "text/html", body:
+      `<script>setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form><input type="email"></form>'),3200)</script>` }));
+    await page.goto("https://outside-window.test/");
+    const started = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({ page, exactTargetUrl: page.url(), parentScanStartedAtMs: started,
+      actionDispatchedAtMs: 0, acceptanceRegisteredAtMs: 0, deadlineAtMs: started + 3000,
+      reviewer: async () => ({ safeForDisplay: true }), onLateFormDetected: () => { extensions++; return started + 12500; } });
+    await new Promise(resolve => setTimeout(resolve, 3250));
+    assert.equal(await capture.finish(), undefined);
+    assert.equal(extensions, 0);
+  } finally { await browser.close(); }
+});
+
+test("ordinary forms request no late extension and keep the original deadline", async () => {
+  const browser=await chromium.launch({headless:true});const page=await browser.newPage();let extensions=0;
+  try {
+    await page.route('https://ordinary.test/**',route=>route.fulfill({contentType:'text/html',body:'<form><input type="email"></form>'}));
+    await page.goto('https://ordinary.test/');const started=Date.now();
+    const capture=startRegisteredPostAcceptFormSnapshots({page,exactTargetUrl:page.url(),parentScanStartedAtMs:started,
+      actionDispatchedAtMs:0,acceptanceRegisteredAtMs:0,deadlineAtMs:started+3000,reviewer:async()=>({safeForDisplay:true}),
+      onLateFormDetected:()=>{extensions++;return started+12500;}});
+    await new Promise(resolve=>setTimeout(resolve,500));const result=await capture.finish();
+    assert.ok(result);assert.equal(result.contractVersion,'certscore.post_accept_form_snapshots.v1');
+    assert.ok(result.capturedAtMs<3000);assert.equal(extensions,0);
+  }finally{await browser.close();}
+});
+
+test("failed pixels do not discard independently retained structured fields", async () => {
+  const browser=await chromium.launch({headless:true});const originalNewContext=browser.newContext.bind(browser);
+  let submissions=0;
+  const server=createServer((request,response)=>{
+    if(request.method==='POST')submissions++;
+    response.setHeader('content-type','text/html');response.end(`<section aria-label="Cookie and analytics preferences"><p>We use analytics cookies.</p><button data-certscore-consent-action="accept">Accept</button></section><script>
+    document.querySelector('button').onclick=()=>{localStorage.setItem('certscore:analytics-consent:v1','granted');document.querySelector('section').remove();
+    setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form method="post"><label>Email<input type="email"></label><p>See our Privacy policy</p></form>'),1450);};</script>`);
+  });
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address();assert.ok(address&&typeof address!=='string');
+  try {
+    (browser as any).newContext=async(...args:any[])=>{
+      const context=await (originalNewContext as any)(...args);const newSession=context.newCDPSession.bind(context);
+      context.newCDPSession=async(...args:any[])=>{const session=await newSession(...args);const send=session.send.bind(session);
+        session.send=async(method:any,...args:any[])=>{if(method==='Page.captureScreenshot')throw new Error('Fixture pixel failure');return send(method,...args);};return session;};
+      return context;
+    };
+    const packet=await runPostAcceptObserver({browser,url:`http://127.0.0.1:${address.port}/`,scanId:'structured-pixel-failure',
+      interactionAuthorization:{authorizationId:'loopback_local_lab',kind:'loopback'},recipe:CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+      observationWindowMs:3000,confirmationTimeoutMs:500,actionSearchTimeoutMs:500,resultBudgetMs:4500,
+      formSnapshotReviewer:async()=>({safeForDisplay:true}),productionProjectable:true});
+    assert.equal(packet.acceptanceRegistration.status,'confirmed');assert.equal(packet.formSnapshotCapture,undefined);
+    assert.equal(packet.formCapture?.status,'captured',JSON.stringify(packet.formCapture));
+    assert.equal(packet.formCapture?.frames[0]?.forms[0]?.fields.length,1);
+    assert.match(packet.formCapture?.frames[0]?.forms[0]?.privacyDisclosure?.excerpts[0]?.text??'',/Privacy policy/);
+    assert.ok(postAcceptEvidencePacketSchema.safeParse(packet).success);assert.equal(submissions,0);
+  }finally{(browser as any).newContext=originalNewContext;await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
 test("pixel proof stays in the Accept window while bounded safety review finishes afterward", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();

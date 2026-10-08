@@ -1,0 +1,16 @@
+{
+  "targets": [
+    {
+      "url": "https://sits.com/en/",
+      "role": "owner_authorized_single_diagnostic",
+      "lanes": [
+        "consent_controls",
+        "third_party_attribution"
+      ]
+    }
+  ],
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28
+  },
+  "eligibilityLedger": "docs/certscore-v2/calibration-runs/2026-10-07-sits-accept-handoff/ledger.json"
+}

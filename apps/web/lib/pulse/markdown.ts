@@ -123,7 +123,10 @@ function compactFindings(findings: any[], options: { gptAction?: boolean } = {})
 function compactConsentLaneResults(pulse: PulseMarkdownInput) {
   const results: string[] = [];
   const forms = scanFormsSummarySchema.safeParse(pulse.formsSummary);
-  if (forms.success) results.push(`- Forms observed (starting page): ${forms.data.totalObserved}; pre-consent: ${forms.data.preConsentObserved ?? "unavailable"}; after Accept click: ${forms.data.afterAcceptObserved ?? "unavailable"}.`);
+  if (forms.success) {
+    const phaseCount = (count: number | null, capture: string) => count === 0 && capture === "limited" ? "not captured" : count ?? "unavailable";
+    results.push(`- Forms observed (starting page): ${forms.data.countStatus === "not_captured" ? "not captured" : forms.data.totalObserved}; pre-consent: ${phaseCount(forms.data.preConsentObserved, forms.data.preConsentCapture)}; after Accept click: ${phaseCount(forms.data.afterAcceptObserved, forms.data.afterAcceptCapture)}.`);
+  }
   const score = scanScoreExplanationSchema.safeParse(pulse.scoreExplanation);
   if (score.success) for (const family of score.data.deductions) {
     results.push(`- Canonical score deduction: ${family.deductionPoints} points (${family.label}); ` +

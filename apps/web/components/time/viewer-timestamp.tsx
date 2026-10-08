@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-const FALLBACK_TIME_ZONE = "America/Los_Angeles";
+const FALLBACK_TIME_ZONE = "UTC";
 
 type ViewerTimestampProps = {
   value: string | Date | null;
   fallback?: string;
+  includeSeconds?: boolean;
 };
 
-function formatViewerTimestampValue(value: string | Date, timeZone: string) {
+function formatViewerTimestampValue(value: string | Date, timeZone: string, includeSeconds: boolean) {
   const date = value instanceof Date ? value : new Date(value);
 
   if (Number.isNaN(date.getTime())) {
@@ -23,36 +24,21 @@ function formatViewerTimestampValue(value: string | Date, timeZone: string) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...(includeSeconds ? { second: "2-digit" as const } : {}),
     hour12: true,
     timeZoneName: "short"
   }).format(date);
 }
 
-function formatViewerTimestampFallback(value: string | Date) {
-  const date = value instanceof Date ? value : new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: FALLBACK_TIME_ZONE,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true
-  }).format(date);
-}
-
-export function ViewerTimestamp({ value, fallback = "Not available" }: ViewerTimestampProps) {
+export function ViewerTimestamp({ value, fallback = "Not available", includeSeconds = false }: ViewerTimestampProps) {
   const [timeZone, setTimeZone] = useState<string | null>(null);
 
   useEffect(() => {
-    const resolvedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (resolvedTimeZone) {
-      setTimeZone(resolvedTimeZone);
+    try {
+      const resolvedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (resolvedTimeZone) setTimeZone(resolvedTimeZone);
+    } catch {
+      // Keep the explicit UTC fallback when browser time-zone detection is unavailable.
     }
   }, []);
 
@@ -60,11 +46,12 @@ export function ViewerTimestamp({ value, fallback = "Not available" }: ViewerTim
     return <>{fallback}</>;
   }
 
-  const formatted = timeZone ? formatViewerTimestampValue(value, timeZone) : formatViewerTimestampFallback(value);
+  const formatted = formatViewerTimestampValue(value, timeZone ?? FALLBACK_TIME_ZONE, includeSeconds);
 
   if (!formatted) {
     return <>{fallback}</>;
   }
 
-  return <span suppressHydrationWarning title={timeZone ?? "Viewer local time"}>{formatted}</span>;
+  const dateTime = (value instanceof Date ? value : new Date(value)).toISOString();
+  return <time dateTime={dateTime} title={timeZone ?? FALLBACK_TIME_ZONE}>{formatted}</time>;
 }

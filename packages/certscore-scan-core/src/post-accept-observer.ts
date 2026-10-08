@@ -1145,6 +1145,8 @@ export async function runPostAcceptObserver(
       acceptanceRegisteredAtMs,
       witnesses,
     };
+    formCaptureHandle?.continueThrough(acceptanceRegisteredAtMs,
+      remainingResultBudgetMs(observationWindowMs));
 
     if (input.formSnapshotReviewer && diagnostics.click.outcome === "completed" && !actionDocumentChanged) {
       formSnapshotHandle = startRegisteredPostAcceptFormSnapshots({ page,

@@ -12,12 +12,22 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
   const parsed = postAcceptReportProjectionSchema.safeParse(runtime.postAcceptEvidenceProjection ?? runtime.post_accept_evidence_projection);
   if (!parsed.success) return empty;
   const images = parsed.data.formSnapshotCapture;
+  const capture = parsed.data.formCapture;
+  const structuredRows: CollectionSurfaceTableRow[] = capture ? capture.frames.flatMap(frame => frame.forms.map(form => ({
+    id: `after_accept:${capture.sessionId}:${form.formRef}`, form,
+    capturedAt: '', capturePhase: 'after_accept_click' as const,
+    captureLimited: capture.status === 'limited',
+    captureProvenance: {packetSha256: parsed.data.packetSha256!, sessionId:capture.sessionId,
+      frameRef:frame.frameRef, documentToken:frame.documentToken, exactTargetSha256:capture.exactTargetSha256,
+      actionDispatchedAtMs:capture.actionDispatchedAtMs,capturedAtMs:frame.capturedAtMs},
+    snapshot: { status: 'unavailable' as const, reason: 'structured_capture_only' },
+  }))) : [];
   if (images) {
     const scanId = projectConsentControlReport(retainedConsentAssessment(value))?.scanId;
     if (!scanId) return empty;
     const displayedInventory = projectPostAcceptFormInventory(images);
     if (!displayedInventory) return empty;
-    return { limited: false, rows: displayedInventory.forms.map(form => {
+    const imagedRows: CollectionSurfaceTableRow[] = displayedInventory.forms.map(form => {
       const laterSnapshot = images.contractVersion === "certscore.post_accept_form_snapshots.v6"
         ? images.postCaptureSnapshots.snapshots.find(snapshot=>snapshot.formRef===form.formRef) : undefined;
       const snapshot = images.snapshots.find(snapshot => snapshot.formRef === form.formRef) ?? laterSnapshot;
@@ -33,18 +43,12 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
           url:`/api/scans/${scanId}/form-snapshot?formRef=${encodeURIComponent(`after_accept:${form.formRef}`)}`} :
           {status:snapshot?.status ?? "unavailable" as const,reason:snapshot?.reason},
       };
-    }) };
+    });
+    // Main-document image inventory and structured embedded-frame inventory
+    // have distinct provenance. Images must not suppress the embedded forms.
+    return { limited: capture?.status === 'limited', rows: [...imagedRows,
+      ...structuredRows.filter(row => row.captureProvenance?.frameRef !== 'accept_frame_0')] };
   }
-  if (!parsed.data.formCapture) return empty;
-  const capture = parsed.data.formCapture;
-  return { limited: capture.status === 'limited', rows: capture.frames.flatMap(frame => frame.forms.map(form => ({
-    id: `after_accept:${capture.sessionId}:${form.formRef}`, form,
-    // Individual offsets are retained in the packet; completedAt is not a capture timestamp.
-    capturedAt: '', capturePhase: 'after_accept_click' as const,
-    captureLimited: capture.status === 'limited',
-    captureProvenance: {packetSha256: parsed.data.packetSha256!, sessionId:capture.sessionId,
-      frameRef:frame.frameRef, documentToken:frame.documentToken, exactTargetSha256:capture.exactTargetSha256,
-      actionDispatchedAtMs:capture.actionDispatchedAtMs,capturedAtMs:frame.capturedAtMs},
-    snapshot: { status: 'unavailable' as const, reason: 'structured_capture_only' },
-  }))) };
+  if (!capture) return { rows: [], limited: parsed.data.interactionDiagnostics?.click.outcome === 'completed' };
+  return { limited: capture.status === 'limited' || capture.version === 'post_accept_form_capture.v1', rows: structuredRows };
 }

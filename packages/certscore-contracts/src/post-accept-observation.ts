@@ -235,7 +235,13 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     packet.interactionDiagnostics?.navigation.finalUrlAuthorized !== true ||
     packet.formCapture.actionDispatchedAtMs !== packet.acceptanceRegistration.actionDispatchedAtMs ||
     packet.interactionDiagnostics?.click.outcome !== "completed" ||
-    packet.formCapture.frames.some(frame => frame.capturedAtMs > packet.timing.readyAtMs || frame.capturedAtMs > packet.formCapture!.actionDispatchedAtMs + packet.observationWindowMs))) {
+    (packet.formCapture.version === "post_accept_form_capture.v2" &&
+      (packet.formCapture.window!.startedAtMs !== (packet.acceptanceRegistration.status === "confirmed"
+        ? packet.acceptanceRegistration.acceptanceRegisteredAtMs : packet.formCapture.actionDispatchedAtMs) ||
+      packet.formCapture.window!.endedAtMs > packet.formCapture.window!.startedAtMs + packet.observationWindowMs)) ||
+    packet.formCapture.frames.some(frame => frame.capturedAtMs > packet.timing.readyAtMs || frame.capturedAtMs >
+      (packet.formCapture!.version === "post_accept_form_capture.v2" ? packet.formCapture!.window!.endedAtMs
+        : packet.formCapture!.actionDispatchedAtMs + packet.observationWindowMs)))) {
     context.addIssue({code: z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires the same completed authorized action and bounded timestamps"});
   }
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "accept", context);
@@ -563,7 +569,11 @@ export const postAcceptReportProjectionSchema = z.object({
   if (projection.formCapture && (!projection.packetSha256 ||
     projection.formCapture.exactTargetSha256 !== projection.actionControlProof?.authorizedTargetSha256 ||
     projection.interactionDiagnostics?.click.outcome !== "completed" ||
-    (projection.afterActionCapture && projection.formCapture.actionDispatchedAtMs !== projection.afterActionCapture.actionDispatchedAtMs))) {
+    (projection.afterActionCapture && projection.formCapture.actionDispatchedAtMs !== projection.afterActionCapture.actionDispatchedAtMs) ||
+    (projection.formCapture.version === "post_accept_form_capture.v2" &&
+      (projection.formCapture.window!.startedAtMs !== (projection.registrationStatus === "confirmed"
+        ? projection.acceptanceRegisteredAtMs : projection.formCapture.actionDispatchedAtMs) ||
+      projection.formCapture.window!.endedAtMs > projection.formCapture.window!.startedAtMs + projection.observationWindowMs)))) {
     context.addIssue({code:z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires retained packet provenance and completed action proof"});
   }
   validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "accept", context);

@@ -11,6 +11,15 @@ test("typed form summary preserves unavailable phases and refuses inconsistent c
   assert.equal(scanFormsSummarySchema.safeParse({ ...value, preConsentObserved: 0 }).success, false);
 });
 
+test("form count status cannot call incomplete empty capture a captured zero",()=>{
+  const value={contractVersion:'certscore.forms-summary.v1',scope:'starting_page_reportable_observations',
+    totalObserved:0,preConsentObserved:0,afterAcceptObserved:0,preConsentCapture:'complete',afterAcceptCapture:'limited',countStatus:'not_captured'};
+  assert.equal(scanFormsSummarySchema.safeParse(value).success,true);
+  assert.equal(scanFormsSummarySchema.safeParse({...value,countStatus:'captured'}).success,false);
+  assert.equal(scanFormsSummarySchema.safeParse({...value,countStatus:'limited'}).success,false);
+  assert.equal(scanFormsSummarySchema.safeParse({...value,totalObserved:1,afterAcceptObserved:1}).success,false);
+});
+
 test("typed score explanations reconcile family caps with the returned score", () => {
   const value = { contractVersion: "certscore.score-explanation.v1", scope: "starting_page_canonical_score",
     scoreVersion: "overall-score.v1", policyVersion: "gdpr-eprivacy-posture.v16", baseScore: 100, scoreFloor: 0,

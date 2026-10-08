@@ -165,6 +165,7 @@ export type ShadowReportData = {
   scan: {
     benchmark: string;
     createdAt: string;
+    createdAtIso?: string | null;
     duration: string;
     startedAt?: string;
     completedAt?: string;

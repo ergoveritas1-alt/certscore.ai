@@ -1,5 +1,9 @@
 import { z } from "zod";
 
+export function formCountStatus(totalObserved: number, incomplete: boolean): "captured" | "limited" | "not_captured" {
+  return incomplete ? totalObserved > 0 ? "limited" : "not_captured" : "captured";
+}
+
 /** Counts of retained reportable observations; never proof that untested phases have no forms. */
 export const scanFormsSummarySchema = z.object({
   contractVersion: z.literal("certscore.forms-summary.v1"),
@@ -9,11 +13,16 @@ export const scanFormsSummarySchema = z.object({
   afterAcceptObserved: z.number().int().nonnegative().nullable(),
   preConsentCapture: z.enum(["complete", "limited", "unavailable"]),
   afterAcceptCapture: z.enum(["retained", "limited", "unavailable"]),
+  countStatus: z.enum(["captured", "limited", "not_captured"]).optional(),
 }).strict().superRefine((value, ctx) => {
   if (value.totalObserved !== (value.preConsentObserved ?? 0) + (value.afterAcceptObserved ?? 0) ||
     (value.preConsentCapture === "unavailable") !== (value.preConsentObserved === null) ||
     (value.afterAcceptCapture === "unavailable") !== (value.afterAcceptObserved === null)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Form totals require retained phase counts; unavailable is not zero." });
+  }
+  if ((value.countStatus === "not_captured" && value.totalObserved !== 0) || (value.countStatus === "limited" && value.totalObserved === 0) ||
+    (value.countStatus === "captured" && (value.preConsentCapture !== "complete" || value.afterAcceptCapture === "limited"))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Incomplete empty capture cannot be a numeric zero or a positive lower bound." });
   }
 });
 

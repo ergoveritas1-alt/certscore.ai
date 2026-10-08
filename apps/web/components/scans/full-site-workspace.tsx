@@ -1,4 +1,5 @@
 "use client";
+import { formCountStatus } from "@certscore/api-contracts";
 import { trackFullSiteCompletion } from "../../lib/analytics/scan-conversions";
 import { flushSync } from "react-dom";
 import { ServicesSnapshotContext } from "./services-signal-snapshot";
@@ -492,7 +493,7 @@ export function FullSiteWorkspace({
           { label: INVENTORY_METRIC_LABELS.requests, value: data?.summary.totals.requestEvents, group: "requests" },
           { label: INVENTORY_METRIC_LABELS.frames, value: data?.summary.totals.embedInstances, group: "embeds" },
         ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined }));
-  const inventorySummary = <ReportInventorySummary forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
+  const inventorySummary = <ReportInventorySummary formCountStatus={formCountStatus((data?.collectionSurfaces?.rows.length ?? 0) + afterAcceptForms.length, !data?.collectionSurfaces || Boolean(data.collectionSurfaces.limitedPages || data.collectionSurfaces.pagesWithoutInventory || afterAcceptFormsLimited))} forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
     <FullSiteScanDurationContext.Provider value={scanDuration}>

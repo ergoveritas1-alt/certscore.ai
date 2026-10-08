@@ -1,6 +1,77 @@
 # Proposal: forms withheld until Accept
 
-Status: bounded implementation and live SITS report projection verified in an isolated AWS canary on October 7, 2026; production release pending.
+Status: production baseline released; October 7 detection-handoff fix verified locally and owner-authorized for production rollout.
+
+## October 7 follow-up: detection handoff and truthful empty counts
+
+Retained production scan `904c54d3-a7d3-4968-ba18-5fb1d9fa947f` confirmed Accept
+with the same ConsentCheckBot HTTP/native-navigator posture as the successful
+two-form scan. Its browser inventory returned one form after the original
+deadline; the extension never activated and no form image packet was retained.
+The image code had not changed between those runs.
+
+The local fix delivers bounded visible-field inventory through a main-frame
+browser binding before the full evaluation response. Only validated, in-window
+detection may request the existing one-time extension. Cancellation, exact-target
+and document checks, worker/coordinator caps, image masking and review remain
+unchanged. A stalled notification still fails closed; this is not a guarantee
+that arbitrarily late or blocked forms will be captured.
+
+Structured capture v2 resamples within the existing Accept window and retains
+its confirmed-window bounds and terminal-sample coverage independently of pixels.
+Legacy v1 samples are not reinterpreted as completed window inspection. Fields
+and local disclosures survive screenshot failure, and structured embedded forms
+are not suppressed by main-document image inventory.
+
+The shared report/API/Pulse/MCP form summary adds optional `countStatus`:
+`captured`, `limited` or `not_captured`. `totalObserved` remains the backward-
+compatible count of retained observations, not proof of absence. An incomplete
+empty inventory displays **Not captured**; completed empty inspection displays
+**0**. No finding, scoring effect or new disclaimer is added.
+
+Local delayed-response verification retained two reviewed fixture screengrabs,
+eight Contact fields, one Newsletter field and both local disclosures. Reproduce
+without public contact or paid services:
+
+```sh
+TSX_TSCONFIG_PATH=tsconfig.base.json node --import tsx scripts/verify-post-accept-form-handoff.ts
+```
+
+Review at `/dev-fixtures/post-accept-form-handoff`. This is a loopback fixture,
+not a fresh SITS scan. No deployment or customer-record rewrite was performed.
+The owner then approved one local Accept-only SITS exception. The central
+history check found no active scans, the canonical selector recorded the narrow
+cooldown override, and the existing SITS hold stayed unchanged. Fresh run
+`0273807b-785b-4683-a41b-ae7aa948be66` used ConsentCheckBot on HTTP with Chromium's
+native navigator identity, one browser context, one confirmed Borlabs Accept
+click, no retry and no form submission. It completed in 11.220 seconds and
+retained two reviewed masked images, eight contact fields and one newsletter
+field. The contact form's privacy-policy link, request-handling notice and
+optional marketing notice were retained; the newsletter disclosure was not.
+Structured capture reached its terminal sample but remained limited by the
+existing three-frame inspection cap and an unavailable frame. This does not
+invalidate the independently verified main-document inventory or images.
+The late-form extension activated at 9,336 ms, before the 10,500 ms base image
+deadline; completion used only part of the already approved allowance.
+
+Actual capture review: `/dev-fixtures/post-accept-form-handoff/sits`. This is an
+Accept-only diagnostic inventory preview, not a complete scored customer report;
+it does not fabricate a passive control assessment. Packet and image integrity,
+both browser image-serving links and the contact disclosure/field expansion were
+verified. Evidence and the reviewed manual ledger candidate are retained in
+`artifacts/sits-local-accept-handoff-20261007`. The attempted contact was persisted
+centrally with idempotent run key `sits-local-accept-handoff-20261007-one-run`.
+One-off history/contact bookkeeping is estimated below $0.06 total. There was no
+AWS scanner invocation, retry, deployment or customer-record rewrite.
+
+Focused runtime/contract, report/API/Pulse and follow-up/image tests passed
+(104 total). Contracts, scan-core, API contracts, web and MCP HTTP typechecks passed.
+The owner authorized committing and deploying this follow-up on October 7 after the fresh local verification. The release record is `docs/certscore-v2/releases/2026-10-07-form-capture-handoff.md`.
+
+Cost: no new recurring infrastructure, browser lane, model call, retained-byte
+limit, worker timeout or coordinator timeout. Work remains inside the existing
+owner-approved bounded capture allowance (upper estimate $126.55/month at
+100,000 affected scans, documented below); actual utilization can vary.
 
 Owner approval: “Approve bounded After Accept form screengrabs.” The approved scope
 is at most two masked, safety-reviewed images in the existing Accept lane, up to
@@ -255,5 +326,4 @@ The owner authorized committing, merging and deploying the complete release on
 October 7 after the successful two-image local verification. Production rollout
 must pass the full release gate, preserve the approved timing/cost bounds, and
 verify a fresh canonical production report and both image-serving paths.
-Temporary localhost review routes and live evidence remain ignored local
-artifacts and are not part of the production image.
+Local review routes are development-only and return 404 in production. Live evidence remains in ignored local artifacts and is excluded from the production image.

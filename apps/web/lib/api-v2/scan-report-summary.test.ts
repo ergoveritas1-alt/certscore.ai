@@ -46,7 +46,7 @@ function fixture(): ScanDetailResponse {
         valuesMasked: true, status: "available", width: 640, height: 400, sha256: "d".repeat(64), sizeBytes: 1000 })),
     },
   });
-  const assessment = { ...observedControlAssessment, scan: { ...observedControlAssessment.scan, scanId } };
+  const assessment = { ...structuredClone(observedControlAssessment), scan: { ...observedControlAssessment.scan, scanId } };
   const row = { id: "post_reject_tracking_reduction", label: "Post-choice tracking reduction", status: "Gap observed",
     assessmentStatus: "gap_observed", evidenceState: "observed", tone: "warning", note: "Direct post-refusal requests retained.",
     explanation: "Direct post-refusal requests retained.", subchecks: [], evidenceRefs: [],
@@ -117,6 +117,52 @@ test("unavailable, malformed or gated-off form captures do not become zero obser
   malformed.canonicalReportProjection.collectionSurfaceAssessment.scanId = "another-scan";
   malformed.runtimeArtifacts.postAcceptEvidenceProjection.packetSha256 = "invalid";
   assert.equal(projectScanFormsSummary(malformed), null);
+});
+
+test("incomplete empty After-Accept capture has the same not-captured status in report, API and evidence export", () => {
+  const scan = fixture() as any;
+  const packet=scan.runtimeArtifacts.postAcceptEvidenceProjection;
+  delete packet.formSnapshotCapture;
+  packet.formCapture={version:'post_accept_form_capture.v2',phase:'after_accept_click',sessionId:randomUUID(),
+    exactTargetSha256:'a'.repeat(64),actionDispatchedAtMs:100,status:'limited',reasonCodes:['frame_unavailable'],
+    inspectedFrameCount:0,candidateFrameCount:1,frames:[],window:{startedAtMs:110,endedAtMs:610,terminalSampleCompleted:false}};
+  assert.ok(postAcceptReportProjectionSchema.safeParse(packet).success,JSON.stringify(postAcceptReportProjectionSchema.safeParse(packet)));
+  const api=buildApiV2ScanResource(scan);
+  const status=buildApiV2ScanStatus(scan,{canonicalScan:api});
+  const report=buildTimelineReportModel(scan);
+  assert.ok('collectionTableRows' in report);
+  assert.equal(api.formsSummary?.countStatus,'not_captured');
+  assert.equal(api.formsSummary?.afterAcceptCapture,'limited');
+  assert.deepEqual(status.formsSummary,api.formsSummary);
+  assert.deepEqual(report.formsSummary,api.formsSummary);
+  const exported=buildReportDisplayExport(selectReportEvidenceSection(report as unknown as Record<string,unknown>,'forms').report) as Record<string,unknown>;
+  assert.deepEqual(exported.formsSummary,api.formsSummary);
+  assert.equal(api.score,85,'form coverage must not affect Reject scoring');
+  packet.formCapture={...packet.formCapture,status:'captured',reasonCodes:[],inspectedFrameCount:1,
+    frames:[{frameRef:'accept_frame_0',documentToken:randomUUID(),documentUrl:pageUrl,capturedAtMs:550,forms:[]}],
+    window:{startedAtMs:110,endedAtMs:610,terminalSampleCompleted:true}};
+  assert.equal(projectScanFormsSummary(scan)?.countStatus,'captured');
+  assert.equal(projectScanFormsSummary(scan)?.totalObserved,0);
+  packet.formCapture={...packet.formCapture,version:'post_accept_form_capture.v1',window:undefined};
+  assert.equal(projectScanFormsSummary(scan)?.countStatus,'not_captured','legacy early sample is not completed window coverage');
+});
+
+test("withheld screenshots preserve verified fields and disclosures in API follow-up", () => {
+  const scan=fixture() as any;
+  const images=scan.runtimeArtifacts.postAcceptEvidenceProjection.formSnapshotCapture;
+  images.snapshots=images.snapshots.map((snapshot:any)=>({contractVersion:snapshot.contractVersion,formRef:snapshot.formRef,
+    pageUrl:snapshot.pageUrl,capturedAt:snapshot.capturedAt,sourceInventoryHash:snapshot.sourceInventoryHash,mimeType:'image/jpeg',
+    valuesMasked:true,status:'withheld',reason:'review_withheld'}));
+  images.inventory.forms[0].privacyDisclosure={version:1,excerpts:[{text:'See our Privacy policy',association:'inside_form',links:[]}],truncated:false};
+  assert.ok(postAcceptReportProjectionSchema.safeParse(scan.runtimeArtifacts.postAcceptEvidenceProjection).success,
+    JSON.stringify(postAcceptReportProjectionSchema.safeParse(scan.runtimeArtifacts.postAcceptEvidenceProjection)));
+  const report=buildTimelineReportModel(scan);
+  assert.ok('collectionTableRows' in report);
+  const exported=buildReportDisplayExport(selectReportEvidenceSection(report as unknown as Record<string,unknown>,'forms').report) as any;
+  assert.deepEqual(exported.collectionTableRows.map((row:any)=>[row.form.fields.length,row.snapshot.status]),[[8,'withheld'],[1,'withheld']]);
+  assert.equal(exported.collectionTableRows[0].form.privacyDisclosure.excerpts[0].text,'See our Privacy policy');
+  assert.ok(exported.collectionTableRows.every((row:any)=>!row.snapshot.url));
+  assert.equal(exported.formsSummary.totalObserved,2);
 });
 
 test("score explanations fail closed for historical, mismatched and unscored results", () => {
