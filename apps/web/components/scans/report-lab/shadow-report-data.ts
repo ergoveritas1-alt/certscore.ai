@@ -178,6 +178,8 @@ export type ShadowReportData = {
     visualEvidenceHref?: string | null;
   };
   score: { label: string; value: number };
+  formsSummary?: import("@certscore/api-contracts").ScanFormsSummary | null;
+  scoreExplanation?: import("@certscore/api-contracts").ScanScoreExplanation | null;
   metrics: {
     domains: number;
     fields: number;

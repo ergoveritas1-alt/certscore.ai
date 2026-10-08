@@ -73,7 +73,7 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       const exportedReport = fullSite ? { ...report, fullSiteReport: fullSiteEvidenceExport(scanId, fullSite) } : report;
       const selected = section ? selectReportEvidenceSection(exportedReport, section) : null;
       sectionSelection = selected?.selection;
-      const projected = buildReportDisplayExport(selected?.report ?? exportedReport);
+      const projected = buildReportDisplayExport(selected?.report ?? exportedReport, { scanId });
       displayReport = selected ? { ...projected, exportContent: { ...projected.exportContent, section, selection: selected.selection } } : projected;
     }
     const serialized = JSON.stringify(displayReport);

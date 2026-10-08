@@ -1,3 +1,5 @@
+import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
+import { projectScanFormsSummary, projectScanScoreExplanation } from "../../../lib/api-v2/scan-report-summary";
 import { projectPostAcceptForms } from "../../../lib/scans/post-accept-form-projection";
 import { projectSuccessfulActionTimeline } from "../../../lib/scans/action-timeline-projection";
 import { readPrivacyAuditEvidence } from "../../../lib/scans/report-review-focus";
@@ -406,26 +408,8 @@ function mapChecklistFinding(
     if (/privacy|policy|disclosure|retention|rights|transfer|controller|recipient/i.test(row.id)) return "Policy & transparency";
     return finding.section;
   })();
-  const postRejectCopy = (() => {
-    if (row?.id !== "post_reject_tracking_reduction") return null;
-    const retainedEvidence = record(row.evidenceJson.retainedEvidence);
-    if (isPersistenceOnlyRejectEvidence(retainedEvidence)) {
-      return {
-        summary: "The same classified non-essential identifier remained stored after confirmed Reject. No qualifying post-Reject request or storage write was retained; stored presence alone does not show active use.",
-        title: "Same non-essential identifier remained stored after Reject",
-      };
-    }
-    if (retainedEvidence?.refusalSignalContradictsAction === true) {
-      return {
-        summary: "The cookie banner’s Reject control was confirmed, but the retained consent state still encoded granted purposes afterward.",
-        title: "Consent state contradicted confirmed Reject",
-      };
-    }
-    return {
-      summary: "After the cookie banner’s Reject control was confirmed, qualifying non-essential requests or storage writes were retained in the post-Reject window.",
-      title: "Non-essential activity after confirmed Reject",
-    };
-  })();
+  const postRejectCopy = row?.id === "post_reject_tracking_reduction"
+    ? describePostRejectFinding(row.evidenceJson.retainedEvidence) : null;
   const summary = (() => {
     if (postRejectCopy) return postRejectCopy.summary;
     if (finding.id === "acceptance_signal_contradicts_action") {
@@ -783,9 +767,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
       atMs: event.atMs,
       detail: event.label === "Consent banner"
         ? Object.entries(controls).filter(([, state]) => state !== "Unknown").map(([name, state]) => `${name}: ${state}`).join(" · ") || "Consent inspection incomplete"
-        : `${event.label} first observed`,
+        : event.detail ?? `${event.label} first observed`,
       label: event.label,
-      tone: event.label === "Consent banner" ? "positive" as const : event.tone === "rose" || event.tone === "amber" ? "concern" as const : "neutral" as const,
+      tone: event.label === "Consent banner" ? "positive" as const : event.tone === "rose" ? "concern" as const : "neutral" as const,
       vendor: event.vendorLabel ?? undefined,
     })),
   ];
@@ -818,6 +802,12 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     limitedItems: reportableChecklistRows.filter((row) => checklistStatus(row) === "Limited").map((row) => row.label),
     positiveCount: summaryCounts.positive_signal,
     priorityIntroduction: formDestinationPriority ?? cmsPriority,
+    preConsentConcerns: {
+      storage: reportableChecklistRows.some(row => row.id === "pre_consent_cookies_storage" &&
+        (row.status === "Gap observed" || row.status === "Review signal")),
+      tracking: reportableChecklistRows.some(row => CHECKLIST_GROUPS.tracking.has(row.id) &&
+        (row.status === "Gap observed" || row.status === "Review signal")),
+    },
     rejectPath,
     timeline,
     transportPositiveCount: evidenceRows.filter((row) => CHECKLIST_GROUPS.transport.has(row.id) && row.status === "Observed").length,
@@ -936,6 +926,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     relatedRows: [],
     scan: buildReportIdentity(scanRecord),
     score: { label: scoreLabel(score), value: score },
+    formsSummary: projectScanFormsSummary(scanRecord),
+    scoreExplanation: projectScanScoreExplanation(scanRecord, score),
     timeline,
     trackingExternalRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.tracking.has(row.id)),
     trackerVendors: [...vendorSurface.resolvedVendorNames, ...vendorSurface.unresolvedVendorHosts],

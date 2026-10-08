@@ -1,4 +1,8 @@
 import { SCORING_POLICY_VERSION } from "./scoring-policy";
+import { projectScanScoreExplanation } from "../api-v2/scan-report-summary";
+import { CANONICAL_OVERALL_SCORE_VERSION } from "./california-gpc-response-policy";
+import { observedControlAssessment } from "./test-fixtures/observed-control-assessment";
+import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -250,6 +254,17 @@ test("confirmed post-refusal evidence reaches canonical concerns, findings, chec
   }));
 
   assert.equal(result.reportProjection.postRefusalActivity.length, 2);
+  assert.deepEqual(result.postRejectRow.criticalEvidence.retainedEvidence.postRejectActivityDetails, {
+    version: 1,
+    activityCount: 2,
+    networkRequestCount: 1,
+    storageWriteCount: 1,
+    vendorAttributedActivityCount: 2,
+    vendors: ["Example Analytics"],
+    timedActivityCount: 2,
+    firstObservedMsAfterReject: 120,
+    lastObservedMsAfterReject: 150,
+  });
   assert.equal(
     result.reportProjection.postRefusalActivity.some((row) => row.requestId === inFlightRequest.requestId),
     false,
@@ -580,6 +595,17 @@ test("verified generic Reject click plus tracking produces one scored review wit
   const display = displays.find((row) => row.unifiedFindingId === "post_reject_click_tracking");
   assert.equal(display?.presentationDecision.status, "surface", JSON.stringify(display?.presentationDecision));
   assert.match(JSON.stringify(display), /Tracking after Reject click/);
+  const record = { scan: { id: "scan-1", status: "completed" },
+    snapshot: { score_version: CANONICAL_OVERALL_SCORE_VERSION },
+    runtimeArtifacts: { ...result.runtimeArtifacts, consentControlAssessment: observedControlAssessment },
+    canonicalReportProjection: { artifactVersion: "persisted-canonical-report-projection-v2", checklistRows: [result.postRejectRow],
+      derivedContext: {}, collectionSurfaceAssessment: null, legacyScoreAssessmentInput: { scanId: "scan-1" },
+      normalizedConcerns: result.normalizedConcerns, globalUnifiedFindings: displays, ownerUnifiedFindings: displays, topFindingIds: [] },
+  } as unknown as ScanDetailResponse;
+  const explanation = projectScanScoreExplanation(record, 85)!;
+  assert.equal(explanation.totalPolicyDeductionPoints, 15);
+  assert.equal(explanation.deductions[0]?.rules[0]?.decisionVerification, "unconfirmed");
+  assert.ok(explanation.deductions[0]?.rules[0]?.findingIds.includes("post_reject_click_tracking"));
 
   const existing = { assessmentStatus: "gap_observed", evidenceState: "observed", id: "transport_security_http_redirect",
     criticalEvidence: { retainedEvidence: { httpProbeOutcome: "plaintext_response_served", httpProbeStatus: 200 } }, status: "Gap observed" };

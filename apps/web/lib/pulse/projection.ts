@@ -1,3 +1,4 @@
+import { projectScanFormsSummary, projectScanScoreExplanation } from "../api-v2/scan-report-summary";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { projectScanReportNoGo, resolveScanReportScore } from "../scans/scan-report-disposition";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
@@ -1742,6 +1743,8 @@ function buildSummaryArtifact(input: {
     gpcResponse: input.base.gpcResponse,
     postAcceptObservation: input.base.postAcceptObservation,
     postRefusalObservation: input.base.postRefusalObservation,
+    formsSummary: input.base.formsSummary,
+    scoreExplanation: input.base.scoreExplanation,
     timestamps: input.timestamps,
     summary: input.base.summary,
     executiveSummary: input.base.executiveSummary,
@@ -1942,6 +1945,8 @@ function buildEvidenceArtifact(input: {
     gpcResponse: input.base.gpcResponse,
     postAcceptObservation: input.base.postAcceptObservation,
     postRefusalObservation: input.base.postRefusalObservation,
+    formsSummary: input.base.formsSummary,
+    scoreExplanation: input.base.scoreExplanation,
     resultDisposition: input.base.resultDisposition,
     noGo: input.base.noGo,
     timestamps: input.timestamps,
@@ -2475,6 +2480,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     gpcResponse,
     postAcceptObservation,
     postRefusalObservation,
+    formsSummary: projectScanFormsSummary(hydratedScanRecord),
+    scoreExplanation: projectScanScoreExplanation(hydratedScanRecord, score),
     summary,
     executiveSummary,
     surfacedResults,
@@ -2505,6 +2512,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
       resultDisposition: base.resultDisposition,
       noGo: base.noGo,
       summary: tinySummary,
+      formsSummary: base.formsSummary,
+      scoreExplanation: base.scoreExplanation,
       counts: base.counts,
       topFindings: topFindings.map((finding) => ({
         id: finding.id,

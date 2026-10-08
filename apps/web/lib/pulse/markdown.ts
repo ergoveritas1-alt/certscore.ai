@@ -1,5 +1,5 @@
 import { PULSE_PURPOSE_STATEMENT, PULSE_STANDARD_DISCLAIMER } from "./constants";
-import { apiV2GpcResponseSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
+import { apiV2GpcResponseSchema, scanFormsSummarySchema, scanScoreExplanationSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 import { getRegulatoryLensAnchor } from "../scans/regulatory-lens-anchor";
 
 type PulseMarkdownInput = Record<string, any>;
@@ -122,6 +122,13 @@ function compactFindings(findings: any[], options: { gptAction?: boolean } = {})
 
 function compactConsentLaneResults(pulse: PulseMarkdownInput) {
   const results: string[] = [];
+  const forms = scanFormsSummarySchema.safeParse(pulse.formsSummary);
+  if (forms.success) results.push(`- Forms observed (starting page): ${forms.data.totalObserved}; pre-consent: ${forms.data.preConsentObserved ?? "unavailable"}; after Accept click: ${forms.data.afterAcceptObserved ?? "unavailable"}.`);
+  const score = scanScoreExplanationSchema.safeParse(pulse.scoreExplanation);
+  if (score.success) for (const family of score.data.deductions) {
+    results.push(`- Canonical score deduction: ${family.deductionPoints} points (${family.label}); ` +
+      family.rules.map(rule => `${rule.ruleId}${rule.decisionVerification === "not_applicable" ? "" : `; decision verification: ${rule.decisionVerification}`}`).join(", ") + ".");
+  }
   const gpc = pulse.gpcResponse;
   if (gpc && typeof gpc === "object") {
     const activity = apiV2GpcResponseSchema.safeParse(gpc);

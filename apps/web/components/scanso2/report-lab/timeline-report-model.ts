@@ -1,3 +1,4 @@
+import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../../lib/scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../../../lib/scans/choice-path-execution";
 import { consentControlReportLabels } from "../../../lib/scans/consent-control-report";
@@ -394,26 +395,8 @@ function mapChecklistFinding(
     if (/privacy|policy|disclosure|retention|rights|transfer|controller|recipient/i.test(row.id)) return "Policy & transparency";
     return finding.section;
   })();
-  const postRejectCopy = (() => {
-    if (row?.id !== "post_reject_tracking_reduction") return null;
-    const retainedEvidence = record(row.evidenceJson.retainedEvidence);
-    if (isPersistenceOnlyRejectEvidence(retainedEvidence)) {
-      return {
-        summary: "The same classified non-essential identifier remained stored after confirmed Reject. No qualifying post-Reject request or storage write was retained; stored presence alone does not show active use.",
-        title: "Same non-essential identifier remained stored after Reject",
-      };
-    }
-    if (retainedEvidence?.refusalSignalContradictsAction === true) {
-      return {
-        summary: "The cookie banner’s Reject control was confirmed, but the retained consent state still encoded granted purposes afterward.",
-        title: "Consent state contradicted confirmed Reject",
-      };
-    }
-    return {
-      summary: "After the cookie banner’s Reject control was confirmed, qualifying non-essential requests or storage writes were retained in the post-Reject window.",
-      title: "Non-essential activity after confirmed Reject",
-    };
-  })();
+  const postRejectCopy = row?.id === "post_reject_tracking_reduction"
+    ? describePostRejectFinding(row.evidenceJson.retainedEvidence) : null;
   const summary = (() => {
     if (postRejectCopy) return postRejectCopy.summary;
     if (finding.id === "acceptance_signal_contradicts_action") {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cmsVersionEvidenceSchema, WORDPRESS_RELEASE } from "./cms-version-evidence";
 import { CMS_CATALOGUE_VERSION, CMS_CATALOGUE_V1, CMS_CATALOGUE_REVIEWED_AT, CMS_SECURITY_RULES, CMS_SECURITY_RULES_V1, type CmsProduct, type CmsRange } from "./cms-security-catalog";
 export { CMS_CATALOGUE_VERSION, CMS_CATALOGUE_REVIEWED_AT, CMS_SECURITY_RULES } from "./cms-security-catalog";
 export const CMS_SECURITY_FINDING_ID = "site_integrity_cms_security";
@@ -18,8 +19,8 @@ export function cmsSafeUrl(value: string): string | null {
   try { const u = new URL(value); if (!/^https?:$/.test(u.protocol) || u.username || u.password) return null; u.search = ""; u.hash = ""; return u.href.length <= 2048 ? u.href : null; } catch { return null; }
 }
 export const cmsSignalSchema = z.object({
-  evidenceRef: z.string().regex(/^site_integrity:(?:dom|asset):\d+$/),
-  kind: z.enum(["meta_generator", "asset_path"]), value: z.string().min(1).max(512),
+  evidenceRef: z.string().regex(/^site_integrity:(?:dom|asset|version):\d+$/),
+  kind: z.enum(["meta_generator", "asset_path", "html_generator_comment", "core_asset_version", "feed_generator"]), versionEvidence: cmsVersionEvidenceSchema.optional(), value: z.string().min(1).max(512),
   sourceUrl: publicUrl, artifactRef: z.string().min(1).max(256),
 }).strict();
 export type CmsSignal = z.infer<typeof cmsSignalSchema>;
@@ -41,6 +42,7 @@ export function matchesCmsRange(version: string, range: CmsRange) {
 export function cmsRangeLabel(range: CmsRange) { return `>= ${range.min} ${range.maxInclusive ? "<=" : "<"} ${range.max}`; }
 const hosted = new Set<CmsProduct>(["shopify", "wix", "squarespace"]);
 function identify(signal: CmsSignal) {
+  if (signal.versionEvidence) return [{ product: "wordpress" as const, observedVersion: signal.versionEvidence.version }];
   return (Object.keys(CMS_NAMES) as CmsProduct[]).flatMap(product => {
     if (signal.kind === "asset_path") {
       const pattern = CMS_ASSET_PATTERNS[product];
@@ -51,23 +53,25 @@ function identify(signal: CmsSignal) {
     return match ? [{ product, observedVersion: match[1] ?? null }] : [];
   });
 }
-export function assessCmsSignals(signals: CmsSignal[], assessedAt: string, catalogueVersion: typeof CMS_CATALOGUE_VERSION | typeof CMS_CATALOGUE_V1 = CMS_CATALOGUE_VERSION) {
+export function assessCmsSignals(signals: CmsSignal[], assessedAt: string, catalogueVersion: typeof CMS_CATALOGUE_VERSION | typeof CMS_CATALOGUE_V1 = CMS_CATALOGUE_VERSION, evidencePolicy: "v1" | "v2" = "v1") {
   const rules = catalogueVersion === CMS_CATALOGUE_V1 ? CMS_SECURITY_RULES_V1 : CMS_SECURITY_RULES;
   const candidates = signals.flatMap(signal => identify(signal).map(detection => ({ ...detection, signal })));
   const products = [...new Set(candidates.map(row => row.product))];
   const detections = products.map((product, index) => {
     const rows = candidates.filter(row => row.product === product);
-    const declarations = rows.filter(row => row.signal.kind === "meta_generator");
-    const observedVersions = [...new Set(declarations.map(row => row.observedVersion).filter((v): v is string => v !== null))];
+    const declarations = rows.filter(row => row.signal.kind === "meta_generator" || evidencePolicy === "v2" && ["html_generator_comment", "feed_generator"].includes(row.signal.kind));
+    const versionRows = evidencePolicy === "v2" && !declarations.some(row => row.observedVersion) ? rows.filter(row => row.signal.kind === "core_asset_version") : declarations;
+    const observedVersions = [...new Set(versionRows.map(row => row.observedVersion).filter((v): v is string => v !== null))];
     const candidate = observedVersions.length === 1 ? observedVersions[0]! : null;
-    const exact = candidate && compareCmsVersions(candidate, candidate) === 0 &&
+    const comparableVersion = candidate && evidencePolicy === "v2" && product === "wordpress" && WORDPRESS_RELEASE.test(candidate) && candidate.split(".").length === 2 ? `${candidate}.0` : candidate;
+    const exact = candidate && comparableVersion && compareCmsVersions(comparableVersion, comparableVersion) === 0 &&
       (!candidate.includes("-p") || ["magento", "adobe-commerce"].includes(product)) &&
-      (product === "opencart" ? /^\d+\.\d+\.\d+\.\d+$/.test(candidate) : product === "prestashop" ? /^\d+\.\d+\.\d+(?:\.\d+)?$/.test(candidate) : /^\d+\.\d+\.\d+(?:-p\d+)?$/.test(candidate));
+      (product === "opencart" ? /^\d+\.\d+\.\d+\.\d+$/.test(candidate) : product === "prestashop" ? /^\d+\.\d+\.\d+(?:\.\d+)?$/.test(candidate) : product === "wordpress" && evidencePolicy === "v2" ? WORDPRESS_RELEASE.test(candidate) : /^\d+\.\d+\.\d+(?:-p\d+)?$/.test(candidate));
     // A page declaring multiple CMS products is ambiguous; do not guess which owns a version.
-    const version = exact && products.length === 1 && declarations.every(row => row.observedVersion === candidate) ? candidate : null;
+    const version = exact && products.length === 1 && (evidencePolicy === "v2" ? declarations.filter(row => row.observedVersion !== null) : declarations).every(row => row.observedVersion === candidate) && declarations.some(row => row.observedVersion === candidate) ? candidate : null;
     return { evidenceRef: `site_integrity:cms:${index}`, product, name: CMS_NAMES[product],
-      observedVersions, version, versionBasis: declarations.length ? "declared" as const : "inferred" as const,
-      confidence: declarations.length ? "high" as const : "medium" as const,
+      observedVersions, version, versionBasis: versionRows.some(row => row.signal.kind === "core_asset_version") ? "inferred" as const : declarations.length ? "declared" as const : "inferred" as const,
+      confidence: versionRows.some(row => row.signal.kind === "core_asset_version") ? "medium" as const : declarations.length ? "high" as const : "medium" as const,
       runtimeVersionConfirmed: false as const, informationalOnly: hosted.has(product),
       evidenceRefs: rows.map(row => row.signal.evidenceRef),
       versionStatus: hosted.has(product) ? "hosted_service" : version ? "declared_exact" : observedVersions.length > 1 || products.length > 1 ? "conflicting" : "unknown_or_partial",
@@ -76,9 +80,11 @@ export function assessCmsSignals(signals: CmsSignal[], assessedAt: string, catal
   let vulnIndex = 0, lifecycleIndex = 0;
   const matches = detections.flatMap(detection => {
     if (!detection.version || detection.informationalOnly) return [];
+    const retainedVersion = detection.version;
     return rules.flatMap(rule => {
       if (!rule.products.includes(detection.product) || rule.effectiveAt > assessedAt.slice(0, 10)) return [];
-      const range = rule.ranges.find(range => matchesCmsRange(detection.version!, range));
+      const comparable = evidencePolicy === "v2" && detection.product === "wordpress" && retainedVersion.split(".").length === 2 ? `${retainedVersion}.0` : retainedVersion;
+      const range = rule.ranges.find(range => matchesCmsRange(comparable, range));
       if (!range) return [];
       return [{ evidenceRef: `site_integrity:${rule.kind === "vulnerability" ? `vuln:${vulnIndex++}` : `lifecycle:${lifecycleIndex++}`}`,
         detectionRef: detection.evidenceRef, observedVersion: detection.version, confidence: detection.confidence,
@@ -88,12 +94,58 @@ export function assessCmsSignals(signals: CmsSignal[], assessedAt: string, catal
   return { catalogueVersion, catalogueReviewedAt: CMS_CATALOGUE_REVIEWED_AT, detections, matches };
 }
 export type CmsAssessment = ReturnType<typeof assessCmsSignals>;
+/** Informational inventory from retained declarations/paths; never core versions or advisory inputs. */
+const wordpressPlugins = [
+  { id: "sitepress-multilingual-cms", name: "WPML", generator: /^WPML(?:\s+ver:([0-9]+(?:\.[0-9]+){1,3}))?(?=\s|$)/i },
+  { id: "wp-rocket", name: "WP Rocket", generator: /^WP Rocket(?:\s+([0-9]+(?:\.[0-9]+){1,3}))?\s*$/i },
+  { id: "js_composer", name: "WPBakery Page Builder", generator: /^Powered by WPBakery Page Builder - drag and drop page builder for WordPress\.?$/i },
+  { id: "borlabs-cookie", name: "Borlabs Cookie" },
+  { id: "svg-support", name: "SVG Support" },
+] as const;
+const cmsPluginDetectionSchema = z.object({
+  evidenceRef: z.string().regex(/^site_integrity:plugin:\d+$/),
+  id: z.string().regex(/^[a-z0-9_-]{1,80}$/), name: z.string().min(1).max(80),
+  version: z.string().regex(/^[0-9]+(?:\.[0-9]+){1,3}$/).nullable(),
+  observedVersions: z.array(z.string().regex(/^[0-9]+(?:\.[0-9]+){1,3}$/)).max(8),
+  versionStatus: z.enum(["declared", "not_detected", "conflicting"]),
+  evidenceRefs: z.array(z.string().regex(/^site_integrity:(?:dom|asset):\d+$/)).min(1).max(14),
+}).strict();
+export const cmsPluginInventorySchema = z.object({
+  contractVersion: z.literal("certscore.cms-plugin-inventory.v1"),
+  detections: z.array(cmsPluginDetectionSchema).max(14),
+}).strict();
+export type CmsPluginInventory = z.infer<typeof cmsPluginInventorySchema>;
+export function assessCmsPluginSignals(signals: CmsSignal[]): CmsPluginInventory {
+  const candidates = signals.flatMap(signal => {
+    if (signal.kind === "meta_generator") return wordpressPlugins.flatMap(plugin => {
+      const match = "generator" in plugin ? plugin.generator.exec(signal.value) : null;
+      return match ? [{ id: plugin.id as string, name: plugin.name as string, version: match[1] ?? null, evidenceRef: signal.evidenceRef }] : [];
+    });
+    if (signal.kind !== "asset_path") return [];
+    // A retained same-site plugin directory identifies an asset, not an installed/core version.
+    const id = /\/wp-content\/plugins\/([a-z0-9_-]{1,80})\//i.exec(signal.value)?.[1]?.toLowerCase();
+    if (!id) return [];
+    const plugin = wordpressPlugins.find(row => row.id === id);
+    return [{ id, name: plugin?.name ?? id, version: null, evidenceRef: signal.evidenceRef }];
+  });
+  const ids = [...new Set(candidates.map(row => row.id))];
+  return { contractVersion: "certscore.cms-plugin-inventory.v1", detections: ids.map((id, index) => {
+    const rows = candidates.filter(row => row.id === id);
+    const observedVersions = [...new Set(rows.flatMap(row => row.version ? [row.version] : []))];
+    return { evidenceRef: `site_integrity:plugin:${index}`, id, name: rows[0]!.name,
+      version: observedVersions.length === 1 ? observedVersions[0]! : null, observedVersions,
+      versionStatus: observedVersions.length === 1 ? "declared" : observedVersions.length > 1 ? "conflicting" : "not_detected",
+      evidenceRefs: rows.map(row => row.evidenceRef),
+    };
+  }) };
+}
 const projectionBase = z.object({
-  contractVersion: z.literal("certscore.cms-security-projection.v1"), scanId: z.string().min(1),
+  contractVersion: z.enum(["certscore.cms-security-projection.v1", "certscore.cms-security-projection.v2"]), scanId: z.string().min(1),
   verificationStatus: z.literal("verified"), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   documentUrl: publicUrl, documentToken: z.string().min(1), capturedAt: z.string().datetime(),
-  evidenceRef: z.string().min(1).max(256), signals: z.array(cmsSignalSchema).max(14),
+  evidenceRef: z.string().min(1).max(256), signals: z.array(cmsSignalSchema).max(22),
   assessment: z.custom<CmsAssessment>(),
+  pluginInventory: cmsPluginInventorySchema.optional(),
 }).strict();
 // JSONB may reorder object keys. Compare the bounded expected shape, not serialization order.
 function sameAssessment(actual: unknown, expected: unknown): boolean {
@@ -109,12 +161,25 @@ export const cmsSecurityProjectionSchema = projectionBase.superRefine((value, ct
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Unknown CMS catalogue version" });
     return;
   }
-  const expected = assessCmsSignals(value.signals, value.capturedAt, version);
+  const policy = value.contractVersion === "certscore.cms-security-projection.v2" ? "v2" : "v1";
+  if (policy === "v1" && (value.signals.length > 14 || value.signals.some(row => row.versionEvidence || !["meta_generator", "asset_path"].includes(row.kind)))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Historical CMS projections cannot acquire new version evidence" });
+  }
+  const expected = assessCmsSignals(value.signals, value.capturedAt, version, policy);
   if (!sameAssessment(value.assessment, expected)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CMS assessment must reproduce the versioned catalogue match" });
+  if (value.pluginInventory && !sameAssessment(value.pluginInventory, assessCmsPluginSignals(value.signals)))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CMS plugin inventory must reproduce retained declarations and paths" });
   const refs = value.signals.map(row => row.evidenceRef);
-  if (new Set(refs).size !== refs.length || value.signals.some(row => row.sourceUrl !== value.documentUrl && row.kind === "meta_generator" ||
-      row.kind === "asset_path" && (new URL(row.sourceUrl).origin !== new URL(value.documentUrl).origin || new URL(row.sourceUrl).pathname !== row.value) ||
-      !row.evidenceRef.startsWith(`site_integrity:${row.kind === "meta_generator" ? "dom" : "asset"}:`)))
+  const documentOrigin = new URL(value.documentUrl).origin;
+  const invalidSignal = value.signals.some(row => {
+    if (row.kind === "meta_generator") return row.versionEvidence !== undefined || row.sourceUrl !== value.documentUrl || !row.evidenceRef.startsWith("site_integrity:dom:");
+    if (row.kind === "asset_path") return row.versionEvidence !== undefined || new URL(row.sourceUrl).origin !== documentOrigin || new URL(row.sourceUrl).pathname !== row.value || !row.evidenceRef.startsWith("site_integrity:asset:");
+    const proof = row.versionEvidence;
+    return !proof || proof.kind !== row.kind || proof.value !== row.value || proof.sourceUrl !== row.sourceUrl || new URL(row.sourceUrl).origin !== documentOrigin ||
+      !row.evidenceRef.startsWith("site_integrity:version:") || row.kind === "html_generator_comment" && row.sourceUrl !== value.documentUrl ||
+      proof.kind === "feed_generator" && proof.linkedFrom !== value.documentUrl;
+  });
+  if (new Set(refs).size !== refs.length || invalidSignal)
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CMS evidence references must be unique and document-bound" });
 });
 export type CmsSecurityProjection = z.infer<typeof cmsSecurityProjectionSchema>;
@@ -132,5 +197,5 @@ export function cmsSecurityCopy(projection: CmsSecurityProjection) {
 }
 /** All references are scoped to this scan/document and resolve to retained values or catalogue records. */
 export function resolveCmsEvidence(projection: CmsSecurityProjection, reference: string) {
-  return projection.signals.find(row => row.evidenceRef === reference) ?? projection.assessment.detections.find(row => row.evidenceRef === reference) ?? projection.assessment.matches.find(row => row.evidenceRef === reference) ?? null;
+  return projection.signals.find(row => row.evidenceRef === reference) ?? projection.assessment.detections.find(row => row.evidenceRef === reference) ?? projection.assessment.matches.find(row => row.evidenceRef === reference) ?? projection.pluginInventory?.detections.find(row => row.evidenceRef === reference) ?? null;
 }

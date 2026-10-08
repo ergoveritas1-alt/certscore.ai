@@ -1,3 +1,4 @@
+import { scanFormsSummarySchema, scanScoreExplanationSchema } from "./scan-report-summary.js";
 import { privacyAuditSummarySchema } from "./privacy-audit.js";
 import { z } from "zod";
 import { reportEvidencePageSchema, reportEvidenceSectionSchema } from "./report-page.js";
@@ -287,6 +288,8 @@ export const mcpScanSiteOutputSchema = z
     gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable(),
     postAcceptObservation: apiV2ScanResourceSchema.shape.postAcceptObservation.nullable(),
     postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
+    formsSummary: scanFormsSummarySchema.nullable().optional(),
+    scoreExplanation: scanScoreExplanationSchema.nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
     preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     error: mcpActionableErrorSchema.nullable(),
@@ -331,6 +334,8 @@ export const mcpScanStatusOutputSchema = z
     gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable(),
     postAcceptObservation: apiV2ScanResourceSchema.shape.postAcceptObservation.nullable(),
     postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
+    formsSummary: scanFormsSummarySchema.nullable().optional(),
+    scoreExplanation: scanScoreExplanationSchema.nullable().optional(),
     coverage: apiV2ScanResourceSchema.shape.coverage.nullable().optional(),
     preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
     phase: z.string().optional(),
@@ -391,11 +396,11 @@ export const mcpScanBundleOutputSchema: z.ZodType<Record<string, unknown>> = z
       scope: z.literal("returned_canonical_projection"),
       baseline: z.object({ scanId: z.string(), url: z.string().nullable(), completedAt: z.string().nullable(), scanFrom: apiV2ScanFromSchema.nullable(), reportUrl: z.string().nullable() }).strict(),
       evidenceIndex: z.array(z.object({
-        key: z.enum(["findings", "tracking", "privacy", "gpc", "accept", "reject", "transport", "report"]),
+        key: z.enum(["findings", "tracking", "privacy", "gpc", "accept", "reject", "forms", "transport", "report"]),
         label: z.string(), delivery: z.enum(["included", "omitted", "not_returned"]),
         returned: z.number().int().nonnegative().optional(), total: z.number().int().nonnegative().optional(),
         retrieval: z.object({ tool: z.literal("certscore_get_report_evidence_page"), arguments: z.object({ scanId: z.string(), section: reportEvidenceSectionSchema }).strict(), createsScan: z.literal(false) }).strict().optional(),
-      }).strict()).max(8),
+      }).strict()).max(9),
       nextActions: z.array(z.object({ tool: z.literal("certscore_get_report_evidence_page"), arguments: z.object({ scanId: z.string(), workpaper: z.literal("tracking").optional() }).strict(), createsScan: z.literal(false), reason: z.string() }).strict()).max(2),
       optionalReview: z.string(), interpretation: z.string(),
     }).strict().optional(),
@@ -416,6 +421,8 @@ export const mcpScanBundleOutputSchema: z.ZodType<Record<string, unknown>> = z
     gpcResponse: apiV2ScanResourceSchema.shape.gpcResponse.nullable().optional(),
     postAcceptObservation: apiV2ScanResourceSchema.shape.postAcceptObservation.nullable(),
     postRefusalObservation: apiV2ScanResourceSchema.shape.postRefusalObservation.nullable(),
+    formsSummary: scanFormsSummarySchema.nullable().optional(),
+    scoreExplanation: scanScoreExplanationSchema.nullable().optional(),
     provenance: mcpScanProvenanceSchema,
     interpretationGuidance: mcpInterpretationGuidanceSchema,
     resultDisposition: scanResultDispositionSchema.nullable().optional(),

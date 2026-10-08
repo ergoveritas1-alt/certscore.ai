@@ -50,3 +50,21 @@ test("confirmed Reject uses retained registration and completion offsets, never 
   const issue = projectSuccessfulActionTimeline(projection, observedControlAssessment, "reject", "concern")!;
   assert.deepEqual(issue.events.map(event => event.tone), ["positive", "concern", "neutral"]);
 });
+
+
+test("ordinary Accept activity stays neutral even if a caller requests concern coloring", () => {
+  const projection = { ...completedActionProjection("accept"), afterActionCapture: undefined,
+    afterActionRequests: undefined, afterActionStorage: undefined, status: "confirmed_observation",
+    registrationStatus: "confirmed", acceptanceExercised: true, acceptanceRegisteredAtMs: 500,
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "granted", basis: "verified_state",
+      observedStateSha256: "b".repeat(64), observedAtMs: 500, timestampBasis: "verified_state_observed" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 }, observationCount: 1,
+    registeredObservationCompletion: { policyVersion: "registered_action_observation_completion.v1", action: "accept",
+      startedAtMs: 500, completedAtMs: 1900, requiredWindowMs: 1000, termination: "window_elapsed" },
+    postAcceptActivity: [{ activityType: "network_request", category: "analytics", consentState: "post_accept",
+      msAfterAccept: 250, nonEssential: true, vendor: "Example", hostname: "analytics.example.test" }],
+  };
+  const result = projectSuccessfulActionTimeline(projection, observedControlAssessment, "accept", "concern");
+  assert.ok(result);
+  assert.deepEqual(result.events.map(event => event.tone), ["positive", "neutral", "neutral"]);
+});

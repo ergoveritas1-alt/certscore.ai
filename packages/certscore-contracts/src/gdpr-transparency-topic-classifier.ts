@@ -1,5 +1,6 @@
 import type { SupportedGdprTransparencyLocale } from "./supported-languages";
 import { PRIVACY_EVIDENCE_LOCALE_REGISTRY } from "./privacy-evidence-locale-registry";
+import { BEHAVIORAL_PROFILING_LOCALE_RULES, findBehavioralProfilingRuleMatch, findLocalizedBehavioralProfilingDisclosure, type BehavioralProfilingLocaleRule } from "./behavioral-profiling-locales";
 
 export type GdprTransparencyTopic =
   | "controller_contact"
@@ -36,6 +37,9 @@ export type GdprTransparencyTopicClassifierInput = {
   localeHints?: SupportedGdprTransparencyLocale[];
   maxMatches?: number;
   retainLocaleAlternatives?: boolean;
+  // Source extraction may retain a substantive clause alongside a generic
+  // heading for the same topic. Default customer classifications are unchanged.
+  retainSemanticAlternatives?: boolean;
 };
 
 export type GdprTransparencyTopicMatch = {
@@ -67,7 +71,8 @@ type GdprTransparencySemanticRule = {
   pattern?: RegExp;
   sectionOnly?: boolean;
   topic: GdprTransparencyTopic;
-  variant?: "semantic_clause" | "section_semantic_clause";
+  behavioralRule?: BehavioralProfilingLocaleRule;
+  variant?: "semantic_clause" | "section_semantic_clause" | "behavioral_profiling_disclosure_v1" | "behavioral_profiling_disclosure_v2";
 };
 
 const MAX_EXCERPT_CHARS = 360;
@@ -99,8 +104,35 @@ export function hasIncidentalGermanDisclosureTerms(value: string, topic: string 
 // statement is distinct from a visitor's generic Article 22 rights.
 export const AUTOMATED_DECISION_PRACTICES_PATTERN = /\b(?:we|[\p{L}][\p{L}\d'-]*) (?:do not|does not|is not intended to) make decisions about (?:natural persons|individuals|people) based solely on automated processing that produce legal or similarly significant effects\b/iu;
 
+// Equivalent profiling disclosure requires evaluation of an individual's
+// interests/engagement. Generic analytics, personalization or rights are not
+// enough, and this does not establish significant automated decisions.
+export const BEHAVIORAL_PROFILING_DISCLOSURE_PATTERN = /\bwe use cookies to (?:track|record|analyse|analyze)\b.{0,100}\b(?:which (?:of )?our pages are visited and of interest to you|your (?:browsing|website) (?:behaviour|behavior) and interests)\b|\b(?:our|the) newsletter\b.{0,60}\b(?:contains?|uses?) tracking pixels?\b.{0,250}\b(?:recording|record)\b.{0,140}\blinks\b.{0,100}\banalysis\b.{0,300}\b(?:topics|offers|content)\b.{0,90}\b(?:match|based on) your interests\b/i;
+
+export function findBehavioralProfilingDisclosure(value: string, locales?: readonly SupportedGdprTransparencyLocale[]) {
+  const localized = findLocalizedBehavioralProfilingDisclosure(value, locales);
+  if (localized) return localized;
+  if (locales?.length && !locales.includes("en")) return null;
+  return findEnglishBehavioralProfilingDisclosure(normalizeGdprTransparencyText(value));
+}
+
+function findEnglishBehavioralProfilingDisclosure(normalized: string) {
+  const match = [...normalized.matchAll(new RegExp(BEHAVIORAL_PROFILING_DISCLOSURE_PATTERN.source, "gi"))]
+    .find(match => !/\b(?:not|never|aggregate|aggregated|anonymous|anonymized|anonymised)\b/.test(
+      normalized.slice(Math.max(0, match.index - 28), match.index + match[0].length + 28)));
+  const clause = match?.[0];
+  return clause ? {locale: "en" as const, clause,
+    basis: clause.startsWith("we ") ? "individual_interest_tracking" as const : "newsletter_engagement_personalization" as const} : null;
+}
+
 /** Canonical precision-first clause rules for wording too variable to list as literal headings. */
 const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] = [
+  ...BEHAVIORAL_PROFILING_LOCALE_RULES.map(rule => ({
+    locale: rule.locale, pattern: rule.pattern, behavioralRule: rule,
+    matchedTerm: `behavioral profiling disclosure: ${rule.basis}`,
+    topic: "automated_decision_making_or_profiling" as const,
+    variant: "behavioral_profiling_disclosure_v2" as const,
+  })),
   {
     locale: "de",
     matchedTerm: "benannte zwecke der verarbeitung",
@@ -133,6 +165,13 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
   },
   {
     locale: "en",
+    matchedTerm: "behavioral interest-tracking disclosure",
+    pattern: BEHAVIORAL_PROFILING_DISCLOSURE_PATTERN,
+    topic: "automated_decision_making_or_profiling",
+    variant: "behavioral_profiling_disclosure_v1",
+  },
+  {
+    locale: "en",
     matchedTerm: "explicit automated decision practices",
     pattern: AUTOMATED_DECISION_PRACTICES_PATTERN,
     topic: "automated_decision_making_or_profiling",
@@ -152,7 +191,7 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
   {
     locale: "en",
     matchedTerm: "international or cross-border transfer disclosure",
-    pattern: /\b(?:personal (?:data|information)|your data|your information|data|information)\b.{0,180}\b(?:transferred|processed|stored|hosted|accessed)\b.{0,180}\b(?:outside (?:the )?(?:eu|eea|european union|european economic area|uk|united kingdom)|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|other countries|other jurisdictions)\b|\b(?:standard contractual clauses?|\bsccs?\b|adequacy decision|data privacy framework|cross-border transfers?|international transfers?)\b.{0,260}\b(?:personal (?:data|information)|your data|your information|data|information|transfer|safeguards?)\b/i,
+    pattern: /\b(?:personal (?:data|information)|your data|your information|data|information)\b.{0,180}\b(?:transferred|processed|stored|hosted|accessed)\b.{0,180}\b(?:outside (?:the )?(?:eu|eea|european union|european economic area|uk|united kingdom)|third countr(?:y|ies)|foreign countr(?:y|ies)|united states|usa|other countries|other jurisdictions)\b|\b(?:standard contractual clauses?|\bsccs?\b|adequacy decision|data privacy framework|cross-border transfers?|international transfers?)\b.{0,260}\b(?:personal (?:data|information)|your data|your information|data|information|transfer|safeguards?)\b/i,
     topic: "international_transfers",
   },
   {
@@ -163,9 +202,33 @@ const GDPR_TRANSPARENCY_SEMANTIC_RULES: readonly GdprTransparencySemanticRule[] 
   },
   {
     locale: "en",
+    matchedTerm: "personal-data processing in a named foreign destination",
+    pattern: /\b(?:personal data|personal information|your data|your information)\b.{0,180}\b(?:processed|stored|hosted|accessed|transferred)\b.{0,180}\b(?:usa|united states|other countries|outside (?:the )?(?:eea|eu|uk))\b/i,
+    topic: "international_transfers",
+  },
+  {
+    locale: "en",
+    matchedTerm: "processing linked to an Article 6 legal basis",
+    pattern: /\b(?:processing|process(?:ed)?)\b.{0,120}\b(?:personal data|the data|data entered|your data|your information)\b.{0,180}\b(?:in accordance with|based on|pursuant to)\b.{0,80}\bart(?:icle)?\.?\s*6\b/i,
+    topic: "legal_basis",
+  },
+  {
+    locale: "en",
     matchedTerm: "personal-data retention period or criterion",
     pattern: /\b(?:personal data|personal information|your data|your information|account (?:data|information)|records?)\b.{0,160}\b(?:retain(?:ed)?|keep|kept|store(?:d)?|delete(?:d)?|erase(?:d)?|anonymi[sz](?:e|ed))\b.{0,180}\b(?:for \d+|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|as long as (?:necessary|required|you (?:use|maintain)|the account)|until (?:the account|you|closure|termination)|account (?:lifetime|closure|termination)|no longer (?:necessary|required)|purpose(?:s)?|legal obligation|applicable law)\b|\b(?:retain(?:ed)?|keep|kept|store(?:d)?)\b.{0,120}\b(?:personal data|personal information|your data|your information|account (?:data|information)|records?)\b.{0,180}\b(?:for \d+|as long as|until|account (?:lifetime|closure|termination)|no longer than necessary|required by law)\b/i,
     topic: "data_retention",
+  },
+  {
+    locale: "en",
+    matchedTerm: "declared data storage duration or deletion criterion",
+    pattern: /\b(?:storage|retention) period of (?:the |your |personal )?(?:data|information)\b.{0,100}\bis (?:set at )?\d+\s*(?:days?|weeks?|months?|years?)\b|\b(?:the data|data you enter|your data|personal data)\b.{0,160}\b(?:remain|stored?|kept|retained?)\b.{0,160}\b(?:as long as is (?:necessary|required)|until you (?:request|delete|revoke))\b/i,
+    topic: "data_retention",
+  },
+  {
+    locale: "en",
+    matchedTerm: "identified recipient of data",
+    pattern: /\brecipient of (?:the |your |personal )?(?:data|information)\s*:\s*[^.!?]{3,120}\b(?:gmbh|limited|ltd|llc|inc|ag)\b|\bwe use (?:the |a |an |our )?(?:order |data )?processor\b.{0,120}\b(?:forms?|appointments?)\b/i,
+    topic: "recipients_or_vendor_categories",
   },
   {
     locale: "en",
@@ -646,6 +709,7 @@ export const GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY: GdprTransparencyTopicPhras
   ...en([
     direct("controller_contact", "data controller"),
     direct("controller_contact", "data controller contact"),
+    direct("controller_contact", "information on the controller"),
     equivalent("controller_contact", "controller operator of data"),
     equivalent("controller_contact", "controller of data"),
     equivalent("controller_contact", "privacy contact"),
@@ -2012,7 +2076,7 @@ export function classifyGdprTransparencyTopics(
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
     .filter(({ term }) => localeHints.size === 0 || localeHints.has(term.locale))
     .filter(({ term }) => term.topic !== "controller_contact" ||
-      !/^(?:privacy contact|privacy office|contact us)$/i.test(term.phrase) ||
+      !/^(?:privacy contact|privacy office|contact us|information on the controller)$/i.test(term.phrase) ||
       hasRetainedContactEndpoint(sourceText))
     .filter(({ normalizedPhrase, term }) => !dpoDesignationIsExplicitlyNegated({
       normalizedPhrase,
@@ -2060,6 +2124,12 @@ export function classifyGdprTransparencyTopics(
       }
       if (!rule.pattern) return false;
       rule.pattern.lastIndex = 0;
+      if (rule.variant === "behavioral_profiling_disclosure_v2") {
+        return rule.behavioralRule != null && findBehavioralProfilingRuleMatch(normalizedText, rule.behavioralRule) !== null;
+      }
+      if (rule.variant === "behavioral_profiling_disclosure_v1") {
+        return findEnglishBehavioralProfilingDisclosure(normalizedText) !== null;
+      }
       return rule.pattern.test(normalizedText);
     });
   const evidenceSourceText = matches.length > 0 || semanticMatches.length > 0
@@ -2098,7 +2168,9 @@ export function classifyGdprTransparencyTopics(
   }
 
   for (const rule of semanticMatches) {
-    const selectionKey = input.retainLocaleAlternatives
+    const selectionKey = input.retainSemanticAlternatives
+      ? `${rule.topic}:${rule.locale}:${rule.matchedTerm}`
+      : input.retainLocaleAlternatives
       ? `${rule.topic}:${rule.locale}`
       : rule.topic;
     if (selected.has(selectionKey)) continue;
@@ -2141,6 +2213,14 @@ function classifierSourceText(input: GdprTransparencyTopicClassifierInput) {
 }
 
 function semanticRuleAnchor(normalizedText: string, rule: GdprTransparencySemanticRule) {
+  if (rule.variant === "behavioral_profiling_disclosure_v1") {
+    const disclosure = findEnglishBehavioralProfilingDisclosure(normalizedText);
+    if (disclosure) return disclosure.clause.slice(0, 80).replace(/\s+\S*$/u, "").trim();
+  }
+  if (rule.variant === "behavioral_profiling_disclosure_v2") {
+    const disclosure = rule.behavioralRule && findBehavioralProfilingRuleMatch(normalizedText, rule.behavioralRule);
+    if (disclosure) return disclosure.clause;
+  }
   const pattern = rule.sectionOnly
     ? rule.bodyPattern ?? rule.headingPattern
     : rule.pattern ?? rule.headingPattern ?? rule.bodyPattern;
@@ -2395,6 +2475,9 @@ function hasRequiredTopicContext(
 }
 
 function hasPrivacyDisclosureContext(normalizedText: string) {
+  // Russian policy prose commonly uses the genitive rather than the nominative
+  // personal-data label in the locale registry.
+  if (/персональных данных/iu.test(normalizedText)) return true;
   if (/\b(?:privacy|gdpr|dsgvo|dati personali|protezione dei dati|titolare del trattamento|responsabili? del trattamento|diritti degli interessati|articolo (?:6|13|28|44))\b/i.test(normalizedText)) {
     return true;
   }

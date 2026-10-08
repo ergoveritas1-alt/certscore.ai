@@ -1,7 +1,7 @@
 /** Navigation over returned canonical projections only; never observation or finding eligibility. */
 export const LIGHT_TOOL_NAMES = ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"] as const;
 export const REVIEW_PROMPT_NAMES = ["certscore_launch_review", "certscore_compare_scans", "certscore_remediation_checklist"] as const;
-const SECTION_BY_KEY: Record<string, "tracking" | "gpc" | "consent" | "transport"> = { tracking: "tracking", gpc: "gpc", accept: "consent", reject: "consent", transport: "transport" };
+const SECTION_BY_KEY: Record<string, "tracking" | "gpc" | "consent" | "forms" | "transport"> = { tracking: "tracking", gpc: "gpc", accept: "consent", reject: "consent", transport: "transport", forms: "forms" };
 
 export function bundleReviewNavigation(bundle: Record<string, any>) {
   if (!['completed', 'completed_limited'].includes(bundle.status) || bundle.resultDisposition === 'no_go') return null;
@@ -22,6 +22,7 @@ export function bundleReviewNavigation(bundle: Record<string, any>) {
     section('gpc', 'GPC response', bundle.gpcResponse, ['gpcResponse']),
     section('accept', 'After Accept', bundle.postAcceptObservation, ['postAcceptObservation']),
     section('reject', 'After Reject', bundle.postRefusalObservation, ['postRefusalObservation']),
+    section('forms', 'Forms by consent phase', bundle.formsSummary, ['formsSummary']),
     section('transport', 'HTTPS/TLS', bundle.transportSecurity, ['transportSecurityDetail']),
     section('report', 'Report tables, policy and collection evidence', bundle.fullReport, ['fullReport']),
   ];

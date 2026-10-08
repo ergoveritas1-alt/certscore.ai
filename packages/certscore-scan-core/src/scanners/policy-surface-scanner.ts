@@ -2708,7 +2708,10 @@ async function processPolicyCandidate({
       async () => extractPolicySections({
         html: boundedAfterSoftBudget ? "" : fetchedHtml,
         sourceUrl: effectiveCandidate.normalizedUrl,
-        visibleText: analysisVisibleText,
+        // Evidence quotes and offsets must reference the original document,
+        // never the synthetic, topic-labelled model analysis packet. Late
+        // capture still omits HTML work and retains the same section limits.
+        visibleText: retainedVisibleText,
       }),
     )
     : [];
@@ -2749,16 +2752,14 @@ async function processPolicyCandidate({
     : emptyPolicyFacts();
   const finalGdprTransparencyTopicCandidates = effectiveCandidate.deterministicSurfaceType === "privacy_policy"
     ? mergeGdprTransparencyTopicCandidates(
-        gdprTransparencyTopicCandidatesFromText(analysisVisibleText),
+        gdprTransparencyTopicCandidatesFromText(retainedVisibleText),
         gdprTransparencyTopicCandidatesFromRetainedPolicySections(policySections),
       )
     : [];
-  const selectedGdprTransparencyTopicCandidates = mergeGdprTransparencyTopicCandidates(
-    deterministic.gdprTransparencyTopicCandidates,
-    finalGdprTransparencyTopicCandidates,
-  );
-  if (selectedGdprTransparencyTopicCandidates.length > 0) {
-    deterministic.gdprTransparencyTopicCandidates = selectedGdprTransparencyTopicCandidates;
+  // Classifier quotes must come from the retained document, never the
+  // synthetic bounded analysis packet used by routine extraction.
+  deterministic.gdprTransparencyTopicCandidates = finalGdprTransparencyTopicCandidates;
+  if (finalGdprTransparencyTopicCandidates.length > 0) {
     deterministic.confidence = Math.max(deterministic.confidence, 0.62);
   }
   const excerpt = boundedExcerpt(analysisVisibleText, prioritizedExcerptKeywords(deterministic));
@@ -6954,14 +6955,18 @@ function gdprTransparencyTopicCandidatesFromText(text: string): PolicySurfaceObs
 }
 
 export function gdprTransparencyTopicCandidatesFromRetainedPolicySections(
-  sections: Pick<RetainedPolicySection, "heading" | "textExcerpt">[],
+  sections: Array<Pick<RetainedPolicySection, "heading" | "textExcerpt"> & Partial<Pick<RetainedPolicySection, "extractionMethod">>>,
 ): PolicySurfaceObservation["gdprTransparencyTopicCandidates"] {
   const sectionCandidates = sections
     .filter((section) => section.textExcerpt.length >= 80)
     .flatMap((section) => classifyGdprTransparencyTopics({
       section: {
         body: section.textExcerpt,
-        heading: section.heading,
+        // Visible-text windows already contain their source headings. Adding
+        // an extracted heading here can duplicate fragments in a quotation.
+        heading: section.extractionMethod?.startsWith("html_") || !section.extractionMethod
+          ? section.heading
+          : undefined,
       },
     }).matches)
     .map(gdprTransparencyTopicCandidateFromMatch);
@@ -7111,7 +7116,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
     disclosureType: "international_transfers",
     headingPatterns: [/data transfers?/i, /international transfers?/i],
     textPatterns: [/servers around the world/i, /processed? outside (?:your )?country/i, /outside (?:of )?the country where you live/i, /outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)/i, /data transfers? to third countr(?:y|ies)/i, /third countr(?:y|ies)/i, /legal frameworks? relating to the transfer of data/i, /data protection laws vary/i, /agreements?.{0,180}(?:protect|safeguard)/i, /adequacy/i, /Article 45|Art\.\s*45/i, /Article 46|Art\.\s*46/i, /safeguards/i, /EU-U\.S\. Data Privacy Framework/i, /UK Extension/i, /Swiss-U\.S\./i],
-    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|data transfers? to third countr(?:y|ies)|(?:we may |we |may )?transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your |the )?(?:country|jurisdiction|eea|european economic area|uk|united kingdom|eu|european union)|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy decision|(?:Article|Art\.)\s*45|(?:Article|Art\.)\s*46|appropriate safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
+    observedPattern: /servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|data transfers? to third countr(?:y|ies)|(?:we may |we |may )?transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your |the )?(?:country|jurisdiction|eea|european economic area|uk|united kingdom|eu|european union)|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|usa|other jurisdictions|other countries|outside)|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union))|legal frameworks? relating to the transfer of data|data protection laws vary|adequacy decision|(?:Article|Art\.)\s*45|(?:Article|Art\.)\s*46|appropriate safeguards|EU-U\.S\. Data Privacy Framework|UK Extension|Swiss-U\.S\.|standard contractual clauses/i,
   },
   {
     disclosureType: "supervisory_authority",
@@ -7158,7 +7163,7 @@ const ARTICLE13_SECTION_PROFILES: Array<{
     disclosureType: "legal_basis",
     headingPatterns: [/legal basis/i, /lawful basis/i, /European requirements/i],
     textPatterns: [/Article 6/i, /legitimate interests/i, /consent/i, /contract/i, /legal obligation/i, /public task/i, /vital interests/i, /required by law/i],
-    observedPattern: /legal basis|lawful basis|Article 6|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|vital interests/i,
+    observedPattern: /legal basis|lawful basis|Article 6|Art\.?\s*6|legitimate interests?|performance of (?:a )?contract|contractual necessity|legal obligation|public task|vital interests/i,
     partialPattern: /required by law|consent/i,
   },
   {
@@ -7208,13 +7213,18 @@ function withSectionArticle13Evidence(
     ...facts,
     article13DisclosureSignals: mergeArticle13DisclosureSignals({
       ...facts,
-      article13DisclosureSignals: [...facts.article13DisclosureSignals, ...sectionSignals],
+      article13DisclosureSignals: [
+        ...facts.article13DisclosureSignals.filter((signal) =>
+          !sectionSignals.some((section) => section.disclosureType === signal.disclosureType &&
+            (section.status === "observed" || signal.status !== "observed"))),
+        ...sectionSignals,
+      ],
     }, undefined).article13DisclosureSignals,
     retainedArticle13SectionEvidence: sectionEvidence,
   };
 }
 
-function policyFactsForFetchedDocument(
+export function policyFactsForFetchedDocument(
   facts: PolicyFacts,
   sectionEvidence: RetainedArticle13SectionEvidence[],
   options: { allowLegacyArticle13Extraction: boolean },
@@ -8968,7 +8978,7 @@ export function extractPolicySections(input: {
     input.sourceUrl,
   );
   const unstructuredBodySections = htmlSections.length < 3
-    ? extractBoundedUnstructuredPolicyBodySections(input.visibleText, input.sourceUrl)
+    ? extractBoundedUnstructuredPolicyBodySections(input.visibleText, input.sourceUrl, topicWindowSections.length > 0 ? 2 : 48)
     : [];
   // A short policy with one or two real headings is still structurally useful.
   // Preserve those heading/body/list sections and supplement them with the
@@ -9020,6 +9030,7 @@ export function extractPolicySections(input: {
 function extractBoundedUnstructuredPolicyBodySections(
   visibleText: string,
   sourceUrl: string,
+  maximumSections = 48,
 ): RetainedPolicySection[] {
   const normalized = normalizeWhitespace(visibleText);
   if (normalized.length <= 1_200) {
@@ -9028,7 +9039,7 @@ function extractBoundedUnstructuredPolicyBodySections(
 
   const sections: RetainedPolicySection[] = [];
   let start = 0;
-  while (start < normalized.length && sections.length < 48) {
+  while (start < normalized.length && sections.length < maximumSections) {
     const maximumEnd = Math.min(normalized.length, start + 1_000);
     const sentenceBoundaries = [
       normalized.lastIndexOf(". ", maximumEnd),
@@ -9068,12 +9079,21 @@ function extractCanonicalTopicWindowSectionsFromVisibleText(
     return [];
   }
 
-  return classifyGdprTransparencyTopics({ text: normalized, maxMatches: 24 }).matches.flatMap((match) => {
+  return classifyGdprTransparencyTopics({ text: normalized, maxMatches: 24, retainSemanticAlternatives: true }).matches.flatMap((match) => {
     const termPattern = new RegExp(
       escapeRegExp(match.matchedTerm).replace(/\\ /g, "\\s+"),
       "giu",
     );
-    const occurrences = Array.from(normalized.matchAll(termPattern)).slice(0, 32);
+    const occurrences: Array<{ index: number; 0: string }> = Array.from(normalized.matchAll(termPattern))
+      .slice(0, 32).map((located) => ({ index: located.index!, 0: located[0] }));
+    // Semantic matchedTerm values are classifier labels, not source strings.
+    // Locate the retained source excerpt instead; do not invent an offset for
+    // a label or manufacture a customer quote from it.
+    if (occurrences.length === 0) {
+      const sourceExcerpt = normalizeWhitespace(match.evidenceExcerpt);
+      const index = normalized.indexOf(sourceExcerpt);
+      if (index >= 0) occurrences.push({ index, 0: sourceExcerpt });
+    }
     const windows = occurrences.flatMap((located) => {
       if (located.index === undefined) return [];
       const anchorStart = located.index;
@@ -9101,7 +9121,7 @@ function extractCanonicalTopicWindowSectionsFromVisibleText(
       const rejection = sharedArticle13DisclosureRejectReason(
         textExcerpt,
         match.topic,
-        { mode: "multilingual_classifier" },
+        { mode: match.matchedLocale === "en" ? "scan_core" : "multilingual_classifier" },
       );
       const quality = policySectionQuality(textExcerpt);
       return [{
@@ -9118,7 +9138,9 @@ function extractCanonicalTopicWindowSectionsFromVisibleText(
     if (!selected) return [];
     return [{
       sourceUrl,
-      heading: match.matchedTerm.slice(0, 160),
+      heading: occurrences[0]?.[0] === normalizeWhitespace(match.evidenceExcerpt)
+        ? "Policy section"
+        : match.matchedTerm.slice(0, 160),
       textExcerpt: selected.textExcerpt,
       extractionMethod: "canonical_topic_window" as const,
       sourceOffsetBasis: "normalized_visible_text" as const,
@@ -9655,9 +9677,12 @@ function bestSectionForProfile(
     score: number;
     substantiveHeadingMatch: boolean;
     observed: boolean;
+    structural: boolean;
+    specificTransfer: boolean;
+    generalProcessingBasis: boolean;
   } | undefined;
   const controllerSpecificSections = profile.disclosureType === "controller_contact"
-    ? sections.filter((section) => !/(?:third parties?|service providers?).{0,100}(?:independent )?(?:data )?controllers?/i.test(section.textExcerpt))
+    ? sections.filter((section) => !/(?:third parties?|service providers?).{0,100}(?:independent )?(?:data )?controllers?|acts as a processor|between the controller and the processor/i.test(section.textExcerpt))
     : sections;
   const candidateSections = controllerSpecificSections.length > 0 ? controllerSpecificSections : sections;
   for (const section of candidateSections) {
@@ -9700,17 +9725,28 @@ function bestSectionForProfile(
       score += controllerSubjectSectionScore(section);
     }
     if (section.quality === "strong") score += 1;
+    if (score < 3) continue;
     const selectedExcerpt = bestSectionExcerptForProfile(section, profile, canonicalMatches);
-    const observed = sectionEvidenceStatus(profile, selectedExcerpt, haystack, canonicalMatches) === "observed";
+    const evidenceStatus = sectionEvidenceStatus(profile, selectedExcerpt, haystack, canonicalMatches);
+    const observed = evidenceStatus === "observed";
+    const structural = section.extractionMethod?.startsWith("html_") === true;
+    const specificTransfer = profile.disclosureType === "international_transfers" &&
+      /\b(?:personal data|personal information|your data|your information)\b.{0,180}\b(?:transferred|processed|stored|accessed)\b.{0,180}\b(?:USA|United States|outside (?:the )?(?:EEA|EU)|other countries)\b/i.test(selectedExcerpt);
+    const generalProcessingBasis = profile.disclosureType === "legal_basis" &&
+      !/\b(?:fanpages?|job applicants?|application documents|recruitment|recruiting|talent pool)\b/i.test(haystack) &&
+      /\b(?:process(?:ing|ed)?|collect(?:ion|ed)?)\b.{0,160}\b(?:data|information)\b.{0,180}\b(?:Art\.?\s*6|Article 6|consent|legitimate interests?|contract)\b/i.test(selectedExcerpt);
     const substantiveHeadingMatch = headingMatched &&
-      sectionEvidenceStatus(profile, selectedExcerpt, haystack, canonicalMatches) !== "not_confirmed";
+      evidenceStatus !== "not_confirmed";
     if (
       !best ||
       (observed && !best.observed) ||
-      (observed === best.observed && substantiveHeadingMatch && !best.substantiveHeadingMatch) ||
-      (observed === best.observed && substantiveHeadingMatch === best.substantiveHeadingMatch && score > best.score)
+      (observed === best.observed && specificTransfer && !best.specificTransfer) ||
+      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis && !best.generalProcessingBasis) ||
+      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && substantiveHeadingMatch && !best.substantiveHeadingMatch) ||
+      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && substantiveHeadingMatch === best.substantiveHeadingMatch && structural && !best.structural) ||
+      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && structural === best.structural && substantiveHeadingMatch === best.substantiveHeadingMatch && score > best.score)
     ) {
-      best = { section, score, substantiveHeadingMatch, observed };
+      best = { section, score, substantiveHeadingMatch, observed, structural, specificTransfer, generalProcessingBasis };
     }
   }
   return best && best.score >= 3 ? best.section : undefined;
@@ -9741,7 +9777,26 @@ function controllerSubjectSectionScore(section: RetainedPolicySection): number {
   return 0;
 }
 
+const sectionExcerptCache = new WeakMap<RetainedPolicySection, Map<Article13DisclosureType, string>>();
+
 function bestSectionExcerptForProfile(
+  section: RetainedPolicySection,
+  profile: (typeof ARTICLE13_SECTION_PROFILES)[number],
+  canonicalMatches: GdprTransparencyTopicMatch[],
+): string {
+  let cached = sectionExcerptCache.get(section);
+  const excerpt = cached?.get(profile.disclosureType);
+  if (excerpt !== undefined) return excerpt;
+  if (!cached) {
+    cached = new Map();
+    sectionExcerptCache.set(section, cached);
+  }
+  const selected = selectSectionExcerptForProfile(section, profile, canonicalMatches);
+  cached.set(profile.disclosureType, selected);
+  return selected;
+}
+
+function selectSectionExcerptForProfile(
   section: RetainedPolicySection,
   profile: (typeof ARTICLE13_SECTION_PROFILES)[number],
   canonicalMatches: GdprTransparencyTopicMatch[],
@@ -9749,7 +9804,11 @@ function bestSectionExcerptForProfile(
   const text = normalizeWhitespace(section.textExcerpt);
   // Preserve complete, bounded structural evidence before considering a short
   // classifier window. Headers keep table values attached to their meaning.
-  const structuralExcerpt = normalizeWhitespace(`${section.heading}. ${text}`);
+  const sourceHeading = section.extractionMethod === "html_heading_hierarchy" ||
+    section.extractionMethod === "html_definition_pair";
+  const structuralExcerpt = sourceHeading && !text.startsWith(section.heading)
+    ? normalizeWhitespace(`${section.heading} ${text}`)
+    : text;
   const preferredPatterns: Partial<Record<Article13DisclosureType, RegExp[]>> = {
     controller_contact: [
       /information on (?:the )?controller.{0,360}(?:e-?mail|email|tel(?:ephone)?|address|@[a-z0-9.-]+\.[a-z]{2,})/i,
@@ -9766,11 +9825,17 @@ function bestSectionExcerptForProfile(
       /we retain.{0,260}(?:as long as|period|criteria|delete|anonymi[sz]e)/i,
       /we (?:only )?keep (?:your )?(?:personal )?(?:data|information).{0,180}(?:for as long as|until|while).{0,180}(?:need|required|purpose|law)/i,
     ],
-    international_transfers: [/(?:we may |we |may )?transfer (?:your )?(?:personal )?(?:data|information).{0,260}(?:located )?outside (?:of )?(?:your |the )?(?:country|jurisdiction|eea|european economic area|uk|united kingdom|eu|european union)/i, /(?:personal data|personal information|information|data).{0,180}(?:transferred|processed|stored|accessed).{0,220}(?:united states|other jurisdictions|other countries|outside)/i, /(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
+    international_transfers: [/(?:we may |we |may )?transfer (?:your )?(?:personal )?(?:data|information).{0,260}(?:located )?outside (?:of )?(?:your |the )?(?:country|jurisdiction|eea|european economic area|uk|united kingdom|eu|european union)/i, /(?:personal data|personal information|information|data).{0,180}(?:transferred|processed|stored|accessed).{0,220}(?:united states|usa|other jurisdictions|other countries|outside)/i, /(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
     recipients_or_vendor_categories: [/(?:we|the company) (?:share|disclose|provide).{0,180}(?:personal data|personal information|information|data).{0,260}(?:service providers?|affiliates?|analytics providers?|advertising networks?|social networks?|platforms?|governmental authorities|third parties)/i],
     dpo_contact: [/(?:privacy office|data protection office|data protection officer|\bdpo\b).{0,180}(?:@|contact|email|write|telephone|phone)/i],
   };
   const directPatterns = preferredPatterns[profile.disclosureType] ?? [];
+  const sourceStatements = ["processing_purposes", "data_retention", "recipients_or_vendor_categories", "international_transfers", "legal_basis", "supervisory_authority"].includes(profile.disclosureType) &&
+    (canonicalTopicMatchForDisclosure(canonicalMatches, profile.disclosureType) || profile.observedPattern.test(text))
+    ? compactSourceDisclosureStatements(text, profile.disclosureType, profile.observedPattern)
+    : [];
+  profile.observedPattern.lastIndex = 0;
+  if (sourceStatements.length > 0) return sourceStatements[0]!;
   for (const pattern of directPatterns) {
     pattern.lastIndex = 0;
     const match = pattern.exec(text);
@@ -9782,11 +9847,11 @@ function bestSectionExcerptForProfile(
     const sentenceStart = Math.max(...sentenceStartCandidates) + (Math.max(...sentenceStartCandidates) >= 0 ? 2 : 0);
     const sentenceEndCandidates = [text.indexOf(". ", matchEnd), text.indexOf("? ", matchEnd), text.indexOf("! ", matchEnd)]
       .filter((index) => index >= matchEnd + 40)
-      .filter((index) => !/\b(?:Art|No|Mr|Ms|Dr)\.$/i.test(text.slice(Math.max(0, index - 8), index + 1)));
+      .filter((index) => !/\b(?:Art|Abs|Nr|No|Mr|Ms|Dr|lit|e\.g|i\.e)\.$/i.test(text.slice(Math.max(0, index - 8), index + 1)));
     const sentenceEnd = sentenceEndCandidates.length > 0 ? Math.min(...sentenceEndCandidates) + 1 : Math.min(text.length, matchEnd + 320);
     const sentenceExcerpt = text.slice(Math.max(0, sentenceStart), Math.min(text.length, sentenceEnd));
     if (sentenceExcerpt.length >= 20) {
-      return normalizeWhitespace(`${section.heading}. ${sentenceExcerpt}`).slice(0, 1_200);
+      return completePolicyExcerpt(normalizeWhitespace(sentenceExcerpt), 1_200);
     }
   }
   if (
@@ -9801,7 +9866,15 @@ function bestSectionExcerptForProfile(
   ) return structuralExcerpt;
   const canonicalTopicMatch = canonicalTopicMatchForDisclosure(canonicalMatches, profile.disclosureType);
   if (canonicalTopicMatch) {
-    return normalizeWhitespace(`${section.heading}. ${canonicalTopicMatch.evidenceExcerpt}`).slice(0, 1_200);
+    const sourceExcerpt = normalizeWhitespace(canonicalTopicMatch.evidenceExcerpt);
+    // Classifier section excerpts may prepend a synthetic heading. Retain only
+    // the source-bound body; a classifier label is never a verbatim quotation.
+    if (text.includes(sourceExcerpt)) return completePolicyExcerpt(sourceExcerpt, 1_200);
+    const headingPrefix = `${normalizeWhitespace(section.heading)} `;
+    if (sourceExcerpt.startsWith(headingPrefix)) {
+      const bodyExcerpt = sourceExcerpt.slice(headingPrefix.length);
+      if (text.includes(bodyExcerpt)) return completePolicyExcerpt(bodyExcerpt, 1_200);
+    }
   }
   const patterns = [
     profile.observedPattern,
@@ -9811,7 +9884,35 @@ function bestSectionExcerptForProfile(
   const excerpt = boundedExcerptForPatterns(text, patterns).slice(0, 1_200);
   const firstUrlIndex = excerpt.search(/\bhttps?:\/\//i);
   const rowSpecificExcerpt = firstUrlIndex >= 80 ? excerpt.slice(0, firstUrlIndex) : excerpt;
-  return normalizeWhitespace(`${section.heading}. ${rowSpecificExcerpt}`).slice(0, 1_200);
+  return completePolicyExcerpt(normalizeWhitespace(rowSpecificExcerpt), 1_200);
+}
+
+function compactSourceDisclosureStatements(text: string, topic: Article13DisclosureType, observedPattern: RegExp): string[] {
+  const starts = [0, ...Array.from(text.matchAll(/[.!?](?:\s+|$)/g))
+    .filter((match) => !/\b(?:Art|Abs|Nr|No|Mr|Ms|Dr|ff|lit|e\.g|i\.e)\.$/i.test(text.slice(Math.max(0, match.index! - 8), match.index! + 1)))
+    .map((match) => match.index! + match[0].length)];
+  if (starts.at(-1) !== text.length) starts.push(text.length);
+  const candidates: Array<{ text: string; length: number; transferSafeguards: boolean; transferLocation: boolean }> = [];
+  for (let index = 0; index < starts.length - 1; index++) {
+    for (let count = 1; count <= 3 && index + count < starts.length; count++) {
+      const excerpt = text.slice(starts[index], starts[index + count]).trim();
+      if (excerpt.length < 35 || excerpt.length > 640) continue;
+      if (sharedArticle13DisclosureRejectReason(excerpt, topic) !== null) continue;
+      if (["international_transfers", "legal_basis"].includes(topic) && !observedPattern.test(excerpt)) continue;
+      // A processor role or a reference to another controller is not the
+      // controller's own contact disclosure.
+      const transferSafeguards = topic === "international_transfers" &&
+        /\b(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect(?:ed|ion)?)\b/i.test(excerpt);
+      const firstStatement = text.slice(starts[index], starts[index + 1]).trim();
+      const transferLocation = topic === "international_transfers" &&
+        /\b(?:servers around the world|(?:transfer(?:red)?|process(?:ed)?|store(?:d)?|access(?:ed)?).{0,180}(?:outside|USA|United States|other countries)|third parties may be in|they may also be outside)\b/i.test(firstStatement);
+      candidates.push({ text: excerpt, length: excerpt.length, transferSafeguards, transferLocation });
+      // Keep a contiguous safeguard sentence with its transfer statement when
+      // both fit the existing quote budget.
+      if (topic !== "international_transfers") break;
+    }
+  }
+  return candidates.sort((a, b) => Number(b.transferLocation) - Number(a.transferLocation) || Number(b.transferSafeguards) - Number(a.transferSafeguards) || a.length - b.length).map((candidate) => candidate.text);
 }
 
 function sectionEvidenceStatus(
@@ -9859,7 +9960,7 @@ function completePolicyExcerpt(text: string, limit: number): string {
   if (text.length <= limit) return text;
   const prefix = text.slice(0, limit);
   const boundaries = Array.from(prefix.matchAll(/[.!?。！？؟](?:\s+|$)/gu))
-    .filter((match) => !/\b(?:Art|No|Mr|Ms|Dr)\.$/i.test(prefix.slice(0, (match.index ?? 0) + 1)));
+    .filter((match) => !/\b(?:Art|Abs|Nr|No|Mr|Ms|Dr|lit|e\.g|i\.e)\.$/i.test(prefix.slice(0, (match.index ?? 0) + 1)));
   const end = boundaries.at(-1)?.index;
   return end !== undefined && end >= limit / 2
     ? prefix.slice(0, end + 1).trim()

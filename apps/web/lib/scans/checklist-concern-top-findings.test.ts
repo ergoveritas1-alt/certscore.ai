@@ -7,6 +7,7 @@ import {
 } from "./checklist-concern-top-findings";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 import type { CertScoreFinding } from "./finding-registry";
+import { summarizePostRejectActivity } from "./post-reject-finding-copy";
 
 const pipeline = {
   concernPolicyKey: "test.concern",
@@ -113,6 +114,14 @@ test("canonical checklist concerns promote a production-projectable post-Reject 
           postRejectNonEssentialActivityRetained: true,
           productionProjectable: true,
           rejectInteractionConfirmed: true,
+          reportControlObserved: true,
+          postRejectNonEssentialRequestCount: 6,
+          postRejectNonEssentialRequests: [],
+          postRejectActivityDetails: summarizePostRejectActivity(
+            [56, 57, 243, 409, 586, 774].map(msAfterReject => ({
+              vendor: "HubSpot", activityType: "network_request", msAfterReject,
+            })),
+          ),
         },
         statusBasis: "Qualifying non-essential activity persisted after confirmed Reject.",
       },
@@ -126,6 +135,9 @@ test("canonical checklist concerns promote a production-projectable post-Reject 
     "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction",
   ]);
   assert.match(findings[0]?.remediation ?? "", /confirmed Reject suppresses optional tracker requests/i);
+  assert.equal(findings[0]?.label, "HubSpot activity after Reject");
+  assert.equal(findings[0]?.shortSummary, "6 non-essential HubSpot requests were observed 56–774 ms after confirmed Reject.");
+  assert.equal(findings[0]?.severity, "high");
 });
 
 test("canonical high-priority selection has no standalone runtime-finding input", () => {

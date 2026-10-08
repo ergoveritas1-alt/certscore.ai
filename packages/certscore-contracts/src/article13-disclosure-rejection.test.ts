@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { classifyGdprTransparencyTopics } from "./gdpr-transparency-topic-classifier";
 
 import {
   article13DisclosureRejectReason,
@@ -7,10 +8,54 @@ import {
   hasSubstantiveAutomatedDecisionOrProfilingEvidence,
   hasSubstantiveLegalBasisEvidence,
   hasSubstantiveProcessingPurposesEvidence,
+  hasSubstantiveRecipientsEvidence,
+  hasSubstantiveRetentionEvidence,
   isArticle13DisclosureEvidenceUsable,
   looksLikeArticle13TableOfContents,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
+
+test("data-specific storage duration and form deletion criteria survive every shared gate", () => {
+  for (const text of [
+    "The storage period of the data in Matomo is set at 6 months.",
+    "The data is stored for as long as is necessary to fulfil the purpose and then deleted immediately.",
+    "The data you enter in the form will remain with us until you request us to delete it, revoke your consent to store it or the purpose for storing the data no longer applies (e.g. after we have completed processing your enquiry).",
+  ]) {
+    assert.equal(hasSubstantiveRetentionEvidence(text), true, text);
+    for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+      assert.equal(article13DisclosureRejectReason(text, "data_retention", { mode }), null, `${mode}: ${text}`);
+    }
+  }
+  for (const text of [
+    "The cookies set by our analytics tool are valid for up to 6 months.",
+    "Cookies are stored for 6 months. We collect personal data to answer questions.",
+    "The storage period of battery power is set at 6 months.",
+    "We process personal data. Our software licence is kept for three years.",
+  ]) assert.equal(hasSubstantiveRetentionEvidence(text), false, text);
+});
+
+test("recipient evidence describes an actual recipient, not a nearby generic rights clause", () => {
+  for (const text of [
+    "Recipient of the data: HubSpot Germany GmbH, Am Postbahnhof 17, 10243 Berlin, Germany.",
+    "We use the order processor HubSpot Germany GmbH to provide contact forms and to arrange appointments.",
+    "We share personal data with hosting providers to operate this website.",
+  ]) {
+    assert.equal(hasSubstantiveRecipientsEvidence(text), true, text);
+    for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const)
+      assert.equal(article13DisclosureRejectReason(text, "recipients_or_vendor_categories", { mode }), null, `${mode}: ${text}`);
+  }
+  for (const text of [
+    "You have the right to receive information about the origin, recipient and purpose of your stored personal data. Our service provider offers helpful documentation.",
+    "You may request information about recipients of your personal data. HubSpot Germany GmbH publishes a privacy policy.",
+  ]) assert.equal(hasSubstantiveRecipientsEvidence(text), false, text);
+});
+
+test("objection-right prose does not establish actual profiling practices", () => {
+  const text = "If your personal data is processed for the purpose of direct marketing, you have the right to object at any time to the processing of personal data concerning you for the purpose of such marketing; this also applies to profiling, insofar as it is related to such direct marketing. If you object, your personal data will subsequently no longer be used for the purpose of direct advertising.";
+  assert.equal(hasSubstantiveAutomatedDecisionOrProfilingEvidence(text), false);
+  for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const)
+    assert.notEqual(article13DisclosureRejectReason(text, "automated_decision_making_or_profiling", { mode }), null, mode);
+});
 
 test("retained-report policy quality accepts canonical Hungarian Russian and Estonian text", () => {
   const policies = [
@@ -113,6 +158,30 @@ test("generic automation and personalization remain insufficient profiling evide
       text,
     );
   }
+});
+
+test("concrete individual interest tracking supplies profiling disclosure without an Article 22 claim", () => {
+  const disclosures = [
+    "As part of website tracking, we use cookies to track which of our pages are visited and of interest to you. The following data is processed: device identifier, IP address and pages viewed.",
+    "Our newsletter contains tracking pixels. A tracking pixel enables a log file recording and a recording of the links activated from the newsletter with subsequent analysis when the email is opened. This enables us to optimize our newsletter to present you with topics and offers that better match your interests.",
+  ];
+  for (const text of disclosures) {
+    assert.equal(hasSubstantiveAutomatedDecisionOrProfilingEvidence(text), true);
+    for (const mode of ["scan_core", "retained_report", "multilingual_classifier"] as const) {
+      assert.equal(article13DisclosureRejectReason(text, "automated_decision_making_or_profiling", {mode}), null, mode);
+    }
+    const matches = classifyGdprTransparencyTopics({section: {heading: "Privacy policy: marketing", body: text}}).matches;
+    const match = matches.find(row => row.topic === "automated_decision_making_or_profiling");
+    assert.equal(match?.matchStrength, "equivalent");
+    assert.equal(match?.variant, "behavioral_profiling_disclosure_v1");
+    assert.ok(match?.evidenceExcerpt);
+  }
+  for (const text of [
+    "Our newsletter contains tracking pixels to evaluate the aggregate success of our campaigns.",
+    "We personalize the newsletter with your name and recommend popular topics.",
+    "Our website uses cookies to count total page views. We offer content about your interests.",
+    "Our provider's website uses cookies to track which pages visitors find interesting.",
+  ]) assert.equal(hasSubstantiveAutomatedDecisionOrProfilingEvidence(text), false, text);
 });
 
 test("Privacy Shield transfer wording does not qualify as processing-purposes evidence", () => {

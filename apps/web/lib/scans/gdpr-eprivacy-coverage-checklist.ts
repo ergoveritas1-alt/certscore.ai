@@ -525,7 +525,7 @@ const CHECKLIST_ROWS: ChecklistRowDefinition[] = [
   },
   {
     id: "automated_decision_making_profiling_disclosure",
-    label: "Automated decision-making / profiling disclosure",
+    label: "Profiling / automated decisions disclosure",
     explanation: "Whether adapter-approved Article 13 evidence retained automated decision-making or profiling disclosure context for review.",
     findingIds: [],
     defaultFindingStatus: "Review signal",

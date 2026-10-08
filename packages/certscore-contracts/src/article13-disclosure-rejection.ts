@@ -1,5 +1,6 @@
 import {
   AUTOMATED_DECISION_PRACTICES_PATTERN,
+  findBehavioralProfilingDisclosure,
   classifyGdprTransparencyTopics,
   hasIncidentalGermanDisclosureTerms,
   hasUnsupportedGenericPrivacyContact,
@@ -120,7 +121,7 @@ export function hasSubstantiveAutomatedDecisionOrProfilingEvidence(value: string
   const text = normalizeArticle13Whitespace(value);
   // A description of the service's actual decision practices, not a generic
   // statement that visitors have rights concerning automated decisions.
-  if (AUTOMATED_DECISION_PRACTICES_PATTERN.test(text)) return true;
+  if (AUTOMATED_DECISION_PRACTICES_PATTERN.test(text) || findBehavioralProfilingDisclosure(text)) return true;
   const topic = /\b(?:profiling|profiled|automated decision(?:-making| making|s)?|solely automated (?:processing|decision))\b/i;
   if (!topic.test(text)) return false;
   const dataOrEffectContext = /\b(?:personal data|personal information|user data|data about you|your data|your information|legal effects?|significantly affects?|similarly significant effects?|eligibility|credit|insurance|employment|access to (?:a )?service)\b/i;
@@ -138,6 +139,7 @@ export function hasSubstantiveAutomatedDecisionOrProfilingEvidence(value: string
   const affirmativeOrNegativeDisclosure = /\b(?:do(?:es)? not|will not|not (?:be )?used|use|uses|used|perform|performs|conduct|conducts|carry out|carried out|engage in|based on|constitutes?)\b/i;
   const firstPartyDisclosure = /\b(?:we|the company|the controller|personal data|personal information|user data)\b/i;
   return text.split(/(?<=[.!?])\s+/u).some((sentence) =>
+    !/\b(?:you have (?:the |a )?right|right to object|rights? (?:concerning|regarding)|if you object|this also applies to profiling)\b/i.test(sentence) &&
     topic.test(sentence) && dataOrEffectContext.test(sentence) &&
     affirmativeOrNegativeDisclosure.test(sentence) &&
     firstPartyDisclosure.test(sentence)
@@ -151,11 +153,21 @@ export function hasSubstantiveRecipientsEvidence(value: string) {
   ) {
     return false;
   }
-  const meaningfulCategory = /\b(?:service providers?|processors?|subprocessors?|suppliers?|payment processors?|payment (?:and )?delivery service providers?|hosting providers?|cloud providers?|analytics providers?|analytics partners?|advertising partners?|advertising networks?|social media providers?|delivery providers?|professional advisers?|affiliates?|group companies|law enforcement|regulators?|authorities)\b/i;
-  const disclosureAction = /\b(?:share[ds]?|disclos(?:e[ds]?|ing)|provid(?:e[ds]?|ing)|transfer(?:red)?|send|sent|(?:make|made) available|receive[ds]?|access|process(?:ed)?|handle[ds]?)\b/i;
+  const meaningfulCategory = /\b(?:service providers?|processors?|subprocessors?|suppliers?|payment processors?|payment (?:and )?delivery service providers?|hosting providers?|cloud providers?|analytics providers?|analytics partners?|advertising partners?|advertising networks?|social media providers?|delivery providers?|shipping providers?|professional advisers?|affiliates?|group companies|law enforcement|regulators?|authorities)\b/i;
+  const disclosureAction = /\b(?:share[ds]?|pass(?:ed)? on|disclos(?:e[ds]?|ing)|provid(?:e[ds]?|ing)|transfer(?:red)?|send|sent|(?:make|made) available|receive[ds]?|access|process(?:ed)?|handle[ds]?)\b/i;
   const dataContext = /\b(?:personal data|personal information|your data|your information|information|data)\b/i;
   const namedRecipient = /\b(?:google|microsoft|amazon|aws|stripe|salesforce|meta|facebook|oracle|adobe|hubspot|mailchimp|[A-Z][A-Za-z0-9&.'’-]+\s+(?:Ltd|Limited|LLC|Inc|GmbH|AG|S\.A\.|SAS|BV))\b/;
-  return dataContext.test(text) && disclosureAction.test(text) && (meaningfulCategory.test(text) || namedRecipient.test(text));
+  // Do not assemble a recipient disclosure from a rights sentence and an
+  // unrelated provider mention elsewhere in the excerpt.
+  return text.split(/(?<=[.!?;])\s+/u).some((sentence) => {
+    if (/\b(?:right to|you (?:can|may) request|you have (?:a |the )?right)\b/i.test(sentence)) return false;
+    const identifiedRecipient = meaningfulCategory.test(sentence) || namedRecipient.test(sentence);
+    const labeledRecipient = /\brecipients? of (?:the |your |personal )?(?:data|information)\s*:/i.test(sentence);
+    const appointedProcessor = /\bwe use (?:the |a |an |our )?(?:order |data )?processor\b/i.test(sentence) &&
+      /\b(?:forms?|appointments?|personal data|personal information)\b/i.test(sentence);
+    return identifiedRecipient && (labeledRecipient || appointedProcessor ||
+      (dataContext.test(sentence) && disclosureAction.test(sentence)));
+  });
 }
 
 export function hasSubstantiveRetentionEvidence(value: string) {
@@ -166,15 +178,17 @@ export function hasSubstantiveRetentionEvidence(value: string) {
   ) {
     return false;
   }
-  const dataContext = /\b(?:personal data|personal information|your data|your information|account (?:data|information)|profile information|technical data|transaction data|records?|recordings?|comments?|metadata|server logs?|ip addresses?|cookies?)\b/i;
+  const dataContext = /\b(?:personal data|personal information|your data|your information|the data|data (?:you enter|in|collected)|account (?:data|information)|profile information|technical data|transaction data|records?|recordings?|comments?|metadata|server logs?|ip addresses?)\b/i;
   const lifecycleAction = /\b(?:retain(?:ed|ing)?|keep|kept|store(?:d)?|delete(?:d)?|erase(?:d)?|anonymi[sz](?:e|ed|ation))\b/i;
-  const periodOrCriterion = /\b(?:for \d+\s*(?:days?|weeks?|months?|years?)|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|indefinitely|as long as (?:necessary|required|you (?:use|maintain)|the account)|until (?:the account|you|closure|termination)|account (?:lifetime|closure|termination)|no longer (?:than )?(?:necessary|required)|purposes? for which (?:it|they|the data|the information) (?:was|were) (?:collected|processed)|legal obligations?|resolve disputes?|enforce (?:our )?agreements?)\b/i;
+  const periodOrCriterion = /\b(?:for \d+\s*(?:days?|weeks?|months?|years?)|for (?:one|two|three|four|five|six|seven|eight|nine|ten) (?:days?|weeks?|months?|years?)|(?:set at|period (?:is|of)) \d+\s*(?:days?|weeks?|months?|years?)|indefinitely|as long as (?:is )?(?:necessary|required|you (?:use|maintain)|the account)|until (?:the account|you|closure|termination)|account (?:lifetime|closure|termination)|no longer (?:than )?(?:necessary|required)|purposes? for which (?:it|they|the data|the information) (?:was|were) (?:collected|processed)|legal obligations?|resolve disputes?|enforce (?:our )?agreements?)\b/i;
+  const explicitStoragePeriod = /\b(?:retention|storage) period of (?:the |your |personal )?(?:data|information)\b.{0,100}\b(?:is (?:set at )?|of )\d+\s*(?:days?|weeks?|months?|years?)\b/i.test(text);
+  const completedPurpose = /\b(?:the data|data you enter|your data|personal data)\b.{0,160}\b(?:remain|stored?|kept|retained?)\b.{0,160}\buntil\b.{0,220}\b(?:purpose.{0,80}no longer applies|completed processing (?:your|the) (?:enquiry|inquiry|request))\b/i.test(text);
   // Retention tables state the lifecycle in their header, not in every cell.
   const retentionTableRow = /\b(?:retention|storage period)\s*:\s*(?:normally\s+)?(?:up to\s+)?\d+\s*(?:days?|weeks?|months?|years?)\b/i.test(text) &&
     /\b(?:data|records?|consent choice|correspondence|logs?|responses?|identifiers?)\b/i.test(text);
-  return (
-    dataContext.test(text) && lifecycleAction.test(text) && periodOrCriterion.test(text)
-  ) || retentionTableRow ||
+  return text.split(/(?<=[.!?])\s+/u).some((sentence) =>
+    dataContext.test(sentence) && lifecycleAction.test(sentence) && periodOrCriterion.test(sentence)
+  ) || explicitStoragePeriod || completedPurpose || retentionTableRow ||
     /\b(?:do not|does not|don['’]t|will not|won['’]t) keep (?:your )?(?:personal )?(?:data|information) (?:any )?longer than (?:is )?(?:necessary|required)\b/i.test(text) ||
     /\bkeep information for as long as we need (?:it )?to (?:fulfil|fulfill) the purpose\b/i.test(text);
 }
@@ -205,8 +219,16 @@ export function article13DisclosureRejectReason(
 ): Article13DisclosureRejectReason | null {
   const mode = options.mode ?? "scan_core";
   const text = normalizeArticle13Whitespace(value);
-  if (text.length < 35) {
+  // Compact scripts can express a complete, narrowly matched practice in fewer
+  // characters. Keep the general quality floor for every other disclosure.
+  if (text.length < 35 && !(disclosureType === "automated_decision_making_or_profiling" &&
+      findBehavioralProfilingDisclosure(text))) {
     return "low_confidence_or_ambiguous";
+  }
+  if (disclosureType === "automated_decision_making_or_profiling" &&
+    /\b(?:you have (?:the |a )?right|right to object|rights? (?:concerning|regarding)|if you object|this also applies to profiling)\b/i.test(text) &&
+    !hasSubstantiveAutomatedDecisionOrProfilingEvidence(text)) {
+    return "insufficient_row_specific_terms";
   }
   if (hasIncidentalGermanDisclosureTerms(text, disclosureType)) {
     return "insufficient_row_specific_terms";
@@ -326,6 +348,7 @@ export function isGenericArticle13StorageNotRetentionEvidence(value: string) {
     /\b(?:collect|store|storage|cookies?|local storage|databases?|server logs?)\b/i.test(text) ||
     /(?:collect(?:é|e|és|ées)|recogid[ao]s?|raccolt[oi]|verzameld|zbierane)/i.test(text);
   const hasRetentionLifecycle =
+    hasSubstantiveRetentionEvidence(text) ||
     /\b(?:retain|retention|how long|kept for|stored for|delete|deletion|anonymi[sz]e|remove|expires?|as long as necessary|no longer needed|required by law|legal purposes|fraud|abuse)\b/i.test(text) ||
     /\bkeep (?:your )?(?:personal )?(?:data|information) for as long as (?:we )?(?:need|require)/i.test(text) ||
     /(?:aufbewahrung|speichern|gespeichert|solange|erforderlich|gesetzlich|conservation|conservons|conserv(?:é|e|és|ées)|durée|dispositions légales|finalités|conservación|conservamos|plazo|conservazione|conserviamo|periodo|bewaren|bewaartermijn|noodzakelijk|przechowywania|przechowujemy|okres)/i.test(text);
@@ -570,7 +593,7 @@ function hasScanCoreRowSpecificArticle13Terms(
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
     case "international_transfers":
-      return /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
+      return /\b(?:data transfers?|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|usa|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|service providers?|business partners?|processors?|vendors?|recipients?).{0,220}outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|agreements?.{0,220}(?:personal information|personal data|data|information).{0,220}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
     case "dpo_contact":
       return /\b(?:data protection officer|data privacy officer|office of the data privacy officer|\bdpo\b|data protection contact|privacy contact point|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
     case "supervisory_authority":
@@ -603,7 +626,7 @@ function hasRetainedReportRowSpecificArticle13Terms(
     case "data_subject_rights":
       return hasSubstantiveRightsDisclosure(text);
     case "international_transfers":
-      return /\b(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,260}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside)|agreements?.{0,260}(?:personal information|personal data|data|information).{0,260}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
+      return /\b(?:data transfers?.{0,320}(?:servers around the world|outside (?:of )?the country|legal frameworks?|data privacy frameworks?|safeguards)|international transfer|cross-border transfer|standard contractual clauses|adequacy decision|servers around the world|processed? (?:on servers )?outside (?:your )?country|outside (?:of )?the country where you live|legal frameworks? relating to the transfer of data|data protection laws vary|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|data privacy framework|\bdpf\b|privacy shield|(?:personal data|personal information|information|data).{0,160}(?:transferred|processed|stored|accessed).{0,180}(?:united states|usa|other jurisdictions|other countries|outside)|transfer (?:your )?(?:personal )?(?:data|information).{0,220}(?:located )?outside (?:of )?(?:your )?country|(?:third parties|third-party|service providers?|business partners?|partners?|vendors?|processors?|subprocessors?|affiliates?|recipients?).{0,260}(?:outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)|third countr(?:y|ies)|foreign countr(?:y|ies)|other countries|countries outside)|agreements?.{0,260}(?:personal information|personal data|data|information).{0,260}(?:protect|protected|safeguard|outside (?:the )?(?:eea|european economic area|uk|united kingdom|eu|european union)))\b/i.test(text);
     case "dpo_contact":
       return /\b(?:data protection officer|data privacy officer|office of the data privacy officer|\bdpo\b|data protection contact|privacy contact point|privacy counsel.{0,180}(?:contact|email|mail|address|@)|(?:contact|email|mail|address|@).{0,180}privacy counsel)\b/i.test(text);
     case "supervisory_authority":
@@ -628,6 +651,9 @@ function hasLocalizedArticle13EvidenceContext(
   if (disclosureType === "data_retention" && hasSubstantiveRetentionEvidence(normalized)) {
     return true;
   }
+  if (disclosureType === "recipients_or_vendor_categories" && hasSubstantiveRecipientsEvidence(normalized)) {
+    return true;
+  }
   // This validator receives already-retained section evidence. Preserve that
   // scope when rechecking the canonical classifier so substantive semantic
   // clauses do not lose their match merely because the bounded excerpt omits
@@ -636,6 +662,11 @@ function hasLocalizedArticle13EvidenceContext(
     section: { body: normalized },
   }).matches
     .find((match) => match.topic === disclosureType);
+  if (canonicalMatch?.matchedLocale === "en") {
+    if (disclosureType === "recipients_or_vendor_categories") return hasSubstantiveRecipientsEvidence(normalized);
+    if (disclosureType === "data_retention") return hasSubstantiveRetentionEvidence(normalized);
+    if (disclosureType === "automated_decision_making_or_profiling") return hasSubstantiveAutomatedDecisionOrProfilingEvidence(normalized);
+  }
   if (
     canonicalMatch?.matchedLocale === "en" &&
     disclosureType === "legal_basis" &&

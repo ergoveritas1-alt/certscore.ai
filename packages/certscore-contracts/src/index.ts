@@ -19,6 +19,7 @@ export * from "./collection-field-review";
 export * from "./collection-field-labels";
 import { siteMetadataSchema } from "./site-metadata";
 export * from "./site-metadata";
+export * from "./cms-version-evidence";
 import { z } from "zod";
 import { consentControlLinkDestinationSchema } from "./consent-control-link";
 import { vendorServicePurposeSchema } from "./vendor-service-purpose";
@@ -3330,8 +3331,9 @@ export const displaySafeEvidenceExcerptSchema = z.object({
 
 // Type annotation bounds declaration size; runtime validation is unchanged.
 const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceObservationSchema>, z.ZodTypeDef, unknown> = policySurfaceObservationSchema;
+const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
 const canonicalEvidenceBundleBaseSchema = z.object({
-  runtimeMetadataSnapshots: z.array(domSnapshotArtifactSchema).max(1).optional(),
+  runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
   resourceInventoryContext: z.object({
     finalUrl: z.string().max(2000), links: z.array(z.string().max(2000)).max(5000),
     configuration: z.record(z.unknown()), configurationHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -3382,7 +3384,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   cmpRuntimeObservations: z.array(cmpRuntimeObservationSchema).default([]),
   screenshots: z.array(screenshotArtifactSchema),
   homepageScreenshot: homepageScreenshotStateSchema.optional(),
-  domSnapshots: z.array(domSnapshotArtifactSchema),
+  domSnapshots: z.array(canonicalDomSnapshotSchema),
   normalizedVendorObservations: z.array(normalizedVendorObservationSchema),
   observedJourneys: z.array(observedJourneySchema).default([]),
   derivedRuntimeSignals: derivedRuntimeSignalsSchema,

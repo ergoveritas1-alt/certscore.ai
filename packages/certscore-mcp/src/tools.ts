@@ -1,4 +1,4 @@
-import { privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
+import { privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, scanFormsSummarySchema, scanScoreExplanationSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 
 import { bundleReviewNavigation } from "./review-navigation.js";
 
@@ -1246,8 +1246,26 @@ export function scanSiteText(value: Record<string, any>, leadingLines: string[] 
   ]);
 }
 
-function terminalLaneResultTextLines(value: Record<string, any>) {
+function reportSummaryTextLines(value: Record<string, any>) {
   const lines: string[] = [];
+  const forms = scanFormsSummarySchema.safeParse(value.formsSummary);
+  if (forms.success) {
+    const summary = forms.data;
+    lines.push(`Forms observed (starting page): ${summary.totalObserved}; pre-consent=${summary.preConsentObserved ?? "unavailable"}; after Accept click=${summary.afterAcceptObserved ?? "unavailable"}.`);
+    if (value.scanId) lines.push(`Form fields and screenshots: certscore_get_report_evidence_page with scanId=${value.scanId}, section=forms.`);
+  }
+  const score = scanScoreExplanationSchema.safeParse(value.scoreExplanation);
+  if (score.success) {
+    for (const family of score.data.deductions) {
+      lines.push(`Canonical score deduction: ${family.deductionPoints} points (${family.label}); ` +
+        family.rules.map(rule => `${rule.ruleId}${rule.decisionVerification === "not_applicable" ? "" : `; decision verification=${rule.decisionVerification}`}`).join(", ") + ".");
+    }
+  }
+  return lines;
+}
+
+function terminalLaneResultTextLines(value: Record<string, any>) {
+  const lines: string[] = reportSummaryTextLines(value);
   const gpcResponse = value.gpcResponse && typeof value.gpcResponse === "object" && !Array.isArray(value.gpcResponse)
     ? value.gpcResponse as Record<string, any>
     : null;
@@ -1460,6 +1478,7 @@ export function pulseReportText(value: Record<string, any>, label = "CertScore r
   const findings = findingsFromReport(value as PulseResult);
   const overview = executiveOverviewText(value.executiveSummary ?? value.summary?.executiveSummary);
   const body = [
+    ...reportSummaryTextLines(value),
     ...(overview ? [overview] : []),
     `Canonical projected findings returned in this ${label.toLocaleLowerCase()}: ${findings.length}.`,
     ...findings.map((finding) => findingText(finding as Record<string, any>)),
@@ -1507,6 +1526,7 @@ export function scanBundleText(bundle: Record<string, any>, options: { toolProfi
     lines.push(line);
     return true;
   };
+  for (const line of reportSummaryTextLines(bundle)) append(line);
   const coverage = bundle.coverage && typeof bundle.coverage === "object" && !Array.isArray(bundle.coverage)
     ? bundle.coverage as Record<string, unknown>
     : null;
@@ -1788,6 +1808,8 @@ export function buildScanBundle(input: {
       (audit.contractVersion === "certscore.privacy-audit-evidence.v2" && audit.controlCandidates.length > 3) ||
       audit.notices.length > 2,
   }) : null;
+  const formsSummary = scanFormsSummarySchema.safeParse(input.scan.formsSummary);
+  const scoreExplanation = scanScoreExplanationSchema.safeParse(input.scan.scoreExplanation);
   const guidedScan = withMcpAgentGuidance(input.scan as unknown as Record<string, any>);
   const bundle: Record<string, any> = {
     type: "certscore_scan_bundle",
@@ -1808,6 +1830,8 @@ export function buildScanBundle(input: {
     ...(input.scan.gpcResponse ? { gpcResponse: input.scan.gpcResponse } : {}),
     postAcceptObservation: input.scan.postAcceptObservation ?? null,
     postRefusalObservation: input.scan.postRefusalObservation ?? null,
+    ...(formsSummary.success ? { formsSummary: formsSummary.data } : {}),
+    ...(scoreExplanation.success && scoreExplanation.data.score === input.scan.score ? { scoreExplanation: scoreExplanation.data } : {}),
     provenance: scanProvenance(input.scan as unknown as Record<string, any>, "existing_scan_retrieved"),
     interpretationGuidance: interpretationGuidance(
       input.scan.resultDisposition === "no_go" ? COMPACT_SCAN_BUNDLE_INTERPRETATION_STATEMENT :
@@ -2073,6 +2097,16 @@ export function buildScanBundle(input: {
     bundle.mcpMetadata.heavyEvidenceIncluded = false;
     refresh();
   }
+  // Large optional lane packets must not displace the canonical score reasons or
+  // form tally. Omitted packets remain available through focused evidence reads.
+  for (const section of ["gpcResponse", "postAcceptObservation", "postRefusalObservation"]) {
+    if (bundle.mcpMetadata.actualBytes <= maxBytes) break;
+    if (bundle[section]) {
+      markBudgetOmitted(section, "lane_detail_omitted_to_preserve_canonical_summary");
+      delete bundle[section];
+      refresh();
+    }
+  }
   while (bundle.mcpMetadata.actualBytes > maxBytes && bundle.findings.length > 1) {
     markBudgetOmitted("additionalFindings", "findings_reduced_to_byte_limit");
     bundle.findings.pop();
@@ -2084,6 +2118,11 @@ export function buildScanBundle(input: {
   }
   if (bundle.mcpMetadata.truncated) {
     refreshTruncationGuidance();
+  }
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.scoreExplanation) {
+    markBudgetOmitted("scoreExplanation", "score_explanation_omitted_to_byte_limit");
+    delete bundle.scoreExplanation;
+    refresh();
   }
   if (bundle.mcpMetadata.actualBytes > maxBytes) {
     const minimal: Record<string, any> = {
@@ -2105,6 +2144,8 @@ export function buildScanBundle(input: {
       ...(bundle.gpcResponse ? { gpcResponse: bundle.gpcResponse } : {}),
       postAcceptObservation: bundle.postAcceptObservation,
       postRefusalObservation: bundle.postRefusalObservation,
+      ...(bundle.formsSummary ? { formsSummary: bundle.formsSummary } : {}),
+      ...(bundle.scoreExplanation ? { scoreExplanation: bundle.scoreExplanation } : {}),
       provenance: bundle.provenance,
       interpretationGuidance: bundle.interpretationGuidance,
       resultDisposition: bundle.resultDisposition,

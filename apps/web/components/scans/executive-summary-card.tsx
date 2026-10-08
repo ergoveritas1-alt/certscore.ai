@@ -133,6 +133,7 @@ export type ExecutiveScanInterruption = {
 
 export type ExecutiveTimelineEvent = {
   atMs: number;
+  detail?: string;
   label: string;
   tone?: "amber" | "emerald" | "rose" | "sky" | "slate";
   vendorLabel?: string | null;
@@ -2590,14 +2591,10 @@ function formatTimelineOffset(ms: number) {
 
 function getTimelineToneClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") {
   switch (tone) {
-    case "amber":
-      return "border-amber-200 bg-amber-50/82 text-amber-950";
     case "emerald":
       return "border-emerald-200 bg-emerald-50/82 text-emerald-950";
     case "rose":
       return "border-rose-200 bg-rose-50/82 text-rose-950";
-    case "sky":
-      return "border-sky-200 bg-sky-50/82 text-sky-950";
     default:
       return "border-slate-200 bg-white text-slate-800";
   }
@@ -2605,14 +2602,10 @@ function getTimelineToneClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") 
 
 function getTimelineTimeBadgeClasses(tone: ExecutiveTimelineEvent["tone"] = "slate") {
   switch (tone) {
-    case "amber":
-      return "border-amber-200 bg-amber-100 text-amber-800";
     case "emerald":
       return "border-emerald-200 bg-emerald-100 text-emerald-800";
     case "rose":
       return "border-rose-200 bg-rose-100 text-rose-800";
-    case "sky":
-      return "border-sky-200 bg-sky-100 text-sky-800";
     default:
       return "border-slate-200 bg-slate-100 text-slate-700";
   }

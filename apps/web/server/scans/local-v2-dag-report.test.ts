@@ -3738,7 +3738,7 @@ test("summarizePolicySurfaces retains outside-region service-provider transfer s
   assert.equal(discardedTransferSignals.length, 0);
 });
 
-test("summarizePolicySurfaces dedupes overlapping Article 13 evidence candidates", async () => {
+test("summarizePolicySurfaces dedupes overlapping source quotes and preserves distinct Article 13 evidence", async () => {
   const { dedupePolicySurfaces, summarizePolicySurfaces } = await loadLocalV2DagReport();
   const shorterRightsText = "You have the right to access and correct your personal data.";
   const mediumRightsText = "You have the right to access, correct, delete, and erase your personal data.";
@@ -3831,7 +3831,11 @@ test("summarizePolicySurfaces dedupes overlapping Article 13 evidence candidates
 
   assert.deepEqual(
     summary.article13DisclosureSignals.map((signal) => signal.evidenceText),
-    [completeRightsText]
+    [completeRightsText, distinctRightsText]
+  );
+  assert.deepEqual(
+    summary.article13DisclosureSignals.map((signal) => signal.selectedPolicySectionExcerpt),
+    [completeRightsText, distinctRightsText]
   );
   assert.deepEqual(
     summary.retainedArticle13SectionEvidence.map((evidence) => evidence.selectedPolicySectionExcerpt),
@@ -3967,7 +3971,9 @@ test("summarizePolicySurfaces carries row-targeted retained policy section evide
     evidence.signalObserved === "not_confirmed" &&
     evidence.extractionLimitation === "section_retained_without_row_specific_disclosure"
   ), true);
-  assert.equal(summary.article13DisclosureSignals[0]?.selectedPolicySectionHeading, "Policy text context");
+  assert.equal(summary.article13DisclosureSignals[0]?.selectedPolicySectionHeading, "Retaining your information");
+  assert.equal(summary.article13DisclosureSignals[0]?.selectedPolicySectionExcerpt,
+    surfaces[0]?.surface.article13DisclosureSignals?.[0]?.selectedPolicySectionExcerpt);
   assert.match(summary.article13DisclosureSignals[0]?.selectedPolicySectionExcerpt ?? "", /retained as long as necessary/i);
 });
 
@@ -9328,6 +9334,13 @@ test("canonical request attribution does not spread cookie vendors to the host's
     const analytics = timeline.find(event => /analytics/i.test(JSON.stringify(event)));
     assert.ok(analytics);
     assert.equal(analytics.atMs, 2601);
+    const markers = hybrid.timelineMarkers as Record<string, unknown>;
+    assert.equal(markers.firstCookieObservedMs, 4416);
+    assert.equal(markers.firstTrackingCookieSetMs, undefined);
+    const cookie = timeline.find(event => event.label === "Cookie observed");
+    assert.equal(cookie?.atMs, 4416);
+    assert.equal(cookie?.tone, "slate");
+    assert.match(cookie?.detail ?? "", /snapshot observation/);
     assert.equal(detail.snapshot?.preconsent_tracking_detected, true);
   } finally { process.env.NEXT_PUBLIC_APP_URL = previousAppUrl; await rm(outDir, { recursive: true, force: true }); }
 });

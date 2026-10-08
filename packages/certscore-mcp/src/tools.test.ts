@@ -5,6 +5,46 @@ import { CertScoreError, type PulseResult } from "@certscore/sdk";
 import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema, mcpPreConsentCookiesTrackersOutputSchema } from "@certscore/api-contracts";
 import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
 
+test("bounded MCP bundles retain form phases, canonical Reject deductions and focused forms navigation", () => {
+  const formsSummary = { contractVersion: "certscore.forms-summary.v1", scope: "starting_page_reportable_observations",
+    totalObserved: 2, preConsentObserved: 0, afterAcceptObserved: 2, preConsentCapture: "complete", afterAcceptCapture: "retained" };
+  for (const decisionVerification of ["confirmed", "unconfirmed"]) {
+    const scoreExplanation = { contractVersion: "certscore.score-explanation.v1", scope: "starting_page_canonical_score",
+      scoreVersion: "overall-score.v1", policyVersion: "gdpr-eprivacy-posture.v16", baseScore: 100, scoreFloor: 0,
+      score: 85, totalPolicyDeductionPoints: 15, deductions: [{ family: "post_refusal_enforcement", label: "Post-refusal",
+        deductionPoints: 15, rules: [{ ruleId: "post_reject_tracking_reduction", label: "Post-Reject activity", policyDeductionPoints: 15,
+          findingIds: ["regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction"], decisionVerification }] }] };
+    const bundle = buildScanBundle({ detail: "summary", maxBytes: 8000, report: null,
+      findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+      scan: { type: "certscore_scan", scanId: "scan_123", domain: "sits.example", url: "https://sits.example/en/", status: "completed",
+        score: 85, scoreStatus: "final", formsSummary, scoreExplanation } as any });
+    assert.deepEqual(bundle.formsSummary, formsSummary);
+    assert.deepEqual(bundle.scoreExplanation, scoreExplanation);
+    assert.equal(bundle.score, 85);
+    assert.ok(bundle.mcpMetadata.actualBytes <= 8000);
+    assert.deepEqual(bundle.reviewNavigation?.evidenceIndex.find((row: any) => row.key === "forms")?.retrieval?.arguments,
+      { scanId: "scan_123", section: "forms" });
+    assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+    const text = scanBundleText(bundle);
+    assert.match(text, /Forms observed \(starting page\): 2; pre-consent=0; after Accept click=2/);
+    assert.match(text, /section=forms/);
+    assert.match(text, /Canonical score deduction: 15 points \(Post-refusal\)/);
+    assert.ok(text.includes(`decision verification=${decisionVerification}`));
+    const bounded = buildScanBundle({ detail: "summary", maxBytes: 8000, report: null,
+      findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+      scan: { type: "certscore_scan", scanId: "scan_123", domain: "sits.example", url: "https://sits.example/en/", status: "completed",
+        score: 85, scoreStatus: "final", formsSummary, scoreExplanation,
+        gpcResponse: { retainedDiagnostic: "x".repeat(10_000) } } as any });
+    assert.deepEqual(bounded.formsSummary, formsSummary);
+    assert.deepEqual(bounded.scoreExplanation, scoreExplanation);
+    assert.equal(bounded.gpcResponse, undefined);
+    assert.ok(bounded.mcpMetadata.omittedSections.includes("gpcResponse"));
+    assert.ok(bounded.mcpMetadata.actualBytes <= 8000);
+    assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bounded));
+    assert.match(scanBundleText(bounded), /Canonical score deduction: 15 points/);
+  }
+});
+
 const report = {
   type: "certscore_pulse",
   scanId: "scan_123",

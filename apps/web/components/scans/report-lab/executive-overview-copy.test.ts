@@ -116,6 +116,7 @@ test("executive overview describes Reject outcomes without disclosing scoring tr
 test("executive overview summarizes a focused mixed review without creating new findings", () => {
   const copy = buildExecutiveOverview({
     ...baseInput,
+    preConsentConcerns: { tracking: true, storage: true },
     findings: [
       { summary: "Reject was not observed.", title: "Decline consent control" },
       { summary: "Third-party activity was retained before consent.", title: "Pre-consent tracking" },
@@ -125,7 +126,7 @@ test("executive overview summarizes a focused mixed review without creating new 
   assertBounded(copy);
   assert.match(copy, /focused review/i);
   assert.match(copy, /tracking activity and cookies\/storage/i);
-  assert.match(copy, /3\.9s/);
+  assert.doesNotMatch(copy, /3\.9s|before the first consent surface/);
   assert.match(copy, /device identification \/ fingerprinting signal/i);
 });
 
@@ -198,4 +199,26 @@ test("oversized projected introductions are not cut into a partial assertion", (
   });
   assert.ok(copy.length <= EXECUTIVE_OVERVIEW_MAX_LENGTH);
   assert.equal(copy, "See Priority review for the retained assessment details.");
+});
+
+
+test("Reject findings mentioning cookies do not invent a pre-consent storage concern", () => {
+  const copy = buildExecutiveOverview({ ...baseInput,
+    controls: { accept: "Observed", reject: "Observed", options: "Observed" },
+    findings: [{ title: "Non-essential activity after confirmed Reject",
+      summary: "After the cookie banner Reject control was confirmed, requests or storage writes were retained." }],
+    preConsentConcerns: { tracking: false, storage: false },
+    rejectPath: { observationWindowMs: 8000, state: "issue_observed" },
+  });
+  assert.match(copy, /confirmed Reject path did not stop/);
+  assert.doesNotMatch(copy, /pre-consent storage|Cookies\/storage also|first consent surface|3\.9s/);
+});
+
+test("pre-consent overview timing claims require their own canonical concern and do not compare browser lanes", () => {
+  const copy = buildExecutiveOverview({ ...baseInput,
+    findings: [{ title: "Pre-consent cookies/storage", summary: "Canonical storage concern retained." }],
+    preConsentConcerns: { tracking: false, storage: true },
+  });
+  assert.match(copy, /Cookies\/storage was retained in the pre-consent observations/);
+  assert.doesNotMatch(copy, /3\.9s|before the first consent surface/);
 });

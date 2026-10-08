@@ -1,14 +1,14 @@
 import type { ReportEvidenceSection } from "@certscore/api-contracts";
 
 // Select existing display projections only. Never classify findings or infer observations.
-const CONTEXT_FIELDS = ["scan", "score", "verdict", "findings", "nextStep", "coverage"] as const;
+const CONTEXT_FIELDS = ["scan", "score", "scoreExplanation", "verdict", "findings", "nextStep", "coverage"] as const;
 const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
   consent: ["controls", "consentVendor", "consentRows", "acceptPath", "rejectPath", "choicePathComparison"],
   gpc: ["gpcResponse", "gpcLaneStatus"],
   policy: ["gdprTransparencyRows", "policySurfaceCoverage"],
   tracking: ["preConsentRuntimeRows", "trackingExternalRows", "inventory", "inventorySummary", "resourceInventory", "trackerVendors", "fullSiteReport"],
   transport: ["transportRows"],
-  forms: ["collectionFields", "collectionLimitations", "collectionStatus", "collectionSurfaces", "collectionTableRows", "fullSiteReport"],
+  forms: ["formsSummary", "collectionFields", "collectionLimitations", "collectionStatus", "collectionSurfaces", "collectionTableRows", "fullSiteReport"],
 };
 
 export function selectReportEvidenceSection(report: Record<string, unknown>, section: ReportEvidenceSection) {

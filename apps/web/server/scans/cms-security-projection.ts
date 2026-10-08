@@ -1,4 +1,4 @@
-import { assessCmsSignals, cmsSafeUrl, cmsSecurityProjectionSchema, siteMetadataSchema, type CanonicalEvidenceBundle, type CmsSignal } from "@certscore/contracts";
+import { assessCmsPluginSignals, assessCmsSignals, cmsSafeUrl, cmsSecurityProjectionSchema, siteMetadataSchema, type CanonicalEvidenceBundle, type CmsSignal } from "@certscore/contracts";
 
 /** No fetches: only metadata in the already verified, document-bound runtime artifact. */
 export function projectCmsSecurity(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null) {
@@ -19,11 +19,18 @@ export function projectCmsSecurity(bundle: CanonicalEvidenceBundle, source: { sh
     if (!assetUrl || new URL(assetUrl).origin !== new URL(url).origin) continue;
     signals.push({ evidenceRef: `site_integrity:asset:${index}`, kind: "asset_path", value: new URL(assetUrl).pathname, sourceUrl: assetUrl, artifactRef });
   }
+  for (const [index, proof] of (metadata.data.versionEvidence ?? []).entries()) {
+    if (new URL(proof.sourceUrl).origin !== new URL(url).origin || proof.kind === "html_generator_comment" && proof.sourceUrl !== url ||
+        proof.kind === "feed_generator" && (proof.linkedFrom !== url || !metadata.data.feedLinks?.includes(proof.sourceUrl))) return null;
+    signals.push({ evidenceRef: `site_integrity:version:${index}`, kind: proof.kind, value: proof.value, sourceUrl: proof.sourceUrl, artifactRef, versionEvidence: proof });
+  }
+  const policy = metadata.data.versionEvidence !== undefined ? "v2" : "v1";
   const capturedAt = new Date(start + snapshot.capturedAtMs).toISOString();
   const result = cmsSecurityProjectionSchema.safeParse({
-    contractVersion: "certscore.cms-security-projection.v1", scanId: bundle.scanId, verificationStatus: "verified",
+    contractVersion: `certscore.cms-security-projection.${policy}`, scanId: bundle.scanId, verificationStatus: "verified",
     sourceHash: source.sha256, documentUrl: url, documentToken: snapshot.documentIdentity!.token,
-    capturedAt, evidenceRef: artifactRef, signals, assessment: assessCmsSignals(signals, capturedAt),
+    capturedAt, evidenceRef: artifactRef, signals, assessment: assessCmsSignals(signals, capturedAt, undefined, policy),
+    pluginInventory: assessCmsPluginSignals(signals),
   });
   return result.success ? result.data : null;
 }

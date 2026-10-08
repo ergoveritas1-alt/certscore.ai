@@ -1,3 +1,4 @@
+import { scanFormsSummarySchema, scanScoreExplanationSchema } from "./scan-report-summary.js";
 import { z } from "zod";
 import {
   apiV2GpcResponseSchema,
@@ -215,6 +216,8 @@ export const pulseResponseSchema = z
     gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
     postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
+    formsSummary: scanFormsSummarySchema.nullable().optional(),
+    scoreExplanation: scanScoreExplanationSchema.nullable().optional(),
     summary: pulseSummarySchema.optional(),
     topFindings: z.array(pulseFindingSchema).optional(),
     transportSecurity: pulseTransportSecuritySchema.optional(),

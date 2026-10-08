@@ -28,3 +28,14 @@ test("timeline concerns color the marker, time, label and detail red while ordin
   const ordinary = renderToStaticMarkup(<RuntimeObservationTimeline compact events={events.map(event=>({...event,tone:"neutral"}))}/>);
   assert.doesNotMatch(ordinary, /text-rose|bg-rose/);
 });
+
+
+test("timeline never subtracts observation times without same-session comparison proof", () => {
+  const html = renderToStaticMarkup(<RuntimeObservationTimeline compact events={[
+    { at: "10.13s", atMs: 10126, label: "Cookie observed", detail: "Snapshot observation", tone: "concern" },
+    { at: "12.9s", atMs: 12903, label: "Consent banner", detail: "Controls observed", tone: "positive" },
+  ]}/>);
+  assert.doesNotMatch(html, /before consent surface|2.78s/);
+  assert.match(html, /10.13s/);
+  assert.match(html, /12.9s/);
+});

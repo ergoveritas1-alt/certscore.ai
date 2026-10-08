@@ -1,3 +1,4 @@
+import { projectScanFormsSummary, projectScanScoreExplanation } from "./scan-report-summary";
 import { readPrivacyAuditEvidence } from "../scans/report-review-focus";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../scans/choice-path-execution";
@@ -114,6 +115,8 @@ type PulseStatusLike = {
   noGo?: ScanNoGoResult;
   postAcceptObservation?: ApiV2ScanResource["postAcceptObservation"];
   postRefusalObservation?: ApiV2ScanResource["postRefusalObservation"];
+  formsSummary?: ApiV2ScanResource["formsSummary"];
+  scoreExplanation?: ApiV2ScanResource["scoreExplanation"];
   gpcResponse?: ApiV2ScanResource["gpcResponse"];
   preConsentPreview?: ApiV2ScanJob["preConsentPreview"];
   error?: {
@@ -1027,6 +1030,8 @@ export function buildApiV2ScanResource(
   const noGoProjection = projectScanReportNoGo(scanRecord);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
+  const formsSummary = canonicalResultState === "final" ? projectScanFormsSummary(scanRecord) : null;
+  const scoreExplanation = canonicalResultState === "final" ? projectScanScoreExplanation(scanRecord, score) : null;
   const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION;
   const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
   const gpcResponse = deriveApiV2GpcResponse(scanRecord);
@@ -1065,12 +1070,15 @@ export function buildApiV2ScanResource(
     gpcResponse,
     postAcceptObservation,
     postRefusalObservation,
+    ...(formsSummary ? { formsSummary } : {}),
+    ...(scoreExplanation ? { scoreExplanation } : {}),
     coverage: deriveCoverage(scanRecord),
     links: {
       self: absoluteUrl(`/api/v2/scans/${scan.id}`),
       status: absoluteUrl(`/api/v2/scans/${scan.id}/status`),
       findings: absoluteUrl(`/api/v2/scans/${scan.id}/findings`),
       diagnostics: absoluteUrl(`/api/v2/scans/${scan.id}/diagnostics`),
+      formsEvidence: absoluteUrl(`/api/v2/scans/${scan.id}/report-evidence?section=forms`),
       preConsentCookiesTrackers: absoluteUrl(`/api/v2/scans/${scan.id}/pre-consent-cookies-trackers`),
       pulse: absoluteUrl(`/api/v2/scans/${scan.id}/pulse`),
       report: absoluteUrl(`/scan/${scan.id}`),
@@ -1272,6 +1280,8 @@ export function buildApiV2ScanStatus(
     gpcResponse: canonicalScan.gpcResponse ?? null,
     postAcceptObservation: canonicalScan.postAcceptObservation ?? null,
     postRefusalObservation: canonicalScan.postRefusalObservation ?? null,
+    ...(canonicalScan.formsSummary ? { formsSummary: canonicalScan.formsSummary } : {}),
+    ...(canonicalScan.scoreExplanation ? { scoreExplanation: canonicalScan.scoreExplanation } : {}),
     coverage: canonicalScan.coverage ?? null,
     lastUpdatedAt: lastHeartbeatAt ?? undefined,
     phaseStartedAt,
@@ -1289,6 +1299,7 @@ export function buildApiV2ScanStatus(
       ...(status === "completed" || status === "completed_limited" ? { findings: absoluteUrl(`/api/v2/scans/${scan.id}/findings`) } : {}),
       ...(status === "completed" || status === "completed_limited" ? { pulse: absoluteUrl(`/api/v2/scans/${scan.id}/pulse`) } : {}),
       ...(status === "completed" || status === "completed_limited" ? { report: reportUrl } : {}),
+      ...(status === "completed" || status === "completed_limited" ? { formsEvidence: absoluteUrl(`/api/v2/scans/${scan.id}/report-evidence?section=forms`) } : {}),
       docs: absoluteUrl("/api/v2/openapi.json")
     },
     disclaimer: apiV2Disclaimer
@@ -1374,6 +1385,8 @@ export function buildApiV2ScanJobFromPulseStatus(
     gpcResponse: status.gpcResponse ?? null,
     postAcceptObservation: status.postAcceptObservation ?? null,
     postRefusalObservation: status.postRefusalObservation ?? null,
+    ...(status.formsSummary ? { formsSummary: status.formsSummary } : {}),
+    ...(status.scoreExplanation ? { scoreExplanation: status.scoreExplanation } : {}),
     coverage: status.coverage ?? null,
     lastUpdatedAt: dateStringOrNull(status.lastUpdatedAt ?? status.completedAt ?? status.createdAt) ?? undefined,
     phaseStartedAt: dateStringOrNull(status.phaseStartedAt ?? status.startedAt ?? status.createdAt),
@@ -1395,6 +1408,7 @@ export function buildApiV2ScanJobFromPulseStatus(
       findings: scanId && (normalizedStatus === "completed" || normalizedStatus === "completed_limited") ? absoluteUrl(`/api/v2/scans/${scanId}/findings`) : undefined,
       pulse: scanId && (normalizedStatus === "completed" || normalizedStatus === "completed_limited") ? absoluteUrl(`/api/v2/scans/${scanId}/pulse`) : undefined,
       report: reportUrl ?? undefined,
+      formsEvidence: scanId && (normalizedStatus === "completed" || normalizedStatus === "completed_limited") ? absoluteUrl(`/api/v2/scans/${scanId}/report-evidence?section=forms`) : undefined,
       docs: absoluteUrl("/api/v2/openapi.json")
     },
     disclaimer: apiV2Disclaimer

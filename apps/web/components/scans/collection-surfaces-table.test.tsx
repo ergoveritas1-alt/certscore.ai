@@ -132,3 +132,17 @@ test("form summary exposes disclosure and screenshot status with compact post-cl
   const withNotice=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form:{...row.form,privacyDisclosure:{version:1,truncated:false,excerpts:[{text:"Personal data is used for support.",association:"inside_form",links:[]}]}}}]}/>);
   assert.match(withNotice,/View privacy disclosure: Contact us/);
 });
+
+test("privacy disclosure is the last summary column and stays aligned with its cell", () => {
+  const html=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form:{...row.form,
+    privacyDisclosure:{version:1,truncated:false,excerpts:[{text:"We handle your request.",association:"inside_form",links:[]}]}}}]}/>);
+  const header=html.match(/<thead\b[^>]*>(.*?)<\/thead>/s)![1]!;
+  const headers=[...header.matchAll(/<th\b[^>]*>(.*?)<\/th>/gs)].map(match=>match[1]!.replace(/<[^>]+>/g,""));
+  assert.deepEqual(headers.map(label=>label.replace(/[↑↓↕]/g,"")),
+    ["View details","Form","Fields","Data type","Destination","Page","Screenshot","Privacy disclosure"]);
+  const firstRow=html.match(/<tbody><tr\b[^>]*>(.*?)<\/tr>/s)![1]!;
+  const cells=[...firstRow.matchAll(/<td\b[^>]*>(.*?)<\/td>/gs)].map(match=>match[1]!);
+  assert.equal(cells.length,7);
+  assert.match(cells[5]!,/View form: Contact us/);
+  assert.match(cells[6]!,/View privacy disclosure: Contact us/);
+});

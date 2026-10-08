@@ -1,3 +1,4 @@
+import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
 import { reportEvidencePageOpenApi } from "./report-page-openapi.js";
 import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.js";
 import { gpcActivityComparisonOpenApi } from "./gpc-activity-comparison-openapi.js";
@@ -626,7 +627,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
         get: {
           operationId: "getReportEvidencePage", tags: ["Scans", "Runtime Inventory"],
           summary: "Retrieve retained report evidence or the tracking workpaper.",
-          description: "Use section=consent, gpc, policy, tracking, transport or forms for focused retained report sections with shared identity, score, findings and coverage context. Preserve section on cursor continuation. Unselected or not-returned fields do not establish absence. Use workpaper=tracking separately for the starting-page inventory, privacy choices/notices and GPC evidence; section and workpaper cannot be combined. Default returns paginated JSON with download URLs; format=download returns one JSON document; format=csv requires workpaper=tracking. Preserve workpaper on cursor continuation. Workspace reports require an authorized read credential or a returned five-minute download capability. Anonymous access is limited to eligible public scans. Existing report-page read quotas apply; no scan is created. Inventory sale, sharing and vendor-specific GPC honoring remain not_assessed.",
+          description: "Use section=consent, gpc, policy, tracking, transport or forms for focused retained report sections with shared identity, score, findings and coverage context. For forms, follow scan.links.formsEvidence; collectionTableRows includes phase-labelled field metadata and each available snapshot.url is a separate API JPEG read using the same bearer credential. Preserve section on cursor continuation. Unselected or not-returned fields do not establish absence. Use workpaper=tracking separately for the starting-page inventory, privacy choices/notices and GPC evidence; section and workpaper cannot be combined. Default returns paginated JSON with download URLs; format=download returns one JSON document; format=csv requires workpaper=tracking. Preserve workpaper on cursor continuation. Workspace reports require an authorized read credential or a returned five-minute download capability. Anonymous access is limited to eligible public scans. Existing report-page read quotas apply; no scan is created. Inventory sale, sharing and vendor-specific GPC honoring remain not_assessed.",
           security: [{ bearerAuth: [] }, {}],
           parameters: [
             { name: "scanId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
@@ -646,6 +647,27 @@ export function buildCertScoreApiV2OpenApiDocument() {
             "404": { description: "Completed authorized report unavailable.", content: errorContent },
             "409": { description: "Report snapshot changed; restart pagination.", content: errorContent },
             "429": readRateLimitedResponse,
+          },
+        },
+      },
+      "/api/v2/scans/{scanId}/report-evidence/form-snapshot": {
+        get: {
+          operationId: "getRetainedFormSnapshot", tags: ["Scans", "Runtime Inventory"],
+          summary: "Download one retained, verified form screenshot.",
+          description: "Follow an available form snapshot.url returned by section=forms. Retrieves pre-consent, post-Accept, or full-site retained masked JPEGs without creating a scan. Workspace images require the same API read bearer credential; report JSON download tickets do not authorize image reads. Eligible anonymous scans require no credential. Withheld, unavailable or unverifiable images return 404. Existing evidence-read quotas apply.",
+          security: [{ bearerAuth: [] }, {}],
+          parameters: [
+            { name: "scanId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            { name: "formRef", in: "query", required: true, description: "Retained form reference; after_accept: prefix selects an After Accept image.", schema: { type: "string", pattern: "^(?:after_accept:)?collection_form_\\d+$" } },
+            { name: "formPage", in: "query", description: "Retained additional-page ID for full-site images. Omit for starting-page and post-Accept images.", schema: { type: "string", format: "uuid" } },
+          ],
+          responses: {
+            "200": { description: "Verified retained JPEG.", content: { "image/jpeg": { schema: { type: "string", format: "binary" } } } },
+            "400": { description: "Invalid scan or form reference." },
+            "403": { description: "Invalid or insufficient read credential." },
+            "404": { description: "Authorized retained image unavailable." },
+            "429": readRateLimitedResponse,
+            "503": { description: "Read protection temporarily unavailable." },
           },
         },
       },
@@ -740,6 +762,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
         }
       },
       schemas: {
+        ...scanReportSummaryOpenApi,
         ReportEvidencePage: reportEvidencePageOpenApi,
         CreateScanRequest: {
           type: "object",
@@ -1139,6 +1162,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
             postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
+            formsSummary: { $ref: "#/components/schemas/FormsSummary" },
+            scoreExplanation: { $ref: "#/components/schemas/ScoreExplanation" },
             preConsentPreview: { $ref: "#/components/schemas/PreConsentRuntimePreview" },
             coverage: { type: ["object", "null"], additionalProperties: true },
             lastUpdatedAt: { type: "string" },
@@ -1205,6 +1230,8 @@ export function buildCertScoreApiV2OpenApiDocument() {
             gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
             postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
+            formsSummary: { $ref: "#/components/schemas/FormsSummary" },
+            scoreExplanation: { $ref: "#/components/schemas/ScoreExplanation" },
             coverage: { type: "object", additionalProperties: true },
             executionMode: { type: "string", enum: ["new_scan", "reused_scan"] },
             reused: { type: "boolean" },
@@ -1574,6 +1601,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             findings: { type: "string" },
             pulse: { type: "string" },
             report: { type: "string" },
+            formsEvidence: { type: "string", description: "Retained forms by phase, with fields and screenshot references." },
             latestDomainScan: { type: "string" },
             docs: { type: "string" }
           }

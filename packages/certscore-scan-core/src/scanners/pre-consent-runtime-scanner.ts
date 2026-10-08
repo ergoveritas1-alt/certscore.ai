@@ -1,6 +1,7 @@
+import { readDocumentSiteMetadata as captureDocumentSiteMetadata, captureWordpressFeedVersion } from "../cms-version-capture.js";
 import { revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
 import { installFormDestinationTracing } from "../form-destination-trace.js";
-import { CMS_ASSET_PATTERNS, SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
+import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { createProxyDestinationCapture } from "../proxy-destination-capture.js";
 import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "../collection-surface-snapshots";
@@ -392,26 +393,7 @@ export function buildLateConsentGeometryShadowArtifact(input: {
 }
 
 export async function readDocumentSiteMetadata(page: Page) {
-  const url = page.url();
-  const identity = currentBrowserDocumentIdentity(page);
-  const metadata = await page.evaluate((assetPatterns) => ({
-    contractVersion: "certscore.site-metadata.v1" as const,
-    title: document.title.slice(0, 240),
-    language: (document.documentElement.lang.trim() || document.querySelector('meta[http-equiv="content-language" i]')?.getAttribute("content")?.split(",")[0]?.trim() || document.querySelector('meta[property="og:locale" i]')?.getAttribute("content")?.replaceAll("_", "-") || "").slice(0, 35),
-    generators: Array.from(document.querySelectorAll('meta[name="generator" i]')).slice(0, 8).map(el => (el.getAttribute("content") || "").trim().slice(0, 160)).filter(Boolean),
-    cmsAssets: Array.from(document.querySelectorAll('script[src],link[href]')).slice(0, 500).flatMap(el => {
-      try {
-        const asset = new URL(el.getAttribute("src") || el.getAttribute("href") || "", document.baseURI);
-        if (asset.origin !== location.origin || !assetPatterns.some(pattern => new RegExp(pattern, "i").test(asset.pathname))) return [];
-        asset.search = ""; asset.hash = "";
-        return asset.href.length <= 512 ? [asset.href] : [];
-      } catch { return []; }
-    }).filter((value, index, all) => all.indexOf(value) === index).slice(0, 6),
-    wordpressAssetObserved: Array.from(document.querySelectorAll('script[src],link[href]')).slice(0, 500).some(el => {
-      try { const url = new URL(el.getAttribute("src") || el.getAttribute("href") || "", document.baseURI); return url.origin === location.origin && /^\/(?:wp-content|wp-includes)\//.test(url.pathname); } catch { return false; }
-    }),
-  }), Object.values(CMS_ASSET_PATTERNS)).catch(() => null);
-  return page.url() === url && identity?.token === currentBrowserDocumentIdentity(page)?.token ? metadata : null;
+  return captureDocumentSiteMetadata(page, () => currentBrowserDocumentIdentity(page));
 }
 
 export async function readDeclaredDocumentLanguage(page: Page): Promise<string | null> {
@@ -3808,7 +3790,19 @@ export async function preConsentRuntimeScanner(
         domText.slice(0, 100_000),
       ),
     );
-    const siteMetadata = captureRuntimeEvidence ? await readDocumentSiteMetadata(page) : null;
+    const metadataDocumentUrl = page.url();
+    const metadataDocumentToken = currentBrowserDocumentIdentity(page)?.token;
+    let siteMetadata = captureRuntimeEvidence ? await readDocumentSiteMetadata(page) : null;
+    // Only the starting-page baseline owns this fallback; GPC/additional pages do not repeat it.
+    if (siteMetadata && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only") {
+      const options = chromiumContextOptions();
+      const feedEvidence = await recordTiming(timingBreakdown, "CMS feed version", "One bounded page-linked WordPress feed fallback within the existing module deadline.", () => captureWordpressFeedVersion({
+        metadata: siteMetadata!, documentUrl: metadataDocumentUrl, deadlineAtMs: moduleDeadlineAtMs,
+        signal: input.signal, headers: { ...options.extraHTTPHeaders, ...(options.userAgent ? { "User-Agent": options.userAgent } : {}) },
+      }));
+      if (page.url() !== metadataDocumentUrl || currentBrowserDocumentIdentity(page)?.token !== metadataDocumentToken) siteMetadata = null;
+      else if (feedEvidence) siteMetadata = { ...siteMetadata, versionEvidence: [...(siteMetadata.versionEvidence ?? []), feedEvidence].slice(0, 8) };
+    }
     const documentLanguage = captureRuntimeEvidence ? siteMetadata?.language : await readDeclaredDocumentLanguage(page);
     const domSnapshot: DomSnapshotArtifact = {
       ...(siteMetadata ? { siteMetadata } : {}),

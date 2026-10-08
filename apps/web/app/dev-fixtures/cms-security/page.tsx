@@ -10,7 +10,7 @@ import { SitePriorityReview } from "../../../components/scans/site-priority-revi
 import { FullSiteExecutiveSummary } from "../../../components/scans/full-site-executive-summary";
 export const dynamic = "force-dynamic";
 const examples: Record<string, string[]> = {
-  wordpress: ["WordPress 4.5.33"],
+  wordpress: ["WordPress 4.5.33"], modern: ["WordPress 6.8"], "wordpress-unknown": ["WordPress"],
   joomla: ["Joomla! 5.2.4"], drupal: ["Drupal 10.4.2"], magento: ["Magento 2.4.7-p5"],
   adobe: ["Adobe Commerce 2.4.8"], prestashop: ["PrestaShop 8.2.2"], typo3: ["TYPO3 13.4.2"], opencart: ["OpenCart 4.2.0.0"],
   fixed: ["Drupal 10.4.3"], unsupported: ["Joomla 3.10.12"], unknown: ["Drupal 10"], hosted: ["Shopify"], conflicting: ["Drupal 10.4.2", "Drupal 11.1.3"],
@@ -23,7 +23,7 @@ export default async function CmsSecurityFixture({ searchParams }: { searchParam
   const url = "https://cms.fixture.example/";
   const bundle = { scanId: "cms-development-fixture", startedAt: "2026-09-17T00:00:00.000Z", completedAt: "2026-09-17T00:00:10.000Z", domSnapshots: [],
     runtimeMetadataSnapshots: [{ url, artifactId: "runtime:dom:1", capturedAtMs: 1000, consentStateAtTime: "pre_consent", documentIdentity: { token: "fixture-loader" },
-      siteMetadata: { contractVersion: "certscore.site-metadata.v1", title: "CMS fixture", language: "en", generators, wordpressAssetObserved: false } }],
+      siteMetadata: { contractVersion: "certscore.site-metadata.v1", title: "CMS fixture", language: "en", generators, wordpressAssetObserved: false, versionEvidence: [] } }],
   } as unknown as CanonicalEvidenceBundle;
   const projection = projectCmsSecurity(bundle, { verificationStatus: "verified", sha256: createHash("sha256").update(JSON.stringify(bundle)).digest("hex") }, url);
   if (!projection) throw new Error("CMS fixture projection failed");

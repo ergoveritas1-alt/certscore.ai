@@ -1092,3 +1092,32 @@ test("retained German clinic wording passes the canonical production evidence ad
   );
   assert.deepEqual(result.discardedArticle13DisclosureSignals, []);
 });
+
+test("accepted candidates prefer validated same-topic retained quotes and reject mismatched pointers", () => {
+  const broadCandidate = candidate({
+    topic: "international_transfers",
+    evidenceText: "We transfer your personal data outside the EEA with standard contractual clauses.",
+    matchedLocale: "en",
+    matchedTerm: "international transfers",
+  });
+  const retainedEvidence = "The personal data collected in this way is processed by our service provider, including in the USA.";
+  for (const [url, expected] of [["https://example.test/privacy", retainedEvidence], ["https://other.test/privacy", broadCandidate.evidenceText]]) {
+    const result = adaptGdprTransparencyTopicCandidatesForProduction({
+      isTargetRelevantPrivacyPolicy: true,
+      policyTextQuality: { usable: true },
+      profile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+      surface: surface([broadCandidate], {article13DisclosureSignals: [{
+        confidence: 0.9,
+        disclosureType: "international_transfers",
+        evidenceText: retainedEvidence,
+        selectedEvidenceStrength: "strong",
+        selectedPolicySectionExcerpt: retainedEvidence,
+        selectedPolicySectionUrl: url,
+        source: "deterministic",
+        status: "observed",
+      }]}),
+    });
+    assert.equal(result.acceptedProductionSignals.length, 1);
+    assert.equal(result.acceptedProductionSignals[0]!.evidenceText, expected);
+  }
+});

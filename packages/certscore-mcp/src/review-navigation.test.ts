@@ -53,3 +53,12 @@ test('zero-findings navigation offers retained evidence without inventing remedi
   assert.equal(navigation.nextActions[0]?.tool, 'certscore_get_report_evidence_page');
   assert.doesNotMatch(navigation.optionalReview, /remediation checklist/);
 });
+
+test('form summary points to the retained forms section without inventing a scan', () => {
+  const navigation = bundleReviewNavigation({ scanId, status: 'completed', findings: [],
+    formsSummary: { totalObserved: 2, preConsentObserved: 0, afterAcceptObserved: 2 } })!;
+  const forms = navigation.evidenceIndex.find(row => row.key === 'forms')!;
+  assert.equal(forms.delivery, 'included');
+  assert.deepEqual(forms.retrieval, { tool: 'certscore_get_report_evidence_page', arguments: { scanId, section: 'forms' }, createsScan: false });
+  assert.equal(navigation.evidenceIndex.length, 9);
+});

@@ -3,8 +3,95 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { article13DisclosureRejectReason, gdprTransparencyTopicCoverageDiagnosticSchema } from "@certscore/contracts";
 import { extractPolicySections, retainedPolicySectionsForObservation, retainedArticle13SectionEvidenceFromSections, buildGdprTransparencyTopicCoverageDiagnostics } from "./scanners/policy-surface-scanner.js";
+import { extractPolicyFacts, policyFactsForFetchedDocument, boundedPrefetchedPolicyAnalysisText, gdprTransparencyTopicCandidatesFromRetainedPolicySections } from "./scanners/policy-surface-scanner.js";
 
 const sourceUrl = "https://example.test/privacy";
+
+test("Russian controller contact remains source-bound without an English privacy heading", () => {
+  const textExcerpt = "Оператор персональных данных указывает контакт ответственного по защите данных.";
+  const evidence = retainedArticle13SectionEvidenceFromSections([{
+    sourceUrl, heading: "Privacy", textExcerpt, charStart: 0,
+    charEnd: textExcerpt.length, quality: "strong",
+  }], sourceUrl);
+  const controller = evidence.find(row => row.coverageArea === "controller_contact");
+  assert.equal(controller?.signalObserved, "observed");
+  assert.equal(controller?.selectedPolicySectionExcerpt, textExcerpt);
+  const roleOnly = "Оператор персональных данных обрабатывает данные.";
+  assert.notEqual(article13DisclosureRejectReason(roleOnly, "controller_contact", { mode: "multilingual_classifier" }), null);
+});
+
+test("visible-text topic candidates do not repeat an extracted heading in source quotes", () => {
+  const body = "Right to data portability. You have the right to access your personal data and to receive a portable copy. Contact privacy@example.test to exercise these rights.";
+  const candidates = gdprTransparencyTopicCandidatesFromRetainedPolicySections([{
+    heading: "Right to data portability",
+    textExcerpt: body,
+    extractionMethod: "canonical_topic_window",
+  }]);
+  const rights = candidates.find(candidate => candidate.topic === "data_subject_rights");
+  assert.ok(rights);
+  assert.ok(body.includes(rights.evidenceText));
+});
+
+test("late policy evidence remains source-bound and prefers actual website disclosures", () => {
+  const visibleText = [
+    "Privacy policy. This notice describes our personal-data processing and your rights. ".repeat(200),
+    "Information on the controller pursuant to Art. 4 No. 7 GDPR Example Group AG, Example Street 1. E-Mail: privacy@example.test.",
+    "You have the right to receive information about the origin, recipient and purpose of your stored personal data. Our service providers offer useful guidance.",
+    "Contact forms. The processing of the data entered in the form is carried out in accordance with Art. 6 (1) lit. f GDPR.",
+    "The data you enter in the form will remain with us until you request us to delete it, revoke your consent to store it or the purpose for storing the data no longer applies.",
+    "Recipient of the data: HubSpot Germany GmbH, Berlin, Germany.",
+    "Analytics. The storage period of the data in Matomo is set at 6 months. The cookies set by Matomo are valid for up to 6 months.",
+    "Newsletter. The personal data collected in this way is processed by our service provider named below, including in the USA. The legal basis for the transfer is an order processing contract as well as EU standard contractual clauses pursuant to Art. 46 GDPR.",
+    "Fanpages. Data transfers to third countries are secured by an adequacy decision pursuant to Art. 45 GDPR or by appropriate safeguards pursuant to Art. 46 GDPR.",
+    "If your personal data is processed for direct marketing, you have the right to object; this also applies to profiling. If you object, your personal data will no longer be used for direct advertising.",
+  ].join(" ");
+  const sections = extractPolicySections({ html: "", visibleText, sourceUrl });
+  const retained = retainedPolicySectionsForObservation(sections);
+  const evidence = retainedArticle13SectionEvidenceFromSections(retained, sourceUrl);
+  const expected = [
+    ["data_retention", /remain with us|set at 6 months/],
+    ["recipients_or_vendor_categories", /HubSpot Germany GmbH/],
+    ["international_transfers", /including in the USA/],
+    ["controller_contact", /Example Group AG/],
+    ["legal_basis", /data entered in the form/],
+  ] as const;
+  const hash = createHash("sha256").update(visibleText.replace(/\s+/g, " ").trim()).digest("hex");
+  for (const [topic, pattern] of expected) {
+    const row = evidence.find(row => row.coverageArea === topic)!;
+    assert.equal(row?.signalObserved, "observed", topic);
+    assert.match(row.selectedPolicySectionExcerpt, pattern, topic);
+    assert.ok(visibleText.includes(row.selectedPolicySectionExcerpt), `verbatim source: ${topic}`);
+    assert.equal(row.sourceDocumentTextSha256, hash);
+    assert.equal(row.evidenceTextSha256, createHash("sha256").update(row.selectedPolicySectionExcerpt).digest("hex"));
+    assert.doesNotMatch(row.selectedPolicySectionExcerpt, /\[(?:retention|supervisory_authority|controller_contact)\]/);
+  }
+  assert.ok(retained.length <= 24);
+  const facts = policyFactsForFetchedDocument(extractPolicyFacts(boundedPrefetchedPolicyAnalysisText(visibleText)), evidence, { allowLegacyArticle13Extraction: true });
+  const recipients = facts.article13DisclosureSignals.find(row => row.disclosureType === "recipients_or_vendor_categories");
+  assert.match(recipients!.evidenceText, /HubSpot/);
+  assert.ok(!facts.article13DisclosureSignals.some(row => row.disclosureType === "automated_decision_making_or_profiling" && row.status === "observed"));
+});
+
+test("cookie-only expiry cannot establish personal-data retention in a policy section", () => {
+  const visibleText = "Privacy policy. Analytics cookies are stored for six months. We collect personal data to answer your enquiries. You can contact us about your rights.";
+  const rows = retainedArticle13SectionEvidenceFromSections(extractPolicySections({ html: "", visibleText, sourceUrl }), sourceUrl);
+  assert.ok(!rows.some(row => row.coverageArea === "data_retention" && row.signalObserved === "observed"));
+});
+
+test("profiling witness uses concrete interest tracking rather than generic objection rights", () => {
+  const concrete = "As part of website tracking, we use cookies to track which of our pages are visited and of interest to you. The following data is processed: device identifier, IP address and pages viewed.";
+  const rights = "If your personal data is processed for direct marketing, you have the right to object; this also applies to profiling.";
+  const visibleText = ["Privacy policy. We process personal data for website marketing.", rights, "HubSpot website marketing", concrete].join(" ");
+  const sections = extractPolicySections({html: "", visibleText, sourceUrl});
+  const retained = retainedPolicySectionsForObservation(sections);
+  const witness = retainedArticle13SectionEvidenceFromSections(retained, sourceUrl)
+    .find(row => row.coverageArea === "automated_decision_making_or_profiling" && row.signalObserved === "observed");
+  assert.ok(witness);
+  assert.match(witness.selectedPolicySectionExcerpt, /we use cookies to track/);
+  assert.ok(visibleText.includes(witness.selectedPolicySectionExcerpt));
+  const facts = policyFactsForFetchedDocument(extractPolicyFacts(boundedPrefetchedPolicyAnalysisText(visibleText)), [witness], {allowLegacyArticle13Extraction: true});
+  assert.equal(facts.article13DisclosureSignals.find(row => row.disclosureType === "automated_decision_making_or_profiling")?.status, "observed");
+});
 
 test("German transfer proof retains the safeguards after an abbreviated legal citation", () => {
   const visibleText = [
@@ -124,5 +211,23 @@ test("policy coverage separates retained document and section extraction without
     assert.equal(row.sectionExtractionState, "truncated");
     assert.equal(row.evaluationState, "unknown");
     assert.equal(row.coverageState, "limited");
+  }
+});
+
+test("every localized behavioral practice retains its original policy quote and hashes", async () => {
+  const {behavioralProfilingFixtures} = await import("../../certscore-contracts/src/test-fixtures/behavioral-profiling");
+  for (const [locale, tracking, newsletter] of behavioralProfilingFixtures) {
+    for (const body of [tracking, newsletter]) {
+      const context = "This privacy policy explains how we process personal data and how you can exercise your choices.";
+      const html = `<main><h2>Privacy policy</h2><p>${context} ${body}</p></main>`;
+      const sections = extractPolicySections({html, visibleText: `Privacy policy ${context} ${body}`, sourceUrl});
+      const evidence = retainedArticle13SectionEvidenceFromSections(sections, sourceUrl);
+      const witness = evidence.find(row => row.coverageArea === "automated_decision_making_or_profiling");
+      assert.equal(witness?.signalObserved, "observed", `${locale}: ${body}`);
+      assert.ok(witness!.selectedPolicySectionExcerpt.includes(body), "retain verbatim source, including accents and punctuation");
+      assert.equal(witness!.selectedPolicySectionUrl, sourceUrl);
+      assert.equal(witness!.evidenceTextSha256, createHash("sha256").update(witness!.selectedPolicySectionExcerpt).digest("hex"));
+      assert.match(witness!.sourceDocumentTextSha256!, /^[a-f0-9]{64}$/);
+    }
   }
 });

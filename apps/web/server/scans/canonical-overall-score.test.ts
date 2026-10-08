@@ -6,7 +6,7 @@ import {
   CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY,
   CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,
 } from "../../lib/scans/california-gpc-response-policy";
-import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
+import { deriveCanonicalOverallScoreForReport, deriveCanonicalOverallScoreExplanationForReport } from "./canonical-overall-score";
 
 const checkedChecklist = [{
   assessmentStatus: "checked",
@@ -51,6 +51,18 @@ test("canonical overall score rejects malformed or differently valued GPC score 
     checklistRows: checkedChecklist,
     unifiedFindings: [gpcFinding(5)],
   }), 100);
+});
+
+test("canonical explanations preserve family caps and independently approved overall deductions", () => {
+  const postReject = { id: "post_reject_tracking_reduction", assessmentStatus: "gap_observed", status: "Gap observed",
+    evidenceState: "observed", criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true } } } as unknown as GdprEprivacyCoverageChecklistItem;
+  const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null },
+    checklistRows: [...checkedChecklist, postReject, postReject], unifiedFindings: [gpcFinding(15), gpcFinding(15)] })!;
+  assert.equal(explanation.score, 70);
+  assert.equal(explanation.totalPolicyDeductionPoints, 30);
+  assert.equal(explanation.deductions.find(row => row.family === "post_refusal_enforcement")?.deductionPoints, 15);
+  assert.equal(explanation.deductions.find(row => row.family === "gpc")?.deductionPoints, 15);
+  assert.equal(explanation.deductions.find(row => row.family === "post_refusal_enforcement")?.rules[0]?.decisionVerification, "confirmed");
 });
 
 test("limited critical coverage preserves the canonical score from supported findings", () => {

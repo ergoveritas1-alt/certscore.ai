@@ -1,3 +1,4 @@
+import { scanFormsSummarySchema, scanScoreExplanationSchema } from "./scan-report-summary.js";
 import { z } from "zod";
 import { privacyAuditEvidenceSchema, type PrivacyAuditEvidence } from "./privacy-audit.js";
 const apiPrivacyAuditEvidenceSchema: z.ZodType<PrivacyAuditEvidence> = privacyAuditEvidenceSchema;
@@ -164,6 +165,7 @@ export const apiV2LinksSchema = z
     findings: z.string().optional(),
     pulse: z.string().optional(),
     report: z.string().optional(),
+    formsEvidence: z.string().optional(),
     latestDomainScan: z.string().optional(),
     docs: z.string().optional()
   })
@@ -240,6 +242,8 @@ export const apiV2ScanJobSchema = z
     score: z.number().int().min(0).max(100).nullable().optional(),
     scoreStatus: z.enum(["provisional", "final"]).optional(),
     scoreVersion: z.string().nullable().optional(),
+    formsSummary: scanFormsSummarySchema.nullable().optional(),
+    scoreExplanation: scanScoreExplanationSchema.nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
@@ -299,6 +303,8 @@ export const apiV2ScanResourceSchema = z
     score: z.number().int().min(0).max(100).nullable().optional(),
     scoreStatus: z.enum(["provisional", "final"]).optional(),
     scoreVersion: z.string().nullable().optional(),
+    formsSummary: scanFormsSummarySchema.nullable().optional(),
+    scoreExplanation: scanScoreExplanationSchema.nullable().optional(),
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     gpcResponse: apiV2GpcResponseSchema.nullable().optional(),

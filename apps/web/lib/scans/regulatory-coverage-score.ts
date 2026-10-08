@@ -403,10 +403,11 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
     : policy.gapDeduction;
 }
 
-function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): RegulatoryCoverageScore {
-  let possibleCoverageWeight = 0;
-  let coveredWeight = 0;
+/** The score and its explanation consume this same capped policy calculation. */
+export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow[]) {
   const familyDeductions = new Map<GdprEprivacyRiskFamily, number>();
+  const familyRules = new Map<GdprEprivacyRiskFamily, Array<{ ruleId: string; label: string;
+    policyDeductionPoints: number; decisionVerification: "confirmed" | "unconfirmed" | "not_applicable" | "unknown" }>>();
   const confirmedPrivacyNoticeGap = rows.some((row) => (
     row.id === "privacy_notice_availability" &&
     isConfirmedGdprEprivacyGap(row) &&
@@ -421,11 +422,6 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
     if (!config || "scoreEffect" in config || isExcludedFromDenominator(row)) {
       continue;
     }
-    possibleCoverageWeight += config.weight;
-    if (!isCoverageLimited(row)) {
-      coveredWeight += config.weight;
-    }
-
     const deduction = getGdprEprivacyRowDeduction(row);
     if (deduction <= 0) continue;
     if (row.id === "outdated_transfer_framework_reference") {
@@ -441,6 +437,15 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
     ) {
       continue;
     }
+    const rules = familyRules.get(policy.family) ?? [];
+    const retained = getRetainedEvidence(row);
+    rules.push({ ruleId: row.id, label: SCORING_RULE_BY_ID.get(row.id)!.label,
+      policyDeductionPoints: deduction,
+      decisionVerification: row.id !== "post_reject_tracking_reduction" ? "not_applicable" as const
+        : retained.rejectInteractionConfirmed === true || retained.refusalExercised === true ? "confirmed" as const
+        : readRejectClickTrackingAssessment(retained.rejectClickTrackingAssessment) ? "unconfirmed" as const : "unknown" as const,
+    });
+    familyRules.set(policy.family, rules);
     familyDeductions.set(
       policy.family,
       Math.min(
@@ -452,11 +457,28 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
     );
   }
 
+  return [...familyDeductions].map(([family, deductionPoints]) => ({
+    family, label: SCORING_FAMILIES[family].label, deductionPoints, rules: familyRules.get(family) ?? [],
+  }));
+}
+
+function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): RegulatoryCoverageScore {
+  let possibleCoverageWeight = 0;
+  let coveredWeight = 0;
+  const deductions = deriveGdprEprivacyDeductionBreakdown(rows);
+  for (const row of rows) {
+    const config = GDPR_EPRIVACY_ROW_WEIGHTS[row.id];
+    if (row.id === "outdated_transfer_framework_reference" && getGdprEprivacyRowDeduction(row) === 0) continue;
+    if (!config || "scoreEffect" in config || isExcludedFromDenominator(row)) continue;
+    possibleCoverageWeight += config.weight;
+    if (!isCoverageLimited(row)) coveredWeight += config.weight;
+  }
+
   const coverageRatio = possibleCoverageWeight > 0
     ? coveredWeight / possibleCoverageWeight
     : 0;
   const scoreMetadata = getScoreMetadata("gdpr_eprivacy");
-  if (possibleCoverageWeight <= 0 || (coveredWeight <= 0 && familyDeductions.size === 0)) {
+  if (possibleCoverageWeight <= 0 || (coveredWeight <= 0 && deductions.length === 0)) {
     return {
       coverageConfidence: "insufficient",
       coverageRatio,
@@ -467,7 +489,7 @@ function deriveGdprEprivacyPostureScore(rows: RegulatoryCoverageRow[]): Regulato
     };
   }
 
-  const totalDeduction = [...familyDeductions.values()].reduce((total, value) => total + value, 0);
+  const totalDeduction = deductions.reduce((total, value) => total + value.deductionPoints, 0);
   const score = clampScore(SCORE_BASE - totalDeduction);
 
   const tone = getGdprEprivacyPostureTone(score);

@@ -152,9 +152,9 @@ export function adaptGdprTransparencyTopicCandidatesForProduction(
 
   for (const candidate of candidates) {
     const candidateRejectReason = rejectReasonForCandidate(input, candidate);
-    const retainedSignal = candidateRejectReason
-      ? boundCanonicalRetainedSignal(input, candidate)
-      : null;
+    // Prefer the validated, URL-bound topic witness over a broad classifier
+    // window, which may include another service's adjacent disclosure.
+    const retainedSignal = boundCanonicalRetainedSignal(input, candidate);
     const rejectReason = retainedSignal ? null : candidateRejectReason;
     if (rejectReason) {
       dispositions.push({

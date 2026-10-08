@@ -11,6 +11,44 @@ const completedInputBase = {
   scanCompleted: true
 };
 
+test("behavioral profiling disclosure follows the adapter and concern path without an automated-decision conclusion", () => {
+  const text = "Privacy policy. We process personal data for marketing. As part of website tracking, we use cookies to track which of our pages are visited and of interest to you. The following data is processed: device identifier, IP address and pages viewed.";
+  const matches = classifyGdprTransparencyTopics({text}).matches;
+  const adapted = adaptGdprTransparencyTopicCandidatesForProduction({
+    isTargetRelevantPrivacyPolicy: true,
+    pageUrl: "https://example.test/privacy",
+    policyTextQuality: {usable: true},
+    surface: {
+      gdprTransparencyTopicCandidates: matches.map(match => ({
+        classifierProvenance: match.classifierProvenance, classifierReasonCodes: match.reasonCodes,
+        confidence: match.confidence, evidenceText: match.evidenceExcerpt,
+        matchedLocale: match.matchedLocale, matchedTerm: match.matchedTerm, matchStrength: match.matchStrength,
+        productionCredit: false, status: "diagnostic_only", topic: match.topic, variant: match.variant,
+      })),
+      normalizedUrl: "https://example.test/privacy", url: "https://example.test/privacy",
+      status: "fetched", surfaceType: "privacy_policy", textExcerpt: text,
+    },
+  });
+  assert.ok(adapted.acceptedProductionSignals.some(signal => signal.disclosureType === "automated_decision_making_or_profiling"));
+  const normalizedConcerns = buildNormalizedConcerns({reviewFindingCandidates: [], validationFindings: [],
+    runtimeArtifacts: {policyDisclosureSummary: {
+      article13DisclosureSignals: adapted.acceptedProductionSignals,
+      gdprTransparencyEvidenceProfile: GDPR_TRANSPARENCY_MULTILINGUAL_ARTICLE13_PROFILE,
+      gdprTransparencyProductionEvidenceEnabled: true,
+    }},
+  });
+  const row = deriveGdprEprivacyCoveragePolicyOutcomesRaw({...completedInputBase, normalizedConcerns, runtimeArtifacts: {}, snapshot: {}})
+    .automated_decision_making_profiling_disclosure!;
+  assert.equal(row.status, "Observed");
+  assert.equal(row.criticalEvidence.retainedEvidence.profilingDisclosureBasis, "behavioral_interest_tracking");
+  assert.equal((row.criticalEvidence.retainedEvidence.article22DetailAssessment as Record<string, unknown>).assessment, "not_evaluated");
+  assert.match(row.limitation, /Profiling disclosure observed/);
+  const unsupported = deriveGdprEprivacyCoveragePolicyOutcomesRaw({...completedInputBase, normalizedConcerns: [], runtimeArtifacts: {
+    policyDisclosureSummary: {retainedPrivacyPolicyTextExcerpt: text, automatedDecisionMakingProfilingDisclosureObserved: true},
+  }}).automated_decision_making_profiling_disclosure!;
+  assert.notEqual(unsupported.status, "Observed", "raw text cannot bypass the normalized concern path");
+});
+
 test("canonical no-go limits page conclusions while retaining independent transport probes", () => {
   const runtimeArtifacts = {
     scanNoGoAssessment: { decision: "no_go", scanNoGoConfidence: 0.99,

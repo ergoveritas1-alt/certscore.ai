@@ -71,8 +71,10 @@ test('later same-document form inventory enriches rows without inventing a secon
   const email={fieldRef:'collection_form_0_field_0',controlIndex:0,elementType:'input',inputType:'email',semanticCategory:'email',
     label:'Email',required:false,disabled:false,readOnly:false,evidenceRefs:[],confidence:0.9,directVsInferred:'direct'};
   const name={...email,fieldRef:'collection_form_0_field_1',controlIndex:1,inputType:'text',semanticCategory:'name',label:'Name'};
-  const first={...form,formRef:'collection_form_0',candidateFieldCount:1,retainedFieldCount:1,fields:[email]};
-  const later={...first,candidateFieldCount:2,retainedFieldCount:2,fields:[email,name]};
+  const disclosure={version:1,truncated:false,excerpts:[{text:'We use your personal data to handle your request.',
+    association:'inside_form',links:[{label:'Privacy policy',url:'https://example.test/privacy'}]}]};
+  const first={...form,formRef:'collection_form_0',candidateFieldCount:1,retainedFieldCount:1,fields:[email],privacyDisclosure:disclosure};
+  const later={...first,privacyDisclosure:undefined,candidateFieldCount:2,retainedFieldCount:2,fields:[email,name]};
   const second={...form,formRef:'collection_form_1',candidateFieldCount:1,retainedFieldCount:1,
     fields:[{...email,fieldRef:'collection_form_1_field_0',controlIndex:2}]};
   const inventory={contractVersion:'certscore.post_accept_form_inventory.v1',sourceLane:'accept_observation',phase:'after_accept',
@@ -94,12 +96,27 @@ test('later same-document form inventory enriches rows without inventing a secon
   assert.equal(rows[0]?.form.fields.length,2);
   assert.equal(rows[0]?.snapshot.status,'available');
   assert.equal(rows[1]?.snapshot.status,'unavailable');
+  assert.deepEqual(rows[0]?.form.privacyDisclosure,disclosure);
+  assert.equal(rows[1]?.form.privacyDisclosure,undefined);
+  assert.equal(later.privacyDisclosure,undefined, 'source inventory must remain unchanged for image hash verification');
   const secondCapture={...value.formSnapshotCapture,contractVersion:"certscore.post_accept_form_snapshots.v6",
     postCaptureSnapshots:{capturedAtMs:5000,snapshots:[{...value.formSnapshotCapture.snapshots[0],formRef:second.formRef}]}};
   const withSecond=projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,formSnapshotCapture:secondCapture}}).rows;
   assert.equal(withSecond[1]?.snapshot.status,"available");
   assert.equal(withSecond[0]?.captureProvenance?.capturedAtMs,3600);
   assert.equal(withSecond[1]?.captureProvenance?.capturedAtMs,5000);
+  assert.deepEqual(withSecond[0]?.form.privacyDisclosure,disclosure);
+  assert.equal(withSecond[1]?.form.privacyDisclosure,undefined);
+
+  const withLaterForms=(forms:unknown[])=>projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,
+    formSnapshotCapture:{...value.formSnapshotCapture,postCaptureInventory:{...value.formSnapshotCapture.postCaptureInventory,
+      inventory:{...value.formSnapshotCapture.postCaptureInventory.inventory,forms}}}}}).rows;
+  const laterDisclosure={...disclosure,excerpts:[{...disclosure.excerpts[0],text:'Updated retained disclosure.'}]};
+  assert.deepEqual(withLaterForms([{...later,privacyDisclosure:laterDisclosure},second])[0]?.form.privacyDisclosure,laterDisclosure);
+  assert.deepEqual(withLaterForms([{...later,privacyDisclosure:{...disclosure,excerpts:[]}},second])[0]?.form.privacyDisclosure,disclosure);
+  assert.equal(withLaterForms([{...later,actionRelationship:'third_party'},second])[0]?.form.privacyDisclosure,undefined);
+  assert.equal(withLaterForms([{...later,pageUrl:'https://example.test/other'},second])[0]?.form.privacyDisclosure,undefined);
+  assert.deepEqual(withLaterForms([later,{...second,formRef:later.formRef}]),[], 'ambiguous form identity must fail closed');
 
   assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,
     formSnapshotCapture:{...value.formSnapshotCapture,postCaptureInventory:{...value.formSnapshotCapture.postCaptureInventory,

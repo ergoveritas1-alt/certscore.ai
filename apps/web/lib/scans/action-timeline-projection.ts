@@ -38,7 +38,7 @@ export function projectSuccessfulActionTimeline(value: unknown, assessment: unkn
     for (const type of ["network_request", "storage_write"] as const) {
       const first = activities.filter(row => row.activityType === type).sort((a, b) => a.offset - b.offset)[0];
       if (first) add(registeredAt + first.offset - start, type === "network_request" ? "Non-essential request" : "Non-essential storage write",
-        [first.vendor, first.hostname, first.storageName].filter(Boolean).join(" · "), activityTone);
+        [first.vendor, first.hostname, first.storageName].filter(Boolean).join(" · "), action === "reject" ? activityTone : "neutral");
     }
   }
   if (capture) {

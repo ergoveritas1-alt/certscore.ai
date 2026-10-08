@@ -1,3 +1,4 @@
+import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
 import { PULSE_CAPABILITIES, PULSE_PURPOSE_STATEMENT, PULSE_SCHEMA_VERSION, PULSE_STANDARD_DISCLAIMER } from "./pulse-v1.js";
 
 const pulseErrorResponses = {
@@ -197,6 +198,7 @@ export function buildPulseChatGptOpenApiDocument() {
     },
     components: {
       schemas: {
+        ...scanReportSummaryOpenApi,
         PulseResponse: {
           type: "object",
           additionalProperties: true,
@@ -215,6 +217,8 @@ export function buildPulseChatGptOpenApiDocument() {
               additionalProperties: true,
               description: "Typed result or explicit limitation from the isolated Accept observation path."
             },
+            formsSummary: { $ref: "#/components/schemas/FormsSummary" },
+            scoreExplanation: { $ref: "#/components/schemas/ScoreExplanation" },
             postRefusalObservation: {
               type: ["object", "null"],
               additionalProperties: true,

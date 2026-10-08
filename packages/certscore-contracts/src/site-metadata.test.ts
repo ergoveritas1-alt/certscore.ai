@@ -26,3 +26,11 @@ test('Hugo declaration separates generator and version', () => {
     platform: 'Hugo (declared)', version: '0.119.0',
   });
 });
+
+test("retained generator comments/feed versions describe WordPress without hiding conflicts", () => {
+  const observation = { contractVersion: "certscore.site-metadata.v1" as const, title: "", language: "", generators: [], wordpressAssetObserved: true,
+    versionEvidence: [{ kind: "html_generator_comment" as const, version: "6.8", value: 'generator="WordPress/6.8"', sourceUrl: "https://cms.example/" }] };
+  assert.deepEqual(describeSiteTechnology(observation), { platform: "WordPress (declared)", version: "6.8" });
+  assert.equal(describeSiteTechnology({ ...observation, generators: ["WordPress 6.7"] }).version, "Unknown");
+  assert.deepEqual(describeSiteTechnology({ ...observation, versionEvidence: [{ kind: "core_asset_version", version: "6.8.3", value: "6.8.3", sourceUrl: "https://cms.example/wp-includes/js/wp-embed.min.js" }] }), { platform: "WordPress indicators observed", version: "6.8.3 (asset)" });
+});

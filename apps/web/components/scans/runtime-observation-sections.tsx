@@ -59,12 +59,6 @@ export function RuntimeObservationTimeline({
   responsive?: boolean;
   events: RuntimeObservationTimelineEvent[];
 }) {
-  const consentEvent = events.find((event) => /consent/i.test(event.label));
-  const firstConcern = events.find((event) => event.tone === "concern");
-  const leadMs = consentEvent && firstConcern && consentEvent.atMs > firstConcern.atMs
-    ? consentEvent.atMs - firstConcern.atMs
-    : null;
-
   return (
     <div className="overflow-x-auto pb-0" data-density="compact">
       <div className={`${responsive ? "min-w-0" : dominant ? "min-w-[58rem]" : "min-w-[48rem]"} relative ${compact ? "pt-2" : "pt-6"}`} style={responsive ? { minWidth: `${Math.max(events.length, 2) * 9}rem` } : undefined}>
@@ -107,11 +101,7 @@ export function RuntimeObservationTimeline({
               <p className={`mt-0.5 max-w-[11rem] overflow-hidden text-[11px] leading-4 ${event.tone === "concern" ? "text-rose-700" : "text-zinc-500"} [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]`}>
                 {event.detail}
               </p>
-              {event === firstConcern && leadMs !== null ? (
-                <span className={`${compact ? "mt-1 inline-block" : "absolute -top-10 left-0 whitespace-nowrap"} rounded-md bg-rose-50 px-2 py-1 text-[0.65rem] font-semibold text-rose-800`}>
-                  {Math.round(leadMs / 10) / 100}s before consent surface
-                </span>
-              ) : null}
+
             </div>
           ))}
         </div>

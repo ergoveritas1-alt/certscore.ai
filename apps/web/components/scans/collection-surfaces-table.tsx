@@ -31,8 +31,8 @@ export function fieldsInPageOrder(fields: Form["fields"]) {
 export type FormSortKey = "form" | "type" | "fields" | "controls" | "sensitivity" | "method" | "destination" | "page" | "snapshot" | "disclosure";
 const columns: Array<{ key: FormSortKey; label: string }> = [
   { key: "form", label: "Form" }, { key: "type", label: "Form" }, { key: "fields", label: "Fields" },
-  { key: "sensitivity", label: "Data type" }, { key: "disclosure", label: "Privacy disclosure" }, { key: "destination", label: "Destination" },
-  { key: "page", label: "Page" }, { key: "snapshot", label: "Screenshot" },
+  { key: "sensitivity", label: "Data type" }, { key: "destination", label: "Destination" },
+  { key: "page", label: "Page" }, { key: "snapshot", label: "Screenshot" }, { key: "disclosure", label: "Privacy disclosure" },
 ];
 export function sortCollectionSurfaces(rows: CollectionSurfaceTableRow[], key: FormSortKey, direction: "asc" | "desc") {
   const value = (row: CollectionSurfaceTableRow): string | number => {
@@ -177,12 +177,12 @@ export function CollectionSurfacesTable({ rows, loading = false, scanning = fals
                     <td className="min-w-40 px-3 py-2"><span className="block max-w-48 truncate font-medium capitalize" title={title}>{title}</span>{row.capturePhase ? <span className="mt-0.5 inline-block whitespace-nowrap rounded bg-sky-100 px-1.5 text-[10px] font-semibold leading-4 text-sky-800">After Accept click</span> : <span className="block text-zinc-500">Page observation</span>}</td>
                     <td className="whitespace-nowrap px-3 py-2 tabular-nums">{form.retainedFieldCount}{form.fieldsTruncated ? ` of ${form.candidateFieldCount}` : ""}</td>
                     <td className="px-3 py-2">{form.fields.length ? <FieldReview field={[...form.fields].sort((a,b)=>reviewRank(b)-reviewRank(a))[0]!}/> : "—"}</td>
-                    <td className="whitespace-nowrap px-3 py-2">{form.privacyDisclosure?.excerpts.length ? <button type="button" aria-label={`View privacy disclosure: ${title}`} onClick={() => {
-                      setExpanded(current => new Set(current).add(row.id)); setDisclosureOpen(row.id);
-                    }} className="text-sky-800 underline decoration-sky-300 underline-offset-2">View disclosure</button> : <span className="text-zinc-500">Not captured</span>}</td>
                     <td className="px-3 py-2"><span className="block max-w-44 truncate" title={form.actionHostname}>{form.actionHostname ?? (form.method === "dialog" ? "No submission" : "Not captured")}</span>{form.actionHostname ? <span className="block whitespace-nowrap text-zinc-500">{label(form.actionRelationship)}</span> : null}</td>
                     <td className="px-3 py-2"><a className="block max-w-44 truncate text-sky-800 hover:underline" href={pageHref(form.pageUrl)} title={form.pageUrl} target="_blank" rel="noopener noreferrer">{form.pageUrl.replace(/^https?:\/\//, "")}</a></td>
                     <td className="whitespace-nowrap px-3 py-2">{row.snapshot.status === "available" && row.snapshot.url.startsWith("/api/scans/") ? <button type="button" onClick={() => { if (row.snapshot.status === "available") setSnapshot({ title, url: row.snapshot.url }); }} aria-label={`View form: ${title}`} className="inline-block rounded-lg border border-zinc-200 px-3 py-1.5 text-sky-800 hover:border-sky-500">View form</button> : <span className="text-zinc-500" title={formSnapshotExplanation(row.snapshot.status === "available" ? undefined : row.snapshot.reason)}>{row.snapshot.status === "pending" ? "Pending" : row.snapshot.status === "withheld" ? "Withheld" : "Not captured"}</span>}</td>
+                    <td className="whitespace-nowrap px-3 py-2">{form.privacyDisclosure?.excerpts.length ? <button type="button" aria-label={`View privacy disclosure: ${title}`} onClick={() => {
+                      setExpanded(current => new Set(current).add(row.id)); setDisclosureOpen(row.id);
+                    }} className="text-sky-800 underline decoration-sky-300 underline-offset-2">View disclosure</button> : <span className="text-zinc-500">Not captured</span>}</td>
                   </tr>
                   <tr data-expanded-details id={detailId} hidden={!open} className="border-b border-zinc-200 bg-slate-50/60"><td colSpan={columns.length} className="p-4">
                     <h3 className="mb-2 font-semibold">{title}</h3>

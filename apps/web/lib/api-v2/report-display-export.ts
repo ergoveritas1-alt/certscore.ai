@@ -1,7 +1,8 @@
 import { visibleFullSiteReport, visibleResourceInventory } from "./report-visible-fields";
+import { apiFormSnapshotExport } from "./form-snapshot-export";
 /** Report content only: omit diagnostic downloads and encode repeated records once. */
 const REPORT_FIELDS = new Set([
-  "scan", "score", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
+  "scan", "score", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
   "coverage", "controls", "consentVendor", "consentRows", "gdprTransparencyRows",
   "preConsentRuntimeRows", "trackingExternalRows", "transportRows", "relatedRows",
   "policySurfaceCoverage", "gpcResponse", "gpcLaneStatus", "acceptPath", "rejectPath",
@@ -12,8 +13,14 @@ const REPORT_FIELDS = new Set([
 const DIAGNOSTICS = new Set(["canonicalEvidenceJson", "evidenceJson", "runtimeEvidenceGraph"]);
 const pointer = (key: string) => key.replace(/~/g, "~0").replace(/\//g, "~1");
 
-export function buildReportDisplayExport(report: Record<string, unknown>) {
+export function buildReportDisplayExport(report: Record<string, unknown>, options: { scanId?: string } = {}) {
+  const scanId = options.scanId ?? (report.scan as { id?: string } | undefined)?.id;
+  const formRows = (rows: unknown) => Array.isArray(rows) && scanId ? rows.map(row => {
+    if (!row?.snapshot || row.snapshot.status !== "available") return row;
+    return { ...row, snapshot: apiFormSnapshotExport(scanId, row.snapshot) };
+  }) : rows;
   report = { ...report,
+    ...(report.collectionTableRows ? { collectionTableRows: formRows(report.collectionTableRows) } : {}),
     ...(report.fullSiteReport ? { fullSiteReport: visibleFullSiteReport(report.fullSiteReport as Record<string, unknown>) } : {}),
     ...(report.resourceInventory ? { resourceInventory: visibleResourceInventory(report.resourceInventory as Record<string, unknown>) } : {}),
   };

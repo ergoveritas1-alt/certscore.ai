@@ -125,7 +125,7 @@ test("limited Reject explains completed click and retained capture without claim
   const result = buildExecutiveRejectPathProjection(item)!;
   assert.equal(result.label, "After-Reject observation recorded");
   assert.match(result.note!, /^The Reject control was clicked\./);
-  assert.match(result.note!, /During 3s.*2 requests.*1 main-document storage write.*consent_choice/);
+  assert.match(result.note!, /During 3s.*2 requests.*1 main-document storage write.*post-click storage snapshot was retained/);
   assert.doesNotMatch(result.note!, /could not be verified|not proof/);
   assert.equal(result.afterClickCoverage, "complete");
   assert.equal(result.registrationConfirmed, false);
@@ -292,7 +292,7 @@ test("active timeline report surfaces canonical Accept and Reject projections in
   assert.doesNotMatch(report, /min-w-\[48rem\]/);
   assert.doesNotMatch(report, /Requests and storage writes after Reject/);
   assert.match(report, /report\.transportRows\.filter\(\(row\) => row\.status === "Observed"\)\.length\} positive · \{report\.transportRows\.length\} checks/);
-  assert.match(model, /Non-essential activity after confirmed Reject/);
+  assert.match(model, /describePostRejectFinding/);
   assert.match(model, /Same non-essential identifier remained stored after Reject/);
   assert.match(model, /isPersistenceOnlyRejectEvidence/);
   assert.match(model, /replace\(\/Post-choice tracking reduction\/gi, postRejectCopy\.title\)/);
@@ -3413,4 +3413,67 @@ test("deriveUnverifiedHomepageReview returns null when the homepage was actually
   });
 
   assert.equal(review, null);
+});
+
+
+test("timeline cookie snapshots remain neutral and preserve observation semantics", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const events = buildExecutiveTimelineEvents({ hybridRuntimeEvidence: {
+    timelineMarkers: { firstTrackingCookieSetMs: 10126, firstConsentSurfaceVisibleMs: 12903 },
+    cookieWriteObservations: [{ cookieName: "wp-wpml_current_language", firstObservedAtMs: 10126,
+      beforeConsent: true, essentiality: "essential", setMethod: "browser_snapshot", setAtMs: null }],
+  } });
+  const cookie = events.find(event => event.label === "Cookie observed");
+  assert.equal(cookie?.atMs, 10126);
+  assert.equal(cookie?.tone, "slate");
+  assert.equal(cookie?.detail, "Essential cookie · snapshot observation");
+  assert.doesNotMatch(JSON.stringify(cookie), /tracking|write|set at/i);
+});
+
+test("timeline cookie details require a row matching the retained milestone time", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const events = buildExecutiveTimelineEvents({ hybridRuntimeEvidence: {
+    timelineMarkers: { firstCookieObservedMs: 1000 },
+    cookieWriteObservations: [{ cookieName: "functional", firstObservedAtMs: 2000,
+      beforeConsent: true, essentiality: "essential", setMethod: "browser_snapshot" }],
+  } });
+  const cookie = events.find(event => event.label === "Cookie/storage observed");
+  assert.equal(cookie?.atMs, 1000);
+  assert.equal(cookie?.tone, "slate");
+  assert.equal(cookie?.detail, "Cookie/storage · retained observation");
+});
+
+test("raw vendor, replay, embed and request observations do not become timeline warnings", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const events = buildExecutiveTimelineEvents({ hybridRuntimeEvidence: {
+    timelineMarkers: { firstThirdPartyRequestMs: 800 },
+    requestObservations: [{ timestampMs: 800, thirdParty: true, category: "advertising", domain: "ads.example" }],
+    sessionReplayEvidenceSummary: { firstSeenMs: 900 },
+    embeddedContentSummary: { embeddedContentObserved: true, observations: [{ timestampMs: 1000, vendor: "Embed" }] },
+  } });
+  assert.deepEqual(events.map(event => event.label), ["3P request", "Ad vendor", "Session replay", "Embedded content"]);
+  assert.ok(events.every(event => event.tone === "slate"));
+});
+
+test("canonical timed concerns are red without coloring an earlier essential cookie", async () => {
+  const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
+  const runtime = { hybridRuntimeEvidence: { timelineMarkers: { firstCookieObservedMs: 1000 },
+    cookieWriteObservations: [{ cookieName: "functional", firstObservedAtMs: 1000, beforeConsent: true,
+      essentiality: "essential", setMethod: "browser_snapshot" }] } };
+  for (const status of ["Gap observed", "Review signal", "Observed", "Not observed", "Insufficient evidence"]) {
+    const events = buildExecutiveTimelineEvents(runtime, [{ id: "pre_consent_cookies_storage", status,
+      criticalEvidence: { retainedEvidence: { firstPreconsentCookieOrStorageObservedMs: 2000 } } }]);
+    assert.equal(events.find(event => event.label === "Cookie observed")?.tone, "slate");
+    const concern = events.find(event => event.label === "Non-essential cookie/storage");
+    assert.equal(Boolean(concern), ["Gap observed", "Review signal"].includes(status));
+    if (concern) assert.deepEqual([concern.atMs, concern.tone], [2000, "rose"]);
+  }
+  const requests = buildExecutiveTimelineEvents(runtime, [{ id: "pre_consent_third_party_tracking", status: "Gap observed",
+    criticalEvidence: { retainedEvidence: { firstPreconsentThirdPartyTrackingObservedMs: 3000 } } }]);
+  assert.equal(requests.find(event => event.label === "Non-essential request")?.tone, "rose");
+  assert.equal(requests.find(event => event.label === "Non-essential request")?.atMs, 3000);
+  for (const timing of [undefined, -1, NaN]) {
+    assert.ok(!buildExecutiveTimelineEvents(runtime, [{ id: "pre_consent_cookies_storage", status: "Gap observed",
+      criticalEvidence: { retainedEvidence: { firstPreconsentCookieOrStorageObservedMs: timing } } }]).some(event => event.tone === "rose"));
+  }
 });

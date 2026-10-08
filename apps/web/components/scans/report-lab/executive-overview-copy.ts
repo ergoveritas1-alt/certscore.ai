@@ -21,6 +21,7 @@ type ExecutiveOverviewInput = {
   limitedCount: number;
   limitedItems: string[];
   positiveCount: number;
+  preConsentConcerns?: { tracking: boolean; storage: boolean };
   priorityIntroduction?: {
     summary: string;
     title: string;
@@ -70,9 +71,8 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
   const findingCount = input.findings.length;
   const evidenceText = input.findings.map((finding) => `${finding.title} ${finding.summary}`).join(" ");
   const hasConsentConcern = /consent|decline|reject|options/i.test(evidenceText);
-  const hasTrackingConcern = /tracking|embedded|third-party/i.test(evidenceText);
-  const hasStorageConcern = /cookie|storage/i.test(evidenceText);
-  const consentEvent = input.timeline.find((event) => /consent/i.test(event.label));
+  const hasTrackingConcern = input.preConsentConcerns?.tracking === true;
+  const hasStorageConcern = input.preConsentConcerns?.storage === true;
   const exactFirstLayerPattern = input.controls.accept === "Observed"
     && input.controls.reject === "Not observed"
     && input.controls.options === "Not observed";
@@ -156,7 +156,7 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
         ? "Cookies/storage"
         : null;
   const activity = activityLabel
-    ? `${activityLabel} also appeared ${consentEvent ? `before the first consent surface at ${consentEvent.at}` : "before any recorded consent action"}.`
+    ? `${activityLabel} was retained in the pre-consent observations.`
     : null;
   const positive = input.transportPositiveCount > 0
     ? "Transport security checks were observed."

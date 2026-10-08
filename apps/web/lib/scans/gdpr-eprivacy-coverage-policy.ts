@@ -1,4 +1,5 @@
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
+import { summarizePostRejectActivity } from "./post-reject-finding-copy";
 import { projectPreconsentTrackingTiming } from "./preconsent-tracking-timing";
 import { readChoicePathExecution } from "./choice-path-execution";
 import { checklistRemediation } from "./checklist-remediation";
@@ -7,6 +8,7 @@ import { readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_SIGNAL } from 
 import { derivePolicyCoverageContext, getWeakPolicyEvidenceLimitation } from "./policy-coverage-context";
 import {
   classifyConsentControlLabel,
+  findBehavioralProfilingDisclosure,
   classifyGdprTransparencyTopics,
   extractPolicyUpdateDateText,
   collectionSurfaceAssessmentSchema,
@@ -6374,6 +6376,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     persistedVendors: compactArray(persistedVendors, 5),
     postRejectNonEssentialActivityRetained: postRejectNonEssentialRequestsRetained,
     postRejectNonEssentialRequestCount: postRejectNonEssentialRows.length,
+    postRejectActivityDetails: summarizePostRejectActivity(postRejectNonEssentialRows),
     postRejectNonEssentialRequests: compactArray(postRejectNonEssentialRows, 5),
     postRejectRequestRecordsObserved,
     postRejectVendors: compactArray(postRejectVendors, 5),
@@ -7318,6 +7321,8 @@ function buildGdprTransparencyArticle13ConcernOutcome(
   ]);
   const automatedDecisionTopicObserved =
     topic === "automated_decision_making_or_profiling";
+  const behavioralProfilingDisclosure = automatedDecisionTopicObserved && evidenceText !== null
+    ? findBehavioralProfilingDisclosure(evidenceText) : null;
   const retainedEvidence = {
     article13Signal: {
       classifierProvenance: rawEvidence.classifierProvenance,
@@ -7359,6 +7364,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
         }
       : {}),
     legalFrameworkValidityMatches,
+    ...(behavioralProfilingDisclosure ? { profilingDisclosureBasis: "behavioral_interest_tracking", profilingPracticeBasis: behavioralProfilingDisclosure.basis } : {}),
     ...(automatedDecisionTopicObserved
       ? {
           article22DetailAssessment: {
@@ -7379,7 +7385,11 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     return makeOutcome(
       config.rowId,
       "Observed",
-      automatedDecisionTopicObserved
+      behavioralProfilingDisclosure
+        ? behavioralProfilingDisclosure.basis === "individual_interest_tracking"
+          ? "Profiling disclosure observed: the policy describes tracking individual interests."
+          : "Profiling disclosure observed: the policy describes engagement-based newsletter personalization."
+        : automatedDecisionTopicObserved
         ? `${config.label} topic evidence was retained through adapter-approved multilingual GDPR Transparency evidence. This row records disclosure presence; Article 22 detail and completeness were not evaluated.`
         : `${config.label} evidence was retained through adapter-approved multilingual GDPR Transparency Article 13 evidence.`,
       automatedDecisionTopicObserved

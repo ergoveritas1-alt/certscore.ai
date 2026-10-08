@@ -102,6 +102,7 @@ export interface ApiV2Links {
   findings?: string;
   pulse?: string;
   report?: string;
+  formsEvidence?: string;
   latestDomainScan?: string;
   docs?: string;
   [key: string]: string | undefined;

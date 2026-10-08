@@ -381,6 +381,12 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
   const article13Snippet = getArticle13Snippet(evidence);
   if (article13Snippet) {
+    if (item.id === "automated_decision_making_profiling_disclosure" &&
+        getEvidenceLabel(item) === "Observed" && evidence.profilingDisclosureBasis === "behavioral_interest_tracking") {
+      return `${evidence.profilingPracticeBasis === "newsletter_engagement_personalization"
+        ? "Profiling disclosed: engagement-based newsletter personalization"
+        : "Profiling disclosed: individual interest tracking"}: ${article13Snippet}`;
+    }
     return `${getArticle13RationalePrefix(item)}: ${article13Snippet}`;
   }
 

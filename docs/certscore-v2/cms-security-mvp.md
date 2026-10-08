@@ -87,3 +87,67 @@ through the production pipeline and components, without modifying customer scans
 Incremental cost estimate: below $1/month at 100,000 scans/month and 30-day retention,
 from bounded metadata and assessment storage. No additional scan/network/model calls
 or provisioned capacity. No deployment performed.
+
+## October 7, 2026 version capture and simpler presentation
+
+New runtime metadata optionally retains at most eight typed version observations:
+explicit WordPress generator comments, numeric `ver` values on the already-loaded
+`/wp-includes/js/wp-embed.min.js` and `wp-emoji-release.min.js` core assets, and
+one WordPress generator from a page-linked RSS/Atom feed. Comments are inspected
+in the existing DOM read (at most 500 comments); plugin, theme, library, arbitrary
+query parameters and cache filenames never become core versions. Asset versions
+remain labelled candidates and cannot produce catalogue warnings on their own.
+
+When the starting-page baseline identifies WordPress without a declared version,
+it may retrieve one observed same-origin feed link, only if a budget remains.
+This October 7 owner-approved exception to the original passive-only scope uses
+the existing guarded proxy transport, preserves the crawler HTTP identity, sends
+no visitor cookies/credentials, follows no redirects and performs no retry.
+The complete attempt, including DNS and body reads, is bounded to one second
+inside the existing module/parent deadline. The body is bounded to 256 KiB; only
+the generator excerpt, numeric version, body SHA-256, source URL and linking
+document are retained. Invalid, ambiguous, oversized, unavailable, cancelled or
+unbound evidence remains unknown. GPC, additional-page and consent-proof lanes
+never make this request. No lane, browser run, model call or timeout extension
+is added. Estimated incremental AWS compute and bounded evidence storage is up
+to **$8/month at 100,000 affected scans**, approved by the owner October 7.
+
+`certscore.cms-security-projection.v2` consumes these typed observations through
+the existing verified projection → normalized concern → policy → unified finding
+path. Explicit WordPress major/minor declarations such as `6.8` are valid release
+numbers; comparisons use the release's zero patch component without rewriting
+the retained version. Conflicting declarations fail closed. All warnings remain
+score-neutral. V1 projections and metadata without the new observation field
+retain the original three-component interpretation and historical catalogue.
+
+The CMS card shows the version once (for example, **WordPress 6.8**) or a neutral
+**WordPress · Version not detected**. The stacked Limited/unavailable messages
+and general disclaimer paragraph are removed. Actual catalogue warnings and
+vendor links remain visible; source observations sit under **How we identified
+this**. No new customer disclaimer is added.
+
+Verification covers local browser capture and guarded feed retrieval, a full
+runtime-lane fixture with GPC isolation, deadline/abort/redirect/body-size
+bounds, declaration/source tampering, major/minor releases, historical V1
+compatibility, canonical score neutrality and rendered CMS presentation.
+No deployment is authorized by this implementation.
+
+## October 7, 2026 informational plugin inventory
+
+The owner requested detected plugins inside the CMS & version box. The verified
+CMS projection now optionally includes `certscore.cms-plugin-inventory.v1`,
+reproduced from its retained generator declarations and same-origin plugin asset
+paths. Known declarations identify WPML, WP Rocket and WPBakery Page Builder;
+plugin directories identify Borlabs Cookie, SVG Support and other observed slugs.
+Only explicit numeric plugin declarations supply versions. Unknown versions
+display as an em dash; conflicting declarations remain conflicting. Plugin
+versions never become core versions, advisory matches, concerns or score effects.
+The report consumes this typed inventory, without parsing raw observations.
+`site_integrity:plugin:<n>` resolves to the inventory row and its retained source
+references. Stored projections without an inventory remain readable unchanged;
+the local retained SITS replay rematerializes it without writing customer records.
+
+No site request, browser capture, model call or timeout is added. Estimated
+incremental compute and bounded projection storage is **below $0.50/month at
+100,000 scans/month and 30-day retention**, disclosed before proceeding under
+the below-$1 pre-approval. Deployment remains on hold.

@@ -1,5 +1,6 @@
 import { CERT_SCORE_FINDING_REGISTRY, type CertScoreFinding } from "./finding-registry";
 import { readChecklistRemediation } from "./checklist-remediation";
+import { describePostRejectFinding } from "./post-reject-finding-copy";
 
 export type RegulatoryGapTopFindingRow = {
   assessmentDirection?: string;
@@ -217,11 +218,14 @@ function findingsForArea(
     })
     .map(({ concernKind, row }, index): CertScoreFinding => {
       const statusLabel = row.statusLabel ?? humanizeStatus(row.status ?? "gap_observed");
-      const shortSummary = getRegulatoryGapTopFindingSummary(row, config);
+      const descriptiveCopy = row.id === "post_reject_tracking_reduction"
+        ? describePostRejectFinding(row.criticalEvidence?.retainedEvidence ?? row.retainedEvidence) : null;
+      const label = descriptiveCopy?.title ?? row.label;
+      const shortSummary = descriptiveCopy?.summary ?? getRegulatoryGapTopFindingSummary(row, config);
       const policySourceUrl = getPolicySourceUrl(row);
       return {
         id: `regulatory_gap__${config.idPrefix}__${safeId(row.id)}`,
-        label: row.label,
+        label,
         section: "Privacy & Tracking",
         defaultSurfacePriority: config.priorityBase - index,
         whyItMatters: getRegulatoryGapWhyItMatters(row, config),
@@ -250,7 +254,7 @@ function findingsForArea(
           }
         },
         evidencePreview: [
-          `${area.title}: ${row.label}`,
+          `${area.title}: ${label}`,
           shortSummary || `${config.lawLabel} checklist row projected as ${statusLabel}.`
         ],
         evidenceRefs: row.evidenceRefs ?? [],

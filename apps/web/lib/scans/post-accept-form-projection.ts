@@ -1,5 +1,5 @@
 import { projectConsentControlReport } from "./consent-control-report";
-import { postAcceptReportProjectionSchema } from '@certscore/contracts';
+import { postAcceptReportProjectionSchema, projectPostAcceptFormInventory } from '@certscore/contracts';
 import { isAfterActionReportEligible, retainedConsentAssessment } from './after-action-report-eligibility';
 import type { CollectionSurfaceTableRow } from './collection-surface-table-row';
 
@@ -15,8 +15,8 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
   if (images) {
     const scanId = projectConsentControlReport(retainedConsentAssessment(value))?.scanId;
     if (!scanId) return empty;
-    const displayedInventory = (images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6")
-      ? images.postCaptureInventory.inventory : images.inventory;
+    const displayedInventory = projectPostAcceptFormInventory(images);
+    if (!displayedInventory) return empty;
     return { limited: false, rows: displayedInventory.forms.map(form => {
       const laterSnapshot = images.contractVersion === "certscore.post_accept_form_snapshots.v6"
         ? images.postCaptureSnapshots.snapshots.find(snapshot=>snapshot.formRef===form.formRef) : undefined;

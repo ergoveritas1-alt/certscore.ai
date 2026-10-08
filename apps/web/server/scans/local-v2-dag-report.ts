@@ -1,4 +1,4 @@
-import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
+import { postAcceptEvidencePacketSchema, projectPostAcceptFormInventory } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
@@ -2909,6 +2909,11 @@ export function summarizePolicySurfaces(
     const fullPolicyText = readPolicySurfaceTextArtifact(row.surface, options.policyTextEvidenceContext);
     return (row.surface.article13DisclosureSignals ?? []).map((signal) => {
       const evidenceText = firstString(signal.evidenceText);
+      const retainedSectionExcerpt = firstString(signal.selectedPolicySectionExcerpt);
+      const sourceBoundSectionExcerpt = retainedSectionExcerpt && fullPolicyText &&
+        fullPolicyText.replace(/\s+/g, " ").trim().includes(retainedSectionExcerpt.replace(/\s+/g, " ").trim())
+        ? retainedSectionExcerpt
+        : null;
       const retainedPolicyContext = evidenceText && fullPolicyText
         ? buildPolicyEvidenceContextExcerpt(fullPolicyText, evidenceText)
         : null;
@@ -2923,8 +2928,10 @@ export function summarizePolicySurfaces(
         source: signal.source,
         status: signal.status,
         selectedEvidenceStrength: retainedPolicyContext ? "strong" : signal.selectedEvidenceStrength,
-        selectedPolicySectionExcerpt: retainedPolicyContext ?? firstString(signal.selectedPolicySectionExcerpt),
-        selectedPolicySectionHeading: retainedPolicyContext ? "Policy text context" : firstString(signal.selectedPolicySectionHeading),
+        selectedPolicySectionExcerpt: sourceBoundSectionExcerpt ?? retainedPolicyContext ?? retainedSectionExcerpt,
+        selectedPolicySectionHeading: sourceBoundSectionExcerpt
+          ? firstString(signal.selectedPolicySectionHeading)
+          : retainedPolicyContext ? "Policy text context" : firstString(signal.selectedPolicySectionHeading),
         selectedPolicySectionUrl: firstString(signal.selectedPolicySectionUrl) ?? row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url,
         supportingContactContext,
         surfaceUrl: row.pageUrl ?? row.surface.normalizedUrl ?? row.surface.url
@@ -5984,7 +5991,8 @@ function buildMaterializedLocalV2Detail(
       firstNonEssentialRequestMs: firstPromotionGradePreconsentRequestMs(requestPurposeRows),
       firstThirdPartyRequestMs: minimumNumber(...thirdPartyRequests.map((event) => event.timestampMs)),
       firstRequestMs: minimumNumber(...networkEvents.map((event) => event.timestampMs)),
-      firstTrackingCookieSetMs: minimumNumber(...preconsentCookies.map((event) => event.timestampMs)),
+      // Snapshot presence is an observation, not proof of a tracking-cookie write.
+      firstCookieObservedMs: minimumNumber(...preconsentCookies.map((event) => event.timestampMs)),
       timelineConfidence: "direct_v2_runtime"
     },
     navigationSummary: {
@@ -6535,7 +6543,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v22";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v28";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
@@ -6791,8 +6799,7 @@ export async function loadSinglePageFormSnapshot(scanRecord: ScanDetailResponse,
     if (!packet.success || packet.data.parentScanId !== scanRecord.scan.id) return null;
     const verified = verifiedPostAcceptFormSnapshots(packet.data.formSnapshotCapture);
     const provenance = row.captureProvenance;
-    const displayedInventory = verified && (verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v5" || verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v6")
-      ? verified.capture.postCaptureInventory.inventory : verified?.capture.inventory;
+    const displayedInventory = verified ? projectPostAcceptFormInventory(verified.capture) : null;
     if (!verified || !provenance || verified.capture.sessionId !== provenance.sessionId ||
       verified.capture.documentIdentity.token !== provenance.documentToken ||
       verified.capture.exactTargetSha256 !== provenance.exactTargetSha256 ||

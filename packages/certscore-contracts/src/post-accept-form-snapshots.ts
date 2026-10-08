@@ -107,6 +107,37 @@ export function postAcceptImageInventoryMatchesLaterInventory(
         item.inputType === field.inputType && item.label === field.label));
   });
 }
+/** Project retained form samples without losing an earlier observed disclosure.
+ * Callers must first verify/parse the capture. Keep both source inventories
+ * unchanged: their timestamps, document binding and image hashes are provenance.
+ * Missing disclosure in a later bounded sample does not establish its absence. */
+export function projectPostAcceptFormInventory(
+  capture: PostAcceptFormSnapshotProjection,
+): z.output<typeof postAcceptFormInventorySchema> | null {
+  if (capture.contractVersion !== "certscore.post_accept_form_snapshots.v5" &&
+    capture.contractVersion !== "certscore.post_accept_form_snapshots.v6") return capture.inventory;
+  const original = capture.inventory;
+  const later = capture.postCaptureInventory;
+  if (later.documentIdentity.token !== capture.documentIdentity.token ||
+    later.capturedAtMs < capture.capturedAtMs ||
+    later.capturedAtMs > capture.lateForm.baseCaptureDeadlineAtMs + capture.lateForm.extensionMs ||
+    new Set(original.forms.map(form => form.formRef)).size !== original.forms.length ||
+    new Set(later.inventory.forms.map(form => form.formRef)).size !== later.inventory.forms.length ||
+    !postAcceptImageInventoryMatchesLaterInventory(original, later.inventory)) return null;
+  return { ...later.inventory, forms: later.inventory.forms.map(form => {
+    if (form.privacyDisclosure?.excerpts.length) return form;
+    const earlier = original.forms.find(item => item.formRef === form.formRef);
+    // A reused reference without matching page, destination and positioned
+    // controls cannot transfer form-specific text to another surface.
+    if (!earlier?.privacyDisclosure?.excerpts.length || earlier.pageUrl !== form.pageUrl ||
+      earlier.actionRelationship !== form.actionRelationship || earlier.surfaceType !== form.surfaceType ||
+      !earlier.fields.length || !earlier.fields.every(field => field.controlIndex !== undefined &&
+        form.fields.filter(item => item.controlIndex === field.controlIndex &&
+          item.elementType === field.elementType && item.inputType === field.inputType &&
+          item.label === field.label).length === 1)) return form;
+    return { ...form, privacyDisclosure: earlier.privacyDisclosure };
+  }) };
+}
 function validateBinding(value: PostAcceptFormSnapshotProjection, ctx: z.RefinementCtx) {
   if (value.actionDispatchedAtMs > value.acceptanceRegisteredAtMs || value.acceptanceRegisteredAtMs > value.capturedAtMs ||
     value.inventory.forms.length > 2 || value.inventory.forms.length === 0 ||

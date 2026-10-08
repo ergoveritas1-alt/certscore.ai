@@ -134,3 +134,112 @@ test("WordPress lifecycle ranges, effective date and ambiguous evidence fail clo
   fabricated.assessment.matches[0]!.matchedRange = ">= 4.1.0 < 99.0.0";
   assert.equal(cmsSecurityProjectionSchema.safeParse(fabricated).success, false);
 });
+
+test("new metadata supports WordPress major/minor releases while historical assessments remain unchanged", () => {
+  const bundle = cmsBundle(["WordPress 4.5"]);
+  const snapshot = bundle.runtimeMetadataSnapshots![0]!;
+  snapshot.siteMetadata!.versionEvidence = [];
+  const current = projectCmsSecurity(bundle, source, url)!;
+  assert.equal(current.contractVersion, "certscore.cms-security-projection.v2");
+  assert.equal(current.assessment.detections[0]?.version, "4.5");
+  assert.equal(current.assessment.matches[0]?.observedVersion, "4.5");
+  assert.equal(current.assessment.matches[0]?.record.kind, "lifecycle");
+  assert.ok(packetsFor(current).every(row => (row.scoreEffects ?? []).length === 0));
+  const legacy = project(["WordPress 4.5"]);
+  assert.equal(legacy.contractVersion, "certscore.cms-security-projection.v1");
+  assert.equal(legacy.assessment.detections[0]?.version, null);
+  assert.equal(legacy.assessment.matches.length, 0);
+  assert.equal(cmsSecurityProjectionSchema.safeParse(legacy).success, true);
+});
+
+test("comments and verified linked feed declarations project through the canonical CMS path", () => {
+  for (const proof of [
+    { kind: "html_generator_comment" as const, version: "4.5", value: 'generator="WordPress/4.5"', sourceUrl: url },
+    { kind: "feed_generator" as const, version: "4.5", value: "<generator>https://wordpress.org/?v=4.5</generator>", sourceUrl: `${url}feed/`, linkedFrom: url, bodySha256: "b".repeat(64) },
+  ]) {
+    const bundle = cmsBundle([], [`${url}wp-includes/js/jquery/jquery.min.js`]);
+    const metadata = bundle.runtimeMetadataSnapshots![0]!.siteMetadata!;
+    metadata.versionEvidence = [proof]; metadata.feedLinks = [`${url}feed/`];
+    const projection = projectCmsSecurity(bundle, source, url)!;
+    assert.equal(projection.assessment.detections[0]?.version, "4.5");
+    assert.equal(cmsSecurityProjectionSchema.safeParse(projection).success, true);
+    assert.equal(projectCmsSecurityPriority(packetsFor(projection))?.title, "Unsupported CMS branch");
+    assert.ok(resolveCmsEvidence(projection, "site_integrity:version:0"));
+    assert.ok(packetsFor(projection).every(row => (row.scoreEffects ?? []).length === 0));
+    const historical = { ...projection, contractVersion: "certscore.cms-security-projection.v1" };
+    assert.equal(cmsSecurityProjectionSchema.safeParse(historical).success, false);
+  }
+});
+
+test("curated core asset versions are candidates only; conflicts and forged declarations stay neutral", () => {
+  const bundle = cmsBundle([], [`${url}wp-includes/js/wp-embed.min.js`]);
+  const metadata = bundle.runtimeMetadataSnapshots![0]!.siteMetadata!;
+  metadata.versionEvidence = [{ kind: "core_asset_version", version: "4.5", value: "4.5", sourceUrl: `${url}wp-includes/js/wp-embed.min.js` }];
+  let projection = projectCmsSecurity(bundle, source, url)!;
+  assert.deepEqual(projection.assessment.detections[0]?.observedVersions, ["4.5"]);
+  assert.equal(projection.assessment.detections[0]?.version, null);
+  assert.equal(projection.assessment.detections[0]?.versionBasis, "inferred");
+  assert.equal(projection.assessment.matches.length, 0);
+  metadata.versionEvidence.push({ kind: "html_generator_comment", version: "6.8", value: 'generator="WordPress/6.8"', sourceUrl: url });
+  projection = projectCmsSecurity(bundle, source, url)!;
+  assert.equal(projection.assessment.detections[0]?.version, "6.8");
+  metadata.generators = ["WordPress 4.5"];
+  assert.equal(projectCmsSecurity(bundle, source, url)!.assessment.detections[0]?.version, null);
+  assert.equal(projectCmsSecurity(bundle, source, url)!.assessment.matches.length, 0);
+  metadata.versionEvidence = [{ kind: "core_asset_version", version: "4.5", value: "4.5", sourceUrl: `${url}wp-includes/js/jquery/jquery.min.js` }];
+  assert.equal(projectCmsSecurity(bundle, source, url), null);
+  metadata.versionEvidence = [{ kind: "feed_generator", version: "4.5", value: "<generator>https://wordpress.org/?v=6.8</generator>", sourceUrl: `${url}feed/`, linkedFrom: url, bodySha256: "b".repeat(64) }];
+  assert.equal(projectCmsSecurity(bundle, source, url), null);
+});
+
+test("feed evidence must remain bound to the retained page link and document", () => {
+  const bundle = cmsBundle([]);
+  const metadata = bundle.runtimeMetadataSnapshots![0]!.siteMetadata!;
+  metadata.versionEvidence = [{ kind: "feed_generator", version: "6.8", value: "<generator>https://wordpress.org/?v=6.8</generator>", sourceUrl: `${url}feed/`, linkedFrom: url, bodySha256: "b".repeat(64) }];
+  assert.equal(projectCmsSecurity(bundle, source, url), null);
+  metadata.feedLinks = [`${url}feed/`];
+  assert.equal(projectCmsSecurity(bundle, source, url)!.assessment.detections[0]?.version, "6.8");
+  metadata.versionEvidence[0] = { ...metadata.versionEvidence[0]!, sourceUrl: "https://other.example/feed/" };
+  assert.equal(projectCmsSecurity(bundle, source, url), null);
+});
+
+test("SITS plugin declarations and paths produce a deduplicated, version-bound informational inventory", () => {
+  const bundle = cmsBundle(["WPML ver:4.8.6 stt:12,77,1,3;", "Powered by WPBakery Page Builder - drag and drop page builder for WordPress.", "WP Rocket 3.20.2"], [
+    `${url}wp-content/plugins/borlabs-cookie/assets/javascript/borlabs-cookie-prioritize.min.js`,
+    `${url}wp-content/cache/min/1/wp-content/plugins/svg-support/css/svgs-attachment.css`,
+    `${url}wp-content/plugins/wp-rocket/assets/script.js`,
+  ]);
+  const projected = projectCmsSecurity(bundle, source, url)!;
+  assert.ok(projected);
+  assert.deepEqual(projected.pluginInventory?.detections.map(row => [row.name, row.version]), [
+    ["WPML", "4.8.6"], ["WPBakery Page Builder", null], ["WP Rocket", "3.20.2"], ["Borlabs Cookie", null], ["SVG Support", null],
+  ]);
+  assert.equal(projected.assessment.detections[0]?.version, null);
+  assert.equal(projected.assessment.matches.length, 0);
+  assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts: { cmsSecurity: projected }, reviewFindingCandidates: [], validationFindings: [] }), []);
+  for (const plugin of projected.pluginInventory!.detections) {
+    assert.ok(resolveCmsEvidence(projected, plugin.evidenceRef));
+    for (const ref of plugin.evidenceRefs) assert.ok(resolveCmsEvidence(projected, ref));
+  }
+  const tampered = structuredClone(projected);
+  tampered.pluginInventory!.detections[1]!.version = "8.0.0";
+  assert.equal(cmsSecurityProjectionSchema.safeParse(tampered).success, false);
+  const legacy = structuredClone(projected); delete legacy.pluginInventory;
+  assert.equal(cmsSecurityProjectionSchema.safeParse(legacy).success, true);
+  assert.equal(projectCmsSecurity(bundle, { ...source, verificationStatus: "unverified" }, url), null);
+});
+
+test("conflicting plugin versions remain unknown and arbitrary plugin names never supply a core version", () => {
+  const projected = projectCmsSecurity(cmsBundle(["WP Rocket 3.20.2", "WP Rocket 3.19.0"], [
+    `${url}wp-content/plugins/custom-plugin/assets/version-6.8.js`,
+    `${url}wp-content/themes/theme/plugins/not-a-wp-plugin/script.js`,
+  ]), source, url)!;
+  assert.equal(projected.pluginInventory?.detections[0]?.versionStatus, "conflicting");
+  assert.equal(projected.pluginInventory?.detections[0]?.version, null);
+  assert.deepEqual(projected.pluginInventory?.detections[0]?.observedVersions, ["3.20.2", "3.19.0"]);
+  assert.equal(projected.pluginInventory?.detections[1]?.name, "custom-plugin");
+  assert.equal(projected.pluginInventory?.detections[1]?.version, null);
+  assert.equal(projected.pluginInventory?.detections.length, 2);
+  assert.equal(projected.assessment.detections[0]?.version, null);
+  assert.equal(projected.assessment.matches.length, 0);
+});

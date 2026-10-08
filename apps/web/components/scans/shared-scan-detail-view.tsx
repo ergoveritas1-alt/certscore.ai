@@ -1762,8 +1762,10 @@ export function buildExecutiveTimelineEvents(
     ...getRecordObjectArray(hybrid, "cookieObservations"),
     ...getRecordObjectArray(hybrid, "cookie_observations"),
     ...getRecordObjectArray(hybrid, "storageObservations"),
-    ...getRecordObjectArray(hybrid, "storage_observations")
-  ];
+    ...getRecordObjectArray(hybrid, "storage_observations"),
+    ...getRecordObjectArray(hybrid, "cookieWriteObservations"),
+    ...getRecordObjectArray(hybrid, "cookie_write_observations")
+  ].filter(row => row.beforeConsent !== false && row.preConsent !== false);
   const consentSummary = getRecord(hybrid.consentSummary) ?? getRecord(hybrid.consent_summary);
   const firstRequestRow = firstTimelineRow(requestRows, isTypedThirdPartyTimelineRow);
   const firstCookieRow = firstTimelineRow(cookieRows, () => true);
@@ -1832,20 +1834,30 @@ export function buildExecutiveTimelineEvents(
         ) ?? -1
       : -1,
     label: "3P request",
-    tone: "amber",
+    tone: "slate",
     vendorLabel: getTimelineVendorLabel(firstRequestRow)
   });
+  const firstCookieObservedMs = firstTimelineMs(
+    timelineMarkers?.firstCookieObservedMs,
+    timelineMarkers?.first_cookie_observed_ms,
+    firstTimelineMsFromRows(cookieRows, () => true),
+    // Historical markers may contain snapshot times. Never label them as writes.
+    timelineMarkers?.firstTrackingCookieSetMs,
+    timelineMarkers?.first_tracking_cookie_set_ms,
+    timelineMarkers?.firstCookieWriteMs,
+    timelineMarkers?.first_cookie_write_ms
+  );
+  const timedCookieRow = firstCookieRow && firstTimelineMsFromRows([firstCookieRow], () => true) === firstCookieObservedMs
+    ? firstCookieRow : null;
+  const cookieMethod = String(timedCookieRow?.setMethod ?? timedCookieRow?.operation ?? "");
+  const cookieSnapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(cookieMethod);
+  const cookieLabel = timedCookieRow?.essentiality === "essential" ? "Essential cookie" :
+    timedCookieRow?.cookieName ? String(timedCookieRow.cookieName) : "Cookie/storage";
   pushEvent({
-    atMs:
-      firstTimelineMs(
-        timelineMarkers?.firstTrackingCookieSetMs,
-        timelineMarkers?.first_tracking_cookie_set_ms,
-        timelineMarkers?.firstCookieWriteMs,
-        timelineMarkers?.first_cookie_write_ms
-      ) ?? -1,
-    label: "Cookie/storage",
-    tone: "amber",
-    vendorLabel: getTimelineVendorLabel(firstCookieRow)
+    atMs: firstCookieObservedMs ?? -1,
+    label: timedCookieRow?.cookieName ? "Cookie observed" : "Cookie/storage observed",
+    detail: `${cookieLabel} · ${cookieSnapshot ? "snapshot observation" : "retained observation"}`,
+    tone: "slate",
   });
   pushEvent({
     atMs:
@@ -1855,7 +1867,7 @@ export function buildExecutiveTimelineEvents(
         )
       ) ?? -1,
     label: "Ad vendor",
-    tone: "rose",
+    tone: "slate",
     vendorLabel: getTimelineVendorLabel(firstAdRow)
   });
   pushEvent({
@@ -1864,7 +1876,7 @@ export function buildExecutiveTimelineEvents(
         /analytics|measurement/i.test(String(row.category ?? row.vendorCategory ?? row.vendor_category ?? ""))
       ) ?? -1,
     label: "Analytics",
-    tone: "sky",
+    tone: "slate",
     vendorLabel: getTimelineVendorLabel(firstAnalyticsRow)
   });
   pushEvent({
@@ -1876,7 +1888,7 @@ export function buildExecutiveTimelineEvents(
         sessionReplaySummary?.first_observed_ms
       ) ?? -1,
     label: "Session replay",
-    tone: "rose"
+    tone: "slate"
   });
   pushEvent({
     atMs: canonicalFingerprintingReviewMs ?? -1,
@@ -1892,10 +1904,30 @@ export function buildExecutiveTimelineEvents(
         ? firstTimelineMsFromRows(vendorRows, row => row.preConsent !== false && row.pre_consent !== false) ?? -1
         : -1,
       label: "Embedded content",
-      tone: "amber",
+      tone: "slate",
       vendorLabel
     });
   }
+
+  // Red milestones project already-assessed canonical concerns and their own
+  // retained times. Raw resource labels and cookie presence remain neutral.
+  const timedConcern = (id: string, timingKey: string, label: string, detail: string) => {
+    const row = gdprEprivacyChecklist.find(item => item.id === id &&
+      (item.status === "Gap observed" || item.status === "Review signal"));
+    const atMs = firstTimelineMs(row?.criticalEvidence?.retainedEvidence?.[timingKey]);
+    if (atMs === null) return;
+    pushEvent({ atMs, label, detail, tone: "rose" });
+  };
+  timedConcern("pre_consent_cookies_storage", "firstPreconsentCookieOrStorageObservedMs",
+    "Non-essential cookie/storage", "Canonical pre-consent cookie/storage concern observed");
+  timedConcern("pre_consent_third_party_tracking", "firstPreconsentThirdPartyTrackingObservedMs",
+    "Non-essential request", "Canonical pre-consent tracking concern observed");
+  const replayRow = gdprEprivacyChecklist.find(item => item.id === "session_replay_fingerprinting_review" &&
+    (item.status === "Gap observed" || item.status === "Review signal"));
+  const replayEvidence = getRecord(replayRow?.criticalEvidence?.retainedEvidence?.sessionReplayEvidence);
+  const replayConcernMs = firstTimelineMs(replayEvidence?.firstSeenMs, replayEvidence?.firstObservedMs);
+  const replayEvent = events.find(event => event.label === "Session replay");
+  if (replayEvent && replayConcernMs === replayEvent.atMs) replayEvent.tone = "rose";
 
   return events.sort((left, right) => left.atMs - right.atMs).slice(0, 8);
 }
