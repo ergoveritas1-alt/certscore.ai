@@ -1,3 +1,4 @@
+import { reportArtifactIdentityKey, verifyReportArtifactTransfer } from "../../../../packages/shared/src/report-artifact-transfer";
 import { createVerifiedPolicyTextCache } from "./verified-policy-text-cache";
 import { postAcceptEvidencePacketSchema, projectPostAcceptFormInventory } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
@@ -1694,7 +1695,24 @@ async function readLocalV2DagJsonArtifactFromS3(input: {
   expectedSha256?: string | null;
   expectedSizeBytes?: number | null;
   uri: string;
+  transferredBytes?: ReadonlyMap<string, Buffer>;
 }) {
+  if (input.expectedSha256 && input.expectedSizeBytes && input.transferredBytes) {
+    const body = input.transferredBytes.get(reportArtifactIdentityKey({
+      uri: input.uri, sha256: input.expectedSha256, sizeBytes: input.expectedSizeBytes,
+    }));
+    if (body) {
+      const parsed = JSON.parse(verifyLocalV2DagLambdaArtifactBody({
+        body, expectedSha256: input.expectedSha256, expectedSizeBytes: input.expectedSizeBytes,
+      }).toString("utf8")) as unknown;
+      // Preserve subsequent screenshot/evidence reads and stale-source retries:
+      // the existing bounded cache must also receive this verified first read.
+      void verifiedReportArtifactCache.getOrCreate(
+        `${input.uri}:${input.expectedSha256}:${input.expectedSizeBytes}`, async () => parsed,
+      );
+      return parsed;
+    }
+  }
   // Cache immutable, fully verified bytes independently of report generation.
   // A stale-source retry still reloads mutable DB inputs, without rereading S3.
   if (!input.expectedSha256 || !input.expectedSizeBytes) {
@@ -1739,6 +1757,7 @@ async function readLocalV2DagBundleFromS3(input: {
   expectedSha256?: string | null;
   expectedSizeBytes?: number | null;
   uri: string;
+  transferredBytes?: ReadonlyMap<string, Buffer>;
 }): Promise<CanonicalEvidenceBundle | null> {
   try {
     const parsed = await readLocalV2DagJsonArtifactFromS3(input);
@@ -1759,6 +1778,7 @@ async function readLocalV2DagManifestFromS3(input: {
   expectedSha256?: string | null;
   expectedSizeBytes?: number | null;
   uri: string;
+  transferredBytes?: ReadonlyMap<string, Buffer>;
 }): Promise<Record<string, unknown> | null> {
   try {
     const parsed = await readLocalV2DagJsonArtifactFromS3(input);
@@ -6625,7 +6645,7 @@ async function loadLocalV2DagRemoteArtifacts(input: {
 
 async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
-  options: { requireBundle?: boolean } = {}
+  options: { requireBundle?: boolean; artifactTransfer?: unknown } = {}
 ): Promise<ScanDetailResponse> {
   const timed = <T>(label: string, operation: () => Promise<T>) =>
     withServerTiming(label, operation, { scanId: scanRecord.scan.id });
@@ -6633,6 +6653,18 @@ async function materializeLocalV2DagScanDetailUncached(
   if (!input || scanRecord.scan.status !== "completed") {
     return scanRecord;
   }
+  const transferStartedAt = performance.now();
+  const transferredBytes = verifyReportArtifactTransfer({
+    transfer: options.artifactTransfer, scanId: scanRecord.scan.id,
+    bundle: input.scanArtifactUri && input.scanArtifactSha256 && input.scanArtifactSizeBytes
+      ? { uri: input.scanArtifactUri, sha256: input.scanArtifactSha256, sizeBytes: input.scanArtifactSizeBytes } : null,
+    manifest: input.manifestArtifactUri && input.manifestArtifactSha256 && input.manifestArtifactSizeBytes
+      ? { uri: input.manifestArtifactUri, sha256: input.manifestArtifactSha256, sizeBytes: input.manifestArtifactSizeBytes } : null,
+  });
+  if (options.artifactTransfer !== undefined) console.info(JSON.stringify({
+    event: "scan.report_artifact_transfer", scanId: scanRecord.scan.id,
+    verifiedArtifacts: transferredBytes.size, durationMs: Math.round(performance.now() - transferStartedAt),
+  }));
   const shouldReadLocalOutDir = shouldReadLocalV2DagReportOutDir(input);
   let bundle: CanonicalEvidenceBundle | null;
   let consentControlGeometryEvidence: Record<string, unknown> | null;
@@ -6678,7 +6710,8 @@ async function materializeLocalV2DagScanDetailUncached(
               readLocalV2DagBundleFromS3({
                 expectedSha256: input.scanArtifactSha256,
                 expectedSizeBytes: input.scanArtifactSizeBytes,
-                uri: input.scanArtifactUri!
+                uri: input.scanArtifactUri!,
+                transferredBytes,
               })
             )
           : Promise.resolve(null),
@@ -6698,7 +6731,8 @@ async function materializeLocalV2DagScanDetailUncached(
               readLocalV2DagManifestFromS3({
                 expectedSha256: input.manifestArtifactSha256,
                 expectedSizeBytes: input.manifestArtifactSizeBytes,
-                uri: input.manifestArtifactUri!
+                uri: input.manifestArtifactUri!,
+                transferredBytes,
               })
             )
           : Promise.resolve(null),
@@ -6767,7 +6801,7 @@ async function materializeLocalV2DagScanDetailUncached(
 
 export async function materializeLocalV2DagScanDetail(
   scanRecord: ScanDetailResponse,
-  options: { requireBundle?: boolean } = {}
+  options: { requireBundle?: boolean; artifactTransfer?: unknown } = {}
 ): Promise<ScanDetailResponse> {
   const input = getLocalV2DagReportInput(scanRecord);
   if (!input || scanRecord.scan.status !== "completed") {
@@ -6844,5 +6878,7 @@ export async function loadSinglePageFormSnapshot(scanRecord: ScanDetailResponse,
 
 export const localV2DagReportPerformanceTestHelpers = {
   loadLocalV2DagRemoteArtifacts,
+  readLocalV2DagBundleFromS3,
+  readLocalV2DagManifestFromS3,
   shouldReadLocalV2DagReportOutDir
 };

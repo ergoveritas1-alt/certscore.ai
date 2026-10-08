@@ -9425,3 +9425,45 @@ test("title-only guessed cookie routes are not projected as dedicated policies",
   const partial = wrapped.summarizePolicySurfaces(surfaces.map(row => ({...row,surface:{...row.surface,documentTextCoverage:{status:"truncated",sourceTextChars:2000,retainedTextChars:text.length,limitationKeys:["truncated"]}}})) as never,"example.test",options);
   assert.equal(partial.legalFrameworkValidityMatches[0]?.outdatedTransferDisclosureAssessment,undefined);
  });
+
+
+test("transferred artifacts and original S3 artifacts produce the same complete canonical report", async (context) => {
+  context.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-10-08T12:00:00.000Z") });
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const { buildReportArtifactTransfer } = await import("../../../../packages/shared/src/report-artifact-transfer");
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  const scanId = "report-transfer-parity";
+  const completedAt = "2026-10-08T12:00:00.000Z";
+  const pageUrl = "https://example.test/";
+  const bundle = Buffer.from(JSON.stringify({ scanId, schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
+    completedAt, startedAt: "2026-10-08T11:59:50.000Z", url: pageUrl, normalizedUrl: pageUrl,
+    consentUiObservations: [], cookieEvents: [], modulesRun: [], networkEvents: [], normalizedVendorObservations: [],
+    policySurfaceObservations: [], screenshots: [], runtimeTimeline: [],
+    runtimeCoverage: { coverageStatus: "usable", fallbackModesUsed: [], limitationKeys: [], notes: [], silentEmpty: false,
+      observationCounts: { cookieEvents: 0, cookiesBeforeConsent: 0, networkEvents: 0, normalizedVendors: 0, observedJourneys: 0, thirdPartyRequests: 0 } },
+  }));
+  const manifest = Buffer.from(JSON.stringify({ scanId, processor: LOCAL_V2_DAG_SCAN_PROCESSOR, targetEnvironment: "production", auxiliaryArtifacts: [] }));
+  const metadata = (body: Buffer) => ({ sha256: createHash("sha256").update(body).digest("hex"), sizeBytes: body.byteLength });
+  const original = makeScanRecord();
+  const record = makeScanRecord({ scan: { ...original.scan, id: scanId, domainHostname: "example.test",
+    scanConfigJson: { hostname: "example.test", normalizedUrl: pageUrl, processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+      execution: { v2DagParallel: { artifactOnly: true, localOnly: true, profile: "standard", productionFindingIntegration: false } } } },
+    events: [{ id: "transfer-event", eventType: "v2_lambda_result.received", createdAt: completedAt, message: "Retained originals",
+      metadataJson: { artifactOnly: true, productionFindingIntegration: false, artifactAccess: { productionReadMode: "verified_s3" }, processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+        artifactMetadata: { manifestUri: metadata(manifest), scanArtifactUri: metadata(bundle) },
+        artifactPointers: { manifestUri: "s3://transport-parity/manifest", scanArtifactUri: "s3://transport-parity/bundle" } } }],
+  });
+  const send = S3Client.prototype.send;
+  let reads = 0;
+  S3Client.prototype.send = (async (command: { input: { Key: string } }) => {
+    reads++; return { Body: command.input.Key === "bundle" ? bundle : manifest };
+  }) as typeof send;
+  try {
+    const remotelyRead = await materializeLocalV2DagScanDetail(record, { requireBundle: false });
+    assert.equal(reads, 2);
+    const transferred = await materializeLocalV2DagScanDetail(record, { requireBundle: true,
+      artifactTransfer: buildReportArtifactTransfer({ scanId, bundle, manifest }) });
+    assert.equal(reads, 2, "transfer does not add any S3 read");
+    assert.deepEqual(transferred, remotelyRead, "all canonical runtime, assessment, finding and report outputs must match");
+  } finally { S3Client.prototype.send = send; }
+});

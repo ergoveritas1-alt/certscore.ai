@@ -33,6 +33,9 @@ import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
 import { createReportFinalizationScheduler } from "./report-finalization-scheduler";
 import { createReportPublicationHandoff, dispatchDurableReportPublication } from "./report-publication-handoff";
 import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
+import { buildReportArtifactTransfer, createReportArtifactTransferCache } from "../../../../packages/shared/src/report-artifact-transfer";
+
+const reportArtifactTransfers = createReportArtifactTransferCache();
 
 const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
@@ -327,7 +330,12 @@ async function ensureCompletedScanScoresPersistedUncoalesced(input: {
         const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
         const requestStartedAt = Date.now();
         const response = await fetchMaterialization(materializationUrl, {
-          body: JSON.stringify({ mode, scanId: input.scanId, token }),
+          body: JSON.stringify({ mode, scanId: input.scanId, token,
+            // Disposable and sent once. Recovery/retries keep their existing
+            // verified S3 reads; never add another request for this optimization.
+            ...(mode === "publish_report" && input.targetEnvironment === "production"
+              ? { artifactTransfer: reportArtifactTransfers.take(input.scanId) } : {}),
+          }),
           headers: { "content-type": "application/json" },
           method: "POST",
           signal: AbortSignal.timeout(remainingMs)
@@ -1668,6 +1676,9 @@ export async function verifyProductionArtifactChain(
     expectedSha256: scanArtifact.sha256,
     expectedSizeBytes: scanArtifact.sizeBytes,
   }, scanArtifact.body);
+  reportArtifactTransfers.retain(buildReportArtifactTransfer({
+    scanId: parsedMessage.scanId, bundle: scanArtifact.body, manifest: manifest.body,
+  }));
   return {
     manifest: { sha256: manifest.sha256, sizeBytes: manifest.sizeBytes },
     scanArtifact: { sha256: scanArtifact.sha256, sizeBytes: scanArtifact.sizeBytes },

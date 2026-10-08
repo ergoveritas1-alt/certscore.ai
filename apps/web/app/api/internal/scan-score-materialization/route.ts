@@ -1,3 +1,4 @@
+import { REPORT_ARTIFACT_TRANSFER_MAX_REQUEST_BYTES } from "../../../../../../packages/shared/src/report-artifact-transfer";
 import { NextResponse } from "next/server";
 import {
   authorizeScoreMaterializationRequest,
@@ -49,7 +50,27 @@ async function timedMaterializationPhase<T>(
 export async function POST(request: Request) {
   let scanId: string | null = null;
   try {
-    const body = await request.json() as { mode?: unknown; scanId?: unknown; token?: unknown };
+    // Bound even unauthenticated bodies before decoding compressed hints.
+    const reader = request.body?.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    if (reader) {
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          size += chunk.value.byteLength;
+          if (size > REPORT_ARTIFACT_TRANSFER_MAX_REQUEST_BYTES) {
+            await reader.cancel();
+            return NextResponse.json({ error: "Materialization request is too large." }, { status: 413 });
+          }
+          chunks.push(chunk.value);
+        }
+      } finally { reader.releaseLock(); }
+    }
+    const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+      mode?: unknown; scanId?: unknown; token?: unknown; artifactTransfer?: unknown;
+    };
     scanId = typeof body.scanId === "string" ? body.scanId : null;
     const token = typeof body.token === "string" ? body.token : null;
     const mode = body.mode === "publish_report" || body.mode === "finalize" || body.mode === "publish_and_finalize"
@@ -81,6 +102,7 @@ export async function POST(request: Request) {
         publishCanonicalScanReportProjection({
           organizationId: authorization.organizationId,
           scanId: authorizedScanId,
+          artifactTransfer: body.artifactTransfer,
         })
       );
       if (publication.status === "finalizing") {

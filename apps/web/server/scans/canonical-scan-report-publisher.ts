@@ -64,6 +64,7 @@ async function publishCanonicalScanReportProjectionUncached(input: {
   organizationId: string | null;
   scanId: string;
   forceRebuild?: boolean;
+  artifactTransfer?: unknown;
 }): Promise<CanonicalScanReportPublicationResult> {
   for (let attempt = 0; attempt < STALE_SOURCE_MAX_ATTEMPTS; attempt += 1) {
     const rawRecord = await withServerTiming("scan.report_publication.load_scan", () => loadScan(input), input);
@@ -115,7 +116,7 @@ async function publishCanonicalScanReportProjectionUncached(input: {
         reason: "already_published", scanId: input.scanId, status: "ready" };
     }
     const materializedRecord = await withServerTiming("scan.report_publication.materialize", () =>
-      materializeLocalV2DagScanDetail(rawRecord, { requireBundle: false }), input);
+      materializeLocalV2DagScanDetail(rawRecord, { requireBundle: false, artifactTransfer: input.artifactTransfer }), input);
     try {
       if (!await withServerTiming("scan.report_publication.source_check", () => sourceGenerationIsCurrent(input.scanId, generation), input)) {
         throw new StaleScanReportProjectionSourceError(input.scanId);
@@ -160,6 +161,7 @@ export function publishCanonicalScanReportProjection(input: {
   organizationId: string | null;
   scanId: string;
   forceRebuild?: boolean;
+  artifactTransfer?: unknown;
 }) {
   const key = `${input.organizationId ?? "anonymous"}:${input.scanId}:${input.forceRebuild === true}`;
   const existing = publicationPromises.get(key);
