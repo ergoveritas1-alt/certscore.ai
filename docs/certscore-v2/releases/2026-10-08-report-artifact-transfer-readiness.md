@@ -100,3 +100,93 @@ production scan, infrastructure change or deployment was performed for this
 implementation. Release affects public web/materializer and validation worker;
 no scanner runtime, Lambda image or migration change is required. Existing and
 new worker/web revisions remain backward compatible during rollout.
+
+
+## Production release and verification
+
+Web/materializer released code commit `901c3a4b8649cff8cce85cde36caa547c2730601`
+through [web workflow 37858529660](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/37858529660).
+Validation released `06d55c6c77a6128b813f03298bc5901c689c643e` through
+[worker workflow 37858939613](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/37858939613).
+The latter differs only in test-fixture setup; runtime source is identical.
+Both workflows succeeded, live web reported the exact expected SHA and ECS
+runtime, and all three services were stable at their existing desired counts.
+Running container digests matched their immutable ECR tags: web task definition
+702, materializer 265 and worker 530. No scanner or capacity change occurred.
+
+The first worker CI attempt stopped before image promotion because the new test
+assumed an untracked `tmp` directory existed. Both new fixtures now create their
+parent directory. All 271 worker tests and both web transport tests passed from
+a checkout without that directory. The exact corrected commit also passed its
+change-aware gate, and all required GitHub CI jobs passed. No failed check was
+waived. The original code's full gate and the exact web commit's change-aware
+gate had already passed. The shared-file MCP trigger was canceled before image
+build because this helper is not an MCP runtime consumer.
+
+Measured deployment stages (seconds):
+
+| Stage | Web | Worker |
+| --- | ---: | ---: |
+| Workflow job | 618 | 517 |
+| Image build/push/cache | 241 | 155 |
+| ECR image layer push | 2.3 | 1.7 |
+| Exact-image migrations | 50 | — |
+| ECS stabilization | 184 | 244 |
+
+Canonical helper totals were 10m 34s for web and 9m 9s for the corrected worker
+release. Web reused its matching ARM64 runtime base and registry cache; Next
+build took 135.6s and cache export 40.5s. Worker reused its existing base and
+exported its registry cache. The earlier web ECR push of 990.4s did not recur;
+this warm release does not establish the cause of that earlier slow upload or
+guarantee every future upload will take 2.3s.
+
+One fresh owned baseline and two fresh post-release scans used the same
+`https://ergoveritas.com/testar1.html` EU-DE standard profile and unchanged scanner
+revision. No forms were submitted and SITS was not contacted. The one-time
+verification scans and bounded AWS diagnostic reads were budgeted below $0.50.
+All three retained original manifest/bundle/action packets passed hash, size,
+schema and identity checks. All six enabled lanes completed and joined;
+A/R/O remained observed, score remained 84, Accept retained four observations,
+Reject retained no qualifying activity after its full eight-second window,
+and forms remained zero as expected for this owned fixture. Each scan had one
+terminal result, one unified derivation, a ready persisted report and a completed
+materialization request with attempt count one. Neither new report produced a
+browser error.
+
+| Scan | Transferred artifacts used | Combined remote artifact phase | Scanner finished → persisted report | Request → browser ready |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline `677611d2` | none | 1.221s | 5.599s | 27.461s |
+| After `a5fa365a` | 2, verified in 4ms | 0.530s | 3.824s | 22.842s |
+| After `62b76a6a` | none, S3 fallback | 1.508s | 12.897s | 29.736s |
+
+[Transferred report](https://certscore.ai/scan/a5fa365a-05f7-4558-a1e9-3e2822992401)
+and [fallback report](https://certscore.ai/scan/62b76a6a-985b-4667-b6d2-badd3693cc91)
+are the actual fresh production results. Phase times overlap; do not add the
+bundle and manifest read durations or attribute the entire wall-clock difference
+to byte transfer. This is a small diagnostic comparison, not cohort latency data.
+
+### Remaining latency issue
+
+The second scan's status-polling web task entered the shared canonical publisher
+without transfer bytes while the worker's authenticated requests received
+`materialization_not_ready` responses. Publication happened on the public web
+task; the worker's one-use hint was not used. Subsequent existing retries correctly
+fell back to S3. Report correctness and single publication were preserved, but
+this optimization did not improve that scan. The worker also logged 2.861s waiting
+for canonical inputs and multiple publication-contention responses; these phases
+must be measured independently rather than labeled an artifact-download delay.
+
+The next target is publication ownership: keep ordinary progress polling from
+competing with an active durable worker publication while retaining explicit,
+bounded recovery when its owner is unavailable. Do not solve this by resending
+compressed bytes on every retry, changing publication locks/readiness, adding
+models or extending timeouts. Any further implementation needs its own relevant
+boundary tests and fresh verification. No universal scan-to-report improvement
+is claimed by this release. Large bundles, including the retained SITS sample,
+also keep their original S3 bundle read under the approved transport bound.
+
+Receipts include `release-exact-gate.json`, `ci-fixture-exact-gate.json`,
+`ecs-ecr-verification.json`, workflow logs/timings, `owned-pair-verification.json`
+and correlated web/worker windows in `artifacts/report-artifact-transfer-20261008/`.
+The temporary clean checkout was removed after saving verification receipts.
+Recurring incremental cost remains under $0.90/month at 100,000 affected scans.
