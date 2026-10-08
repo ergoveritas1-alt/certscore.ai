@@ -1,3 +1,4 @@
+import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema } from "./post-accept-form-snapshots";
 import { postAcceptFormCaptureSchema } from "./post-accept-form-capture";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
@@ -179,6 +180,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     resolverMs: z.number().int().nonnegative(),
     confirmationMs: z.number().int().nonnegative(),
     observationMs: z.number().int().nonnegative(),
+    observationEndedAtMs: z.number().int().nonnegative().optional(),
     observationExitReason: z.enum([
       "window_elapsed",
       "non_essential_request_observed",
@@ -214,6 +216,10 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  if (packet.timing.observationEndedAtMs !== undefined && (
+    packet.timing.observationEndedAtMs > packet.timing.readyAtMs ||
+    packet.timing.observationEndedAtMs < (packet.acceptanceRegistration.acceptanceRegisteredAtMs ?? packet.acceptanceRegistration.actionDispatchedAtMs ?? 0)
+  )) context.addIssue({code:z.ZodIssueCode.custom,path:["timing","observationEndedAtMs"],message:"Observation end must retain the action and result clock binding."});
   const images = packet.formSnapshotCapture;
   const imageCaptureDeadlineAtMs = images && images.contractVersion !== "certscore.post_accept_form_snapshots.v1"
     ? images.lateForm.baseCaptureDeadlineAtMs + images.lateForm.extensionMs
@@ -510,6 +516,7 @@ const postAcceptReportActivityRowSchema = z.object({
 });
 
 export const postAcceptReportProjectionSchema = z.object({
+  retainedActionTiming: retainedActionTimingSchema.optional(),
   formSnapshotCapture: postAcceptFormSnapshotProjectionSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
   execution: choicePathExecutionSchema.optional(),
@@ -578,6 +585,7 @@ export const postAcceptReportProjectionSchema = z.object({
   }
   validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "accept", context);
   validateChoicePathExecution(projection.execution, projection, "accept", context);
+  validateRetainedActionTiming(projection.retainedActionTiming, projection, "accept", context);
   validateAfterActionProjection(projection.afterActionCapture, context, {
     action: "accept", proof: projection.actionControlProof,
     requests: projection.afterActionRequests, storage: projection.afterActionStorage,
@@ -658,13 +666,19 @@ export function projectPostAcceptEvidenceForReport(input: {
       ].slice(0, 48)
     : [];
 
+  const retainedActionTiming = retainActionTiming({ action: "accept", packetSha256: input.packetSha256,
+      clickCompleted: packet.interactionDiagnostics?.click.outcome === "completed" && packet.actionControlProof?.action === "accept",
+      actionDispatchedAtMs: packet.acceptanceRegistration.actionDispatchedAtMs,
+      observationEndedAtMs: packet.timing.observationEndedAtMs, requests: packet.network.requests });
+
   const projection = postAcceptReportProjectionSchema.parse({
+    ...(retainedActionTiming ? { retainedActionTiming } : {}),
     registeredObservationCompletion: retainRegisteredObservationCompletion({
       action: "accept", registeredAtMs: packet.acceptanceRegistration.acceptanceRegisteredAtMs,
       productionProjectable: packet.productionProjectable, cancelled: packet.cancellation.requested,
       requestsDropped: packet.captureCoverage?.requestsDroppedAfterAction ?? 0,
       observationWindowMs: packet.observationWindowMs, observedDurationMs: packet.timing.observationMs,
-      readyAtMs: packet.timing.readyAtMs, exitReason: packet.timing.observationExitReason,
+      readyAtMs: packet.timing.observationEndedAtMs ?? packet.timing.readyAtMs, exitReason: packet.timing.observationExitReason,
       observationCount: packet.observations.length,
     }),
     ...(packet.formCapture && input.packetSha256 ? {formCapture: packet.formCapture} : {}),

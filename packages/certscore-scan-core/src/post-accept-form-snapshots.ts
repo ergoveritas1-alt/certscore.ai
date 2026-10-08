@@ -135,6 +135,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
         captureDeadlineAtMs - 75, {
           pixelSignal: signal,
           maxCropHeight: 480,
+          fitFormToCrop: true,
           hideControlsDuringCapture: true,
           ...(lateFormExtensionActive ? { pixelBudgetMs: Math.max(1, captureDeadlineAtMs - Date.now()) } : {}),
           reviewDeadlineAtMs: lateFormExtensionActive ? captureDeadlineAtMs : input.deadlineAtMs + 1500,
@@ -181,7 +182,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
         let laterPixelProvedAtMs: number | undefined;
         const extra = await captureCollectionSurfaceSnapshots(input.page, {...postCaptureInventory.inventory,
           forms:newForms.slice(0,2-snapshots.length)}, input.reviewer, input.signal, boundSession,
-          captureDeadlineAtMs - 75, {pixelSignal:signal, maxCropHeight:480, hideControlsDuringCapture:true,
+          captureDeadlineAtMs - 75, {pixelSignal:signal, maxCropHeight:480, fitFormToCrop:true, hideControlsDuringCapture:true,
             pixelBudgetMs:Math.max(1,captureDeadlineAtMs-Date.now()), reviewDeadlineAtMs:captureDeadlineAtMs,
             sourceInventoryHash:createHash("sha256").update(JSON.stringify(postCaptureInventory.inventory)).digest("hex"),
             onMaskedPixelsCaptured:async()=>{

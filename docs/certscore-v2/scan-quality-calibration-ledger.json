@@ -111,8 +111,136 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://consumerfinance.gov"
+    },
+    "https://notion.so": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T04:10:10.796Z",
+      "lastContactAt": "2026-10-08T04:10:10.796Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://notion.so"
+    },
+    "https://openai.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-05T04:10:24.576Z",
+      "lastContactAt": "2026-10-08T04:10:24.576Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "dom_text_empty",
+        "homepage_response_403",
+        "network_cloudflare_challenge",
+        "policy_homepage_fetch_403",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://openai.com"
+    },
+    "https://mayoclinic.org": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-05T04:10:38.692Z",
+      "lastContactAt": "2026-10-08T04:10:38.692Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "homepage_response_403",
+        "policy_homepage_fetch_403",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://mayoclinic.org"
+    },
+    "https://booking.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-05T04:10:55.223Z",
+      "lastContactAt": "2026-10-08T04:10:55.223Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "scan_no_go:scan_no_go_corroborated",
+        "scan_no_go:server_error_5xx",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://booking.com"
+    },
+    "https://hotjar.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T04:11:14.754Z",
+      "lastContactAt": "2026-10-08T04:11:14.754Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://hotjar.com"
+    },
+    "https://progressive.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T04:11:28.269Z",
+      "lastContactAt": "2026-10-08T04:11:28.269Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://progressive.com"
+    },
+    "https://usa.gov": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T04:11:39.424Z",
+      "lastContactAt": "2026-10-08T04:11:39.424Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://usa.gov"
+    },
+    "https://wayfair.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-05T04:11:54.767Z",
+      "lastContactAt": "2026-10-08T04:11:54.767Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "network_datadome_challenge",
+        "scan_no_go:rate_limited_429",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://wayfair.com"
+    },
+    "https://theguardian.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-05T04:12:12.395Z",
+      "lastContactAt": "2026-10-08T04:12:12.395Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://theguardian.com"
+    },
+    "https://salesforce.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-05T04:12:32.322Z",
+      "lastContactAt": "2026-10-08T04:12:32.322Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "homepage_response_403",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://salesforce.com"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-09-11T04:03:56.340Z"
+  "updatedAt": "2026-10-08T04:12:55.620Z"
 }

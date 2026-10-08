@@ -62,9 +62,11 @@ export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs
       try { return Boolean(element.closest(selector)); } catch { return false; }
     });
     const label = (element: Element) => {
+      const labelledBy = text((element.getAttribute("aria-labelledby") ?? "").split(/\s+/).slice(0, 4)
+        .map(id => id ? document.getElementById(id)?.textContent ?? "" : "").join(" "));
       const id = element.getAttribute("id");
       const explicit = id ? Array.from(document.querySelectorAll(`label[for="${CSS.escape(id)}"]`)).map(node => text(node.textContent)).find(Boolean) : undefined;
-      return explicit ?? text(element.closest("label")?.textContent) ?? text(element.getAttribute("aria-label")) ??
+      return labelledBy ?? text(element.getAttribute("aria-label")) ?? explicit ?? text(element.closest("label")?.textContent) ??
         text(element.getAttribute("placeholder")) ?? text(element.getAttribute("name"));
     };
     const isVisible = (element: Element) => {

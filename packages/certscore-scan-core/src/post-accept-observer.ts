@@ -350,6 +350,7 @@ export async function runPostAcceptObserver(
     resolverMs: 0,
     confirmationMs: 0,
     observationMs: 0,
+    observationEndedAtMs: undefined as number | undefined,
     observationExitReason: undefined as PostAcceptEvidencePacket["timing"]["observationExitReason"],
   };
   const diagnostics: PostRefusalInteractionDiagnostics = {
@@ -565,6 +566,9 @@ export async function runPostAcceptObserver(
     await installStorageWriteProbe(page);
     let mainNavigationRequestCount = 0;
     page.on("request", (request) => {
+      // Optional form images may continue in this session after the action
+      // window closes. They must not grow or truncate its request evidence.
+      if (timing.observationEndedAtMs !== undefined) return;
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
         mainNavigationRequestCount += 1;
       }
@@ -1170,18 +1174,21 @@ export async function runPostAcceptObserver(
       targetUrl: observationTargetUrl,
     });
     formCapture = formCaptureHandle?.finish();
-    if (!formSnapshotHandle) timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
+    const observationEndedAtEpochMs = Date.now();
+    timing.observationMs = Math.max(0, observationEndedAtEpochMs - observationStartedAtMs);
+    timing.observationEndedAtMs = elapsed(parentScanStartedAtMs, observationEndedAtEpochMs);
     // The storage read and optional masked-image completion are independent
     // same-session reads after the observation window. Overlap their browser
     // work so an image cannot spend the result's finalization allowance.
-    const [finishedSnapshot, postActionStorage] = await Promise.all([
-      formSnapshotHandle?.finish().then(capture => {
-        timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
-        return capture;
-      }) ?? Promise.resolve(undefined),
+    const [finishedSnapshot, storageRead, instrumentedWrites] = await Promise.all([
+      formSnapshotHandle?.finish() ?? Promise.resolve(undefined),
       captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies,
-        (d) => { storageCollectionDiagnostics.postAction = d; }),
+        (d) => { storageCollectionDiagnostics.postAction = d; }).then(storage => ({
+          storage, capturedAtMs: elapsed(parentScanStartedAtMs),
+        })),
+      readStorageWrites(page),
     ]);
+    const postActionStorage = storageRead.storage;
     formSnapshotCapture = finishedSnapshot;
     timing.observationExitReason = observationResult.reason;
     observationCoverageSufficient = observationResult.completed;
@@ -1194,7 +1201,7 @@ export async function runPostAcceptObserver(
       limitations.push(`observation_early_exit:${observationResult.reason}`);
     }
     void graphCapture?.snapshotStorage();
-    const postActionCapturedAtMs = elapsed(parentScanStartedAtMs);
+    const postActionCapturedAtMs = storageRead.capturedAtMs;
     const requests = classifyRequests(
       retainedRequests(),
       parentScanStartedAtMs,
@@ -1206,9 +1213,9 @@ export async function runPostAcceptObserver(
       typeof request.msOffsetFromAccept === "number" &&
       request.msOffsetFromAccept >= 0
     ).slice(0, 24);
-    const instrumentedWrites = await readStorageWrites(page);
     const writesAfterAccept = instrumentedWrites
-      .filter((write) => write.observedAtEpochMs > acceptanceRegisteredAtEpochMs!)
+      .filter((write) => write.observedAtEpochMs > acceptanceRegisteredAtEpochMs! &&
+        write.observedAtEpochMs <= observationEndedAtEpochMs)
       .map((write) => classifyStorageWrite(
         write,
         parentScanStartedAtMs,
@@ -1224,12 +1231,13 @@ export async function runPostAcceptObserver(
       const before = preActionByIdentity.get(storageKey(item));
       return item.nonEssential && before?.valueHash !== item.valueHash;
     }).slice(0, 24);
-    const finalTcfSnapshot = observationResult.tcfData ??
-      await readTcfData(page).catch(() => undefined);
+    // Use the decision read retained inside the action window. Image-only
+    // settling must not introduce a later consent contradiction.
+    const finalTcfSnapshot = observationResult.tcfData;
     const finalTcfObservedAtEpochMs = observationResult.tcfData &&
         observationResult.tcfObservedAtEpochMs !== undefined
       ? observationResult.tcfObservedAtEpochMs
-      : finalTcfSnapshot ? Date.now() : undefined;
+      : undefined;
     const tcfSnapshot = finalTcfSnapshot;
     const postAcceptTcfState = tcfSnapshot
       ? tcfState(
@@ -2338,7 +2346,7 @@ async function waitForPostAcceptObservation(input: {
 
   return {
     completed: !input.signal?.aborted,
-    reason: firstSignalReason ?? "window_elapsed",
+    reason: "window_elapsed",
     ...(lastTcfData
       ? { tcfData: lastTcfData, tcfObservedAtEpochMs: lastTcfObservedAtEpochMs }
       : {}),

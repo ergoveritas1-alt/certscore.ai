@@ -42,6 +42,26 @@ test("Google Maps iframe attribution requires the canonical embed endpoint", () 
   assert.ok(unrelated.every(row => row.product !== "Google Maps embed"));
 });
 
+test("HubSpot form-definition delivery is functional while counters remain analytics", () => {
+  for (const host of ["forms.hsforms.com", "forms-eu1.hsforms.com", "forms-na1.hsforms.com"]) {
+    const result = resolveCanonicalVendor({ type: "request", url: `https://${host}/embed/v3/form/123/example-form/json?hs_version=1` });
+    assert.equal(result.status, "resolved");
+    if (result.status !== "resolved") continue;
+    assert.equal(result.observation.product, "HubSpot Forms");
+    assert.equal(result.observation.purpose, "infrastructure");
+    const counter = resolveCanonicalVendor({ type: "request", url: `https://${host}/embed/v3/counters.gif` });
+    assert.equal(counter.status, "resolved");
+    if (counter.status === "resolved") assert.equal(counter.observation.purpose, "analytics");
+  }
+  for (const url of [
+    "https://forms-eu1.hsforms.com/embed/v3/form/123/example-form/json/submission",
+    "https://unrelated.example/embed/v3/form/123/example-form/json",
+  ]) {
+    const result = resolveCanonicalVendor({ type: "request", url });
+    if (result.status === "resolved") assert.equal(result.observation.regulatoryRelevance.includes("form_delivery"), false);
+  }
+});
+
 test("every canonical rule explicitly declares a service purpose, consistently across signatures", () => {
   const definitions = getCanonicalVendorPurposeDefinitions();
   assert.ok(definitions.length >= 334);

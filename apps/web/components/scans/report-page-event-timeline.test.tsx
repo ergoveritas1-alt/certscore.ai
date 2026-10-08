@@ -5,8 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ReportPageEventTimeline } from "./report-page-event-timeline";
 import { RuntimeObservationTimeline } from "./runtime-observation-sections";
 
-const path = {clockLabel:"Times from confirmed Accept",events:[{at:"0s",atMs:0,label:"Accept confirmed",detail:"Confirmed decision",tone:"positive" as const}]};
-test("timeline defaults to pre-consent and only offers available successful action views", () => {
+const path = {coverage:"complete" as const,clockLabel:"Times from confirmed Accept",events:[{at:"0s",atMs:0,label:"Accept confirmed",detail:"Confirmed decision",tone:"positive" as const}]};
+test("timeline defaults to pre-consent and only offers available retained action views", () => {
   for (const accept of [null,path]) for (const reject of [null,path]) {
     const html=renderToStaticMarkup(<ReportPageEventTimeline events={[]} accept={accept} reject={reject}/>);
     assert.match(html, /Pre-consent page event timeline/);
@@ -38,4 +38,9 @@ test("timeline never subtracts observation times without same-session comparison
   assert.doesNotMatch(html, /before consent surface|2.78s/);
   assert.match(html, /10.13s/);
   assert.match(html, /12.9s/);
+});
+
+test("partial retained paths still offer both action tabs",()=>{
+ const html=renderToStaticMarkup(<ReportPageEventTimeline events={[]} accept={{...path,coverage:"limited"}} reject={{...path,coverage:"limited"}}/>);
+ assert.match(html,/>Accept<\/button>/);assert.match(html,/>Reject<\/button>/);
 });

@@ -90,17 +90,13 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
             ? `Accept-path testing was limited. ${input.acceptPath.note.trim()}`
             : "Accept-path testing was limited."
           : null;
-  const rejectObservationWindowMs = input.rejectPath?.observationWindowMs;
   const rejectIncompleteReason = input.rejectPath?.note?.trim();
-  const rejectWindow = typeof rejectObservationWindowMs === "number"
-    ? `${Number.isInteger(rejectObservationWindowMs / 1_000) ? rejectObservationWindowMs / 1_000 : Math.round(rejectObservationWindowMs / 100) / 10}-second`
-    : "bounded";
   const rejectOutcome = input.rejectPath?.state === "issue_observed"
-    ? `The confirmed Reject path did not stop qualifying non-essential activity during the retained ${rejectWindow} post-Reject window.`
+    ? "The confirmed Reject path did not stop qualifying non-essential activity during the retained post-Reject capture."
     : input.rejectPath?.state === "review_signal"
       ? input.rejectPath.note?.trim() || "The Reject path retained evidence requiring review."
       : input.rejectPath?.state === "no_issue_observed"
-        ? `The confirmed Reject path completed without a qualifying issue in the retained ${rejectWindow} post-Reject window.`
+        ? "The confirmed Reject path completed without a qualifying issue in the retained post-Reject capture."
         : input.rejectPath?.state === "incomplete"
           ? input.rejectPath.afterClickCoverage
             ? rejectIncompleteReason || "The Reject control was clicked and subsequent observations were recorded."

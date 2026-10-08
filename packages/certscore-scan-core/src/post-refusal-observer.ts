@@ -96,7 +96,8 @@ const NON_ESSENTIAL_PURPOSES = new Set([
   "analytics",
   "performance_monitoring",
   "session_replay",
-  "tag_management",
+  // A tag loader alone does not establish analytics or advertising activity.
+  // Its downstream requests retain their own canonical purposes.
 ]);
 
 export interface PostRefusalActionRecipe {
@@ -371,6 +372,7 @@ export async function runPostRefusalObserver(
     resolverMs: 0,
     confirmationMs: 0,
     observationMs: 0,
+    observationEndedAtMs: undefined as number | undefined,
     observationExitReason: undefined as
       | "window_elapsed"
       | "non_essential_request_observed"
@@ -614,6 +616,7 @@ export async function runPostRefusalObserver(
 
     let mainNavigationRequestCount = 0;
     page.on("request", (request) => {
+      if (timing.observationEndedAtMs !== undefined) return;
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
         mainNavigationRequestCount += 1;
       }
@@ -1502,7 +1505,6 @@ export async function runPostRefusalObserver(
     let tcfDataAfterRefusal = await readTcfData(page).catch(() => undefined);
     let tcfDataObservedAtEpochMs = tcfDataAfterRefusal ? Date.now() : undefined;
     let tcfGrantEvidence = tcfPurposeGrantEvidence(tcfDataAfterRefusal);
-    const observationStartedAtMs = Date.now();
     const observationResult = tcfGrantEvidence.purposeGrantedIds.length > 0
         ? {
           reason: "refusal_signal_contradiction_observed" as const,
@@ -1518,7 +1520,9 @@ export async function runPostRefusalObserver(
           observationWindowMs,
         });
     timing.observationExitReason = observationResult.reason;
-    timing.observationMs = Math.max(0, Date.now() - observationStartedAtMs);
+    // Request/write capture is already active while semantic readback runs.
+    // Measure the registered observation from its anchor, not the later poll.
+    timing.observationMs = Math.max(0, Math.round(Date.now() - confirmedRefusalRegisteredAtEpochMs));
     if (timing.observationExitReason !== "window_elapsed") {
       limitations.push(`observation_early_exit:${timing.observationExitReason}`);
     }
@@ -1554,6 +1558,10 @@ export async function runPostRefusalObserver(
         waitForDelay(250),
       ]).catch(() => undefined);
     }
+    // Freeze request starts before result assembly. Finalization time must not
+    // be presented as a configured observation window or admit later starts.
+    const observationEndedAtEpochMs = Date.now();
+    timing.observationEndedAtMs = elapsed(parentScanStartedAtMs, observationEndedAtEpochMs);
     const allRequests = classifyRequests(
       retainedRequests(),
       parentScanStartedAtMs,
@@ -1572,7 +1580,7 @@ export async function runPostRefusalObserver(
       return [];
     });
     const instrumentedWritesAfterRefusal = instrumentedWrites
-      .filter((write) => write.observedAtEpochMs > confirmedRefusalRegisteredAtEpochMs)
+      .filter((write) => write.observedAtEpochMs > confirmedRefusalRegisteredAtEpochMs && write.observedAtEpochMs <= observationEndedAtEpochMs)
       .map((write) => classifyStorageWrite(
         write,
         parentScanStartedAtMs,
@@ -3785,7 +3793,10 @@ async function waitForPostRefusalObservation(input: {
   tcfData?: TcfDataSnapshot;
   tcfObservedAtEpochMs?: number;
 }> {
-  const deadlineAtMs = Date.now() + input.observationWindowMs;
+  // Classification changes may remove an early-exit candidate, but cannot
+  // restart the configured window after semantic readback work.
+  const deadlineAtMs = Math.min(Date.now() + input.observationWindowMs,
+    input.refusalRegisteredAtEpochMs + input.observationWindowMs);
   let lastTcfPollAtMs = 0;
   let lastTcfData: TcfDataSnapshot | undefined;
   let lastTcfObservedAtEpochMs: number | undefined;

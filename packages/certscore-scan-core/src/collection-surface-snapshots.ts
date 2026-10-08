@@ -14,6 +14,7 @@ export type FormSnapshotCaptureOptions = {
   onMaskedPixelsCaptured?: () => Promise<void>;
   layoutRetryAllowed?: boolean;
   maxCropHeight?: number;
+  fitFormToCrop?: boolean;
   hideControlsDuringCapture?: boolean;
   sourceInventoryHash?: string;
 };
@@ -78,7 +79,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       onStage?.(`form_${formIndex}_bind_controls`);
       // Bind retained controls, freeze motion and collect the first layout in
       // one browser call. A second call can miss late SITS forms entirely.
-      prepared = await page.evaluate(({ fields, structure, url, token, maxCropHeight, hideControlsDuringCapture }) => {
+      prepared = await page.evaluate(({ fields, structure, url, token, maxCropHeight, fitFormToCrop, hideControlsDuringCapture }) => {
         const scope = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
         scope.__name ??= function(target) { return target; };
         if (location.href !== url) return null;
@@ -87,9 +88,11 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
         if (controls.some((el, i) => !el || (["input", "textarea", "select"].includes(el.tagName.toLowerCase()) ? el.tagName.toLowerCase() : "custom_control") !== fields[i]!.elementType || (el.getAttribute("type") || el.tagName.toLowerCase()).toLowerCase() !== fields[i]!.inputType)) return null;
         const bounded = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim().slice(0, 120) || undefined;
         const labelFor = (el: Element) => {
+          const labelledBy = bounded((el.getAttribute("aria-labelledby") ?? "").split(/\s+/).slice(0, 4)
+            .map(id => id ? document.getElementById(id)?.textContent ?? "" : "").join(" "));
           const id = el.getAttribute("id");
           const explicit = id ? Array.from(document.querySelectorAll(`label[for="${CSS.escape(id)}"]`)).map(l => bounded(l.textContent)).find(Boolean) : undefined;
-          return explicit ?? bounded(el.closest("label")?.textContent) ?? bounded(el.getAttribute("aria-label")) ?? bounded(el.getAttribute("placeholder")) ?? bounded(el.getAttribute("name"));
+          return labelledBy ?? bounded(el.getAttribute("aria-label")) ?? explicit ?? bounded(el.closest("label")?.textContent) ?? bounded(el.getAttribute("placeholder")) ?? bounded(el.getAttribute("name"));
         };
         if (controls.some((el, i) => labelFor(el!) !== fields[i]!.label || ((el as HTMLInputElement).required === true || el!.getAttribute("aria-required") === "true") !== fields[i]!.required)) return null;
         const group = (el: Element) => structure === "native_form" ? (el as HTMLInputElement).form ?? el.closest("form") : structure === "role_form" ? el.closest('[role="form"]') : null;
@@ -105,6 +108,8 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
           while (root && controls.some(el => !root!.contains(el))) root = root.parentElement;
         }
         if (!root) return null;
+        const originalZoom = (root as HTMLElement).style.getPropertyValue("zoom");
+        const originalZoomPriority = (root as HTMLElement).style.getPropertyPriority("zoom");
         const animationSet = new Set<Animation>();
         for (let current: Element | null = root; current; current = current.parentElement) {
           for (const animation of current.getAnimations({ subtree: current === root })) animationSet.add(animation);
@@ -114,7 +119,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
         const runningAnimations = animations.filter(animation => animation.playState === "running");
         for (const animation of runningAnimations) animation.pause();
         const position = { x: scrollX, y: scrollY };
-        const scrollPositions = [];
+        const scrollPositions: Array<{ element: HTMLElement; x: number; y: number }> = [];
         for (let parent = root.parentElement; parent; parent = parent.parentElement) {
           scrollPositions.push({ element: parent, x: parent.scrollLeft, y: parent.scrollTop });
         }
@@ -128,17 +133,33 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
           (hideControlsDuringCapture ? `${cssScope} input,${cssScope} textarea,${cssScope} select,${cssScope} [role="checkbox"],${cssScope} [role="switch"],${cssScope} [contenteditable]{clip-path:inset(100%)!important;-webkit-clip-path:inset(100%)!important}` : "");
         document.documentElement.appendChild(node);
         const state = { root, node, markerRoot, attribute, previous, position, scrollPositions, animations: runningAnimations,
-          hideControlsDuringCapture };
+          hideControlsDuringCapture, originalZoom, originalZoomPriority };
         const restore = () => {
           node.remove();
+          if (originalZoom) (root as HTMLElement).style.setProperty("zoom", originalZoom, originalZoomPriority);
+          else (root as HTMLElement).style.removeProperty("zoom");
           for (const animation of runningAnimations) if (animation.playState === "paused") animation.play();
           if (previous === null) markerRoot.removeAttribute(attribute);
           else markerRoot.setAttribute(attribute, previous);
+          for (const entry of scrollPositions) entry.element.scrollTo({ left: entry.x, top: entry.y, behavior: "instant" });
+          scrollTo({ left: position.x, top: position.y, behavior: "instant" });
         };
         try {
           if (runningAnimations.some(animation => animation.playState === "running")) throw new Error("Form screenshot animation did not pause");
-          const initial = root.getBoundingClientRect();
-          if (initial.left < 0 || initial.top < 0 || initial.right > innerWidth || initial.bottom > innerHeight) {
+          let initial = root.getBoundingClientRect();
+          if (fitFormToCrop) {
+            // Fit the real, masked form into the same bounded pixel area. This
+            // keeps its notice/submit area without a second image or off-screen
+            // rasterization. The original style is restored after verification.
+            const availableHeight = Math.max(100, Math.min(maxCropHeight, innerHeight - 128));
+            const scale = Math.min(1, availableHeight / initial.height, (innerWidth - 32) / initial.width);
+            if (scale < 1) {
+              const currentZoom = Number.parseFloat(getComputedStyle(root).zoom) || 1;
+              (root as HTMLElement).style.setProperty("zoom", String(currentZoom * scale), "important");
+              initial = root.getBoundingClientRect();
+            }
+          }
+          if (fitFormToCrop || initial.left < 0 || initial.top < 0 || initial.right > innerWidth || initial.bottom > innerHeight) {
             // A bounded viewport crop avoids Chromium's costly full-page
             // off-screen rasterization on long pages. Restore all scroll
             // positions after the strict post-pixel layout check.
@@ -174,6 +195,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
         } catch (error) { restore(); throw error; }
       }, { fields: form.fields, structure: form.structure, url: inventory.pageUrl, token: randomUUID(),
         maxCropHeight: Math.max(100, Math.min(10_000, options?.maxCropHeight ?? 10_000)),
+        fitFormToCrop: options?.fitFormToCrop === true,
         hideControlsDuringCapture: options?.hideControlsDuringCapture === true });
       if (!prepared) { results.push(retain(unavailable("control_binding_changed"))); continue; }
       if (pixelSignal.aborted || Date.now() >= deadline) {

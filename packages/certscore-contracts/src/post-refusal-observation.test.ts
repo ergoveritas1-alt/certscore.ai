@@ -183,6 +183,25 @@ test("Reject materialization retains explicit completed protocol evidence indepe
   assert.equal(incomplete.execution?.consentConfirmed, true);
 });
 
+test("Reject capture end is retained independently from worker completion and rejects clock drift", () => {
+  const base = confirmedPacket();
+  const packet = postRefusalEvidencePacketSchema.parse({ ...base,
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "denied", basis: "verified_state",
+      observedAtMs: 15, observedStateSha256: "a".repeat(64), timestampBasis: "verified_state_observed" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 },
+    timing: { ...base.timing, observationMs: 250, observationEndedAtMs: 265, readyAtMs: 300,
+      totalMs: 300, observationExitReason: "window_elapsed" },
+  });
+  const projection = projectPostRefusalEvidenceForReport({ packet, packetSha256: "a".repeat(64) });
+  assert.equal(projection.registeredObservationCompletion?.completedAtMs, 265);
+  assert.equal(projection.execution?.status, "succeeded_with_confirmation");
+  for (const end of [14, 301]) {
+    assert.equal(postRefusalEvidencePacketSchema.safeParse({ ...packet,
+      timing: { ...packet.timing, observationEndedAtMs: end },
+    }).success, false);
+  }
+});
+
 test("post-refusal evidence stays score-ineligible when refusal is unconfirmed", () => {
   const result = postRefusalEvidencePacketSchema.safeParse({
     ...basePacket(),

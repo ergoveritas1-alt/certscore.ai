@@ -1735,10 +1735,23 @@ const rules: VendorRule[] = [
     urlPatterns: [
       /^https:\/\/js\.hsforms\.net\/forms\/(?:embed\/v2|v2)\.js(?:\?|$)/i,
       /^https:\/\/js\.hscollectedforms\.net\/collectedforms\.js(?:\?|$)/i,
-      /^https:\/\/forms(?:-[a-z0-9]+)?\.hsforms\.com\/embed\/v3\/(?:form\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/json|counters\.gif)(?:\?|$)/i,
+      /^https:\/\/forms(?:-[a-z0-9]+)?\.hsforms\.com\/embed\/v3\/counters\.gif(?:\?|$)/i,
     ],
     requireUrlPatternMatch: true,
     basisLabel: "hubspot_forms_embed_runtime",
+  },
+  {
+    // Form definitions deliver the form UI. Attribute the product without
+    // treating its schema download as an analytics event.
+    identity: {"entityId":"ent_182562f6476e","vendorId":"ven_32eb0adcc0a3","serviceId":"svc_868137f85728"},
+    entity: "HubSpot, Inc.", vendor: "HubSpot", product: "HubSpot Forms",
+    purpose: "infrastructure", servicePurpose: "Marketing automation",
+    regulatoryRelevance: ["lead_capture", "forms", "form_delivery"], confidence: 0.96,
+    hostPatterns: [/^forms(?:-[a-z0-9]+)?\.hsforms\.com$/i],
+    urlPatterns: [/^https:\/\/forms(?:-[a-z0-9]+)?\.hsforms\.com\/embed\/v3\/form\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/json(?:\?|$)/i],
+    requireUrlPatternMatch: true, basisLabel: "hubspot_form_definition_delivery",
+    review: { reviewedAt: "2026-10-08", reviewer: "Codex source review",
+      sourceUrls: ["https://knowledge.hubspot.com/forms/set-up-and-style-your-form-on-an-external-site"] },
   },
   {
     identity: {"entityId":"ent_5262e317b747","vendorId":"ven_24d36c542550","serviceId":"svc_e2b6db8813da"},

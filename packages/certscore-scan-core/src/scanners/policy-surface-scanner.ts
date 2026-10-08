@@ -9680,12 +9680,17 @@ function bestSectionForProfile(
     structural: boolean;
     specificTransfer: boolean;
     generalProcessingBasis: boolean;
+    controllerSubjectScore: number;
   } | undefined;
   const controllerSpecificSections = profile.disclosureType === "controller_contact"
     ? sections.filter((section) => !/(?:third parties?|service providers?).{0,100}(?:independent )?(?:data )?controllers?|acts as a processor|between the controller and the processor/i.test(section.textExcerpt))
     : sections;
   const candidateSections = controllerSpecificSections.length > 0 ? controllerSpecificSections : sections;
   for (const section of candidateSections) {
+    const controllerSubjectScore = profile.subjectScope === "controller" ? controllerSubjectSectionScore(section) : 0;
+    // A platform's officer is not the governing controller's officer. Do not
+    // let structural extraction quality outrank subject ownership.
+    if (profile.disclosureType === "dpo_contact" && controllerSubjectScore < 0) continue;
     const haystack = `${section.heading}\n${section.textExcerpt}`;
     const canonicalMatches = canonicalMatchesBySection.get(section) ?? [];
     const canonicalTopicMatch = canonicalTopicMatchForDisclosure(canonicalMatches, profile.disclosureType);
@@ -9740,13 +9745,14 @@ function bestSectionForProfile(
     if (
       !best ||
       (observed && !best.observed) ||
-      (observed === best.observed && specificTransfer && !best.specificTransfer) ||
-      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis && !best.generalProcessingBasis) ||
-      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && substantiveHeadingMatch && !best.substantiveHeadingMatch) ||
-      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && substantiveHeadingMatch === best.substantiveHeadingMatch && structural && !best.structural) ||
-      (observed === best.observed && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && structural === best.structural && substantiveHeadingMatch === best.substantiveHeadingMatch && score > best.score)
+      (observed === best.observed && controllerSubjectScore > best.controllerSubjectScore) ||
+      (observed === best.observed && controllerSubjectScore === best.controllerSubjectScore && specificTransfer && !best.specificTransfer) ||
+      (observed === best.observed && controllerSubjectScore === best.controllerSubjectScore && specificTransfer === best.specificTransfer && generalProcessingBasis && !best.generalProcessingBasis) ||
+      (observed === best.observed && controllerSubjectScore === best.controllerSubjectScore && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && substantiveHeadingMatch && !best.substantiveHeadingMatch) ||
+      (observed === best.observed && controllerSubjectScore === best.controllerSubjectScore && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && substantiveHeadingMatch === best.substantiveHeadingMatch && structural && !best.structural) ||
+      (observed === best.observed && controllerSubjectScore === best.controllerSubjectScore && specificTransfer === best.specificTransfer && generalProcessingBasis === best.generalProcessingBasis && structural === best.structural && substantiveHeadingMatch === best.substantiveHeadingMatch && score > best.score)
     ) {
-      best = { section, score, substantiveHeadingMatch, observed, structural, specificTransfer, generalProcessingBasis };
+      best = { section, score, substantiveHeadingMatch, observed, structural, specificTransfer, generalProcessingBasis, controllerSubjectScore };
     }
   }
   return best && best.score >= 3 ? best.section : undefined;
@@ -9827,7 +9833,7 @@ function selectSectionExcerptForProfile(
     ],
     international_transfers: [/(?:we may |we |may )?transfer (?:your )?(?:personal )?(?:data|information).{0,260}(?:located )?outside (?:of )?(?:your |the )?(?:country|jurisdiction|eea|european economic area|uk|united kingdom|eu|european union)/i, /(?:personal data|personal information|information|data).{0,180}(?:transferred|processed|stored|accessed).{0,220}(?:united states|usa|other jurisdictions|other countries|outside)/i, /(?:we|our service providers?|our processors?) (?:transfer|store|process).{0,300}(?:outside|other countries|third countr(?:y|ies)|international).{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i, /(?:international|cross-border|third-country) transfers?.{0,300}(?:standard contractual clauses|adequacy|safeguards?|data privacy framework|protect)/i],
     recipients_or_vendor_categories: [/(?:we|the company) (?:share|disclose|provide).{0,180}(?:personal data|personal information|information|data).{0,260}(?:service providers?|affiliates?|analytics providers?|advertising networks?|social networks?|platforms?|governmental authorities|third parties)/i],
-    dpo_contact: [/(?:privacy office|data protection office|data protection officer|\bdpo\b).{0,180}(?:@|contact|email|write|telephone|phone)/i],
+    dpo_contact: [/(?:privacy office|data protection office|data protection officer|\bdpo\b(?!@)).{0,180}(?:@|contact|email|write|telephone|phone)/i],
   };
   const directPatterns = preferredPatterns[profile.disclosureType] ?? [];
   const sourceStatements = ["processing_purposes", "data_retention", "recipients_or_vendor_categories", "international_transfers", "legal_basis", "supervisory_authority"].includes(profile.disclosureType) &&
@@ -9843,6 +9849,14 @@ function selectSectionExcerptForProfile(
     if (!match || match.index === undefined) continue;
     const matchStart = match.index;
     const matchEnd = matchStart + match[0].length;
+    if (profile.disclosureType === "dpo_contact") {
+      const contact = /[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.exec(text.slice(matchStart, matchStart + 260));
+      if (contact?.index !== undefined) {
+        // Keep the designated officer and its contact together; a topic window
+        // may also contain the preceding controller phone or following rights.
+        return text.slice(matchStart, matchStart + contact.index + contact[0].length);
+      }
+    }
     const sentenceStartCandidates = [text.lastIndexOf(". ", matchStart), text.lastIndexOf("? ", matchStart), text.lastIndexOf("! ", matchStart)];
     const sentenceStart = Math.max(...sentenceStartCandidates) + (Math.max(...sentenceStartCandidates) >= 0 ? 2 : 0);
     const sentenceEndCandidates = [text.indexOf(". ", matchEnd), text.indexOf("? ", matchEnd), text.indexOf("! ", matchEnd)]

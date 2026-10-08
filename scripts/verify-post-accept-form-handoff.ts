@@ -22,7 +22,8 @@ const server=createServer((request,response)=>{
       setTimeout(()=>document.body.insertAdjacentHTML('beforeend', '<form method="post" aria-label="Contact">'+
         ['First name','Last name','Company','Job title','Business email','Phone','Country','Message'].map((name,i)=>'<label>'+name+'<input name="field'+i+'" type="'+(i===4?'email':'text')+'"></label>').join('')+
         '<p>We use personal data to respond. <a href="/privacy">Privacy policy</a></p></form>'),2450);
-      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form method="post" aria-label="Newsletter"><label>Business email<input type="email"></label><p>Newsletter data is handled under our <a href="/privacy">Privacy policy</a>.</p></form>'),3150);};</script>`);
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form method="post" aria-label="Newsletter"><label>Business email<input type="email"></label><p>Newsletter data is handled under our <a href="/privacy">Privacy policy</a>.</p></form>'),3150);
+      setTimeout(()=>{for(let i=0;i<225;i++)fetch('/image-only-noise?i='+i).catch(()=>{});},3700);};</script>`);
 });
 await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
 const address=server.address();assert.ok(address&&typeof address!=='string');
@@ -41,12 +42,18 @@ try {
   const packet=await runPostAcceptObserver({browser,url:`http://127.0.0.1:${address.port}/`,scanId:randomUUID(),
     interactionAuthorization:{authorizationId:'loopback_local_lab',kind:'loopback'},recipe:CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
     actionSearchTimeoutMs:500,confirmationTimeoutMs:500,observationWindowMs:3000,resultBudgetMs:5000,
-    productionProjectable:true,formSnapshotReviewer:async()=>({safeForDisplay:true})});
+    productionProjectable:true,formSnapshotReviewer:async()=>{await new Promise(resolve=>setTimeout(resolve,1000));return {safeForDisplay:true};}});
   const verified=verifiedPostAcceptFormSnapshots(packet.formSnapshotCapture);assert.ok(verified);
   assert.equal(packet.acceptanceRegistration.status,'confirmed');assert.equal(submissions,0);
   assert.equal(verified.images.filter(image=>image.bytes).length,2);
   const packetText=JSON.stringify(packet);const sha256=createHash('sha256').update(packetText).digest('hex');
   const projection=projectPostAcceptEvidenceForReport({packet,packetSha256:sha256});
+  assert.equal(packet.captureCoverage?.requestsDroppedAfterAction,0, "Image-only traffic must not truncate action evidence");
+  assert.ok(packet.timing.observationEndedAtMs);
+  assert.ok(packet.timing.readyAtMs > packet.timing.observationEndedAtMs! + 500);
+  assert.ok(packet.network.requests.every(row=>row.startedAtMs<=packet.timing.observationEndedAtMs!));
+  assert.equal(projection.execution?.status,"succeeded_with_confirmation");
+  assert.equal(projection.registeredObservationCompletion?.completedAtMs,packet.timing.observationEndedAtMs);
   await mkdir(outDir,{recursive:true});await writeFile(path.join(outDir,'PostAcceptEvidencePacket.json'),packetText);
   await writeFile(path.join(outDir,'Projection.json'),JSON.stringify(projection,null,2));
   await writeFile(path.join(outDir,'Verification.json'),JSON.stringify({scanId:packet.scanId,packetSha256:sha256,

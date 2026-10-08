@@ -56,7 +56,8 @@ test("executive overview names a confirmed Reject-path failure", () => {
 
   assertBounded(copy);
   assert.match(copy, /confirmed Reject path did not stop qualifying non-essential activity/i);
-  assert.match(copy, /8-second post-Reject window/i);
+  assert.match(copy, /retained post-Reject capture/i);
+  assert.doesNotMatch(copy, /8-second|8s|8 second/i);
 });
 
 test("executive overview includes the confirmed Accept-path comparison result", () => {

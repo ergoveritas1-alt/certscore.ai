@@ -1,5 +1,5 @@
 "use client";
-import { useId, useState } from "react";
+import React, { useId, useState } from "react";
 import { RuntimeObservationTimeline, type RuntimeObservationTimelineEvent } from "./runtime-observation-sections";
 import type { ActionTimelineProjection } from "../../lib/scans/action-timeline-projection";
 
@@ -30,7 +30,7 @@ export function ReportPageEventTimeline({ events, accept, reject }: {
         </button>)}
       </div> : null}
     </div>
-    {path ? <p className="mt-1 text-[11px] text-zinc-500">{path.clockLabel}</p> : null}
+    {path ? <p className="mt-1 text-[11px] text-zinc-500">{path.clockLabel}{path.coverage === "limited" ? <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">Limited</span> : null}</p> : null}
     <div id={id} className="mt-1"><RuntimeObservationTimeline dominant compact responsive events={path?.events ?? events} /></div>
   </section>;
 }

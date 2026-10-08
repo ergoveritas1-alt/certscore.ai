@@ -2348,7 +2348,7 @@ function getCompactRejectPathPresentation(state: ExecutiveRejectPathProjection["
 
 function formatRejectObservationWindow(observationWindowMs: number) {
   const seconds = observationWindowMs / 1000;
-  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)}s observation`;
+  return `${Number.isInteger(seconds) ? seconds.toFixed(0) : seconds.toFixed(1)}s maximum`;
 }
 
 function formatRejectResolverMethod(resolverMethod: string) {

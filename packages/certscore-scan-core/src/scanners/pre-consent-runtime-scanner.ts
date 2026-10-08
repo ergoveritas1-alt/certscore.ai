@@ -5357,6 +5357,11 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
       return normalized ? normalized.slice(0, maxLength) : undefined;
     };
     const labelFor = (element: Element) => {
+      const labelledBy = boundedText((element.getAttribute("aria-labelledby") ?? "").split(/\s+/).slice(0, 4)
+        .map(id => id ? document.getElementById(id)?.textContent ?? "" : "").join(" "), 120);
+      if (labelledBy) return labelledBy;
+      const ariaLabel = boundedText(element.getAttribute("aria-label"), 120);
+      if (ariaLabel) return ariaLabel;
       const labels: string[] = [];
       const id = element.getAttribute("id");
       if (id) {

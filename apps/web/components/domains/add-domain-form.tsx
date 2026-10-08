@@ -54,7 +54,7 @@ export function AddDomainForm({
   const [state, action, isPending] = useActionState(createDomainAction, initialState);
   const [domain, setDomain] = useState("");
   const [showSearchResultsWarning, setShowSearchResultsWarning] = useState(false);
-  const [freshRescan, setFreshRescan] = useState(false);
+  const [freshRescan, setFreshRescan] = useState(true);
   const [apiHasRecentReusableScan, setApiHasRecentReusableScan] = useState(false);
   const [localV2ScanProfile, setLocalV2ScanProfile] = useState<LocalV2ScanProfile>("standard");
   const [scanFrom, setScanFrom] = useState<ScanFrom>(defaultScanFrom);
@@ -75,12 +75,12 @@ export function AddDomainForm({
   useEffect(() => {
     if (!effectiveSubmitDomain || scanFrom === "local_extension") {
       setApiHasRecentReusableScan(false);
-      setFreshRescan(false);
+      setFreshRescan(true);
       return;
     }
 
     setApiHasRecentReusableScan(false);
-    setFreshRescan(false);
+    setFreshRescan(true);
 
     if (hasRecentReusableScanHint) {
       return;
@@ -106,7 +106,7 @@ export function AddDomainForm({
         .then((nextHasRecentReusableScan) => {
           setApiHasRecentReusableScan(nextHasRecentReusableScan);
           if (!nextHasRecentReusableScan) {
-            setFreshRescan(false);
+            setFreshRescan(true);
           }
         })
         .catch((error) => {
@@ -114,7 +114,7 @@ export function AddDomainForm({
             return;
           }
           setApiHasRecentReusableScan(false);
-          setFreshRescan(false);
+          setFreshRescan(true);
         });
     }, RECENT_SCAN_AVAILABILITY_CHECK_DELAY_MS);
 

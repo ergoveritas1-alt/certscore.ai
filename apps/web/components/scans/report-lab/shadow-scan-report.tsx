@@ -740,7 +740,7 @@ function CompactAcceptPathCard({ projection }: { projection: NonNullable<ShadowR
             cardTone: "border-zinc-200 bg-gradient-to-b from-white to-zinc-50/90",
           };
   const context = [
-    projection.observationWindowMs !== null ? `${formatChoicePathOffset(projection.observationWindowMs)} observation` : null,
+    projection.observationWindowMs !== null ? `${formatChoicePathOffset(projection.observationWindowMs)} maximum` : null,
     projection.resolverMethod === "tcf_api_cmp_registry_recipe"
       ? "TCF + CMP registry resolver"
       : projection.resolverMethod

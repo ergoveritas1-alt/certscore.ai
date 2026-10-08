@@ -1,3 +1,4 @@
+import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
@@ -465,6 +466,7 @@ const postRefusalEvidencePacketBaseSchema = z.object({
     resolverMs: z.number().int().nonnegative(),
     confirmationMs: z.number().int().nonnegative(),
     observationMs: z.number().int().nonnegative(),
+    observationEndedAtMs: z.number().int().nonnegative().optional(),
     observationExitReason: z.enum([
       "window_elapsed",
       "non_essential_request_observed",
@@ -500,6 +502,10 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   }),
   limitations: z.array(z.string().max(240)).max(24).default([]),
 }).superRefine((packet, context) => {
+  if (packet.timing.observationEndedAtMs !== undefined && (
+    packet.timing.observationEndedAtMs > packet.timing.readyAtMs ||
+    packet.timing.observationEndedAtMs < (packet.refusalRegistration.refusalRegisteredAtMs ?? packet.refusalRegistration.actionDispatchedAtMs ?? 0)
+  )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["timing", "observationEndedAtMs"], message: "Observation end must retain the action and result clock binding." });
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
   validateLegacyActionStorageNames(packet, context);
   validateAfterActionCapture(packet.afterActionCapture, context, {
@@ -1119,6 +1125,8 @@ const postRefusalReportPersistedStorageRowSchema = z.object({
 }).superRefine(validateActionStorageName);
 
 export const postRefusalReportProjectionSchema = z.object({
+  interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
+  retainedActionTiming: retainedActionTimingSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
   execution: choicePathExecutionSchema.optional(),
   registeredObservationCompletion: registeredObservationCompletionSchema.optional(),
@@ -1163,6 +1171,7 @@ export const postRefusalReportProjectionSchema = z.object({
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["registeredObservationCompletion"], message: "Registered completion must retain its action, registration and observation binding." });
   validateTerminalConsentDecision(projection.terminalDecisionEvidence, projection.afterActionCapture, projection.actionControlProof, "reject", context);
   validateChoicePathExecution(projection.execution, projection, "reject", context);
+  validateRetainedActionTiming(projection.retainedActionTiming, projection, "reject", context);
   validateAfterActionProjection(projection.afterActionCapture, context, {
     action: "reject", proof: projection.actionControlProof,
     requests: projection.afterActionRequests, storage: projection.afterActionStorage,
@@ -1271,13 +1280,20 @@ export function projectPostRefusalEvidenceForReport(input: {
         .slice(0, 24)
     : [];
 
+  const retainedActionTiming = retainActionTiming({ action: "reject", packetSha256: input.packetSha256,
+      clickCompleted: packet.interactionDiagnostics?.click.outcome === "completed" && packet.actionControlProof?.action === "reject",
+      actionDispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,
+      observationEndedAtMs: packet.timing.observationEndedAtMs ?? packet.afterActionCapture?.captureEndedAtMs, requests: packet.network.requests });
+
   const projection = postRefusalReportProjectionSchema.parse({
+    ...(packet.interactionDiagnostics ? { interactionDiagnostics: packet.interactionDiagnostics } : {}),
+    ...(retainedActionTiming ? { retainedActionTiming } : {}),
     registeredObservationCompletion: retainRegisteredObservationCompletion({
       action: "reject", registeredAtMs: packet.refusalRegistration.refusalRegisteredAtMs,
       productionProjectable: packet.productionProjectable, cancelled: packet.cancellation.requested,
       requestsDropped: packet.captureCoverage?.requestsDroppedAfterAction ?? 0,
       observationWindowMs: packet.observationWindowMs, observedDurationMs: packet.timing.observationMs,
-      readyAtMs: packet.timing.readyAtMs, exitReason: packet.timing.observationExitReason,
+      readyAtMs: packet.timing.observationEndedAtMs ?? packet.timing.readyAtMs, exitReason: packet.timing.observationExitReason,
       observationCount: packet.observations.length,
     }),
     ...(packet.afterActionCapture ? {

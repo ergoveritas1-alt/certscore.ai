@@ -123,7 +123,7 @@ test("compact Reject-path card renders canonical outcome, bounded evidence, and 
   assert.match(html, /Activity observed after Reject/);
   assert.match(html, /Example Analytics/);
   assert.match(html, /120ms after Reject/);
-  assert.match(html, /8s observation/);
+  assert.match(html, /8s maximum/);
   assert.match(html, /CMP registry resolver/);
   assert.doesNotMatch(html, /score effect|included in score|deduct/i);
   assert.match(html, /data-reject-path-state="issue_observed"/);

@@ -20,6 +20,10 @@ export async function cleanupPreparedMaskedFormScreenshot(page: Page, token: str
     if (!state) return;
     delete (window as any)[key];
     state.node.remove();
+    if (state.originalZoom !== undefined) {
+      if (state.originalZoom) state.root.style.setProperty("zoom", state.originalZoom, state.originalZoomPriority);
+      else state.root.style.removeProperty("zoom");
+    }
     for (const animation of state.animations) if (animation.playState === "paused") animation.play();
     if (state.markerRoot.getAttribute(state.attribute) === token) {
       if (state.previous === null) state.markerRoot.removeAttribute(state.attribute);
@@ -111,6 +115,10 @@ export async function capturePreparedMaskedFormScreenshot(page: Page, prepared: 
         } finally {
           delete (window as any)[key];
           state.node.remove();
+          if (state.originalZoom !== undefined) {
+            if (state.originalZoom) state.root.style.setProperty("zoom", state.originalZoom, state.originalZoomPriority);
+            else state.root.style.removeProperty("zoom");
+          }
           for (const animation of state.animations) if (animation.playState === "paused") animation.play();
           if (state.markerRoot.getAttribute(state.attribute) === token) {
             if (state.previous === null) state.markerRoot.removeAttribute(state.attribute);

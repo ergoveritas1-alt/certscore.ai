@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {classifyCollectionFieldReview as classify} from './collection-field-review.js';
+test('required-marker and organization metadata retain operational field meaning',()=>{
+ for (const label of ['Company Name*','Firmenname:','Nom de société *']) assert.equal(classify({label,inputType:'text',semanticCategory:'unknown'}).category,'operational');
+ assert.equal(classify({inputType:'text',autocompleteToken:'organization',semanticCategory:'unknown'}).category,'operational');
+ assert.equal(classify({label:'File name*',inputType:'text',semanticCategory:'unknown'}).category,'unknown');
+ assert.equal(classify({label:'Email',inputType:'text',autocompleteToken:'organization',semanticCategory:'unknown'}).category,'unknown');
+});
 test('canonical field review covers sensitive, personal, unstructured and operational categories',()=>{
  for(const [label,category] of [['Medical symptoms','special_category'],['Religious affiliation','special_category'],['Criminal convictions','criminal_offence'],['Passport number','government_identifier'],['Routing number','financial_payment'],['Security question','credentials'],['Email','personal_contact'],['Date of birth','identity_profile'],['Postal code','location'],['Marketing email','marketing_contact'],['Company name','operational'],['Quantity','operational']] as const)assert.equal(classify({label,inputType:'text'}).category,category,label);
  assert.equal(classify({inputType:'file'}).category,'file_upload');assert.equal(classify({inputType:'textarea'}).category,'free_text');
