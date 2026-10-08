@@ -6,6 +6,7 @@ import path from "node:path";
 import { awsScannerImageControl, synchronizeScannerImage } from "./lib/scanner-image-provenance";
 import { runtimeBaseInputsChanged } from "./lib/runtime-base-inputs.mjs";
 import { scannerRuntimeBaseMode } from "./lib/scanner-runtime-base";
+import { requireExpectedWebRevision, resolveDeploymentWorkflowRun, type DeploymentWorkflowRun } from "./lib/deployment-workflow-runs";
 
 type DeployMode = "all" | "db" | "scanners" | "validation" | "web";
 type LaneStatus = "failed" | "skipped" | "succeeded";
@@ -109,23 +110,27 @@ async function main() {
     }
   }
 
+  let workflowRegistrationGraceMs = 0;
   if (!args.noPush && !args.ref) {
     await timedLane("git push", async () => {
       const branch = (await git(["rev-parse", "--abbrev-ref", "HEAD"])).trim();
       if (branch === "HEAD") {
         throw new Error("Refusing to deploy detached HEAD without --ref.");
       }
+      const previousMainSha = branch === "main" ? await git(["rev-parse", "origin/main"]) : null;
       await run(["git", "push", "origin", `${branch}:${branch}`]);
+      if (previousMainSha && previousMainSha !== sha) workflowRegistrationGraceMs = 20_000;
     });
   }
 
   const lanes: Array<Promise<LaneResult>> = [];
   if (args.mode === "all") {
-    lanes.push(deployWeb({ ref: sha, workflowRef, force: true }));
+    lanes.push(deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: true }));
     lanes.push(deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase }));
     lanes.push(deployValidation({
       ref: sha,
       workflowRef,
+      registrationGraceMs: workflowRegistrationGraceMs,
       skip: !args.forceValidation && !changed.validation,
       pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase
     }));
@@ -134,11 +139,12 @@ async function main() {
       "the web workflow applies migrations from the target image before ECS promotion"
     )));
   } else if (args.mode === "web") {
-    lanes.push(deployWeb({ ref: sha, workflowRef, force: args.forceWeb || true }));
+    lanes.push(deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: args.forceWeb || true }));
   } else if (args.mode === "validation") {
     lanes.push(deployValidation({
       ref: sha,
       workflowRef,
+      registrationGraceMs: workflowRegistrationGraceMs,
       skip: false,
       pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase
     }));
@@ -152,6 +158,12 @@ async function main() {
 
   if (args.mode === "all" || args.mode === "web") {
     results.push(await timedLane("verify live web", async () => {
+      const topology = JSON.parse(await readFile("config/deployment-topology.json", "utf8")) as { primaryHost: string };
+      const response = await fetch(new URL("/api/version", process.env.LIVE_BASE_URL ?? topology.primaryHost), {
+        cache: "no-store", signal: AbortSignal.timeout(10_000)
+      });
+      if (!response.ok) throw new Error(`Live web revision request failed with HTTP ${response.status}`);
+      requireExpectedWebRevision(await response.json(), sha);
       await run(["pnpm", "ops:check:live"], {
         env: { EXPECTED_LIVE_GIT_SHA: sha }
       });
@@ -372,20 +384,20 @@ function isLambdaRuntimeBaseInput(file: string) {
     file === "pnpm-workspace.yaml";
 }
 
-async function deployWeb(input: { force: boolean; ref: string; workflowRef: string }): Promise<LaneResult> {
+async function deployWeb(input: { force: boolean; ref: string; workflowRef: string; registrationGraceMs?: number }): Promise<LaneResult> {
   return timedLane("web ECS deploy", async () => {
     await run([
       "node", "--import", "tsx",
       "scripts/assert-forward-web-deploy.ts",
       "--target", input.ref
     ]);
-    const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref);
+    const runId = await ensureWorkflowRun(WEB_WORKFLOW, input.workflowRef, input.ref, [], false, input.registrationGraceMs);
     const workflowRun = await waitForRun(runId);
     return { workflow: WEB_WORKFLOW, url: workflowRun.url };
   });
 }
 
-async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string }): Promise<LaneResult> {
+async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("validation deploy", "no validation deploy inputs changed");
   }
@@ -394,7 +406,7 @@ async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; 
       "-f", "use_runtime_base=true",
       "-f", `push_runtime_base=${input.pushRuntimeBase ? "true" : "false"}`,
       "-f", "runtime_base_tag=validation-worker-runtime-base"
-    ], input.pushRuntimeBase);
+    ], input.pushRuntimeBase, input.registrationGraceMs);
     const workflowRun = await waitForRun(runId);
     return {
       runtimeBase: input.pushRuntimeBase ? "rebuilt" : "reused",
@@ -404,7 +416,7 @@ async function deployValidation(input: { pushRuntimeBase: boolean; ref: string; 
   });
 }
 
-async function deployDb(input: { ref: string; skip: boolean; workflowRef: string }): Promise<LaneResult> {
+async function deployDb(input: { ref: string; skip: boolean; workflowRef: string; registrationGraceMs?: number }): Promise<LaneResult> {
   if (input.skip) {
     return skippedLane("production DB migrations", "no migration inputs changed");
   }
@@ -705,42 +717,22 @@ async function ensureWorkflowRun(
   workflowRef: string,
   targetSha: string,
   extraArgs: string[] = [],
-  forceDispatch = false
+  forceDispatch = false,
+  registrationGraceMs = 0
 ) {
-  if (!forceDispatch) {
-    const existing = await latestWorkflowRunId(workflow, targetSha);
-    if (existing) {
-      console.log(`Using existing ${workflow} run ${existing} for ${targetSha.slice(0, 8)}`);
-      return existing;
-    }
-  }
-
-  const before = await latestWorkflowRunId(workflow, targetSha);
-  await run(["gh", "workflow", "run", workflow, "--ref", workflowRef, ...extraArgs]);
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
-    await sleep(3000);
-    const latest = await latestWorkflowRunId(workflow, targetSha);
-    if (latest && latest !== before) {
-      return latest;
-    }
-  }
-  throw new Error(`Timed out waiting for ${workflow} run to appear for ${targetSha}`);
-}
-
-async function latestWorkflowRunId(workflow: string, ref: string) {
-  const result = await run([
-    "gh", "run", "list",
-    "--workflow", workflow,
-    "--commit", ref,
-    "--limit", "1",
-    "--json", "databaseId"
-  ], { quiet: true, reject: false });
-  if (result.exitCode !== 0 || !result.stdout.trim()) {
-    return null;
-  }
-  const runs = JSON.parse(result.stdout) as Array<{ databaseId?: number }>;
-  return runs[0]?.databaseId ? String(runs[0].databaseId) : null;
+  const runId = await resolveDeploymentWorkflowRun({
+    targetSha, forceDispatch, registrationGraceMs, sleep,
+    list: async () => {
+      const result = await run([
+        "gh", "run", "list", "--workflow", workflow, "--commit", targetSha,
+        "--limit", "10", "--json", "databaseId,headSha,status,conclusion,event"
+      ], { quiet: true });
+      return JSON.parse(result.stdout) as DeploymentWorkflowRun[];
+    },
+    dispatch: async () => { await run(["gh", "workflow", "run", workflow, "--ref", workflowRef, ...extraArgs]); }
+  });
+  console.log(`Watching ${workflow} run ${runId} for ${targetSha.slice(0, 8)}`);
+  return runId;
 }
 
 async function waitForRun(runId: string): Promise<RunJson> {

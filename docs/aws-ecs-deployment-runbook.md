@@ -23,6 +23,19 @@ Do not use Vercel or an ad hoc local container as a production deployment path.
 5. Deploy only the affected services. Scanner deployment is separate from the
    web and MCP workflows.
 
+After pushing a new `main` revision, the canonical helper gives GitHub up to
+20 seconds to expose the push-triggered web/validation runs before dispatching
+a fallback. Reuse only an exact-SHA active or successful run; canceled and
+failed runs are not reusable. Prefer a running job over a queued duplicate.
+If discovery fails, stop rather than dispatching blindly. Intentional forced
+runtime-base or database dispatches must bind to the new manual run.
+
+If duplicate runs are discovered, preserve the active image build and cancel
+only the redundant queued run. An unrelated workflow may be canceled before
+its image build begins. Keep the cancellation rule below for image builds.
+Release success also requires `/api/version` to report the exact target SHA
+and `ecs-fargate`; a general deployment audit warning is not sufficient.
+
 ## Monitoring ARM64 builds
 
 The public web workflow builds its Linux ARM64 image on GitHub's native ARM64
