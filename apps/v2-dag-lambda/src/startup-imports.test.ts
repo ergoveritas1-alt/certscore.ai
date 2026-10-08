@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 test("bundled coordinator initialization does not load browser or image runtimes", async () => {
-  const directory = await mkdtemp(path.resolve("tmp/lambda-startup-"));
+  const root = fileURLToPath(new URL("../../../", import.meta.url));
+  const directory = await mkdtemp(path.join(tmpdir(), "lambda-startup-"));
   const outfile = path.join(directory, "handler.cjs");
   try {
-    await build({ entryPoints: [path.resolve("apps/v2-dag-lambda/src/handler.ts")], outfile,
+    await build({ entryPoints: [path.join(root, "apps/v2-dag-lambda/src/handler.ts")], outfile,
       bundle: true, platform: "node", target: "node22", format: "cjs", minify: true,
-      external: ["playwright", "pdf-parse", "sharp"], tsconfig: path.resolve("tsconfig.base.json") });
+      external: ["playwright", "pdf-parse", "sharp"], tsconfig: path.join(root, "tsconfig.base.json") });
     const output = execFileSync(process.execPath, ["-e", `
       const Module = require('node:module'); const original = Module._load;
       Module._load = function(name, ...rest) {
