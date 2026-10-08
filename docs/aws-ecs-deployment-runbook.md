@@ -145,7 +145,7 @@ remains under $0.90/month.
 
 Release `20d17e61` bootstrapped the web runtime base, published its input
 fingerprint and both web/validation caches, and completed web, validation and
-MCP deployments. Web completed in 9m 37s versus the previous 11m 26s; its image
+MCP deployments. The web workflow completed in 10m 26s versus the previous 11m 26s; its image
 stage took 237s versus 290s. These are whole-run comparisons, not isolated causal
 benchmarks. Compare a later warm release before claiming cache-reuse savings.
 
@@ -157,6 +157,9 @@ only the build region and stops if its base is unavailable; destination tags are
 irrelevant because the application image is built once and replicated. Do not
 silently rebuild Chromium or repeat successful ECS deployments to repair this.
 Retain the failed smoke evidence and verify browser navigation after recovery.
+The targeted scanner correction (`75190099`) completed in 2m 45s, reused the
+existing base, and passed HTTP 200 bot-auth navigation in all three regions.
+Both primary and inventory functions retain the same verified image digest.
 
 Fresh SITS diagnostic timing verification requires an explicit one-run exception
 to its repository testing hold and central contact cooldown. Release checks and
