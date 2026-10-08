@@ -17,6 +17,7 @@ Historical evidence, scores and customer records are not rewritten.
 - Reports, API v2 and Pulse/MCP share retained form counts and additive
   `countStatus`. Incomplete empty capture reads `Not captured`; a completed
   empty inspection can still read `0`. Images failing review do not erase fields.
+  Coverage metadata does not add a verbose form-table disclaimer.
 - Report timestamps use the browser timezone when available, with explicit UTC
   server/fallback rendering. The pre-consent classification disclosure sits
   above and inside the executive inventory card.
