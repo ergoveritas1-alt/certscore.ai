@@ -31,6 +31,7 @@ import {
 } from "./model-policy-review";
 import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
 import { createReportFinalizationScheduler } from "./report-finalization-scheduler";
+import { createReportPublicationHandoff, dispatchDurableReportPublication } from "./report-publication-handoff";
 import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
 
 const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
@@ -393,6 +394,72 @@ export function ensureCompletedScanScoresPersisted(input: {
     });
   scoreMaterializationInFlight.set(input.scanId, task);
   return task;
+}
+
+const completedReportPublicationHandoff = createReportPublicationHandoff({
+  maxPending: RESULT_FINALIZATION_BACKGROUND_CONCURRENCY * 2,
+  publish: ensureCompletedScanScoresPersisted,
+  onError: (error, input) => {
+    // Canonical completion and its pending request were committed atomically.
+    // Endpoint/process failures remain recoverable through the indexed sweep.
+    console.error("[validation-worker] immediate report materialization dispatch failed", {
+      error: error instanceof Error ? error.message : String(error),
+      scanId: input.scanId,
+    });
+  },
+});
+
+/** Call only after canonical findings are persisted; verify the recovery owner. */
+export async function handoffCompletedScanReportPublication(input: {
+  scanId: string;
+  targetEnvironment: LambdaTargetEnvironment;
+  webBaseUrl?: string;
+}) {
+  const status = await dispatchDurableReportPublication(input, {
+    isRecoverable: async (request) => {
+      if (request.targetEnvironment !== "production") return false;
+      const row = await queryOne<{ recoverable: boolean }>(
+        `select exists (
+           select 1 from public.scan_score_materialization_requests request
+           join public.scans scan on scan.id = request.scan_id
+           join lateral (
+             select event.metadata_json from public.scan_events event
+              where event.scan_id = request.scan_id
+                and event.event_type = $2
+                and event.metadata_json->>'resultStatus' = 'completed'
+                and event.created_at >= now() - interval '7 days'
+              order by event.created_at desc
+              limit 1
+           ) result on true
+          where request.scan_id = $1::uuid
+            and request.status = 'pending'
+            and scan.status = 'completed'
+            and result.metadata_json->>'targetEnvironment' = 'production'
+            and result.metadata_json #>> '{artifactVerification,verifiedAt}' is not null
+            and exists (
+              select 1 from public.scan_events merged
+               where merged.scan_id = request.scan_id
+                 and merged.event_type = 'signals.merge_completed'
+            )
+            and exists (
+              select 1 from public.scan_events findings
+               where findings.scan_id = request.scan_id
+                 and findings.event_type = 'findings.unified_derivation_completed'
+            )
+         ) as recoverable`,
+        [request.scanId, RESULT_RECEIVED_EVENT_TYPE],
+      );
+      return row?.recoverable === true;
+    },
+    handoff: (request) => completedReportPublicationHandoff.handoff(request),
+    publish: ensureCompletedScanScoresPersisted,
+  });
+  console.info(JSON.stringify({
+    event: "validation.report_finalization.handoff",
+    scanId: input.scanId,
+    status,
+  }));
+  return status;
 }
 
 type LambdaResultConsumerMetadata = {

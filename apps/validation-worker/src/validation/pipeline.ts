@@ -46,7 +46,7 @@ import {
   ORPHANED_QUEUED_SCAN_DISPATCH_DEADLINE_MS,
   shouldFailQueuedScanWithoutExecutableDispatch
 } from "./orphaned-queued-scan";
-import { ensureCompletedScanScoresPersisted } from "./local-v2-dag-lambda-results";
+import { handoffCompletedScanReportPublication } from "./local-v2-dag-lambda-results";
 import {
   validateFindingsBatchWithLlm,
   type BatchedValidationVerdict
@@ -7106,14 +7106,14 @@ export async function processNanoSignalEnrichmentJob(input: {
       (scanStatus === "completed" || scanType === "preview")
     ) {
       const workerEnv = getWorkerEnv();
-      await ensureCompletedScanScoresPersisted({
+      // Verify the durable recovery owner, then release the validation slot
+      // without awaiting HTTP. Local/preview paths retain awaited completion.
+      await handoffCompletedScanReportPublication({
         scanId,
         targetEnvironment: workerEnv.CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV,
         webBaseUrl: workerEnv.CERTSCORE_WEB_BASE_URL,
       }).catch((error) => {
-        // The completion event and pending request were committed atomically.
-        // Leave endpoint or process failures to the indexed recovery sweep.
-        console.error("[validation-worker] immediate report materialization dispatch failed", {
+        console.error("[validation-worker] immediate report materialization handoff failed", {
           error: error instanceof Error ? error.message : String(error),
           scanId,
         });

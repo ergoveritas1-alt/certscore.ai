@@ -640,8 +640,8 @@ test("validation worker frees result poll capacity after retaining the terminal 
   assert.match(source, /input\.parsed\.targetEnvironment !== "production"/);
   assert.equal(
     (source.match(/result\.metadata_json->>'targetEnvironment' = 'production'/g) ?? []).length,
-    2,
-    "both durable finalization recovery paths must exclude local diagnostic results",
+    3,
+    "both durable recovery paths and the handoff gate must exclude local diagnostic results",
   );
   assert.doesNotMatch(source, /order by result\.scan_id, result\.created_at desc\s+limit 25/);
 });
@@ -669,7 +669,9 @@ test("unified completion durably queues and immediately dispatches canonical rep
   assert.match(repositorySource, /where public\.scan_score_materialization_requests\.status = 'pending'/);
   assert.match(pipelineSource, /appendUnifiedFindingsCompletionAndQueueReportMaterialization/);
   assert.match(pipelineSource, /requireDurableCompletionEvent:\s*true/);
-  assert.match(pipelineSource, /immediate report materialization dispatch failed/);
+  assert.match(pipelineSource, /handoffCompletedScanReportPublication/);
+  assert.doesNotMatch(pipelineSource, /await ensureCompletedScanScoresPersisted/);
+  assert.match(resultSource, /immediate report materialization dispatch failed/);
   assert.match(resultSource, /scoreMaterializationInFlight/);
   assert.match(resultSource, /REPORT_FINALIZATION_DURABLE_RECOVERY_SWEEP_MS\s*=\s*2_000/);
   assert.match(resultSource, /MATERIALIZATION_MISSING_REQUEST_DISCOVERY_INTERVAL_MS\s*=\s*300_000/);
