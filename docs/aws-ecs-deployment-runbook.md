@@ -143,10 +143,20 @@ images. Terraform now reflects those validation limits. No broader Terraform
 apply or capacity change was performed. Estimated incremental cache/base storage
 remains under $0.90/month.
 
-The first application release must bootstrap the missing web runtime-base tag.
-Verify its published input fingerprint and validation cache publication, preserve
-both caches during cleanup, and record actual deployment stage timings. Compare
-against a later warm release before claiming measured deployment savings.
+Release `20d17e61` bootstrapped the web runtime base, published its input
+fingerprint and both web/validation caches, and completed web, validation and
+MCP deployments. Web completed in 9m 37s versus the previous 11m 26s; its image
+stage took 237s versus 290s. These are whole-run comparisons, not isolated causal
+benchmarks. Compare a later warm release before claiming cache-reuse savings.
+
+The scanner verification failed before navigation in all three regions. A
+missing runtime-base tag in a replication destination incorrectly selected a
+full build, installing Chromium 154 instead of the previously verified 151.
+Restore the working scanner image before diagnosis. Routine selection now checks
+only the build region and stops if its base is unavailable; destination tags are
+irrelevant because the application image is built once and replicated. Do not
+silently rebuild Chromium or repeat successful ECS deployments to repair this.
+Retain the failed smoke evidence and verify browser navigation after recovery.
 
 Fresh SITS diagnostic timing verification requires an explicit one-run exception
 to its repository testing hold and central contact cooldown. Release checks and

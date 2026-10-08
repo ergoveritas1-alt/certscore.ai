@@ -1082,6 +1082,12 @@ A preflight result applies only to the exact source state that was tested. Rerun
 
 Routine scanner deployments must reuse the existing runtime base, build the scanner image once in the canonical build region, skip registry cache export, replicate the image to all approved regions, and verify digest parity and Lambda health. Use `--push-runtime-base` only when Chromium, Playwright, OS packages, workspace dependencies, or the Lambda runtime-base Docker stage genuinely changed.
 
+Only the canonical build region needs that runtime base. A missing base in a
+replication destination must not trigger a full Chromium rebuild. If the build
+region's verified base is unavailable, stop before modifying production and
+restore it or explicitly review a runtime rebuild; never silently install a new
+browser during an application-only release.
+
 Routine public web deployments use three ECR-managed artifacts in addition to the immutable Git-SHA image: `${WEB_IMAGE}:buildcache`, `${WEB_IMAGE}:runtime-base`, and `${WEB_IMAGE}:runtime-base-cache`. The web workflow publishes the BuildKit cache with `mode=max` and builds the runner from the reusable ARM64 runtime base. The first deployment after this contract is introduced may bootstrap the runtime base; subsequent application-only deployments should reuse it. Rebuild the web runtime base when the Node image, OS/runtime packages, runtime dependency versions, or the web runtime-base Docker stage changes. Do not delete or retag the mutable cache/base tags during cleanup, and treat cache export, runtime-base export, and image push as valid build progress when monitoring a deployment.
 
 Deploy-all applies database migrations through the target web image before ECS promotion. It does not run a separate production DB lane. Use the standalone DB deployment only when an independently approved migration must run outside a web release.

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { awsScannerImageControl, synchronizeScannerImage } from "./lib/scanner-image-provenance";
 import { runtimeBaseInputsChanged } from "./lib/runtime-base-inputs.mjs";
+import { scannerRuntimeBaseMode } from "./lib/scanner-runtime-base";
 
 type DeployMode = "all" | "db" | "scanners" | "validation" | "web";
 type LaneStatus = "failed" | "skipped" | "succeeded";
@@ -416,25 +417,20 @@ async function deployDb(input: { ref: string; skip: boolean; workflowRef: string
 
 async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }): Promise<LaneResult> {
   return timedLane("Lambda scanner deploys", async () => {
+    const runtimeBase = await scannerRuntimeBaseMode({
+      buildRegion: SCANNER_BUILD_REGION,
+      rebuild: input.pushRuntimeBase,
+      available: async (region) => {
+        const result = await run([
+          "aws", "ecr", "describe-images",
+          "--region", region,
+          "--repository-name", "certscore-v2-dag-local-lambda",
+          "--image-ids", "imageTag=runtime-base"
+        ], { quiet: true, reject: false });
+        return result.exitCode === 0;
+      }
+    });
     await applyScannerRuntimeConfiguration();
-
-    const runtimeBaseAvailability = await Promise.all(SCANNER_REGIONS.map(async (region) => {
-      const result = await run([
-        "aws", "ecr", "describe-images",
-        "--region", region,
-        "--repository-name", "certscore-v2-dag-local-lambda",
-        "--image-ids", "imageTag=runtime-base"
-      ], { quiet: true, reject: false });
-      return { available: result.exitCode === 0, region };
-    }));
-    const useRuntimeBase = input.pushRuntimeBase || runtimeBaseAvailability.every((result) => result.available);
-    if (!useRuntimeBase) {
-      const missingRegions = runtimeBaseAvailability
-        .filter((result) => !result.available)
-        .map((result) => result.region)
-        .join(", ");
-      console.log(`Runtime base is unavailable in ${missingRegions}; using the cached full-image build path without publishing a runtime base.`);
-    }
 
     const dockerConfigRoot = path.join(tmpdir(), `certscore-lambda-deploy-${process.pid}-${input.ref.slice(0, 8)}`);
     const dockerConfigByRegion = Object.fromEntries(SCANNER_REGIONS.map((region) => [
@@ -477,7 +473,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
           CERTSCORE_V2_DAG_LAMBDA_IMAGE_TAG: input.ref,
           CERTSCORE_V2_DAG_LAMBDA_PUSH_RUNTIME_BASE: input.pushRuntimeBase ? "true" : "false",
           CERTSCORE_V2_DAG_LAMBDA_SKIP_ECR_LOGIN: "true",
-          CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: useRuntimeBase ? "true" : "false",
+          CERTSCORE_V2_DAG_LAMBDA_USE_RUNTIME_BASE: "true",
           CERTSCORE_V2_DAG_LAMBDA_SKIP_BUILD_CACHE_PUSH: "true",
           DOCKER_CONFIG: dockerConfigByRegion[SCANNER_BUILD_REGION]
         }
@@ -518,12 +514,12 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
           durationMs: Date.now() - regionStart,
           imageUri: digestImageUri,
           region,
-          runtimeBase: input.pushRuntimeBase ? "rebuilt" : useRuntimeBase ? "reused" : "not-used"
+          runtimeBase
         };
       }));
 
       const details: Record<string, string> = {
-        runtimeBase: input.pushRuntimeBase ? "rebuilt" : useRuntimeBase ? "reused" : "not-used"
+        runtimeBase
       };
       for (const result of results) {
         details[result.region] = `${formatDuration(result.durationMs)} ${result.imageUri}`;
