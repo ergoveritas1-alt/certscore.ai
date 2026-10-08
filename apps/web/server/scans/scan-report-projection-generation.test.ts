@@ -100,6 +100,33 @@ test("artifact-only policy handoff events do not invalidate report generation", 
   );
 });
 
+test("internal early-review lifecycle does not restart publication; canonical changes do", () => {
+  const baseline = [event(1, "2026-07-31T16:36:21.000Z")];
+  const internal = ["v2_policy_evidence.verified", "v2_policy_review.started", "v2_runtime_preview.received"]
+    .map((eventType, index) => ({ ...event(index + 2, "2026-07-31T16:36:22.000Z"), eventType }));
+  const generation = getScanReportProjectionGeneration({ events: baseline });
+  assert.deepEqual(getScanReportProjectionGeneration({ events: [...baseline, ...internal] }), generation);
+  for (const eventType of ["browser_extension.observed_signals_ingested", "v2_lambda_result.received", "findings.unified_derivation_completed"]) {
+    assert.equal(isSameScanReportProjectionGeneration(generation,
+      getScanReportProjectionGeneration({ events: [...baseline, { ...event(5, "2026-07-31T16:36:23.000Z"), eventType }] })), false);
+  }
+});
+
+test("worker and polling publication share a lock and reuse only a verified current generation", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const publisher = await readFile("apps/web/server/scans/canonical-scan-report-publisher.ts", "utf8");
+  const route = await readFile("apps/web/app/api/internal/scan-score-materialization/route.ts", "utf8");
+  assert.match(publisher, /withNonBlockingDatabaseLock\([\s\S]*canonical-report-publication:/);
+  assert.match(publisher, /!isCurrentScanReportProjectionReady\(rawRecord.snapshot\)/);
+  assert.match(publisher, /getPersistedScanReportProjection\(rawRecord\)/);
+  assert.match(publisher, /isSameScanReportProjectionGeneration/);
+  assert.ok(publisher.indexOf('reason: "already_published"') < publisher.indexOf("const materializedRecord"));
+  assert.match(route, /publishCanonicalScanReportProjection\(/);
+  assert.doesNotMatch(route, /persistScanReportProjection\(|materializeLocalV2DagScanDetail\(/);
+  const repair = await readFile("apps/web/app/api/internal/scan-report-projection-backfill/route.ts", "utf8");
+  assert.match(repair, /forceRebuild: true/);
+});
+
 test("projection persistence and materialization cache both bind to the event generation", async () => {
   const { readFile } = await import("node:fs/promises");
   const [projectionSource, materializerSource, publisherSource] = await Promise.all([

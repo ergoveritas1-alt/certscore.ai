@@ -96,16 +96,31 @@ export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs
           const node = document.getElementById(id);
           if (node) candidates.push({ node, association: "described_by" });
         }
+        // Only direct neighbors of the form or its single exclusive wrapper.
+        const exclusive = (node: Element | null): node is Element => Boolean(node &&
+          !node.matches('body, main, header, footer, nav') && node.querySelectorAll('form, [role="form"]').length === 1);
         const parent = group.parentElement;
-        if (parent && !parent.matches("body, main, header, footer, nav") && parent.querySelectorAll('form, [role="form"]').length === 1) {
-          for (const node of [group.previousElementSibling, group.nextElementSibling]) {
-            if (node?.matches('p, small, [role="note"]')) candidates.push({ node, association: "adjacent_notice" });
+        const scopes = [group];
+        if (exclusive(parent) && !parent.querySelector('header, footer, nav') && exclusive(parent.parentElement)) scopes.push(parent);
+        for (const scope of scopes) {
+          if (!exclusive(scope.parentElement)) continue;
+          for (const neighbor of [scope.previousElementSibling, scope.nextElementSibling]) {
+            if (!neighbor || neighbor.matches('header, footer, nav, form, [role="form"]') ||
+              neighbor.querySelector('form, [role="form"], input, textarea, select, header, footer, nav')) continue;
+            const notices = neighbor.matches('p, small, [role="note"], a[href]') ? [neighbor] :
+              neighbor.matches('div, span') ? Array.from(neighbor.querySelectorAll('p, small, [role="note"], a[href]')).slice(0, 8) : [];
+            for (const node of notices) candidates.push({node, association:'adjacent_notice'});
           }
         }
         const retained: Element[] = [];
         for (const { node, association } of candidates) {
           if (performance.now() >= disclosureDeadline) { result.truncated = true; break; }
-          if (!isVisible(node) || excluded(node) || node.closest('footer, nav, [contenteditable="true"]') || retained.some(other => other.contains(node))) continue;
+          // A newsletter form may itself live in a footer. Keep its own
+          // scoped notice, without treating the site's footer as disclosure.
+          if (!isVisible(node) || excluded(node) || node.matches('header, footer, nav') ||
+            node.closest('nav, [contenteditable="true"]') ||
+            (association === 'described_by' && node.closest('footer') && !group.contains(node)) ||
+            retained.some(other => other.contains(node))) continue;
           const owner = node.closest('form, [role="form"]');
           if (owner && owner !== group) continue;
           const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);

@@ -106,6 +106,7 @@ export async function POST(request: Request) {
       if (!row) continue;
       try {
         const publication = await publishCanonicalScanReportProjection({
+          forceRebuild: true,
           organizationId: row.organization_id,
           scanId: row.id
         });

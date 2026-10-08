@@ -67,8 +67,18 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
   const work = (async () => {
     let stage = "inventory_wait";
     const stageStartedAtMs = Date.now();
+    let currentStageStartedAtMs = stageStartedAtMs;
     const stageTimingsMs: Record<string, number> = {};
-    const nextStage = (name: string) => { stageTimingsMs[stage] = Date.now() - stageStartedAtMs; stage = name; };
+    const nextStage = (name: string) => {
+      const now = Date.now();
+      stageTimingsMs[stage] = now - currentStageStartedAtMs;
+      stage = name;
+      currentStageStartedAtMs = now;
+    };
+    const imageTimingsMs: Array<{ capture: "initial" | "later"; stage: string; durationMs: number }> = [];
+    const captureTiming = (capture: "initial" | "later") => (stage: string, durationMs: number) => {
+      if (imageTimingsMs.length < 24) imageTimingsMs.push({capture, stage, durationMs});
+    };
     let inventoryDiagnostics: { forms: number; fields: number } | undefined;
     let snapshotDiagnostics: Array<{ status: string; reason?: string }> | undefined;
     let pixelProvedAtMs: number | undefined;
@@ -113,6 +123,8 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       const inventory = retainedFormInventory(raw);
       if (!inventory.forms.length || inventory.pageUrl !== input.exactTargetUrl || !active()) return;
       let laterInventoryWork: Promise<{capturedAtMs:number; documentIdentity:{source:"cdp_loader_id";token:string}; inventory:typeof inventory} | undefined> | undefined;
+      type LaterInventory = Awaited<NonNullable<typeof laterInventoryWork>>;
+      let laterEvidenceWork: Promise<{inventory: LaterInventory; snapshots?: {capturedAtMs:number; snapshots:Awaited<ReturnType<typeof captureCollectionSurfaceSnapshots>>}} | undefined> | undefined;
       const originalFieldCount = inventory.forms.reduce((count, form) => count + form.fields.length, 0);
       const sampleLaterInventory = async (delayMs: number) => {
         await new Promise(resolve => setTimeout(resolve, delayMs));
@@ -134,11 +146,38 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       const snapshots = await captureCollectionSurfaceSnapshots(input.page, inventory, input.reviewer, input.signal, boundSession,
         captureDeadlineAtMs - 75, {
           pixelSignal: signal,
+          onCaptureTiming: captureTiming("initial"),
           maxCropHeight: 480,
           fitFormToCrop: true,
           hideControlsDuringCapture: true,
           ...(lateFormExtensionActive ? { pixelBudgetMs: Math.max(1, captureDeadlineAtMs - Date.now()) } : {}),
           reviewDeadlineAtMs: lateFormExtensionActive ? captureDeadlineAtMs : input.deadlineAtMs + 1500,
+          onPixelWorkCompleted: () => {
+            if (!laterInventoryWork) return;
+            // All initial browser mutations/pixels have finished. The second
+            // crop now overlaps the first review, within the same two-image cap.
+            laterEvidenceWork = (async () => {
+              const later = await laterInventoryWork;
+              if (!later || !active() || pixelProvedAtMs === undefined || later.capturedAtMs < pixelProvedAtMs) return undefined;
+              const newForms = later.inventory.forms.filter(form => !inventory.forms.some(original => original.formRef === form.formRef));
+              if (!newForms.length || inventory.forms.length >= 2 || Date.now() + 750 >= captureDeadlineAtMs) return {inventory:later};
+              let laterPixelProvedAtMs: number | undefined;
+              const extra = await captureCollectionSurfaceSnapshots(input.page, {...later.inventory,
+                forms:newForms.slice(0,2-inventory.forms.length)}, input.reviewer, input.signal, boundSession,
+                captureDeadlineAtMs - 75, {pixelSignal:signal, maxCropHeight:480, fitFormToCrop:true, hideControlsDuringCapture:true,
+                  onCaptureTiming:captureTiming("later"),
+                  pixelBudgetMs:Math.max(1,captureDeadlineAtMs-Date.now()), reviewDeadlineAtMs:captureDeadlineAtMs,
+                  sourceInventoryHash:createHash("sha256").update(JSON.stringify(later.inventory)).digest("hex"),
+                  onMaskedPixelsCaptured:async()=>{
+                    if (!active()) return;
+                    const after=await boundSession.send("Page.getFrameTree");
+                    if (after.frameTree.frame.loaderId !== token) {changed=true;return;}
+                    if (active()) laterPixelProvedAtMs=Date.now()-input.parentScanStartedAtMs;
+                  }});
+              return {inventory:later, ...(laterPixelProvedAtMs !== undefined && !changed ?
+                {snapshots:{capturedAtMs:laterPixelProvedAtMs,snapshots:extra}} : {})};
+            })().catch(() => undefined);
+          },
           onMaskedPixelsCaptured: async () => {
             if (!active()) return;
             const after = await boundSession.send("Page.getFrameTree");
@@ -164,35 +203,15 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
         });
       snapshotDiagnostics = snapshots.map(snapshot => ({ status: snapshot.status, ...(snapshot.reason ? { reason: snapshot.reason } : {}) }));
       if (pixelProvedAtMs === undefined || changed || input.signal?.aborted || input.page.isClosed() || input.page.url() !== input.exactTargetUrl) return;
-      let postCaptureInventory: Awaited<NonNullable<typeof laterInventoryWork>>;
-      if (laterInventoryWork && Date.now() < captureDeadlineAtMs) {
-        let waitTimer: ReturnType<typeof setTimeout> | undefined;
-        try {
-          postCaptureInventory = await Promise.race([
-            laterInventoryWork,
-            new Promise<undefined>(resolve => { waitTimer = setTimeout(() => resolve(undefined),
-              Math.max(1, captureDeadlineAtMs - Date.now())); }),
-          ]);
-        } finally { if (waitTimer) clearTimeout(waitTimer); }
-      }
-      if (postCaptureInventory && postCaptureInventory.capturedAtMs < pixelProvedAtMs) postCaptureInventory = undefined;
-      let postCaptureSnapshots: {capturedAtMs:number; snapshots:typeof snapshots} | undefined;
-      const newForms = postCaptureInventory?.inventory.forms.filter(form => !inventory.forms.some(original => original.formRef === form.formRef)) ?? [];
-      if (postCaptureInventory && newForms.length && snapshots.length < 2 && active() && Date.now() + 750 < captureDeadlineAtMs) {
-        let laterPixelProvedAtMs: number | undefined;
-        const extra = await captureCollectionSurfaceSnapshots(input.page, {...postCaptureInventory.inventory,
-          forms:newForms.slice(0,2-snapshots.length)}, input.reviewer, input.signal, boundSession,
-          captureDeadlineAtMs - 75, {pixelSignal:signal, maxCropHeight:480, fitFormToCrop:true, hideControlsDuringCapture:true,
-            pixelBudgetMs:Math.max(1,captureDeadlineAtMs-Date.now()), reviewDeadlineAtMs:captureDeadlineAtMs,
-            sourceInventoryHash:createHash("sha256").update(JSON.stringify(postCaptureInventory.inventory)).digest("hex"),
-            onMaskedPixelsCaptured:async()=>{
-              if (!active()) return;
-              const after=await boundSession.send("Page.getFrameTree");
-              if (after.frameTree.frame.loaderId !== token) {changed=true;return;}
-              if (active()) laterPixelProvedAtMs=Date.now()-input.parentScanStartedAtMs;
-            }});
-        if (laterPixelProvedAtMs !== undefined && !changed) postCaptureSnapshots={capturedAtMs:laterPixelProvedAtMs,snapshots:extra};
-      }
+      let laterWaitTimer: ReturnType<typeof setTimeout> | undefined;
+      let laterEvidence: Awaited<NonNullable<typeof laterEvidenceWork>>;
+      try {
+        laterEvidence = await Promise.race([laterEvidenceWork,
+          new Promise<undefined>(resolve => { laterWaitTimer = setTimeout(() => resolve(undefined),
+            Math.max(1, captureDeadlineAtMs - Date.now())); })]);
+      } finally { if (laterWaitTimer) clearTimeout(laterWaitTimer); }
+      const postCaptureInventory = laterEvidence?.inventory;
+      const postCaptureSnapshots = laterEvidence?.snapshots;
       if (changed || input.signal?.aborted || input.page.isClosed() || input.page.url() !== input.exactTargetUrl) return;
       nextStage("packet_validation");
       result = postAcceptFormSnapshotCaptureSchema.parse({
@@ -212,7 +231,17 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
     } catch (error) {
       console.warn("[post-accept-form-snapshots]", JSON.stringify({stage, failureClass:error instanceof Error ? error.name : "unknown", issues: (error as {issues?: Array<{path: unknown; code: unknown}>}).issues?.map(issue => ({path:issue.path,code:issue.code})), deadlineExpired:Date.now() >= captureDeadlineAtMs}));
     }
-    finally { if (!result) console.warn("[post-accept-form-snapshot-incomplete]", JSON.stringify({stage, stageTimingsMs, elapsedMs:Date.now()-stageStartedAtMs, changed, aborted:signal.aborted, deadlineExpired:Date.now() >= captureDeadlineAtMs, lateFormExtensionActive, inventory:inventoryDiagnostics, snapshots:snapshotDiagnostics})); done = true; if (!cdp) void documentBinding?.then(({session}) => session.detach()).catch(() => {}); await cdp?.detach().catch(() => {}); }
+    finally {
+      stageTimingsMs[stage] = Date.now() - currentStageStartedAtMs;
+      if (inventoryDiagnostics?.forms) console.info("[post-accept-form-snapshot-timing]", JSON.stringify({
+        completed: Boolean(result), stageTimingsMs, imageTimingsMs,
+        elapsedMs: Date.now() - stageStartedAtMs, lateFormExtensionActive,
+      }));
+      if (!result) console.warn("[post-accept-form-snapshot-incomplete]", JSON.stringify({stage, stageTimingsMs, elapsedMs:Date.now()-stageStartedAtMs, changed, aborted:signal.aborted, deadlineExpired:Date.now() >= captureDeadlineAtMs, lateFormExtensionActive, inventory:inventoryDiagnostics, snapshots:snapshotDiagnostics}));
+      done = true;
+      if (!cdp) void documentBinding?.then(({session}) => session.detach()).catch(() => {});
+      await cdp?.detach().catch(() => {});
+    }
   })();
   return {
     done: () => done || !active(),

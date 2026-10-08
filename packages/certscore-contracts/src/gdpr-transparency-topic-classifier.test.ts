@@ -24,6 +24,35 @@ test("transfer excerpts locate spaced hyphens instead of borrowing the introduct
   assert.doesNotMatch(match.evidenceExcerpt, /^Privacy policy/);
 });
 
+test("mixed ASCII and native text retains the original policy quotations after a long introduction", () => {
+  const introduction = "Site information and navigation. ".repeat(40);
+  const disclosure = "We PROCESS personal DATA to provide services. The LEGAL BASIS for processing is Article 6(1)(f) GDPR, our legitimate interests in providing these services—subject to your rights. 개인정보를 6개월 동안 보관합니다. Contact privacy@example.test to exercise your rights.";
+  const result = classifyGdprTransparencyTopics({ text: `${introduction}${disclosure}` });
+  for (const topic of ["processing_purposes", "legal_basis"] as const) {
+    const match = result.matches.find((row) => row.topic === topic);
+    assert.ok(match, topic);
+    assert.ok(`${introduction}${disclosure}`.includes(match.evidenceExcerpt));
+    assert.match(match.evidenceExcerpt, /PROCESS personal DATA|LEGAL BASIS/);
+    assert.doesNotMatch(match.evidenceExcerpt, /^(?:Site information and navigation\. ){10}/);
+  }
+  assert.ok(result.matches.some((row) => row.evidenceExcerpt.includes("개인정보")));
+});
+
+test("repeated large policy inputs keep quotes bound to each document after content drift", () => {
+  const introduction = "General website information and navigation. ".repeat(240);
+  const firstClause = "Data retention. We retain personal data for SIX months after account closure, then delete it unless a legal obligation requires longer retention.";
+  const changedClause = "Data retention. We retain personal data for TWELVE months after account closure, then delete it unless a legal obligation requires longer retention.";
+  const first = `${introduction}${firstClause}`;
+  const changed = `${changedClause}${introduction}`;
+  for (const [text, duration] of [[first, "SIX"], [changed, "TWELVE"], [first, "SIX"]] as const) {
+    const match = classifyGdprTransparencyTopics({ text }).matches.find((row) => row.topic === "data_retention");
+    assert.ok(match);
+    assert.ok(text.includes(match.evidenceExcerpt));
+    assert.ok(match.evidenceExcerpt.includes(duration));
+    assert.ok(!match.evidenceExcerpt.includes(duration === "SIX" ? "TWELVE" : "SIX"));
+  }
+});
+
 test("generic privacy-contact navigation does not establish controller/contact disclosure", () => {
   const footer = "privacy contact Facebook Instagram Twitter Shop Parts Keyboard Finder Buying Guides Saved Parts Keyboards & Kits Cases PCBs Plates Stabilizers Switches Keycaps Cables Legal Terms Privacy Contact Us Affiliate Disclosure © 2026 Example. All rights reserved.";
   assert.equal(classifyGdprTransparencyTopics({ text: footer }).matches.some(match => match.topic === "controller_contact"), false);

@@ -697,8 +697,43 @@ resource "aws_ecr_lifecycle_policy" "web" {
 
   policy = jsonencode({
     rules = [
+      # Higher-priority tag rules keep the few mutable build artifacts out of
+      # the release-image limit. Each prefix has at most this many current tags.
       {
         rulePriority = 1
+        description  = "Preserve the reusable application build cache"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["buildcache"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 1
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 2
+        description  = "Preserve the web runtime base and its build cache"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["runtime-base"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 2
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 3
+        description  = "Preserve the validation runtime base and its build cache"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["validation-worker-runtime-base"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 2
+        }
+        action = { type = "expire" }
+      },
+      {
+        rulePriority = 8
         description  = "Expire untagged images after 14 days"
         selection = {
           tagStatus   = "untagged"

@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { awsScannerImageControl, synchronizeScannerImage } from "./lib/scanner-image-provenance";
+import { runtimeBaseInputsChanged } from "./lib/runtime-base-inputs.mjs";
 
 type DeployMode = "all" | "db" | "scanners" | "validation" | "web";
 type LaneStatus = "failed" | "skipped" | "succeeded";
@@ -291,7 +292,8 @@ async function classifyChanges(baseRef: string): Promise<ChangedTargets> {
     lambdaRuntimeBase: changedFiles.some(isLambdaRuntimeBaseInput),
     scanners: changedFiles.some(isScannerDeployInput),
     validation: changedFiles.some(isValidationDeployInput),
-    validationRuntimeBase: changedFiles.some(isValidationRuntimeBaseInput),
+    validationRuntimeBase: await runtimeBaseInputsChanged("validation", changedFiles,
+      file => git(["show", `${baseRef}:${file}`]), file => readFile(file, "utf8")),
     web: changedFiles.some(isWebDeployInput)
   };
 }
@@ -309,6 +311,8 @@ function isGlobalBuildInput(file: string) {
 
 function isWebDeployInput(file: string) {
   return isGlobalBuildInput(file) ||
+    file === ".npmrc" || file.startsWith("patches/") ||
+    file === "scripts/runtime-base-changes.mjs" || file === "scripts/lib/runtime-base-inputs.mjs" ||
     file === ".github/workflows/web-aws-ecs-deploy.yml" ||
     file === "scripts/assert-forward-web-deploy.ts" ||
     file.startsWith("apps/web/") ||
@@ -324,6 +328,8 @@ function isWebDeployInput(file: string) {
 
 function isValidationDeployInput(file: string) {
   return isGlobalBuildInput(file) ||
+    file === ".npmrc" || file.startsWith("patches/") ||
+    file === "scripts/runtime-base-changes.mjs" || file === "scripts/lib/runtime-base-inputs.mjs" ||
     file === ".github/workflows/validation-aws-deploy.yml" ||
     file.startsWith("apps/validation-worker/") ||
     file.startsWith("apps/web/lib/scans/") ||
@@ -360,15 +366,6 @@ function isScannerDeployInput(file: string) {
 function isLambdaRuntimeBaseInput(file: string) {
   return file === "apps/v2-dag-lambda/Dockerfile" ||
     file === "apps/v2-dag-lambda/package.json" ||
-    file === "package.json" ||
-    file === "pnpm-lock.yaml" ||
-    file === "pnpm-workspace.yaml";
-}
-
-function isValidationRuntimeBaseInput(file: string) {
-  return file === "apps/validation-worker/Dockerfile" ||
-    file === "apps/validation-worker/package.json" ||
-    file === ".npmrc" ||
     file === "package.json" ||
     file === "pnpm-lock.yaml" ||
     file === "pnpm-workspace.yaml";

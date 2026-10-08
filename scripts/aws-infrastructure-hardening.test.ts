@@ -54,13 +54,11 @@ test("validation deploy assumes its dedicated AWS role", async () => {
 
 test("validation runtime-base rebuilds follow dependency inputs, not root script-only edits", async () => {
   const source = await readFile(".github/workflows/validation-aws-deploy.yml", "utf8");
-  const classifier = source.match(
-    /if git diff --name-only "\$\{base_ref\}" "\$\{GITHUB_SHA\}" \| grep -Eq '([^']+)'/,
-  )?.[1] ?? "";
-
-  assert.match(classifier, /apps\/validation-worker\/package\\\.json/);
-  assert.match(classifier, /pnpm-lock\\\.yaml/);
-  assert.doesNotMatch(classifier, /\|package\\\.json\|/);
+  const classifier = await readFile("scripts/lib/runtime-base-inputs.mjs", "utf8");
+  assert.match(source, /node scripts\/runtime-base-changes\.mjs validation/);
+  assert.match(classifier, /data\.dependencies/);
+  assert.match(classifier, /pnpm-lock\.yaml/);
+  assert.doesNotMatch(classifier, /data\.scripts/);
 });
 
 test("validation deployment classifiers include web server dependencies compiled into the worker", async () => {

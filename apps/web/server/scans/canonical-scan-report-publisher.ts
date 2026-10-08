@@ -1,16 +1,21 @@
 import "server-only";
+import { queryOne, withNonBlockingDatabaseLock } from "@website-signal-risk-scanner/db";
 
 import { getAnonymousScanById, getScanById } from "./get-scan-by-id";
 import { getLocalV2DagReportInput, materializeLocalV2DagScanDetail } from "./local-v2-dag-report";
 import {
   persistScanReportProjection,
+  getPersistedScanReportProjection,
   ScanReportProjectionNotReadyError,
   StaleScanReportProjectionSourceError
 } from "./scan-report-projection";
-import { SCAN_REPORT_PROJECTION_VERSION } from "./scan-report-projection-contract";
+import { isCurrentScanReportProjectionReady, SCAN_REPORT_PROJECTION_VERSION } from "./scan-report-projection-contract";
 import {
   getCanonicalScanReportPublicationReadiness,
-  getScanReportProjectionGeneration
+  getScanReportProjectionGeneration,
+  isSameScanReportProjectionGeneration,
+  SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES,
+  type ScanReportProjectionGeneration
 } from "./scan-report-projection-generation";
 import { getPublicScanStatusProjection } from "./scan-status-projection";
 
@@ -39,9 +44,25 @@ async function loadScan(input: { organizationId: string | null; scanId: string }
     : getAnonymousScanById(input.scanId);
 }
 
+async function sourceGenerationIsCurrent(scanId: string, generation: ScanReportProjectionGeneration) {
+  // Use the writer to avoid reusing a projection from a lagging read replica
+  // when another process has already retained genuinely changed evidence.
+  const current = await queryOne<{ event_count: number; latest_event_id: string | null }>(
+    `select count(*)::int as event_count,
+            (array_agg(id::text order by created_at desc, id desc))[1] as latest_event_id
+       from public.scan_events
+      where scan_id = $1::uuid and not (event_type = any($2::text[]))`,
+    [scanId, [...SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES]],
+  );
+  return Boolean(current && isSameScanReportProjectionGeneration(generation, {
+    eventCount: current.event_count, latestEventId: current.latest_event_id,
+  }));
+}
+
 async function publishCanonicalScanReportProjectionUncached(input: {
   organizationId: string | null;
   scanId: string;
+  forceRebuild?: boolean;
 }): Promise<CanonicalScanReportPublicationResult> {
   for (let attempt = 0; attempt < STALE_SOURCE_MAX_ATTEMPTS; attempt += 1) {
     const rawRecord = await loadScan(input);
@@ -72,6 +93,14 @@ async function publishCanonicalScanReportProjectionUncached(input: {
       };
     }
 
+    const persisted = input.forceRebuild || !isCurrentScanReportProjectionReady(rawRecord.snapshot)
+      ? null : getPersistedScanReportProjection(rawRecord);
+    if (persisted && isSameScanReportProjectionGeneration(
+      generation, getScanReportProjectionGeneration(persisted)
+    ) && await sourceGenerationIsCurrent(input.scanId, generation)) {
+      return { ...generation, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
+        reason: "already_published", scanId: input.scanId, status: "ready" };
+    }
     const materializedRecord = await materializeLocalV2DagScanDetail(rawRecord, { requireBundle: false });
     try {
       await persistScanReportProjection(materializedRecord, {
@@ -113,11 +142,18 @@ async function publishCanonicalScanReportProjectionUncached(input: {
 export function publishCanonicalScanReportProjection(input: {
   organizationId: string | null;
   scanId: string;
+  forceRebuild?: boolean;
 }) {
-  const key = `${input.organizationId ?? "anonymous"}:${input.scanId}`;
+  const key = `${input.organizationId ?? "anonymous"}:${input.scanId}:${input.forceRebuild === true}`;
   const existing = publicationPromises.get(key);
   if (existing) return existing;
-  const pending = publishCanonicalScanReportProjectionUncached(input).finally(() => {
+  const pending = withNonBlockingDatabaseLock(
+    `canonical-report-publication:${input.scanId}`,
+    () => publishCanonicalScanReportProjectionUncached(input),
+  ).then((result): CanonicalScanReportPublicationResult => result.acquired ? result.value : {
+    eventCount: null, latestEventId: null, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
+    reason: "publication_in_progress", scanId: input.scanId, status: "finalizing",
+  }).finally(() => {
     publicationPromises.delete(key);
   });
   publicationPromises.set(key, pending);

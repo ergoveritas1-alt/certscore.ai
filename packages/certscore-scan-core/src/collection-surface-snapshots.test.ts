@@ -12,15 +12,18 @@ test("form crops retain binding, mask inputs, resize, and fail closed on unsafe 
     await page.setContent('<form style="width:1000px;height:300px;background:white"><label>Email<input type="email" value="private@example.test" style="display:block;width:400px;height:80px"></label></form>');
     const inventory = buildCollectionSurfaceInventory({ pageUrl: "about:blank", inspectedFieldCandidateCount: 1, candidateScanTruncated: false, rows: [{ groupKey: "native_form_0", structure: "native_form", elementType: "input", inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
     let reviewed = 0;
+    const timings: Array<{stage:string; durationMs:number}> = [];
     const snapshots = await captureCollectionSurfaceSnapshots(page, inventory, async ({ bytes }) => {
       reviewed++;
       const metadata = await sharp(bytes).metadata();
       assert.equal(metadata.width, 640); assert.ok(metadata.height! <= 960);
       return { safeForDisplay: true };
-    });
+    }, undefined, undefined, undefined, { onCaptureTiming: (stage, durationMs) => timings.push({stage, durationMs}) });
     assert.equal(reviewed, 1);
     assert.equal(snapshots[0]?.status, "available");
     assert.equal(snapshots[0]?.formRef, inventory.forms[0]?.formRef);
+    assert.deepEqual(timings.map(timing => timing.stage), ["bind_controls", "masked_pixels", "image_processing", "safety_review"]);
+    assert.ok(timings.every(timing => Number.isInteger(timing.durationMs) && timing.durationMs >= 0));
     assert.ok(snapshots[0]?.data);
     assert.ok(snapshots[0]!.sizeBytes! < 96 * 1024);
     const pixels = await sharp(Buffer.from(snapshots[0]!.data!, "base64")).raw().toBuffer({ resolveWithObject: true });
@@ -529,4 +532,42 @@ test("combined binding withholds pixels when a form animation cannot pause", asy
     assert.equal(snapshots[0]?.data, undefined);
     assert.equal(await page.locator("html").getAttribute("data-certscore-form-capture"), null);
   } finally { await browser.close(); }
+});
+
+
+test("responsive form fitting preserves aspect ratio, full submit area, masks and original layout", async () => {
+  const browser = await chromium.launch({headless:true}); const page=await browser.newPage({viewport:{width:1280,height:900}});
+  try {
+    await page.setContent(`<style>body{margin:0;font:20px Arial}.layout{display:grid;grid-template-columns:600px 240px;gap:24px;margin-top:1000px}
+      form{box-sizing:border-box;padding:24px;border:4px solid #234;background:white;min-width:100%;max-width:100%}
+      label{display:block;margin-bottom:24px}input{box-sizing:border-box;display:block;width:100%;height:60px}
+      button{display:block;width:100%;height:60px;background:rgb(0,160,60);color:white;border:0}aside{background:rgb(255,0,170)}</style>
+      <div class="layout"><form style="zoom:1!important;width:auto!important">${Array.from({length:8},(_,i)=>`<label>Field ${i+1}<input type="text" name="field${i}" value="private-value"></label>`).join('')}
+        <p>We use personal data to handle your request. Privacy policy.</p><button>Submit</button></form><aside>Neighbor content must not enter the crop</aside></div>`);
+    const before=await page.locator('form').evaluate(form=>({style:(form as HTMLElement).style.cssText,width:form.getBoundingClientRect().width,height:form.getBoundingClientRect().height}));
+    const inventory=buildCollectionSurfaceInventory({pageUrl:page.url(),inspectedFieldCandidateCount:8,candidateScanTruncated:false,
+      rows:Array.from({length:8},(_,i)=>({groupKey:'0',structure:'native_form' as const,elementType:'input' as const,inputType:'text',label:`Field ${i+1}`,required:false,disabled:false,readOnly:false,domOrder:i}))},Date.now());
+    const snapshots=await captureCollectionSurfaceSnapshots(page,inventory,async({bytes})=>{
+      const pixels=await sharp(bytes).raw().toBuffer({resolveWithObject:true});
+      assert.ok(Math.abs(pixels.info.width/pixels.info.height-before.width/before.height)<0.01,'form must shrink uniformly');
+      let green=0,pink=0,masks=0;
+      for(let offset=0;offset<pixels.data.length;offset+=pixels.info.channels){
+        const [r,g,b]=[pixels.data[offset]!,pixels.data[offset+1]!,pixels.data[offset+2]!];
+        if(r<30&&g>120&&g<190&&b>30&&b<90)green++;
+        if(r>220&&g<30&&b>130)pink++;
+        if(Math.abs(r-148)<8&&Math.abs(g-163)<8&&Math.abs(b-184)<8)masks++;
+      }
+      assert.ok(green>100,'submit area must be retained');assert.equal(pink,0,'neighbor must stay outside crop');assert.ok(masks>1000);
+      if(process.env.FORM_CAPTURE_ARTIFACT_DIR){
+        const {mkdir,writeFile}=await import('node:fs/promises');await mkdir(process.env.FORM_CAPTURE_ARTIFACT_DIR,{recursive:true});
+        await writeFile(`${process.env.FORM_CAPTURE_ARTIFACT_DIR}/responsive-form.jpeg`,bytes);
+      }
+      return {safeForDisplay:true};
+    },undefined,undefined,undefined,{maxCropHeight:480,fitFormToCrop:true,hideControlsDuringCapture:true});
+    assert.equal(snapshots[0]?.status,'available',JSON.stringify(snapshots.map(({data,...row})=>row)));
+    const after=await page.locator('form').evaluate(form=>({style:(form as HTMLElement).style.cssText,width:form.getBoundingClientRect().width,height:form.getBoundingClientRect().height}));
+    assert.deepEqual(after,before);assert.deepEqual(await page.evaluate(()=>({x:scrollX,y:scrollY})),{x:0,y:0});
+    assert.equal(await page.locator('[data-certscore-form-capture]').count(),0);
+    assert.equal(await page.locator('input').first().inputValue(),'private-value');
+  }finally{await browser.close();}
 });

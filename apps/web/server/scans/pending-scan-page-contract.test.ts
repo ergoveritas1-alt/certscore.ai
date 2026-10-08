@@ -34,14 +34,15 @@ test("refreshed authenticated report preserves scoped access and the scanso comp
 test("timeline model is projection-backed for findings, checklist rows, inventory, evidence, and correction steps", async () => {
   const source = await readFile("apps/web/components/scans/report-lab/timeline-report-model.ts", "utf8");
   const report = await readFile("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
+  const findingRow = await readFile("apps/web/components/scans/report-finding-row.tsx", "utf8");
 
   assert.match(source, /getPersistedCanonicalReportProjection\(scanRecord\)/);
   assert.match(source, /hydrateChecklistPolicyEvidence/);
-  assert.match(source, /getReportableGdprEprivacyCoverageItems\(checklistRows\)/);
+  assert.match(source, /getReportableGdprEprivacyCoverageItems\(checklistRows, \{/);
   assert.match(source, /GDPR_TRANSPARENCY_REPORT_ROW_ID_SET\.has\(row\.id\)/);
   assert.match(source, /deriveGdprEprivacyCoverageChecklistRowRationale\(item\)/);
   assert.match(source, /buildRuntimeInventoryProjectionFromScan/);
-  assert.match(source, /buildChecklistConcernTopFindings\(checklistRows\)/);
+  assert.match(source, /buildChecklistConcernTopFindings\(reportableChecklistRows\)/);
   assert.match(source, /selectCanonicalHighPriorityFindings/);
   assert.match(source, /buildExecutiveTimelineEvents/);
   assert.match(source, /buildExecutiveRejectPathProjection/);
@@ -57,8 +58,9 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.match(source, /durationFromTimestamps\(scanRecord\.scan\)/);
   assert.match(source, /\["cmp_vendor_name", "cmpVendorName"\]/);
   assert.doesNotMatch(report, /report\.inventory\.find\(\(row\) => \/consent\|cookie compliance/);
-  assert.match(report, /RegulatoryChecklistEvidenceDetails/);
-  assert.match(report, /RegulatoryChecklistCorrectionSteps/);
+  assert.match(report, /FindingRow.*from "\.\.\/report-finding-row"/);
+  assert.match(findingRow, /RegulatoryChecklistEvidenceDetails/);
+  assert.match(findingRow, /RegulatoryChecklistCorrectionSteps/);
   assert.doesNotMatch(report, /Requests \/ records/);
   assert.match(report, /InventoryConfidenceDots/);
   assert.match(report, /InventoryTypeIcon/);
@@ -69,7 +71,7 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
   assert.doesNotMatch(report, />Privacy surfaces</);
   assert.doesNotMatch(report, /observedPrivacyRows/);
   assert.match(report, /observedGdprTransparencyRows/);
-  assert.match(report, /\{observedGdprTransparencyRows\} of \{report\.gdprTransparencyRows\.length\} observed/);
+  assert.match(report, /\{observedGdprTransparencyRows\} observed · \{report\.gdprTransparencyRows\.length\} checks/);
   assert.match(report, /<CompactRejectPathCard projection=\{report\.rejectPath\} \/>/);
   assert.match(report, /data-testid="timeline-reject-path-card"/);
   assert.match(report, /data-testid=\{isAccept \? "post-accept-path-result" : "post-reject-timeline"\}/);
@@ -88,8 +90,10 @@ test("timeline model is projection-backed for findings, checklist rows, inventor
 });
 
 test("refreshed report keeps repeated retained evidence and vendors on unique React keys", async () => {
-  const source = await readFile("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
+  const report = await readFile("apps/web/components/scans/report-lab/shadow-scan-report.tsx", "utf8");
+  const source = await readFile("apps/web/components/scans/report-finding-row.tsx", "utf8");
 
+  assert.match(report, /FindingRow.*from "\.\.\/report-finding-row"/);
   assert.match(source, /finding\.vendors\.map\(\(vendor, index\) =>/);
   assert.match(source, /key=\{`\$\{vendor\}:\$\{index\}`\}/);
   assert.match(source, /finding\.evidence\.map\(\(item, index\) =>/);
@@ -101,7 +105,7 @@ test("shared signed-out header and footer default to the report-width alignment"
   const footer = await readFile("apps/web/components/layout/site-footer.tsx", "utf8");
 
   assert.match(header, /wide = true/);
-  assert.match(header, /max-w-\[90rem\] px-5 lg:px-10/);
+  assert.match(header, /max-w-\[90rem\] px-3 min-\[360px\]:px-5 lg:px-10/);
   assert.match(footer, /wide = true/);
   assert.match(footer, /max-w-\[90rem\] px-5 lg:px-10/);
 });
@@ -161,7 +165,8 @@ test("completed dashboard reports stream an honest report shell before detailed 
   assert.match(loadingState, /Loading your report/);
   assert.match(loadingState, /loading the latest scan results, including cookies, trackers, and privacy findings/i);
   assert.doesNotMatch(loadingState, /Finishing your report/);
-  assert.match(loadingCard, /scan-hourglass/);
+  assert.match(loadingCard, /import \{ ScanProgressSpinner \} from "\.\/scan-progress-spinner"/);
+  assert.match(loadingCard, /<ScanProgressSpinner/);
   assert.doesNotMatch(loadingState, /summary\.overallScore|summary\.topFindingCount/);
   assert.match(source, /COMPLETED_SCAN_DETAIL_CACHE_TTL_MS = 15_000/);
   assert.doesNotMatch(source, /unstable_cache/);

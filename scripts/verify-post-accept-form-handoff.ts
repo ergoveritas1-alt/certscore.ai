@@ -54,12 +54,22 @@ try {
   assert.ok(packet.network.requests.every(row=>row.startedAtMs<=packet.timing.observationEndedAtMs!));
   assert.equal(projection.execution?.status,"succeeded_with_confirmation");
   assert.equal(projection.registeredObservationCompletion?.completedAtMs,packet.timing.observationEndedAtMs);
-  await mkdir(outDir,{recursive:true});await writeFile(path.join(outDir,'PostAcceptEvidencePacket.json'),packetText);
+  await mkdir(outDir,{recursive:true});
+  for (const [index,image] of verified.images.entries()) {
+    assert.ok(image.bytes);
+    await writeFile(path.join(outDir,`form-${index+1}.jpeg`),image.bytes);
+  }
+  await writeFile(path.join(outDir,'PostAcceptEvidencePacket.json'),packetText);
   await writeFile(path.join(outDir,'Projection.json'),JSON.stringify(projection,null,2));
   await writeFile(path.join(outDir,'Verification.json'),JSON.stringify({scanId:packet.scanId,packetSha256:sha256,
     target:packet.targetUrl,scope:'loopback_fixture_only',submissions,fields:verified.capture.contractVersion==='certscore.post_accept_form_snapshots.v6'
       ?verified.capture.postCaptureInventory.inventory.forms.map(form=>form.fields.length):verified.capture.inventory.forms.map(form=>form.fields.length),
     images:verified.images.map(image=>({formRef:image.snapshot.formRef,status:image.snapshot.status,sha256:image.snapshot.sha256})),
+    privacyDisclosures:verified.capture.contractVersion==='certscore.post_accept_form_snapshots.v6'
+      ?verified.capture.postCaptureInventory.inventory.forms.map(form=>form.privacyDisclosure?.excerpts.length??0)
+      :verified.capture.inventory.forms.map(form=>form.privacyDisclosure?.excerpts.length??0),
+    structuredCapture:{status:packet.formCapture?.status,reasons:packet.formCapture?.reasonCodes,
+      fields:packet.formCapture?.frames.flatMap(frame=>frame.forms.map(form=>form.fields.length))},
     timing:packet.timing},null,2));
   console.log(JSON.stringify({outDir,images:verified.images.length,submissions,readyAtMs:packet.timing.readyAtMs}));
 }finally{browser.newContext=originalContext;await browser.close();await new Promise<void>(resolve=>server.close(()=>resolve()));}

@@ -4,11 +4,6 @@ ARG VALIDATION_WORKER_RUNTIME_BASE=validation-worker-runtime-base
 
 FROM node:22-bookworm-slim AS build
 
-ARG BUILD_GIT_REF=""
-ARG BUILD_GIT_SHA=""
-ARG BUILD_IMAGE_TAG=""
-ARG BUILD_RUNTIME_TARGET="ecs-fargate"
-
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV NODE_ENV="production"
@@ -41,8 +36,6 @@ RUN --mount=type=cache,id=wc01-validation-worker-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store \
   && pnpm install --frozen-lockfile --filter @website-signal-risk-scanner/validation-worker...
 
-COPY apps/web ./apps/web
-COPY apps/validation-worker ./apps/validation-worker
 COPY packages/certscore-api-contracts ./packages/certscore-api-contracts
 COPY packages/certscore-contracts ./packages/certscore-contracts
 COPY packages/certscore-scan-core ./packages/certscore-scan-core
@@ -53,7 +46,6 @@ COPY packages/db ./packages/db
 COPY packages/validation-shared ./packages/validation-shared
 
 RUN rm -rf \
-  ./apps/validation-worker/dist \
   ./packages/certscore-api-contracts/dist \
   ./packages/certscore-contracts/dist \
   ./packages/certscore-scan-core/dist \
@@ -63,14 +55,22 @@ RUN rm -rf \
   ./packages/db/dist \
   ./packages/validation-shared/dist
 
-RUN pnpm --filter @certscore/contracts build
-RUN pnpm --filter @certscore/vendor-resolver build
-RUN pnpm --filter @website-signal-risk-scanner/shared build
-RUN pnpm --filter @certscore/api-contracts build
-RUN pnpm --filter @website-signal-risk-scanner/web-bot-auth build
-RUN pnpm --filter @certscore/scan-core build
-RUN pnpm --filter @website-signal-risk-scanner/db build
-RUN pnpm --filter @website-signal-risk-scanner/validation-shared build
+# Build the package DAG once. The resolver and scanner package scripts rebuild
+# their dependencies; compile them directly after those dependencies instead.
+# Keep app/server source and image SHA out of these reusable layers.
+RUN pnpm exec turbo run build --concurrency=2 \
+    --filter @certscore/contracts \
+    --filter @certscore/api-contracts \
+    --filter @website-signal-risk-scanner/shared \
+    --filter @website-signal-risk-scanner/web-bot-auth \
+    --filter @website-signal-risk-scanner/db \
+    --filter @website-signal-risk-scanner/validation-shared \
+  && pnpm exec tsc -p packages/certscore-vendor-resolver/tsconfig.json \
+  && pnpm exec tsc -p packages/certscore-scan-core/tsconfig.json
+
+COPY apps/web ./apps/web
+COPY apps/validation-worker ./apps/validation-worker
+RUN rm -rf ./apps/validation-worker/dist
 RUN pnpm --filter @website-signal-risk-scanner/validation-worker build
 
 FROM build AS validation-worker-prod-deps

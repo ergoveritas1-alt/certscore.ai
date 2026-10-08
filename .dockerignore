@@ -10,6 +10,8 @@ packages/*/node_modules
 .next
 dist
 .turbo
+**/.turbo
+**/*.tsbuildinfo
 coverage
 artifacts
 tmp
@@ -24,5 +26,8 @@ packages/*/dist
 .env.local
 .env.*.local
 .env.*
+**/.env
+**/.env.*
 !.env.example
+!**/.env.example
 supabase/.temp

@@ -896,7 +896,7 @@ export async function policySurfaceScanner(
         timingBreakdown,
         "homepage-failed rendered discovery",
         "Bounded browser-rendered policy link discovery after static homepage fetch failed.",
-        () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
+        () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime, timingBreakdown),
       );
       void renderedDiscoveryPromise.catch(() => undefined);
       const governingPriorRecoveryPromise = speculativeCommonPathRecoveryPromise
@@ -1261,7 +1261,7 @@ export async function policySurfaceScanner(
           timingBreakdown,
           "rendered discovery",
           "Optional browser-rendered footer/header policy link discovery.",
-          () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime),
+          () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime, timingBreakdown),
         );
         renderedCandidates = renderedDiscovery.candidates;
         renderedDiscoveryDeadlineReached = renderedDiscovery.deadlineReached;
@@ -2763,7 +2763,9 @@ async function processPolicyCandidate({
     deterministic.confidence = Math.max(deterministic.confidence, 0.62);
   }
   const excerpt = boundedExcerpt(analysisVisibleText, prioritizedExcerptKeywords(deterministic));
-  const nanoAnalysisExcerpt = textQuality.usable ? boundedPolicyAnalysisExcerpt(analysisVisibleText) : "";
+  const nanoAnalysisExcerpt = textQuality.usable && !boundedAfterSoftBudget && !boundedSameOriginSupplement
+    ? boundedPolicyAnalysisExcerpt(analysisVisibleText)
+    : "";
   const excerptId = `policy_excerpt_${stableHash(effectiveCandidate.normalizedUrl)}_${stableHash(excerpt)}`;
   throwIfAborted(input.signal);
   if (processingProgress) {
@@ -3005,20 +3007,24 @@ export function assessPolicyDocumentSubstance(input: {
     /\bview (?:all )?(?:products|models|offers)\b/i,
   ].filter((pattern) => pattern.test(normalized)).length;
   if (input.surfaceType === "privacy_policy") {
-    const consentSurface = classifyConsentSurfaceText({ text: normalized });
-    const canonicalConsentControlIntents = canonicalConsentControlIntentsInText(normalized);
-    const consentControlIntentObserved = hasCanonicalConsentControlIntent(consentSurface) ||
-      canonicalConsentControlIntents.size >= 2;
-    if (
-      normalized.length < MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS &&
-      consentControlIntentObserved &&
-      (
-        consentSurface.likelyPresent ||
-        consentSurface.recoveryHintObserved ||
-        canonicalConsentControlIntents.size >= 2
-      )
-    ) {
-      return { matchesExpectedSurface: false, reasonCode: "consent_settings_shell" };
+    // Consent-shell classification cannot affect a document at or above this
+    // existing length threshold. Avoid running the full multilingual control
+    // registry over a long policy whose result would be discarded.
+    if (normalized.length < MAX_CONSENT_SETTINGS_SHELL_TEXT_CHARS) {
+      const consentSurface = classifyConsentSurfaceText({ text: normalized });
+      const canonicalConsentControlIntents = canonicalConsentControlIntentsInText(normalized);
+      const consentControlIntentObserved = hasCanonicalConsentControlIntent(consentSurface) ||
+        canonicalConsentControlIntents.size >= 2;
+      if (
+        consentControlIntentObserved &&
+        (
+          consentSurface.likelyPresent ||
+          consentSurface.recoveryHintObserved ||
+          canonicalConsentControlIntents.size >= 2
+        )
+      ) {
+        return { matchesExpectedSurface: false, reasonCode: "consent_settings_shell" };
+      }
     }
     const topicMatches = gdprTransparencyTopicMatchCount(normalized);
     const substantivePrivacySignals = [
@@ -4254,19 +4260,33 @@ async function extractRenderedCandidates(
   input: PolicySurfaceScannerInput,
   moduleStartedAtMs: number,
   browserRuntime: PolicyBrowserRuntime,
+  timingBreakdown?: ScanModuleRun["timingBreakdown"],
+  progress?: { stage: string; startedAtMs: number },
 ): Promise<PolicySurfaceCandidate[]> {
   if (remainingMs(input, moduleStartedAtMs) < 1_500) {
     return [];
   }
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
   let releaseAbortContext: (() => void) | undefined;
+  let stage = "browser launch";
+  let stageStartedAtMs = Date.now();
+  const nextStage = (next: string) => {
+    const now = Date.now();
+    timingBreakdown?.push({ label: `rendered discovery: ${stage}`, durationMs: now - stageStartedAtMs,
+      detail: "Substage of rendered discovery; included in its wall time, not additive." });
+    stage = next;
+    stageStartedAtMs = now;
+    if (progress) { progress.stage = stage; progress.startedAtMs = now; }
+  };
   try {
     const browser = await browserRuntime.getBrowser();
+    nextStage("browser context");
     context = await browser.newContext(chromiumContextOptions());
     releaseAbortContext = bindAbortSignalToBrowserContext(context, input.signal);
     await installWebBotAuthRoute(context);
     await installPublicNetworkGuardRoute(context);
     const page = await context.newPage();
+    nextStage("navigation");
     const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
     await page.goto(input.normalizedUrl, {
       // Retain the committed document promptly, then let the bounded waits
@@ -4276,15 +4296,25 @@ async function extractRenderedCandidates(
       waitUntil: "commit",
       timeout: Math.min(navigationTimeoutMs, Math.max(1_000, remainingMs(input, moduleStartedAtMs))),
     });
+    nextStage("initial settle and footer reveal");
+    await page.waitForTimeout(Math.min(400, Math.max(250, remainingMs(input, moduleStartedAtMs))));
+    // Trigger lazy footer links before waiting for them. Keep the existing
+    // network and link-settle bounds so genuinely late links retain coverage.
+    await page.evaluate(() => {
+      window.scrollTo(0, document.body?.scrollHeight ?? 0);
+    }).catch(() => undefined);
+    nextStage("network settle");
     await page.waitForLoadState("networkidle", {
       timeout: Math.min(1_000, Math.max(500, remainingMs(input, moduleStartedAtMs))),
     }).catch(() => undefined);
-    await page.waitForTimeout(Math.min(400, Math.max(250, remainingMs(input, moduleStartedAtMs))));
+    nextStage("policy link readiness");
     await waitForRenderedPolicySurfaceCandidate(page, input, moduleStartedAtMs);
+    nextStage("footer settle");
     await page.evaluate(() => {
-      window.scrollTo(0, document.body.scrollHeight);
+      window.scrollTo(0, document.body?.scrollHeight ?? 0);
     }).catch(() => undefined);
     await page.waitForTimeout(Math.min(300, Math.max(150, remainingMs(input, moduleStartedAtMs))));
+    nextStage("visible text");
     const renderedBaseUrl = /^https?:\/\//i.test(page.url()) ? page.url() : input.normalizedUrl;
     const visibleText = await page.evaluate((maxChars) => {
       const text = document.body?.innerText ?? "";
@@ -4292,6 +4322,7 @@ async function extractRenderedCandidates(
       const headChars = Math.floor(maxChars * 0.65);
       return `${text.slice(0, headChars)}\n\n[CertScore retained tail of oversized rendered text.]\n\n${text.slice(-(maxChars - headChars))}`;
     }, MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS).catch(() => "");
+    nextStage("DOM policy links");
     const collectPolicyCandidates = ({ maxCandidates, cmpScopes, vendorPattern, priorityPhrases }: {
       maxCandidates: number;
       cmpScopes: typeof CMP_POLICY_SCOPES;
@@ -4499,6 +4530,7 @@ async function extractRenderedCandidates(
       const headChars = Math.floor(maxChars * 0.5);
       return `${regionHtml.slice(0, headChars)}\n${regionHtml.slice(-(maxChars - headChars))}`;
     }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => "");
+    nextStage("candidate classification");
     const renderedHtmlCandidates = renderedPolicyRegionHtml
       ? extractCandidates(
         renderedBaseUrl,
@@ -4590,8 +4622,10 @@ async function extractRenderedCandidates(
   } catch {
     return [];
   } finally {
+    nextStage("cleanup");
     releaseAbortContext?.();
     await context?.close().catch(() => undefined);
+    nextStage("done");
   }
 }
 
@@ -4617,16 +4651,23 @@ async function extractRenderedCandidatesBeforeSoftDeadline(
   input: PolicySurfaceScannerInput,
   moduleStartedAtMs: number,
   browserRuntime: PolicyBrowserRuntime,
+  timingBreakdown?: ScanModuleRun["timingBreakdown"],
 ): Promise<RenderedPolicyDiscoveryResult> {
-  const discoveryPromise = extractRenderedCandidates(input, moduleStartedAtMs, browserRuntime);
+  // Freeze operational subtimings at the same terminal barrier. A browser
+  // command finishing after the soft deadline must not mutate the returned run.
+  const renderedTimings: NonNullable<ScanModuleRun["timingBreakdown"]> = [];
+  const progress = { stage: "browser launch", startedAtMs: Date.now() };
+  const discoveryPromise = extractRenderedCandidates(input, moduleStartedAtMs, browserRuntime, renderedTimings, progress);
   void discoveryPromise.catch(() => undefined);
   const remainingBudgetMs = Math.max(1, input.internalBudgetMs - (Date.now() - moduleStartedAtMs));
   const deadlineMs = input.discoveryMode === "fast"
     ? Math.min(POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS, remainingBudgetMs)
     : remainingBudgetMs;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let deadlineReached = false;
   const deadlinePromise = new Promise<RenderedPolicyDiscoveryResult>((resolve) => {
     deadlineTimer = setTimeout(() => {
+      deadlineReached = true;
       void browserRuntime.close();
       resolve({ candidates: [], deadlineReached: true });
     }, deadlineMs);
@@ -4639,6 +4680,10 @@ async function extractRenderedCandidatesBeforeSoftDeadline(
     ]);
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer);
+    timingBreakdown?.push(...renderedTimings);
+    if (deadlineReached) timingBreakdown?.push({ label: `rendered discovery: ${progress.stage}`,
+      durationMs: Date.now() - progress.startedAtMs,
+      detail: "Substage still pending at the existing rendered-discovery deadline; included in its wall time." });
   }
 }
 
@@ -4667,33 +4712,43 @@ async function waitForRenderedPolicySurfaceCandidate(
     ...entry.cookiePolicyPathSlugs,
   ])).map((term) => term.normalize("NFKC").toLowerCase());
 
-  await page.waitForFunction(({ surfaceTerms, pathTerms }: { surfaceTerms: string[]; pathTerms: string[] }) => {
-    const elements = document.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]");
-    for (const element of elements) {
-      const href = element.getAttribute("href") ??
-        element.getAttribute("data-href") ??
-        element.getAttribute("data-url") ??
-        element.getAttribute("data-link") ??
-        "";
-      if (!href || href.trim() === "#" || /^javascript:/i.test(href.trim())) {
-        continue;
+  await page.waitForFunction(({ surfaceTerms, pathTerms, cmpScopes }: {
+    surfaceTerms: string[]; pathTerms: string[]; cmpScopes: typeof CMP_POLICY_SCOPES;
+  }) => {
+    const roots: ParentNode[] = [document];
+    for (const cmp of cmpScopes) for (const selector of cmp.selectors) {
+      for (const host of Array.from(document.querySelectorAll(selector)).slice(0, 4)) {
+        if (host.shadowRoot) roots.push(host.shadowRoot);
       }
-      const text = [
-        element.textContent,
-        element.getAttribute("aria-label"),
-        element.getAttribute("title"),
-        href,
-      ].filter(Boolean).join(" ").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
-      const normalizedHref = href.normalize("NFKC").toLowerCase();
-      if (
-        surfaceTerms.some((term) => text.includes(term)) ||
-        pathTerms.some((term) => normalizedHref.includes(term))
-      ) {
-        return true;
+    }
+    for (const root of roots) {
+      const elements = root.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]");
+      for (const element of elements) {
+        const href = element.getAttribute("href") ??
+          element.getAttribute("data-href") ??
+          element.getAttribute("data-url") ??
+          element.getAttribute("data-link") ??
+          "";
+        if (!href || href.trim() === "#" || /^javascript:/i.test(href.trim())) {
+          continue;
+        }
+        const text = [
+          element.textContent,
+          element.getAttribute("aria-label"),
+          element.getAttribute("title"),
+          href,
+        ].filter(Boolean).join(" ").normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+        const normalizedHref = href.normalize("NFKC").toLowerCase();
+        if (
+          surfaceTerms.some((term) => text.includes(term)) ||
+          pathTerms.some((term) => normalizedHref.includes(term))
+        ) {
+          return true;
+        }
       }
     }
     return false;
-  }, { surfaceTerms: canonicalSurfaceTerms, pathTerms: canonicalPathTerms }, {
+  }, { surfaceTerms: canonicalSurfaceTerms, pathTerms: canonicalPathTerms, cmpScopes: CMP_POLICY_SCOPES }, {
     polling: 250,
     timeout: timeoutMs,
   }).catch(() => undefined);
@@ -6909,8 +6964,9 @@ export function extractPolicyFacts(text: string): PolicyFacts {
     ["contact_privacy", /privacy@|contact us/i, "contact privacy"],
     ["accessibility", /accessibility/i, "accessibility"],
   ];
-  const observedTopics = unique(rules.filter(([, pattern]) => pattern.test(text)).map(([topic]) => topic));
-  const keywords = rules.filter(([, pattern]) => pattern.test(text)).map(([, , keyword]) => keyword);
+  const matchedRules = rules.filter(([, pattern]) => pattern.test(text));
+  const observedTopics = unique(matchedRules.map(([topic]) => topic));
+  const keywords = matchedRules.map(([, , keyword]) => keyword);
   const vendors = knownVendorMentions(text);
   const legacyArticle13Signals = article13SignalsFromText(text);
   const article13Signals = mergeArticle13DisclosureSignals({
@@ -8968,10 +9024,13 @@ export function extractPolicySections(input: {
   sourceUrl: string;
   visibleText: string;
 }): PolicySurfaceObservation["retainedPolicySections"] {
-  const htmlSections = extractPolicySectionsFromHtml(input.html, input.sourceUrl);
-  const definitionSections = extractPolicyDefinitionSectionsFromHtml(input.html, input.sourceUrl);
-  const labeledBlockSections = extractPolicyLabeledBlockSectionsFromHtml(input.html, input.sourceUrl);
-  const tableSections = extractPolicyTableRowsFromHtml(input.html, input.sourceUrl);
+  // These four extractors and their source-offset hashes use the exact same
+  // sanitized document. Strip page chrome once, without changing retained bytes.
+  const sanitizedHtml = stripPageChromeHtml(input.html);
+  const htmlSections = extractPolicySectionsFromHtml(sanitizedHtml, input.sourceUrl);
+  const definitionSections = extractPolicyDefinitionSectionsFromHtml(sanitizedHtml, input.sourceUrl);
+  const labeledBlockSections = extractPolicyLabeledBlockSectionsFromHtml(sanitizedHtml, input.sourceUrl);
+  const tableSections = extractPolicyTableRowsFromHtml(sanitizedHtml, input.sourceUrl);
   const fallbackSections = extractPolicySectionsFromVisibleText(input.visibleText, input.sourceUrl);
   const topicWindowSections = extractCanonicalTopicWindowSectionsFromVisibleText(
     input.visibleText,
@@ -8986,6 +9045,7 @@ export function extractPolicySections(input: {
   const baseSections = htmlSections.length >= 3
     ? htmlSections
     : [...htmlSections, ...fallbackSections];
+  const seenSections = new Set<string>();
   const sections = [
     ...tableSections,
     ...definitionSections,
@@ -8993,15 +9053,17 @@ export function extractPolicySections(input: {
     ...baseSections,
     ...topicWindowSections,
     ...unstructuredBodySections,
-  ].filter((section, index, all) =>
-    all.findIndex((candidate) =>
-      candidate.sourceUrl === section.sourceUrl &&
-      normalizeWhitespace(candidate.heading) === normalizeWhitespace(section.heading) &&
-      normalizeWhitespace(candidate.textExcerpt) === normalizeWhitespace(section.textExcerpt)
-    ) === index
-  );
+  ].filter((section) => {
+    const key = JSON.stringify([
+      section.sourceUrl,
+      normalizeWhitespace(section.heading),
+      normalizeWhitespace(section.textExcerpt),
+    ]);
+    if (seenSections.has(key)) return false;
+    seenSections.add(key);
+    return true;
+  });
   const normalizedVisibleText = normalizeWhitespace(input.visibleText);
-  const sanitizedHtml = stripPageChromeHtml(input.html);
   const normalizedVisibleTextSha256 = sha256Text(normalizedVisibleText);
   const sanitizedHtmlSha256 = sha256Text(sanitizedHtml);
   const boundedSections = sections
@@ -9351,8 +9413,7 @@ export function extractPolicyCookieDisclosures(input: {
   return [...deduped.values()].slice(0, 250);
 }
 
-function extractPolicyTableRowsFromHtml(html: string, sourceUrl: string): RetainedPolicySection[] {
-  const cleanHtml = stripPageChromeHtml(html);
+function extractPolicyTableRowsFromHtml(cleanHtml: string, sourceUrl: string): RetainedPolicySection[] {
   return Array.from(cleanHtml.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)).flatMap((tableMatch, tableIndex) => {
     const tableHtml = tableMatch[1] ?? "";
     const rows = Array.from(tableHtml.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)).map((rowMatch) => {
@@ -9397,8 +9458,7 @@ function extractPolicyTableRowsFromHtml(html: string, sourceUrl: string): Retain
   });
 }
 
-function extractPolicySectionsFromHtml(html: string, sourceUrl: string): RetainedPolicySection[] {
-  const cleanHtml = stripPageChromeHtml(html);
+function extractPolicySectionsFromHtml(cleanHtml: string, sourceUrl: string): RetainedPolicySection[] {
   const semanticHeadings = Array.from(
     cleanHtml.matchAll(/<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1>/gi),
   ).map((match) => ({
@@ -9440,10 +9500,9 @@ function extractPolicySectionsFromHtml(html: string, sourceUrl: string): Retaine
 }
 
 function extractPolicyDefinitionSectionsFromHtml(
-  html: string,
+  cleanHtml: string,
   sourceUrl: string,
 ): RetainedPolicySection[] {
-  const cleanHtml = stripPageChromeHtml(html);
   return Array.from(cleanHtml.matchAll(/<dl\b[^>]*>([\s\S]*?)<\/dl>/gi)).flatMap((listMatch) => {
     const listHtml = listMatch[1] ?? "";
     const terms = Array.from(listHtml.matchAll(/<dt\b[^>]*>([\s\S]*?)<\/dt>/gi));
@@ -9474,10 +9533,9 @@ function extractPolicyDefinitionSectionsFromHtml(
 }
 
 function extractPolicyLabeledBlockSectionsFromHtml(
-  html: string,
+  cleanHtml: string,
   sourceUrl: string,
 ): RetainedPolicySection[] {
-  const cleanHtml = stripPageChromeHtml(html);
   return Array.from(
     cleanHtml.matchAll(/<(p|li)\b[^>]*>\s*<(strong|b)\b[^>]*>([\s\S]*?)<\/\2>([\s\S]*?)<\/\1>/gi),
   ).flatMap((match) => {

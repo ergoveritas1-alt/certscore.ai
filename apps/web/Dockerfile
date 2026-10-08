@@ -79,6 +79,7 @@ ARG BUILD_GIT_REF=""
 ARG BUILD_GIT_SHA=""
 ARG BUILD_IMAGE_TAG=""
 ARG BUILD_RUNTIME_TARGET="ecs-fargate"
+ARG WEB_TYPECHECK_VERIFIED_SHA=""
 
 COPY apps/web ./apps/web
 COPY scripts/apply-db-migrations.mjs ./scripts/apply-db-migrations.mjs
@@ -91,7 +92,8 @@ RUN printf 'export const generatedBuildInfo = {"gitRef":"%s","gitSha":"%s","imag
   "${BUILD_RUNTIME_TARGET}" > /app/apps/web/server/generated-build-info.ts
 
 RUN rm -rf ./apps/web/.next
-RUN pnpm --filter @website-signal-risk-scanner/web build:container
+RUN WEB_TYPECHECK_VERIFIED_SHA="${WEB_TYPECHECK_VERIFIED_SHA}" \
+  pnpm --filter @website-signal-risk-scanner/web build:container
 
 FROM node:22-bookworm-slim AS web-runtime-base
 

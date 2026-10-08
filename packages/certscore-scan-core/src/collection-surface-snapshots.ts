@@ -12,6 +12,10 @@ export type FormSnapshotCaptureOptions = {
   pixelBudgetMs?: number;
   reviewDeadlineAtMs?: number;
   onMaskedPixelsCaptured?: () => Promise<void>;
+  /** Fires after browser pixels and cleanup, before awaiting safety reviews. */
+  onPixelWorkCompleted?: () => void;
+  /** Operational durations only; does not change retained evidence. */
+  onCaptureTiming?: (stage: "bind_controls" | "masked_pixels" | "image_processing" | "safety_review", durationMs: number) => void;
   layoutRetryAllowed?: boolean;
   maxCropHeight?: number;
   fitFormToCrop?: boolean;
@@ -76,6 +80,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
     let prepared: PreparedMaskedFormScreenshot | null = null;
     let captureStarted = false;
     try {
+      let timingStartedAtMs = Date.now();
       onStage?.(`form_${formIndex}_bind_controls`);
       // Bind retained controls, freeze motion and collect the first layout in
       // one browser call. A second call can miss late SITS forms entirely.
@@ -110,6 +115,8 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
         if (!root) return null;
         const originalZoom = (root as HTMLElement).style.getPropertyValue("zoom");
         const originalZoomPriority = (root as HTMLElement).style.getPropertyPriority("zoom");
+        const originalSizeStyles = ["width", "min-width", "max-width"].map(property => ({ property,
+          value: (root as HTMLElement).style.getPropertyValue(property), priority: (root as HTMLElement).style.getPropertyPriority(property) }));
         const animationSet = new Set<Animation>();
         for (let current: Element | null = root; current; current = current.parentElement) {
           for (const animation of current.getAnimations({ subtree: current === root })) animationSet.add(animation);
@@ -133,11 +140,15 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
           (hideControlsDuringCapture ? `${cssScope} input,${cssScope} textarea,${cssScope} select,${cssScope} [role="checkbox"],${cssScope} [role="switch"],${cssScope} [contenteditable]{clip-path:inset(100%)!important;-webkit-clip-path:inset(100%)!important}` : "");
         document.documentElement.appendChild(node);
         const state = { root, node, markerRoot, attribute, previous, position, scrollPositions, animations: runningAnimations,
-          hideControlsDuringCapture, originalZoom, originalZoomPriority };
+          hideControlsDuringCapture, originalZoom, originalZoomPriority, originalSizeStyles };
         const restore = () => {
           node.remove();
           if (originalZoom) (root as HTMLElement).style.setProperty("zoom", originalZoom, originalZoomPriority);
           else (root as HTMLElement).style.removeProperty("zoom");
+          for (const entry of originalSizeStyles) {
+            if (entry.value) (root as HTMLElement).style.setProperty(entry.property, entry.value, entry.priority);
+            else (root as HTMLElement).style.removeProperty(entry.property);
+          }
           for (const animation of runningAnimations) if (animation.playState === "paused") animation.play();
           if (previous === null) markerRoot.removeAttribute(attribute);
           else markerRoot.setAttribute(attribute, previous);
@@ -155,6 +166,10 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
             const scale = Math.min(1, availableHeight / initial.height, (innerWidth - 32) / initial.width);
             if (scale < 1) {
               const currentZoom = Number.parseFloat(getComputedStyle(root).zoom) || 1;
+              // Auto-width blocks otherwise expand back to their container as
+              // zoom shrinks their height, flattening the form and its masks.
+              const measuredWidth = getComputedStyle(root).width;
+              for (const { property } of originalSizeStyles) (root as HTMLElement).style.setProperty(property, measuredWidth, "important");
               (root as HTMLElement).style.setProperty("zoom", String(currentZoom * scale), "important");
               initial = root.getBoundingClientRect();
             }
@@ -197,6 +212,7 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
         maxCropHeight: Math.max(100, Math.min(10_000, options?.maxCropHeight ?? 10_000)),
         fitFormToCrop: options?.fitFormToCrop === true,
         hideControlsDuringCapture: options?.hideControlsDuringCapture === true });
+      options?.onCaptureTiming?.("bind_controls", Date.now() - timingStartedAtMs);
       if (!prepared) { results.push(retain(unavailable("control_binding_changed"))); continue; }
       if (pixelSignal.aborted || Date.now() >= deadline) {
         results.push(retain(unavailable("capture_budget_exhausted"))); continue;
@@ -206,7 +222,9 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       onStage?.(`form_${formIndex}_capture_pixels`);
       if (!reusableSession) reusableSession = await page.context().newCDPSession(page);
       captureStarted = true;
+      timingStartedAtMs = Date.now();
       const original = await capturePreparedMaskedFormScreenshot(page, prepared, remaining, reusableSession);
+      options?.onCaptureTiming?.("masked_pixels", Date.now() - timingStartedAtMs);
       if (pixelSignal.aborted || page.url() !== inventory.pageUrl || Date.now() >= deadline) { results.push(retain(unavailable(pixelSignal.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : "capture_budget_exhausted"))); continue; }
       // Prove each masked crop against the original document immediately. A
       // later form may exhaust the pixel window without invalidating this one.
@@ -214,10 +232,13 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       if (pixelSignal.aborted || page.url() !== inventory.pageUrl || Date.now() >= deadline) { results.push(retain(unavailable("capture_budget_exhausted"))); continue; }
       stage = "image_processing_failed";
       onStage?.(`form_${formIndex}_mask_and_review`);
+      timingStartedAtMs = Date.now();
       const { data, info } = await sharp(original, { limitInputPixels: 40_000_000 }).resize({ width: 640, height: 960, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 45 }).toBuffer({ resolveWithObject: true });
+      options?.onCaptureTiming?.("image_processing", Date.now() - timingStartedAtMs);
       if (data.byteLength > 96 * 1024) { results.push(retain(unavailable("image_size_exceeded"))); continue; }
       const boundedSignal = AbortSignal.any([AbortSignal.timeout(Math.max(1, reviewDeadline - Date.now())), reviewSignal]);
       onReviewStarted?.(formIndex);
+      const reviewStartedAtMs = Date.now();
       results.push((async () => {
         let onAbort: (() => void) | undefined;
         try {
@@ -234,14 +255,14 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
           if (page.url() !== inventory.pageUrl) return unavailable("document_changed");
           return collectionSurfaceSnapshotSchema.parse(outcome.safeForDisplay ? { ...base, status: "available", width: info.width, height: info.height, sizeBytes: data.byteLength, sha256: hash(data), data: data.toString("base64") } : { ...base, status: "withheld", reason: "review_withheld" });
         } catch { return unavailable(reviewSignal.aborted ? "capture_cancelled" : boundedSignal.aborted ? "review_timed_out" : "review_failed"); }
-        finally { onReviewFinished?.(formIndex); if (onAbort) boundedSignal.removeEventListener("abort", onAbort); }
+        finally { options?.onCaptureTiming?.("safety_review", Date.now() - reviewStartedAtMs); onReviewFinished?.(formIndex); if (onAbort) boundedSignal.removeEventListener("abort", onAbort); }
       })().then(retain));
     } catch (error) {
       if (options?.layoutRetryAllowed !== false && error instanceof Error &&
         (error.message.includes("Form screenshot layout changed:") || error.message.includes("Form screenshot crop changed")) &&
         !pixelSignal.aborted && page.url() === inventory.pageUrl && Date.now() + 750 < deadline) {
         const retry = await captureCollectionSurfaceSnapshots(page, { pageUrl: inventory.pageUrl, forms: [form] }, review,
-          signal, reusableSession, deadline, { ...options, layoutRetryAllowed: false,
+          signal, reusableSession, deadline, { ...options, onPixelWorkCompleted: undefined, layoutRetryAllowed: false,
             sourceInventoryHash,
             pixelBudgetMs: Math.max(1, deadline - Date.now()), reviewDeadlineAtMs: reviewDeadline });
         results.push(retain(retry[0] ?? unavailable("screenshot_failed")));
@@ -253,7 +274,8 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       if (error instanceof Error && error.message === "Form screenshot bounds unavailable") stage = "form_not_visible";
       if (error instanceof Error && error.message === "Form screenshot bounds exceeded") stage = "form_bounds_exceeded";
       results.push(retain(unavailable(pixelSignal.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : stage))); }
-    finally { if (prepared && !captureStarted) void cleanupPreparedMaskedFormScreenshot(page, prepared.token).catch(() => {}); }
+    finally { if (prepared && !captureStarted) await cleanupPreparedMaskedFormScreenshot(page, prepared.token).catch(() => {}); }
   }
+  options?.onPixelWorkCompleted?.();
   return Promise.all(results);
 }

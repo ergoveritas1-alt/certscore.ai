@@ -7,12 +7,8 @@ import {
 } from "../../../../server/scans/score-materialization-request-repository";
 import { persistCompletedLegacyGdprEprivacyAssessment } from "../../../../server/scans/score-assessment-lifecycle";
 import { persistAdminScanSummaryForPublishedRecord } from "../../../../server/admin/admin-scan-summary";
-import { getAnonymousScanById, getScanById } from "../../../../server/scans/get-scan-by-id";
-import { materializeLocalV2DagScanDetail } from "../../../../server/scans/local-v2-dag-report";
-import {
-  loadPersistedScanReportProjection,
-  persistScanReportProjection,
-} from "../../../../server/scans/scan-report-projection";
+import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
+import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
 import { classifyScoreMaterializationFailure } from "../../../../server/scans/score-materialization-failure";
 
 export const dynamic = "force-dynamic";
@@ -78,24 +74,26 @@ export async function POST(request: Request) {
       )
       : null;
     if (mode !== "finalize") {
-      const rawRecord = authorization.organizationId
-        ? await getScanById({ organizationId: authorization.organizationId, scanId: authorizedScanId })
-        : await getAnonymousScanById(authorizedScanId);
-      if (!rawRecord) {
-        throw new Error("Completed scan record was not available for materialization.");
-      }
-      const scanRecord = await timedMaterializationPhase(authorizedScanId, "scan_materialization", () =>
-        materializeLocalV2DagScanDetail(rawRecord)
-      );
       // Report publication is the customer-visible readiness boundary. Keep
       // it canonical and verified, then yield the HTTP request before trailing
       // Admin and legacy-score persistence so status polling is not starved.
-      await timedMaterializationPhase(authorizedScanId, "report_projection", () =>
-        persistScanReportProjection(scanRecord, {
-          runtimeArtifacts: scanRecord.runtimeArtifacts,
-          snapshot: scanRecord.snapshot,
+      const publication = await timedMaterializationPhase(authorizedScanId, "report_projection", () =>
+        publishCanonicalScanReportProjection({
+          organizationId: authorization.organizationId,
+          scanId: authorizedScanId,
         })
       );
+      if (publication.status === "finalizing") {
+        // Reuse the worker's existing bounded retry. Contention is not a failed
+        // materialization attempt and must not reset its durable request.
+        return NextResponse.json({
+          code: "materialization_not_ready", retryAfterSeconds: 1, retryable: true,
+          reportReady: false,
+        }, { status: 503, headers: { "Retry-After": "1" } });
+      }
+      if (publication.status !== "ready") {
+        throw new Error("Completed scan record was not available for materialization.");
+      }
       canonicalScanRecord = await timedMaterializationPhase(
         authorizedScanId,
         "projection_verification",

@@ -20,7 +20,7 @@ import {
   type VerifiedPreConsentRuntimePreviewPacket,
   type VerifiedPolicyEvidencePacket,
 } from "@certscore/contracts";
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { query, queryOne, withNonBlockingDatabaseLock } from "@website-signal-risk-scanner/db";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -30,6 +30,7 @@ import {
   buildPolicyReviewPacketFromVerifiedPolicyEvidence,
 } from "./model-policy-review";
 import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
+import { createReportFinalizationScheduler } from "./report-finalization-scheduler";
 
 const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
@@ -47,9 +48,10 @@ const RESULT_FAILED_EVENT_TYPE = "v2_lambda_result.failed";
 const RESULT_BATCH_CONCURRENCY = 3;
 const RESULT_QUEUE_POLL_CONCURRENCY = 2;
 // Canonical report publication performs CPU-heavy projection and bounded
-// database writes in the public web task. Keep only two finalizations active
-// so a burst of completed scanners cannot starve report-status reads.
+// database writes in the public web task. Keep only two publications active;
+// trailing persistence has its own two slots so it cannot occupy publication capacity.
 const RESULT_FINALIZATION_BACKGROUND_CONCURRENCY = 2;
+const reportFinalizationScheduler = createReportFinalizationScheduler(RESULT_FINALIZATION_BACKGROUND_CONCURRENCY);
 const POLICY_EVIDENCE_BACKGROUND_CONCURRENCY = 2;
 const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
 const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
@@ -263,43 +265,8 @@ async function ensureCompletedScanScoresPersistedUncoalesced(input: {
   targetEnvironment: LambdaTargetEnvironment;
   webBaseUrl?: string;
 }): Promise<CompletedScanScoresPersistenceResult> {
-  const existingState = await scoreMaterializationState(input.scanId);
-  if (existingState === "completed") return { alreadyPersisted: true };
-  if (existingState === "terminal_failure") {
-    return { alreadyPersisted: false, terminalFailure: true as const };
-  }
-  const finalizingDeadline = Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS;
-  if (!(await canonicalReportInputsReady(input.scanId))) {
-    throw new Error("Canonical report inputs are not ready for materialization.");
-  }
-  const token = randomBytes(32).toString("base64url");
-  const tokenSha256 = createHash("sha256").update(token).digest("hex");
-  await query(
-    `insert into public.scan_score_materialization_requests (
-       scan_id, token_sha256, status, attempt_count, requested_at, completed_at,
-       last_error, first_failed_at, last_attempt_at, next_attempt_at
-     ) values ($1::uuid, $2, 'pending', 1, now(), null, null, null, now(), now())
-     on conflict (scan_id) do update
-       set token_sha256 = excluded.token_sha256,
-           status = 'pending',
-           attempt_count = case
-             when public.scan_score_materialization_requests.token_sha256 = repeat('0', 64)
-              and public.scan_score_materialization_requests.last_attempt_at is null
-               then 1
-             else public.scan_score_materialization_requests.attempt_count + 1
-           end,
-           requested_at = now(),
-           last_attempt_at = now(),
-           completed_at = null,
-           next_attempt_at = now()
-       where public.scan_score_materialization_requests.status = 'pending'`,
-    [input.scanId, tokenSha256]
-  );
-  const claimedState = await scoreMaterializationState(input.scanId);
-  if (claimedState === "completed") return { alreadyPersisted: true };
-  if (claimedState === "terminal_failure") {
-    return { alreadyPersisted: false, terminalFailure: true as const };
-  }
+  let finalizingDeadline = 0;
+  let token = "";
 
   const baseUrl = input.webBaseUrl?.trim() ||
     (input.targetEnvironment === "production" ? "https://certscore.ai" : "http://localhost:3000");
@@ -310,52 +277,94 @@ async function ensureCompletedScanScoresPersistedUncoalesced(input: {
   // that persisted projection, so customer-visible readiness must not wait on
   // trailing Admin summary and legacy score persistence.
   for (const mode of ["publish_report", "finalize"] as const) {
-    while (true) {
-      finalizingAttempt += 1;
-      const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
-      const response = await fetchMaterialization(materializationUrl, {
-        body: JSON.stringify({ mode, scanId: input.scanId, token }),
-        headers: { "content-type": "application/json" },
-        method: "POST",
-        signal: AbortSignal.timeout(remainingMs)
-      });
-      if (!response.ok) {
-        const failure = await response.json().catch(() => null) as {
-          code?: unknown;
-          retryAfterSeconds?: unknown;
-          retryable?: unknown;
-        } | null;
-        if (response.status === 422 && failure?.retryable === false) {
-          console.error("[validation-worker] terminal score materialization failure acknowledged", {
-            code: typeof failure.code === "string" ? failure.code.slice(0, 120) : "contract_validation_failed",
-            scanId: input.scanId,
-          });
-          return { alreadyPersisted: false, terminalFailure: true as const };
+    const completed = await reportFinalizationScheduler.run(mode, async () => {
+      if (mode === "publish_report") {
+        const existingState = await scoreMaterializationState(input.scanId);
+        if (existingState === "completed") return { alreadyPersisted: true as const };
+        if (existingState === "terminal_failure") {
+          return { alreadyPersisted: false as const, terminalFailure: true as const };
         }
-        if (response.status === 503 && failure?.code === "materialization_not_ready" && failure.retryable === true) {
-          if (Date.now() + MATERIALIZATION_RETRY_MS < finalizingDeadline) {
-            console.info("[validation-worker] score materialization still finalizing", {
-              attempt: finalizingAttempt,
-              retryMs: MATERIALIZATION_RETRY_MS,
+        finalizingDeadline = Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS;
+        if (!(await canonicalReportInputsReady(input.scanId))) {
+          throw new Error("Canonical report inputs are not ready for materialization.");
+        }
+        token = randomBytes(32).toString("base64url");
+        const tokenSha256 = createHash("sha256").update(token).digest("hex");
+        await query(
+          `insert into public.scan_score_materialization_requests (
+             scan_id, token_sha256, status, attempt_count, requested_at, completed_at,
+             last_error, first_failed_at, last_attempt_at, next_attempt_at
+           ) values ($1::uuid, $2, 'pending', 1, now(), null, null, null, now(), now())
+           on conflict (scan_id) do update
+             set token_sha256 = excluded.token_sha256,
+                 status = 'pending',
+                 attempt_count = case
+                   when public.scan_score_materialization_requests.token_sha256 = repeat('0', 64)
+                    and public.scan_score_materialization_requests.last_attempt_at is null
+                     then 1
+                   else public.scan_score_materialization_requests.attempt_count + 1
+                 end,
+                 requested_at = now(),
+                 last_attempt_at = now(),
+                 completed_at = null,
+                 next_attempt_at = now()
+             where public.scan_score_materialization_requests.status = 'pending'`,
+          [input.scanId, tokenSha256]
+        );
+        const claimedState = await scoreMaterializationState(input.scanId);
+        if (claimedState === "completed") return { alreadyPersisted: true as const };
+        if (claimedState === "terminal_failure") {
+          return { alreadyPersisted: false as const, terminalFailure: true as const };
+        }
+      }
+      while (true) {
+        finalizingAttempt += 1;
+        const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
+        const response = await fetchMaterialization(materializationUrl, {
+          body: JSON.stringify({ mode, scanId: input.scanId, token }),
+          headers: { "content-type": "application/json" },
+          method: "POST",
+          signal: AbortSignal.timeout(remainingMs)
+        });
+        if (!response.ok) {
+          const failure = await response.json().catch(() => null) as {
+            code?: unknown;
+            retryAfterSeconds?: unknown;
+            retryable?: unknown;
+          } | null;
+          if (response.status === 422 && failure?.retryable === false) {
+            console.error("[validation-worker] terminal score materialization failure acknowledged", {
+              code: typeof failure.code === "string" ? failure.code.slice(0, 120) : "contract_validation_failed",
               scanId: input.scanId,
             });
-            await waitForCanonicalReportInputs(input.scanId, finalizingDeadline);
-            await sleep(MATERIALIZATION_RETRY_MS);
-            continue;
+            return { alreadyPersisted: false as const, terminalFailure: true as const };
           }
+          if (response.status === 503 && failure?.code === "materialization_not_ready" && failure.retryable === true) {
+            if (Date.now() + MATERIALIZATION_RETRY_MS < finalizingDeadline) {
+              console.info("[validation-worker] score materialization still finalizing", {
+                attempt: finalizingAttempt,
+                retryMs: MATERIALIZATION_RETRY_MS,
+                scanId: input.scanId,
+              });
+              await waitForCanonicalReportInputs(input.scanId, finalizingDeadline);
+              await sleep(MATERIALIZATION_RETRY_MS);
+              continue;
+            }
+          }
+          throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
         }
-        throw new Error(`Score materialization endpoint returned HTTP ${response.status}.`);
-      }
-      const result = await response.json() as { complete?: unknown; reportReady?: unknown };
-      if (mode === "publish_report") {
-        if (result.reportReady !== true) {
-          throw new Error("Score materialization endpoint did not confirm canonical report publication.");
+        const result = await response.json() as { complete?: unknown; reportReady?: unknown };
+        if (mode === "publish_report") {
+          if (result.reportReady !== true) {
+            throw new Error("Score materialization endpoint did not confirm canonical report publication.");
+          }
+        } else if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
+          throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
         }
-      } else if (result.complete !== true || !(await completedScoreMaterializationExists(input.scanId))) {
-        throw new Error("Score materialization endpoint did not confirm canonical materialization completion.");
+        return true;
       }
-      break;
-    }
+    });
+    if (completed !== true) return completed;
   }
   return { alreadyPersisted: false, terminalFailure: false as const };
 }
@@ -633,7 +642,17 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
   let reviewSummary: Record<string, unknown> = {
     reviewStatus: "disabled",
   };
-  const earlyReviewEnabled = env.CERTSCORE_MINI_REVIEW_ENABLED && env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED;
+  // A delayed/duplicate handoff must not start a fresh model call after the
+  // terminal result. Completed cached reviews remain available to its one join.
+  const terminalResult = env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED
+    ? await queryOne<{ id: string }>(
+        "select id::text from scan_events where scan_id = $1::uuid and event_type = $2 limit 1",
+        [scanId, RESULT_RECEIVED_EVENT_TYPE],
+      )
+    : null;
+  const earlyReviewEnabled = env.CERTSCORE_MINI_REVIEW_ENABLED &&
+    env.CERTSCORE_PARALLEL_POLICY_REVIEW_ENABLED && !terminalResult;
+  if (terminalResult) reviewSummary = { reviewStatus: "skipped", skipReason: "terminal_result_already_received" };
   if (earlyReviewEnabled) {
     await query(
       `insert into scan_events (scan_id, event_type, message, metadata_json)
@@ -698,6 +717,9 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
           ? { reviewDurationMs: Math.max(0, Date.parse(reviewCompletedAt) - Date.parse(verifiedAt)) }
           : {}),
         reviewSummary,
+        ...(env.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED
+          ? { terminalProjectionPolicy: "completed_early_review_only.v1" }
+          : {}),
         sourceHash: packet.sourceHash,
         verifiedAt,
       },
@@ -719,28 +741,6 @@ const policyEvidenceProcessingInFlight = new Map<string, Promise<PolicyEvidenceP
 const policyEvidenceBackgroundTasks = new Set<Promise<void>>();
 const resultFinalizationBackgroundTasks = new Set<Promise<void>>();
 const resultFinalizationScanIds = new Set<string>();
-const resultFinalizationSlotWaiters: Array<() => void> = [];
-let activeResultFinalizations = 0;
-
-async function withResultFinalizationSlot<T>(operation: () => Promise<T>) {
-  if (activeResultFinalizations >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY) {
-    await new Promise<void>((resolve) => resultFinalizationSlotWaiters.push(resolve));
-  } else {
-    activeResultFinalizations += 1;
-  }
-  try {
-    return await operation();
-  } finally {
-    const next = resultFinalizationSlotWaiters.shift();
-    if (next) {
-      // Transfer the active permit directly so a newly arriving task cannot
-      // overtake the FIFO waiter and exceed the projection concurrency bound.
-      next();
-    } else {
-      activeResultFinalizations -= 1;
-    }
-  }
-}
 
 async function processPolicyEvidenceReadyMessage(input: {
   consumer?: PolicyEvidenceConsumerMetadata;
@@ -754,7 +754,16 @@ async function processPolicyEvidenceReadyMessage(input: {
   const existing = policyEvidenceProcessingInFlight.get(key);
   if (existing) return existing;
 
-  const processing = processPolicyEvidenceReadyMessageUncoalesced(input);
+  const processing = withNonBlockingDatabaseLock(
+    `early-policy-review:${key}`,
+    () => processPolicyEvidenceReadyMessageUncoalesced(input),
+  ).then((result) => {
+    if (!result.acquired) {
+      // Keep the durable SQS message retryable; do not duplicate a paid review.
+      throw new Error("Early policy evidence is already being processed.");
+    }
+    return result.value;
+  });
   policyEvidenceProcessingInFlight.set(key, processing);
   try {
     return await processing;
@@ -2208,6 +2217,12 @@ async function processEmbeddedPolicyEvidenceBeforeScoreMaterialization(input: {
   queueRegion: string;
   targetEnvironment: LambdaTargetEnvironment;
 }) {
+  if (getWorkerEnv().CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED) {
+    // This fallback must not join an in-flight semantic review after terminal
+    // receipt. The separate policy consumer retains its artifact; the normal
+    // enrichment pass consumes only completed early/cache evidence, once.
+    return;
+  }
   const raw = JSON.stringify(input.message);
   try {
     await processPolicyEvidenceReadyMessage({
@@ -2477,14 +2492,12 @@ async function startCompletedResultFinalization(input: {
         input.parsed.scanId,
         Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS,
       );
-      await withResultFinalizationSlot(async () => {
-        await ensureCompletedScanScoresPersisted({
-          scanId: input.parsed.scanId,
-          targetEnvironment: input.parsed.targetEnvironment,
-          webBaseUrl: input.webBaseUrl,
-        });
-        await persistScannerRuntimeSnapshot(input.parsed);
+      await ensureCompletedScanScoresPersisted({
+        scanId: input.parsed.scanId,
+        targetEnvironment: input.parsed.targetEnvironment,
+        webBaseUrl: input.webBaseUrl,
       });
+      await reportFinalizationScheduler.run("finalize", () => persistScannerRuntimeSnapshot(input.parsed));
     } catch (error) {
       console.error("[validation-worker] persisted v2 DAG Lambda result finalization failed", {
         error: error instanceof Error ? error.message : String(error),
@@ -2636,7 +2649,9 @@ export async function reconcilePersistedCompletedResultFinalizations(input: {
     .slice(0, 25);
   let started = 0;
   for (const candidate of candidates) {
-    if (resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY) break;
+    // Admit at most the combined publication and trailing-stage capacity.
+    // Slow trailing persistence must not prevent recovery of the next report.
+    if (resultFinalizationBackgroundTasks.size >= RESULT_FINALIZATION_BACKGROUND_CONCURRENCY * 2) break;
     const metadata = asRecord(candidate.metadata_json);
     const targetEnvironment = metadata.targetEnvironment === "production" ? "production" : "local";
     const policyEvidence = parseEmbeddedPolicyEvidenceMessage({

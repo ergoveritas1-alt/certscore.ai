@@ -7,7 +7,10 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 // completing its durable handoff.
 export const SCAN_REPORT_PROJECTION_NON_SOURCE_EVENT_TYPES = [
   "v2_policy_evidence.received",
-  "v2_policy_evidence.rejected"
+  "v2_policy_evidence.rejected",
+  "v2_policy_evidence.verified",
+  "v2_policy_review.started",
+  "v2_runtime_preview.received"
 ] as const;
 
 const scanReportProjectionNonSourceEventTypes = new Set<string>(

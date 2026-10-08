@@ -2135,7 +2135,7 @@ export function classifyGdprTransparencyTopics(
   const evidenceSourceText = matches.length > 0 || semanticMatches.length > 0
     ? decodedEvidenceText(sourceText)
     : "";
-  const evidenceSearchIndex = evidenceSourceText ? buildEvidenceSearchIndex(evidenceSourceText) : undefined;
+  const evidenceSearchIndex = evidenceSourceText ? evidenceSearchIndexFor(evidenceSourceText) : undefined;
 
   const selected = new Map<string, GdprTransparencyTopicMatch>();
   for (const { term } of matches) {
@@ -2242,7 +2242,7 @@ function boundedSectionSemanticEvidenceExcerpt(
   const body = decodedEvidenceText(section.body ?? "").trim();
   const prefix = heading ? `${heading}. ` : "";
   const bodyBudget = Math.max(80, MAX_EXCERPT_CHARS - prefix.length);
-  const bodyIndex = body ? buildEvidenceSearchIndex(body) : undefined;
+  const bodyIndex = body ? evidenceSearchIndexFor(body) : undefined;
   const bodyExcerpt = boundedEvidenceExcerptFromIndex(
     body,
     bodyIndex,
@@ -2762,6 +2762,45 @@ function decodedEvidenceText(text: string): string {
     .trim();
 }
 
+// Pure quote-location indexes only: never cache classifications, ownership,
+// findings or evidence records. Exact decoded text binds every reused offset.
+// Bound warm-process memory, and avoid retaining small one-off section texts.
+const evidenceSearchIndexes = new Map<string, {
+  expiresAtMs: number;
+  index: ReturnType<typeof buildEvidenceSearchIndex>;
+}>();
+const MAX_CACHED_EVIDENCE_INDEX_ENTRIES = 4;
+const MAX_CACHED_EVIDENCE_INDEX_CHARS = 200_000;
+const EVIDENCE_INDEX_CACHE_TTL_MS = 60_000;
+let cachedEvidenceIndexChars = 0;
+
+function evidenceSearchIndexFor(sourceText: string) {
+  if (sourceText.length < 8_000 || sourceText.length > 100_000) {
+    return buildEvidenceSearchIndex(sourceText);
+  }
+  const now = Date.now();
+  for (const [text, cached] of evidenceSearchIndexes) {
+    if (cached.expiresAtMs <= now) {
+      evidenceSearchIndexes.delete(text);
+      cachedEvidenceIndexChars -= text.length;
+    }
+  }
+  const cached = evidenceSearchIndexes.get(sourceText);
+  if (cached) return cached.index;
+
+  const index = buildEvidenceSearchIndex(sourceText);
+  while (evidenceSearchIndexes.size >= MAX_CACHED_EVIDENCE_INDEX_ENTRIES ||
+    cachedEvidenceIndexChars + sourceText.length > MAX_CACHED_EVIDENCE_INDEX_CHARS) {
+    const oldest = evidenceSearchIndexes.keys().next().value;
+    if (oldest === undefined) break;
+    evidenceSearchIndexes.delete(oldest);
+    cachedEvidenceIndexChars -= oldest.length;
+  }
+  evidenceSearchIndexes.set(sourceText, { expiresAtMs: now + EVIDENCE_INDEX_CACHE_TTL_MS, index });
+  cachedEvidenceIndexChars += sourceText.length;
+  return index;
+}
+
 function buildEvidenceSearchIndex(sourceText: string) {
   const normalizedChunks: string[] = [];
   let normalizedLength = 0;
@@ -2799,6 +2838,30 @@ function buildEvidenceSearchIndex(sourceText: string) {
 
   for (let index = 0; index < sourceText.length;) {
     const char = sourceText[index] ?? "";
+    const code = sourceText.charCodeAt(index);
+    // ASCII letters/digits and ordinary spaces have identical NFKC/NFD
+    // results. Retain their exact source offsets without normalizing every
+    // character or running the Unicode punctuation/diacritic expressions.
+    // All other characters continue through the original Unicode mapping.
+    if ((code >= 65 && code <= 90) || (code >= 97 && code <= 122) || (code >= 48 && code <= 57)) {
+      const normalizedChar = code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : char;
+      normalizedChunks.push(normalizedChar);
+      normalizedLength += 1;
+      lastNormalizedCharacter = normalizedChar;
+      sourceIndexes.push(index);
+      index += 1;
+      continue;
+    }
+    if (code === 32) {
+      if (normalizedLength > 0 && lastNormalizedCharacter !== " ") {
+        normalizedChunks.push(" ");
+        normalizedLength += 1;
+        lastNormalizedCharacter = " ";
+        sourceIndexes.push(index);
+      }
+      index += 1;
+      continue;
+    }
     append(char.normalize("NFKC"), index);
     index += char.length;
   }

@@ -175,7 +175,9 @@ async function runPolicyModelReview(input: {
     typeof input.artifacts.snapshot?.domain === "string"
       ? input.artifacts.snapshot.domain
       : null;
-  const legacyPacket = buildPolicyReviewPacket({
+  const lambdaResultMetadata = await loadLatestCompletedV2LambdaResultMetadata(input.scanId);
+  const canonicalPointer = extractCanonicalPolicyReviewPointer(lambdaResultMetadata);
+  const legacyPacket = canonicalPointer ? null : buildPolicyReviewPacket({
     documentSources: input.artifacts.documentSources,
     evidenceCoverage: {
       coverageLimitations: input.artifacts.runtimeArtifacts?.coverageLimitations,
@@ -201,8 +203,6 @@ async function runPolicyModelReview(input: {
     scanDate,
     scanId: input.scanId
   });
-  const lambdaResultMetadata = await loadLatestCompletedV2LambdaResultMetadata(input.scanId);
-  const canonicalPointer = extractCanonicalPolicyReviewPointer(lambdaResultMetadata);
   let canonicalPacket = null;
   if (canonicalPointer) {
     const localMirrorPath = extractLocalCanonicalPolicyReviewMirrorPath({
@@ -6669,6 +6669,17 @@ export async function processNanoSignalEnrichmentJob(input: {
         : null;
   const lambdaOnlyProduction =
     getWorkerEnv().CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV === "production";
+  // Consume the completed early/cache review concurrently with deterministic
+  // document work. Parallel projection forbids fresh terminal model calls, so
+  // this moves the existing verified join earlier without adding paid work.
+  const startPolicyReview = () => measureNanoPhase("policy_model_review", () => runPolicyModelReview({
+    artifacts,
+    scanId,
+  })).catch((error) => ({
+    cacheHit: false,
+    reviewStatus: "failed",
+    failureReason: error instanceof Error ? error.message : "Unknown policy model-review failure.",
+  }));
 
   if (
     lambdaOnlyProduction &&
@@ -6715,6 +6726,11 @@ export async function processNanoSignalEnrichmentJob(input: {
     snapshot: artifacts.snapshot,
     runtimeArtifacts: artifacts.runtimeArtifacts
   });
+  const earlyTerminalPolicyReview = scanStatus === "completed" &&
+    selectedPendingDocumentSources.length === 0 &&
+    getWorkerEnv().CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED
+    ? startPolicyReview()
+    : null;
   const reusableExtractions = resolveReusableNanoDocumentExtractions({
     candidates: selectedPendingDocumentSources,
     priorExtractions: selectedPendingDocumentSources.length > 0
@@ -6996,14 +7012,7 @@ export async function processNanoSignalEnrichmentJob(input: {
   // while deterministic signal persistence consumes the already-loaded typed
   // runtime/policy rows. They join before normalized concern derivation, so run
   // them concurrently without allowing either path to infer from the other.
-  const modelPolicyReviewPromise = measureNanoPhase("policy_model_review", () => runPolicyModelReview({
-    artifacts,
-    scanId
-  })).catch((error) => ({
-    cacheHit: false,
-    reviewStatus: "failed",
-    failureReason: error instanceof Error ? error.message : "Unknown policy model-review failure."
-  }));
+  const modelPolicyReviewPromise = earlyTerminalPolicyReview ?? startPolicyReview();
   const nanoSignalRows = lastPersistedNanoSignalRows && !artifactsChangedAfterSignalPersistence
     ? lastPersistedNanoSignalRows
     : await measureNanoPhase("persist_final_signals", () => persistDerivedNanoPolicySignals({

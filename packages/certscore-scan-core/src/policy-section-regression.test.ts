@@ -3,9 +3,50 @@ import { createHash } from "node:crypto";
 import test from "node:test";
 import { article13DisclosureRejectReason, gdprTransparencyTopicCoverageDiagnosticSchema } from "@certscore/contracts";
 import { extractPolicySections, retainedPolicySectionsForObservation, retainedArticle13SectionEvidenceFromSections, buildGdprTransparencyTopicCoverageDiagnostics } from "./scanners/policy-surface-scanner.js";
-import { extractPolicyFacts, policyFactsForFetchedDocument, boundedPrefetchedPolicyAnalysisText, gdprTransparencyTopicCandidatesFromRetainedPolicySections } from "./scanners/policy-surface-scanner.js";
+import { assessPolicyDocumentSubstance, extractPolicyFacts, policyFactsForFetchedDocument, boundedPrefetchedPolicyAnalysisText, gdprTransparencyTopicCandidatesFromRetainedPolicySections } from "./scanners/policy-surface-scanner.js";
 
 const sourceUrl = "https://example.test/privacy";
+
+test("consent shell rejection preserves its existing length boundary and localized controls", () => {
+  for (const text of [
+    "Privacy settings. Accept all. Reject all. Cookie preferences.",
+    "Cookie-Einstellungen. Alle akzeptieren. Alle ablehnen.",
+    "Paramètres des cookies. Tout accepter. Tout refuser.",
+    "Accept all. Reject all. ".padEnd(119, "x"),
+  ]) {
+    assert.deepEqual(assessPolicyDocumentSubstance({ surfaceType: "privacy_policy", text }), {
+      matchesExpectedSurface: false, reasonCode: "consent_settings_shell",
+    });
+  }
+  for (const length of [120, 121]) {
+    assert.deepEqual(assessPolicyDocumentSubstance({
+      surfaceType: "privacy_policy", text: "Accept all. Reject all. ".padEnd(length, "x"),
+    }), { matchesExpectedSurface: true, reasonCode: "multilingual_policy_reviewable" });
+  }
+});
+
+test("HTML section formats share source-bound offsets after page chrome removal", () => {
+  const contact = "The controller is Example Group. Contact privacy@example.test for information about our processing of your personal data and to exercise your data protection rights.";
+  const retention = "We retain your personal data for six months after your account is closed. You may request deletion by contacting privacy@example.test and we will respond to your request.";
+  const rights = "You have the right to access, correct and delete your personal data. Contact privacy@example.test to exercise these rights or to receive a portable copy of your personal data.";
+  const body = `<h2>Controller contact</h2><p>${contact}</p><dl><dt>Data retention</dt><dd>${retention}</dd></dl><p><strong>Data subject rights</strong>${rights}</p><table><tr><th>Purpose</th><th>Retention</th></tr><tr><td>Account data</td><td>${retention}</td></tr></table>`;
+  const visibleText = `${contact} ${retention} ${rights}`;
+  const withChrome = extractPolicySections({
+    html: `<header>Unrelated navigation</header>${body}<footer>Unrelated footer</footer>`,
+    sourceUrl,
+    visibleText,
+  });
+  const withoutChrome = extractPolicySections({ html: ` ${body} `, sourceUrl, visibleText });
+  assert.deepEqual(withChrome, withoutChrome);
+  for (const method of ["html_heading_hierarchy", "html_definition_pair", "html_table_row"]) {
+    const section = withChrome.find((row) => row.extractionMethod === method);
+    assert.ok(section, `${method}: ${withChrome.map((row) => row.extractionMethod).join(", ")}`);
+    assert.equal(section.sourceOffsetBasis, "sanitized_html");
+    assert.equal(section.documentTextSha256, createHash("sha256").update(` ${body} `).digest("hex"));
+    assert.ok(section.charStart! >= 0 && section.charEnd! <= body.length + 2);
+  }
+  assert.ok(withChrome.every((row) => !/Unrelated navigation|Unrelated footer/.test(row.textExcerpt)));
+});
 
 test("Russian controller contact remains source-bound without an English privacy heading", () => {
   const textExcerpt = "Оператор персональных данных указывает контакт ответственного по защите данных.";

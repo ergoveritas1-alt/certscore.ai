@@ -23,6 +23,7 @@ export function startPostAcceptFormCapture(input: {
   let sampledFrames: Frame[] = [];
   const epochs = new Map<Frame, number>();
   const retained = new Map<string, { frame: Frame; epoch: number }>();
+  const inspected = new Map<Frame, number>();
   const navigated = (frame: Frame) => {
     epochs.set(frame, (epochs.get(frame) ?? 0) + 1);
     if (frame === page.mainFrame()) mainChanged = true;
@@ -39,7 +40,9 @@ export function startPostAcceptFormCapture(input: {
     if (!active()) return;
     done = false;
     const sampleStartedAtMs = Date.now();
-    capture.inspectedFrameCount = 0;
+    // Preserve verified earlier samples while this sample is still pending.
+    // Resetting the count while retaining its frames made finalization invalid.
+    capture.window!.terminalSampleCompleted = false;
     reasons.clear();
     const frames = page.frames(); sampledFrames = frames; capture.candidateFrameCount = frames.length;
     if (frames.length > 3) reasons.add("capture_limit");
@@ -61,7 +64,13 @@ export function startPostAcceptFormCapture(input: {
             return !ancestor;
           });
           await element.dispose();
-          if (!shown) { if (active()) capture.inspectedFrameCount++; return; }
+          if (!shown) {
+            if (active() && !frame.isDetached() && epoch === (epochs.get(frame) ?? 0)) {
+              inspected.set(frame, epoch);
+              capture.frames = capture.frames.filter(row => retained.get(row.frameRef)?.frame !== frame);
+            }
+            return;
+          }
         }
         if (!active()) return;
         const snapshot = await frame.evaluate(({ hints, cmpSelectors }) => {
@@ -109,18 +118,34 @@ export function startPostAcceptFormCapture(input: {
             if (!groups.has(group)) groups.set(group, groups.size);
             const groupIndex = groups.get(group)!;
             if (groupIndex >= 2 || rows.filter(row => row.groupKey === String(groupIndex)).length >= 12) { truncated = true; continue; }
-            const label = (node.getAttribute('aria-label') || Array.from(node.labels ?? []).map(text).join(' ') || node.getAttribute('placeholder') || node.getAttribute('name') || '').slice(0, 120);
+            const labelledBy = (node.getAttribute('aria-labelledby') ?? '').split(/\s+/).slice(0, 4)
+              .map(id => id ? document.getElementById(id) : null).filter((element): element is HTMLElement => element !== null).map(text).join(' ');
+            const label = (labelledBy || node.getAttribute('aria-label') || Array.from(node.labels ?? []).map(text).join(' ') || node.getAttribute('placeholder') || node.getAttribute('name') || '').slice(0, 120);
             const notices: { text: string; association: "inside_form" | "adjacent_notice" | "described_by"; links: { label: string; url: string }[] }[] = [];
             if (!rows.some(row => row.groupKey === String(groupIndex))) {
               const blocks = Array.from(group.querySelectorAll('p, label, small, [role="note"]')).slice(0, 12).map(node => ({ node, association: 'inside_form' as 'inside_form' | 'adjacent_notice' | 'described_by' }));
               for (const id of (group.getAttribute('aria-describedby') ?? '').split(/\s+/).slice(0, 2)) { const node = document.getElementById(id); if (node) blocks.push({node, association:'described_by'}); }
+              // Only direct neighbors of the form or its single exclusive wrapper.
+              const exclusive = (node: Element | null): node is Element => Boolean(node &&
+                !node.matches('body, main, header, footer, nav') && node.querySelectorAll('form, [role="form"]').length === 1);
               const parent = group.parentElement;
-              if (parent && !parent.matches('body, main, footer, nav') && parent.querySelectorAll('form, [role="form"]').length === 1) {
-                for (const node of [group.previousElementSibling, group.nextElementSibling]) if (node?.matches('p, small, [role="note"]')) blocks.push({node, association:'adjacent_notice'});
+              const scopes: Element[] = [group];
+              if (exclusive(parent) && !parent.querySelector('header, footer, nav') && exclusive(parent.parentElement)) scopes.push(parent);
+              for (const scope of scopes) {
+                if (!exclusive(scope.parentElement)) continue;
+                for (const neighbor of [scope.previousElementSibling, scope.nextElementSibling]) {
+                  if (!neighbor || neighbor.matches('header, footer, nav, form, [role="form"]') ||
+                    neighbor.querySelector('form, [role="form"], input, textarea, select, header, footer, nav')) continue;
+                  const notices = neighbor.matches('p, small, [role="note"], a[href]') ? [neighbor] :
+                    neighbor.matches('div, span') ? Array.from(neighbor.querySelectorAll('p, small, [role="note"], a[href]')).slice(0, 8) : [];
+                  for (const node of notices) blocks.push({node, association:'adjacent_notice'});
+                }
               }
               for (const block of blocks) {
                 if (performance.now() >= stopAt) { truncated = true; break; }
-                if (!visible(block.node) || block.node.closest('footer, nav') || (block.node.closest('form, [role="form"]') && block.node.closest('form, [role="form"]') !== group)) continue;
+                if (!visible(block.node) || block.node.matches('header, footer, nav') || block.node.closest('nav, [contenteditable="true"]') ||
+                  (block.association === 'described_by' && block.node.closest('footer') && !group.contains(block.node)) ||
+                  (block.node.closest('form, [role="form"]') && block.node.closest('form, [role="form"]') !== group)) continue;
                 const value = text(block.node);
                 if (!hints.some(hint => value.toLowerCase().includes(hint))) continue;
                 const links = Array.from(block.node.querySelectorAll('a[href]')).slice(0, 2).flatMap(a => {
@@ -145,7 +170,7 @@ export function startPostAcceptFormCapture(input: {
         if (!snapshot || frame.isDetached() || epoch !== (epochs.get(frame) ?? 0)) { reasons.add("frame_unavailable"); return; }
         const capturedAtMs = Date.now() - input.parentScanStartedAtMs;
         const inventory = buildCollectionSurfaceInventory(snapshot, input.parentScanStartedAtMs);
-        capture.inspectedFrameCount++;
+        inspected.set(frame, epoch);
         if (inventory.coverage.status !== "complete") reasons.add(snapshot.documentReadyState === "loading" ? "document_loading" : "capture_limit");
         const frameRef = `accept_frame_${index}`;
         const forms = inventory.forms.map(form => ({...form,
@@ -154,7 +179,7 @@ export function startPostAcceptFormCapture(input: {
           fields: form.fields.map(field => ({...field, evidenceRefs:[{refId:`${frameRef}_${field.fieldRef}`,artifactId:"post_accept_forms",eventType:"after_accept_field"}]})),
         }));
         const frameRow = {frameRef, documentToken:snapshot.documentToken, documentUrl:snapshot.pageUrl, capturedAtMs, forms};
-        const nextFrames = [...capture.frames.filter(row => row.frameRef !== frameRef), frameRow];
+        const nextFrames = [...capture.frames.filter(row => row.frameRef !== frameRef && retained.get(row.frameRef)?.frame !== frame), frameRow];
         if (Buffer.byteLength(JSON.stringify({...capture, frames:nextFrames})) > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES - 200) { reasons.add("capture_limit"); return; }
         capture.frames = nextFrames; retained.set(frameRef,{frame,epoch});
       } catch { if (!frozen) reasons.add("frame_unavailable"); }
@@ -183,11 +208,14 @@ export function startPostAcceptFormCapture(input: {
     finish(): PostAcceptFormCapture {
     if (result) return result;
     clearTimeout(timer); frozen = true; page.off("framenavigated", navigated);
-    if (!done || !capture.window!.terminalSampleCompleted || capture.inspectedFrameCount < capture.candidateFrameCount && !reasons.size) reasons.add("window_ended");
     if (page.frames().some(frame => !sampledFrames.includes(frame))) reasons.add("frame_unavailable");
     if (input.signal?.aborted) { reasons.add("cancelled"); capture.frames = []; }
     if (mainChanged || page.isClosed() || !targetMatches()) { reasons.add("document_changed"); capture.frames = []; }
-    capture.frames = capture.frames.filter(row => { const binding = retained.get(row.frameRef)!; const valid = !binding.frame.isDetached() && binding.epoch === (epochs.get(binding.frame) ?? 0); if (!valid) reasons.add("document_changed"); return valid; });
+    const currentFrames = page.frames();
+    capture.frames = capture.frames.filter(row => { const binding = retained.get(row.frameRef)!; const valid = currentFrames.slice(0, 3).includes(binding.frame) && !binding.frame.isDetached() && binding.epoch === (epochs.get(binding.frame) ?? 0); if (!valid) reasons.add("document_changed"); return valid; });
+    capture.candidateFrameCount = currentFrames.length;
+    capture.inspectedFrameCount = currentFrames.slice(0, 3).filter(frame => inspected.has(frame) && inspected.get(frame) === (epochs.get(frame) ?? 0) && !frame.isDetached()).length;
+    if (!done || !capture.window!.terminalSampleCompleted || capture.inspectedFrameCount < capture.candidateFrameCount && !reasons.size) reasons.add("window_ended");
     capture.frames.sort((a,b)=>a.frameRef.localeCompare(b.frameRef));
     capture.reasonCodes = [...reasons]; capture.status = reasons.size ? "limited" : "captured";
     const parsed = postAcceptFormCaptureSchema.safeParse(capture);

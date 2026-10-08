@@ -496,7 +496,7 @@ test("validation worker persists scanner provenance before score materialization
   assert.match(source, /'runtimeProvenance', \$7::jsonb/);
   assert.match(source, /public_ip_hash = coalesce\(\$4, public_ip_hash\)/);
   const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
-  const snapshotIndex = source.indexOf("await persistScannerRuntimeSnapshot", scoreIndex);
+  const snapshotIndex = source.indexOf("persistScannerRuntimeSnapshot(input.parsed)", scoreIndex);
   assert.ok(snapshotIndex > scoreIndex, "snapshot provenance must be persisted after score materialization creates the row");
 });
 
@@ -606,16 +606,16 @@ test("validation worker owns projection finalization across the result-to-findin
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const start = source.indexOf("async function startCompletedResultFinalization");
   const wait = source.indexOf("await waitForCanonicalReportInputs(", start);
-  const slot = source.indexOf("await withResultFinalizationSlot", wait);
-  const materialize = source.indexOf("await ensureCompletedScanScoresPersisted", slot);
+  const materialize = source.indexOf("await ensureCompletedScanScoresPersisted", wait);
   const functionBody = source.slice(start, source.indexOf("async function mapWithConcurrency", start));
 
   assert.ok(wait > start, "terminal retention must schedule a wait for canonical findings");
-  assert.ok(slot > wait, "completed inputs must enter bounded finalization capacity");
-  assert.ok(materialize > slot, "worker-owned materialization must follow canonical input readiness");
+  assert.ok(materialize > wait, "worker-owned materialization must follow canonical input readiness");
+  assert.match(source, /await reportFinalizationScheduler\.run\(mode, async \(\) =>/);
+  assert.match(functionBody, /reportFinalizationScheduler\.run\("finalize", \(\) => persistScannerRuntimeSnapshot/);
   assert.doesNotMatch(functionBody, /resultFinalizationBackgroundTasks\.size\s*>=/);
   assert.doesNotMatch(functionBody, /!\(await canonicalReportInputsReady/);
-  assert.match(source, /resultFinalizationSlotWaiters/);
+  assert.match(source, /createReportFinalizationScheduler\(RESULT_FINALIZATION_BACKGROUND_CONCURRENCY\)/);
 });
 
 test("validation worker runtime overlays the current policy evidence contract and terminates malformed packets", async () => {
@@ -629,7 +629,7 @@ test("validation worker runtime overlays the current policy evidence contract an
     /COPY --from=build \/app\/packages\/certscore-contracts\/dist \.\/node_modules\/@certscore\/contracts\/dist/,
   );
   assert.match(dockerfile, /COPY packages\/certscore-scan-core \.\/packages\/certscore-scan-core/);
-  assert.match(dockerfile, /pnpm --filter @certscore\/scan-core build/);
+  assert.match(dockerfile, /pnpm exec tsc -p packages\/certscore-scan-core\/tsconfig\.json/);
   assert.match(
     dockerfile,
     /COPY --from=build \/app\/packages\/certscore-scan-core\/dist \.\/node_modules\/@certscore\/scan-core\/dist/,
@@ -650,7 +650,7 @@ test("validation worker durably retains results before acknowledgement and mater
   const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
   const deleteIndex = source.indexOf("new DeleteMessageCommand", resultIndex);
   const readinessIndex = source.indexOf("await canonicalReportInputsReady(input.scanId)");
-  const tokenIndex = source.indexOf("const token = randomBytes(32)", readinessIndex);
+  const tokenIndex = source.indexOf("token = randomBytes(32)", readinessIndex);
   const requestIndex = source.indexOf("insert into public.scan_score_materialization_requests", tokenIndex);
   const ensureIndex = source.indexOf("await ensureCompletedScanScoresPersisted");
 
@@ -693,6 +693,19 @@ test("validation worker records terminal completion before consuming embedded po
   assert.match(source, /policyEvidenceProcessingInFlight/);
   assert.match(source, /policyEvidenceBackgroundTasks/);
   assert.match(source, /POLICY_EVIDENCE_BACKGROUND_CONCURRENCY\s*=\s*2/);
+});
+
+test("parallel terminal finalization never joins an in-flight early policy review", async () => {
+  const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
+  const start = source.indexOf("async function processEmbeddedPolicyEvidenceBeforeScoreMaterialization");
+  const end = source.indexOf("async function pollOnce", start);
+  const fallback = source.slice(start, end);
+  assert.match(fallback, /if \(getWorkerEnv\(\)\.CERTSCORE_PARALLEL_POLICY_PROJECTION_ENABLED\) \{[\s\S]*return;/);
+  assert.ok(fallback.indexOf("return;") < fallback.indexOf("await processPolicyEvidenceReadyMessage"));
+  assert.match(source, /withNonBlockingDatabaseLock\([\s\S]*early-policy-review:/);
+  assert.match(source, /skipReason: "terminal_result_already_received"/);
+  const migration = await readFile("packages/db/migrations/0208_single_terminal_policy_projection.sql", "utf8");
+  assert.match(migration, /terminalProjectionPolicy' = 'completed_early_review_only\.v1' then\s+return new;/);
 });
 
 test("verified early policy evidence durably schedules canonical reprojection without a display fallback", async () => {

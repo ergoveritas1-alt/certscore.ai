@@ -1088,6 +1088,37 @@ Deploy-all applies database migrations through the target web image before ECS p
 
 After deployment, verify the workflow result, live revision, expected runtime target, and affected production behavior. Keep verification read-only by default. Do not create production scans, records, users, or other persistent state unless the user explicitly authorized that verification.
 
+### Optimized deployment checklist
+
+For every release, follow `docs/aws-ecs-deployment-runbook.md` and preserve these
+optimization contracts:
+
+- Compare against the live deployed SHA, inspect actual runtime consumers, and
+  dispatch only affected services through the canonical AWS helpers/workflows.
+- Record readiness results for the exact source/commit. Reuse a completed local
+  preflight only under the existing exact-commit rule; keep required CI checks.
+  A failed full gate remains unresolved even if a separate container build passes.
+- Use native ARM64 builds. Restore and publish web/validation registry caches;
+  preserve the scanner's existing build-once, no-cache-export, regional replication
+  path. Keep nested environment files and generated local caches out of Docker.
+- Use the shared runtime-base input detector. Web reuse additionally requires
+  the published base's fingerprint to match current inputs. Missing/unverifiable
+  bases must follow the documented bootstrap/rebuild gate. Do not force a
+  Chromium/runtime-base rebuild for an application-only change.
+- Only the successful required CI web typecheck may provide
+  `WEB_TYPECHECK_VERIFIED_SHA`, and only for its exact image SHA. Never fabricate
+  a receipt or disable checks to speed a release. Keep validation dependency
+  compilation independent of the release SHA and ahead of application source.
+- Preserve mutable cache/base tags during cleanup. Preview ECR lifecycle changes
+  against actual repositories before applying them; do not apply Terraform as
+  part of an ordinary application release. Consult the runbook's rollout status.
+- Retain exact-image migrations before ECS promotion, service-stability waits,
+  health checks, forward-deploy protection and production revision verification.
+- Record total deployment time and the major stages (checks, build/cache/push,
+  migrations, stabilization, verification). Distinguish cold/bootstrap releases
+  from warm releases; claim savings only from measured production runs. Record
+  unresolved gates and any recurring cost increase in the release summary.
+
 ### Production deploy monitoring
 
 Before starting or monitoring an AWS ECS production deployment, read and follow

@@ -2588,13 +2588,14 @@ test("policySurfaceScanner fast mode retains warmed static policy evidence after
 });
 
 test("policySurfaceScanner fast mode stops stalled rendered discovery at the soft budget and retains warmed policy evidence", async () => {
+  let finishNavigation: (() => void) | undefined;
   const stalledBrowser = {
     async newContext() {
       return {
         async newPage() {
           return {
             async goto() {
-              await new Promise<never>(() => undefined);
+              await new Promise<void>(resolve => { finishNavigation = resolve; });
             },
           };
         },
@@ -2616,6 +2617,13 @@ test("policySurfaceScanner fast mode stops stalled rendered discovery at the sof
       ),
       true,
     );
+    assert.ok(result.moduleRun.timingBreakdown?.some(timing =>
+      timing.label === "rendered discovery: navigation" && timing.detail.includes("still pending")));
+    const terminalTimings = structuredClone(result.moduleRun.timingBreakdown);
+    finishNavigation?.();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(result.moduleRun.timingBreakdown, terminalTimings,
+      "late browser completion must not mutate terminal timing or evidence");
   }, {
     browser: stalledBrowser,
     discoveryMode: "fast",
@@ -6951,6 +6959,47 @@ async function readPolicyCaptureDiagnostics(
   const ref = result.artifactRefs.find((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics");
   assert.ok(ref?.path, "policy capture diagnostics artifact should be retained");
   return JSON.parse(await readFile(ref.path, "utf8"));
+}
+
+for (const mechanism of ["lazy_footer", "registered_shadow"] as const) {
+  test(`policy rendered discovery does not exhaust readiness wait for ${mechanism} links`, async () => {
+    const policyText = "We process personal data to provide services. Contact our privacy officer. " +
+      "We retain personal data for six months. You may request access, correction and deletion. ";
+    const server = createServer((request, response) => {
+      response.setHeader("content-type", "text/html");
+      if (request.url === "/") {
+        response.end(`<!doctype html><body><main style="height:2600px">Welcome</main><footer></footer><div id="onetrust-banner-sdk"></div><script>
+          const mount = () => {
+            const link = document.createElement('a'); link.href = '/public-notice'; link.textContent = 'Privacy policy';
+            ${mechanism === "lazy_footer"
+              ? "document.querySelector('footer').append(link);"
+              : "document.querySelector('#onetrust-banner-sdk').attachShadow({mode:'open'}).append(link);"}
+          };
+          ${mechanism === "lazy_footer" ? "addEventListener('scroll', mount, {once:true});" : "mount();"}
+        </script></body>`);
+      } else if (request.url === "/public-notice") {
+        response.end(`<title>Privacy policy</title><main><h1>Privacy policy</h1><p>${policyText.repeat(12)}</p></main>`);
+      } else {response.statusCode = 404; response.end("Not found");}
+    });
+    server.listen(0, "127.0.0.1"); await once(server, "listening");
+    const address = server.address(); assert.ok(address && typeof address === "object");
+    const url = `http://127.0.0.1:${address.port}/`;
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "policy-ready-"));
+    try {
+      const result = await policySurfaceScanner({url, normalizedUrl:url, scanStartedAtMs:Date.now(),
+        internalBudgetMs:10000, artifactWriter:await createArtifactWriter(tempRoot),
+        nanoAssistProvider:createDefaultMockNanoPolicyAssistProvider()});
+      const policy = result.policySurfaceObservations.find(row => row.normalizedUrl === `${url}public-notice`);
+      assert.equal(policy?.status, "fetched"); assert.equal(policy?.documentEvaluationState, "usable");
+      const timing = result.moduleRun.timingBreakdown?.find(row => row.label === "rendered discovery");
+      assert.ok(timing && timing.durationMs < 3000, JSON.stringify(timing));
+      const stages = result.moduleRun.timingBreakdown?.filter(row => row.label.startsWith("rendered discovery: ")) ?? [];
+      assert.ok(stages.some(row => row.label === "rendered discovery: policy link readiness"));
+      assert.ok(stages.some(row => row.label === "rendered discovery: DOM policy links"));
+      assert.ok(stages.reduce((sum, row) => sum + row.durationMs, 0) <= timing.durationMs + 5,
+        "substage durations must measure their own interval rather than cumulative elapsed time");
+    } finally {server.close(); await once(server,"close"); await rm(tempRoot,{recursive:true,force:true});}
+  });
 }
 
 function createDefaultMockNanoPolicyAssistProvider(): PolicyNanoAssistProvider {

@@ -1684,7 +1684,28 @@ export function verifyLocalV2DagLambdaArtifactBody(input: {
   return input.body;
 }
 
+const verifiedReportArtifactCache = new BoundedPromiseCache<string, unknown>({
+  maxEntries: 6,
+  ttlMs: 10 * 60 * 1_000,
+});
+
 async function readLocalV2DagJsonArtifactFromS3(input: {
+  expectedSha256?: string | null;
+  expectedSizeBytes?: number | null;
+  uri: string;
+}) {
+  // Cache immutable, fully verified bytes independently of report generation.
+  // A stale-source retry still reloads mutable DB inputs, without rereading S3.
+  if (!input.expectedSha256 || !input.expectedSizeBytes) {
+    return readLocalV2DagJsonArtifactFromS3Uncached(input);
+  }
+  return verifiedReportArtifactCache.getOrCreate(
+    `${input.uri}:${input.expectedSha256}:${input.expectedSizeBytes}`,
+    () => readLocalV2DagJsonArtifactFromS3Uncached(input),
+  );
+}
+
+async function readLocalV2DagJsonArtifactFromS3Uncached(input: {
   expectedSha256?: string | null;
   expectedSizeBytes?: number | null;
   uri: string;

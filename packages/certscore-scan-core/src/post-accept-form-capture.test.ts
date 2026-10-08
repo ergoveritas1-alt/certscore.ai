@@ -102,3 +102,51 @@ test('structured capture retains late fields and disclosures through the confirm
     assert.doesNotMatch(JSON.stringify(result),/image\/|base64/);
   } finally {await browser.close();}
 });
+
+
+test('pending terminal samples preserve prior verified frame counts and fields within the frame cap', async () => {
+  let calls = 0, release: ((snapshot: unknown) => void) | undefined;
+  let terminalStarted: (() => void) | undefined;
+  const terminal = new Promise<void>(resolve => {terminalStarted = resolve;});
+  const snapshot = {pageUrl:'https://partial.test/', documentToken:'72d05164-c49e-491c-9a64-02076fd785ea', documentReadyState:'complete',
+    candidateScanTruncated:false, inspectedFieldCandidateCount:1, rows:[{groupKey:'0',structure:'native_form',elementType:'input',
+      inputType:'email',label:'Business email',required:false,disabled:false,readOnly:false,domOrder:0}]};
+  const frames = Array.from({length:4},(_,index)=>({parentFrame:()=>null,isDetached:()=>false,
+    evaluate:()=>{
+      if (index===0 && ++calls===2) {terminalStarted!();return new Promise(resolve=>{release=resolve;});}
+      return Promise.resolve(snapshot);
+    }}));
+  const page = {on:()=>{},off:()=>{},frames:()=>frames,mainFrame:()=>frames[0],isClosed:()=>false,url:()=>snapshot.pageUrl} as unknown as Page;
+  const capture = startPostAcceptFormCapture({page,exactTargetUrl:snapshot.pageUrl,parentScanStartedAtMs:Date.now(),actionDispatchedAtMs:0,windowMs:1000});
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try { await Promise.race([terminal,new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error("terminal sample did not start")),1500);})]); }
+  finally {if(timeout)clearTimeout(timeout);}
+  const result = capture.finish();
+  assert.equal(result.status,'limited'); assert.ok(result.reasonCodes.includes('capture_limit'));
+  assert.ok(result.reasonCodes.includes('window_ended')); assert.ok(!result.reasonCodes.includes('capture_invalid'));
+  assert.equal(result.candidateFrameCount,4);assert.equal(result.inspectedFrameCount,3);
+  assert.equal(result.frames.length,3);assert.equal(result.frames[0]?.forms[0]?.fields[0]?.label,'Business email');
+  assert.equal(result.window?.terminalSampleCompleted,false);
+  const frozen = JSON.stringify(result); release!(snapshot); await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(JSON.stringify(result),frozen);
+});
+
+test('structured capture binds aria labels and wrapped neighboring notices without borrowing disclosure', async () => {
+  const browser = await chromium.launch({headless:true}); const page = await browser.newPage();
+  try {
+    await page.route('https://wrapped-notice.test/**',route=>route.fulfill({contentType:'text/html',body:`
+      <footer><section><div><form aria-label="Newsletter"><span id="email-label">Business email</span><input type="email" aria-labelledby="email-label" name="unhelpful-name" value="private@example.test"></form></div>
+        <div><p>Newsletter personal data: <a href="/privacy?secret=x">Privacy policy</a></p></div></section><p>Global footer policy must not be borrowed.</p></footer>
+      <section><form aria-label="Other"><input name="other"></form><div><form aria-label="Foreign"><input name="foreign"><p>Foreign personal data notice</p></form></div></section>
+      <footer><p>Privacy footer</p></footer>`}));
+    await page.goto('https://wrapped-notice.test/'); const started=Date.now();
+    const capture=startPostAcceptFormCapture({page,exactTargetUrl:page.url(),parentScanStartedAtMs:started,actionDispatchedAtMs:0,windowMs:300});
+    await new Promise(resolve=>setTimeout(resolve,350));const result=capture.finish();
+    const newsletter=result.frames[0]?.forms.find(form=>form.title==='Newsletter');
+    assert.equal(newsletter?.fields[0]?.label,'Business email');
+    assert.match(newsletter?.privacyDisclosure?.excerpts[0]?.text??'',/Newsletter personal data/);
+    assert.equal(newsletter?.privacyDisclosure?.excerpts[0]?.links[0]?.url,'https://wrapped-notice.test/privacy');
+    assert.equal(result.frames[0]?.forms.find(form=>form.title==='Other')?.privacyDisclosure,undefined);
+    assert.doesNotMatch(JSON.stringify(result),/private@example|secret=x|Privacy footer|Global footer/);
+  }finally{await browser.close();}
+});

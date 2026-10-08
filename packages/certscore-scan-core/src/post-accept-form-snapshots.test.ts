@@ -426,8 +426,8 @@ test("After Accept inventory retains only form-associated privacy disclosures an
         <label><input type="checkbox">I agree to personal data processing to handle your request.
           <a href="/privacy?secret=query#private">Privacy policy</a></label>
         <textarea>private-message</textarea></form></section>
-      <section><form aria-label="Newsletter"><input type="email" name="email"></form>
-        <p>Personal data is used for newsletter subscriptions. <a href="/privacy">Privacy policy</a></p></section>
+      <footer><section><form aria-label="Newsletter"><input type="email" name="email"></form>
+        <div><p>Personal data is used for newsletter subscriptions. <a href="/privacy">Privacy policy</a></p></div></section><p>Global footer privacy must not be borrowed.</p></footer>
       <form aria-label="Unrelated"><input name="search"></form>
       <footer>Privacy footer must not be attributed.</footer>`}));
     await page.goto("https://form-notice.test/");
@@ -438,7 +438,7 @@ test("After Accept inventory retains only form-associated privacy disclosures an
     assert.equal(contact?.privacyDisclosure?.excerpts[0]?.links[0]?.url, "https://form-notice.test/privacy");
     assert.equal(newsletter?.privacyDisclosure?.excerpts[0]?.association, "adjacent_notice");
     assert.equal(inventory.forms.find(form => form.title === "Unrelated")?.privacyDisclosure, undefined);
-    assert.doesNotMatch(JSON.stringify(inventory), /private-entered-value|private-message|secret=query|CMP notice|Privacy footer/);
+    assert.doesNotMatch(JSON.stringify(inventory), /private-entered-value|private-message|secret=query|CMP notice|Privacy footer|Global footer/);
     assert.ok(new TextEncoder().encode(JSON.stringify(inventory.forms.map(form=>form.privacyDisclosure).filter(Boolean))).length <= 1030);
   } finally { await browser.close(); }
 });
@@ -466,4 +466,58 @@ test("a later second form receives its own reviewed inventory-bound image inside
     assert.match(result.postCaptureInventory.inventory.forms[1]?.privacyDisclosure?.excerpts[0]?.text??"",/newsletters/);
     assert.doesNotMatch(JSON.stringify(result.postCaptureInventory.inventory),/private@example/);
   }finally{await browser.close();}
+});
+
+
+test("the later form's pixels and review do not wait for the first safety review", async () => {
+  const browser = await chromium.launch({headless:true}); const page = await browser.newPage();
+  let reviews = 0, firstFinished = false, releaseFirst: (() => void) | undefined;
+  const firstGate = new Promise<void>(resolve => {releaseFirst = resolve;});
+  try {
+    await page.route("https://review-overlap.test/**", route => route.fulfill({contentType:"text/html", body:`<script>
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form aria-label="Contact"><label>Email<input name="email" type="email"></label></form>'),1250);
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<section><div><form aria-label="Newsletter"><label>Email<input name="newsletter" type="email"></label></form></div><div><p>See our <a href="/privacy">Privacy policy</a> for newsletter data.</p></div></section>'),2100);
+      </script>`}));
+    await page.goto("https://review-overlap.test/"); const started = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({page, exactTargetUrl:page.url(), parentScanStartedAtMs:started,
+      actionDispatchedAtMs:0, acceptanceRegisteredAtMs:0, deadlineAtMs:started+2400,
+      onLateFormDetected:()=>started+6500,
+      reviewer:async()=>{
+        reviews++;
+        if (reviews === 1) {await firstGate; firstFinished = true;}
+        else {assert.equal(firstFinished,false); releaseFirst!();}
+        return {safeForDisplay:true};
+      }});
+    await new Promise(resolve=>setTimeout(resolve,2450));
+    const result = await capture.finish();
+    assert.ok(result); assert.equal(result.contractVersion,"certscore.post_accept_form_snapshots.v6");
+    assert.equal(reviews,2); assert.equal(firstFinished,true);
+    assert.equal(result.snapshots[0]?.status,"available");
+    assert.equal(result.postCaptureSnapshots.snapshots[0]?.status,"available");
+    assert.match(result.postCaptureInventory.inventory.forms[1]?.privacyDisclosure?.excerpts[0]?.text ?? "",/newsletter data/);
+    assert.ok(result.postCaptureSnapshots.capturedAtMs < 6500);
+    assert.equal(await page.locator('[data-certscore-form-capture]').count(),0);
+    assert.equal(await page.locator('form').evaluateAll(nodes=>nodes.every(node=>!(node as HTMLElement).style.zoom)),true);
+  } finally {releaseFirst?.();await browser.close();}
+});
+
+test("later form settling retains fields and disclosure mounted after the form container", async () => {
+  const browser = await chromium.launch({headless:true}); const page = await browser.newPage();
+  try {
+    await page.route("https://late-fields.test/**", route => route.fulfill({contentType:"text/html",body:`<script>
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form aria-label="Contact"><label>Email<input name="email" type="email"></label></form>'),1250);
+      setTimeout(()=>document.body.insertAdjacentHTML('beforeend','<form aria-label="Newsletter"><label>Email<input name="newsletter" type="email"></label></form>'),1500);
+      setTimeout(()=>document.querySelectorAll('form')[1].insertAdjacentHTML('beforeend','<label>Company<input name="company"></label><p>Personal data is handled under our Privacy policy.</p>'),2000);
+      </script>`}));
+    await page.goto("https://late-fields.test/"); const started = Date.now();
+    const capture = startRegisteredPostAcceptFormSnapshots({page,exactTargetUrl:page.url(),
+      parentScanStartedAtMs:started,actionDispatchedAtMs:0,acceptanceRegisteredAtMs:0,
+      deadlineAtMs:started+2400,reviewer:async()=>{await new Promise(resolve=>setTimeout(resolve,500));return {safeForDisplay:true};}});
+    await new Promise(resolve=>setTimeout(resolve,2450)); const result = await capture.finish();
+    assert.ok(result && result.contractVersion === "certscore.post_accept_form_snapshots.v6");
+    const newsletter = result.postCaptureInventory.inventory.forms[1];
+    assert.equal(newsletter?.fields.length,2);
+    assert.match(newsletter.privacyDisclosure?.excerpts[0]?.text ?? "",/Privacy policy/);
+    assert.equal(result.postCaptureSnapshots.snapshots[0]?.status,"available");
+  } finally {await browser.close();}
 });

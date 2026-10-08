@@ -19,8 +19,12 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+      - ".npmrc"
+      - "patches/**"
       - "tsconfig.base.json"
       - "turbo.json"
+      - "scripts/runtime-base-changes.mjs"
+      - "scripts/lib/runtime-base-inputs.mjs"
       - "!apps/validation-worker/**/*.test.ts"
       - "!apps/validation-worker/**/*.spec.ts"
       - "!apps/validation-worker/scripts/**"
@@ -140,15 +144,12 @@ jobs:
             }
           '
 
+          runtime_inputs_changed="$(node scripts/runtime-base-changes.mjs validation "${base_ref}" "${GITHUB_SHA}")"
           {
             echo "VALIDATION_DEPLOY_BASE_REF=${base_ref}"
             # Root package.json script-only edits do not change the Chromium/runtime
             # base. Dependency changes remain covered by the canonical lockfile.
-            if git diff --name-only "${base_ref}" "${GITHUB_SHA}" | grep -Eq '^(apps/validation-worker/Dockerfile|apps/validation-worker/package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|\.npmrc)$'; then
-              echo "VALIDATION_RUNTIME_INPUTS_CHANGED=1"
-            else
-              echo "VALIDATION_RUNTIME_INPUTS_CHANGED=0"
-            fi
+            echo "VALIDATION_RUNTIME_INPUTS_CHANGED=${runtime_inputs_changed}"
           } >> "${GITHUB_ENV}"
 
       - name: Validate deploy configuration
@@ -264,6 +265,7 @@ jobs:
             --provenance=false \
             --sbom=false \
             --cache-from "type=registry,ref=${WORKER_CACHE}" \
+            --cache-to "type=registry,ref=${WORKER_CACHE},mode=max,image-manifest=true,oci-mediatypes=true,ignore-error=true" \
             -f apps/validation-worker/Dockerfile \
             "${runtime_base_args[@]}" \
             --build-arg BUILD_GIT_REF="${GITHUB_REF_NAME}" \

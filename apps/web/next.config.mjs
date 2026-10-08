@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasVerifiedBuildTypecheck } from "./build-typecheck.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,6 +10,9 @@ const nextConfig = {
   deploymentId: process.env.BUILD_GIT_SHA || undefined,
   devIndicators: false,
   output: "standalone",
+  // Only reuse the required, successful CI typecheck for this exact image.
+  // Local/manual builds without the receipt retain Next's type validation.
+  typescript: { ignoreBuildErrors: hasVerifiedBuildTypecheck() },
   experimental: {
     // Our extension-alias customization disables Next's automatic build worker.
     // Restore isolated compilation and release each compiler's retained graph.

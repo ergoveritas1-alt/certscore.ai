@@ -90,6 +90,71 @@ record the reason when dispatching it. Both paths must retain AWS OIDC, Docker
 Buildx, ECR access, immutable Git-SHA tagging, and the exact-image migration
 step.
 
+## Reusing verified build work
+
+The required web CI typecheck runs route type generation and the complete web
+TypeScript check before the image build. Only its successful output supplies
+`WEB_TYPECHECK_VERIFIED_SHA`; Next.js reuses that check only when it exactly
+matches the image's full `BUILD_GIT_SHA`. Unverified local/manual builds and
+mismatched receipts retain Next.js type validation. Lint, compilation, runtime
+contracts, migration ordering and ECS health gates remain enabled.
+
+Runtime-base changes are compared through `scripts/runtime-base-changes.mjs`.
+Dependency manifests, lockfiles, patches, dependency-install inputs, Node/OS
+images and runtime stages remain rebuild inputs. App source, build SHA metadata
+and package-script-only edits do not require a new runtime base. Missing or
+unrecognized inputs request a rebuild. Web bootstraps a missing base and permits
+an intentional `push_runtime_base` dispatch; validation retains its explicit
+runtime-base rebuild gate.
+Web reuse additionally requires the published base's runtime-input fingerprint
+to match the current source. A missing or mismatched fingerprint rebuilds it,
+including after a failed dependency-changing deployment. This first release
+labels the existing cached base; subsequent matching releases reuse it.
+
+Validation publishes the registry cache it imports on the next run. Its image
+metadata belongs only to the runtime stage; dependency compilation is independent
+of the release SHA and precedes app/server source. Workspace runtime packages
+are still replaced from the current application build. Keep cache/base tags
+during cleanup, and inspect cache export logs before judging a build stalled.
+The web/validation Terraform lifecycle policies give the bounded mutable
+cache/base tags priority over release-image cleanup. Preview those policies
+against their actual ECR repositories before applying them; do not apply
+Terraform merely to publish an application release. Untagged cleanup and the
+release-image count limit remain in place. Estimated incremental cache/base
+storage is under $0.90/month; no paid capacity or runtime settings change.
+
+## Optimization rollout status — October 8, 2026
+
+The clean-source workspace build passed all 19 packages at the existing 8 GB
+heap limit, including Next compilation, lint and type validation. The earlier
+8 GB/12 GB failures occurred in the long-lived development checkout; a passing
+container alone was not used to waive the failed gate. For local readiness,
+use a clean checkout of the exact source, install with the frozen lockfile and
+build workspace dependencies before running the full and change-aware gates.
+Keep ignored scan artifacts and local environment files out of that checkout.
+Record source hashes and gate results; do not increase the heap or fabricate a
+CI typecheck receipt to bypass an unresolved failure.
+
+Cache/base protection was previewed against all three affected ECR repositories
+and applied as a separate scoped lifecycle-policy update. Every preview expired
+zero current images. Public web retains its 14-day untagged cleanup and 20-image
+limit; validation retains its existing one-day untagged cleanup and 15 tagged
+images. Terraform now reflects those validation limits. No broader Terraform
+apply or capacity change was performed. Estimated incremental cache/base storage
+remains under $0.90/month.
+
+The first application release must bootstrap the missing web runtime-base tag.
+Verify its published input fingerprint and validation cache publication, preserve
+both caches during cleanup, and record actual deployment stage timings. Compare
+against a later warm release before claiming measured deployment savings.
+
+Fresh SITS diagnostic timing verification requires an explicit one-run exception
+to its repository testing hold and central contact cooldown. Release checks and
+read-only production verification do not authorize that contact. Retained replay
+savings cannot be added across parallel lanes or reported as measured fresh-scan
+improvement. Record the deployed revision, workflow evidence, scan-to-report
+measurements and any remaining limitations in the release work summary.
+
 ## After deployment
 
 1. Require a successful workflow conclusion.
