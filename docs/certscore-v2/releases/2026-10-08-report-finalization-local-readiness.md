@@ -4,6 +4,8 @@ Baseline application: `90e6f90a`. Implementation branch:
 `codex/report-finalization-timing`. Production verification is required before
 claiming measured latency savings.
 
+Completed release evidence is in [production verification](2026-10-08-report-finalization-production-verification.md).
+
 ## What the existing production logs establish
 
 The prior owned canary `6b5add38-dac1-4e03-a154-6f83706406bd` recorded its result
