@@ -23,6 +23,10 @@ Historical evidence, scores and customer records are not rewritten.
 - Development review routes remain local-only, fail closed in production and
   serve only integrity-verified masked images. Fixture and live packet bytes are
   ignored and excluded from image builds.
+- Restore Next's isolated webpack build worker and enable its memory
+  optimizations. The custom extension-alias configuration had disabled the
+  automatic worker; local full-gate compilation exhausted the 8 GiB heap.
+  This changes compilation only and preserves the existing runtime and heap caps.
 
 ## Verification
 
@@ -52,6 +56,8 @@ No new browser lane, model call, timeout ceiling, retained-byte limit, capacity 
 retention policy is introduced. Capture uses the previously approved bounded
 allowance (upper estimate $126.55/month at 100,000 affected scans); utilization may
 vary. Local verification/history/contact bookkeeping was estimated below $0.06
-once. Deployment adds no recurring capacity. Preserve the archived worktree,
+once. Deployment adds no recurring capacity. Build memory optimization may
+slightly increase CI compilation time, estimated below $0.10/month at ten releases;
+no production resource increase is introduced. Preserve the archived worktree,
 ignored local evidence and all unique work; remove only merged active branches
 or unused active worktrees after successful production verification.

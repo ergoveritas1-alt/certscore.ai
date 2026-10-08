@@ -9,6 +9,12 @@ const nextConfig = {
   deploymentId: process.env.BUILD_GIT_SHA || undefined,
   devIndicators: false,
   output: "standalone",
+  experimental: {
+    // Our extension-alias customization disables Next's automatic build worker.
+    // Restore isolated compilation and release each compiler's retained graph.
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true
+  },
   outputFileTracingRoot: path.join(__dirname, "../.."),
   // Scan/calibration output is runtime data, not a server dependency. Mirror
   // Docker's existing exclusions so local standalone builds cannot copy it.
