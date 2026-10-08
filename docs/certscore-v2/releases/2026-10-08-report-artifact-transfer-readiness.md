@@ -52,15 +52,18 @@ Geometry/policy-text reads, canonical projection and DB persistence remain.
 Disclosed before implementation: conservatively **under $0.90/month at 100,000
 affected scans**, within the repository's below-$1 pre-approval. At the request
 cap that is at most 7.37 GB extra body traffic. A conservative $0.118/GB allowance
-covers two $0.045/GB NAT-processing legs, $0.008/GB ALB byte processing and
+covers $0.09/GB external egress through the existing public-host routing
+(or two $0.045/GB NAT-processing legs), $0.008/GB ALB byte processing and
 $0.02/GB regional routing, leaving room for the bounded operational log.
-These are budgeting allowances, not a claim that every leg is charged.
+The current public-IP topology does not introduce NAT gateways; these are
+budgeting allowances, not a claim that every leg is charged.
 Current worker and web/materializer tasks are in us-west-1, use public IPs and
 existing fixed capacity. No new capacity, model use, retention or paid service.
 Avoided S3 requests and transfers are not subtracted from the estimate.
 
 Pricing references: [AWS VPC pricing](https://aws.amazon.com/vpc/pricing/) and
-[AWS load-balancer pricing](https://aws.amazon.com/elasticloadbalancing/pricing/).
+[AWS load-balancer pricing](https://aws.amazon.com/elasticloadbalancing/pricing/)
+and [AWS data-transfer pricing](https://aws.amazon.com/ec2/pricing/on-demand/).
 Re-evaluate before increasing the cap, scan volume assumption, retransmission
 count, routing charges or capacity.
 
@@ -75,7 +78,22 @@ count, routing charges or capacity.
   finalization and durable recovery remain compatible.
 - The complete canonical report is identical when materialized from transferred
   bytes and the original S3 bytes, with the assessment clock held constant.
-- Full release readiness is recorded in the local receipts after completion.
+- Full `pnpm preflight:full -- --base c53f9cfcaabffa86461816df24f7ee1a9169348b`
+  passed for code commit `82f3599ed2f0eb9a76c8ae8b3824ff9265a59fcb` in a clean
+  checkout: all 19 workspace typechecks/builds, 271 worker pipeline tests,
+  529 canonical projection tests and the full post-refusal release checks.
+  The clean checkout also passed 39 focused transport/result/publication tests
+  and the complete report parity test separately.
+- The development checkout's 8 GB Next heap failure was resolved by the clean
+  build at the same existing limit. No memory setting or CI check was changed.
+  A missing SDK build prerequisite in the first clean attempt was resolved by
+  building all workspace packages before the full gate.
+
+Clean-checkout reproduction: install with `pnpm install --frozen-lockfile`,
+build all package dependencies with `pnpm --filter './packages/**' build`,
+create empty test output directories (`tmp` and `artifacts/local-v2-dag-scans`),
+then run the full gate. Do not copy the development environment, generated
+caches or retained scan artifacts into that checkout.
 
 Receipts: `artifacts/report-artifact-transfer-20261008/`. No fresh SITS contact,
 production scan, infrastructure change or deployment was performed for this
