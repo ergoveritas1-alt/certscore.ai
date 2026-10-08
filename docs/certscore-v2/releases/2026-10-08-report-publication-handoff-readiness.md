@@ -4,6 +4,8 @@ Baseline application: `d2848c0c8bc9cddd877c091a0f8cf6ae257fa4a3`.
 Scope: validation-worker orchestration only. Web, scanner runtime, evidence,
 scoring, model review, observation windows and capacity are unchanged.
 
+Completed release evidence: [production verification](2026-10-08-report-publication-handoff-production-verification.md).
+
 ## Problem and change
 
 The previous production canary waited approximately 5.6 seconds for a validation
@@ -56,5 +58,5 @@ Existing worker/database capacity and endpoint concurrency remain unchanged.
 The added bounded handoff log is estimated below $0.05/month at 100,000 scans;
 this below-$1 increase was disclosed before proceeding. The indexed recovery-
 owner check uses the existing allocated database, with no paid request service.
-Four owned before/after tests and bounded production reads are estimated below
+Owned before/after tests and bounded production reads are estimated below
 $0.50 once. No recurring capacity or retention change is introduced.
