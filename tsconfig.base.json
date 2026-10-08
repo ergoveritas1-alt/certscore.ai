@@ -24,6 +24,7 @@
       "@certscore/contracts": ["packages/certscore-contracts/src"],
       "@certscore/vendor-resolver": ["packages/certscore-vendor-resolver/src"],
       "@certscore/scan-core": ["packages/certscore-scan-core/src"],
+      "@certscore/scan-core/*": ["packages/certscore-scan-core/src/*"],
       "@certscore/review-engine": ["packages/certscore-review-engine/src"],
       "@certscore/report-adapter": ["packages/certscore-report-adapter/src"]
     }

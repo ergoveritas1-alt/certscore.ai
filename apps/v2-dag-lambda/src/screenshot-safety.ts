@@ -6,7 +6,7 @@ import type {
   ScreenshotArtifact,
   ScreenshotSafetyFailureCode,
 } from "@certscore/contracts";
-import { proxyFetch } from "@certscore/scan-core";
+import { proxyFetch } from "@certscore/scan-core/proxy-fetch";
 
 export const DEFAULT_SCREENSHOT_SAFETY_MODEL = "omni-moderation-latest";
 export const DEFAULT_SCREENSHOT_SAFETY_TIMEOUT_MS = 8_000;

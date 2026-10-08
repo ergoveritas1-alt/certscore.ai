@@ -1,4 +1,5 @@
 import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { SQSClient, ReceiveMessageCommand } from "@aws-sdk/client-sqs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile } from "node:fs/promises";
@@ -16,10 +17,49 @@ import {
   mirrorLocalV2DagLambdaArtifacts,
   parseLambdaResultMessage,
   productionArtifactChainRejectReason,
+  startLocalV2DagLambdaResultPoller,
   verifyPreConsentRuntimePreviewPacket,
   verifyProductionArtifactChain,
   type LambdaRuntimePreviewMessage,
 } from "./local-v2-dag-lambda-results";
+
+test("result poller immediately re-arms empty long polls and backs off transport failures", async t => {
+  for (const failFirstPoll of [false, true]) {
+    let receives = 0;
+    const pending: Array<() => void> = [];
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const send = t.mock.method(SQSClient.prototype, "send", async (command: ReceiveMessageCommand) => {
+      assert.ok(command instanceof ReceiveMessageCommand);
+      assert.equal(command.input.WaitTimeSeconds, 10);
+      receives++;
+      if (receives <= 2) {
+        if (failFirstPoll) throw new Error("fixture transport failure");
+        return { Messages: [] };
+      }
+      return new Promise(resolve => pending.push(() => resolve({ Messages: [] })));
+    });
+    const log = t.mock.method(console, "error", () => {});
+    const poller = startLocalV2DagLambdaResultPoller({ enabled: true, pollMs: 2000,
+      queueUrl: "https://sqs.us-west-2.amazonaws.com/123456789012/local-fixture", targetEnvironment: "local" });
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(receives, failFirstPoll ? 2 : 4);
+      if (failFirstPoll) {
+        t.mock.timers.tick(1999);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(receives, 2, "transport failure must retain the configured backoff");
+        t.mock.timers.tick(1);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(receives, 4);
+      }
+    } finally {
+      poller!.stop();
+      for (const resolve of pending) resolve();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      send.mock.restore(); log.mock.restore(); t.mock.timers.reset();
+    }
+  }
+});
 
 test("validation worker verifies the preliminary runtime packet checksum, identity, contract, and source hash", () => {
   const scanId = "00000000-0000-4000-8000-000000000123";
@@ -526,7 +566,9 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /pollIndex < RESULT_QUEUE_POLL_CONCURRENCY/);
   assert.match(source, /startCompletedResultFinalization/);
   assert.match(source, /resultFinalizationBackgroundTasks/);
-  assert.match(source, /if \(received === 0\) \{\s*await sleep\(options\.pollMs\)/);
+  assert.match(source, /catch \(error\) \{\s*pollFailed = true/);
+  assert.match(source, /if \(pollFailed\) \{\s*await sleep\(options\.pollMs\)/);
+  assert.doesNotMatch(source, /if \(received === 0\)/);
   assert.match(source, /validation\.v2_lambda_result\.handoff/);
   assert.doesNotMatch(source, /Promise\.all\(queueUrls\.map/);
 });

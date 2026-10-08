@@ -2567,11 +2567,15 @@ test("policySurfaceScanner fast mode retains warmed static policy evidence after
     const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
 
     assert.equal(labels.includes("static policy fetch warmup"), true);
+    assert.equal(labels.includes("static policy analysis warmup"), true);
     assert.equal(labels.includes("rendered discovery"), true);
     assert.equal(labels.some((label) => label.startsWith("policy prefetched text resolution")), true);
     assert.equal(labels.some((label) => label.startsWith("policy text resolution")), false);
     assert.equal(labels.some((label) => label.startsWith("policy url-stub follow")), false);
     assert.equal(privacy?.status, "fetched");
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.ok(diagnostics.deterministicAnalysisCacheHits >= 2,
+      "the selected late-budget policy must reuse content-bound sections and facts prepared during discovery");
   }, {
     discoveryMode: "fast",
     enableNanoPolicyAssist: true,
@@ -6955,6 +6959,7 @@ async function readPolicyCaptureDiagnostics(
   }>;
   winningSurfaceUrls: string[];
   policyCaptureDurationMs: number;
+  deterministicAnalysisCacheHits: number;
 }> {
   const ref = result.artifactRefs.find((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics");
   assert.ok(ref?.path, "policy capture diagnostics artifact should be retained");

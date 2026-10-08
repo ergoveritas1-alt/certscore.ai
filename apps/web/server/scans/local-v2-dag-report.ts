@@ -1,3 +1,4 @@
+import { createVerifiedPolicyTextCache } from "./verified-policy-text-cache";
 import { postAcceptEvidencePacketSchema, projectPostAcceptFormInventory } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
@@ -1811,29 +1812,36 @@ export async function readProjectedPolicyTextArtifact(pointer: LocalV2DagLambdaA
   return readLocalV2DagPolicyTextArtifactFromS3(pointer);
 }
 
+const readVerifiedPolicyText = createVerifiedPolicyTextCache();
+
 export async function readLocalV2DagPolicyTextArtifactFromS3(
   pointer: LocalV2DagLambdaArtifactPointer,
 ): Promise<{ text: string; sha256: string; sizeBytes: number }> {
   if (pointer.sizeBytes === null || pointer.sizeBytes <= 0 || pointer.sizeBytes > 1_000_000 || !pointer.sha256) {
     throw new Error("Policy text artifact metadata is missing or outside the retained size bound.");
   }
+  const sha256 = pointer.sha256;
   const { bucket, key } = parseS3Uri(pointer.uri);
-  const response = await getLocalV2DagS3Client(inferS3ArtifactRegion(bucket)).send(
-    new GetObjectCommand({ Bucket: bucket, Key: key })
-  );
-  const body = verifyLocalV2DagLambdaArtifactBody({
-    body: await streamToBuffer(response.Body),
-    expectedSha256: pointer.sha256,
-    expectedSizeBytes: pointer.sizeBytes,
+  // Validate the pointer and region on every call, before consulting immutable text.
+  const client = getLocalV2DagS3Client(inferS3ArtifactRegion(bucket));
+  return readVerifiedPolicyText(pointer, async () => {
+    const response = await client.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key })
+    );
+    const body = verifyLocalV2DagLambdaArtifactBody({
+      body: await streamToBuffer(response.Body),
+      expectedSha256: pointer.sha256,
+      expectedSizeBytes: pointer.sizeBytes,
   });
   if (body.includes(0)) {
     throw new Error("Policy text artifact is not valid bounded UTF-8 text.");
   }
   return {
     text: body.toString("utf8").replace(/\s+/g, " ").trim(),
-    sha256: pointer.sha256,
+    sha256,
     sizeBytes: body.byteLength,
   };
+  });
 }
 
 export function classifyPolicyTextArtifactVerificationFailure(

@@ -93,16 +93,31 @@ async function publishCanonicalScanReportProjectionUncached(input: {
       };
     }
 
+    // Scan reads can themselves retain a benchmark; independent writers may
+    // also finish canonical inputs while loading. Do not spend a full projection
+    // pass on a generation already known to be stale. The atomic persistence
+    // guard remains authoritative for changes after this check.
+    if (!await sourceGenerationIsCurrent(input.scanId, generation)) {
+      if (attempt + 1 >= STALE_SOURCE_MAX_ATTEMPTS) throw new StaleScanReportProjectionSourceError(input.scanId);
+      console.warn(JSON.stringify({ event: "scan.report_projection.stale_source_retry", attempt: attempt + 1,
+        phase: "before_materialization", scanId: input.scanId }));
+      await waitForStaleSourceRetry(attempt);
+      continue;
+    }
+
     const persisted = input.forceRebuild || !isCurrentScanReportProjectionReady(rawRecord.snapshot)
       ? null : getPersistedScanReportProjection(rawRecord);
     if (persisted && isSameScanReportProjectionGeneration(
       generation, getScanReportProjectionGeneration(persisted)
-    ) && await sourceGenerationIsCurrent(input.scanId, generation)) {
+    )) {
       return { ...generation, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
         reason: "already_published", scanId: input.scanId, status: "ready" };
     }
     const materializedRecord = await materializeLocalV2DagScanDetail(rawRecord, { requireBundle: false });
     try {
+      if (!await sourceGenerationIsCurrent(input.scanId, generation)) {
+        throw new StaleScanReportProjectionSourceError(input.scanId);
+      }
       await persistScanReportProjection(materializedRecord, {
         snapshot: materializedRecord.snapshot,
         runtimeArtifacts: materializedRecord.runtimeArtifacts

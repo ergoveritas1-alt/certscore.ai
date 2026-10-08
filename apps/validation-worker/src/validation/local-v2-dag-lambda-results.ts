@@ -2977,26 +2977,25 @@ export function startLocalV2DagLambdaResultPoller(options: LocalV2DagLambdaResul
       clients.set(queueRegion, client);
     }
     while (!stopped) {
-      let received = 0;
+      let pollFailed = false;
       try {
-        const outcome = await pollOnce({
+        await pollOnce({
           client,
           queueRegion,
           queueUrl,
           targetEnvironment: options.targetEnvironment,
           webBaseUrl: options.webBaseUrl
         });
-        received = outcome.received;
       } catch (error) {
+        pollFailed = true;
         console.error("[validation-worker] v2 DAG Lambda result poll failed", {
           error: error instanceof Error ? error.message : String(error),
           queueRegion
         });
       }
-      // Long polling already waits when the queue is empty. When work was
-      // returned, drain the next batch immediately instead of imposing an
-      // application-side delay between result batches.
-      if (received === 0) {
+      // A successful long poll already waits for arrivals, including when it
+      // returns empty. Re-arm it immediately; back off only on transport errors.
+      if (pollFailed) {
         await sleep(options.pollMs);
       }
     }

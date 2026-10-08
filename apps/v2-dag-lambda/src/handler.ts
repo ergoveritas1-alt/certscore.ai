@@ -1,6 +1,6 @@
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
-import { FULL_SITE_PAGE_DISPATCH, dispatchFullSitePage } from "./full-site-page";
+import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
 import { InvokeCommand, LambdaClient, type InvokeCommandOutput } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, PutObjectCommand, S3Client, type GetObjectCommandOutput, type PutObjectCommandOutput } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand, type SendMessageCommandOutput } from "@aws-sdk/client-sqs";
@@ -12,7 +12,6 @@ import type { Duplex } from "node:stream";
 import path from "node:path";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { connect as tlsConnect, type TLSSocket } from "node:tls";
-import { chromium } from "playwright";
 import { consentActionPassiveBarrierLimits } from "./consent-action-tail-policy.js";
 import { actionLanePassiveAbsenceDisposition } from "./action-lane-passive-absence.js";
 import { evidenceValidationFailure } from "./evidence-validation-failure.js";
@@ -54,32 +53,18 @@ import {
   type VerifiedPreConsentRuntimePreviewPacket,
   type V2DagLambdaResultPurpose,
 } from "@certscore/contracts";
-import {
-  applyGoverningPolicySelection,
-  chromiumContextOptions,
-  chromiumLaunchArgs,
-  chromiumLaunchOptions,
-  buildScanEvidenceLaneAssessment,
-  buildGpcResponseAssessment,
-  buildGpcProductionAssessment,
-  buildGpcActivityComparison,
-  buildCanonicalPostAcceptActionRecipes,
-  buildPostAcceptCmpActionRecipe,
-  buildCanonicalPostRefusalActionRecipes,
-  buildPostRefusalCmpActionRecipe,
-  canonicalSha256,
-  assertPublicNetworkUrl,
-  decidePostRefusalCooperativeAbort,
-  isAwsLambdaRuntime,
-  lambdaChromiumSingleProcessEnabled,
-  mergePolicySurfaceObservations,
-  POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS,
-  runPostAcceptObserver,
-  runPostRefusalObserver,
-  runScan,
-  publicNetworkGuardEnabled,
-  type RunScanInput
-} from "@certscore/scan-core";
+import type { RunScanInput } from "@certscore/scan-core";
+import { applyGoverningPolicySelection, mergePolicySurfaceObservations } from "@certscore/scan-core/policy-surface-projection";
+import { buildScanEvidenceLaneAssessment } from "@certscore/scan-core/scan-evidence-lane-assessment";
+import { chromiumContextOptions, chromiumLaunchArgs, chromiumLaunchOptions, isAwsLambdaRuntime, lambdaChromiumSingleProcessEnabled } from "@certscore/scan-core/playwright-runtime";
+import { assertPublicNetworkUrl, publicNetworkGuardEnabled } from "@certscore/scan-core/public-network-guard";
+import { buildGpcResponseAssessment } from "@certscore/scan-core/gpc-response-assessment";
+import { buildGpcProductionAssessment } from "@certscore/scan-core/gpc-production-observation";
+import { buildGpcActivityComparison } from "@certscore/scan-core/gpc-activity-comparison";
+import { canonicalSha256 } from "@certscore/scan-core/post-refusal-reconciliation";
+import { decidePostRefusalCooperativeAbort, POST_REFUSAL_CANONICAL_BARRIER_MAX_TAIL_WAIT_MS } from "@certscore/scan-core/post-refusal-orchestration";
+import { buildCanonicalPostAcceptActionRecipes, buildPostAcceptCmpActionRecipe } from "@certscore/scan-core/post-accept-cmp-recipes";
+import { buildCanonicalPostRefusalActionRecipes, buildPostRefusalCmpActionRecipe } from "@certscore/scan-core/post-refusal-cmp-recipes";
 import {
   applyHomepageScreenshotSafetyGate,
   createHomepageScreenshotSafetyReviewCoordinator,
@@ -1326,6 +1311,7 @@ async function runLocalV2DagLambdaScanBundle(
             ? "policy_evidence"
             : "combined";
     try {
+      const { runScan } = await import("@certscore/scan-core");
       const bundle = await runScan({
         scanId: payload.scanId,
         resourceInventoryCrawl: payload.resourceInventoryCrawl,
@@ -1651,6 +1637,7 @@ export async function writeEgressPreflightArtifact(
   let browser;
   const browserAttemptStartedAt = Date.now();
   try {
+    const { chromium } = await import("playwright");
     browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
     const context = await browser.newContext(chromiumContextOptions());
     const page = await context.newPage();
@@ -2186,6 +2173,7 @@ export async function runLocalV2DagLambdaPostRefusalArtifactChain(
         reason: "canonical_cmp_reject_recipe_not_found",
       });
     }
+    const { runPostRefusalObserver } = await import("@certscore/scan-core/post-refusal-observer");
     return runPostRefusalObserver({
       runtimeGraph: payload.runtimeGraph,
       onLifecycleEvent: () => { void checkpoint("action_dispatched"); },
@@ -2293,6 +2281,7 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
         reason: "canonical_cmp_accept_recipe_not_found",
       });
     }
+    const { runPostAcceptObserver } = await import("@certscore/scan-core/post-accept-observer");
     return runPostAcceptObserver({
       formSnapshotReviewer: createFormSnapshotSafetyClassifier(),
       runtimeGraph: payload.runtimeGraph,
@@ -5769,7 +5758,10 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
   let policyEvidenceHandoff: Promise<LocalV2DagLambdaPolicyEvidenceMessage | undefined> | undefined;
   let runtimePreviewHandoff: Promise<LocalV2DagLambdaRuntimePreviewMessage | undefined> | undefined;
   const dispatchEvent = unwrapLocalV2DagLambdaDispatchEvent(event);
-  if (asRecord(dispatchEvent.payload).contractVersion === FULL_SITE_PAGE_DISPATCH) return dispatchFullSitePage(dispatchEvent.payload);
+  if (asRecord(dispatchEvent.payload).contractVersion === FULL_SITE_PAGE_DISPATCH) {
+    const { dispatchFullSitePage } = await import("./full-site-page.js");
+    return dispatchFullSitePage(dispatchEvent.payload);
+  }
   if (process.env.CERTSCORE_FULL_SITE_INVENTORY_WORKER === "1") throw new Error("Inventory worker rejects homepage dispatches.");
 
   const remainingResultPublishMs = () => Math.max(

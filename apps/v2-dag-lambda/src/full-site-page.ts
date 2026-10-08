@@ -19,7 +19,8 @@ import {
   type RobotsPolicy,
 } from "@website-signal-risk-scanner/shared";
 
-export const FULL_SITE_PAGE_DISPATCH = "certscore.full-site-page-dispatch.v1";
+import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
+export { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
 
 /** Failure hints describe actual capture failures, never a successful visit's default. */
 export function fullSitePageCaptureOutcome(input: {

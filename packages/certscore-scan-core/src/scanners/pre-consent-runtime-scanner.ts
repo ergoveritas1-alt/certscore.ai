@@ -1190,6 +1190,7 @@ export async function preConsentRuntimeScanner(
 
   const scanPromise = (async (): Promise<PreConsentRuntimeScannerResult> => {
   try {
+    let committedConsentInventory: Promise<ConsentUiObservation> | undefined;
     const navigationStartedAtMs = Date.now();
     lifecycleCheckpoint("page_navigation", "started");
     let navigationResponse = await recordTiming(
@@ -1231,14 +1232,28 @@ export async function preConsentRuntimeScanner(
           const navigationDispatchAtMs = Date.now();
           const response = index === 0
             ? await page.goto(candidateUrl, {
-              waitUntil: captureConsentEvidence ? "domcontentloaded" : "commit",
+              waitUntil: "commit",
               timeout: navigationTimeoutMs,
             })
             : await measureRecovery("transport_alternate_navigation", () => page.goto(candidateUrl, {
-              waitUntil: captureConsentEvidence ? "domcontentloaded" : "commit",
+              waitUntil: "commit",
               timeout: navigationTimeoutMs,
             }));
           effectiveNavigationUrl = page.url() === "about:blank" ? candidateUrl : page.url();
+          if (captureConsentEvidence) {
+            // Start the existing rapid typed channel while parser/scripts settle.
+            // Only a complete, bound positive A/R/O inventory can be reused;
+            // early negatives and partial inventories receive ordinary inspection
+            // after DOM readiness. Visual capture still waits for that readiness.
+            committedConsentInventory = recordBoundedTiming(timingBreakdown,
+              "consent inventory during document loading",
+              "Read-only rapid control inventory overlaps DOMContentLoaded; loading-document absence is never reused.",
+              750, () => readRapidFirstLayerConsentUiObservation(page, input.scanStartedAtMs, 750, "initial"),
+              () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()));
+            await page.waitForLoadState("domcontentloaded", {
+              timeout: Math.max(1, Math.min(navigationTimeoutMs - (Date.now() - navigationDispatchAtMs), remainingModuleBudgetMs())),
+            });
+          }
           const passiveDocumentReady = captureConsentEvidence || await waitForPassiveRuntimeDocumentReadiness(
             page,
             passiveReadinessTimeout(navigationTimeoutMs, Date.now() - navigationDispatchAtMs, remainingModuleBudgetMs()),
@@ -1445,9 +1460,10 @@ export async function preConsentRuntimeScanner(
         "page evidence: consent UI",
         "First-layer consent surface/control inventory starts immediately after DOMContentLoaded alongside visual capture, so a slow screenshot cannot consume the structured-evidence window.",
         consentUiCaptureTimeoutMs,
-        () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
+        async () => detectConsentUi(page, input.scanStartedAtMs, consentUiWaitTimeoutMs, {
           returnAfterRapidSnapshot: true,
           waitForCompleteChoiceControls: true,
+          initialObservation: await committedConsentInventory,
         }),
         () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
       );
@@ -6788,6 +6804,16 @@ function consentGateDecisionCode(decision: string) {
   }
 }
 
+export function canReuseCommittedConsentInventory(observation: ConsentUiObservation | undefined,
+  pageUrl: string, identity: BrowserDocumentIdentity | undefined): boolean {
+  return Boolean(observation && observation.documentUrl === pageUrl && observation.captureStatus === "observed" &&
+    observation.inventoryOutcome === "complete_with_controls" && observation.layerInspected === "first_layer" &&
+    stableBrowserDocumentIdentity(observation.documentIdentity, identity) &&
+    observation.documentIdentity?.source === identity?.source &&
+    observation.acceptControlObserved && observation.rejectControlObserved && observation.managePreferencesControlObserved &&
+    !observation.inventoryDiagnostics?.timingMarkers.includes("rapid_inventory_toggle_present"));
+}
+
 export async function detectConsentUi(
   page: Page,
   scanStartedAtMs: number,
@@ -6802,6 +6828,7 @@ export async function detectConsentUi(
     waitForControlsOnTextOnlySurface?: boolean;
     returnAfterCheapNoEvidence?: boolean;
     returnAfterRapidSnapshot?: boolean;
+    initialObservation?: ConsentUiObservation;
   } = {},
 ): Promise<ConsentUiObservation> {
   if (options.accessibilityOnly === true) {
@@ -6826,7 +6853,8 @@ export async function detectConsentUi(
   // Run the bounded canonical DOM inventory before the full accessibility
   // tree. Large native trees can consume almost the entire caller budget even
   // when the already-rendered first-layer controls are cheap to read.
-  let rapidObservation = await readRapidFirstLayerConsentUiObservation(
+  const reusableInitial = canReuseCommittedConsentInventory(options.initialObservation, page.url(), currentBrowserDocumentIdentity(page));
+  let rapidObservation = reusableInitial ? options.initialObservation! : await readRapidFirstLayerConsentUiObservation(
     page,
     scanStartedAtMs,
     rapidInventoryTimeoutMs,
