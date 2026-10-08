@@ -6627,6 +6627,8 @@ async function materializeLocalV2DagScanDetailUncached(
   scanRecord: ScanDetailResponse,
   options: { requireBundle?: boolean } = {}
 ): Promise<ScanDetailResponse> {
+  const timed = <T>(label: string, operation: () => Promise<T>) =>
+    withServerTiming(label, operation, { scanId: scanRecord.scan.id });
   const input = getLocalV2DagReportInput(scanRecord);
   if (!input || scanRecord.scan.status !== "completed") {
     return scanRecord;
@@ -6638,7 +6640,7 @@ async function materializeLocalV2DagScanDetailUncached(
   let policyTextArtifactsById: ReadonlyMap<string, RetainedPolicyTextArtifactEvidence> | undefined;
   const verifiedArtifactChainAvailable = hasVerifiedRemoteReportArtifactChain(input);
   if (shouldReadLocalOutDir && input.outDir) {
-    [bundle, consentControlGeometryEvidence, remoteManifest] = await withServerTiming(
+    [bundle, consentControlGeometryEvidence, remoteManifest] = await timed(
       "app.scan_detail.local_v2_artifacts.local",
       async () => {
         const [localBundle, localGeometryEvidence, localManifest] = await Promise.all([
@@ -6658,7 +6660,7 @@ async function materializeLocalV2DagScanDetailUncached(
     if (bundle && remoteManifest && verifiedArtifactChainAvailable) {
       const verifiedLocalBundle = bundle;
       const verifiedLocalManifest = remoteManifest;
-      policyTextArtifactsById = await withServerTiming(
+      policyTextArtifactsById = await timed(
         "app.scan_detail.local_v2_artifact.policy_text_mirror",
         () => loadVerifiedLocalPolicyTextArtifacts({
           bundle: verifiedLocalBundle,
@@ -6668,11 +6670,11 @@ async function materializeLocalV2DagScanDetailUncached(
       );
     }
   } else {
-    const remoteArtifacts = await withServerTiming(
+    const remoteArtifacts = await timed(
       "app.scan_detail.local_v2_artifacts.remote",
       () => loadLocalV2DagRemoteArtifacts({
         readBundle: () => input.scanArtifactUri
-          ? withServerTiming("app.scan_detail.local_v2_artifact.bundle", () =>
+          ? timed("app.scan_detail.local_v2_artifact.bundle", () =>
               readLocalV2DagBundleFromS3({
                 expectedSha256: input.scanArtifactSha256,
                 expectedSizeBytes: input.scanArtifactSizeBytes,
@@ -6686,13 +6688,13 @@ async function materializeLocalV2DagScanDetailUncached(
             "ConsentControlGeometryEvidence.json"
           );
           return geometryArtifact
-            ? withServerTiming("app.scan_detail.local_v2_artifact.geometry", () =>
+            ? timed("app.scan_detail.local_v2_artifact.geometry", () =>
                 readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
               )
             : Promise.resolve(null);
         },
         readManifest: () => input.manifestArtifactUri
-          ? withServerTiming("app.scan_detail.local_v2_artifact.manifest", () =>
+          ? timed("app.scan_detail.local_v2_artifact.manifest", () =>
               readLocalV2DagManifestFromS3({
                 expectedSha256: input.manifestArtifactSha256,
                 expectedSizeBytes: input.manifestArtifactSizeBytes,
@@ -6700,7 +6702,7 @@ async function materializeLocalV2DagScanDetailUncached(
               })
             )
           : Promise.resolve(null),
-        readPolicyTextArtifacts: (verifiedBundle, manifest) => withServerTiming(
+        readPolicyTextArtifacts: (verifiedBundle, manifest) => timed(
           "app.scan_detail.local_v2_artifact.policy_text",
           () => loadVerifiedPolicyTextArtifacts({ bundle: verifiedBundle, manifest })
         )
@@ -6721,7 +6723,7 @@ async function materializeLocalV2DagScanDetailUncached(
     throw new Error(`Required local v2 DAG evidence bundle was unavailable for scan ${scanRecord.scan.id}.`);
   }
   return bundle
-    ? withServerTiming("app.scan_detail.local_v2_projection", async () =>
+    ? timed("app.scan_detail.local_v2_projection", async () =>
         buildMaterializedLocalV2Detail(scanRecord, bundle, {
           consentControlGeometryEvidence,
           gdprTransparencyEvidenceProfile: input.gdprTransparencyEvidenceProfile,

@@ -2515,7 +2515,7 @@ test("regional FIFO SQS dispatch envelopes contain exactly one typed payload", (
   );
 });
 
-test("SQS redelivery replays retained completion without rerunning scanner work", async () => {
+test("SQS redelivery replays retained completion without rerunning scanner work", async t => {
   const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
   const previousPrefix = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX;
   process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-test-artifacts";
@@ -2523,72 +2523,80 @@ test("SQS redelivery replays retained completion without rerunning scanner work"
   let artifactRuns = 0;
   const sent: SendMessageCommand[] = [];
   const postRefusalPacketUri = "s3://certscore-test-artifacts/v2-dag-lambda/local/scan-local-1/lanes/reject_observation/PostRefusalEvidencePacket.json";
-  const laneTimingSummary = {
-    contractVersion: "certscore.v2.lambda-lane-timing.v1",
-    coordinatorStartedAt: "2026-08-20T19:59:40.000Z",
-    generatedAt: "2026-08-20T20:00:00.000Z",
-    lanes: ["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation"].map((lane) => ({
-      coordinatorElapsedMs: 1_000,
-      evidenceJoined: true,
-      invocationStartedAt: "2026-08-20T19:59:40.000Z",
-      lane,
-      outcome: "completed",
-      terminalOutcomeDeltaFromPassiveBarrierMs: lane === "reject_observation" ? -100 : 0,
-      terminalOutcomeObservedAt: "2026-08-20T19:59:59.000Z",
-      workerReportedCompletedAt: "2026-08-20T19:59:59.000Z",
-      workerReportedHandlerDurationMs: 900,
-    })),
-    maxRejectTailWaitMs: 6_000,
-    passiveLaneBarrierCompletedAt: "2026-08-20T19:59:59.100Z",
-    rejectCompletedBeforeOrAtPassiveBarrier: true,
-    rejectLaneAddedWaitMs: 0,
-    rejectLaneJoin: "joined",
-    rejectTailDeltaMs: -100,
-  };
   try {
-    const result = await handler({
-      Records: [{ body: JSON.stringify(validPayload()), eventSource: "aws:sqs" }],
-    }, {
-      runArtifactChain: async () => {
-        artifactRuns += 1;
-        throw new Error("scanner work must not rerun");
-      },
-      s3GetClient: {
-        async send(command: GetObjectCommand) {
-          const key = command.input.Key ?? "";
-          const body = key.endsWith("LocalV2DagLambdaManifest.json")
-            ? JSON.stringify({
-                artifactMetadata: {
-                  postRefusalPacketUri: { sha256: "c".repeat(64), sizeBytes: 1_024 },
-                },
-                generatedAt: "2026-08-20T20:00:00.000Z",
-                laneTimingSummary,
-                phaseTimings: [],
-                pointers: { postRefusalPacketUri },
-              })
-            : JSON.stringify({ artifactVersion: "fixture" });
-          return { Body: Buffer.from(body) };
+    for (const sixLanes of [false, true]) {
+      await t.test(sixLanes ? "six lanes" : "historical four lanes", async () => {
+      sent.length = 0;
+      const laneTimingSummary = {
+        contractVersion: "certscore.v2.lambda-lane-timing.v1",
+        coordinatorStartedAt: "2026-08-20T19:59:40.000Z",
+        generatedAt: "2026-08-20T20:00:00.000Z",
+        lanes: ["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation",
+          ...(sixLanes ? ["gpc_observation", "accept_observation"] : [])].map((lane) => ({
+          coordinatorElapsedMs: 1_000,
+          evidenceJoined: true,
+          invocationStartedAt: "2026-08-20T19:59:40.000Z",
+          lane,
+          outcome: "completed",
+          terminalOutcomeDeltaFromPassiveBarrierMs: lane === "reject_observation" ? -100 : 0,
+          terminalOutcomeObservedAt: "2026-08-20T19:59:59.000Z",
+          workerReportedCompletedAt: "2026-08-20T19:59:59.000Z",
+          workerReportedHandlerDurationMs: 900,
+        })),
+        ...(sixLanes ? { maxAcceptTailWaitMs: 6_000, acceptLaneAddedWaitMs: 0,
+          acceptLaneJoin: "joined", acceptTailDeltaMs: -100, acceptCompletedBeforeOrAtPassiveBarrier: true } : {}),
+        maxRejectTailWaitMs: 6_000,
+        passiveLaneBarrierCompletedAt: "2026-08-20T19:59:59.100Z",
+        rejectCompletedBeforeOrAtPassiveBarrier: true,
+        rejectLaneAddedWaitMs: 0,
+        rejectLaneJoin: "joined",
+        rejectTailDeltaMs: -100,
+      };
+      const result = await handler({
+        Records: [{ body: JSON.stringify(validPayload()), eventSource: "aws:sqs" }],
+      }, {
+        runArtifactChain: async () => {
+          artifactRuns += 1;
+          throw new Error("scanner work must not rerun");
         },
-      },
-      sqsClient: {
-        async send(command: SendMessageCommand) {
-          sent.push(command);
-          return { MessageId: "replayed-result" };
+        s3GetClient: {
+          async send(command: GetObjectCommand) {
+            const key = command.input.Key ?? "";
+            const body = key.endsWith("LocalV2DagLambdaManifest.json")
+              ? JSON.stringify({
+                  artifactMetadata: {
+                    postRefusalPacketUri: { sha256: "c".repeat(64), sizeBytes: 1_024 },
+                  },
+                  generatedAt: "2026-08-20T20:00:00.000Z",
+                  laneTimingSummary,
+                  phaseTimings: [],
+                  pointers: { postRefusalPacketUri },
+                })
+              : JSON.stringify({ artifactVersion: "fixture" });
+            return { Body: Buffer.from(body) };
+          },
         },
-      },
-    });
-    assert.equal(artifactRuns, 0);
-    assert.equal(sent.length, 1);
-    assert.equal(result.status, "completed");
-    assert.equal(result.artifactPointers?.postRefusalPacketUri, postRefusalPacketUri);
-    assert.deepEqual(result.artifactMetadata?.postRefusalPacketUri, {
-      sha256: "c".repeat(64),
-      sizeBytes: 1_024,
-    });
-    assert.deepEqual(result.laneTimingSummary, laneTimingSummary);
-    const replayedMessage = JSON.parse(String(sent[0]?.input.MessageBody));
-    assert.equal(replayedMessage.artifactPointers.postRefusalPacketUri, postRefusalPacketUri);
-    assert.deepEqual(replayedMessage.laneTimingSummary, laneTimingSummary);
+        sqsClient: {
+          async send(command: SendMessageCommand) {
+            sent.push(command);
+            return { MessageId: "replayed-result" };
+          },
+        },
+      });
+      assert.equal(artifactRuns, 0);
+      assert.equal(sent.length, 1);
+      assert.equal(result.status, "completed");
+      assert.equal(result.artifactPointers?.postRefusalPacketUri, postRefusalPacketUri);
+      assert.deepEqual(result.artifactMetadata?.postRefusalPacketUri, {
+        sha256: "c".repeat(64),
+        sizeBytes: 1_024,
+      });
+      assert.deepEqual(result.laneTimingSummary, laneTimingSummary);
+      const replayedMessage = JSON.parse(String(sent[0]?.input.MessageBody));
+      assert.equal(replayedMessage.artifactPointers.postRefusalPacketUri, postRefusalPacketUri);
+      assert.deepEqual(replayedMessage.laneTimingSummary, laneTimingSummary);
+      });
+    }
   } finally {
     if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
     else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;

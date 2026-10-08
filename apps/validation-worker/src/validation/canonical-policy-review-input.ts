@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
 
 const MAX_CANONICAL_BUNDLE_BYTES = 20 * 1024 * 1024;
 const APPROVED_ARTIFACT_REGIONS = new Set([
@@ -17,6 +18,15 @@ const APPROVED_ARTIFACT_REGIONS = new Set([
   "eu-west-1",
   "us-west-1"
 ]);
+const regionalClients = new Map<string, S3GetClient>();
+
+function regionalClient(region: string): S3GetClient {
+  const existing = regionalClients.get(region);
+  if (existing) return existing;
+  const client = new S3Client({ region });
+  regionalClients.set(region, client);
+  return client;
+}
 
 export type CanonicalPolicyReviewPointer = {
   expectedSha256: string;
@@ -182,11 +192,20 @@ async function streamToBuffer(body: unknown) {
 export async function loadCanonicalBundleForPolicyReview(input: {
   client?: S3GetClient;
   pointer: CanonicalPolicyReviewPointer;
+  cache?: typeof verifiedCanonicalBundleBytes;
 }): Promise<CanonicalEvidenceBundle> {
   const { bucket, key } = parseS3Uri(input.pointer.uri);
-  const client = input.client ?? new S3Client({ region: input.pointer.region });
-  const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  const body = await streamToBuffer(response.Body);
+  // Ingestion already downloads and verifies the original canonical bundle.
+  // Reuse only that exact URI/checksum/size, then retain the ordinary schema gate.
+  // Injected clients/local mirrors remain uncached unless explicitly requested.
+  const cache = input.cache ?? (input.client ? undefined : verifiedCanonicalBundleBytes);
+  let body = cache?.get(input.pointer);
+  const cacheHit = Boolean(body);
+  if (!body) {
+    const client = input.client ?? regionalClient(input.pointer.region);
+    const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    body = await streamToBuffer(response.Body);
+  }
   if (body.byteLength !== input.pointer.expectedSizeBytes) {
     throw new Error("Canonical policy-review artifact size does not match retained metadata.");
   }
@@ -194,7 +213,10 @@ export async function loadCanonicalBundleForPolicyReview(input: {
   if (sha256 !== input.pointer.expectedSha256) {
     throw new Error("Canonical policy-review artifact checksum does not match retained metadata.");
   }
-  return canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+  const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(body.toString("utf8")));
+  if (!cacheHit) cache?.retain(input.pointer, body);
+  console.info(JSON.stringify({ event: "validation.policy_bundle.loaded", scanId: bundle.scanId, cacheHit }));
+  return bundle;
 }
 
 export async function loadCanonicalBundleForPolicyReviewFromLocalMirror(input: {

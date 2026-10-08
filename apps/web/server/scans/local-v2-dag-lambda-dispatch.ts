@@ -795,8 +795,12 @@ function parseLaneTimingSummary(value: unknown): LocalV2DagLambdaLaneTimingSumma
     }];
   });
   const hasAcceptLane = lanes.some((lane) => lane.lane === "accept_observation");
-  const expectedLaneCount = hasAcceptLane ? 5 : 4;
-  if (lanes.length !== expectedLaneCount || new Set(lanes.map((lane) => lane.lane)).size !== expectedLaneCount) {
+  const laneNames = new Set(lanes.map((lane) => lane.lane));
+  const expectedLaneCount = 4 + Number(hasAcceptLane) + Number(laneNames.has("gpc_observation"));
+  if (lanes.length !== record.lanes.length || lanes.length !== expectedLaneCount ||
+      laneNames.size !== expectedLaneCount ||
+      !["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation"]
+        .every((lane) => laneNames.has(lane as typeof lanes[number]["lane"]))) {
     return undefined;
   }
   if (

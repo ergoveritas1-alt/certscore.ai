@@ -18,6 +18,7 @@ import {
   type ScanReportProjectionGeneration
 } from "./scan-report-projection-generation";
 import { getPublicScanStatusProjection } from "./scan-status-projection";
+import { withServerTiming } from "../performance/log-server-timing";
 
 export type CanonicalScanReportPublicationResult = {
   eventCount: number | null;
@@ -65,7 +66,7 @@ async function publishCanonicalScanReportProjectionUncached(input: {
   forceRebuild?: boolean;
 }): Promise<CanonicalScanReportPublicationResult> {
   for (let attempt = 0; attempt < STALE_SOURCE_MAX_ATTEMPTS; attempt += 1) {
-    const rawRecord = await loadScan(input);
+    const rawRecord = await withServerTiming("scan.report_publication.load_scan", () => loadScan(input), input);
     if (!rawRecord) {
       return {
         eventCount: null,
@@ -97,7 +98,7 @@ async function publishCanonicalScanReportProjectionUncached(input: {
     // also finish canonical inputs while loading. Do not spend a full projection
     // pass on a generation already known to be stale. The atomic persistence
     // guard remains authoritative for changes after this check.
-    if (!await sourceGenerationIsCurrent(input.scanId, generation)) {
+    if (!await withServerTiming("scan.report_publication.source_check", () => sourceGenerationIsCurrent(input.scanId, generation), input)) {
       if (attempt + 1 >= STALE_SOURCE_MAX_ATTEMPTS) throw new StaleScanReportProjectionSourceError(input.scanId);
       console.warn(JSON.stringify({ event: "scan.report_projection.stale_source_retry", attempt: attempt + 1,
         phase: "before_materialization", scanId: input.scanId }));
@@ -113,9 +114,10 @@ async function publishCanonicalScanReportProjectionUncached(input: {
       return { ...generation, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
         reason: "already_published", scanId: input.scanId, status: "ready" };
     }
-    const materializedRecord = await materializeLocalV2DagScanDetail(rawRecord, { requireBundle: false });
+    const materializedRecord = await withServerTiming("scan.report_publication.materialize", () =>
+      materializeLocalV2DagScanDetail(rawRecord, { requireBundle: false }), input);
     try {
-      if (!await sourceGenerationIsCurrent(input.scanId, generation)) {
+      if (!await withServerTiming("scan.report_publication.source_check", () => sourceGenerationIsCurrent(input.scanId, generation), input)) {
         throw new StaleScanReportProjectionSourceError(input.scanId);
       }
       await persistScanReportProjection(materializedRecord, {

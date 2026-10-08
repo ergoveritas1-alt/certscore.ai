@@ -16,7 +16,7 @@ function shouldLogServerTiming() {
   return process.env.SERVER_TIMING_LOG_ENABLED?.trim().toLowerCase() !== "false";
 }
 
-export async function withServerTiming<T>(label: string, callback: () => Promise<T>): Promise<T> {
+export async function withServerTiming<T>(label: string, callback: () => Promise<T>, context?: { scanId: string }): Promise<T> {
   const startedAt = performance.now();
 
   try {
@@ -28,7 +28,8 @@ export async function withServerTiming<T>(label: string, callback: () => Promise
         JSON.stringify({
           durationMs,
           event: "server.timing",
-          label
+          label,
+          ...(context ? { scanId: context.scanId } : {})
         })
       );
     }

@@ -31,6 +31,7 @@ import {
 } from "./model-policy-review";
 import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
 import { createReportFinalizationScheduler } from "./report-finalization-scheduler";
+import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
 
 const PROCESSOR = "local-certscore-v2-dag-parallel-v1";
 const RESULT_CONTRACT_VERSION = "certscore.v2.lambda-dag-result.v1";
@@ -277,7 +278,10 @@ async function ensureCompletedScanScoresPersistedUncoalesced(input: {
   // that persisted projection, so customer-visible readiness must not wait on
   // trailing Admin summary and legacy score persistence.
   for (const mode of ["publish_report", "finalize"] as const) {
+    const enqueuedAt = Date.now();
     const completed = await reportFinalizationScheduler.run(mode, async () => {
+      console.info(JSON.stringify({ event: "validation.report_finalization.queue", scanId: input.scanId,
+        mode, waitMs: Date.now() - enqueuedAt }));
       if (mode === "publish_report") {
         const existingState = await scoreMaterializationState(input.scanId);
         if (existingState === "completed") return { alreadyPersisted: true as const };
@@ -320,12 +324,15 @@ async function ensureCompletedScanScoresPersistedUncoalesced(input: {
       while (true) {
         finalizingAttempt += 1;
         const remainingMs = Math.max(1_000, finalizingDeadline - Date.now());
+        const requestStartedAt = Date.now();
         const response = await fetchMaterialization(materializationUrl, {
           body: JSON.stringify({ mode, scanId: input.scanId, token }),
           headers: { "content-type": "application/json" },
           method: "POST",
           signal: AbortSignal.timeout(remainingMs)
         });
+        console.info(JSON.stringify({ event: "validation.report_finalization.request", scanId: input.scanId,
+          mode, status: response.status, durationMs: Date.now() - requestStartedAt }));
         if (!response.ok) {
           const failure = await response.json().catch(() => null) as {
             code?: unknown;
@@ -531,7 +538,7 @@ async function processPolicyEvidenceReadyMessageUncoalesced(input: {
       scanId,
     );
   }
-  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const s3Client = input.s3Client ?? artifactClient(bucket);
   const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const body = await streamToBuffer(response.Body);
   const bodySha256 = createHash("sha256").update(body).digest("hex");
@@ -922,7 +929,7 @@ async function processRuntimePreviewReadyMessage(input: {
       message.scanId,
     );
   }
-  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const s3Client = input.s3Client ?? artifactClient(bucket);
   const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   if (
     typeof response.ContentLength === "number" &&
@@ -1242,8 +1249,12 @@ function parseLambdaLaneTimingSummary(value: unknown): LambdaLaneTimingSummary |
     }];
   });
   const hasAcceptLane = lanes.some((lane) => lane.lane === "accept_observation");
-  const expectedLaneCount = hasAcceptLane ? 5 : 4;
-  if (lanes.length !== expectedLaneCount || new Set(lanes.map((lane) => lane.lane)).size !== expectedLaneCount) {
+  const laneNames = new Set(lanes.map((lane) => lane.lane));
+  const expectedLaneCount = 4 + Number(hasAcceptLane) + Number(laneNames.has("gpc_observation"));
+  if (lanes.length !== record.lanes.length || lanes.length !== expectedLaneCount ||
+      laneNames.size !== expectedLaneCount ||
+      !["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation"]
+        .every((lane) => laneNames.has(lane as typeof lanes[number]["lane"]))) {
     return undefined;
   }
   if (
@@ -1503,6 +1514,16 @@ function inferS3ArtifactRegion(bucket: string) {
   return match?.[1] ?? "eu-central-1";
 }
 
+const artifactClients = new Map<string, S3Client>();
+function artifactClient(bucket: string) {
+  const region = inferS3ArtifactRegion(bucket);
+  const existing = artifactClients.get(region);
+  if (existing) return existing;
+  const client = new S3Client({ region });
+  artifactClients.set(region, client);
+  return client;
+}
+
 async function readVerifiedProductionArtifact(input: {
   expected: Record<string, unknown>;
   label: "manifest" | "scanArtifact";
@@ -1520,7 +1541,7 @@ async function readVerifiedProductionArtifact(input: {
     throw new Error(`Production ${input.label} exceeds the bounded retained-artifact size.`);
   }
   const { bucket, key } = parseS3Uri(input.uri);
-  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const s3Client = input.s3Client ?? artifactClient(bucket);
   const response = await s3Client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   if (typeof response.ContentLength === "number" && response.ContentLength !== expectedSizeBytes) {
     throw new Error(`Production ${input.label} content length did not verify.`);
@@ -1575,6 +1596,11 @@ export async function verifyProductionArtifactChain(
   ) {
     throw new Error("Production retained-artifact identity did not match the Lambda result.");
   }
+  verifiedCanonicalBundleBytes.retain({
+    uri: scanArtifactUri,
+    expectedSha256: scanArtifact.sha256,
+    expectedSizeBytes: scanArtifact.sizeBytes,
+  }, scanArtifact.body);
   return {
     manifest: { sha256: manifest.sha256, sizeBytes: manifest.sizeBytes },
     scanArtifact: { sha256: scanArtifact.sha256, sizeBytes: scanArtifact.sizeBytes },
@@ -1729,7 +1755,7 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
   const outDir = localV2DagArtifactRoot(input.parsedMessage.scanId, input.workspaceRoot);
   await mkdir(outDir, { recursive: true });
   const { bucket } = parseS3Uri(scanArtifactUri);
-  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const s3Client = input.s3Client ?? artifactClient(bucket);
   const artifacts = [
     { field: "manifestUri" as const, fileName: "LocalV2DagLambdaManifest.json", uri: stringValue(pointers.manifestUri) },
     { field: "scanArtifactUri" as const, fileName: "CanonicalEvidenceBundle.json", uri: scanArtifactUri },
@@ -1790,7 +1816,7 @@ async function mirrorLocalV2DagLambdaAuxiliaryArtifacts(input: {
   }
 
   const { bucket } = parseS3Uri(stringValue(input.parsedMessage.artifactPointers?.scanArtifactUri) ?? "");
-  const s3Client = input.s3Client ?? new S3Client({ region: inferS3ArtifactRegion(bucket) });
+  const s3Client = input.s3Client ?? artifactClient(bucket);
   const auxiliaryArtifacts = await mirrorAuxiliaryArtifactsFromLambdaManifest({
     manifestPath: manifestArtifact.localPath,
     outDir: input.mirror.outDir,
@@ -2473,14 +2499,22 @@ async function startCompletedResultFinalization(input: {
     return false;
   }
   resultFinalizationScanIds.add(input.parsed.scanId);
+  const timed = async <T>(phase: string, operation: () => Promise<T>) => {
+    const startedAt = Date.now();
+    try { return await operation(); } finally {
+      console.info(JSON.stringify({ event: "validation.report_finalization.phase", scanId: input.parsed.scanId,
+        phase, durationMs: Date.now() - startedAt }));
+    }
+  };
   const task = (async () => {
     try {
       if (input.parsed.policyEvidence) {
-        await processEmbeddedPolicyEvidenceBeforeScoreMaterialization({
-          message: input.parsed.policyEvidence,
+        const message = input.parsed.policyEvidence;
+        await timed("embedded_policy_join", () => processEmbeddedPolicyEvidenceBeforeScoreMaterialization({
+          message,
           queueRegion: input.queueRegion,
           targetEnvironment: input.parsed.targetEnvironment,
-        });
+        }));
       }
       // The terminal scanner result is normally retained just before the
       // validation dispatcher persists normalized signals and unified
@@ -2488,10 +2522,10 @@ async function startCompletedResultFinalization(input: {
       // instead of requiring them to exist at the exact result-receipt
       // instant. Otherwise a fast result can miss finalization and leave the
       // UI waiting for a page-render recovery path.
-      await waitForCanonicalReportInputs(
+      await timed("canonical_inputs_wait", () => waitForCanonicalReportInputs(
         input.parsed.scanId,
         Date.now() + MATERIALIZATION_FINALIZING_WAIT_MS,
-      );
+      ));
       await ensureCompletedScanScoresPersisted({
         scanId: input.parsed.scanId,
         targetEnvironment: input.parsed.targetEnvironment,

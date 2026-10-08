@@ -7,6 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
+import { parseLocalV2DagLambdaResultMessage } from "../../../web/server/scans/local-v2-dag-lambda-dispatch";
+import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
 import { VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION } from "@certscore/contracts";
 import {
   getLambdaResultTargetEnvironment,
@@ -22,6 +24,40 @@ import {
   verifyProductionArtifactChain,
   type LambdaRuntimePreviewMessage,
 } from "./local-v2-dag-lambda-results";
+
+test("web and validation retain historical four/five and current six-lane timing without accepting incomplete inventories", () => {
+  const parse = (lanes: string[]) => {
+    const hasAccept = lanes.includes("accept_observation");
+    const message = { artifactOnly: true, completedAt: "2026-10-08T20:00:06.000Z",
+      contractVersion: "certscore.v2.lambda-dag-result.v1", processor: "local-certscore-v2-dag-parallel-v1",
+      productionFindingIntegration: false, scanId: "scan-timing-parity", status: "completed", targetEnvironment: "local",
+      laneTimingSummary: { contractVersion: "certscore.v2.lambda-lane-timing.v1",
+        coordinatorStartedAt: "2026-10-08T20:00:00.000Z", generatedAt: "2026-10-08T20:00:06.000Z",
+        passiveLaneBarrierCompletedAt: "2026-10-08T20:00:05.000Z",
+        maxRejectTailWaitMs: 8000, rejectLaneAddedWaitMs: 1000, rejectLaneJoin: "joined", rejectTailDeltaMs: 1000,
+        rejectCompletedBeforeOrAtPassiveBarrier: false,
+        ...(hasAccept ? { maxAcceptTailWaitMs: 6000, acceptLaneAddedWaitMs: 0, acceptLaneJoin: "joined",
+          acceptTailDeltaMs: -1000, acceptCompletedBeforeOrAtPassiveBarrier: true } : {}),
+        lanes: lanes.map(lane => ({ lane, outcome: "completed", evidenceJoined: true,
+          coordinatorElapsedMs: 4000, invocationStartedAt: "2026-10-08T20:00:00.000Z",
+          terminalOutcomeObservedAt: "2026-10-08T20:00:04.000Z", terminalOutcomeDeltaFromPassiveBarrierMs: -1000,
+          workerReportedCompletedAt: "2026-10-08T20:00:04.000Z", workerReportedHandlerDurationMs: 4000 })) } };
+    return [parseLambdaResultMessage(JSON.stringify(message), "local"),
+      parseLocalV2DagLambdaResultMessage(message, { expectedTargetEnvironment: "local" })];
+  };
+  const core = ["consent_proof", "runtime_evidence", "policy_evidence", "reject_observation"];
+  for (const optional of [[], ["accept_observation"], ["gpc_observation"], ["gpc_observation", "accept_observation"]]) {
+    for (const parsed of parse([...core, ...optional])) {
+      assert.equal(parsed.laneTimingSummary?.lanes.length, core.length + optional.length);
+      assert.equal(parsed.laneTimingSummary?.rejectTailDeltaMs, 1000);
+      if (optional.includes("accept_observation")) assert.equal(parsed.laneTimingSummary?.acceptTailDeltaMs, -1000);
+    }
+  }
+  for (const invalid of [[...core, "unknown_lane"], [...core, core[0]!],
+    ["consent_proof", "runtime_evidence", "gpc_observation", "reject_observation"], core.slice(0, 3)]) {
+    for (const parsed of parse(invalid)) assert.equal(parsed.laneTimingSummary, undefined);
+  }
+});
 
 test("result poller immediately re-arms empty long polls and backs off transport failures", async t => {
   for (const failFirstPoll of [false, true]) {
@@ -354,6 +390,11 @@ test("production result handoff verifies retained bytes and scan identity before
 
   assert.equal(verified?.manifest.sizeBytes, manifest.byteLength);
   assert.equal(verified?.scanArtifact.sizeBytes, bundle.byteLength);
+  assert.deepEqual(verifiedCanonicalBundleBytes.get({
+    uri: "s3://certscore-artifacts/scan/CanonicalEvidenceBundle.json",
+    expectedSha256: createHash("sha256").update(bundle).digest("hex"),
+    expectedSizeBytes: bundle.byteLength,
+  }), bundle, "identity-bound ingestion primes original bytes for subsequent policy review");
 
   await assert.rejects(
     verifyProductionArtifactChain(parsed, {
@@ -579,7 +620,7 @@ test("validation worker frees result poll capacity after retaining the terminal 
   const durableDeleteIndex = source.indexOf("new DeleteMessageCommand", resultIndex);
   const finalizationStartIndex = source.indexOf("startCompletedResultFinalization", resultIndex);
   const finalizationBodyIndex = source.indexOf("function startCompletedResultFinalization", finalizationStartIndex);
-  const policyIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeScoreMaterialization", finalizationBodyIndex);
+  const policyIndex = source.indexOf('await timed("embedded_policy_join"', finalizationBodyIndex);
   const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", policyIndex);
 
   assert.ok(resultIndex >= 0, "expected terminal result retention");
@@ -647,7 +688,7 @@ test("validation worker exposes no independent post-refusal message or regenerat
 test("validation worker owns projection finalization across the result-to-findings race", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const start = source.indexOf("async function startCompletedResultFinalization");
-  const wait = source.indexOf("await waitForCanonicalReportInputs(", start);
+  const wait = source.indexOf('await timed("canonical_inputs_wait"', start);
   const materialize = source.indexOf("await ensureCompletedScanScoresPersisted", wait);
   const functionBody = source.slice(start, source.indexOf("async function mapWithConcurrency", start));
 
@@ -726,7 +767,7 @@ test("validation worker durably retains results before acknowledgement and mater
 test("validation worker records terminal completion before consuming embedded policy evidence", async () => {
   const source = await readFile("apps/validation-worker/src/validation/local-v2-dag-lambda-results.ts", "utf8");
   const resultIndex = source.indexOf("await recordLocalV2DagLambdaResult");
-  const fallbackIndex = source.indexOf("await processEmbeddedPolicyEvidenceBeforeScoreMaterialization", resultIndex);
+  const fallbackIndex = source.indexOf('await timed("embedded_policy_join"', resultIndex);
   const scoreIndex = source.indexOf("await ensureCompletedScanScoresPersisted", fallbackIndex);
 
   assert.ok(fallbackIndex >= 0, "expected terminal message policy-evidence fallback");
