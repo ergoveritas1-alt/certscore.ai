@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -46,7 +46,9 @@ test("web uses exact transferred bytes without S3, and stale hints retain verifi
 });
 
 test("internal route bounds unauthenticated payloads and passes hints only after token authorization", async () => {
-  const directory = await mkdtemp(path.resolve("tmp/transfer-route-"));
+  const prefix = path.resolve("tmp/transfer-route-");
+  await mkdir(path.dirname(prefix), { recursive: true });
+  const directory = await mkdtemp(prefix);
   const fixture = path.join(directory, "fixture.cjs");
   const output = path.join(directory, "route.cjs");
   try {

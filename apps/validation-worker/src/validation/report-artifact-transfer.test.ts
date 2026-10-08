@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -9,7 +9,9 @@ import { build } from "esbuild";
 // Exercise the real artifact-verification -> publication boundary with a
 // controlled DB and endpoint, rather than invoking any production service.
 test("worker transfers verified ingestion bytes once and preserves existing publication/finalization retries", async () => {
-  const directory = await mkdtemp(path.resolve(__dirname, "../../../../tmp/worker-transfer-"));
+  const prefix = path.resolve(__dirname, "../../../../tmp/worker-transfer-");
+  await mkdir(path.dirname(prefix), { recursive: true });
+  const directory = await mkdtemp(prefix);
   const fixture = path.join(directory, "fixture.cjs");
   const output = path.join(directory, "worker.cjs");
   try {
