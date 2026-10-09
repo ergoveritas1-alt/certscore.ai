@@ -13,6 +13,16 @@ const completed = await certscore.scans.wait(created);
 const scanId = completed.scanId;
 
 console.log(
+  completed.formsSummary?.totalObserved,
+  completed.formsSummary?.afterAcceptObserved,
+  completed.scoreExplanation?.deductions.map(family => ({
+    family: family.family,
+    points: family.deductionPoints,
+    decisions: family.rules.map(rule => rule.decisionVerification)
+  }))
+);
+
+console.log(
   completed.gpcResponse?.observation?.status, // capture completion
   completed.gpcResponse?.status, // paired response
   completed.postAcceptObservation?.execution, // path completion, separate from confirmation
@@ -30,3 +40,5 @@ const latest = await certscore.domains.latest("ergoveritas.com");
 const latestPreConsentTable = await certscore.domains.latestPreConsentCookiesTrackers("ergoveritas.com");
 
 console.log(status.status, findings.findings.length, preConsentTable.summary.rowCount, latest.scan?.scanId, latestPreConsentTable.summary.rowCount);
+const pulse = await certscore.getScan(scanId);
+console.log(status.formsSummary?.totalObserved, pulse.scoreExplanation?.score);

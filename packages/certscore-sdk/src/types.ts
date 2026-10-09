@@ -1,3 +1,5 @@
+import type { ScanFormsSummary, ScanScoreExplanation } from "./scan-report-summary.js";
+
 export type PulseDetail = "tiny" | "quick" | "standard" | "full" | "summary" | "evidence";
 export type NormalizedPulseDetail = "tiny" | "standard" | "full" | "summary" | "evidence";
 export type PulseFormat = "json" | "markdown";
@@ -287,6 +289,8 @@ export interface GpcResponse {
 }
 
 export interface ScanResource extends ScanCreationMetadata {
+  formsSummary?: ScanFormsSummary | null;
+  scoreExplanation?: ScanScoreExplanation | null;
   privacyAuditEvidence?: import("./privacy-audit.js").PrivacyAuditEvidence | null;
   type: "certscore_scan";
   scanId: string;
@@ -320,6 +324,8 @@ export interface ScanResource extends ScanCreationMetadata {
 }
 
 export interface ScanJob extends ScanCreationMetadata {
+  formsSummary?: ScanFormsSummary | null;
+  scoreExplanation?: ScanScoreExplanation | null;
   type: "certscore_scan_job";
   jobId: string;
   scanId?: string | null;
@@ -832,6 +838,8 @@ export interface TransportSecurityProjection {
 }
 
 export interface PulseResultBase {
+  formsSummary?: ScanFormsSummary | null;
+  scoreExplanation?: ScanScoreExplanation | null;
   type: "certscore_pulse" | "certscore_pulse_summary" | "certscore_pulse_evidence";
   meta?: PulseMeta;
   request?: PulseRequest;

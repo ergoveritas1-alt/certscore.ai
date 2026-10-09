@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { CertScoreClient } from "./client.js";
 import { getCertScoreErrorContext, CertScoreScanFailedError, CertScoreTimeoutError, InvalidUrlError, ThrottledError } from "./errors.js";
@@ -208,6 +210,37 @@ test("packaged declarations expose API v2 scan timing fields", () => {
     declarations,
     /export interface PulseResultBase[\s\S]*gpcResponse\?: GpcResponse \| null;[\s\S]*postAcceptObservation\?: PostAcceptObservation \| null;[\s\S]*postRefusalObservation\?: PostRefusalObservation \| null;/,
   );
+});
+
+test("packaged summary declarations compile for consumers and match canonical API contracts", () => {
+  execFileSync("pnpm", ["run", "build"], { cwd: new URL("..", import.meta.url), stdio: "pipe" });
+  const directory = mkdtempSync(join(tmpdir(), "certscore-sdk-summary-types-"));
+  try {
+    const sdk = new URL("../dist/index.js", import.meta.url).pathname;
+    const contracts = new URL("../../certscore-api-contracts/src/scan-report-summary.js", import.meta.url).pathname;
+    const consumer = join(directory, "consumer.mts");
+    writeFileSync(consumer, `
+      import type {ScanResource, ScanJob, PulseResult, ScanFormsSummary, ScanScoreExplanation} from ${JSON.stringify(sdk)};
+      import type {ScanFormsSummary as ApiForms, ScanScoreExplanation as ApiScore} from ${JSON.stringify(contracts)};
+      type Assert<T extends true> = T;
+      type SameForms = Assert<ScanFormsSummary extends ApiForms ? ApiForms extends ScanFormsSummary ? true : false : false>;
+      type SameScore = Assert<ScanScoreExplanation extends ApiScore ? ApiScore extends ScanScoreExplanation ? true : false : false>;
+      declare const scan: ScanResource;
+      declare const job: ScanJob;
+      declare const pulse: PulseResult;
+      const total: number | undefined = scan.formsSummary?.totalObserved;
+      const unavailable: number | null | undefined = scan.formsSummary?.preConsentObserved;
+      const points: number | undefined = scan.scoreExplanation?.totalPolicyDeductionPoints;
+      const jobTotal: number | undefined = job.formsSummary?.totalObserved;
+      const pulseTotal: number | undefined = pulse.formsSummary?.totalObserved;
+      const decision: "confirmed" | "unconfirmed" | "not_applicable" | "unknown" | undefined = pulse.scoreExplanation?.deductions[0]?.rules[0]?.decisionVerification;
+      // @ts-expect-error summary counts cannot become strings
+      const invalid: string | undefined = scan.formsSummary?.totalObserved;
+      void [total, unavailable, points, jobTotal, pulseTotal, decision, invalid];
+    `);
+    execFileSync(process.execPath, [new URL("../../../node_modules/typescript/bin/tsc", import.meta.url).pathname,
+      "--strict", "--noEmit", "--skipLibCheck", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", consumer], { stdio: "pipe" });
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test("pulse.evidence retrieves the bounded Evidence JSON artifact", async () => {

@@ -106,7 +106,8 @@ test("after-click form observations retain context without claiming consent or a
   assert.match(html,/After Accept click/);
   assert.match(html,/1 form observation/);
   assert.match(html,/does not establish consent registration/);
-  assert.match(html,/Some forms or disclosures may not have been retained/);
+  assert.match(html,/Capture was limited; other fields or forms may be missing/);
+  assert.doesNotMatch(html,/Some forms or disclosures may not have been retained/);
   assert.doesNotMatch(html,/Snapshot unavailable|View form:/);
   assert.match(html,/aria-expanded="false"/);
   const empty=renderToStaticMarkup(<CollectionSurfacesTable afterAcceptLimited rows={[]} />);

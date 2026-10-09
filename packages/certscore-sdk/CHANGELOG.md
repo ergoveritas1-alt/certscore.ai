@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## Unreleased
+
+- Type and export canonical `ScanFormsSummary` and `ScanScoreExplanation` on scan resources, scan jobs and Pulse results.
+- Preserve unavailable phase counts and decision-verification states in TypeScript consumers.
+
 ## 0.2.14
 
 - Retrieve focused retained report evidence with `getReportEvidencePage(scanId, { section })`.
