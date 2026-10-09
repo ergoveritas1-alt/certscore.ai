@@ -1,0 +1,106 @@
+{
+  "censoredTraceInspection": [
+    {
+      "action": "accept",
+      "retained": 192,
+      "missing": 127,
+      "classifications": {
+        "tracking": 64,
+        "document": 4,
+        "unknown": 15,
+        "consent": 2,
+        "delivery_asset": 106,
+        "known_other": 1
+      },
+      "censored": true,
+      "note": "Missing rows cannot be reconstructed; inspection is not recovery measurement."
+    },
+    {
+      "action": "reject",
+      "retained": 192,
+      "missing": 29,
+      "classifications": {
+        "tracking": 59,
+        "document": 5,
+        "consent": 2,
+        "unknown": 14,
+        "delivery_asset": 110,
+        "known_other": 2
+      },
+      "censored": true,
+      "note": "Missing rows cannot be reconstructed; inspection is not recovery measurement."
+    }
+  ],
+  "completeDeterministicStream": {
+    "observed": 223,
+    "cap": 192,
+    "fifoLateRows": [],
+    "priorityLateRows": [
+      "unknown",
+      "tracking_pixel",
+      "second_tracker"
+    ],
+    "summary": {
+      "policyVersion": "priority_bounded_action_requests.v1",
+      "requestsObserved": 223,
+      "requestsRetained": 192,
+      "replacements": 3,
+      "priorityEvaluations": 31,
+      "omitted": {
+        "delivery_asset": 31,
+        "known_other": 0,
+        "unknown": 0,
+        "tracking": 0,
+        "consent": 0,
+        "document": 0,
+        "unclassified": 0
+      }
+    },
+    "note": "Synthetic complete stream; not FullStory missing traffic."
+  },
+  "benchmark": [
+    {
+      "requests": 320,
+      "medianMs": 12.079499999999996,
+      "maxMs": 12.70941700000003,
+      "durationsMs": [
+        12.70941700000003,
+        12.555250000000001,
+        12.079499999999996,
+        10.598500000000001,
+        12.340499999999963,
+        11.574415999999985,
+        10.871332999999993
+      ]
+    },
+    {
+      "requests": 1000,
+      "medianMs": 15.097166999999956,
+      "maxMs": 16.796667000000014,
+      "durationsMs": [
+        16.796667000000014,
+        15.182958000000042,
+        15.418834000000004,
+        14.94120799999996,
+        14.372749999999996,
+        14.66945800000002,
+        15.097166999999956
+      ]
+    },
+    {
+      "requests": 10000,
+      "medianMs": 16.125083000000018,
+      "maxMs": 19.01795900000002,
+      "durationsMs": [
+        18.902208000000087,
+        15.843082999999979,
+        16.281375000000025,
+        16.07245899999998,
+        15.516166999999996,
+        19.01795900000002,
+        16.125083000000018
+      ]
+    }
+  ],
+  "note": "Local warm-loop CPU timings; not measured Lambda latency/cost. No browser wait or storage capacity added."
+}

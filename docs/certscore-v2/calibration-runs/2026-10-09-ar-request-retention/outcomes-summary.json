@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-10-09T14:45:34.173Z",
+  "results": [
+    {
+      "url": "https://fullstory.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:45:21.703Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:45:34.171Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

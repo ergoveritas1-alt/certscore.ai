@@ -1,0 +1,29 @@
+{
+  "reviewer": "Luna / luna_live_benchmark_review",
+  "reviewType": "model_assisted_retained_evidence_review",
+  "independentlyReviewed": false,
+  "sourceManifestAndSelectionReviewed": true,
+  "packetSchemasValid": 4,
+  "packetSha256": {
+    "baselineAccept": "d6dd92730cdfd7626f62da7616cc0877399de063de13809c801b9e9a3caa604b",
+    "baselineReject": "febe4ee991971aab58791882c120ffc5399e71b9b80a50aea0cd9b7010dc0e34",
+    "candidateAccept": "fc8642be79df19697032483e9012a2aa295102a5c174b14922372d2d6d6b4b84",
+    "candidateReject": "414f2639fb5614e42147bcbc496368959cc154839ef0cbdebfb00a1189d27a31"
+  },
+  "visualStructuredARAgreement": {
+    "visits": 2,
+    "disagreements": 0,
+    "source": "Same-visit geometry-proof screenshots, pre-consent and same-loader bound.",
+    "baselineSha256": "6f7220a3d5b114c1a7f23a3fbc1b1d905d3d21eadbcc0a990f4c902f8d56654b",
+    "candidateSha256": "ab4835b42d971991bf0f873feec6a8007fe9dffd7fdfdf9fdccef87a20f740ce"
+  },
+  "limitations": [
+    "Every consent registration unconfirmed. Baseline Reject succeeded operationally, not confirmed refusal.",
+    "Different live streams: baseline A57drops/R0 versus candidate A51/R36 do not prove lower overflow.",
+    "Omitted class is producer diagnostic accounting; omitted identities are not retained for independent reclassification.",
+    "Unknown-full-buffer remains protected even if a late tracker cannot fit. Beyond256 overflow evaluations further omissions unclassified.",
+    "One same-day owner-waived public pair, not a rotating release cohort or population reliability measurement."
+  ],
+  "contactsPersisted": 6,
+  "noGo": false
+}

@@ -1,0 +1,349 @@
+{
+  "scope": "One FullStory baseline/candidate diagnostic pair, three isolated browser lanes each; different live request streams, no population or causal same-stream improvement claim.",
+  "sites": [
+    {
+      "url": "https://fullstory.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-request-retention-20261009/visits/fullstory.com/baseline-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "capturedAtMs": 5894,
+            "artifactId": "screenshot_pre_consent_geometry_proof"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-request-retention-20261009/visits/fullstory.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 5618,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-request-retention-20261009/visits/fullstory.com/baseline-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 466,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 145,
+            "requestsDroppedAfterAction": 57
+          },
+          "retainedNetworkRows": 192,
+          "retainedNonEssentialRows": 80,
+          "found": true,
+          "cmp": "Osano",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 3905,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 3905,
+            "endedAtMs": 6916
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 202,
+            "resolverMs": 2531,
+            "confirmationMs": 2024,
+            "observationMs": 844,
+            "totalMs": 6933,
+            "readyAtMs": 6939
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 149,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 147,
+          "retainedNonEssentialRows": 57,
+          "found": true,
+          "cmp": "Osano",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "refusalExercised": false,
+            "actionDispatchedAtMs": 4559,
+            "reason": "cmp_rejection_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 4559,
+            "endedAtMs": 12565
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 416,
+            "resolverMs": 1952,
+            "confirmationMs": 2002,
+            "observationMs": 5876,
+            "totalMs": 12576,
+            "readyAtMs": 12581
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "refusal_registration_not_confirmed"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://fullstory.com",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-request-retention-20261009/visits/fullstory.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "capturedAtMs": 6052,
+            "artifactId": "screenshot_pre_consent_geometry_proof"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-request-retention-20261009/visits/fullstory.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 5730,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-request-retention-20261009/visits/fullstory.com/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 624,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 144,
+            "requestsDroppedAfterAction": 51,
+            "postActionRetention": {
+              "policyVersion": "priority_bounded_action_requests.v1",
+              "requestsObserved": 243,
+              "requestsRetained": 192,
+              "replacements": 25,
+              "priorityEvaluations": 51,
+              "omitted": {
+                "delivery_asset": 51,
+                "known_other": 0,
+                "unknown": 0,
+                "tracking": 0,
+                "consent": 0,
+                "document": 0,
+                "unclassified": 0
+              }
+            }
+          },
+          "retainedNetworkRows": 192,
+          "retainedNonEssentialRows": 78,
+          "found": true,
+          "cmp": "Osano",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 3107,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 3107,
+            "endedAtMs": 6121
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 156,
+            "resolverMs": 2118,
+            "confirmationMs": 2018,
+            "observationMs": 550,
+            "totalMs": 6143,
+            "readyAtMs": 6149
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 147,
+            "requestsDroppedAfterAction": 36,
+            "postActionRetention": {
+              "policyVersion": "priority_bounded_action_requests.v1",
+              "requestsObserved": 228,
+              "requestsRetained": 192,
+              "replacements": 20,
+              "priorityEvaluations": 36,
+              "omitted": {
+                "delivery_asset": 36,
+                "known_other": 0,
+                "unknown": 0,
+                "tracking": 0,
+                "consent": 0,
+                "document": 0,
+                "unclassified": 0
+              }
+            }
+          },
+          "retainedNetworkRows": 192,
+          "retainedNonEssentialRows": 66,
+          "found": true,
+          "cmp": "Osano",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "refusalExercised": false,
+            "actionDispatchedAtMs": 3378,
+            "reason": "cmp_rejection_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 3378,
+            "endedAtMs": 11386
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 208,
+            "resolverMs": 957,
+            "confirmationMs": 2024,
+            "observationMs": 5758,
+            "totalMs": 11399,
+            "readyAtMs": 11404
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "refusal_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": [
+    {
+      "url": "https://fullstory.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "limited",
+        "clickCompleted": true,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "limited",
+        "clickCompleted": true,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "limited",
+        "clickCompleted": true,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    }
+  ],
+  "contacts": 6
+}

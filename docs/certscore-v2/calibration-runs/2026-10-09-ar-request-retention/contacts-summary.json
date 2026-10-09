@@ -1,0 +1,78 @@
+{
+  "generatedAt": "2026-10-09T14:45:34.173Z",
+  "contactNoGoPolicy": "Each isolated lane contact inherits the authoritative consent-proof visit no-go outcome; not an independent lane diagnosis.",
+  "results": [
+    {
+      "url": "https://fullstory.com",
+      "scanId": "e6be5095-a2eb-4f5f-af8f-46d8d8dbc3fe",
+      "startedAt": "2026-10-09T14:45:09.084Z",
+      "completedAt": "2026-10-09T14:45:15.354Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "6ccc6f62-e34d-4694-9045-53e1e08a0eac",
+      "startedAt": "2026-10-09T14:45:09.085Z",
+      "completedAt": "2026-10-09T14:45:16.050Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "a3f82b76-68f5-4362-97ec-ad2349708528",
+      "startedAt": "2026-10-09T14:45:09.085Z",
+      "completedAt": "2026-10-09T14:45:21.690Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "8ed8e95e-7783-4ac3-93e6-185021c5b58f",
+      "startedAt": "2026-10-09T14:45:22.720Z",
+      "completedAt": "2026-10-09T14:45:29.003Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "7db9beef-e9c9-4071-afe3-0a078ee8711c",
+      "startedAt": "2026-10-09T14:45:22.721Z",
+      "completedAt": "2026-10-09T14:45:29.003Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "480b010f-647d-4e4d-8953-a1619db088d7",
+      "startedAt": "2026-10-09T14:45:22.721Z",
+      "completedAt": "2026-10-09T14:45:34.155Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

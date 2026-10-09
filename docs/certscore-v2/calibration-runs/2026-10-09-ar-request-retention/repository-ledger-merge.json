@@ -1,0 +1,23 @@
+{
+  "scope": "Only FullStory row updated; all other repository entries preserved.",
+  "before": {
+    "consecutiveNoGoCount": 0,
+    "cooldownUntil": "2026-11-06T14:17:04.079Z",
+    "lastContactAt": "2026-10-09T14:17:04.079Z",
+    "lastContactSource": "calibration",
+    "lastNoGoReasons": [],
+    "lastOutcome": "completed",
+    "state": "cooldown",
+    "url": "https://fullstory.com"
+  },
+  "after": {
+    "consecutiveNoGoCount": 0,
+    "cooldownUntil": "2026-11-06T14:45:34.171Z",
+    "lastContactAt": "2026-10-09T14:45:34.171Z",
+    "lastContactSource": "calibration",
+    "lastNoGoReasons": [],
+    "lastOutcome": "completed",
+    "state": "cooldown",
+    "url": "https://fullstory.com"
+  }
+}

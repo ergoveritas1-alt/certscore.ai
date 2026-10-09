@@ -1,0 +1,103 @@
+{
+  "regressions.log": {
+    "sha256": "30f3393214940f52fd9c0f18a168344e5a4d47f28f20921d80dc271eb995a6e9",
+    "lastLines": [
+      "1..264",
+      "# tests 264",
+      "# suites 0",
+      "# pass 264",
+      "# fail 0",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 118163.099208"
+    ]
+  },
+  "contracts-full.log": {
+    "sha256": "85ff4765ebbe0d7dc805099d107287bfd7f736982e014911d2353f30460e0b57",
+    "lastLines": [
+      "1..566",
+      "# tests 566",
+      "# suites 0",
+      "# pass 566",
+      "# fail 0",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 7378.99625"
+    ]
+  },
+  "scan-core-typecheck.log": {
+    "sha256": "b4a890755af2aceccca6100fb8d5b00423e238bf530041c1af46a25b8d7999b6",
+    "lastLines": [
+      "> @certscore/scan-core@0.1.0 typecheck /Users/benmasek/WC01/packages/certscore-scan-core",
+      "> tsc --noEmit -p tsconfig.typecheck.json"
+    ],
+    "exitCode": 0,
+    "completionVerified": true
+  },
+  "contracts-typecheck.log": {
+    "sha256": "32a8443b89449fd03b8b0b84a16b47aa6af9c664d96467e7f60e14325e5e0abc",
+    "lastLines": [
+      "> @certscore/contracts@0.1.0 typecheck /Users/benmasek/WC01/packages/certscore-contracts",
+      "> tsc --noEmit -p tsconfig.json"
+    ],
+    "exitCode": 0,
+    "completionVerified": true
+  },
+  "cancellation-fix.log": {
+    "sha256": "f4d9cd6bc9db498e397c1c6b864f6e71d3d14515f4827d68b1c465bb051af03c",
+    "lastLines": [
+      "1..2",
+      "# tests 2",
+      "# suites 0",
+      "# pass 2",
+      "# fail 0",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 1725.6755"
+    ]
+  },
+  "registry.log": {
+    "sha256": "55d31c664c68897ac460cfef94470d960f6004435010af852a7df63a13526cb7",
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-registry-check /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/verify-scan-quality-calibration-registry.ts",
+      "",
+      "Scan-quality calibration registry passed: 51 rotating targets, 6 stable lanes, 10-site default live sample."
+    ]
+  },
+  "contact-export.log": {
+    "sha256": "70a7b2d2c7dbf410e75da80a5afe984a3318fef31f5313f20ffcd6500fce7f57",
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-ledger-export /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/export-scan-quality-calibration-ledger.ts --ecs-oneoff --manifest artifacts/ar-request-retention-20261009/manifest.json --ledger artifacts/ar-request-retention-20261009/ledger.json --out artifacts/ar-request-retention-20261009/effective-ledger.json",
+      "",
+      "Exported 1 central contact records into /Users/benmasek/WC01/artifacts/ar-request-retention-20261009/effective-ledger.json"
+    ]
+  },
+  "contact-persist.log": {
+    "sha256": "cf7e25f8bfa533a77a9271bc30348becc9c72a1728a4531b4411bffdc595cfcc",
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-contact-persist /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/persist-scan-quality-calibration-contacts.ts --ecs-oneoff --manifest artifacts/ar-request-retention-20261009/manifest.json --run-key ar-request-retention-pair-20261009 --summary artifacts/ar-request-retention-20261009/contacts-summary.json",
+      "",
+      "Persisted 6 calibration contacts for run ar-request-retention-pair-20261009"
+    ]
+  },
+  "browser-overflow.log": {
+    "sha256": "557d581ec835fcda3f03c30e55f245274c903d2d6d039c7c62f840e288e3a06d",
+    "lastLines": [
+      "1..4",
+      "# tests 4",
+      "# suites 0",
+      "# pass 4",
+      "# fail 0",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 7191.765875"
+    ]
+  }
+}
