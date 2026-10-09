@@ -116,7 +116,7 @@ export const cmsPluginInventorySchema = z.object({
 }).strict();
 export type CmsPluginInventory = z.infer<typeof cmsPluginInventorySchema>;
 export function assessCmsPluginSignals(signals: CmsSignal[]): CmsPluginInventory {
-  const candidates = signals.flatMap(signal => {
+  const candidates = signals.flatMap<{ id: string; name: string; version: string | null; evidenceRef: string }>(signal => {
     if (signal.kind === "meta_generator") return wordpressPlugins.flatMap(plugin => {
       const match = "generator" in plugin ? plugin.generator.exec(signal.value) : null;
       return match ? [{ id: plugin.id as string, name: plugin.name as string, version: match[1] ?? null, evidenceRef: signal.evidenceRef }] : [];
