@@ -1,0 +1,37 @@
+[
+  {
+    "path": "artifacts/ar-reject-eligibility-20261009/regressions-verified.log",
+    "sha256": "d7cecc87a105c7429f6b3e9b06c52ecaa0085c76c6e9f64af68d86e1973bfd3c",
+    "summary": "1..212\n# tests 212\n# suites 0\n# pass 212\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 98826.871292"
+  },
+  {
+    "path": "artifacts/ar-reject-eligibility-20261009/contracts-full.log",
+    "sha256": "e0057907e133c443031d5bfe6217a4b432759abae8025f64ad56a84985b8c424",
+    "summary": "1..564\n# tests 564\n# suites 0\n# pass 564\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 3140.196291"
+  },
+  {
+    "path": "artifacts/ar-reject-eligibility-20261009/typecheck-verified.log",
+    "sha256": "b4a890755af2aceccca6100fb8d5b00423e238bf530041c1af46a25b8d7999b6",
+    "summary": "\n> @certscore/scan-core@0.1.0 typecheck /Users/benmasek/WC01/packages/certscore-scan-core\n> tsc --noEmit -p tsconfig.typecheck.json\n\n"
+  },
+  {
+    "path": "artifacts/ar-reject-eligibility-20261009/contracts-typecheck.log",
+    "sha256": "32a8443b89449fd03b8b0b84a16b47aa6af9c664d96467e7f60e14325e5e0abc",
+    "summary": "\n> @certscore/contracts@0.1.0 typecheck /Users/benmasek/WC01/packages/certscore-contracts\n> tsc --noEmit -p tsconfig.json\n\n"
+  },
+  {
+    "path": "artifacts/ar-reject-eligibility-20261009/registry-final.log",
+    "sha256": "55d31c664c68897ac460cfef94470d960f6004435010af852a7df63a13526cb7",
+    "summary": "\n> website-signal-risk-scanner@0.1.0 v2:calibration-registry-check /Users/benmasek/WC01\n> node --import tsx ./scripts/verify-scan-quality-calibration-registry.ts\n\nScan-quality calibration registry passed: 51 rotating targets, 6 stable lanes, 10-site default live sample.\n"
+  },
+  {
+    "path": "artifacts/ar-reject-eligibility-20261009/contact-export.log",
+    "sha256": "146c39549c4fe79689e978fa89e0dd7aacc276c5dd099d52032628421761a17f",
+    "summary": "\n> website-signal-risk-scanner@0.1.0 v2:calibration-ledger-export /Users/benmasek/WC01\n> node --import tsx ./scripts/export-scan-quality-calibration-ledger.ts --ecs-oneoff --manifest artifacts/ar-reject-eligibility-20261009/inventory-manifest.json --out artifacts/ar-reject-eligibility-20261009/effective-ledger.json\n\nExported 4 central contact records into /Users/benmasek/WC01/artifacts/ar-reject-eligibility-20261009/effective-ledger.json\n"
+  },
+  {
+    "path": "artifacts/ar-reject-eligibility-20261009/contact-persist.log",
+    "sha256": "de34b403cd2774e7b5e9bf4a64ba3230a5a82fc8d89d91e5c630bc653c71b8a8",
+    "summary": "\n> website-signal-risk-scanner@0.1.0 v2:calibration-contact-persist /Users/benmasek/WC01\n> node --import tsx ./scripts/persist-scan-quality-calibration-contacts.ts --ecs-oneoff --manifest artifacts/ar-reject-eligibility-20261009/inventory-manifest.json --run-key ar-reject-eligibility-20261009 --summary artifacts/ar-reject-eligibility-20261009/all-contacts-summary.json\n\nPersisted 144 calibration contacts for run ar-reject-eligibility-20261009\n"
+  }
+]

@@ -1,0 +1,45 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-09T13:18:28.824Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-reject-eligibility-20261009",
+  "selected": [
+    {
+      "url": "https://unleashedsoftware.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://adecco.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://sodexo.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner approved repeat fresh local scans and bounded Reject eligibility cost; blocked/do_not_calibrate remain excluded.",
+    "appliedToUrls": [
+      "https://adecco.com/",
+      "https://receitasnestle.com.br/",
+      "https://sodexo.com/",
+      "https://unleashedsoftware.com/"
+    ]
+  }
+}

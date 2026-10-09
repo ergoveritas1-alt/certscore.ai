@@ -1,0 +1,6 @@
+{
+  "beforeSnapshotUnchanged": true,
+  "candidateSnapshotUnchanged": true,
+  "originalBaselineUnchanged": true,
+  "workingTreeMatchesFinalSnapshot": true
+}

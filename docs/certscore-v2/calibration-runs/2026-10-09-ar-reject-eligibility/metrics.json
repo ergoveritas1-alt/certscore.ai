@@ -1,0 +1,653 @@
+{
+  "generatedAt": "2026-10-09T13:42:45.314288+00:00",
+  "localOnly": true,
+  "populationEstimate": false,
+  "protocol": "Fixed diagnostic comparison; two repeats per source and site; ABBA/BAAB; separate fresh consent/Accept/Reject sessions.",
+  "sites": [
+    {
+      "url": "https://adecco.com/",
+      "versions": {
+        "baseline": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:e804e1c01b382aacb582c841",
+                "actionSemantics": "direct_label",
+                "durationMs": 6465,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:e804e1c01b382aacb582c841",
+                "actionSemantics": "direct_label",
+                "durationMs": 6483,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 0,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "not_attempted",
+                "registration": "not_attempted",
+                "reason": "resolved_control_label_not_classified",
+                "recipe": null,
+                "actionSemantics": null,
+                "durationMs": 4247,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "label_unverifiable",
+                  "resolved_control_label_not_classified"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "not_attempted",
+                "registration": "not_attempted",
+                "reason": "resolved_control_label_not_classified",
+                "recipe": null,
+                "actionSemantics": null,
+                "durationMs": 3752,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "label_unverifiable",
+                  "resolved_control_label_not_classified"
+                ]
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:e804e1c01b382aacb582c841",
+                "actionSemantics": "direct_label",
+                "durationMs": 6676,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:e804e1c01b382aacb582c841",
+                "actionSemantics": "direct_label",
+                "durationMs": 5979,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_rejection_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:reject:v3",
+                "actionSemantics": "canonical_necessary_only_recipe",
+                "durationMs": 11928,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "refusal_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_rejection_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:reject:v3",
+                "actionSemantics": "canonical_necessary_only_recipe",
+                "durationMs": 11139,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "refusal_registration_not_confirmed"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "versions": {
+        "baseline": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:8f911d4fd12c4d5bc598bf5d",
+                "actionSemantics": "direct_label",
+                "durationMs": 7874,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:8f911d4fd12c4d5bc598bf5d",
+                "actionSemantics": "direct_label",
+                "durationMs": 7725,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 0,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "not_attempted",
+                "registration": "not_attempted",
+                "reason": "resolved_control_label_below_confidence_threshold",
+                "recipe": null,
+                "actionSemantics": null,
+                "durationMs": 15528,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "label_unverifiable",
+                  "resolved_control_label_below_confidence_threshold"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "not_attempted",
+                "registration": "not_attempted",
+                "reason": "resolved_control_label_below_confidence_threshold",
+                "recipe": null,
+                "actionSemantics": null,
+                "durationMs": 15536,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "label_unverifiable",
+                  "resolved_control_label_below_confidence_threshold"
+                ]
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:8f911d4fd12c4d5bc598bf5d",
+                "actionSemantics": "direct_label",
+                "durationMs": 7632,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-control:accept:v1:8f911d4fd12c4d5bc598bf5d",
+                "actionSemantics": "direct_label",
+                "durationMs": 7182,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_rejection_state_not_observed",
+                "recipe": "canonical-control:reject:v2:79ae7d983a41d4b559c6aaa9",
+                "actionSemantics": "direct_label",
+                "durationMs": 12734,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "refusal_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_rejection_state_not_observed",
+                "recipe": "canonical-control:reject:v2:79ae7d983a41d4b559c6aaa9",
+                "actionSemantics": "direct_label",
+                "durationMs": 13296,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "action_dispatch_verified_geometry_fallback",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "refusal_registration_not_confirmed"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "versions": {
+        "baseline": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:accept:v1",
+                "actionSemantics": "direct_label",
+                "durationMs": 5831,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:accept:v1",
+                "actionSemantics": "direct_label",
+                "durationMs": 5872,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 0,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "not_attempted",
+                "registration": "not_attempted",
+                "reason": "resolved_control_no_longer_actionable",
+                "recipe": null,
+                "actionSemantics": null,
+                "durationMs": 4240,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "label_unverifiable",
+                  "resolved_control_no_longer_actionable"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "not_attempted",
+                "registration": "not_attempted",
+                "reason": "resolved_control_label_not_classified",
+                "recipe": null,
+                "actionSemantics": null,
+                "durationMs": 3730,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "label_unverifiable",
+                  "resolved_control_label_not_classified"
+                ]
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:accept:v1",
+                "actionSemantics": "direct_label",
+                "durationMs": 6791,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_acceptance_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:accept:v1",
+                "actionSemantics": "direct_label",
+                "durationMs": 5617,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "acceptance_registration_not_confirmed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 0,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_rejection_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:reject:v3",
+                "actionSemantics": "canonical_necessary_only_recipe",
+                "durationMs": 12278,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "refusal_registration_not_confirmed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "unconfirmed",
+                "reason": "cmp_rejection_state_not_observed",
+                "recipe": "canonical-cmp:OneTrust:reject:v3",
+                "actionSemantics": "canonical_necessary_only_recipe",
+                "durationMs": 11488,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                  "refusal_registration_not_confirmed"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "versions": {
+        "baseline": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 2,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-cmp:OneTrust:accept:v1",
+                "actionSemantics": "direct_label",
+                "durationMs": 4473,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "observation_early_exit:non_essential_request_observed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-cmp:OneTrust:accept:v1",
+                "actionSemantics": "direct_label",
+                "durationMs": 3595,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "observation_early_exit:non_essential_request_observed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 2,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+                "actionSemantics": "direct_label",
+                "durationMs": 4933,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "observation_early_exit:non_essential_request_observed",
+                  "persistence_observation_not_settled_due_to_early_exit"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+                "actionSemantics": "direct_label",
+                "durationMs": 4132,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "observation_early_exit:non_essential_request_observed",
+                  "persistence_observation_not_settled_due_to_early_exit"
+                ]
+              }
+            ]
+          }
+        },
+        "candidate": {
+          "accept": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 2,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-control:accept:v1:40fffe5b0c6472268fbda52b",
+                "actionSemantics": "direct_label",
+                "durationMs": 3108,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "observation_early_exit:non_essential_request_observed"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-cmp:OneTrust:accept:v1",
+                "actionSemantics": "direct_label",
+                "durationMs": 3874,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "observation_early_exit:non_essential_request_observed"
+                ]
+              }
+            ]
+          },
+          "reject": {
+            "sessions": 2,
+            "completedClicks": 2,
+            "confirmed": 2,
+            "outcomes": [
+              {
+                "repeat": 1,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+                "actionSemantics": "direct_label",
+                "durationMs": 4084,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "observation_early_exit:non_essential_request_observed",
+                  "persistence_observation_not_settled_due_to_early_exit"
+                ]
+              },
+              {
+                "repeat": 2,
+                "click": "completed",
+                "registration": "confirmed",
+                "reason": null,
+                "recipe": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+                "actionSemantics": "direct_label",
+                "durationMs": 4162,
+                "limitations": [
+                  "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                  "redirect_target_resolved_exact:1",
+                  "observation_early_exit:non_essential_request_observed",
+                  "persistence_observation_not_settled_due_to_early_exit"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "summary": "pass1-summary.json",
+      "visits": 16,
+      "contacts": 48,
+      "purpose": "failed_diagnostic_iteration"
+    },
+    {
+      "summary": "summary-final.json",
+      "visits": 16,
+      "contacts": 48,
+      "purpose": "failed_diagnostic_iteration"
+    },
+    {
+      "summary": "summary-verified.json",
+      "visits": 16,
+      "contacts": 48,
+      "purpose": "final_comparison"
+    }
+  ],
+  "allContacts": 144,
+  "noGoContacts": 0
+}

@@ -1,0 +1,46 @@
+{
+  "entries": {
+    "https://adecco.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:35:05.483+00:00",
+      "lastContactAt": "2026-10-09T12:35:05.483+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://adecco.com/"
+    },
+    "https://sodexo.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:50:29.19+00:00",
+      "lastContactAt": "2026-10-09T12:50:29.19+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sodexo.com/"
+    },
+    "https://receitasnestle.com.br/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:32:08.648+00:00",
+      "lastContactAt": "2026-10-09T12:32:08.648+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://receitasnestle.com.br/"
+    },
+    "https://unleashedsoftware.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:57:52.031+00:00",
+      "lastContactAt": "2026-10-09T12:57:52.031+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://unleashedsoftware.com/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-09T13:15:43.328Z"
+}

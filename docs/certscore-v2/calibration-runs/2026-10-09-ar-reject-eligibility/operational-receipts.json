@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-10-09T13:45:31.948899+00:00",
+  "deploymentPerformed": false,
+  "centralHistoryExport": "completed;4 target records",
+  "contactPersistence": {
+    "runKey": "ar-reject-eligibility-20261009",
+    "attemptedSessions": 144,
+    "status": "completed; includes both failed diagnostic iterations"
+  },
+  "ledgerReview": {
+    "entries": 4,
+    "allCooldown": true,
+    "diagnosticInventoryOnly": true,
+    "rootInventoryAndExistingUniqueWorkPreserved": true
+  },
+  "verification": {
+    "actionRegressions": {
+      "passed": 212,
+      "failed": 0
+    },
+    "contractsFull": {
+      "passed": 564,
+      "failed": 0
+    },
+    "scanCoreTypecheck": "passed",
+    "contractsTypecheck": "passed",
+    "completedClickProofsValid": 26,
+    "sourceSnapshotsAndRootIntegrity": "passed",
+    "lunaReview": {
+      "provenance": "model_assisted_read_only_audit",
+      "humanIndependentLabels": false,
+      "countsPairingProofsAndSourceHashes": "verified",
+      "unconfirmedBoundedCaptures": 18,
+      "allUnconfirmedCapturesCompletedTheirConfiguredWindow": true,
+      "requestDropsInUnconfirmedCaptures": 0,
+      "limitations": [
+        "Fixed selected diagnostic sites; not population/release acceptance.",
+        "Six newly exercised Reject paths remain semantically unconfirmed.",
+        "Confirmed positive-control Reject captures may early exit before persistence settling."
+      ]
+    }
+  },
+  "cost": {
+    "ownerApprovedRecurringCapUsdPer100000AffectedScans": 110,
+    "boundedProofStorageUsdPerMonthAt100000AffectedScansLessThan": 0.1,
+    "proofStorageIncludedInApprovedEnvelope": true,
+    "oneTimeBookkeepingEstimateUsdLessThan": 0.1,
+    "populationOccurrenceRate": "not established"
+  },
+  "remaining": "Semantic confirmation on Adecco/Sodexo/Receitas Nestle remains unconfirmed; no deployment or release acceptance claimed."
+}

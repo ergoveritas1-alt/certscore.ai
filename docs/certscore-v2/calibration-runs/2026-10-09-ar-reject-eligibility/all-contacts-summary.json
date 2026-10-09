@@ -1,0 +1,1350 @@
+{
+  "runKey": "ar-reject-eligibility-20261009",
+  "generatedAt": "2026-10-09T13:42:45.314288+00:00",
+  "results": [
+    {
+      "url": "https://adecco.com/",
+      "scanId": "d7d57007-7bc4-4719-9f8c-6ecfc441e64d",
+      "startedAt": "2026-10-09T13:22:35.344Z",
+      "completedAt": "2026-10-09T13:22:39.010Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "eee533cc-d8e0-42ce-910e-01e62138a1a0",
+      "startedAt": "2026-10-09T13:22:35.345Z",
+      "completedAt": "2026-10-09T13:22:39.305Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "ef7f44c5-9858-44eb-90aa-801d720f8842",
+      "startedAt": "2026-10-09T13:22:35.345Z",
+      "completedAt": "2026-10-09T13:22:41.864Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "8cbfd466-868d-4bc9-9b94-600541450d55",
+      "startedAt": "2026-10-09T13:22:35.848Z",
+      "completedAt": "2026-10-09T13:22:42.329Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "3333c47a-386b-4907-9e6b-8db1744f91cc",
+      "startedAt": "2026-10-09T13:22:35.849Z",
+      "completedAt": "2026-10-09T13:22:40.612Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "ceb03667-03bc-4619-a468-e0d7294cb989",
+      "startedAt": "2026-10-09T13:22:35.849Z",
+      "completedAt": "2026-10-09T13:22:40.380Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "617a4c68-309a-4cce-9701-461df6485faf",
+      "startedAt": "2026-10-09T13:22:42.447Z",
+      "completedAt": "2026-10-09T13:22:45.736Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "531d5c74-f0e0-4d17-a4f3-e3e92d7ccb8e",
+      "startedAt": "2026-10-09T13:22:42.448Z",
+      "completedAt": "2026-10-09T13:22:46.080Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "c5755d37-69f4-452b-9608-4468f7fa4174",
+      "startedAt": "2026-10-09T13:22:42.448Z",
+      "completedAt": "2026-10-09T13:22:50.396Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "2d4de855-e13f-47eb-9e67-0c92eb736c55",
+      "startedAt": "2026-10-09T13:22:42.910Z",
+      "completedAt": "2026-10-09T13:22:47.284Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "7e445c6d-9265-48af-9468-b9c1d26a27a7",
+      "startedAt": "2026-10-09T13:22:42.910Z",
+      "completedAt": "2026-10-09T13:22:47.394Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "bf8379e4-f8e3-4347-aa9d-d4b67879bfac",
+      "startedAt": "2026-10-09T13:22:42.910Z",
+      "completedAt": "2026-10-09T13:22:49.278Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "f9dcb43a-5573-437f-a209-8c8b3da6ce13",
+      "startedAt": "2026-10-09T13:22:49.783Z",
+      "completedAt": "2026-10-09T13:22:55.890Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "7fb9219f-59e8-4f9a-b481-30e18165d490",
+      "startedAt": "2026-10-09T13:22:49.784Z",
+      "completedAt": "2026-10-09T13:22:54.267Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "809e6135-e0f9-4737-b25b-a9a5b5102b6d",
+      "startedAt": "2026-10-09T13:22:49.784Z",
+      "completedAt": "2026-10-09T13:22:54.128Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "581ea9be-28c2-4c5c-ad5e-76b4e0c77264",
+      "startedAt": "2026-10-09T13:22:50.930Z",
+      "completedAt": "2026-10-09T13:22:59.998Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "ac52f647-0f71-4285-910a-9fe1161554ad",
+      "startedAt": "2026-10-09T13:22:50.930Z",
+      "completedAt": "2026-10-09T13:22:57.277Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "ee042464-22d2-4753-ac12-f8a9f7d8f88b",
+      "startedAt": "2026-10-09T13:22:50.930Z",
+      "completedAt": "2026-10-09T13:22:54.749Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "759fdca2-df4a-4c5b-a3b2-34aeb7b1509f",
+      "startedAt": "2026-10-09T13:22:56.443Z",
+      "completedAt": "2026-10-09T13:23:01.707Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "44ab92aa-b80d-4751-b15d-95afeee46a72",
+      "startedAt": "2026-10-09T13:22:56.447Z",
+      "completedAt": "2026-10-09T13:23:00.686Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "cf58d95a-c80c-4db7-8c7c-dc47ed65b327",
+      "startedAt": "2026-10-09T13:22:56.447Z",
+      "completedAt": "2026-10-09T13:23:00.852Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "ba53705e-2fc2-4a46-a6c5-d8f7211a0381",
+      "startedAt": "2026-10-09T13:23:00.878Z",
+      "completedAt": "2026-10-09T13:23:04.750Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "5942fa6c-b85d-4b47-ae74-3a91809302b3",
+      "startedAt": "2026-10-09T13:23:00.879Z",
+      "completedAt": "2026-10-09T13:23:06.169Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "fe6b9544-7219-4501-aee1-d36ba17da512",
+      "startedAt": "2026-10-09T13:23:00.879Z",
+      "completedAt": "2026-10-09T13:23:04.634Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "6b8f99ec-8577-4805-9e42-f22390e5d7c3",
+      "startedAt": "2026-10-09T13:23:02.464Z",
+      "completedAt": "2026-10-09T13:23:08.053Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "a910f39d-a494-4c9e-b37e-5d8151e03239",
+      "startedAt": "2026-10-09T13:23:02.465Z",
+      "completedAt": "2026-10-09T13:23:09.810Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "ade28cdf-3e76-482d-8c9d-77a605ef4875",
+      "startedAt": "2026-10-09T13:23:02.465Z",
+      "completedAt": "2026-10-09T13:23:18.014Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "868fb771-c4b5-4169-90ba-8fb551dfd9b2",
+      "startedAt": "2026-10-09T13:23:06.857Z",
+      "completedAt": "2026-10-09T13:23:11.553Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "47069ea0-7e8b-4c90-9b08-da4673159644",
+      "startedAt": "2026-10-09T13:23:06.860Z",
+      "completedAt": "2026-10-09T13:23:12.868Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "7f8e95eb-2468-4110-9240-7c8ddfa7d77a",
+      "startedAt": "2026-10-09T13:23:06.860Z",
+      "completedAt": "2026-10-09T13:23:10.376Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "61195410-4126-47b0-8c40-a512ea31077b",
+      "startedAt": "2026-10-09T13:23:13.426Z",
+      "completedAt": "2026-10-09T13:23:18.062Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "2af30470-f0f0-44ac-ad70-7af82fc62c3a",
+      "startedAt": "2026-10-09T13:23:13.427Z",
+      "completedAt": "2026-10-09T13:23:16.560Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "f1afc13e-d0b2-4d31-b3a9-96ebee189e23",
+      "startedAt": "2026-10-09T13:23:13.427Z",
+      "completedAt": "2026-10-09T13:23:18.962Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "102ba529-4cd4-4068-925e-e90e5b2c8e0e",
+      "startedAt": "2026-10-09T13:23:18.595Z",
+      "completedAt": "2026-10-09T13:23:24.469Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "398a1391-41cd-4c5c-8546-eac2b4c3a85e",
+      "startedAt": "2026-10-09T13:23:18.595Z",
+      "completedAt": "2026-10-09T13:23:30.283Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "836f9743-63f0-4b46-aa55-c7bfb1ce4d30",
+      "startedAt": "2026-10-09T13:23:18.595Z",
+      "completedAt": "2026-10-09T13:23:25.033Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "65916a16-e171-42b4-8847-517833aa07c6",
+      "startedAt": "2026-10-09T13:23:19.945Z",
+      "completedAt": "2026-10-09T13:23:24.099Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "00f0b836-5e5a-4ffb-891f-cb22df8e4eb3",
+      "startedAt": "2026-10-09T13:23:19.946Z",
+      "completedAt": "2026-10-09T13:23:25.893Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "401986ff-b9d0-47bb-8f32-46694e99e99c",
+      "startedAt": "2026-10-09T13:23:19.946Z",
+      "completedAt": "2026-10-09T13:23:23.932Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "5c90e539-7c7a-4459-b0ea-8340b101cd93",
+      "startedAt": "2026-10-09T13:23:26.420Z",
+      "completedAt": "2026-10-09T13:23:30.867Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "d384a310-1626-46fe-885a-d2d2921e3cf5",
+      "startedAt": "2026-10-09T13:23:26.424Z",
+      "completedAt": "2026-10-09T13:23:30.950Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "d688a60f-aab8-4d46-a7b8-a0c410705e45",
+      "startedAt": "2026-10-09T13:23:26.424Z",
+      "completedAt": "2026-10-09T13:23:32.831Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "7b698ef9-d82f-4931-9fe2-53a3719efb59",
+      "startedAt": "2026-10-09T13:23:31.050Z",
+      "completedAt": "2026-10-09T13:23:36.275Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "85c850fc-0224-4ef3-b101-799cbe13e4f5",
+      "startedAt": "2026-10-09T13:23:31.050Z",
+      "completedAt": "2026-10-09T13:23:38.424Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "e5307251-909d-4f93-856f-3ccca09e6cb4",
+      "startedAt": "2026-10-09T13:23:31.050Z",
+      "completedAt": "2026-10-09T13:23:43.849Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "164aad25-a56f-4c4b-b3f3-8a0e228adab2",
+      "startedAt": "2026-10-09T13:23:44.391Z",
+      "completedAt": "2026-10-09T13:23:49.592Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "2d846072-5369-4855-87f6-4330f93c28f0",
+      "startedAt": "2026-10-09T13:23:44.392Z",
+      "completedAt": "2026-10-09T13:23:59.847Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "86f79e32-f1f4-4ede-985d-df2cac5f478d",
+      "startedAt": "2026-10-09T13:23:44.392Z",
+      "completedAt": "2026-10-09T13:23:50.835Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "4255ae30-cfca-4db5-8e88-3701677fe3f0",
+      "startedAt": "2026-10-09T13:36:35.652Z",
+      "completedAt": "2026-10-09T13:36:42.587Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "33e1b85c-6bdb-4d45-a5f7-76c28a3b90e2",
+      "startedAt": "2026-10-09T13:36:35.653Z",
+      "completedAt": "2026-10-09T13:36:40.361Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "35b46790-d440-4547-8aba-3a7bf03e1ed5",
+      "startedAt": "2026-10-09T13:36:35.653Z",
+      "completedAt": "2026-10-09T13:36:40.300Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "658585b0-0bb3-4ad1-9546-c5eeaffc3ac6",
+      "startedAt": "2026-10-09T13:36:36.105Z",
+      "completedAt": "2026-10-09T13:36:40.333Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "7fc17c48-1a58-41c5-997f-4b4502c0e8b0",
+      "startedAt": "2026-10-09T13:36:36.105Z",
+      "completedAt": "2026-10-09T13:36:42.919Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "d42b0db3-62a2-4e21-ba16-a020d7f0552c",
+      "startedAt": "2026-10-09T13:36:36.105Z",
+      "completedAt": "2026-10-09T13:36:40.204Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "59e766f7-925f-45ab-a7b4-3f41870945fc",
+      "startedAt": "2026-10-09T13:36:43.158Z",
+      "completedAt": "2026-10-09T13:36:49.102Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "72885270-8a00-4055-b0cd-cbe3550dfd40",
+      "startedAt": "2026-10-09T13:36:43.161Z",
+      "completedAt": "2026-10-09T13:36:47.317Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "a1cd25e6-2eb4-4fa6-a300-e828818e4ba4",
+      "startedAt": "2026-10-09T13:36:43.161Z",
+      "completedAt": "2026-10-09T13:36:47.638Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "96d1f376-f003-49fa-97ec-f7ed095b1876",
+      "startedAt": "2026-10-09T13:36:43.529Z",
+      "completedAt": "2026-10-09T13:36:47.444Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "578b94c8-d014-4a88-a09c-3119a8bbb3b1",
+      "startedAt": "2026-10-09T13:36:43.530Z",
+      "completedAt": "2026-10-09T13:36:49.551Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "ac61c3c1-689c-4748-bf85-19d83cc6b056",
+      "startedAt": "2026-10-09T13:36:43.530Z",
+      "completedAt": "2026-10-09T13:36:47.824Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "45706a8d-91a6-44a3-8350-fd1752cfc7b0",
+      "startedAt": "2026-10-09T13:36:49.655Z",
+      "completedAt": "2026-10-09T13:36:55.182Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "11a3656c-c248-417f-a0d8-3e258bbfc4a6",
+      "startedAt": "2026-10-09T13:36:49.656Z",
+      "completedAt": "2026-10-09T13:36:54.248Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "bdfe2165-c250-44cd-85b2-f61f0eae05ba",
+      "startedAt": "2026-10-09T13:36:49.656Z",
+      "completedAt": "2026-10-09T13:36:54.477Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "1aa20b36-e682-4f11-af8c-bd5f167de8e9",
+      "startedAt": "2026-10-09T13:36:50.154Z",
+      "completedAt": "2026-10-09T13:36:53.644Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "a0c3e0f7-aada-4ce3-943b-6a0117d50279",
+      "startedAt": "2026-10-09T13:36:50.154Z",
+      "completedAt": "2026-10-09T13:36:56.082Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "c155017d-e653-49f7-a5ce-9e27a54704d6",
+      "startedAt": "2026-10-09T13:36:50.154Z",
+      "completedAt": "2026-10-09T13:36:54.414Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "02e119c6-c6f5-4c29-8ea2-ee68fb38f506",
+      "startedAt": "2026-10-09T13:36:55.721Z",
+      "completedAt": "2026-10-09T13:37:00.608Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "41ce0696-e651-4243-ab9c-2c2be4cb631c",
+      "startedAt": "2026-10-09T13:36:55.722Z",
+      "completedAt": "2026-10-09T13:37:00.188Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "512616e7-1f2f-459c-a8bb-f4e16a95df43",
+      "startedAt": "2026-10-09T13:36:55.722Z",
+      "completedAt": "2026-10-09T13:36:59.851Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "35803fd5-da68-41ee-a361-94b8df100709",
+      "startedAt": "2026-10-09T13:36:56.674Z",
+      "completedAt": "2026-10-09T13:37:00.656Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "334fdd46-2c2f-4716-a2b5-caee330fa60e",
+      "startedAt": "2026-10-09T13:36:56.675Z",
+      "completedAt": "2026-10-09T13:37:00.805Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "cc0d14e1-5c37-4a45-a679-a88b7f3ba72f",
+      "startedAt": "2026-10-09T13:36:56.675Z",
+      "completedAt": "2026-10-09T13:37:03.149Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "7b569ff5-7fe2-4054-b548-ca3543a8a80f",
+      "startedAt": "2026-10-09T13:37:01.231Z",
+      "completedAt": "2026-10-09T13:37:08.837Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "3f608396-7158-46ff-8287-97d973c3ff09",
+      "startedAt": "2026-10-09T13:37:01.234Z",
+      "completedAt": "2026-10-09T13:37:16.675Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "8700a7dc-c4e3-48dd-9029-3af6b7a6ec29",
+      "startedAt": "2026-10-09T13:37:01.234Z",
+      "completedAt": "2026-10-09T13:37:09.245Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "d6e3fb89-c0b7-47c9-b7ff-d1046b6237ed",
+      "startedAt": "2026-10-09T13:37:03.844Z",
+      "completedAt": "2026-10-09T13:37:08.642Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "9837350e-8e4a-4c1e-b2c1-6092c36e927b",
+      "startedAt": "2026-10-09T13:37:03.846Z",
+      "completedAt": "2026-10-09T13:37:07.731Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "be182d71-8909-43d4-a82c-c007bd14811e",
+      "startedAt": "2026-10-09T13:37:03.846Z",
+      "completedAt": "2026-10-09T13:37:10.226Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "6339aa0e-6c32-4c41-8320-3b03319522ac",
+      "startedAt": "2026-10-09T13:37:10.791Z",
+      "completedAt": "2026-10-09T13:37:19.848Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "83346328-2472-4585-b7cc-1d50428e1240",
+      "startedAt": "2026-10-09T13:37:10.795Z",
+      "completedAt": "2026-10-09T13:37:18.735Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "be2daba2-2c96-434a-b1eb-c8b5fa51f76b",
+      "startedAt": "2026-10-09T13:37:10.795Z",
+      "completedAt": "2026-10-09T13:37:15.729Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "1c51f8fc-dfb2-4e47-8fb7-671a81a52fe4",
+      "startedAt": "2026-10-09T13:37:17.332Z",
+      "completedAt": "2026-10-09T13:37:22.257Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "45c0127d-907b-4f93-bb98-93111eda469a",
+      "startedAt": "2026-10-09T13:37:17.332Z",
+      "completedAt": "2026-10-09T13:37:23.022Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "69946ed6-9ac7-4c26-a1f3-bd667c6fe1b1",
+      "startedAt": "2026-10-09T13:37:17.332Z",
+      "completedAt": "2026-10-09T13:37:24.762Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "f077e968-a52b-4b9f-af1a-34911c18eea5",
+      "startedAt": "2026-10-09T13:37:20.679Z",
+      "completedAt": "2026-10-09T13:37:24.469Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "37884ae3-941a-48a7-8fe4-6848baa38475",
+      "startedAt": "2026-10-09T13:37:20.680Z",
+      "completedAt": "2026-10-09T13:37:26.562Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "de4200de-6478-46cc-894d-d48f8d06b29c",
+      "startedAt": "2026-10-09T13:37:20.680Z",
+      "completedAt": "2026-10-09T13:37:24.423Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "b16772eb-28b8-4eaf-9218-4e95944c6ef8",
+      "startedAt": "2026-10-09T13:37:25.382Z",
+      "completedAt": "2026-10-09T13:37:30.682Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "5837d1c6-8e78-43fb-86d5-0abfb2d04545",
+      "startedAt": "2026-10-09T13:37:25.383Z",
+      "completedAt": "2026-10-09T13:37:31.573Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "a20feb0a-6e44-42ad-8856-4687c223efd6",
+      "startedAt": "2026-10-09T13:37:25.383Z",
+      "completedAt": "2026-10-09T13:37:28.753Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "afbfbb5f-9e01-4d65-98c3-5dc6e612dc7a",
+      "startedAt": "2026-10-09T13:37:27.481Z",
+      "completedAt": "2026-10-09T13:37:31.677Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "0ae9fce2-1a61-44e4-b9c5-4f1a4a91274a",
+      "startedAt": "2026-10-09T13:37:27.482Z",
+      "completedAt": "2026-10-09T13:37:31.263Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "1f262013-72df-4b59-8baf-a5ecd99eea2b",
+      "startedAt": "2026-10-09T13:37:27.482Z",
+      "completedAt": "2026-10-09T13:37:33.846Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "4cd77c15-5bd2-4e33-8000-e764fcae7fef",
+      "startedAt": "2026-10-09T13:37:32.334Z",
+      "completedAt": "2026-10-09T13:37:37.406Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "73b3ff49-27dd-413a-ba37-7bead4ffb17c",
+      "startedAt": "2026-10-09T13:37:32.335Z",
+      "completedAt": "2026-10-09T13:37:39.755Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "830a23c5-60d6-46b5-815a-108408484dce",
+      "startedAt": "2026-10-09T13:37:32.335Z",
+      "completedAt": "2026-10-09T13:37:48.029Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "f1de6426-b0b1-4f41-85d9-24347a135237",
+      "startedAt": "2026-10-09T13:41:09.584Z",
+      "completedAt": "2026-10-09T13:41:15.540Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "29731b03-2713-40a2-be60-ce879755dfd6",
+      "startedAt": "2026-10-09T13:41:09.585Z",
+      "completedAt": "2026-10-09T13:41:14.518Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "e2b83bd2-aa68-48b2-acad-48d73515c060",
+      "startedAt": "2026-10-09T13:41:09.585Z",
+      "completedAt": "2026-10-09T13:41:14.058Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "5d3c16f3-fdce-4071-a50f-344f549ae010",
+      "startedAt": "2026-10-09T13:41:10.077Z",
+      "completedAt": "2026-10-09T13:41:16.753Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "8d47eb22-86ec-44fa-a1d4-74305d43e9fd",
+      "startedAt": "2026-10-09T13:41:10.077Z",
+      "completedAt": "2026-10-09T13:41:13.903Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "bde272ab-b759-4cba-a5a3-14be0567afb6",
+      "startedAt": "2026-10-09T13:41:10.077Z",
+      "completedAt": "2026-10-09T13:41:22.005Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "3edb30c9-310b-43ee-af3e-e2ced460cb45",
+      "startedAt": "2026-10-09T13:41:16.099Z",
+      "completedAt": "2026-10-09T13:41:21.956Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "4f406f8c-2da4-483f-a68c-b173556655f2",
+      "startedAt": "2026-10-09T13:41:16.102Z",
+      "completedAt": "2026-10-09T13:41:19.210Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "d6739685-25cc-44d0-ae8d-c35ebe2226a8",
+      "startedAt": "2026-10-09T13:41:16.102Z",
+      "completedAt": "2026-10-09T13:41:20.186Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "004fc036-2271-4fb6-91cf-f3633d0290ee",
+      "startedAt": "2026-10-09T13:41:22.522Z",
+      "completedAt": "2026-10-09T13:41:27.830Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "3b03bc16-62c0-4196-bc68-0be5b4b9adee",
+      "startedAt": "2026-10-09T13:41:22.523Z",
+      "completedAt": "2026-10-09T13:41:26.397Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "6ee46e80-832f-43c6-b38f-4f90e9ed3ef1",
+      "startedAt": "2026-10-09T13:41:22.523Z",
+      "completedAt": "2026-10-09T13:41:26.685Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "17c1c290-756a-4d4c-89ef-0cd82071a3ed",
+      "startedAt": "2026-10-09T13:41:22.569Z",
+      "completedAt": "2026-10-09T13:41:26.816Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "d926fea8-b734-4e9a-96df-9d8005fd6ce8",
+      "startedAt": "2026-10-09T13:41:22.569Z",
+      "completedAt": "2026-10-09T13:41:29.034Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "e0afa0e5-1eef-4764-8a7b-f1da3079e09b",
+      "startedAt": "2026-10-09T13:41:22.569Z",
+      "completedAt": "2026-10-09T13:41:26.088Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "800ddd00-bffb-48a6-a3cf-73c21ca2c1c2",
+      "startedAt": "2026-10-09T13:41:28.377Z",
+      "completedAt": "2026-10-09T13:41:33.518Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "741887a4-f4d2-42b3-a33d-872b2b7c236d",
+      "startedAt": "2026-10-09T13:41:28.380Z",
+      "completedAt": "2026-10-09T13:41:32.512Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "7ea7fc11-c1ea-4f54-a699-6565881ec630",
+      "startedAt": "2026-10-09T13:41:28.380Z",
+      "completedAt": "2026-10-09T13:41:31.975Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "048d0d4f-c8d3-4602-8ce2-3ecd02adaa13",
+      "startedAt": "2026-10-09T13:41:29.658Z",
+      "completedAt": "2026-10-09T13:41:36.141Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "7806870c-22f6-4b59-b430-b756de26e1f5",
+      "startedAt": "2026-10-09T13:41:29.658Z",
+      "completedAt": "2026-10-09T13:41:33.410Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "ced22252-ea7d-479d-ba19-f487a4e61f36",
+      "startedAt": "2026-10-09T13:41:29.658Z",
+      "completedAt": "2026-10-09T13:41:33.185Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "c0cbe5a5-793b-42f6-8516-ab68ac8cfd1b",
+      "startedAt": "2026-10-09T13:41:34.112Z",
+      "completedAt": "2026-10-09T13:41:39.720Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "7a2015ee-9946-429d-b701-e6479750dec0",
+      "startedAt": "2026-10-09T13:41:34.113Z",
+      "completedAt": "2026-10-09T13:41:41.987Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "9fc13d98-a6b5-48d4-b529-1e109cc08ebd",
+      "startedAt": "2026-10-09T13:41:34.113Z",
+      "completedAt": "2026-10-09T13:41:49.641Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "4e9a7171-9c35-4388-bf7c-6a063f6d398d",
+      "startedAt": "2026-10-09T13:41:36.902Z",
+      "completedAt": "2026-10-09T13:41:48.041Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "7cd74875-d66f-4d35-958d-b3f194c692fd",
+      "startedAt": "2026-10-09T13:41:36.902Z",
+      "completedAt": "2026-10-09T13:41:39.967Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "aee4c9dd-0586-4241-96f0-493ad9e39eef",
+      "startedAt": "2026-10-09T13:41:36.902Z",
+      "completedAt": "2026-10-09T13:41:42.881Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "6f37dfd5-1751-4b9c-9fee-07085cc624b0",
+      "startedAt": "2026-10-09T13:41:48.596Z",
+      "completedAt": "2026-10-09T13:41:52.918Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "6faec0b7-8881-42b4-a491-1590269ec27a",
+      "startedAt": "2026-10-09T13:41:48.596Z",
+      "completedAt": "2026-10-09T13:42:00.874Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "925ad4b2-437b-41a3-b539-c7b3dd074848",
+      "startedAt": "2026-10-09T13:41:48.596Z",
+      "completedAt": "2026-10-09T13:41:55.387Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "cc0bb886-96af-4fb9-9501-b75300db9d5b",
+      "startedAt": "2026-10-09T13:41:50.381Z",
+      "completedAt": "2026-10-09T13:41:55.562Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "c7564686-c0c2-4abc-a569-4a9cda42db6a",
+      "startedAt": "2026-10-09T13:41:50.382Z",
+      "completedAt": "2026-10-09T13:41:58.014Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "d9e04cb8-58a4-4d3d-a105-557645727af9",
+      "startedAt": "2026-10-09T13:41:50.382Z",
+      "completedAt": "2026-10-09T13:42:03.116Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "1a1ddd35-16d1-4c5e-9205-9ae6f05069c2",
+      "startedAt": "2026-10-09T13:42:01.559Z",
+      "completedAt": "2026-10-09T13:42:05.775Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "7333c5f1-a51a-4bb6-9301-a4806886de0b",
+      "startedAt": "2026-10-09T13:42:01.560Z",
+      "completedAt": "2026-10-09T13:42:07.391Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "eaa5322b-7fd7-412c-834c-c17eae57626a",
+      "startedAt": "2026-10-09T13:42:01.560Z",
+      "completedAt": "2026-10-09T13:42:05.800Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "602989df-b6cf-4f0c-9174-44048a71d99c",
+      "startedAt": "2026-10-09T13:42:04.135Z",
+      "completedAt": "2026-10-09T13:42:09.893Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "e77dbaf0-8816-495b-aa6f-d38b5cc26693",
+      "startedAt": "2026-10-09T13:42:04.136Z",
+      "completedAt": "2026-10-09T13:42:17.432Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "f48cd97c-a268-4776-8156-ceb60036f8fe",
+      "startedAt": "2026-10-09T13:42:04.136Z",
+      "completedAt": "2026-10-09T13:42:11.318Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "014fa3e1-b0cc-40af-8589-0257e1945549",
+      "startedAt": "2026-10-09T13:42:08.186Z",
+      "completedAt": "2026-10-09T13:42:11.916Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "225e7abf-6e69-451a-b27a-52c654f76ff6",
+      "startedAt": "2026-10-09T13:42:08.186Z",
+      "completedAt": "2026-10-09T13:42:14.058Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "dea78d6a-4e62-4f4f-abfd-16ee94fd8f3a",
+      "startedAt": "2026-10-09T13:42:08.186Z",
+      "completedAt": "2026-10-09T13:42:12.057Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "e7d3cc61-c2df-4212-b032-1b477a0617ff",
+      "startedAt": "2026-10-09T13:42:14.613Z",
+      "completedAt": "2026-10-09T13:42:18.221Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "93bc654b-2089-4ef6-9909-298e9763baf4",
+      "startedAt": "2026-10-09T13:42:14.615Z",
+      "completedAt": "2026-10-09T13:42:20.232Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "9dde6aac-f186-4e9d-8cdf-3c23236ea139",
+      "startedAt": "2026-10-09T13:42:14.615Z",
+      "completedAt": "2026-10-09T13:42:26.103Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "4f7dc245-55ad-495a-919e-3ccd76aa0d41",
+      "startedAt": "2026-10-09T13:42:18.272Z",
+      "completedAt": "2026-10-09T13:42:33.808Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "a0d58381-9c03-444b-9e4e-ff69636e25b9",
+      "startedAt": "2026-10-09T13:42:18.272Z",
+      "completedAt": "2026-10-09T13:42:23.750Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "f7200563-87e5-47d8-9c25-e90ae001be68",
+      "startedAt": "2026-10-09T13:42:18.272Z",
+      "completedAt": "2026-10-09T13:42:25.997Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed"
+    }
+  ]
+}

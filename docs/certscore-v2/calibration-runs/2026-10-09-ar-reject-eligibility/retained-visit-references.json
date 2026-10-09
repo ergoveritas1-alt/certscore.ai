@@ -1,0 +1,114 @@
+[
+  {
+    "url": "https://unleashedsoftware.com/",
+    "version": "baseline",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/unleashedsoftware.com/baseline-1/result.json",
+    "sha256": "7f7563d98475c61dd6bd1171e764d4c29b96dff2843dc1e5b234a04294a92d6a"
+  },
+  {
+    "url": "https://adecco.com/",
+    "version": "candidate",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/adecco.com/candidate-1/result.json",
+    "sha256": "21175f9ca57e4ada4dea94a01c2bffda9ff9a44b6a74824dd4fbab3b401cc164"
+  },
+  {
+    "url": "https://unleashedsoftware.com/",
+    "version": "candidate",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/unleashedsoftware.com/candidate-1/result.json",
+    "sha256": "00f2412fbbcb419a5389eefe0aba6b444ff44a1db6bba22b7adc6782d33a5dbd"
+  },
+  {
+    "url": "https://unleashedsoftware.com/",
+    "version": "candidate",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/unleashedsoftware.com/candidate-2/result.json",
+    "sha256": "2f220468c54781e939c87448fdad0025e5b9f607097ac0a9561a76ef9fda257d"
+  },
+  {
+    "url": "https://adecco.com/",
+    "version": "baseline",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/adecco.com/baseline-1/result.json",
+    "sha256": "e48255a01e2697dece5e44174d60e3fa3c4e48ab7df66d9e6de3afb4ee6a8ea5"
+  },
+  {
+    "url": "https://unleashedsoftware.com/",
+    "version": "baseline",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/unleashedsoftware.com/baseline-2/result.json",
+    "sha256": "968630b0ca77d5c76f81cd069fe21a691a048f09714d9891e63fd6bae50647a4"
+  },
+  {
+    "url": "https://adecco.com/",
+    "version": "baseline",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/adecco.com/baseline-2/result.json",
+    "sha256": "e7e6c8e7f9b79e2845439b8a5ea375411cfe7298d76d4e49501e0434389224e6"
+  },
+  {
+    "url": "https://receitasnestle.com.br/",
+    "version": "baseline",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/receitasnestle.com.br/baseline-1/result.json",
+    "sha256": "00acf63fb9c3d19c7174f1330a61c8c53590fb83246165732bb714bbe421482f"
+  },
+  {
+    "url": "https://adecco.com/",
+    "version": "candidate",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/adecco.com/candidate-2/result.json",
+    "sha256": "02c2c32bf6ba726abe9682b57c8effb55d68482bd175aa3db30b6e32b1b5c449"
+  },
+  {
+    "url": "https://sodexo.com/",
+    "version": "candidate",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/sodexo.com/candidate-1/result.json",
+    "sha256": "27d988cc28f606f00fa7819035880b4169d12f29d3d8a3795d7a43aa7b9665e0"
+  },
+  {
+    "url": "https://receitasnestle.com.br/",
+    "version": "candidate",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/receitasnestle.com.br/candidate-1/result.json",
+    "sha256": "0c4b9b1140f0bb3cc2afbbf915c5973b0bc854ef0052ac2e95904ccc44dadec2"
+  },
+  {
+    "url": "https://sodexo.com/",
+    "version": "baseline",
+    "repeat": 1,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/sodexo.com/baseline-1/result.json",
+    "sha256": "b3dad09d7cc63f2e83b49bcc1f9e30074b386f22a269e378a59447377f1076c8"
+  },
+  {
+    "url": "https://receitasnestle.com.br/",
+    "version": "candidate",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/receitasnestle.com.br/candidate-2/result.json",
+    "sha256": "aadb1924a7a65cd61e684d34705141552f6101571ed55c8460586d9bc4ad6a31"
+  },
+  {
+    "url": "https://sodexo.com/",
+    "version": "baseline",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/sodexo.com/baseline-2/result.json",
+    "sha256": "4a069a6b77bfd71b8c810e691687c1d0443e22bde782c47ce9f824798f609819"
+  },
+  {
+    "url": "https://sodexo.com/",
+    "version": "candidate",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/sodexo.com/candidate-2/result.json",
+    "sha256": "e6516c2595c43d7857f8196f0cb00e60b444c5cbc7206cddf48eb881b028f9dd"
+  },
+  {
+    "url": "https://receitasnestle.com.br/",
+    "version": "baseline",
+    "repeat": 2,
+    "path": "artifacts/ar-reject-eligibility-20261009/visits-verified/receitasnestle.com.br/baseline-2/result.json",
+    "sha256": "ac3f980baccf371c6f59b57db302011af2a12b03633e3e0988a1903bae73b8bf"
+  }
+]
