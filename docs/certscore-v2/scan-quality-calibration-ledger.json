@@ -12,8 +12,8 @@
     },
     "https://cloudflare.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-09T04:01:53.462Z",
-      "lastContactAt": "2026-09-11T04:01:53.462Z",
+      "cooldownUntil": "2026-11-06T16:16:51.444Z",
+      "lastContactAt": "2026-10-09T16:16:51.444Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -22,8 +22,8 @@
     },
     "https://spotify.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T15:02:41.484Z",
-      "lastContactAt": "2026-10-09T15:02:41.484Z",
+      "cooldownUntil": "2026-11-06T16:17:39.000Z",
+      "lastContactAt": "2026-10-09T16:17:39.000Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -42,8 +42,8 @@
     },
     "https://fullstory.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:45:34.171Z",
-      "lastContactAt": "2026-10-09T14:45:34.171Z",
+      "cooldownUntil": "2026-11-06T16:16:07.719Z",
+      "lastContactAt": "2026-10-09T16:16:07.719Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -182,8 +182,8 @@
     },
     "https://progressive.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:16:35.249Z",
-      "lastContactAt": "2026-10-09T14:16:35.249Z",
+      "cooldownUntil": "2026-11-06T16:17:01.982Z",
+      "lastContactAt": "2026-10-09T16:17:01.982Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -192,8 +192,8 @@
     },
     "https://usa.gov": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T15:03:25.333Z",
-      "lastContactAt": "2026-10-09T15:03:25.333Z",
+      "cooldownUntil": "2026-11-06T16:17:24.640Z",
+      "lastContactAt": "2026-10-09T16:17:24.640Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -217,8 +217,8 @@
     },
     "https://theguardian.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-05T04:12:12.395Z",
-      "lastContactAt": "2026-10-08T04:12:12.395Z",
+      "cooldownUntil": "2026-11-06T16:16:15.417Z",
+      "lastContactAt": "2026-10-09T16:16:15.417Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -297,8 +297,8 @@
     },
     "https://healthline.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T15:02:07.285Z",
-      "lastContactAt": "2026-10-09T15:02:07.285Z",
+      "cooldownUntil": "2026-11-06T16:18:18.268Z",
+      "lastContactAt": "2026-10-09T16:18:18.268Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -317,8 +317,8 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T02:48:21.305Z",
-      "lastContactAt": "2026-10-09T02:48:21.305Z",
+      "cooldownUntil": "2026-11-06T16:16:33.777Z",
+      "lastContactAt": "2026-10-09T16:16:33.777Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -380,8 +380,8 @@
     },
     "https://segment.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T15:01:58.762Z",
-      "lastContactAt": "2026-10-09T15:01:58.762Z",
+      "cooldownUntil": "2026-11-06T16:22:53.598Z",
+      "lastContactAt": "2026-10-09T16:22:53.598Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -410,15 +410,25 @@
     },
     "https://caltech.edu": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T15:03:10.672Z",
-      "lastContactAt": "2026-10-09T15:03:10.672Z",
+      "cooldownUntil": "2026-11-06T16:17:47.089Z",
+      "lastContactAt": "2026-10-09T16:17:47.089Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://caltech.edu"
+    },
+    "https://homedepot.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T16:17:20.478Z",
+      "lastContactAt": "2026-10-09T16:17:20.478Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://homedepot.com"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-09T15:07:17.501Z"
+  "updatedAt": "2026-10-09T16:23:11.114Z"
 }
