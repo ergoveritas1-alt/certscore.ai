@@ -1,6 +1,6 @@
-# Local verification of report publication ownership — October 8, 2026
+# Report publication ownership release — October 8, 2026
 
-Status: local implementation and verification; **not deployed or pushed**.
+Status: deployed and production-verified. Runtime revision: `9b7c9a81630abe51c1608c88e7f0ed3f7bce8386`. The production verification completed October 8 Pacific / October 9 UTC.
 
 The deployed artifact-transfer optimization improved one owned run, but another
 run took 12.897 seconds from scanner completion to report readiness. Its public
@@ -107,7 +107,7 @@ cache restored HTTP 200 at
 Keep full builds isolated while that server is running; this is now recorded
 in `AGENTS.md` alongside the package prerequisites and canonical clone origin.
 
-## Cost and remaining verification
+## Cost and verification scope
 
 Estimated incremental recurring infrastructure cost: **$0/month**. The indexed
 ownership check replaces competing full materialization/load work; it uses
@@ -122,11 +122,8 @@ the existing emergency x64 fallback. This below-$1 estimate is disclosed under
 the repository's pre-approval; included/free minutes are not subtracted.
 Source: [GitHub runner pricing](https://docs.github.com/en/billing/reference/actions-runner-pricing).
 
-No production latency saving is claimed for this fix. After local gates pass
-and a separately authorized release, measure scanner completion to persisted
-report readiness on fresh owned runs with status polling enabled. Verify the
-worker wins publication, retains transfer use when eligible, and publishes
-exactly once. The previous 12.897-second production outcome remains historical
+The production measurements below verify this fix on three owned runs. They
+do not establish a production percentile or fleet-wide latency saving. The previous 12.897-second production outcome remains historical
 evidence; this localhost reproduction establishes its race mechanism, not its
 exact elapsed time or a production percentile.
 
@@ -137,5 +134,93 @@ regressions are included in both the local release gate and web deployment CI.
 The production behavior change is in public web/materializer. Existing worker
 images remain compatible: the authorization token, payload and 150-second
 deadline are unchanged. The worker source only aliases that existing deadline
-to the shared constant. Inspect actual runtime consumers when planning the
-eventual AWS release; no scanner runtime or regional image change is required.
+to the shared constant. Actual runtime consumers were checked for the targeted AWS release; no scanner
+runtime or regional image change was required.
+
+
+## Exact release gate and AWS promotion
+
+The exact clean runtime commit `9b7c9a81` passed `pnpm preflight:full` with
+**exit code 0** in `/tmp/certscore-publication-release-7C7e2Y` before promotion.
+All 19 workspace typechecks and 19 workspace builds passed at the unchanged
+memory limit; the final 50 projection/result/selection tests passed. The
+source fingerprints matched the development checkout, and both checkouts were
+clean. `release-exact-gate.json` binds the SHA, source hashes and full log hash.
+This supersedes the incomplete whole-gate receipt described historically above.
+
+The fast-forward merge into main was released using the canonical
+`pnpm deploy:web` helper. The duplicate local preflight was omitted only after
+this exact successful full gate; required workflow guards, tests, typechecks,
+migrations and health checks remained enabled. The helper reused the exact-SHA
+push-triggered [web workflow](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/37869181576).
+It succeeded, verified `/api/version` at the exact SHA with `ecs-fargate`, and
+verified both ECS services stabilized:
+
+- public web: task definition `certscore-web-certscore:703`, 2/2 running;
+- dedicated materializer: `certscore-web-certscore-materializer:266`, 1/1 running.
+
+Both services use the same immutable target image and digest. The helper took
+10m 18s; the workflow job took 601s. Image build/push took 213s versus 241s on
+the preceding release; migrations took 50s. The unchanged runtime base was
+reused. These are whole-run/stage comparisons, not isolated causal benchmarks.
+
+[Required validation CI](https://github.com/ergoveritas1-alt/certscore.ai/actions/runs/37869181623)
+passed its web contract, worker pipeline and live smoke jobs. Broad path filters
+also triggered validation and MCP deployment runs `37869181700` and
+`37869181573`; both were cancelled before image builds. The only changed
+worker runtime expression aliases the same existing 150,000-ms deadline; the
+shared artifact-transfer module is not exported to or consumed by MCP. No
+worker behavior, scanner image, runtime base or capacity change was required.
+The live-deployment audit's sole warning is the already-unconfigured secondary
+host; the primary host and affected services passed.
+
+## Fresh owned production verification
+
+The registry check and read-only central contact-history check passed before
+fresh verification on the authorized owned `https://ergoveritas.com/testar1.html`
+page in EU-DE. No SITS or rotating public target was contacted. Scans were
+sequential, used the ordinary existing six-lane production path, and submitted
+no forms. Estimated one-time verification compute, scan and artifact-read cost
+is below $0.10 total; no recurring diagnostic service was added.
+
+| Owned run | Scanner completion → persisted report | Request → report visible in browser |
+| --- | ---: | ---: |
+| [First](https://certscore.ai/scan/07139777-7553-4a65-a3f9-84b4b5e456a3) | 5.415s | 25.583s |
+| [Second](https://certscore.ai/scan/e731bf86-d330-459d-9a64-c29c9320d9b7) | 5.097s | 20.263s |
+| [Explicit status polling](https://certscore.ai/scan/ce4bf3d3-5015-44f3-817a-1512720b2201) | 4.143s | 18.712s |
+
+The public report route did not emit status-endpoint calls during the first two
+browser runs. A late API v2 status-read check on the second scan happened after
+readiness and is not race evidence. The third scan therefore explicitly polled
+the affected `/api/scan-status/{id}?includeFindings=0` endpoint from dispatch
+through readiness alongside the report browser. All 17 polls returned 200,
+including three with a completed scan and a finalizing report followed by ready.
+
+For every scan, CloudWatch logs verify exactly one worker `publish_report`
+request, its first response 200, exactly one canonical materialization on the
+dedicated materializer, and two verified transferred original artifacts. No
+public web task materialized a competing report. Database inspection verifies
+one terminal Lambda result and one unified derivation, a ready persisted report
+and a completed durable materialization request. All retained bundle, manifest,
+Accept and Reject artifact sizes and hashes match their terminal metadata.
+Typed schemas and all six joined, completed lanes passed verification. Existing
+fixture expectations remained intact: score 84, A/R/O observed, confirmed
+Accept with four observations, confirmed clean Reject with the complete
+8-second window, zero forms, and no browser errors. The zero-form result is an
+expectation of this owned fixture, not evidence about SITS.
+
+The prior 12.897-second polling/publication contention was not reproduced. These
+three samples confirm the mechanism and preserve the report; they do not prove
+that all production scans are faster or establish a tail percentile. The
+remaining measured 4.1–5.4 seconds includes result delivery, canonical input
+preparation, verification, projection and persistence. Those stages were not
+removed to shorten latency.
+
+Production receipts in the same ignored artifact directory include
+`web-workflow-final.json`, `required-ci-final.json`, `production-ecs-verification.json`,
+`owned-pair-verification.json`, `production-publication-mechanism-verification.json`
+and `owned-after-3-active-status-polls.json`. The merged branch and temporary
+clean verification checkout were removed after source preservation; the archived
+SITS worktree snapshot and all retained diagnostic evidence remain preserved.
+Git's pre-existing unreachable-object/GC warning was left untouched: no object
+pruning or forced garbage collection was performed.
