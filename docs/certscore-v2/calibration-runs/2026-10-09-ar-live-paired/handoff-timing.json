@@ -1,0 +1,982 @@
+[
+  {
+    "version": "candidate",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nintendo.de/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nintendo.de/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nintendo.de/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nintendo.de/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nintendo.de/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nintendo.de/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nintendo.de/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nintendo.de/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nintendo.de/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://feedbackcompany.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nintendo.de/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nintendo.de/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nintendo.de/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://podtrac.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://podtrac.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://podtrac.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://podtrac.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://podtrac.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://podtrac.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://podtrac.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://podtrac.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://podtrac.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 1.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://podtrac.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://podtrac.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://podtrac.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://sodexo.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://sodexo.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://sodexo.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://sodexo.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 1.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://sodexo.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://sodexo.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://sodexo.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://gotokyo.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://gotokyo.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://gotokyo.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_cmp_controls",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://luminpdf.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://luminpdf.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://luminpdf.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://luminpdf.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://luminpdf.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://luminpdf.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://luminpdf.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://luminpdf.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://luminpdf.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://luminpdf.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://luminpdf.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://luminpdf.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nature.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nature.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nature.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nature.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nature.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nature.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://gotokyo.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://gotokyo.org/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nature.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nature.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://nature.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nature.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nature.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://nature.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 1.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://receitasnestle.com.br/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_cmp_controls",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://gotokyo.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://gotokyo.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_cmp_controls",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 1.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_cmp_controls",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_cmp_controls",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://upshow.tv/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://gotokyo.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 1.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://gotokyo.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://gotokyo.org/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_cmp_controls",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://unleashedsoftware.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://adecco.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://adecco.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://adecco.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 1,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_full_page",
+    "lagMs": 0.0
+  },
+  {
+    "version": "baseline",
+    "url": "https://adecco.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://adecco.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://adecco.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_settled",
+    "lagMs": 0.0
+  },
+  {
+    "version": "candidate",
+    "url": "https://adecco.com/",
+    "repeat": 2,
+    "artifactId": "screenshot_pre_consent_geometry_proof",
+    "lagMs": 0.0
+  }
+]

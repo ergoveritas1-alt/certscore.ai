@@ -1,0 +1,167 @@
+{
+  "manifestVersion": "certscore.scan_quality_calibration.2",
+  "internalOnly": true,
+  "sourceUrlList": "docs/certscore-v2/calibration-urls-lab-50.txt",
+  "eligibilityLedger": "artifacts/ar-live-paired-20261009/inventory-ledger.json",
+  "centralContactLedger": {
+    "table": "public.scan_domain_contact_ledger",
+    "eventTable": "public.scan_domain_contacts",
+    "requiredForLiveSelection": true,
+    "includesAllScanChannels": true,
+    "failsClosedWhenUnavailable": true
+  },
+  "calibrationModel": {
+    "baselineUnit": "capability_lane",
+    "publicTargetMode": "rotating_inventory",
+    "fixedSiteRepetitionProhibited": true
+  },
+  "layers": {
+    "deterministicFixtures": {
+      "requiredForEveryScannerChange": true,
+      "initiatesPublicTraffic": false
+    },
+    "retainedReplay": {
+      "requiredForEveryScannerChange": true,
+      "initiatesPublicTraffic": false,
+      "boundedSanitizedArtifactsRequired": true
+    },
+    "ownedCanaries": {
+      "requiredForScannerRelease": true,
+      "initiatesPublicTraffic": true,
+      "ownershipRequired": true
+    },
+    "rotatingPublicSample": {
+      "requiredForScannerRelease": true,
+      "initiatesPublicTraffic": true,
+      "requiresEligibilityAttestation": true,
+      "minimumSize": 8,
+      "defaultSize": 10,
+      "maximumSize": 12
+    },
+    "passiveProductionSampling": {
+      "requiredForPostDeployReview": true,
+      "initiatesAdditionalTraffic": false,
+      "defaultSampleSize": 10
+    }
+  },
+  "publicContactPolicy": {
+    "minimumCooldownDays": 28,
+    "maximumConcurrentScansPerDomain": 1,
+    "automaticRetryAfterNoGo": false,
+    "crossRegionRetryAfterBlock": false,
+    "retireAfterRepeatedNoGo": true,
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
+  },
+  "owners": {
+    "calibrationQuality": "Luna",
+    "productionOperations": "SO",
+    "implementation": "WC01"
+  },
+  "laneDefinitions": {
+    "consent_controls": "Retain and classify first-layer consent controls, including late and localized controls.",
+    "gdpr_transparency": "Discover policy surfaces, retain usable text, and project canonical transparency topics.",
+    "transport_evidence": "Retain typed transport observations and distinguish unknown from negative evidence.",
+    "third_party_attribution": "Classify first-party and third-party requests, cookies, vendors, and final-document redirects.",
+    "no_go_resilience": "Propagate blocked, captcha, timeout, unsupported, and incomplete outcomes with reasons.",
+    "language_inference": "Produce a best-effort primary language from retained evidence with an honest unknown fallback."
+  },
+  "requiredLanes": [
+    "consent_controls",
+    "gdpr_transparency",
+    "transport_evidence",
+    "third_party_attribution",
+    "no_go_resilience",
+    "language_inference"
+  ],
+  "targets": [
+    {
+      "url": "https://adecco.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://sodexo.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://upshow.tv/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nomura.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://podtrac.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nintendo.de/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nature.org/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    }
+  ]
+}

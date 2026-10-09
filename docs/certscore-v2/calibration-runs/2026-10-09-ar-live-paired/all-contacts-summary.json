@@ -1,0 +1,2180 @@
+{
+  "runKey": "ar-live-paired-20261009",
+  "generatedAt": "2026-10-09T12:39:02.987401+00:00",
+  "results": [
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "1b032b74-42e3-4efe-b8bf-7a6d383bb396",
+      "startedAt": "2026-10-09T12:28:07.185Z",
+      "completedAt": "2026-10-09T12:28:11.509Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "3fdecc2b-2e23-44b9-8cae-cb5f1b451636",
+      "startedAt": "2026-10-09T12:28:07.185Z",
+      "completedAt": "2026-10-09T12:28:09.197Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "f9f4b836-637b-4e93-8fcd-2191db527f8d",
+      "startedAt": "2026-10-09T12:28:07.185Z",
+      "completedAt": "2026-10-09T12:28:10.519Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "c1e9274b-05ef-4cf9-989e-98708bbd2e8d",
+      "startedAt": "2026-10-09T12:28:07.181Z",
+      "completedAt": "2026-10-09T12:28:11.995Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "70693160-17b3-45c8-b343-086f811e9a9d",
+      "startedAt": "2026-10-09T12:28:07.181Z",
+      "completedAt": "2026-10-09T12:28:08.634Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "bbf660fa-7feb-4f4f-b685-f62393dac1b4",
+      "startedAt": "2026-10-09T12:28:07.181Z",
+      "completedAt": "2026-10-09T12:28:10.009Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "c6d92075-0867-4577-aab3-9ed89d7b2946",
+      "startedAt": "2026-10-09T12:28:12.043Z",
+      "completedAt": "2026-10-09T12:28:15.634Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "c72b6deb-5f2f-4da1-849e-81f684dd0432",
+      "startedAt": "2026-10-09T12:28:12.044Z",
+      "completedAt": "2026-10-09T12:28:13.409Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "73582d4c-5e90-4e9e-a9d6-7871f6c2a824",
+      "startedAt": "2026-10-09T12:28:12.044Z",
+      "completedAt": "2026-10-09T12:28:15.390Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "8edb98ea-5434-4a7f-8881-3df10263251b",
+      "startedAt": "2026-10-09T12:28:12.606Z",
+      "completedAt": "2026-10-09T12:28:15.836Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "c175a3bf-9f93-4f76-87b8-e6d26b0a792e",
+      "startedAt": "2026-10-09T12:28:12.607Z",
+      "completedAt": "2026-10-09T12:28:13.691Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "7d58c841-f739-4171-9641-746979453c12",
+      "startedAt": "2026-10-09T12:28:12.607Z",
+      "completedAt": "2026-10-09T12:28:15.564Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "aa91a0e4-212c-4cce-9751-627c5b5ef8eb",
+      "startedAt": "2026-10-09T12:28:16.418Z",
+      "completedAt": "2026-10-09T12:28:19.538Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "8aaf24e8-6fdd-4d05-bfda-99d48ba9d149",
+      "startedAt": "2026-10-09T12:28:16.418Z",
+      "completedAt": "2026-10-09T12:28:17.455Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "c4205c9c-f9a0-4806-9073-a8398f1bda28",
+      "startedAt": "2026-10-09T12:28:16.418Z",
+      "completedAt": "2026-10-09T12:28:19.258Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "bd6f057e-c316-42cd-8fd5-bd25108dabda",
+      "startedAt": "2026-10-09T12:28:16.217Z",
+      "completedAt": "2026-10-09T12:28:20.217Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "8a52dabc-1d7b-459c-a1bb-58a4c35e0d9f",
+      "startedAt": "2026-10-09T12:28:16.220Z",
+      "completedAt": "2026-10-09T12:28:17.638Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "7809d2d0-0517-4b93-8fe3-691b1eadc2f1",
+      "startedAt": "2026-10-09T12:28:16.220Z",
+      "completedAt": "2026-10-09T12:28:19.242Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "8d5c4e4a-20e7-4ed8-9839-77564a52b051",
+      "startedAt": "2026-10-09T12:28:20.103Z",
+      "completedAt": "2026-10-09T12:28:23.601Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "9e4b1905-ff08-4ba0-a7a3-2cc28a327995",
+      "startedAt": "2026-10-09T12:28:20.104Z",
+      "completedAt": "2026-10-09T12:28:21.221Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "aad04d70-42d6-4095-b7b0-e743a188c42c",
+      "startedAt": "2026-10-09T12:28:20.104Z",
+      "completedAt": "2026-10-09T12:28:22.827Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "83e0b829-bc25-48de-8aac-964dbe2eb49a",
+      "startedAt": "2026-10-09T12:28:20.842Z",
+      "completedAt": "2026-10-09T12:28:24.827Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "6cd495db-f096-46a0-995f-97bb720be651",
+      "startedAt": "2026-10-09T12:28:20.843Z",
+      "completedAt": "2026-10-09T12:28:22.267Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "7b36c2c9-80b7-4fdc-85a7-da6c70b9b04f",
+      "startedAt": "2026-10-09T12:28:20.843Z",
+      "completedAt": "2026-10-09T12:28:23.905Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "4e6161b2-052c-47bf-b860-be019e18470e",
+      "startedAt": "2026-10-09T12:28:25.343Z",
+      "completedAt": "2026-10-09T12:28:29.026Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "b2f8a830-4fcf-42af-92e4-2a2133b8c835",
+      "startedAt": "2026-10-09T12:28:25.344Z",
+      "completedAt": "2026-10-09T12:28:26.193Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "42c535de-3106-4919-b781-fbf8734acd9e",
+      "startedAt": "2026-10-09T12:28:25.344Z",
+      "completedAt": "2026-10-09T12:28:27.895Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "859277c4-7c30-4845-a86d-626358c3dce7",
+      "startedAt": "2026-10-09T12:28:29.552Z",
+      "completedAt": "2026-10-09T12:28:31.988Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "79a856c0-960c-477c-878f-2f836541b1fc",
+      "startedAt": "2026-10-09T12:28:29.553Z",
+      "completedAt": "2026-10-09T12:28:30.423Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "e32f6657-e58f-4cb5-bea4-0313aff6b8ab",
+      "startedAt": "2026-10-09T12:28:29.553Z",
+      "completedAt": "2026-10-09T12:28:32.058Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "92d1c054-6ac0-44f1-ab5c-307ae75c7580",
+      "startedAt": "2026-10-09T12:28:32.586Z",
+      "completedAt": "2026-10-09T12:28:35.046Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "c4f9ef7f-1e2e-43bc-9d4f-b9134a0d908e",
+      "startedAt": "2026-10-09T12:28:32.586Z",
+      "completedAt": "2026-10-09T12:28:33.397Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "a2c8002a-d6e5-4a84-ad6a-bc16e43a61fe",
+      "startedAt": "2026-10-09T12:28:32.586Z",
+      "completedAt": "2026-10-09T12:28:35.241Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "31cfdec4-b75f-44fb-b71f-398cda4a8130",
+      "startedAt": "2026-10-09T12:28:35.757Z",
+      "completedAt": "2026-10-09T12:28:38.125Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "ee96cf71-48ef-4110-a0f2-57961ec681cb",
+      "startedAt": "2026-10-09T12:28:35.757Z",
+      "completedAt": "2026-10-09T12:28:36.580Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "6331fbc4-a42e-46b5-959a-6daef055b9d3",
+      "startedAt": "2026-10-09T12:28:35.757Z",
+      "completedAt": "2026-10-09T12:28:38.418Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "41519f57-54ff-4cdc-a7bb-14f14264ad34",
+      "startedAt": "2026-10-09T12:28:24.217Z",
+      "completedAt": "2026-10-09T12:28:43.202Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "68d5f233-cff3-4b73-a498-cfc2f7a634ca",
+      "startedAt": "2026-10-09T12:28:24.218Z",
+      "completedAt": "2026-10-09T12:28:25.655Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "093de57e-e927-4d3a-bb98-29296be91122",
+      "startedAt": "2026-10-09T12:28:24.218Z",
+      "completedAt": "2026-10-09T12:28:27.357Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "83b5747e-4eec-44fe-a6a3-f6064a6c6b5b",
+      "startedAt": "2026-10-09T12:28:38.959Z",
+      "completedAt": "2026-10-09T12:28:57.843Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "1707423a-5ff6-4a39-b264-124e3962ba0f",
+      "startedAt": "2026-10-09T12:28:38.960Z",
+      "completedAt": "2026-10-09T12:28:41.379Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "7b233f2d-1b1f-41e7-af4f-f7c6d56f6bbc",
+      "startedAt": "2026-10-09T12:28:38.960Z",
+      "completedAt": "2026-10-09T12:28:42.769Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "77302079-4d13-4b58-8e87-a763e503f60a",
+      "startedAt": "2026-10-09T12:28:58.344Z",
+      "completedAt": "2026-10-09T12:29:01.551Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "a70aaa0c-a6c8-4695-9c53-a90cedbd7359",
+      "startedAt": "2026-10-09T12:28:58.345Z",
+      "completedAt": "2026-10-09T12:28:59.423Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "73a286e0-409f-41c4-8017-8e6ae5210e36",
+      "startedAt": "2026-10-09T12:28:58.345Z",
+      "completedAt": "2026-10-09T12:29:01.145Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "eef36d24-03cc-40b3-9e28-b9d2668f40c9",
+      "startedAt": "2026-10-09T12:28:43.834Z",
+      "completedAt": "2026-10-09T12:29:02.770Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "c8b94e55-e4b1-441c-b4b2-93fc4653f02f",
+      "startedAt": "2026-10-09T12:28:43.834Z",
+      "completedAt": "2026-10-09T12:28:45.466Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "9aae583e-10e6-41cf-83c3-d5f0a2d7d8e0",
+      "startedAt": "2026-10-09T12:28:43.834Z",
+      "completedAt": "2026-10-09T12:28:46.927Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "0eb09c8f-f703-4a8f-b9d6-1e7977d4c00d",
+      "startedAt": "2026-10-09T12:29:02.056Z",
+      "completedAt": "2026-10-09T12:29:05.207Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "50f3b3d3-d796-4704-a9d9-67876a661f17",
+      "startedAt": "2026-10-09T12:29:02.056Z",
+      "completedAt": "2026-10-09T12:29:03.012Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "b265e3ae-e714-48d3-af7f-782b86f49bd3",
+      "startedAt": "2026-10-09T12:29:02.056Z",
+      "completedAt": "2026-10-09T12:29:04.789Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "ff698a04-3a18-4a77-bd74-348665e29406",
+      "startedAt": "2026-10-09T12:29:03.570Z",
+      "completedAt": "2026-10-09T12:29:22.510Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "093a6c7a-17a8-40f8-9474-169589a803f0",
+      "startedAt": "2026-10-09T12:29:03.571Z",
+      "completedAt": "2026-10-09T12:29:05.044Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "94c44db0-15f9-41b8-84f7-a939755780a5",
+      "startedAt": "2026-10-09T12:29:03.571Z",
+      "completedAt": "2026-10-09T12:29:06.780Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "22ffcb2b-890d-4899-b6db-1e035be6abc8",
+      "startedAt": "2026-10-09T12:29:05.760Z",
+      "completedAt": "2026-10-09T12:29:24.690Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "57746a30-b691-475a-86b8-2a74b826912e",
+      "startedAt": "2026-10-09T12:29:05.760Z",
+      "completedAt": "2026-10-09T12:29:12.039Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "6e46266f-0d91-44a9-a7c7-4913811afb40",
+      "startedAt": "2026-10-09T12:29:05.760Z",
+      "completedAt": "2026-10-09T12:29:22.422Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "44033175-3c28-44c4-8f81-3ea6f4c43b89",
+      "startedAt": "2026-10-09T12:29:23.201Z",
+      "completedAt": "2026-10-09T12:29:41.912Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "efa1c86a-f7a4-4f97-8a6f-a75167dedf04",
+      "startedAt": "2026-10-09T12:29:23.202Z",
+      "completedAt": "2026-10-09T12:29:28.139Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://nomura.com/",
+      "scanId": "1b21530c-6237-44fd-8848-4d198a3a0f8b",
+      "startedAt": "2026-10-09T12:29:23.202Z",
+      "completedAt": "2026-10-09T12:29:39.341Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "reviewed_cloudfront_403_error_shell"
+        ]
+      }
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "beefab1e-934b-4693-9519-7b53aa5f97e5",
+      "startedAt": "2026-10-09T12:29:42.624Z",
+      "completedAt": "2026-10-09T12:29:48.978Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "93131281-209c-4198-a362-fcb7da84df49",
+      "startedAt": "2026-10-09T12:29:42.625Z",
+      "completedAt": "2026-10-09T12:29:48.812Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "868a815e-eff5-454d-960c-b9fe4a2e48d4",
+      "startedAt": "2026-10-09T12:29:42.625Z",
+      "completedAt": "2026-10-09T12:29:54.150Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "4d8a40d8-6190-4897-a213-a7b57e3f98ce",
+      "startedAt": "2026-10-09T12:29:54.734Z",
+      "completedAt": "2026-10-09T12:30:01.028Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "ccd24d0f-319e-4de2-aa9b-0483ce8aaa08",
+      "startedAt": "2026-10-09T12:29:54.735Z",
+      "completedAt": "2026-10-09T12:30:00.580Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "f2a58515-a5fb-4dac-882f-55afd535df9e",
+      "startedAt": "2026-10-09T12:29:54.735Z",
+      "completedAt": "2026-10-09T12:30:05.857Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "34fc692f-5f00-4aa3-b02e-0d5a7c5d5e88",
+      "startedAt": "2026-10-09T12:30:06.365Z",
+      "completedAt": "2026-10-09T12:30:12.564Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "ec34782a-80de-469f-a98b-42f48fee60fd",
+      "startedAt": "2026-10-09T12:30:06.365Z",
+      "completedAt": "2026-10-09T12:30:12.122Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "aee2e715-b306-4ba4-be21-4aa13de489b2",
+      "startedAt": "2026-10-09T12:30:06.365Z",
+      "completedAt": "2026-10-09T12:30:17.800Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "6fc60993-510f-4ad1-83f3-5db86a738073",
+      "startedAt": "2026-10-09T12:30:18.422Z",
+      "completedAt": "2026-10-09T12:30:24.602Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "6731398c-f963-4eff-afa5-b4b027fc33c6",
+      "startedAt": "2026-10-09T12:30:18.422Z",
+      "completedAt": "2026-10-09T12:30:24.177Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "32fcba1c-b850-48a8-84ee-8dc6880244f7",
+      "startedAt": "2026-10-09T12:30:18.422Z",
+      "completedAt": "2026-10-09T12:30:29.549Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "b44b919e-1a99-4d05-9057-7db23607e680",
+      "startedAt": "2026-10-09T12:30:30.127Z",
+      "completedAt": "2026-10-09T12:30:38.230Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "9a7e007a-d61e-45de-b9fe-ab1e561a0687",
+      "startedAt": "2026-10-09T12:30:30.128Z",
+      "completedAt": "2026-10-09T12:30:37.368Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "7b5571c1-fb0b-430b-9a03-9ed3b454d6ab",
+      "startedAt": "2026-10-09T12:30:30.128Z",
+      "completedAt": "2026-10-09T12:30:43.385Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "090b81c5-121d-4e91-b3f9-e0525ab50a8a",
+      "startedAt": "2026-10-09T12:29:25.257Z",
+      "completedAt": "2026-10-09T12:29:51.469Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "706e9528-4316-444a-a04e-58333012f90b",
+      "startedAt": "2026-10-09T12:29:25.258Z",
+      "completedAt": "2026-10-09T12:30:40.571Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "110f4331-76bc-44a4-8fac-b2087503a9df",
+      "startedAt": "2026-10-09T12:29:25.258Z",
+      "completedAt": "2026-10-09T12:30:54.766Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "fd6d8b3b-c116-4bc7-a81e-102f8523822f",
+      "startedAt": "2026-10-09T12:30:43.929Z",
+      "completedAt": "2026-10-09T12:30:50.789Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "76db2ced-7337-401d-93fa-0c89d9d6adc8",
+      "startedAt": "2026-10-09T12:30:43.930Z",
+      "completedAt": "2026-10-09T12:30:50.156Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "aa769563-219c-48db-9016-da4bbde7b3fc",
+      "startedAt": "2026-10-09T12:30:43.930Z",
+      "completedAt": "2026-10-09T12:30:55.272Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "f07f2aa2-6d28-4896-b909-6acc5781d986",
+      "startedAt": "2026-10-09T12:30:55.875Z",
+      "completedAt": "2026-10-09T12:31:02.827Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "e1ca801e-f498-4214-9260-80014db834bb",
+      "startedAt": "2026-10-09T12:30:55.876Z",
+      "completedAt": "2026-10-09T12:31:02.211Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "18d28d46-f0b2-425a-9ebf-93f0cdbd29c2",
+      "startedAt": "2026-10-09T12:30:55.876Z",
+      "completedAt": "2026-10-09T12:31:07.409Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "49e413e4-e87f-459a-ba0a-43751fb76563",
+      "startedAt": "2026-10-09T12:31:07.997Z",
+      "completedAt": "2026-10-09T12:31:15.025Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "ab8bdfc0-f063-43de-aea1-6832cc9c24fa",
+      "startedAt": "2026-10-09T12:31:07.998Z",
+      "completedAt": "2026-10-09T12:31:14.193Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "265af5ec-be05-480b-8b15-0e97c49ecbd9",
+      "startedAt": "2026-10-09T12:31:07.998Z",
+      "completedAt": "2026-10-09T12:31:20.011Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "92b31803-44bf-4782-9d21-9679d8b17218",
+      "startedAt": "2026-10-09T12:31:20.589Z",
+      "completedAt": "2026-10-09T12:31:25.522Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "52492b3d-4765-4e99-9e68-092db23b023d",
+      "startedAt": "2026-10-09T12:31:20.590Z",
+      "completedAt": "2026-10-09T12:31:27.901Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "d1b3a50c-621a-4955-b68a-78a205293dcb",
+      "startedAt": "2026-10-09T12:31:20.590Z",
+      "completedAt": "2026-10-09T12:31:36.143Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "9a3c3c2c-4374-45fe-b955-44023631d2a8",
+      "startedAt": "2026-10-09T12:31:36.718Z",
+      "completedAt": "2026-10-09T12:31:41.302Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "b0dd4257-e232-4978-a33e-1764d91014dc",
+      "startedAt": "2026-10-09T12:31:36.718Z",
+      "completedAt": "2026-10-09T12:31:43.435Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "211043b1-b99f-408a-9f1d-59be4a435b0d",
+      "startedAt": "2026-10-09T12:31:36.719Z",
+      "completedAt": "2026-10-09T12:31:52.108Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "61c964ed-2c5e-4571-ad2a-622a4a016415",
+      "startedAt": "2026-10-09T12:31:52.618Z",
+      "completedAt": "2026-10-09T12:31:57.644Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "5d990c6b-9493-4861-8949-886f10a672e7",
+      "startedAt": "2026-10-09T12:31:52.618Z",
+      "completedAt": "2026-10-09T12:31:59.542Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "f75ba658-4820-41ad-b155-dac067f1e954",
+      "startedAt": "2026-10-09T12:31:52.618Z",
+      "completedAt": "2026-10-09T12:32:08.040Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "b7d5f938-2692-4a6b-a56f-40beee63f23e",
+      "startedAt": "2026-10-09T12:32:08.647Z",
+      "completedAt": "2026-10-09T12:32:13.764Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "c4185557-dd7a-4ed0-b46d-a93cee8b37a1",
+      "startedAt": "2026-10-09T12:32:08.648Z",
+      "completedAt": "2026-10-09T12:32:16.118Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "9538fbfc-f57b-46d4-ae0b-480e71c140a6",
+      "startedAt": "2026-10-09T12:32:08.648Z",
+      "completedAt": "2026-10-09T12:32:24.011Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "c9e15864-0a06-405d-94c7-c79d285b88cc",
+      "startedAt": "2026-10-09T12:30:55.325Z",
+      "completedAt": "2026-10-09T12:31:21.562Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "56bf0bd2-b869-4ee2-84f6-1b68fddb721d",
+      "startedAt": "2026-10-09T12:30:55.326Z",
+      "completedAt": "2026-10-09T12:32:10.715Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "e5249a54-0a80-442c-a2f9-23cf0c03d6bd",
+      "startedAt": "2026-10-09T12:30:55.326Z",
+      "completedAt": "2026-10-09T12:32:24.825Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "5fcafda7-cb21-45e9-943c-1d3f9eca0773",
+      "startedAt": "2026-10-09T12:32:24.605Z",
+      "completedAt": "2026-10-09T12:32:46.405Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "32110a67-0976-4c95-8061-6a4859e3c7b0",
+      "startedAt": "2026-10-09T12:32:24.606Z",
+      "completedAt": "2026-10-09T12:32:31.667Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "79543362-afa2-47fd-ab05-22e019312983",
+      "startedAt": "2026-10-09T12:32:24.606Z",
+      "completedAt": "2026-10-09T12:32:40.391Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "a75ff938-dea1-4738-bd36-8c74a726135b",
+      "startedAt": "2026-10-09T12:32:46.977Z",
+      "completedAt": "2026-10-09T12:33:08.690Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "222c9710-c5dc-434b-85f9-791a60488b1c",
+      "startedAt": "2026-10-09T12:32:46.979Z",
+      "completedAt": "2026-10-09T12:32:53.986Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "6f78c2e0-43fd-46fc-ba80-c6bc246c1c0a",
+      "startedAt": "2026-10-09T12:32:46.979Z",
+      "completedAt": "2026-10-09T12:33:02.765Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "5389408d-16df-4fc5-8206-af8793d5c56e",
+      "startedAt": "2026-10-09T12:33:09.224Z",
+      "completedAt": "2026-10-09T12:33:30.990Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "12d766dc-742d-44d7-b24b-fb03ece8135e",
+      "startedAt": "2026-10-09T12:33:09.225Z",
+      "completedAt": "2026-10-09T12:33:16.286Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "0f277c77-6da2-48ca-af32-9da1df925a5e",
+      "startedAt": "2026-10-09T12:33:09.225Z",
+      "completedAt": "2026-10-09T12:33:25.111Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "6722f09d-545f-4c95-9ad3-fde1b92371f8",
+      "startedAt": "2026-10-09T12:33:31.577Z",
+      "completedAt": "2026-10-09T12:33:53.751Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "f1e2978e-a987-49dd-852e-f80049e822de",
+      "startedAt": "2026-10-09T12:33:31.577Z",
+      "completedAt": "2026-10-09T12:33:38.640Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "a0aabf39-8351-4d5a-ad27-568e1776bce0",
+      "startedAt": "2026-10-09T12:33:31.577Z",
+      "completedAt": "2026-10-09T12:33:47.556Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "57a76982-a153-4cc9-b80a-fe40e2cf6314",
+      "startedAt": "2026-10-09T12:32:25.485Z",
+      "completedAt": "2026-10-09T12:32:51.876Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "ac1b88a5-16c4-493c-86f5-fc8b5263f797",
+      "startedAt": "2026-10-09T12:32:25.485Z",
+      "completedAt": "2026-10-09T12:33:40.897Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "c36b5eb5-1362-4ac2-8c68-0ac59c595146",
+      "startedAt": "2026-10-09T12:32:25.485Z",
+      "completedAt": "2026-10-09T12:33:54.880Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "09d518ea-884a-4e6a-b6f1-655a8f91c5fe",
+      "startedAt": "2026-10-09T12:33:54.493Z",
+      "completedAt": "2026-10-09T12:34:01.112Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "786aaaab-d27e-4fa9-bf16-3be0f38cc77f",
+      "startedAt": "2026-10-09T12:33:54.494Z",
+      "completedAt": "2026-10-09T12:33:58.464Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "10ce9bf7-48b1-420b-ad7d-6145d3858927",
+      "startedAt": "2026-10-09T12:33:54.494Z",
+      "completedAt": "2026-10-09T12:33:58.476Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "dc571531-164d-4abc-a4bf-0df9d28cf2b7",
+      "startedAt": "2026-10-09T12:34:01.692Z",
+      "completedAt": "2026-10-09T12:34:06.565Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "38601610-fb5c-488a-bd0e-ec2170719e7c",
+      "startedAt": "2026-10-09T12:34:01.693Z",
+      "completedAt": "2026-10-09T12:34:05.865Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "9d2e0b0e-b104-4372-8893-baedf4b6967a",
+      "startedAt": "2026-10-09T12:34:01.693Z",
+      "completedAt": "2026-10-09T12:34:06.208Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "0c7d5ea8-69f4-408c-ad39-e626e238ffa4",
+      "startedAt": "2026-10-09T12:34:07.097Z",
+      "completedAt": "2026-10-09T12:34:12.275Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "bc3943c2-24a6-4387-b7c8-954c51f12641",
+      "startedAt": "2026-10-09T12:34:07.099Z",
+      "completedAt": "2026-10-09T12:34:10.724Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "689e17da-8e73-44e6-9c6d-7ba765348edb",
+      "startedAt": "2026-10-09T12:34:07.099Z",
+      "completedAt": "2026-10-09T12:34:11.350Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "ce33666e-4fa8-4253-a178-d1d42afe3992",
+      "startedAt": "2026-10-09T12:34:12.915Z",
+      "completedAt": "2026-10-09T12:34:18.121Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "33c8f82d-d3e9-42ab-b72b-f2534b0add6d",
+      "startedAt": "2026-10-09T12:34:12.916Z",
+      "completedAt": "2026-10-09T12:34:16.643Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "e30b81f9-fef9-45eb-9812-fb42a7bb5144",
+      "startedAt": "2026-10-09T12:34:12.916Z",
+      "completedAt": "2026-10-09T12:34:16.974Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "7402dd3a-19db-428e-90b0-5846f5652fdd",
+      "startedAt": "2026-10-09T12:34:18.740Z",
+      "completedAt": "2026-10-09T12:34:22.183Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "e871c41d-ff88-4a03-840c-391a98761c96",
+      "startedAt": "2026-10-09T12:34:18.741Z",
+      "completedAt": "2026-10-09T12:34:26.072Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "cf37f601-32c3-4cf7-a51d-eb8216b592c1",
+      "startedAt": "2026-10-09T12:34:18.741Z",
+      "completedAt": "2026-10-09T12:34:23.076Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "b3772692-a989-46d7-af50-eb45f9769137",
+      "startedAt": "2026-10-09T12:34:26.615Z",
+      "completedAt": "2026-10-09T12:34:45.417Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "81f92b70-33d9-4801-90e0-3460e09ff417",
+      "startedAt": "2026-10-09T12:34:26.615Z",
+      "completedAt": "2026-10-09T12:34:32.447Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "fe5c550c-5c56-4393-9b79-a37c31841777",
+      "startedAt": "2026-10-09T12:34:26.615Z",
+      "completedAt": "2026-10-09T12:34:42.608Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "5599505f-4045-4598-9a5d-a6bd62f873e1",
+      "startedAt": "2026-10-09T12:34:46.089Z",
+      "completedAt": "2026-10-09T12:35:04.898Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "a81c1117-92ba-445a-8067-0660bc0c286e",
+      "startedAt": "2026-10-09T12:34:46.090Z",
+      "completedAt": "2026-10-09T12:34:52.037Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "bdb869ae-da69-402b-b7e8-163202d73b08",
+      "startedAt": "2026-10-09T12:34:46.090Z",
+      "completedAt": "2026-10-09T12:35:01.699Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "595add72-0a75-43d1-a1bd-05f2be418630",
+      "startedAt": "2026-10-09T12:35:05.483Z",
+      "completedAt": "2026-10-09T12:35:09.112Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "94f60c59-9f31-4119-be0a-46f97ce1644f",
+      "startedAt": "2026-10-09T12:35:05.483Z",
+      "completedAt": "2026-10-09T12:35:13.034Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "60f6a913-b2b6-45a0-bfd6-f06f042f5578",
+      "startedAt": "2026-10-09T12:35:05.483Z",
+      "completedAt": "2026-10-09T12:35:09.208Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "86647ac0-8267-4d91-8025-022da9f84e50",
+      "startedAt": "2026-10-09T12:33:55.550Z",
+      "completedAt": "2026-10-09T12:34:22.375Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "e0c17242-bf93-4555-98b1-68b26c067157",
+      "startedAt": "2026-10-09T12:33:55.551Z",
+      "completedAt": "2026-10-09T12:35:10.900Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "cfbdce8f-3385-4a43-b1f5-0c004c2b804d",
+      "startedAt": "2026-10-09T12:33:55.551Z",
+      "completedAt": "2026-10-09T12:35:24.970Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "151b2d00-4565-4e66-97e4-3e4d2209fbe5",
+      "startedAt": "2026-10-09T12:35:41.381Z",
+      "completedAt": "2026-10-09T12:35:47.548Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "d427c57b-753b-4a2e-b4ec-4cc0ab142864",
+      "startedAt": "2026-10-09T12:35:41.382Z",
+      "completedAt": "2026-10-09T12:35:52.870Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "3a6fa039-f195-41a6-8599-4410ececf60c",
+      "startedAt": "2026-10-09T12:35:41.420Z",
+      "completedAt": "2026-10-09T12:35:47.491Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "e764b49a-ac50-4c20-9029-73b87bb851c7",
+      "startedAt": "2026-10-09T12:35:41.420Z",
+      "completedAt": "2026-10-09T12:35:54.039Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "27b3a896-02a7-45db-8ccb-e4ab119eed61",
+      "startedAt": "2026-10-09T12:35:53.459Z",
+      "completedAt": "2026-10-09T12:35:59.397Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "d660a7ee-a133-4ab9-a9a9-5b9f169dca7c",
+      "startedAt": "2026-10-09T12:35:53.460Z",
+      "completedAt": "2026-10-09T12:36:04.925Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "4e2e523f-66e9-4fda-bfec-5deca312d990",
+      "startedAt": "2026-10-09T12:35:54.616Z",
+      "completedAt": "2026-10-09T12:35:59.941Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "2038badf-9d83-455e-8c58-2409f92180f0",
+      "startedAt": "2026-10-09T12:35:54.617Z",
+      "completedAt": "2026-10-09T12:36:05.961Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "2c3c27ad-3944-432b-baf0-ffd0ddc0a109",
+      "startedAt": "2026-10-09T12:36:05.452Z",
+      "completedAt": "2026-10-09T12:36:11.032Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "e8dae6eb-dacd-47f9-a08a-8b77d72a3379",
+      "startedAt": "2026-10-09T12:36:05.453Z",
+      "completedAt": "2026-10-09T12:36:16.777Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "059f2543-50a3-430a-84d0-49e4697361b1",
+      "startedAt": "2026-10-09T12:36:06.507Z",
+      "completedAt": "2026-10-09T12:36:11.747Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "5b563698-5ac9-438f-8fe9-fc85c8a625c5",
+      "startedAt": "2026-10-09T12:36:06.508Z",
+      "completedAt": "2026-10-09T12:36:18.046Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "d73bd4f5-f3bf-4531-8bdd-4531283a728f",
+      "startedAt": "2026-10-09T12:36:17.301Z",
+      "completedAt": "2026-10-09T12:36:22.954Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "scanId": "afb40010-d28a-4bd9-bd34-2bc332c8a339",
+      "startedAt": "2026-10-09T12:36:17.302Z",
+      "completedAt": "2026-10-09T12:36:28.806Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "07dca7ff-c8df-43fb-9a39-35fa0ba21903",
+      "startedAt": "2026-10-09T12:36:18.645Z",
+      "completedAt": "2026-10-09T12:36:23.942Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "14a31357-6b73-42d8-873c-14191da5a184",
+      "startedAt": "2026-10-09T12:36:18.645Z",
+      "completedAt": "2026-10-09T12:36:29.998Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "854fa207-c21f-4a0d-b609-66799c53804c",
+      "startedAt": "2026-10-09T12:36:29.305Z",
+      "completedAt": "2026-10-09T12:36:34.051Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "9a0fff10-e402-47cd-9afb-76f25e40155d",
+      "startedAt": "2026-10-09T12:36:29.306Z",
+      "completedAt": "2026-10-09T12:36:40.083Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "f6bf2156-92d7-40b1-92c2-37a7d0c044ea",
+      "startedAt": "2026-10-09T12:36:30.641Z",
+      "completedAt": "2026-10-09T12:36:36.292Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "2dcd1b9a-fd8a-4c37-acfc-dc15f213cc3f",
+      "startedAt": "2026-10-09T12:36:30.642Z",
+      "completedAt": "2026-10-09T12:36:46.299Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "226679e7-d3da-4ebc-aff6-1ee40fa838b8",
+      "startedAt": "2026-10-09T12:36:40.624Z",
+      "completedAt": "2026-10-09T12:36:45.080Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "cf5abd2f-7e4c-4bb9-a961-bbcc35dd788c",
+      "startedAt": "2026-10-09T12:36:40.624Z",
+      "completedAt": "2026-10-09T12:36:51.451Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "1f9a2098-7a65-424b-a2f5-67f877b3b983",
+      "startedAt": "2026-10-09T12:36:46.806Z",
+      "completedAt": "2026-10-09T12:36:56.910Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "329741d7-f300-4cd4-8add-4db4092c2fe8",
+      "startedAt": "2026-10-09T12:36:46.807Z",
+      "completedAt": "2026-10-09T12:36:52.546Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "7115fb86-66f6-4577-b6f2-1fb61903f4cb",
+      "startedAt": "2026-10-09T12:36:52.000Z",
+      "completedAt": "2026-10-09T12:36:56.623Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "4215364b-0a65-4f02-9a5d-4957c2ccc18b",
+      "startedAt": "2026-10-09T12:36:52.000Z",
+      "completedAt": "2026-10-09T12:37:02.820Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "9ef8096a-2578-445f-b072-f53103cc9ee6",
+      "startedAt": "2026-10-09T12:36:57.411Z",
+      "completedAt": "2026-10-09T12:37:04.023Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "e1b986f4-1483-460d-ae47-01d86053f56a",
+      "startedAt": "2026-10-09T12:36:57.411Z",
+      "completedAt": "2026-10-09T12:37:01.039Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "69bc6bca-b8da-4c57-a646-11c3522f1597",
+      "startedAt": "2026-10-09T12:37:03.408Z",
+      "completedAt": "2026-10-09T12:37:08.213Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept"
+    },
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "8993bb59-ffc2-4ffb-b5bb-a040fcf8449d",
+      "startedAt": "2026-10-09T12:37:03.411Z",
+      "completedAt": "2026-10-09T12:37:14.213Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject"
+    }
+  ]
+}

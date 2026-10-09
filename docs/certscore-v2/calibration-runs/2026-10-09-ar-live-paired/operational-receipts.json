@@ -1,0 +1,24 @@
+{
+  "contactPersistence": {
+    "runKey": "ar-live-paired-20261009",
+    "attemptedSessions": 174,
+    "status": "completed",
+    "output": "\n> website-signal-risk-scanner@0.1.0 v2:calibration-contact-persist /Users/benmasek/WC01\n> node --import tsx ./scripts/persist-scan-quality-calibration-contacts.ts --ecs-oneoff --manifest artifacts/ar-live-paired-20261009/inventory-manifest.json --run-key ar-live-paired-20261009 --summary artifacts/ar-live-paired-20261009/all-contacts-summary.json\n\nPersisted 174 calibration contacts for run ar-live-paired-20261009\n"
+  },
+  "historyExport": {
+    "status": "completed",
+    "output": "\n> website-signal-risk-scanner@0.1.0 v2:calibration-ledger-export /Users/benmasek/WC01\n> node --import tsx ./scripts/export-scan-quality-calibration-ledger.ts --ecs-oneoff --manifest artifacts/ar-live-paired-20261009/inventory-manifest.json --out artifacts/ar-live-paired-20261009/effective-ledger.json\n\nExported 12 central contact records into /Users/benmasek/WC01/artifacts/ar-live-paired-20261009/effective-ledger.json\n"
+  },
+  "registryCheck": {
+    "status": "passed",
+    "output": "\n> website-signal-risk-scanner@0.1.0 v2:calibration-registry-check /Users/benmasek/WC01\n> node --import tsx ./scripts/verify-scan-quality-calibration-registry.ts\n\nScan-quality calibration registry passed: 51 rotating targets, 6 stable lanes, 10-site default live sample.\n"
+  },
+  "ledgerReview": {
+    "entries": 12,
+    "cooldown": 11,
+    "doNotCalibrate": [
+      "https://nomura.com/"
+    ],
+    "existingRootLedgerPreserved": true
+  }
+}

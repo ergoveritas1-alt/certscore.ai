@@ -1,0 +1,4189 @@
+{
+  "runKey": "ar-live-paired-20261009",
+  "generatedAt": "2026-10-09T12:39:02.987401+00:00",
+  "localOnly": true,
+  "deploymentPerformed": false,
+  "baselineCommit": "fba576bcbc0d7ad1cffdf5375bb9629f63e065d7",
+  "sourceHashes": {
+    "baseline": {
+      "sha256": "24cf0a5ab6d77d25b1fcc4aff546fd126747b8adedf28593799cb8c6b0de5496",
+      "fileCount": 479,
+      "latestMtimeMs": 1791509829000.0
+    },
+    "candidate": {
+      "sha256": "3f86a0c000790baa00e412d7b103eb7a636d3bf0d89e6980df4b69435cabcb81",
+      "fileCount": 490,
+      "latestMtimeMs": 1791548122638.9922
+    }
+  },
+  "candidateSourceMtimePredatesAllVisits": true,
+  "protocol": "12 sites, two repeats per source, ABBA/BAAB balanced; same local California egress, ConsentCheckBot HTTP/native Chromium navigator, en-IE/Europe Dublin; fresh independent consent/accept/reject contexts; 30s existing per-lane budgets, no forms/model calls",
+  "plannedSites": 12,
+  "usableSites": 11,
+  "originalVisits": 48,
+  "usablePassiveVisits": 44,
+  "originalSessions": 144,
+  "actionRepairVisits": 15,
+  "actionRepairSessions": 30,
+  "totalContactSessions": 174,
+  "harnessInvalidOriginalActionVisits": [
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 1
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 1
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 1
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 1
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 2
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 2
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 2
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 2
+    },
+    {
+      "url": "https://nomura.com/",
+      "version": "baseline",
+      "repeat": 1
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 1
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 1
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 2
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 2
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 1
+    },
+    {
+      "url": "https://nomura.com/",
+      "version": "candidate",
+      "repeat": 1
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 1
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 2
+    },
+    {
+      "url": "https://nomura.com/",
+      "version": "candidate",
+      "repeat": 2
+    }
+  ],
+  "excludedSites": {
+    "nomura.com": {
+      "reason": "reviewed_cloudfront_403_error_shell",
+      "representativeSite": false,
+      "furtherContactAllowed": false,
+      "evidence": "visits/nomura.com/candidate-1/consent/screenshot-pre-consent-cmp-controls.png",
+      "review": "model-assisted visual review; not independent human adjudication"
+    }
+  },
+  "metrics": {
+    "baseline": {
+      "usableVisits": 22,
+      "decisions": 44,
+      "truePositive": 36,
+      "falsePositive": 0,
+      "falseNegative": 4,
+      "trueNegative": 4,
+      "visualAgreement": 0.9090909090909091,
+      "visibleControlRecall": 0.9,
+      "acceptIdentified": 22,
+      "acceptVisuallyPresent": 22,
+      "rejectIdentified": 14,
+      "rejectVisuallyPresent": 18,
+      "geometryScreenshotBound": 21,
+      "passiveDurationMedianMs": 6486.5,
+      "actions": {
+        "accept": {
+          "sessions": 22,
+          "passiveVisibleSessions": 22,
+          "completedClicks": 20,
+          "verifiedClickProofs": 20,
+          "confirmedRegistrations": 4,
+          "unconfirmedCompletedClicks": 16,
+          "fullWindowCapturesAmongUnconfirmed": 16,
+          "notAttemptedReasons": {
+            "target_navigation_failed": 2
+          }
+        },
+        "reject": {
+          "sessions": 22,
+          "passiveVisibleSessions": 18,
+          "completedClicks": 12,
+          "verifiedClickProofs": 12,
+          "confirmedRegistrations": 4,
+          "unconfirmedCompletedClicks": 8,
+          "fullWindowCapturesAmongUnconfirmed": 8,
+          "notAttemptedReasons": {
+            "resolved_control_label_not_classified": 4,
+            "target_navigation_failed": 2,
+            "resolved_control_label_below_confidence_threshold": 2,
+            "deterministic_reject_control_not_found": 2
+          }
+        }
+      }
+    },
+    "candidate": {
+      "usableVisits": 22,
+      "decisions": 44,
+      "truePositive": 40,
+      "falsePositive": 0,
+      "falseNegative": 0,
+      "trueNegative": 4,
+      "visualAgreement": 1.0,
+      "visibleControlRecall": 1.0,
+      "acceptIdentified": 22,
+      "acceptVisuallyPresent": 22,
+      "rejectIdentified": 18,
+      "rejectVisuallyPresent": 18,
+      "geometryScreenshotBound": 22,
+      "passiveDurationMedianMs": 4843.5,
+      "actions": {
+        "accept": {
+          "sessions": 22,
+          "passiveVisibleSessions": 22,
+          "completedClicks": 20,
+          "verifiedClickProofs": 20,
+          "confirmedRegistrations": 4,
+          "unconfirmedCompletedClicks": 16,
+          "fullWindowCapturesAmongUnconfirmed": 16,
+          "notAttemptedReasons": {
+            "target_navigation_failed": 2
+          }
+        },
+        "reject": {
+          "sessions": 22,
+          "passiveVisibleSessions": 18,
+          "completedClicks": 12,
+          "verifiedClickProofs": 12,
+          "confirmedRegistrations": 4,
+          "unconfirmedCompletedClicks": 8,
+          "fullWindowCapturesAmongUnconfirmed": 8,
+          "notAttemptedReasons": {
+            "resolved_control_label_not_classified": 4,
+            "target_navigation_failed": 2,
+            "resolved_control_label_below_confidence_threshold": 2,
+            "multiple_deterministic_reject_controls_found": 1,
+            "deterministic_reject_control_not_found": 1
+          }
+        }
+      }
+    }
+  },
+  "methodology": {
+    "visualLabels": "Primary Codex agent model-assisted visual inspection of all44 usable representative screenshots. No independent human adjudication. Missing Reject on partial inventory is not promoted to verified absence.",
+    "scope": "Local scanner control observations/actions, not AWS coordinator or customer API/report projection verification.",
+    "population": "Selected diagnostic sites; repeated visits are correlated; not an estimated production defect rate.",
+    "actionRepairs": "15 harness-invalid non-Nomura visit action pairs rerun after corrected parentScanId binding. Repairs are action-only and a distinct stratum, not same-time passive/action observations. No product sources changed during batch.",
+    "cost": "No recurring change or scanner model/API calls. Central contact history/export/persistence estimated under $0.10 once. Normal Codex/Luna review usage is separate.",
+    "screenshots": "Local captures, not production safety-approved assets.",
+    "handoff": "Clock-normalized per CanonicalEvidenceBundle.startedAt versus outer visit.startedAt; zero/submillisecond measurement noise possible.",
+    "actionRates": "Descriptive coverage across valid action sessions, replacing known harness-invalid pairs. Passive visible controls are from separate fresh sessions, not proof of identical action-session eligibility; action-only repairs omit passive browser concurrency. No causal action-rate improvement claimed.",
+    "promotion": "Selected model-assisted local A/R diagnostic comparison only; not human-adjudicated A/R/O calibration, full six-lane regression, production release gate, or baseline promotion."
+  },
+  "unresolved": [
+    "Sodexo and Adecco newly recognized contextual necessary-only controls remain observation-only, so Reject action authorization still fails closed.",
+    "Receitas Nestle Portuguese Reject label remains below action confidence threshold.",
+    "GoTokyo action navigation times out despite passive banner capture.",
+    "Several completed clicks lack a verified semantic state receipt; do not treat as registered consent or refusal.",
+    "Nomura CloudFront403 was not classified no-go by scanner; reviewed exclusion and no-further-contact applied."
+  ],
+  "visits": [
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/candidate-1/result.json",
+      "host": "feedbackcompany.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 4814
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nintendo.de/baseline-1/result.json",
+      "host": "nintendo.de",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nintendo.de/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 4324
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nintendo.de/candidate-1/result.json",
+      "host": "nintendo.de",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nintendo.de/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3591
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/baseline-1/result.json",
+      "host": "feedbackcompany.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3230
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nintendo.de/candidate-2/result.json",
+      "host": "nintendo.de",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nintendo.de/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 4000
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/baseline-2/result.json",
+      "host": "feedbackcompany.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3120
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/candidate-2/result.json",
+      "host": "feedbackcompany.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/feedbackcompany.com/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3498
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nintendo.de/baseline-2/result.json",
+      "host": "nintendo.de",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nintendo.de/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3985
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/podtrac.com/candidate-1/result.json",
+      "host": "podtrac.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/podtrac.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3683
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/podtrac.com/baseline-1/result.json",
+      "host": "podtrac.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/podtrac.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 2436
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/podtrac.com/baseline-2/result.json",
+      "host": "podtrac.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/podtrac.com/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 2460
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/podtrac.com/candidate-2/result.json",
+      "host": "podtrac.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/podtrac.com/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 2368
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/sodexo.com/baseline-1/result.json",
+      "host": "sodexo.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/sodexo.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 18884
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/sodexo.com/candidate-1/result.json",
+      "host": "sodexo.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/sodexo.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3207
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/sodexo.com/candidate-2/result.json",
+      "host": "sodexo.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/sodexo.com/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3151
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/sodexo.com/baseline-2/result.json",
+      "host": "sodexo.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/sodexo.com/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 18930
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-1/result.json",
+      "host": "gotokyo.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 26212
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-1/result.json",
+      "host": "luminpdf.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 6354
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-1/result.json",
+      "host": "luminpdf.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 6294
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-2/result.json",
+      "host": "luminpdf.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 6199
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-2/result.json",
+      "host": "luminpdf.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 6180
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-1/result.json",
+      "host": "nature.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 8103
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-1/result.json",
+      "host": "nature.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 6860
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-1/result.json",
+      "host": "gotokyo.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-1/consent/screenshot-pre-consent.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 26237
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-2/result.json",
+      "host": "nature.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 6952
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-2/result.json",
+      "host": "nature.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 7028
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-1/result.json",
+      "host": "receitasnestle.com.br",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 4933
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-1/result.json",
+      "host": "receitasnestle.com.br",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 4584
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-2/result.json",
+      "host": "receitasnestle.com.br",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 5026
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-2/result.json",
+      "host": "receitasnestle.com.br",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 5117
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-1/result.json",
+      "host": "upshow.tv",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": false,
+      "passiveDurationMs": 21800
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-2/result.json",
+      "host": "gotokyo.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-2/consent/screenshot-pre-consent.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 26391
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-1/result.json",
+      "host": "upshow.tv",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": false,
+      "sameDocumentSnapshot": false,
+      "passiveDurationMs": 21713
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-2/result.json",
+      "host": "upshow.tv",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-2/consent/screenshot-pre-consent-cmp-controls.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": false,
+      "passiveDurationMs": 21766
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-2/result.json",
+      "host": "upshow.tv",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": false,
+      "passiveDurationMs": 22174
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-1/result.json",
+      "host": "unleashedsoftware.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-1/consent/screenshot-pre-consent.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 6619
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-2/result.json",
+      "host": "gotokyo.org",
+      "expectedVisible": {
+        "accept": true,
+        "reject": false
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 26825
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-1/result.json",
+      "host": "unleashedsoftware.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 4873
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-2/result.json",
+      "host": "unleashedsoftware.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-2/consent/screenshot-pre-consent.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 5178
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-2/result.json",
+      "host": "unleashedsoftware.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 5206
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-1/result.json",
+      "host": "adecco.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3443
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-1/result.json",
+      "host": "adecco.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 18802
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-2/result.json",
+      "host": "adecco.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": false
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "partial",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-2/consent/screenshot-pre-consent-settled.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 18809
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "resultPath": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-2/result.json",
+      "host": "adecco.com",
+      "expectedVisible": {
+        "accept": true,
+        "reject": true
+      },
+      "observed": {
+        "accept": true,
+        "reject": true
+      },
+      "captureStatus": "observed",
+      "inventoryOutcome": "complete_with_controls",
+      "visualReview": {
+        "reviewer": "Codex primary agent",
+        "provenance": "model_assisted_visual_review",
+        "reference": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-2/consent/screenshot-pre-consent-geometry-proof.png",
+        "humanAdjudicated": false,
+        "independentlyReviewed": false
+      },
+      "geometryScreenshotBound": true,
+      "sameDocumentSnapshot": true,
+      "passiveDurationMs": 3629
+    }
+  ],
+  "actions": [
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:Cookiebot:accept:v1",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3112,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "55c29e2676387b64cf663fa1ea3a3cf51911e75bc952e3a0964d94eb7205ca71",
+          "corroboratingOnly": false
+        },
+        {
+          "witnessType": "banner_transition",
+          "observedAtMs": 3112,
+          "corroboratingOnly": true
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ],
+      "durationMs": 6167
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:cc210041e2bb97818c409354",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3460,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "d6a1b29ec446c70d26e60be30dd5868553aa4336a8913f318f71581ac45f8c8d",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1"
+      ],
+      "durationMs": 11488
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:fcfdc8b4583071de7f9b4763",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6071
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:5969c5cb447adb4c1c0e67e8",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 12619
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:fcfdc8b4583071de7f9b4763",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5325
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:5969c5cb447adb4c1c0e67e8",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11344
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:Cookiebot:accept:v1",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 2776,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "a15fe4b83de205b747bf869cbd5a36d94b21619c55e39ee18e3b8723612e7dfd",
+          "corroboratingOnly": false
+        },
+        {
+          "witnessType": "banner_transition",
+          "observedAtMs": 2776,
+          "corroboratingOnly": true
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ],
+      "durationMs": 5938
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:cc210041e2bb97818c409354",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3439,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "2084037339858cedce42c373ea930ef0a14e566910fa26271713d6815fa82a5d",
+          "corroboratingOnly": false
+        },
+        {
+          "witnessType": "banner_transition",
+          "observedAtMs": 3439,
+          "corroboratingOnly": true
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1"
+      ],
+      "durationMs": 11465
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:fcfdc8b4583071de7f9b4763",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5240
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:5969c5cb447adb4c1c0e67e8",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11538
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:Cookiebot:accept:v1",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 2529,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "2813cdb3d589f2492eda494b26eef2f5e53683ea033376c48400a32dcc517484",
+          "corroboratingOnly": false
+        },
+        {
+          "witnessType": "banner_transition",
+          "observedAtMs": 2529,
+          "corroboratingOnly": true
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ],
+      "durationMs": 5580
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:cc210041e2bb97818c409354",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3291,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "cf42bdb3de86c520b2d1b0fb2e709114c8041f7d8e2c9bcdc0a4156f2b4c0f20",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1"
+      ],
+      "durationMs": 11324
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:Cookiebot:accept:v1",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 2598,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "7fe41e2437862c4c61d89d3884a7db2afab6ae5f4fb014dc55eb92d359f6c0f2",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ],
+      "durationMs": 5653
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/feedbackcompany.com/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:cc210041e2bb97818c409354",
+        "cmpId": "Cookiebot"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3472,
+          "key": "CookieConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "73e74a55343957c88c1add753c571adb4ed2b2212881821f6309039019ca67b6",
+          "corroboratingOnly": false
+        },
+        {
+          "witnessType": "banner_transition",
+          "observedAtMs": 3472,
+          "corroboratingOnly": true
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1"
+      ],
+      "durationMs": 11504
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:fcfdc8b4583071de7f9b4763",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5297
+    },
+    {
+      "url": "https://nintendo.de/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/nintendo.de/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:5969c5cb447adb4c1c0e67e8",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11353
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:907b392bb78c1407959feccd"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 4746
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:2e05be98d144ac1ffc7e8a29"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 10777
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:907b392bb78c1407959feccd"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 4456
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:2e05be98d144ac1ffc7e8a29"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 10827
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:907b392bb78c1407959feccd"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 4623
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:2e05be98d144ac1ffc7e8a29"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 10820
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:907b392bb78c1407959feccd"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 4805
+    },
+    {
+      "url": "https://podtrac.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/podtrac.com/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:2e05be98d144ac1ffc7e8a29"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 10802
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/sodexo.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5651
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/sodexo.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 15657
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/sodexo.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 10104
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/sodexo.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-control:reject:v2:a2183c9801253ce9c69023df",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 5739
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/sodexo.com/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:40fffe5b0c6472268fbda52b",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6612
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "action_only_repair",
+      "packet": "artifacts/ar-live-paired-20261009/action-repair/sodexo.com/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-control:reject:v2:a2183c9801253ce9c69023df",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 3628
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/sodexo.com/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:40fffe5b0c6472268fbda52b",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6279
+    },
+    {
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/sodexo.com/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 16662
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-accept-v10",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout",
+        "observer_result_budget_exhausted_before_packet_finalization"
+      ],
+      "durationMs": 75313
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v24",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:aborted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "durationMs": 89508
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:990d7fd854785ad27b32b2f2"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6187
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:b9c069f5268a121d9988bc43"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11525
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:990d7fd854785ad27b32b2f2"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5845
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:b9c069f5268a121d9988bc43"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11122
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:990d7fd854785ad27b32b2f2"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5757
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:b9c069f5268a121d9988bc43"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11435
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:990d7fd854785ad27b32b2f2"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5755
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/luminpdf.com/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:b9c069f5268a121d9988bc43"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11127
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7240
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:78e8db676e2e28c3c1435a78",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 13257
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6226
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:78e8db676e2e28c3c1435a78",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11342
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-accept-v9",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout",
+        "observer_result_budget_exhausted_before_packet_finalization"
+      ],
+      "durationMs": 75389
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v23",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:aborted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "durationMs": 89499
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6335
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:78e8db676e2e28c3c1435a78",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 11533
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6195
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/nature.org/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:78e8db676e2e28c3c1435a78",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_rejection_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "durationMs": 12013
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:8f911d4fd12c4d5bc598bf5d",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "action_dispatch_verified_geometry_fallback",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7311
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_below_confidence_threshold",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_below_confidence_threshold"
+      ],
+      "durationMs": 15553
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "action_dispatch_verified_geometry_fallback",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6717
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_below_confidence_threshold",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_below_confidence_threshold"
+      ],
+      "durationMs": 15389
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "action_dispatch_verified_geometry_fallback",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 6924
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_below_confidence_threshold",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_below_confidence_threshold"
+      ],
+      "durationMs": 15422
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:8f911d4fd12c4d5bc598bf5d",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "action_dispatch_verified_geometry_fallback",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7470
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/receitasnestle.com.br/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_below_confidence_threshold",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_below_confidence_threshold"
+      ],
+      "durationMs": 15363
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:8778393c6510eb22c430de94",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7061
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v24",
+        "reason": "multiple_deterministic_reject_controls_found"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "multiple_deterministic_reject_controls_found",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "adaptive_late_control_extension_applied:2000",
+        "resolver_ambiguity_unresolved_at_deadline",
+        "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:83c33d3eaddfb505"
+      ],
+      "durationMs": 15785
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-accept-v9",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout",
+        "observer_result_budget_exhausted_before_packet_finalization"
+      ],
+      "durationMs": 75412
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v23",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:aborted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "durationMs": 89395
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:8778393c6510eb22c430de94",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7007
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v23",
+        "reason": "deterministic_reject_control_not_found"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "deterministic_reject_control_not_found",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "adaptive_late_control_extension_applied:2000",
+        "resolver_search_budget_exhausted",
+        "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:105cb8d426eb7d78"
+      ],
+      "durationMs": 15786
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:8778393c6510eb22c430de94",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7061
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v23",
+        "reason": "deterministic_reject_control_not_found"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "deterministic_reject_control_not_found",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "adaptive_late_control_extension_applied:2000",
+        "resolver_search_budget_exhausted",
+        "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:83c33d3eaddfb505"
+      ],
+      "durationMs": 15886
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:8778393c6510eb22c430de94",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7063
+    },
+    {
+      "url": "https://upshow.tv/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/upshow.tv/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v24",
+        "reason": "deterministic_reject_control_not_found"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "deterministic_reject_control_not_found",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "adaptive_late_control_extension_applied:2000",
+        "resolver_search_budget_exhausted",
+        "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:83c33d3eaddfb505"
+      ],
+      "durationMs": 15979
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3309,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "912f0cafcb63ad079ec7c5013b4622f16837c570257e91598995ae9155719fd6",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "durationMs": 3970
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3659,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "af3bdfd2f5d02b7deb8f23449e6d10a57a6e92dd833a1a69b006159e36085951",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "durationMs": 3982
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-accept-v10",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout",
+        "observer_result_budget_exhausted_before_packet_finalization"
+      ],
+      "durationMs": 75349
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": false,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/gotokyo.org/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "canonical_consent_control_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-consent-control-reject-v24",
+        "reason": "target_navigation_failed"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "target_navigation_failed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:aborted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "durationMs": 89419
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:40fffe5b0c6472268fbda52b",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3526,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "88105179a3e50d616a13015ddf985c5b7fd3ef51f2e6247757c0319c37d6ecff",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "registration_timestamp_is_observation_upper_bound",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "durationMs": 4172
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3964,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "cc83f7d89d77a9ef697d6b2ad9684b05482c15714e6739648975eb0754e86dc3",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "durationMs": 4515
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:40fffe5b0c6472268fbda52b",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 2536,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "8952cf86d7990908f65a7b68d4c351db1c1224eb148508e49c8fe59854f6860d",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "durationMs": 3625
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3914,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "ffca8f2a527d6f0936dd6b8c5c0fb8fff256e22e4666310af76ccce903149e09",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "durationMs": 4251
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:40fffe5b0c6472268fbda52b",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3039,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_granted_decision_after_action",
+          "observedStateHash": "2b285409f75da307c438a2784c9d5c78b633718932a61979488180a835629d2f",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "durationMs": 3727
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/unleashedsoftware.com/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:reject:v2:94855898c4c6f64241c3988e",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "confirmed",
+      "registrationReason": null,
+      "confirmedWitnesses": [
+        {
+          "witnessType": "cmp_cookie_state",
+          "observedAtMs": 3747,
+          "key": "OptanonConsent",
+          "expectedState": "canonical_cmp_denied_decision_after_action",
+          "observedStateHash": "49bdf8f526864c070a9bcb93d788ac3a897e325cd408f80b0bb178142e9fbe27",
+          "corroboratingOnly": false
+        }
+      ],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "durationMs": 4058
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-cmp:OneTrust:accept:v1",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7331
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-control:reject:v2:c8de0aee4f6fc090e806a05e",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 4335
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:e804e1c01b382aacb582c841",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "action_dispatch_verified_geometry_fallback",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5832
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 15993
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:e804e1c01b382aacb582c841",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 5947
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/baseline-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-cmp:OneTrust:reject:v3",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 15609
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-2/accept/PostAcceptEvidencePacket.json",
+      "resolver": {
+        "found": true,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 1,
+        "recipeId": "canonical-control:accept:v1:e804e1c01b382aacb582c841",
+        "cmpId": "OneTrust"
+      },
+      "click": "completed",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "registrationReason": "cmp_acceptance_state_not_observed",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": true,
+      "captureStopReason": "window_elapsed",
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "durationMs": 7551
+    },
+    {
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "passiveControlVisible": true,
+      "measurementStratum": "original_three_lane_visit",
+      "packet": "artifacts/ar-live-paired-20261009/visits/adecco.com/candidate-2/reject/PostRefusalEvidencePacket.json",
+      "resolver": {
+        "found": false,
+        "method": "tcf_api_cmp_registry_recipe",
+        "confidence": 0,
+        "recipeId": "canonical-control:reject:v2:c8de0aee4f6fc090e806a05e",
+        "cmpId": "OneTrust",
+        "reason": "label_unverifiable"
+      },
+      "click": "not_attempted",
+      "proofValid": false,
+      "registration": "not_attempted",
+      "registrationReason": "resolved_control_label_not_classified",
+      "confirmedWitnesses": [],
+      "fullWindowUnconfirmedCapture": false,
+      "captureStopReason": null,
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "label_unverifiable",
+        "resolved_control_label_not_classified"
+      ],
+      "durationMs": 3725
+    }
+  ],
+  "contactBookkeeping": {
+    "persisted": 174,
+    "runKey": "ar-live-paired-20261009",
+    "receipt": "operational-receipts.json",
+    "reviewedRepositoryLedger": "ledger-candidate.json",
+    "nomuraState": "do_not_calibrate"
+  },
+  "benchmarkReview": {
+    "reviewer": "Luna subagent",
+    "status": "protocol and final counts reviewed; one vacuous non-headline candidate-reference metric removed before commit",
+    "humanAdjudication": false,
+    "baselinePromotion": false,
+    "notes": [
+      "Scanner-source hash scope is packages/certscore-scan-core,certscore-contracts,shared/src; not whole repository.",
+      "Action-only repairs unbalanced:7baseline,8candidate. No causal action-rate improvement claimed.",
+      "Passive-control ground truth is primary-agent model-assisted visual review."
+    ]
+  },
+  "repeatConsistency": {
+    "pairedSitesPerVersion": 11,
+    "sitesWithSameARAcrossBothRepeats": {
+      "baseline": 11,
+      "candidate": 11
+    }
+  },
+  "actionMeasurementStrata": {
+    "baseline": {
+      "original_three_lane_visit": {
+        "sessions": 30,
+        "completedClicks": 19,
+        "confirmedRegistrations": 4
+      },
+      "action_only_repair": {
+        "sessions": 14,
+        "completedClicks": 13,
+        "confirmedRegistrations": 4
+      }
+    },
+    "candidate": {
+      "original_three_lane_visit": {
+        "sessions": 28,
+        "completedClicks": 18,
+        "confirmedRegistrations": 4
+      },
+      "action_only_repair": {
+        "sessions": 16,
+        "completedClicks": 14,
+        "confirmedRegistrations": 4
+      }
+    }
+  },
+  "protocolSnapshotHashes": {
+    "run.mts": "5784a584402533caffe8470389eaf1691da8d9c9144c584a060cfe3110461f1f",
+    "visit.mts": "90cb22bac1e0329626fe2c2b8b1695afa142fd31ce2b77158498d76d96139587",
+    "repair-actions.mts": "dd41c16a1944aef490b7e9d129baa88f74bfa19185175b091f2f34c438ec4b0b",
+    "analyze.py": "6e5ad641c7e2d657a7b367f7fd7a67d04a8f40eb0bfea840c23c97c1ff1630e1"
+  }
+}

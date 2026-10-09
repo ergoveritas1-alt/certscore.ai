@@ -1,0 +1,109 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-09T12:26:47.652Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-live-paired-20261009",
+  "selected": [
+    {
+      "url": "https://nintendo.de/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://feedbackcompany.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nomura.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://podtrac.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://sodexo.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nature.org/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://upshow.tv/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://adecco.com/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner explicitly authorized fresh repeat site scans at will to measure live-site A/R improvement; blocked and do_not_calibrate remain excluded.",
+    "appliedToUrls": [
+      "https://adecco.com/",
+      "https://feedbackcompany.com/",
+      "https://gotokyo.org/",
+      "https://luminpdf.com/",
+      "https://nature.org/",
+      "https://nintendo.de/",
+      "https://nomura.com/",
+      "https://podtrac.com/",
+      "https://receitasnestle.com.br/",
+      "https://sodexo.com/",
+      "https://unleashedsoftware.com/",
+      "https://upshow.tv/"
+    ]
+  }
+}

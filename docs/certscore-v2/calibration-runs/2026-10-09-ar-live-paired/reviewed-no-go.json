@@ -1,0 +1,9 @@
+{
+  "nomura.com": {
+    "reason": "reviewed_cloudfront_403_error_shell",
+    "representativeSite": false,
+    "furtherContactAllowed": false,
+    "evidence": "visits/nomura.com/candidate-1/consent/screenshot-pre-consent-cmp-controls.png",
+    "review": "model-assisted visual review; not independent human adjudication"
+  }
+}

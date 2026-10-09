@@ -1,0 +1,128 @@
+{
+  "entries": {
+    "https://adecco.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:35:09.208Z",
+      "lastContactAt": "2026-10-09T12:35:09.208Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://adecco.com/"
+    },
+    "https://sodexo.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:37:01.039Z",
+      "lastContactAt": "2026-10-09T12:37:01.039Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sodexo.com/"
+    },
+    "https://upshow.tv/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:33:47.556Z",
+      "lastContactAt": "2026-10-09T12:33:47.556Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://upshow.tv/"
+    },
+    "https://feedbackcompany.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:36:28.806Z",
+      "lastContactAt": "2026-10-09T12:36:28.806Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://feedbackcompany.com/"
+    },
+    "https://nomura.com/": {
+      "consecutiveNoGoCount": 12,
+      "cooldownUntil": "2026-11-06T12:29:39.341Z",
+      "lastContactAt": "2026-10-09T12:29:39.341Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "reviewed_cloudfront_403_error_shell"
+      ],
+      "lastOutcome": "no_go",
+      "state": "do_not_calibrate",
+      "url": "https://nomura.com/"
+    },
+    "https://gotokyo.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:35:24.970Z",
+      "lastContactAt": "2026-10-09T12:35:24.970Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://gotokyo.org/"
+    },
+    "https://podtrac.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:37:14.213Z",
+      "lastContactAt": "2026-10-09T12:37:14.213Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://podtrac.com/"
+    },
+    "https://luminpdf.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:30:29.549Z",
+      "lastContactAt": "2026-10-09T12:30:29.549Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://luminpdf.com/"
+    },
+    "https://receitasnestle.com.br/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:32:24.011Z",
+      "lastContactAt": "2026-10-09T12:32:24.011Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://receitasnestle.com.br/"
+    },
+    "https://nintendo.de/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:36:29.998Z",
+      "lastContactAt": "2026-10-09T12:36:29.998Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://nintendo.de/"
+    },
+    "https://unleashedsoftware.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:34:16.974Z",
+      "lastContactAt": "2026-10-09T12:34:16.974Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://unleashedsoftware.com/"
+    },
+    "https://nature.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:31:20.011Z",
+      "lastContactAt": "2026-10-09T12:31:20.011Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://nature.org/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-09T12:39:24.189Z"
+}
