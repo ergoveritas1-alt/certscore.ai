@@ -1,0 +1,83 @@
+{
+  "fullGate": {
+    "gitSha": "2d0142d1f40be56f7220328f452a031eb997d0c5",
+    "command": "pnpm preflight:full",
+    "exitCode": 0,
+    "startedAt": "2026-10-09T22:19:45.708044+00:00",
+    "completedAt": "2026-10-09T22:32:13.023199+00:00",
+    "logSha256": "862b7b32fe43984cafe38d3579947adb02cee5377397063c236e2fefcb0e017d",
+    "verificationWorktree": "/Users/benmasek/.codex/worktrees/form-sdk-release-gate/WC01",
+    "sourceManifestEntries": 4432,
+    "primarySourceMismatches": [],
+    "ciTypecheckReceipt": false
+  },
+  "focusedChecks": {
+    "sourceCommit": "2d0142d1f40be56f7220328f452a031eb997d0c5",
+    "sdkTests": 32,
+    "reportRegressions": 30,
+    "disclosureRegression": 1,
+    "sdkPackageSmoke": "passed with consumer declaration compilation",
+    "timestampServerRendering": "passed; hydration not exercised",
+    "browserInteractionStatus": "blocked by browser tool URL security policy; no bypass attempted",
+    "publicSdkPublication": "not performed; changes are Unreleased",
+    "recurringCostIncreaseUsdPerMonth": 0,
+    "logs": {
+      "sdk-tests.log": {
+        "bytes": 6448,
+        "sha256": "e15708f65bd97311c0429f3d896d697e0203d2d8b26f2d5e22c4ca183be228dc"
+      },
+      "sdk-package-smoke.log": {
+        "bytes": 65,
+        "sha256": "b1aad3b3b8220682b4860824e25c6e8081296a05f22104276ba20d4dcf383d3b"
+      },
+      "report-regressions-final.log": {
+        "bytes": 7248,
+        "sha256": "c1100342d13b60575acfd892e07191091ac09b4f6ceb8f759441ed29a48f66f1"
+      },
+      "disclosure-regression.log": {
+        "bytes": 375,
+        "sha256": "b73f296a5d0cb551b92f055387973e41ec70b7a7d0a4906df60a7bbfb5c7d6c9"
+      },
+      "timestamp-render-check-final.log": {
+        "bytes": 72,
+        "sha256": "7b54180a23d423db57c99c06e7f36a0681cdbd2bdfad8d4c1e0f3244b03e5dcd"
+      }
+    }
+  },
+  "disclosureAudit": {
+    "scanId": "0dc38682-e8b9-4da2-bdb3-0371ace904b8",
+    "retainedDomHashVerified": true,
+    "domSha256": "0a855e649d841c095acf0f561fa444ae613d9954a11fed435273f689957274a7",
+    "domSizeBytes": 6840,
+    "formRows": 2,
+    "privacyExcerptsRetained": 0,
+    "contactRegionContainsPrivacyPolicyLink": false,
+    "privacyLocationsInRetainedText": [
+      "CMP cookie notice before page content",
+      "global footer policy/privacy-choice links after other page sections"
+    ],
+    "postAcceptImageReviewed": "Seven field labels and masked controls; no privacy notice visible in retained crop.",
+    "positiveNegativeFixture": "Existing form-associated disclosure fixture passes: inside form and adjacent notice retained; CMP, unrelated footer and entered values excluded.",
+    "decision": "No demonstrated detector defect. Keep Not captured; do not borrow generic footer/CMP content or infer disclosure absence.",
+    "limitations": [
+      "Plain text does not establish full DOM geometry.",
+      "Retained image crop does not establish absence outside that crop.",
+      "No new site contact."
+    ]
+  },
+  "timestampServerRender": {
+    "passed": true,
+    "checks": [
+      "SSR UTC fallback stable across server timezone",
+      "ISO machine timestamp retained",
+      "Date/string parity",
+      "null/invalid fallback"
+    ],
+    "serverTimeZone": "America/Los_Angeles",
+    "html": "<time dateTime=\"2026-10-08T00:22:22.000Z\" title=\"UTC\">Oct 8, 2026, 12:22:22 AM UTC</time>",
+    "scope": "Server rendering only. Browser timezone hydration remains unverified because the browser tool blocked the report URL."
+  },
+  "deployStatus": "not deployed",
+  "sdkPublishStatus": "not published; Unreleased source patch",
+  "browserSignoff": "pending; browser tool blocked URL; manual check requested and unanswered at record time"
+}
