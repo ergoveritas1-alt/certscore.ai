@@ -32,6 +32,7 @@ test('bounded Accept sample retains main and embedded forms, local disclosures, 
     assert.ok(performance.now()-before<30,'finish must not await its sample');
     assert.equal(limited.status,'limited'); assert.ok(limited.reasonCodes.includes('window_ended'));
     const changed=startPostAcceptFormCapture({page,exactTargetUrl:url,parentScanStartedAtMs:start,actionDispatchedAtMs:0,windowMs:100});
+    changed.bindMainDocument('loader-before-navigation');
     await page.reload();
     assert.deepEqual(changed.finish().frames,[]);
     assert.ok(changed.finish().reasonCodes.includes('document_changed'));
@@ -121,12 +122,15 @@ test('pending terminal samples preserve prior verified frame counts and fields w
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try { await Promise.race([terminal,new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(new Error("terminal sample did not start")),1500);})]); }
   finally {if(timeout)clearTimeout(timeout);}
+  capture.bindMainDocument('loader-after-earlier-sample');
   const result = capture.finish();
   assert.equal(result.status,'limited'); assert.ok(result.reasonCodes.includes('capture_limit'));
   assert.ok(result.reasonCodes.includes('window_ended')); assert.ok(!result.reasonCodes.includes('capture_invalid'));
   assert.equal(result.candidateFrameCount,4);assert.equal(result.inspectedFrameCount,3);
   assert.equal(result.frames.length,3);assert.equal(result.frames[0]?.forms[0]?.fields[0]?.label,'Business email');
   assert.equal(result.window?.terminalSampleCompleted,false);
+  assert.equal(result.version,'post_accept_form_capture.v3');
+  assert.ok(result.frames.every(frame=>frame.documentBinding===undefined),'earlier samples must not acquire loader proof retroactively');
   const frozen = JSON.stringify(result); release!(snapshot); await new Promise(resolve=>setImmediate(resolve));
   assert.equal(JSON.stringify(result),frozen);
 });

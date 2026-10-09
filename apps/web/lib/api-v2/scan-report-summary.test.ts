@@ -10,6 +10,7 @@ import { buildApiV2ScanResource, buildApiV2ScanStatus } from "./scan-resource";
 import { buildTimelineReportModel } from "../../components/scans/report-lab/timeline-report-model";
 import { buildReportDisplayExport } from "./report-display-export";
 import { selectReportEvidenceSection } from "./report-evidence-selection";
+import { projectRetainedActionTimeline } from "../scans/action-timeline-projection";
 
 const scanId = "00000000-0000-4000-8000-000000000123";
 const pageUrl = "https://sits.example/en/";
@@ -99,6 +100,40 @@ test("report and API share the 85 score, Reject deduction and both After-Accept 
     assert.equal(url.pathname, `/api/v2/scans/${scanId}/report-evidence/form-snapshot`);
     assert.equal(url.searchParams.get("formRef"), `after_accept:collection_form_${index}`);
   }
+});
+
+test("terminal bound fields agree across report, API follow-up and form tally without changing score",()=>{
+  const scan=fixture() as any;const packet=scan.runtimeArtifacts.postAcceptEvidenceProjection;
+  const images=packet.formSnapshotCapture;
+  const later={...images.inventory.forms[0],candidateFieldCount:7,retainedFieldCount:7,
+    fields:images.inventory.forms[0].fields.slice(0,7).map((field:any,index:number)=>({...field,controlIndex:index,label:`Field ${index}`}))};
+  images.inventory.forms=[{...later,candidateFieldCount:3,retainedFieldCount:3,fields:later.fields.slice(0,3)}];
+  images.snapshots=images.snapshots.slice(0,1);
+  packet.formCapture={version:'post_accept_form_capture.v3',phase:'after_accept_click',sessionId:randomUUID(),
+    exactTargetSha256:'a'.repeat(64),actionDispatchedAtMs:100,status:'captured',reasonCodes:[],inspectedFrameCount:1,candidateFrameCount:1,
+    window:{startedAtMs:110,endedAtMs:610,terminalSampleCompleted:true},frames:[{
+      frameRef:'accept_frame_0',documentToken:randomUUID(),documentUrl:pageUrl,capturedAtMs:550,
+      documentBinding:{source:'cdp_loader_id',token:'loader',boundAtMs:130},
+      forms:[{...later,formRef:'accept_frame_0_collection_form_0'}]}]};
+  packet.retainedActionTiming={policyVersion:'retained_action_timing.v1',action:'accept',actionDispatchedAtMs:100,observationEndedAtMs:610};
+  assert.ok(postAcceptReportProjectionSchema.safeParse(packet).success);
+  const api=buildApiV2ScanResource(scan);const report=buildTimelineReportModel(scan);
+  assert.ok('collectionTableRows' in report);
+  const exported=buildReportDisplayExport(selectReportEvidenceSection(report as unknown as Record<string,unknown>,'forms').report) as any;
+  assert.equal(api.formsSummary?.afterAcceptObserved,1);
+  assert.deepEqual(report.formsSummary,api.formsSummary);
+  assert.equal(exported.collectionTableRows[0]?.form.fields.length,7);
+  assert.equal(exported.collectionTableRows[0]?.snapshot.status,'available');
+  assert.equal(exported.collectionTableRows[0]?.captureProvenance.capturedAtMs,550);
+  assert.equal(api.score,85);assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints,15);
+  assert.equal(images.inventory.forms[0].fields.length,3,'source image inventory is immutable');
+  const timeline=projectRetainedActionTimeline(packet,scan.runtimeArtifacts.consentControlAssessment,'accept')!;
+  assert.equal(timeline.events.find(event=>event.label==='Forms captured')?.atMs,450);
+  packet.formCapture.frames[0].forms.push({...later,formRef:'accept_frame_0_collection_form_1',candidateFieldCount:1,retainedFieldCount:1,
+    fields:[{...later.fields[0],fieldRef:'collection_form_1_field_0',controlIndex:7}]});
+  assert.equal(projectScanFormsSummary(scan)?.afterAcceptObserved,2);
+  assert.equal(projectRetainedActionTimeline(packet,scan.runtimeArtifacts.consentControlAssessment,'accept')?.events
+    .find(event=>event.label==='Forms captured')?.detail,'2 forms retained after the Accept click');
 });
 
 test("unavailable, malformed or gated-off form captures do not become zero observed", () => {

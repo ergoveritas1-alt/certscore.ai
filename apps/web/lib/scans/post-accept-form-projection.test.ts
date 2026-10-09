@@ -126,3 +126,47 @@ test('later same-document form inventory enriches rows without inventing a secon
       inventory:{...value.formSnapshotCapture.postCaptureInventory.inventory,
         forms:[{...later,fields:[{...email,controlIndex:99},name]},second]}}}}}).rows,[]);
 });
+
+test('producer-bound terminal fields reach the shared form row while the original image stays available',()=>{
+  const fields=Array.from({length:7},(_,i)=>({fieldRef:`collection_form_0_field_${i}`,controlIndex:i,elementType:'input',
+    inputType:'text',semanticCategory:'name',label:`Field ${i}`,required:false,disabled:false,readOnly:false,
+    evidenceRefs:[],confidence:0.9,directVsInferred:'direct'}));
+  const first={...form,formRef:'collection_form_0',actionRelationship:'self',actionHostname:'example.test',
+    candidateFieldCount:3,retainedFieldCount:3,fields:fields.slice(0,3)};
+  const images={contractVersion:'certscore.post_accept_form_snapshots.v1',phase:'after_accept',sessionId:randomUUID(),
+    exactTargetSha256:'a'.repeat(64),actionDispatchedAtMs:100,acceptanceRegisteredAtMs:110,capturedAtMs:500,
+    documentIdentity:{source:'cdp_loader_id',token:'loader'},
+    inventory:{contractVersion:'certscore.post_accept_form_inventory.v1',sourceLane:'accept_observation',phase:'after_accept',
+      coverage:'bounded_sample',pageUrl:form.pageUrl,forms:[first]},
+    snapshots:[{contractVersion:'certscore.collection-surface-snapshot.v1',formRef:'collection_form_0',pageUrl:form.pageUrl,
+      capturedAt:'2026-10-09T10:00:00.000Z',sourceInventoryHash:'c'.repeat(64),mimeType:'image/jpeg',valuesMasked:true,
+      status:'available',width:640,height:400,sha256:'d'.repeat(64),sizeBytes:1000}]};
+  const capture={version:'post_accept_form_capture.v3',phase:'after_accept_click',sessionId:randomUUID(),
+    exactTargetSha256:'a'.repeat(64),actionDispatchedAtMs:100,status:'captured',reasonCodes:[],inspectedFrameCount:1,candidateFrameCount:1,
+    window:{startedAtMs:110,endedAtMs:3110,terminalSampleCompleted:true},frames:[{
+      frameRef:'accept_frame_0',documentToken:randomUUID(),documentUrl:form.pageUrl,capturedAtMs:2900,
+      documentBinding:{source:'cdp_loader_id',token:'loader',boundAtMs:200},
+      forms:[{...first,formRef:'accept_frame_0_collection_form_0',candidateFieldCount:7,retainedFieldCount:7,fields}]}]};
+  const value={...projection,formCapture:capture,formSnapshotCapture:images,observationWindowMs:3000,
+    acceptanceRegisteredAtMs:110,acceptanceExercised:true,registrationStatus:'confirmed',status:'confirmed_clean',
+    evidenceDisposition:'confirmed',indeterminateReason:null};
+  const source={consentControlAssessment:observedControlAssessment,postAcceptEvidenceProjection:value};
+  const original=JSON.stringify(source);const rows=projectPostAcceptForms(source).rows;
+  assert.equal(rows.length,1);assert.equal(rows[0]?.form.fields.length,7);
+  assert.equal(rows[0]?.snapshot.status,'available');
+  assert.equal(rows[0]?.captureProvenance?.capturedAtMs,2900);
+  assert.equal(rows[0]?.captureProvenance?.sessionId,capture.sessionId);
+  assert.equal(rows[0]?.capturedAt,images.snapshots[0]!.capturedAt);
+  assert.equal(JSON.stringify(source),original);
+  const second={...capture.frames[0]!.forms[0]!,formRef:'accept_frame_0_collection_form_1',candidateFieldCount:1,retainedFieldCount:1,
+    fields:[{...fields[0]!,fieldRef:'collection_form_1_field_0',controlIndex:7}]};
+  const withSecond=projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,formCapture:{...capture,
+    frames:[{...capture.frames[0]!,forms:[capture.frames[0]!.forms[0]!,second]}]}}}).rows;
+  assert.equal(withSecond.length,2);
+  assert.equal(withSecond[0]?.snapshot.status,'available');
+  assert.equal(withSecond[1]?.snapshot.status,'unavailable');
+  assert.equal(withSecond[1]?.form.fields.length,1);
+  assert.equal(withSecond[1]?.capturePhase,'after_accept_click');
+  const legacy={...capture,version:'post_accept_form_capture.v2',frames:capture.frames.map(({documentBinding:_binding,...frame})=>frame)};
+  assert.equal(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,formCapture:legacy}}).rows[0]?.form.fields.length,3);
+});

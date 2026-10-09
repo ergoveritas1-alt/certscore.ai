@@ -171,7 +171,10 @@ export async function capturePostAcceptFormInventory(page: Page, scanStartedAtMs
     for (let index = 0; index < Math.min(candidates.length, 250); index++) {
       if (performance.now() > deadline) { truncated = true; break; }
       const element = candidates.item(index)!;
-      const type = (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase();
+      // Native input defaults are observed DOM semantics. Both form collectors
+      // must retain "text" for an input without an explicit type attribute.
+      const type = (element instanceof HTMLInputElement ? element.type :
+        element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase();
       if (["hidden", "submit", "button", "reset", "image"].includes(type) ||
         element.closest('[hidden],[inert],[aria-hidden="true"]') || excluded(element)) continue;
       const bounds = element.getBoundingClientRect(), style = getComputedStyle(element);

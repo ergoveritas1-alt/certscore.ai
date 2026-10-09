@@ -90,7 +90,14 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
         if (location.href !== url) return null;
         const all = document.querySelectorAll('input, textarea, select, [role="checkbox"], [role="switch"]');
         const controls = fields.map(f => all.item(f.controlIndex!));
-        if (controls.some((el, i) => !el || (["input", "textarea", "select"].includes(el.tagName.toLowerCase()) ? el.tagName.toLowerCase() : "custom_control") !== fields[i]!.elementType || (el.getAttribute("type") || el.tagName.toLowerCase()).toLowerCase() !== fields[i]!.inputType)) return null;
+        if (controls.some((el, i) => {
+          if (!el || (["input", "textarea", "select"].includes(el.tagName.toLowerCase()) ? el.tagName.toLowerCase() : "custom_control") !== fields[i]!.elementType) return true;
+          const observedType = (el instanceof HTMLInputElement ? el.type : el.getAttribute("type") || el.tagName.toLowerCase()).toLowerCase();
+          // Passive/legacy inventories used the tag for a default text input.
+          // Preserve that exact case without accepting changed explicit types.
+          return observedType !== fields[i]!.inputType && !(el instanceof HTMLInputElement &&
+            !el.getAttribute("type") && observedType === "text" && fields[i]!.inputType === "input");
+        })) return null;
         const bounded = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim().slice(0, 120) || undefined;
         const labelFor = (el: Element) => {
           const labelledBy = bounded((el.getAttribute("aria-labelledby") ?? "").split(/\s+/).slice(0, 4)

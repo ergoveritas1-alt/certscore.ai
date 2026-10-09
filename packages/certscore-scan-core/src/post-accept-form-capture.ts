@@ -22,6 +22,7 @@ export function startPostAcceptFormCapture(input: {
   let result: PostAcceptFormCapture | undefined;
   let sampledFrames: Frame[] = [];
   const epochs = new Map<Frame, number>();
+  let mainDocumentBinding: PostAcceptFormCapture["frames"][number]["documentBinding"];
   const retained = new Map<string, { frame: Frame; epoch: number }>();
   const inspected = new Map<Frame, number>();
   const navigated = (frame: Frame) => {
@@ -156,9 +157,12 @@ export function startPostAcceptFormCapture(input: {
               }
             }
             const kind = ['checkbox', 'radio'].includes(node.type) ? node.type as 'checkbox' | 'radio' : undefined;
+            let actionHostname: string | undefined;
+            try { if (group.tagName === 'FORM') actionHostname = new URL(group.getAttribute('action') || location.href, location.href).hostname || undefined; } catch {}
             rows.push({ groupKey: String(groupIndex), structure: group.tagName === 'FORM' ? 'native_form' as const : 'role_form' as const,
               title: (group.getAttribute('aria-label') ?? group.querySelector('legend, h1, h2, h3')?.textContent ?? '').trim().slice(0,120) || undefined,
-              method: group.getAttribute('method') ?? (group.tagName === 'FORM' ? 'get' : undefined), elementType: node.tagName.toLowerCase() as 'input' | 'textarea' | 'select', inputType: node.type || node.tagName.toLowerCase(), label: label || undefined,
+              method: group.getAttribute('method') ?? (group.tagName === 'FORM' ? 'get' : undefined), actionHostname,
+              elementType: node.tagName.toLowerCase() as 'input' | 'textarea' | 'select', inputType: node.type || node.tagName.toLowerCase(), label: label || undefined,
               required: node.required, disabled: node.disabled, readOnly: node.readOnly === true, domOrder: i,
               ...(kind ? {controlKind:kind, checkedState: node.checked ? 'checked' as const : 'unchecked' as const} : {}),
               ...(notices.length ? {privacyDisclosure:{version:1 as const, excerpts:notices, truncated: true}} : {}),
@@ -178,7 +182,10 @@ export function startPostAcceptFormCapture(input: {
           evidenceRefs: [{refId:`${frameRef}_${form.formRef}`,artifactId:"post_accept_forms",eventType:"after_accept_form"}],
           fields: form.fields.map(field => ({...field, evidenceRefs:[{refId:`${frameRef}_${field.fieldRef}`,artifactId:"post_accept_forms",eventType:"after_accept_field"}]})),
         }));
-        const frameRow = {frameRef, documentToken:snapshot.documentToken, documentUrl:snapshot.pageUrl, capturedAtMs, forms};
+        const frameRow = {frameRef, documentToken:snapshot.documentToken, documentUrl:snapshot.pageUrl, capturedAtMs, forms,
+          ...(frame === page.mainFrame() && mainDocumentBinding &&
+            sampleStartedAtMs >= input.parentScanStartedAtMs + mainDocumentBinding.boundAtMs
+            ? {documentBinding:mainDocumentBinding} : {})};
         const nextFrames = [...capture.frames.filter(row => row.frameRef !== frameRef && retained.get(row.frameRef)?.frame !== frame), frameRow];
         if (Buffer.byteLength(JSON.stringify({...capture, frames:nextFrames})) > POST_ACCEPT_FORM_CAPTURE_MAX_BYTES - 200) { reasons.add("capture_limit"); return; }
         capture.frames = nextFrames; retained.set(frameRef,{frame,epoch});
@@ -199,6 +206,14 @@ export function startPostAcceptFormCapture(input: {
   timer = setTimeout(() => { void collect(); }, Math.min(250, Math.max(0, input.windowMs / 2)));
   timer.unref?.();
   return {
+    // The image collector already obtained this loader from this exact Page.
+    // Never bind prior samples retroactively. Both collectors discard captures
+    // on main-document navigation; later samples use the existing DOM cadence.
+    bindMainDocument(token: string) {
+      if (!active() || mainDocumentBinding || !token || token.length > 128) return;
+      mainDocumentBinding = {source:"cdp_loader_id",token,boundAtMs:Date.now()-input.parentScanStartedAtMs};
+      capture.version = "post_accept_form_capture.v3";
+    },
     continueThrough(confirmedAtMs: number, windowMs: number) {
       if (frozen || mainChanged || input.signal?.aborted) return;
       deadline = input.parentScanStartedAtMs + confirmedAtMs + windowMs;

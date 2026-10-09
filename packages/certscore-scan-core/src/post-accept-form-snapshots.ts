@@ -30,6 +30,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
   actionDispatchedAtMs: number; acceptanceRegisteredAtMs: number;
   deadlineAtMs: number; reviewer: FormSnapshotReviewer; signal?: AbortSignal;
   onLateFormDetected?: () => number | undefined;
+  onDocumentBound?: (loaderId: string) => void;
 }) {
   const controller = new AbortController();
   const signal = AbortSignal.any([controller.signal, ...(input.signal ? [input.signal] : [])]);
@@ -119,6 +120,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       const boundSession = binding.session;
       const token = binding.token;
       if (!token || !active()) return;
+      input.onDocumentBound?.(token);
       nextStage("inventory");
       const inventory = retainedFormInventory(raw);
       if (!inventory.forms.length || inventory.pageUrl !== input.exactTargetUrl || !active()) return;

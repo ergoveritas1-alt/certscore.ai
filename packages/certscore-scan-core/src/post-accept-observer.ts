@@ -1178,7 +1178,8 @@ export async function runPostAcceptObserver(
         actionDispatchedAtMs, acceptanceRegisteredAtMs, reviewer: input.formSnapshotReviewer,
         deadlineAtMs: Math.min(parentScanStartedAtMs + acceptanceRegisteredAtMs + observationWindowMs,
           resultBudgetDeadlineAtMs ?? Number.POSITIVE_INFINITY), signal: effectiveSignal,
-        onLateFormDetected: extendResultBudgetForLateForm });
+        onLateFormDetected: extendResultBudgetForLateForm,
+        onDocumentBound: token => formCaptureHandle?.bindMainDocument(token) });
     }
     const observationStartedAtMs = Date.now();
     const observationResult = await waitForPostAcceptObservation({

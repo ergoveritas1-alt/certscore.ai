@@ -5,6 +5,25 @@ import sharp from "sharp";
 import { buildCollectionSurfaceInventory } from "./collection-surface-inventory";
 import { captureCollectionSurfaceSnapshots, FORM_SNAPSHOT_BUDGET_MS } from "./collection-surface-snapshots";
 
+test("default text inputs bind for current and legacy inventories but changed types fail closed",async()=>{
+  const browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  try {
+    await page.setContent('<form><label>Name<input value="private-name"></label></form>');
+    for (const inputType of ['text','input']) {
+      const inventory=buildCollectionSurfaceInventory({pageUrl:'about:blank',inspectedFieldCandidateCount:1,
+        candidateScanTruncated:false,rows:[{groupKey:'0',structure:'native_form',elementType:'input',inputType,
+          label:'Name',required:false,disabled:false,readOnly:false,domOrder:0}]},Date.now());
+      const images=await captureCollectionSurfaceSnapshots(page,inventory,async()=>({safeForDisplay:true}));
+      assert.equal(images[0]?.status,'available');
+      await page.locator('input').evaluate(node=>{(node as HTMLInputElement).type='email';});
+      const changed=await captureCollectionSurfaceSnapshots(page,inventory,async()=>{throw new Error('Changed control must not reach review');});
+      assert.equal(changed[0]?.reason,'control_binding_changed');
+      assert.equal(changed[0]?.data,undefined);
+      await page.locator('input').evaluate(node=>node.removeAttribute('type'));
+    }
+  } finally {await browser.close();}
+});
+
 test("form crops retain binding, mask inputs, resize, and fail closed on unsafe or mismatched documents", async () => {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });

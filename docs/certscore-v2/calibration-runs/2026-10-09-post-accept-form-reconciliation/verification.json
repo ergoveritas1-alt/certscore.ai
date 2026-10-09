@@ -1,0 +1,71 @@
+{
+  "scanId": "0dc38682-e8b9-4da2-bdb3-0371ace904b8",
+  "reportUrl": "http://localhost:3000/scan/0dc38682-e8b9-4da2-bdb3-0371ace904b8",
+  "score": 87,
+  "formsSummary": {
+    "contractVersion": "certscore.forms-summary.v1",
+    "scope": "starting_page_reportable_observations",
+    "totalObserved": 2,
+    "preConsentObserved": 1,
+    "afterAcceptObserved": 1,
+    "preConsentCapture": "complete",
+    "afterAcceptCapture": "retained",
+    "countStatus": "captured"
+  },
+  "fieldCounts": [
+    7,
+    7
+  ],
+  "acceptRegistration": "confirmed",
+  "rejectRegistration": "confirmed",
+  "structuredCaptureVersion": "post_accept_form_capture.v3",
+  "mainDocumentBindingVerified": true,
+  "retainedHashesVerified": true,
+  "sixLanesJoined": true,
+  "scannerDurationMs": 12972,
+  "apiFormFollowupParity": true,
+  "images": [
+    {
+      "phase": "pre_consent",
+      "bytes": 12152,
+      "sha256": "ab48cbfbb9c8be2881cb7d6ac8628e677066d4b23b598d25f22650734a9bea2e",
+      "httpStatus": 200
+    },
+    {
+      "phase": "after_accept",
+      "bytes": 9661,
+      "sha256": "31a77adae0801ca0dbc0038fdb49809940b3d0f54a20adf78833e94b10fccf0d",
+      "httpStatus": 200
+    }
+  ],
+  "scope": "One fresh localhost full scan; its initial image inventory already had seven fields. The deterministic three-to-seven fixture separately exercises reconciliation. No deployment or fleet estimate.",
+  "historicalReplay": {
+    "scanId": "5049609a-c668-4993-8e20-ec1fdfbaa6b9",
+    "inputPacketValidated": true,
+    "historicalVersion": "post_accept_form_capture.v2",
+    "retainedTerminalFields": 7,
+    "projectedImageInventoryFields": 3,
+    "historicalProofNotUpgraded": true,
+    "note": "Original packet bytes hashed for in-memory replay only; no persistence or production mutation."
+  },
+  "contactReceipt": {
+    "runKey": "post-accept-form-reconciliation-20261009",
+    "persistedContacts": 1,
+    "laneSessions": 6,
+    "ledgerEntries": 54,
+    "changedEntry": "https://wethepeoples-republic.org/",
+    "unchangedEntries": 53
+  },
+  "imageVisualReview": "Both masked images inspected; seven field labels visible in each.",
+  "checks": {
+    "contracts": 572,
+    "formBrowserRegressions": 49,
+    "bindingLifecycleRerun": 6,
+    "bindingRerunOverlapsFormRegressions": true,
+    "acceptObserverRegressions": 19,
+    "reportApiTimelineImageRouteRegressions": 22,
+    "scannerBuild": "passed",
+    "contractsScannerWebTypechecks": "passed",
+    "deployment": "not performed"
+  }
+}

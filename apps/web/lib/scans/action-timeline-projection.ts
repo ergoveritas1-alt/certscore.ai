@@ -1,4 +1,4 @@
-import { postAcceptReportProjectionSchema, postRefusalReportProjectionSchema } from "@certscore/contracts";
+import { postAcceptReportProjectionSchema, postRefusalReportProjectionSchema, reconcilePostAcceptFormInventory } from "@certscore/contracts";
 import { isAfterActionReportEligible } from "./after-action-report-eligibility";
 import { readChoicePathExecution } from "./choice-path-execution";
 import type { RuntimeObservationTimelineEvent } from "../../components/scans/runtime-observation-sections";
@@ -59,8 +59,12 @@ export function projectRetainedActionTimeline(value: unknown, assessment: unknow
   }
   if ("formSnapshotCapture" in projection && projection.formSnapshotCapture) {
     const forms = projection.formSnapshotCapture;
-    const inventory = "postCaptureInventory" in forms ? forms.postCaptureInventory : { capturedAtMs: forms.capturedAtMs, inventory: forms.inventory };
-    if (inventory.inventory.forms.length) add(inventory.capturedAtMs - start, "Forms captured", `${inventory.inventory.forms.length} form${inventory.inventory.forms.length === 1 ? "" : "s"} retained after the Accept click`);
+    const reconciled = reconcilePostAcceptFormInventory(forms,projection.formCapture);
+    if (reconciled) {
+      const count = reconciled.inventory.forms.length + reconciled.additionalFormRefs.length;
+      const capturedAtMs = reconciled.structuredFrame?.capturedAtMs ?? ("postCaptureInventory" in forms ? forms.postCaptureInventory.capturedAtMs : forms.capturedAtMs);
+      if (count) add(capturedAtMs - start, "Forms captured", `${count} form${count === 1 ? "" : "s"} retained after the Accept click`);
+    }
   }
   const exactCaptureEnd = timing?.observationEndedAtMs !== undefined || capture?.captureEndedAtMs !== undefined;
   if (end !== undefined) add(end - start, coverage === "complete" ? exactCaptureEnd ? "Observation end" : "Worker complete" : "Capture stopped",

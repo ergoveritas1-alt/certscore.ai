@@ -6,7 +6,7 @@ import { startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snaps
 import { capturePostAcceptFormInventory } from "./post-accept-form-inventory.js";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE } from "./post-accept-cmp-recipes.js";
-import { projectPostAcceptEvidenceForReport, postAcceptEvidencePacketSchema } from "@certscore/contracts";
+import { projectPostAcceptEvidenceForReport, postAcceptEvidencePacketSchema, reconcilePostAcceptFormInventory } from "@certscore/contracts";
 
 test("registered Accept captures two delayed forms, masks entered values, and projects metadata without bytes", async () => {
   let submissions = 0;
@@ -49,6 +49,45 @@ test("registered Accept captures two delayed forms, masks entered values, and pr
     assert.equal(projectPostAcceptEvidenceForReport({ packet }).formSnapshotCapture, undefined);
     assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...packet, formSnapshotCapture: { ...images, exactTargetSha256: "b".repeat(64) } }).success, false);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("existing terminal samples enrich an early three-field crop to seven without another browser roundtrip or wait",async()=>{
+  const server=createServer((_request,response)=>{
+    response.setHeader('content-type','text/html');
+    response.end(`<section aria-label="Cookie and analytics preferences"><p>We use analytics cookies.</p>
+      <button data-certscore-consent-action="accept">Accept</button></section><script>
+      document.querySelector('button').onclick=()=>{localStorage.setItem('certscore:analytics-consent:v1','granted');
+        document.querySelector('section').remove();document.body.insertAdjacentHTML('beforeend',
+        '<form method="post">'+Array.from({length:3},(_,i)=>'<label>Field '+i+'<input name="field'+i+'"></label>').join('')+'</form>');
+        setTimeout(()=>document.querySelector('form').insertAdjacentHTML('beforeend',
+          Array.from({length:4},(_,i)=>'<label>Field '+(i+3)+'<input name="field'+(i+3)+'"></label>').join('')),1400);};
+      </script>`);
+  });
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const address=server.address();assert.ok(address && typeof address!=='string');
+  try {
+    const packet=await runPostAcceptObserver({url:`http://127.0.0.1:${address.port}/`,scanId:'terminal-form-fields',parentScanId:'terminal-form-fields-parent',
+      interactionAuthorization:{authorizationId:'loopback_local_lab',kind:'loopback'},recipe:CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+      actionSearchTimeoutMs:500,confirmationTimeoutMs:500,observationWindowMs:3000,productionProjectable:true,
+      formSnapshotReviewer:async()=>({safeForDisplay:true})});
+    assert.equal(packet.acceptanceRegistration.status,'confirmed');
+    assert.equal(packet.formCapture?.version,'post_accept_form_capture.v3');
+    assert.equal(packet.formCapture?.window?.terminalSampleCompleted,true);
+    const images=packet.formSnapshotCapture;assert.ok(images);
+    assert.equal(images.inventory.forms[0]?.fields.length,3);
+    assert.equal(images.snapshots[0]?.status,'available');
+    assert.equal(packet.formCapture?.frames[0]?.forms[0]?.fields.length,7);
+    const retained=projectPostAcceptEvidenceForReport({packet,packetSha256:'a'.repeat(64)});
+    assert.ok(retained.formSnapshotCapture);
+    const result=reconcilePostAcceptFormInventory(retained.formSnapshotCapture,retained.formCapture);
+    assert.equal(result?.inventory.forms[0]?.fields.length,7);
+    assert.equal(result?.inventory.forms.length,1);
+    assert.equal(result?.structuredFrame?.documentBinding?.token,images.documentIdentity.token);
+    assert.ok(result!.structuredFrame!.capturedAtMs<=packet.acceptanceRegistration.acceptanceRegisteredAtMs!+3000);
+    assert.equal(retained.formSnapshotCapture.inventory.forms[0]?.fields.length,3);
+    assert.ok(postAcceptEvidencePacketSchema.safeParse(packet).success);
+    assert.equal(packet.observationWindowMs,3000);
+  } finally {await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
 
 test("late form extends the Accept result budget once without extending consent observations", async () => {
