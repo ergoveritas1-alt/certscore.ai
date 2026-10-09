@@ -46,6 +46,14 @@ const SCAN_NO_GO_RELEASE_CHECK: Check = {
   command: ["pnpm", "test:scan-no-go"],
 };
 
+const REPORT_PUBLICATION_CHECK: Check = {
+  key: "report-publication",
+  label: "report publication ownership, artifact transfer and recovery contracts",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test",
+    "apps/web/server/scans/canonical-scan-report-publisher.test.ts",
+    "apps/web/server/scans/report-artifact-transfer.test.ts"],
+};
+
 const RUNTIME_GRAPH_CAPTURE_CHECK: Check = {
   key: "runtime-graph-capture",
   label: "runtime graph browser, correlation, retention and deadline regressions",
@@ -111,6 +119,7 @@ const ROOT_FULL_CHECKS: Check[] = [
   CONSENT_ACTION_SEMANTICS_CHECK,
   GPC_OBSERVATION_RELEASE_CHECK,
   SCAN_NO_GO_RELEASE_CHECK,
+  REPORT_PUBLICATION_CHECK,
   RUNTIME_GRAPH_RELEASE_CHECK,
   RUNTIME_GRAPH_CAPTURE_CHECK,
   REPRESENTATIVE_PROOF_CHECK,
@@ -217,6 +226,7 @@ const TARGETS: Target[] = [
     checks: [
       RUNTIME_GRAPH_RELEASE_CHECK,
       SCAN_NO_GO_RELEASE_CHECK,
+      REPORT_PUBLICATION_CHECK,
       {
         key: "web-typecheck",
         label: "public web typecheck",

@@ -218,6 +218,12 @@ jobs:
       - name: Test canonical scan no-go reports
         run: pnpm test:scan-no-go
 
+      - name: Test report publication ownership and artifact transfer
+        run: |
+          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
+            apps/web/server/scans/canonical-scan-report-publisher.test.ts \
+            apps/web/server/scans/report-artifact-transfer.test.ts
+
       - name: Test public page request logging
         run: |
           node --import tsx --test \

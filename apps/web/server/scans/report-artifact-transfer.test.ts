@@ -76,8 +76,9 @@ test("internal route bounds unauthenticated payloads and passes hints only after
     });
     assert.equal((await POST(request({ mode: "publish_report", scanId, token, artifactTransfer }))).status, 200);
     assert.deepEqual(state.publications[0].artifactTransfer, artifactTransfer);
+    assert.equal(state.publications[0].publicationTrigger, "authorized_worker");
     state.authorized = false;
-    assert.equal((await POST(request({ mode: "publish_report", scanId, token, artifactTransfer }))).status, 401);
+    assert.equal((await POST(request({ mode: "publish_report", scanId, token, artifactTransfer, publicationTrigger: "authorized_worker" }))).status, 401);
     assert.equal(state.publications.length, 1);
     const priorAuthorizations = state.authorizations;
     assert.equal((await POST(request({ mode: "publish_report", scanId, token, artifactTransfer: "x".repeat(100_000) }))).status, 413);
@@ -87,5 +88,6 @@ test("internal route bounds unauthenticated payloads and passes hints only after
     assert.equal(state.publications.length, 1, "finalize cannot reproject or consume artifacts");
     assert.equal((await POST(request({ mode: "publish_report", scanId, token }))).status, 200, "older workers remain compatible");
     assert.equal(state.publications[1].artifactTransfer, undefined);
+    assert.equal(state.publications[1].publicationTrigger, "authorized_worker", "S3 recovery still has authorized ownership");
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

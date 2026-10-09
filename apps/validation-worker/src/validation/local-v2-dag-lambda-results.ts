@@ -33,7 +33,7 @@ import { runStaticPolicyReviewPacket } from "./model-policy-review-runner";
 import { createReportFinalizationScheduler } from "./report-finalization-scheduler";
 import { createReportPublicationHandoff, dispatchDurableReportPublication } from "./report-publication-handoff";
 import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
-import { buildReportArtifactTransfer, createReportArtifactTransferCache } from "../../../../packages/shared/src/report-artifact-transfer";
+import { buildReportArtifactTransfer, createReportArtifactTransferCache, REPORT_PUBLICATION_TIMEOUT_MS } from "../../../../packages/shared/src/report-artifact-transfer";
 
 const reportArtifactTransfers = createReportArtifactTransferCache();
 
@@ -59,7 +59,7 @@ const RESULT_FINALIZATION_BACKGROUND_CONCURRENCY = 2;
 const reportFinalizationScheduler = createReportFinalizationScheduler(RESULT_FINALIZATION_BACKGROUND_CONCURRENCY);
 const POLICY_EVIDENCE_BACKGROUND_CONCURRENCY = 2;
 const RESULT_VISIBILITY_TIMEOUT_SECONDS = 240;
-const MATERIALIZATION_FINALIZING_WAIT_MS = 150_000;
+const MATERIALIZATION_FINALIZING_WAIT_MS = REPORT_PUBLICATION_TIMEOUT_MS;
 const MATERIALIZATION_INPUT_POLL_MS = 250;
 const MATERIALIZATION_RETRY_MS = 500;
 const ORPHAN_RECONCILIATION_INTERVAL_MS = 10_000;

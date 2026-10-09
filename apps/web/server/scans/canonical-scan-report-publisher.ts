@@ -19,6 +19,7 @@ import {
 } from "./scan-report-projection-generation";
 import { getPublicScanStatusProjection } from "./scan-status-projection";
 import { withServerTiming } from "../performance/log-server-timing";
+import { getReadTriggeredPublicationDeferral } from "./report-publication-ownership";
 
 export type CanonicalScanReportPublicationResult = {
   eventCount: number | null;
@@ -162,17 +163,29 @@ export function publishCanonicalScanReportProjection(input: {
   scanId: string;
   forceRebuild?: boolean;
   artifactTransfer?: unknown;
+  // Set only by the internal route after durable-token authorization. Transfer
+  // presence alone cannot authorize bypass, including worker retries/recovery.
+  publicationTrigger?: "authorized_worker";
 }) {
-  const key = `${input.organizationId ?? "anonymous"}:${input.scanId}:${input.forceRebuild === true}`;
+  const key = `${input.organizationId ?? "anonymous"}:${input.scanId}:${input.forceRebuild === true}:${input.publicationTrigger ?? "read_recovery"}`;
   const existing = publicationPromises.get(key);
   if (existing) return existing;
-  const pending = withNonBlockingDatabaseLock(
-    `canonical-report-publication:${input.scanId}`,
-    () => publishCanonicalScanReportProjectionUncached(input),
-  ).then((result): CanonicalScanReportPublicationResult => result.acquired ? result.value : {
-    eventCount: null, latestEventId: null, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
-    reason: "publication_in_progress", scanId: input.scanId, status: "finalizing",
-  }).finally(() => {
+  const pending = (async () => {
+    if (input.publicationTrigger !== "authorized_worker") {
+      const reason = await getReadTriggeredPublicationDeferral(input.scanId);
+      if (reason) return {
+        eventCount: null, latestEventId: null, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
+        reason, scanId: input.scanId, status: "finalizing" as const,
+      };
+    }
+    return withNonBlockingDatabaseLock(
+      `canonical-report-publication:${input.scanId}`,
+      () => publishCanonicalScanReportProjectionUncached(input),
+    ).then((result): CanonicalScanReportPublicationResult => result.acquired ? result.value : {
+      eventCount: null, latestEventId: null, projectionVersion: SCAN_REPORT_PROJECTION_VERSION,
+      reason: "publication_in_progress", scanId: input.scanId, status: "finalizing",
+    });
+  })().finally(() => {
     publicationPromises.delete(key);
   });
   publicationPromises.set(key, pending);

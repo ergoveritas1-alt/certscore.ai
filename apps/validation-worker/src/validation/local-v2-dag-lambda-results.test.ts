@@ -10,6 +10,7 @@ import test from "node:test";
 import { parseLocalV2DagLambdaResultMessage } from "../../../web/server/scans/local-v2-dag-lambda-dispatch";
 import { verifiedCanonicalBundleBytes } from "./verified-canonical-bundle-bytes";
 import { VERIFIED_PRE_CONSENT_RUNTIME_PREVIEW_PACKET_VERSION } from "@certscore/contracts";
+import { REPORT_PUBLICATION_TIMEOUT_MS } from "../../../../packages/shared/src/report-artifact-transfer";
 import {
   getLambdaResultTargetEnvironment,
   getManualSmokeResultScanId,
@@ -587,7 +588,8 @@ test("validation worker Lambda result poller retains leases and bounds result co
   assert.match(source, /ChangeMessageVisibilityCommand/);
   assert.match(source, /VisibilityTimeout:\s*0/);
   assert.match(source, /RESULT_VISIBILITY_TIMEOUT_SECONDS\s*=\s*240/);
-  assert.match(source, /MATERIALIZATION_FINALIZING_WAIT_MS\s*=\s*150_000/);
+  assert.match(source, /MATERIALIZATION_FINALIZING_WAIT_MS\s*=\s*REPORT_PUBLICATION_TIMEOUT_MS/);
+  assert.equal(REPORT_PUBLICATION_TIMEOUT_MS, 150_000, "publication ownership must retain the existing worker deadline");
   assert.match(source, /MATERIALIZATION_INPUT_POLL_MS\s*=\s*250/);
   assert.match(source, /await waitForCanonicalReportInputs\(input\.scanId, finalizingDeadline\)/);
   assert.match(source, /signals\.merge_completed/);

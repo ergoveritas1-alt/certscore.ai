@@ -7,6 +7,8 @@ export const REPORT_ARTIFACT_TRANSFER_VERSION = "certscore.report-artifact-trans
 export const REPORT_ARTIFACT_TRANSFER_MAX_COMPRESSED_BYTES = 48 * 1024;
 export const REPORT_ARTIFACT_TRANSFER_MAX_RAW_BYTES = 8 * 1024 * 1024;
 export const REPORT_ARTIFACT_TRANSFER_MAX_REQUEST_BYTES = 72 * 1024;
+// Existing publication deadline, also bounds read-triggered recovery deferral.
+export const REPORT_PUBLICATION_TIMEOUT_MS = 150_000;
 type Kind = "bundle" | "manifest";
 export type ReportArtifactIdentity = { uri: string; sha256: string; sizeBytes: number };
 export type ReportArtifactTransfer = {

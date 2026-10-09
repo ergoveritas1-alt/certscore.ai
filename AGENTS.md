@@ -1104,6 +1104,13 @@ optimization contracts:
 - Record readiness results for the exact source/commit. Reuse a completed local
   preflight only under the existing exact-commit rule; keep required CI checks.
   A failed full gate remains unresolved even if a separate container build passes.
+- For scan/report latency changes, reproduce publication races locally with
+  concurrent HTTP requests and real database locks before deploying. Verify
+  worker ownership, bounded recovery, and canonical report parity; resolve
+  local failures before using production to measure the latency improvement.
+- Run full application builds in an isolated clean checkout while the localhost
+  development server is active; do not overwrite its `.next` output. Build
+  workspace package prerequisites and retain the canonical Git origin there.
 - Use native ARM64 builds. Restore and publish web/validation registry caches;
   preserve the scanner's existing build-once, no-cache-export, regional replication
   path. Keep nested environment files and generated local caches out of Docker.

@@ -103,6 +103,7 @@ export async function POST(request: Request) {
           organizationId: authorization.organizationId,
           scanId: authorizedScanId,
           artifactTransfer: body.artifactTransfer,
+          publicationTrigger: "authorized_worker",
         })
       );
       if (publication.status === "finalizing") {
