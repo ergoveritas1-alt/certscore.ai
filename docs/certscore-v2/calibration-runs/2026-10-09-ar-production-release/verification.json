@@ -1,0 +1,421 @@
+{
+  "exact-gate-receipt": {
+    "gitSha": "d26865415100bcf3dc98a9084fada057dfc6a570",
+    "command": "pnpm preflight:full",
+    "exitCode": 0,
+    "logSha256": "5b2a842d8dd30f864c3027ecb66831ab52179fb03fb5dbdf4e54d05d9a512ee0",
+    "sourceIntegrity": {
+      "gitSha": "d26865415100bcf3dc98a9084fada057dfc6a570",
+      "files": 4420,
+      "mismatches": [],
+      "verificationWorktree": "/Users/benmasek/.codex/worktrees/ar-release-exact/WC01"
+    },
+    "completedAt": "2026-10-09T20:48:03.524797+00:00",
+    "ciTypecheckReceipt": false
+  },
+  "correction-readiness-receipt": {
+    "commit": "233f175e619d0c22fbdcb64339c714fa9d70f3f8",
+    "preflightAllExit": 0,
+    "goldCorpusExactTypecheckExit": 0,
+    "cmsRegressionPassed": 13,
+    "runtimeJavaScriptUnchanged": true,
+    "scannerCommit": "d26865415100bcf3dc98a9084fada057dfc6a570",
+    "logs": {
+      "correction-preflight.log": "db229540faca9b15fcfe0d3fb8284186bed89547c6f90e4c8d2c1b50ce0955d2",
+      "gold-typecheck-local.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "cms-regression.log": "a9efc0e762dec6c6561672a160b49d9e493962f99b2fd1e9180c04bf13b7f7df"
+    },
+    "ciTypecheckReceipt": false
+  },
+  "mirror-readiness-receipt": {
+    "commit": "803173db229810f977153cc8aa7637effbfe4358",
+    "applicationPreflightCommit": "233f175e619d0c22fbdcb64339c714fa9d70f3f8",
+    "applicationSourceUnchanged": true,
+    "deploymentContractsPassed": 9,
+    "arm64BuildKitExit": 0,
+    "amd64BuildKitExit": 0,
+    "mirrorUpstreamDigestsEqual": true,
+    "workflowYamlValid": true,
+    "runtimeBaseInputsUnchanged": true,
+    "additionalRecurringCostUsd": 0,
+    "ciTypecheckReceipt": false
+  },
+  "production-evidence-verification": [
+    {
+      "scanId": "2651b7c8-3c21-49df-ae15-5d3ba1cf79d8",
+      "target": "https://ergoveritas.com/testar1.html",
+      "reportUrl": "https://certscore.ai/scan/2651b7c8-3c21-49df-ae15-5d3ba1cf79d8",
+      "score": 84,
+      "scoreExplanation": {
+        "contractVersion": "certscore.score-explanation.v1",
+        "scope": "starting_page_canonical_score",
+        "scoreVersion": "overall-posture.v6",
+        "policyVersion": "gdpr-eprivacy-posture.v16",
+        "baseScore": 100,
+        "scoreFloor": 0,
+        "score": 84,
+        "totalPolicyDeductionPoints": 16,
+        "deductions": [
+          {
+            "family": "pre_consent_storage",
+            "label": "Storage",
+            "deductionPoints": 8,
+            "rules": [
+              {
+                "ruleId": "pre_consent_cookies_storage",
+                "label": "Pre-consent cookies / storage",
+                "policyDeductionPoints": 8,
+                "findingIds": [
+                  "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage"
+                ],
+                "decisionVerification": "not_applicable"
+              }
+            ]
+          },
+          {
+            "family": "pre_consent_tracking",
+            "label": "Tracking",
+            "deductionPoints": 8,
+            "rules": [
+              {
+                "ruleId": "pre_consent_third_party_tracking",
+                "label": "Pre-consent tracking",
+                "policyDeductionPoints": 8,
+                "findingIds": [
+                  "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking"
+                ],
+                "decisionVerification": "not_applicable"
+              }
+            ]
+          }
+        ]
+      },
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 0,
+        "preConsentObserved": 0,
+        "afterAcceptObserved": 0,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "acceptRegistration": "confirmed",
+      "rejectRegistration": "confirmed",
+      "acceptExecution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "rejectExecution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "acceptStatus": "confirmed_observation",
+      "rejectStatus": "confirmed_clean",
+      "acceptObservations": 4,
+      "rejectObservations": 0,
+      "retainedHashesVerified": true,
+      "sixLanesVerified": true,
+      "scannerGitSha": "d26865415100bcf3dc98a9084fada057dfc6a570",
+      "scannerDurationMs": 14705,
+      "scannerToReportMs": 4091,
+      "deliveryMs": 1126,
+      "resultToReportMs": 2965,
+      "requestToServerReportMs": 25634
+    },
+    {
+      "scanId": "58124a87-bfca-4607-a7f4-b5afcb2b7a8c",
+      "target": "https://ergoveritas.com/testar2.html",
+      "reportUrl": "https://certscore.ai/scan/58124a87-bfca-4607-a7f4-b5afcb2b7a8c",
+      "score": 69,
+      "scoreExplanation": {
+        "contractVersion": "certscore.score-explanation.v1",
+        "scope": "starting_page_canonical_score",
+        "scoreVersion": "overall-posture.v6",
+        "policyVersion": "gdpr-eprivacy-posture.v16",
+        "baseScore": 100,
+        "scoreFloor": 0,
+        "score": 69,
+        "totalPolicyDeductionPoints": 31,
+        "deductions": [
+          {
+            "family": "pre_consent_storage",
+            "label": "Storage",
+            "deductionPoints": 8,
+            "rules": [
+              {
+                "ruleId": "pre_consent_cookies_storage",
+                "label": "Pre-consent cookies / storage",
+                "policyDeductionPoints": 8,
+                "findingIds": [
+                  "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage"
+                ],
+                "decisionVerification": "not_applicable"
+              }
+            ]
+          },
+          {
+            "family": "pre_consent_tracking",
+            "label": "Tracking",
+            "deductionPoints": 8,
+            "rules": [
+              {
+                "ruleId": "pre_consent_third_party_tracking",
+                "label": "Pre-consent tracking",
+                "policyDeductionPoints": 8,
+                "findingIds": [
+                  "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking"
+                ],
+                "decisionVerification": "not_applicable"
+              }
+            ]
+          },
+          {
+            "family": "post_refusal_enforcement",
+            "label": "Post-refusal",
+            "deductionPoints": 15,
+            "rules": [
+              {
+                "ruleId": "post_reject_tracking_reduction",
+                "label": "Post-Reject activity",
+                "policyDeductionPoints": 15,
+                "findingIds": [
+                  "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction"
+                ],
+                "decisionVerification": "confirmed"
+              }
+            ]
+          }
+        ]
+      },
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 0,
+        "preConsentObserved": 0,
+        "afterAcceptObserved": 0,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "acceptRegistration": "unconfirmed",
+      "rejectRegistration": "confirmed",
+      "acceptExecution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": false
+      },
+      "rejectExecution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "acceptStatus": "unconfirmed",
+      "rejectStatus": "confirmed_observation",
+      "acceptObservations": 0,
+      "rejectObservations": 4,
+      "retainedHashesVerified": true,
+      "sixLanesVerified": true,
+      "scannerGitSha": "d26865415100bcf3dc98a9084fada057dfc6a570",
+      "scannerDurationMs": 9909,
+      "scannerToReportMs": 4343,
+      "deliveryMs": 1105,
+      "resultToReportMs": 3238,
+      "requestToServerReportMs": 15285
+    },
+    {
+      "scanId": "5049609a-c668-4993-8e20-ec1fdfbaa6b9",
+      "target": "https://wethepeoples-republic.org/",
+      "reportUrl": "https://certscore.ai/scan/5049609a-c668-4993-8e20-ec1fdfbaa6b9",
+      "score": 87,
+      "scoreExplanation": {
+        "contractVersion": "certscore.score-explanation.v1",
+        "scope": "starting_page_canonical_score",
+        "scoreVersion": "overall-posture.v6",
+        "policyVersion": "gdpr-eprivacy-posture.v16",
+        "baseScore": 100,
+        "scoreFloor": 0,
+        "score": 87,
+        "totalPolicyDeductionPoints": 13,
+        "deductions": [
+          {
+            "family": "pre_consent_storage",
+            "label": "Storage",
+            "deductionPoints": 8,
+            "rules": [
+              {
+                "ruleId": "pre_consent_cookies_storage",
+                "label": "Pre-consent cookies / storage",
+                "policyDeductionPoints": 8,
+                "findingIds": [
+                  "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage"
+                ],
+                "decisionVerification": "not_applicable"
+              }
+            ]
+          },
+          {
+            "family": "embedded_third_party",
+            "label": "Embeds",
+            "deductionPoints": 5,
+            "rules": [
+              {
+                "ruleId": "embedded_content_pre_consent",
+                "label": "Embedded third-party content before consent",
+                "policyDeductionPoints": 5,
+                "findingIds": [
+                  "regulatory_gap__gdpr_eprivacy__embedded_content_pre_consent"
+                ],
+                "decisionVerification": "not_applicable"
+              }
+            ]
+          }
+        ]
+      },
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 2,
+        "preConsentObserved": 1,
+        "afterAcceptObserved": 1,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "acceptRegistration": "confirmed",
+      "rejectRegistration": "confirmed",
+      "acceptExecution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "rejectExecution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "acceptStatus": "confirmed_clean",
+      "rejectStatus": "confirmed_clean",
+      "acceptObservations": 0,
+      "rejectObservations": 0,
+      "retainedHashesVerified": true,
+      "sixLanesVerified": true,
+      "scannerGitSha": "d26865415100bcf3dc98a9084fada057dfc6a570",
+      "scannerDurationMs": 19618,
+      "scannerToReportMs": 6010,
+      "deliveryMs": 1825,
+      "resultToReportMs": 4185,
+      "requestToServerReportMs": 27350
+    }
+  ],
+  "public-transport-verification": [
+    {
+      "scanId": "2651b7c8-3c21-49df-ae15-5d3ba1cf79d8",
+      "target": "https://ergoveritas.com/testar1.html",
+      "score": 84,
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 0,
+        "preConsentObserved": 0,
+        "afterAcceptObserved": 0,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "publicApiMcpParity": true,
+      "availableFormImages": []
+    },
+    {
+      "scanId": "58124a87-bfca-4607-a7f4-b5afcb2b7a8c",
+      "target": "https://ergoveritas.com/testar2.html",
+      "score": 69,
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 0,
+        "preConsentObserved": 0,
+        "afterAcceptObserved": 0,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "publicApiMcpParity": true,
+      "availableFormImages": []
+    },
+    {
+      "scanId": "5049609a-c668-4993-8e20-ec1fdfbaa6b9",
+      "target": "https://wethepeoples-republic.org/",
+      "score": 87,
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 2,
+        "preConsentObserved": 1,
+        "afterAcceptObserved": 1,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "publicApiMcpParity": true,
+      "availableFormImages": [
+        {
+          "httpStatus": 200,
+          "contentType": "image/jpeg",
+          "bytes": 12330,
+          "sha256": "383689fa8c14ce910ab8cd8b89037aadff6c1776c60a36a73f95cb3597891e72"
+        },
+        {
+          "httpStatus": 200,
+          "contentType": "image/jpeg",
+          "bytes": 10571,
+          "sha256": "08c8f7e341fc57ee1d0e03c1abe7ce8075fa266227828ee11a441122576befa3"
+        }
+      ]
+    }
+  ],
+  "contactBookkeeping": {
+    "runKey": "ar-production-release-20261009",
+    "persistedContacts": 3,
+    "laneSessions": 18,
+    "changedEntries": [
+      "https://ergoveritas.com/testar1.html",
+      "https://ergoveritas.com/testar2.html",
+      "https://wethepeoples-republic.org/"
+    ],
+    "preservedEntries": 51
+  },
+  "clientTiming": [
+    {
+      "scanId": "2651b7c8-3c21-49df-ae15-5d3ba1cf79d8",
+      "requestToReadyMs": 26338
+    },
+    {
+      "scanId": "58124a87-bfca-4607-a7f4-b5afcb2b7a8c",
+      "requestToReadyMs": 16552
+    },
+    {
+      "scanId": "5049609a-c668-4993-8e20-ec1fdfbaa6b9",
+      "requestToReadyMs": 27424
+    }
+  ],
+  "unresolved": [
+    "Earlier imaged inventory has 3 typed fields; terminal structured capture and image show 7; provenance-bound reconciliation remains required.",
+    "In-app browser crashed before production interactive verification completed.",
+    "Production handoff 4.1\u20136.0 seconds; small cohort does not prove fleet speedup."
+  ]
+}
