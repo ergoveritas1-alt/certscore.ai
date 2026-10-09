@@ -883,6 +883,32 @@ test("Pulse quality gate rejects completed shells with no retained public eviden
   assert.equal(quality.reason, "completed_without_retained_public_evidence");
 });
 
+test("Pulse quality gate preserves canonical terminal no-go evidence without public-page anchors", () => {
+  for (const reasonCode of SCAN_NO_GO_REASON_CODES) {
+    const presentation = SCAN_NO_GO_REASON_PRESENTATIONS[reasonCode];
+    const record = pulseScanRecord({ scan: {
+      id: "00000000-0000-4000-8000-000000000123", domainHostname: "example.fr",
+      status: "completed", pagesRequested: 1, pagesScanned: 0,
+      createdAt: "2026-08-01T20:00:00.000Z", completedAt: "2026-08-01T20:00:20.000Z"
+    }, runtimeArtifacts: {
+      scan_no_go_assessment: { decision: "no_go", reasonCodes: [reasonCode] },
+      visual_access_review: { page_state: presentation.pageState, reason_code: reasonCode }
+    } });
+    const quality = assessPulseScanRecordQuality(record);
+    assert.equal(quality.usable, true, reasonCode);
+    assert.equal(quality.reason, "scan_no_go", reasonCode);
+    assert.equal(quality.level, "usable_with_limitations", reasonCode);
+    const result = buildPulseProjection({
+      detail: "evidence", format: "json", freshnessMode: "latest", pulseRequestId: "no-go-fixture",
+      requestedUrl: "https://example.fr/", resolutionMode: "test", scanRecord: record, waitSeconds: 0
+    }) as Record<string, any>;
+    pulseResponseSchema.parse(result);
+    assert.equal(result.summary.score, null, reasonCode);
+    assert.equal(result.noGo?.reasonCode, reasonCode, reasonCode);
+    assert.equal(result.noGo?.recommendedNextAction, presentation.recommendedNextAction, reasonCode);
+  }
+});
+
 test("Pulse quality gate keeps explicit access-limited scans usable as limitations", () => {
   const quality = assessPulseScanRecordQuality(
     pulseScanRecord({

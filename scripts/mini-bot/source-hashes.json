@@ -1,0 +1,10 @@
+{
+  "daemon.js": {
+    "originalSha256": "3da7014dc1a1fb365676fd443134a459bf2170b88ce76114852aea836928da75",
+    "patchedSha256": "5f75c707580772eeb443e25cbb6222d5181208af9c8becbda2fff2604f8cd8e8"
+  },
+  "result_parser.js": {
+    "originalSha256": "35b639ea78640fd620016774bc094590bd4d5bccd89fa8638fe12314cfd795c2",
+    "patchedSha256": "7cd4cc652e0eaf6710086adfaaa5e565a5ca7d615da46f9c7169bdeba29754d4"
+  }
+}

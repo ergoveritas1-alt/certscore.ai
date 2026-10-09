@@ -842,6 +842,17 @@ function hasPositiveNumber(value: unknown) {
 }
 
 export function assessPulseScanRecordQuality(scanRecord: ScanDetailResponse) {
+  // A canonical no-go assessment is itself retained terminal evidence. Keep
+  // its reason and next action available even when no page could be assessed.
+  const noGo = projectScanReportNoGo(scanRecord);
+  if (noGo) {
+    return {
+      usable: true as const,
+      level: "usable_with_limitations",
+      reason: "scan_no_go",
+      message: noGo.noGo.explanation
+    };
+  }
   const posture = scanRecord.accessPostureSummary;
   const snapshot = scanRecord.snapshot;
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";

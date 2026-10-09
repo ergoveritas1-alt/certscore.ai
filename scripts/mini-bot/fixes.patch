@@ -1,0 +1,268 @@
+--- a/daemon.js
++++ b/daemon.js
+@@ -15,0 +16 @@
++import { evidenceState, checklistSummary, supportingResources, ingestionTiming } from './result-handling.mjs';
+@@ -738 +739 @@
+-async function scanDomain(domain, rank, certscoreClient, db, options = {}) {
++export async function scanDomain(domain, rank, certscoreClient, db, options = {}) {
+@@ -928,34 +929,13 @@
+-  try {
+-    findings = await runApiOperation({
+-      operation: 'findings',
+-      domain,
+-      scanFrom,
+-      scanId: finalScanId,
+-      task: () => certscoreClient.findings.list(finalScanId),
+-      maxRetries: 2
+-    });
+-  } catch (err) {
+-    logMessage('WARNING', `Failed to fetch findings for ${domain}: ${err.message}`);
+-  }
+-
+-  try {
+-    preConsent = await runApiOperation({
+-      operation: 'pre_consent_resource',
+-      domain,
+-      scanFrom,
+-      scanId: finalScanId,
+-      task: () => certscoreClient.scans.preConsentCookiesTrackers(finalScanId),
+-      maxRetries: 2
+-    });
+-  } catch (err) {
+-    logMessage('WARNING', `Failed to fetch pre-consent cookies & trackers for ${domain}: ${err.message}`);
+-  }
+-
+-  try {
+-    evidencePayload = await runApiOperation({
+-      operation: 'evidence',
+-      domain,
+-      scanFrom,
+-      scanId: finalScanId,
+-      task: () => certscoreClient.pulse.evidence(finalScanId)
+-    });
++  const supportingStartedAt = Date.now();
++  const supporting = await supportingResources({
++    findings: () => runApiOperation({ operation: 'findings', domain, scanFrom, scanId: finalScanId,
++      task: () => certscoreClient.findings.list(finalScanId), maxRetries: 2 }),
++    preConsent: () => runApiOperation({ operation: 'pre_consent_resource', domain, scanFrom, scanId: finalScanId,
++      task: () => certscoreClient.scans.preConsentCookiesTrackers(finalScanId), maxRetries: 2 }),
++    evidence: () => runApiOperation({ operation: 'evidence', domain, scanFrom, scanId: finalScanId,
++      task: () => certscoreClient.pulse.evidence(finalScanId) }),
++  });
++  if (supporting.findings.status === 'fulfilled') findings = supporting.findings.value;
++  if (supporting.preConsent.status === 'fulfilled') preConsent = supporting.preConsent.value;
++  if (supporting.evidence.status === 'fulfilled') {
++    evidencePayload = supporting.evidence.value;
+@@ -963,15 +943,19 @@
+-      const evidenceDir = path.join(dataDir, 'evidence');
+-      fs.mkdirSync(evidenceDir, { recursive: true });
+-      fs.writeFileSync(
+-        path.join(evidenceDir, `${finalScanId}.json`),
+-        JSON.stringify(evidencePayload, null, 2)
+-      );
+-      logMessage('INFO', `Wrote full evidence payload to ${evidenceDir}/${finalScanId}.json`);
+-    }
+-  } catch (err) {
+-    evidenceError = err.message;
+-    evidenceClassification = err.certscoreClassification || classifyError(err, true);
+-    logMessage('WARNING', `Failed to fetch or save detail=evidence payload for ${domain}: ${err.message}`);
+-  }
+-
+-  const finalStatus = completed ? (completed.status || 'completed') : 'completed';
++      try {
++        const evidenceDir = path.join(dataDir, 'evidence');
++        fs.mkdirSync(evidenceDir, { recursive: true });
++        fs.writeFileSync(path.join(evidenceDir, `${finalScanId}.json`), JSON.stringify(evidencePayload, null, 2));
++      } catch (error) {
++        evidenceError = error.message;
++        logMessage('WARNING', `Failed to save evidence for ${domain}: ${error.message}`);
++      }
++    }
++  } else {
++    const error = supporting.evidence.reason;
++    evidenceError = error.message;
++    evidenceClassification = error.certscoreClassification || classifyError(error, true);
++  }
++  for (const [resource, outcome] of Object.entries(supporting)) {
++    if (outcome.status === 'rejected') logMessage('WARNING', `Failed to fetch ${resource} for ${domain}: ${outcome.reason.message}`);
++  }
++
++  let finalStatus = completed ? (completed.status || 'completed') : 'completed';
+@@ -1014,22 +998,5 @@
+-  // Extract GDPR/ePrivacy checklist values from evidence payload
+-  let privacyPolicyCaptured = null;
+-  let acceptControlSeen = null;
+-  let rejectControlSeen = null;
+-  let optionsPreferencesControlSeen = null;
+-
+-  if (evidencePayload && evidencePayload.gdprEprivacyChecklistRows && evidencePayload.gdprEprivacyChecklistRows.items) {
+-    for (const row of evidencePayload.gdprEprivacyChecklistRows.items) {
+-      if (row.id === 'cookie_notice_policy_availability') {
+-        privacyPolicyCaptured = row.status || null;
+-      } else if (row.id === 'accept_consent_control') {
+-        acceptControlSeen = row.status || null;
+-      } else if (row.id === 'reject_all_path_availability') {
+-        rejectControlSeen = row.status || null;
+-      } else if (row.id === 'options_settings_preferences_control') {
+-        optionsPreferencesControlSeen = row.status || null;
+-      }
+-    }
+-  }
+-
+-  const evidenceRetained = !!evidencePayload && !evidenceError;
+-  const evidenceStatus = evidenceRetained ? 'retained' : 'pending';
++  const { privacyPolicyCaptured, cookiePolicyCaptured, acceptControlSeen,
++    rejectControlSeen, optionsPreferencesControlSeen } = checklistSummary(evidencePayload);
++  const state = evidenceState({ payload: evidencePayload, error: evidenceError, classification: evidenceClassification });
++  const evidenceRetained = state.retained;
++  const evidenceStatus = state.status;
+@@ -1037,3 +1004,9 @@
+-  const evidenceNextAttemptAt = evidenceRetained ? null : new Date(Date.now() + 30000).toISOString();
+-
+-  const evidenceDetails = evidencePayload ? JSON.stringify(evidencePayload) : null;
++  const evidenceNextAttemptAt = state.nextAttemptAt;
++  const endToEnd = ingestionTiming({ submittedAt, completedAt: completed?.completedAt, supportingStartedAt });
++
++  if (state.terminal) finalStatus = 'completed_limited';
++  const evidenceDetails = evidencePayload ? JSON.stringify(evidencePayload) : state.terminal ? JSON.stringify({
++    type: 'certscore_bot_terminal_result', scanResource: completed,
++    evidenceRetrieval: { status: state.status, httpStatus: evidenceClassification?.httpStatus,
++      apiErrorCode: evidenceClassification?.apiErrorCode, message: evidenceError }
++  }) : null;
+@@ -1041 +1014 @@
+-    `UPDATE scans SET status = ?, score = ?, scan_id = ?, tracker_count = ?, cookie_count = ?, request_count = ?, finding_count = ?, scan_time_seconds = ?, submit_latency_ms = ?, sdk_wall_seconds = ?, queued_seconds = ?, scanner_runtime_seconds = ?, details = ?, scanned_at = ?, analyzed_at = ?, privacy_policy_captured = ?, accept_control_seen = ?, reject_control_seen = ?, options_preferences_control_seen = ?, evidence_status = ?, evidence_error = ?, evidence_retrieved_at = ?, next_attempt_at = ?, error_type = ?, http_status = ?, api_error_code = ? WHERE id = ?`,
++    `UPDATE scans SET status = ?, score = ?, scan_id = ?, tracker_count = ?, cookie_count = ?, request_count = ?, finding_count = ?, scan_time_seconds = ?, submit_latency_ms = ?, sdk_wall_seconds = ?, queued_seconds = ?, scanner_runtime_seconds = ?, details = ?, scanned_at = ?, analyzed_at = ?, privacy_policy_captured = ?, cookie_policy_captured = ?, accept_control_seen = ?, reject_control_seen = ?, options_preferences_control_seen = ?, evidence_status = ?, evidence_error = ?, evidence_retrieved_at = ?, next_attempt_at = ?, error_type = ?, http_status = ?, api_error_code = ? WHERE id = ?`,
+@@ -1058,0 +1032 @@
++      cookiePolicyCaptured,
+@@ -1066 +1040 @@
+-      evidenceRetained ? null : 'evidence_retrieval_pending',
++      state.errorType,
+@@ -1072,2 +1046,4 @@
+-
+-  if (evidenceDetails) {
++  await db.run(`UPDATE scans SET bot_total_seconds = ?, supporting_resource_seconds = ?, completed_to_ingested_seconds = ? WHERE id = ?`,
++    [endToEnd.botTotalSeconds, endToEnd.supportingResourceSeconds, endToEnd.completedToIngestedSeconds, dbRowId]);
++
++  if (evidencePayload) {
+@@ -1081 +1057,2 @@
+-  logMessage('INFO', `→ ${domain}  score=${score !== null ? score.toFixed(1) : 'PENDING'}  status=${finalStatus} evidence=${evidenceStatus} (trackers=${trackerCount ?? '—'}, cookies=${cookieCount ?? '—'}, took ${typeof scanTimeSeconds === 'number' ? scanTimeSeconds + 's' : 'n/a'})`);
++  logMessage('INFO', `→ ${domain}  score=${score !== null ? score.toFixed(1) : state.status === 'pending' ? 'PENDING' : 'UNSCORED'}  status=${finalStatus} evidence=${evidenceStatus} (trackers=${trackerCount ?? '—'}, cookies=${cookieCount ?? '—'}, took ${typeof scanTimeSeconds === 'number' ? scanTimeSeconds + 's' : 'n/a'})`);
++  logMessage('INFO', `Bot ingestion timing for ${domain}: total=${endToEnd.botTotalSeconds}s supporting=${endToEnd.supportingResourceSeconds}s completed-to-ingested=${endToEnd.completedToIngestedSeconds}s`);
+@@ -1085 +1062 @@
+-    evidencePending: !evidenceRetained,
++    evidencePending: state.status === 'pending',
+@@ -1370 +1347 @@
+-class Daemon {
++export class Daemon {
+@@ -1587 +1564 @@
+-              AND status NOT IN ('completed_limited', 'scanner_failed', 'failed')
++              AND status NOT IN ('scanner_failed', 'failed')
+@@ -1692,20 +1669,6 @@
+-        let privacyPolicyCaptured = null;
+-        let acceptControlSeen = null;
+-        let rejectControlSeen = null;
+-        let optionsPreferencesControlSeen = null;
+-        for (const checklistRow of evidencePayload?.gdprEprivacyChecklistRows?.items || []) {
+-          if (checklistRow.id === 'cookie_notice_policy_availability') privacyPolicyCaptured = checklistRow.status || null;
+-          if (checklistRow.id === 'accept_consent_control') acceptControlSeen = checklistRow.status || null;
+-          if (checklistRow.id === 'reject_all_path_availability') rejectControlSeen = checklistRow.status || null;
+-          if (checklistRow.id === 'options_settings_preferences_control') optionsPreferencesControlSeen = checklistRow.status || null;
+-        }
+-
+-        const evidenceRetained = !!evidencePayload && !evidenceError;
+-        const evidenceUnavailable = !!evidenceClassification &&
+-          evidenceClassification.httpStatus === 409 &&
+-          evidenceClassification.apiErrorCode === 'scan_unavailable';
+-        const evidenceRetriesExhausted = !evidenceRetained &&
+-          !evidenceUnavailable &&
+-          isTransientClassification(evidenceClassification) &&
+-          row.reconcile_attempts + 1 >= MAX_EVIDENCE_RETRIES;
+-        const evidenceTerminal = evidenceUnavailable || evidenceRetriesExhausted;
++        const { privacyPolicyCaptured, cookiePolicyCaptured, acceptControlSeen,
++          rejectControlSeen, optionsPreferencesControlSeen } = checklistSummary(evidencePayload);
++        const state = evidenceState({ payload: evidencePayload, error: evidenceError,
++          classification: evidenceClassification, attempts: row.reconcile_attempts + 1, maxAttempts: MAX_EVIDENCE_RETRIES });
++        const evidenceRetained = state.retained;
++        const evidenceTerminal = state.terminal;
+@@ -1713,10 +1676,8 @@
+-        const persistedEvidenceStatus = evidenceRetained ? 'retained' : evidenceTerminal ? 'unavailable' : 'pending';
+-        const nextAttemptAt = evidenceRetained || evidenceTerminal ? null : new Date(Date.now() + 30000).toISOString();
+-        const persistedErrorType = evidenceRetained
+-          ? null
+-          : evidenceUnavailable
+-            ? 'evidence_unavailable'
+-            : evidenceRetriesExhausted
+-              ? 'evidence_retry_exhausted'
+-              : 'evidence_retrieval_pending';
+-        const evidenceDetails = evidencePayload ? JSON.stringify(evidencePayload) : null;
++        const persistedEvidenceStatus = state.status;
++        const nextAttemptAt = state.nextAttemptAt;
++        const persistedErrorType = state.errorType;
++        const evidenceDetails = evidencePayload ? JSON.stringify(evidencePayload) : state.terminal ? JSON.stringify({
++          type: 'certscore_bot_terminal_result', scanResource: scan,
++          evidenceRetrieval: { status: state.status, httpStatus: evidenceClassification?.httpStatus,
++            apiErrorCode: evidenceClassification?.apiErrorCode, message: evidenceError }
++        }) : null;
+@@ -1724 +1685 @@
+-          `UPDATE scans SET status = ?, score = ?, tracker_count = COALESCE(?, tracker_count), cookie_count = COALESCE(?, cookie_count), request_count = COALESCE(?, request_count), finding_count = ?, scan_time_seconds = ?, queued_seconds = ?, scanner_runtime_seconds = ?, details = COALESCE(?, details), scanned_at = ?, analyzed_at = ?, privacy_policy_captured = COALESCE(?, privacy_policy_captured), accept_control_seen = COALESCE(?, accept_control_seen), reject_control_seen = COALESCE(?, reject_control_seen), options_preferences_control_seen = COALESCE(?, options_preferences_control_seen), evidence_status = ?, evidence_error = ?, evidence_retrieved_at = ?, error_type = ?, http_status = ?, api_error_code = ?, next_attempt_at = ?, reconcile_attempts = ? WHERE id = ?`,
++          `UPDATE scans SET status = ?, score = ?, tracker_count = COALESCE(?, tracker_count), cookie_count = COALESCE(?, cookie_count), request_count = COALESCE(?, request_count), finding_count = ?, scan_time_seconds = ?, queued_seconds = ?, scanner_runtime_seconds = ?, details = COALESCE(?, details), scanned_at = ?, analyzed_at = ?, privacy_policy_captured = CASE WHEN ? THEN ? ELSE privacy_policy_captured END, cookie_policy_captured = CASE WHEN ? THEN ? ELSE cookie_policy_captured END, accept_control_seen = COALESCE(?, accept_control_seen), reject_control_seen = COALESCE(?, reject_control_seen), options_preferences_control_seen = COALESCE(?, options_preferences_control_seen), evidence_status = ?, evidence_error = ?, evidence_retrieved_at = ?, error_type = ?, http_status = ?, api_error_code = ?, next_attempt_at = ?, reconcile_attempts = ? WHERE id = ?`,
+@@ -1737,0 +1699 @@
++            evidenceRetained,
+@@ -1738,0 +1701,2 @@
++            evidenceRetained,
++            cookiePolicyCaptured,
+@@ -1753 +1717 @@
+-        if (evidenceDetails) {
++        if (evidencePayload) {
+@@ -1935,0 +1900,4 @@
++    cookie_policy_captured: 'TEXT',
++    bot_total_seconds: 'REAL',
++    supporting_resource_seconds: 'REAL',
++    completed_to_ingested_seconds: 'REAL',
+--- a/result_parser.js
++++ b/result_parser.js
+@@ -3 +3 @@
+-export const RESULT_PARSER_VERSION = 'certscore-result-parser.v1';
++export const RESULT_PARSER_VERSION = 'certscore-result-parser.v2';
+@@ -47,0 +48,2 @@
++    privacy_policy_status: status('privacy_notice_availability'),
++    cookie_policy_status: status('cookie_notice_policy_availability'),
+@@ -71,0 +74,12 @@
++function typedExecution(value) {
++  if (!isObject(value) || value.policyVersion !== 'choice_path_execution.v1' ||
++    !['succeeded', 'succeeded_with_confirmation', 'limited', 'not_attempted', 'unsupported'].includes(value.status) ||
++    ![value.clickCompleted, value.observationCompleted, value.consentConfirmed].every(item => typeof item === 'boolean')) return null;
++  if (value.observationCompleted && !value.clickCompleted || value.consentConfirmed && !value.clickCompleted) return null;
++  if (value.status === 'succeeded' && (!value.clickCompleted || !value.observationCompleted || value.consentConfirmed)) return null;
++  if (value.status === 'succeeded_with_confirmation' && (!value.clickCompleted || !value.observationCompleted || !value.consentConfirmed)) return null;
++  if (['not_attempted', 'unsupported'].includes(value.status) && (value.clickCompleted || value.observationCompleted || value.consentConfirmed)) return null;
++  if (value.status === 'limited' && value.clickCompleted && value.observationCompleted) return null;
++  return value;
++}
++
+@@ -75,0 +90,2 @@
++  const hasExecution = own(post, 'execution');
++  const execution = typedExecution(post?.execution);
+@@ -84,3 +100,5 @@
+-    [`${prefix}_click_completed`]: afterAction ? Number(afterAction.activationStatus === 'completed') : null,
+-    [`${prefix}_capture_status`]: captureStatus(post, afterAction),
+-    [`${prefix}_registration_verified`]: registrationVerified,
++    [`${prefix}_click_completed`]: hasExecution ? booleanInt(execution?.clickCompleted) : afterAction ? Number(afterAction.activationStatus === 'completed') : null,
++    [`${prefix}_capture_status`]: hasExecution ? execution ? execution.observationCompleted ? 'complete' :
++      ['not_attempted', 'unsupported'].includes(execution.status) ? execution.status === 'unsupported' ? 'not_applicable' : 'not_attempted' : 'incomplete' : 'unavailable' : captureStatus(post, afterAction),
++    [`${prefix}_registration_verified`]: hasExecution ? booleanInt(execution?.consentConfirmed) : registrationVerified,
++    [`${prefix}_execution_json`]: json(post?.execution),
+@@ -89 +107 @@
+-    [`${prefix}_activation_status`]: text(afterAction?.activationStatus),
++    [`${prefix}_activation_status`]: hasExecution ? execution ? execution.clickCompleted ? 'completed' : 'not_completed' : null : text(afterAction?.activationStatus),
+@@ -151 +169 @@
+-  if (!isObject(payload)) return null;
++  if (!isObject(payload) || payload.type === 'certscore_bot_terminal_result') return null;
+@@ -167,0 +186 @@
++  privacy_policy_status: 'TEXT', cookie_policy_status: 'TEXT',
+@@ -172 +191 @@
+-  accept_registration_verified: 'INTEGER', accept_after_action_policy_version: 'TEXT', accept_after_action_json: 'TEXT',
++  accept_execution_json: 'TEXT', accept_registration_verified: 'INTEGER', accept_after_action_policy_version: 'TEXT', accept_after_action_json: 'TEXT',
+@@ -179 +198 @@
+-  reject_registration_verified: 'INTEGER', reject_after_action_policy_version: 'TEXT', reject_after_action_json: 'TEXT',
++  reject_execution_json: 'TEXT', reject_registration_verified: 'INTEGER', reject_after_action_policy_version: 'TEXT', reject_after_action_json: 'TEXT',
