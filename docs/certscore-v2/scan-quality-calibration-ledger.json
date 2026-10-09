@@ -22,8 +22,8 @@
     },
     "https://spotify.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:17:39.000Z",
-      "lastContactAt": "2026-10-09T16:17:39.000Z",
+      "cooldownUntil": "2026-11-06T16:57:06.971Z",
+      "lastContactAt": "2026-10-09T16:57:06.971Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -32,8 +32,8 @@
     },
     "https://msnbc.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-09T04:02:04.207Z",
-      "lastContactAt": "2026-09-11T04:02:04.207Z",
+      "cooldownUntil": "2026-11-06T16:57:44.385Z",
+      "lastContactAt": "2026-10-09T16:57:44.385Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -72,8 +72,8 @@
     },
     "https://gatech.edu": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:34.787Z",
-      "lastContactAt": "2026-10-09T14:17:34.787Z",
+      "cooldownUntil": "2026-11-06T16:57:45.057Z",
+      "lastContactAt": "2026-10-09T16:57:45.057Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -104,8 +104,8 @@
     },
     "https://consumerfinance.gov": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:07.077Z",
-      "lastContactAt": "2026-10-09T14:17:07.077Z",
+      "cooldownUntil": "2026-11-06T16:58:13.539Z",
+      "lastContactAt": "2026-10-09T16:58:13.539Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -182,8 +182,8 @@
     },
     "https://progressive.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:17:01.982Z",
-      "lastContactAt": "2026-10-09T16:17:01.982Z",
+      "cooldownUntil": "2026-11-06T16:56:27.927Z",
+      "lastContactAt": "2026-10-09T16:56:27.927Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -286,13 +286,15 @@
       "url": "https://att.com"
     },
     "https://target.com": {
-      "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-05T20:11:50.491Z",
-      "lastContactAt": "2026-10-08T20:11:50.491Z",
+      "consecutiveNoGoCount": 2,
+      "cooldownUntil": "2026-11-06T16:57:00.529Z",
+      "lastContactAt": "2026-10-09T16:57:00.529Z",
       "lastContactSource": "calibration",
-      "lastNoGoReasons": [],
-      "lastOutcome": "completed",
-      "state": "cooldown",
+      "lastNoGoReasons": [
+        "bot_security_check"
+      ],
+      "lastOutcome": "no_go",
+      "state": "do_not_calibrate",
       "url": "https://target.com"
     },
     "https://healthline.com": {
@@ -337,8 +339,8 @@
     },
     "https://fandango.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:20.237Z",
-      "lastContactAt": "2026-10-09T14:17:20.237Z",
+      "cooldownUntil": "2026-11-06T16:55:55.297Z",
+      "lastContactAt": "2026-10-09T16:55:55.297Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -380,8 +382,8 @@
     },
     "https://segment.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:22:53.598Z",
-      "lastContactAt": "2026-10-09T16:22:53.598Z",
+      "cooldownUntil": "2026-11-06T16:58:17.900Z",
+      "lastContactAt": "2026-10-09T16:58:17.900Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -427,8 +429,28 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://homedepot.com"
+    },
+    "https://plannedparenthood.org": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T16:55:48.696Z",
+      "lastContactAt": "2026-10-09T16:55:48.696Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://plannedparenthood.org"
+    },
+    "https://supabase.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T16:56:29.375Z",
+      "lastContactAt": "2026-10-09T16:56:29.375Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://supabase.com"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-09T16:23:11.114Z"
+  "updatedAt": "2026-10-09T17:06:51.461Z"
 }
