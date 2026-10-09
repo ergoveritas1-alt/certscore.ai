@@ -1,0 +1,10 @@
+{
+  "targeted-persist.log": {
+    "sha256": "4fd573419ce6e6870bf5f642a6cc7f952139fa2918cbf7032ebfd008d3823107",
+    "lastLine": "Persisted 24 calibration contacts for run ar-onetrust-confirmation-targeted-20261009"
+  },
+  "smoke-persist.log": {
+    "sha256": "503a273f7549269f97bde3c6928f106eae88525345b8694932df9751ae633c2f",
+    "lastLine": "Persisted 30 calibration contacts for run ar-onetrust-smoke-20261009"
+  }
+}

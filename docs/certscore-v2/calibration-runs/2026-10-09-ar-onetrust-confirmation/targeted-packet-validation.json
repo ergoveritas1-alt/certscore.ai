@@ -1,0 +1,165 @@
+{
+  "completedClicks": 16,
+  "rows": [
+    {
+      "scanId": "e3e22720-70ad-4998-aed5-f7a3c62cb02b",
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "confirmed",
+      "afterActionCapture": "confirmed_observation"
+    },
+    {
+      "scanId": "2cc5dd3d-bea8-46ec-b759-0b484df8354b",
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "confirmed",
+      "afterActionCapture": "confirmed_observation"
+    },
+    {
+      "scanId": "4248497c-e9e1-4a2a-a211-8ce84a1c4fb7",
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "confirmed",
+      "afterActionCapture": "confirmed_observation"
+    },
+    {
+      "scanId": "c667b7e2-ac6d-4b20-90c4-c29f0c7fd137",
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "confirmed",
+      "afterActionCapture": "confirmed_observation"
+    },
+    {
+      "scanId": "d9607b2a-3fa6-4a9c-a69e-3c3fcf448fba",
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "5cd58eb7-8eb3-4edc-bfd6-431cf7029663",
+      "url": "https://adecco.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "a915a20e-1d02-4b2f-9c5e-3bf26481dea5",
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "9ce1fbf7-7726-446a-a2a3-eb26008a0d7d",
+      "url": "https://sodexo.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "b768690d-fde2-43ec-b6b1-44166a81af62",
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "4e4a2e9d-6a92-4940-8bc9-9ea02475b9d9",
+      "url": "https://adecco.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "eb436f48-13e1-49b5-8e9c-2d5e91f93051",
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "ee6dda28-8a44-4781-8214-e687abc5ad64",
+      "url": "https://sodexo.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "7280e5da-5b29-4548-a014-a502fca55ba6",
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "e12ec242-0650-4bff-acf7-07a1780785cd",
+      "url": "https://receitasnestle.com.br/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "314cbdb6-1480-4915-a3f9-69161c9f531f",
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    },
+    {
+      "scanId": "4bb475ff-747f-47cf-9642-d295d6903e7a",
+      "url": "https://receitasnestle.com.br/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "proofValid": true,
+      "registration": "unconfirmed",
+      "afterActionCapture": "window_elapsed"
+    }
+  ]
+}

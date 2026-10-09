@@ -1,0 +1,1330 @@
+{
+  "scope": "Ten-site candidate-only localhost smoke; one visit/site; three isolated browser lanes. No population or paired improvement claim.",
+  "sites": [
+    {
+      "url": "https://progressive.com",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/progressive.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "capturedAtMs": 13351,
+            "artifactId": "screenshot_pre_consent_full_page"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/progressive.com/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 1802,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 981,
+            "resolverMs": 13005,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14768,
+            "readyAtMs": 14773
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:b4acffa0ea33e91d"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 1790,
+            "resolverMs": 11055,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15072,
+            "readyAtMs": 15082
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:a2263e50278013db"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://notion.so",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": true,
+            "inventoryOutcome": "partial",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/notion.so/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "capturedAtMs": 4237,
+            "artifactId": "screenshot_pre_consent_geometry_proof"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/notion.so/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 3926,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/notion.so/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 2192,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": true,
+          "cmp": "Transcend",
+          "click": "completed",
+          "registration": {
+            "status": "confirmed",
+            "acceptanceExercised": true,
+            "actionDispatchedAtMs": 3630,
+            "acceptanceRegisteredAtMs": 3677,
+            "witnesses": [
+              {
+                "witnessType": "cmp_api_state",
+                "observedAtMs": 3677,
+                "key": "transcend",
+                "expectedState": "all_configurable_purposes_granted_after_accept",
+                "observedStateHash": "753109a243fcef33797db57db3d46e5251d0fbd68a151044f27d10c2624a692c",
+                "corroboratingOnly": false
+              },
+              {
+                "witnessType": "banner_transition",
+                "observedAtMs": 3677,
+                "corroboratingOnly": true
+              }
+            ]
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded_with_confirmation",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": true
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 588,
+            "resolverMs": 2121,
+            "confirmationMs": 1,
+            "observationMs": 652,
+            "observationEndedAtMs": 4329,
+            "observationExitReason": "non_essential_request_observed",
+            "totalMs": 4434,
+            "readyAtMs": 4441
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "registration_timestamp_is_observation_upper_bound",
+            "observation_early_exit:non_essential_request_observed"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": true,
+          "cmp": "Transcend",
+          "click": "completed",
+          "registration": {
+            "status": "confirmed",
+            "refusalExercised": true,
+            "actionDispatchedAtMs": 3841,
+            "refusalRegisteredAtMs": 3875,
+            "witnesses": [
+              {
+                "witnessType": "cmp_api_state",
+                "observedAtMs": 3875,
+                "key": "transcend",
+                "expectedState": "all_configurable_purposes_denied_after_reject",
+                "observedStateHash": "0e20af44b2b4e4b9edc009f07eebcefe49cd4210eb6713a062517709bd744b2e",
+                "corroboratingOnly": false
+              },
+              {
+                "witnessType": "banner_transition",
+                "observedAtMs": 3875,
+                "corroboratingOnly": true
+              }
+            ]
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded_with_confirmation",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": true
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 635,
+            "resolverMs": 951,
+            "confirmationMs": 1,
+            "observationMs": 8001,
+            "observationEndedAtMs": 12151,
+            "observationExitReason": "window_elapsed",
+            "totalMs": 12152,
+            "readyAtMs": 12158
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "registration_timestamp_is_observation_upper_bound",
+            "changed_nonessential_storage_without_write_anchor"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://forbes.com",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/forbes.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "capturedAtMs": 10435,
+            "artifactId": "screenshot_pre_consent_full_page"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/forbes.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 4452,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/forbes.com/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 1031,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 214,
+            "resolverMs": 13031,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13828,
+            "readyAtMs": 13833
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:Ketch:ec0a71f24b4f90a8"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 404,
+            "resolverMs": 13029,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15640,
+            "readyAtMs": 15642
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:Ketch:ec0a71f24b4f90a8"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://walmart.com",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/walmart.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "capturedAtMs": 10525,
+            "artifactId": "screenshot_pre_consent_full_page"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/walmart.com/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 3006,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 286,
+            "resolverMs": 13001,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14155,
+            "readyAtMs": 14166
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:a83e06b6ce1ea1e6"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 233,
+            "resolverMs": 11088,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13628,
+            "readyAtMs": 13683
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:a83e06b6ce1ea1e6"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://fullstory.com",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/fullstory.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "capturedAtMs": 5983,
+            "artifactId": "screenshot_pre_consent_geometry_proof"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/fullstory.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 5627,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/fullstory.com/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 459,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": true,
+          "cmp": "Osano",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 4580,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 4580,
+            "endedAtMs": 7591
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 205,
+            "resolverMs": 3564,
+            "confirmationMs": 2004,
+            "observationMs": 835,
+            "totalMs": 7606,
+            "readyAtMs": 7611
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": true,
+          "cmp": "Osano",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "refusalExercised": false,
+            "actionDispatchedAtMs": 4866,
+            "reason": "cmp_rejection_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 4866,
+            "endedAtMs": 12873
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 220,
+            "resolverMs": 2254,
+            "confirmationMs": 2003,
+            "observationMs": 5859,
+            "totalMs": 12887,
+            "readyAtMs": 12890
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "refusal_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/consumerfinance.gov/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "capturedAtMs": 10300,
+            "artifactId": "screenshot_pre_consent_full_page"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/consumerfinance.gov/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 1371,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 786,
+            "resolverMs": 13001,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14483,
+            "readyAtMs": 14489
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:17259aa8019d283c"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 574,
+            "resolverMs": 11042,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13883,
+            "readyAtMs": 13896
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:c6d697c9a76ac81f"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://fandango.com",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/fandango.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "capturedAtMs": 10412,
+            "artifactId": "screenshot_pre_consent_full_page"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/fandango.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 6947,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/fandango.com/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 1230,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": false,
+          "cmp": "OneTrust",
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "resolved_control_label_not_classified",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 249,
+            "resolverMs": 3043,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13715,
+            "readyAtMs": 13722
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "label_unverifiable",
+            "resolved_control_label_not_classified"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 257,
+            "resolverMs": 13002,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15469,
+            "readyAtMs": 15475
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:4bc895ef1de25ea9"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://nih.gov",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/nih.gov/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "capturedAtMs": 10339,
+            "artifactId": "screenshot_pre_consent_full_page"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/nih.gov/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 1528,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 920,
+            "resolverMs": 13003,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14666,
+            "readyAtMs": 14677
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:170449b31fce4d9d"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 734,
+            "resolverMs": 11047,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14103,
+            "readyAtMs": 14111
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:170449b31fce4d9d"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://spotify.com",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/spotify.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "capturedAtMs": 8244,
+            "artifactId": "screenshot_pre_consent_full_page"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/spotify.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 3613,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/spotify.com/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 1176,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 552,
+            "resolverMs": 13002,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14033,
+            "readyAtMs": 14041
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:OneTrust:c22a52dd14536904"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": false,
+          "click": "not_attempted",
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 575,
+            "resolverMs": 13007,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15800,
+            "readyAtMs": 15806
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:c22a52dd14536904"
+          ]
+        }
+      ]
+    },
+    {
+      "url": "https://gatech.edu",
+      "visitStatus": "completed",
+      "noGo": false,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": false,
+            "inventoryOutcome": "partial",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/gatech.edu/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "capturedAtMs": 6285,
+            "artifactId": "screenshot_pre_consent_geometry_proof"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/gatech.edu/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "capturedAtMs": 6081,
+            "artifactId": "screenshot_pre_consent_settled"
+          },
+          {
+            "path": "/Users/benmasek/WC01/artifacts/ar-onetrust-confirmation-20261009/visits-smoke/gatech.edu/candidate-1/consent/screenshot-pre-consent.png",
+            "capturedAtMs": 1333,
+            "artifactId": "screenshot_pre_consent"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "found": true,
+          "cmp": "Drupal EU Cookie Compliance module, non-TCF",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 2556,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 2556,
+            "endedAtMs": 5560
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 243,
+            "resolverMs": 1022,
+            "confirmationMs": 2016,
+            "observationMs": 931,
+            "totalMs": 5584,
+            "readyAtMs": 5593
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "found": true,
+          "cmp": "Drupal EU Cookie Compliance module, non-TCF",
+          "click": "completed",
+          "registration": {
+            "status": "unconfirmed",
+            "refusalExercised": false,
+            "actionDispatchedAtMs": 2762,
+            "reason": "cmp_rejection_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "capture": {
+            "stopReason": "window_elapsed",
+            "startedAtMs": 2762,
+            "endedAtMs": 10767
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 196,
+            "resolverMs": 277,
+            "confirmationMs": 2004,
+            "observationMs": 5969,
+            "totalMs": 10753,
+            "readyAtMs": 10775
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "refusal_registration_not_confirmed"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": [
+    {
+      "url": "https://progressive.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://progressive.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://notion.so",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      }
+    },
+    {
+      "url": "https://notion.so",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      }
+    },
+    {
+      "url": "https://forbes.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://forbes.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://walmart.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://walmart.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "limited",
+        "clickCompleted": true,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "limited",
+        "clickCompleted": true,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://fandango.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://fandango.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://nih.gov",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://nih.gov",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "not_attempted",
+        "clickCompleted": false,
+        "observationCompleted": false,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://gatech.edu",
+      "lane": "accept",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": false
+      }
+    },
+    {
+      "url": "https://gatech.edu",
+      "lane": "reject",
+      "packetValid": true,
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": false
+      }
+    }
+  ],
+  "contacts": 30
+}

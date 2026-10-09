@@ -1,0 +1,105 @@
+{
+  "generatedAt": "2026-10-09T14:17:36.693Z",
+  "results": [
+    {
+      "url": "https://progressive.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:16:35.249Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://notion.so",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:16:32.325Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://forbes.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:16:51.623Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://walmart.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:16:50.415Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:17:04.079Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:17:07.077Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fandango.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:17:20.237Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nih.gov",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:17:22.642Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:17:36.691Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gatech.edu",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-09T14:17:34.787Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

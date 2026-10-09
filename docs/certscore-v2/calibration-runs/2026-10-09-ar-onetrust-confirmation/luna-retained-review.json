@@ -1,0 +1,80 @@
+{
+  "reviewer": "Luna / luna_live_benchmark_review",
+  "reviewType": "model_assisted_retained_evidence_review",
+  "independentlyReviewed": false,
+  "scope": "10 candidate-only local visits, one/site; retained pre-consent screenshots and typed inventory; not population precision or absence proof.",
+  "visualStructuredAgreement": {
+    "sites": 10,
+    "disagreements": 0,
+    "arPositiveSites": 3,
+    "privacyChoiceOnlySites": 2,
+    "noAROVisibleSites": 5
+  },
+  "observations": [
+    {
+      "sites": [
+        "notion.so"
+      ],
+      "controls": [
+        "accept",
+        "reject",
+        "options"
+      ],
+      "inventory": "partial"
+    },
+    {
+      "sites": [
+        "fullstory.com"
+      ],
+      "controls": [
+        "accept",
+        "reject"
+      ],
+      "inventory": "complete_with_controls"
+    },
+    {
+      "sites": [
+        "gatech.edu"
+      ],
+      "controls": [
+        "accept",
+        "reject"
+      ],
+      "inventory": "partial"
+    },
+    {
+      "sites": [
+        "fandango.com",
+        "spotify.com"
+      ],
+      "controls": [
+        "do_not_sell_share"
+      ],
+      "aroVisible": false
+    },
+    {
+      "sites": [
+        "progressive.com",
+        "forbes.com",
+        "walmart.com",
+        "consumerfinance.gov",
+        "nih.gov"
+      ],
+      "aroVisible": false,
+      "inventory": "complete_empty"
+    }
+  ],
+  "qualifiers": [
+    "Notion/Georgia Tech observed controls do not establish complete inventory.",
+    "Walmart/Spotify usable first-party page shells retain skeleton placeholders; not comprehensive page coverage.",
+    "NIH security-challenge request signal retained alongside HTTP200 substantive main page, continue_with_diagnostics/degraded_but_useful; not blocked.",
+    "FullStory Accept/Reject limited: network requests dropped127/29, unconfirmed, despite completed clicks/windows.",
+    "Georgia Tech completed bounded captures3s/8s, zero drops, unconfirmed; operational success only."
+  ],
+  "correctedPriorReview": {
+    "site": "unleashedsoftware.com",
+    "cause": "Reviewer initially inspected early screenshot rather than settled screenshot. Settled clearly shows all A/R/O; no source defect.",
+    "settledSha256": "348919e5138460d7739d247b6c987ecae98981314b6ed8aaadd1206b134bf0b9",
+    "earlySha256": "3a1e4fd58daf3709519fb59166b26f14af2e477fda914641c49ed3deef7c3647"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "snapshots": [
+    {
+      "source": "before",
+      "files": 1002,
+      "sha256": "c0233ec08aefa4ab971734e6def40a45121cf0e9b1f84744491f6ef6e56eb266",
+      "verified": true
+    },
+    {
+      "source": "candidate",
+      "files": 1003,
+      "sha256": "139912b3e8639a982ade09b9e8177f0550f49d48df2b63ada73163099e1245cb",
+      "verified": true
+    }
+  ],
+  "currentSourceDrift": [],
+  "verificationLogsSha256": {
+    "onetrust-fixtures-final.log": "c2dd02c2273c4238b0f4a69c40715c4b87b37cbafe38b3b634034f944081cf40",
+    "regressions.log": "cdd2a419c055e5c4694ff19c1a49f5a0c8b27d7b42d4ff3595bef6bda006e1e0",
+    "contracts-full.log": "a33e1c8d94c1e32ae8ce1e75e99afb970d33d633b4a2bf10b78cc15c2cec0950",
+    "scan-core-typecheck.log": "b4a890755af2aceccca6100fb8d5b00423e238bf530041c1af46a25b8d7999b6",
+    "contracts-typecheck.log": "32a8443b89449fd03b8b0b84a16b47aa6af9c664d96467e7f60e14325e5e0abc",
+    "registry.log": "55d31c664c68897ac460cfef94470d960f6004435010af852a7df63a13526cb7"
+  }
+}

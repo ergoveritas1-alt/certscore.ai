@@ -1,0 +1,198 @@
+{
+  "excluded": [
+    {
+      "reason": "blocked",
+      "url": "https://nytimes.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://washingtonpost.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://wayfair.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://salesforce.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://adobe.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://mayoclinic.org"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://ftc.gov"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://unilever.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://booking.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://openai.com"
+    }
+  ],
+  "generatedAt": "2026-10-09T14:12:20.534Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-onetrust-broader-20261009",
+  "selected": [
+    {
+      "url": "https://notion.so",
+      "role": "saas_global",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://progressive.com",
+      "role": "finance_insurance",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://forbes.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://walmart.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://fullstory.com",
+      "role": "behavioral_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "role": "government",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://fandango.com",
+      "role": "headless_or_control",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://nih.gov",
+      "role": "healthcare_public",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://spotify.com",
+      "role": "global_cmp_heavy",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://gatech.edu",
+      "role": "education",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner authorized fresh local reliability scans; holds, blocked and do_not_calibrate remain excluded; newly paired diagnostic sites excluded.",
+    "appliedToUrls": [
+      "https://att.com",
+      "https://bbc.com",
+      "https://caltech.edu",
+      "https://chase.com",
+      "https://cloudflare.com",
+      "https://cnn.com",
+      "https://forbes.com",
+      "https://ford.com",
+      "https://healthline.com",
+      "https://hotjar.com",
+      "https://hubspot.com",
+      "https://ikea.com",
+      "https://microsoft.com",
+      "https://mozilla.org",
+      "https://notion.so",
+      "https://plannedparenthood.org",
+      "https://progressive.com",
+      "https://segment.com",
+      "https://spotify.com",
+      "https://target.com",
+      "https://theguardian.com",
+      "https://toyota.com",
+      "https://usa.gov",
+      "https://weather.com"
+    ]
+  }
+}

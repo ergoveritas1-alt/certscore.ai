@@ -1,0 +1,366 @@
+{
+  "generatedAt": "2026-10-09T14:17:36.693Z",
+  "contactNoGoPolicy": "Each isolated lane contact inherits the authoritative consent-proof visit no-go outcome; not an independent lane diagnosis.",
+  "results": [
+    {
+      "url": "https://progressive.com",
+      "scanId": "1cef5821-79b2-48e4-ae7f-53eacfc30098",
+      "startedAt": "2026-10-09T14:16:20.131Z",
+      "completedAt": "2026-10-09T14:16:33.952Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://progressive.com",
+      "scanId": "d1d65c40-2882-456a-808d-961542e1b403",
+      "startedAt": "2026-10-09T14:16:20.132Z",
+      "completedAt": "2026-10-09T14:16:34.925Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://progressive.com",
+      "scanId": "ec08cdb6-bd38-4768-9fdf-3484334d4989",
+      "startedAt": "2026-10-09T14:16:20.132Z",
+      "completedAt": "2026-10-09T14:16:35.233Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://notion.so",
+      "scanId": "e2e31eaf-9f05-438d-9b4c-3621bf4bc8a8",
+      "startedAt": "2026-10-09T14:16:20.131Z",
+      "completedAt": "2026-10-09T14:16:24.717Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://notion.so",
+      "scanId": "cc0574ef-db65-4fa5-849c-99c84682be03",
+      "startedAt": "2026-10-09T14:16:20.132Z",
+      "completedAt": "2026-10-09T14:16:24.614Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://notion.so",
+      "scanId": "a53faecf-4ca3-4c02-8f06-400b999cc3df",
+      "startedAt": "2026-10-09T14:16:20.132Z",
+      "completedAt": "2026-10-09T14:16:32.309Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://forbes.com",
+      "scanId": "dbcd1037-9596-4b5d-aa6f-5f257c620e13",
+      "startedAt": "2026-10-09T14:16:32.880Z",
+      "completedAt": "2026-10-09T14:16:51.609Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://forbes.com",
+      "scanId": "172791b0-117c-4fb1-87b2-d69be65294b0",
+      "startedAt": "2026-10-09T14:16:32.880Z",
+      "completedAt": "2026-10-09T14:16:46.788Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://forbes.com",
+      "scanId": "963b1218-649c-4a42-9fa6-af8d022286d6",
+      "startedAt": "2026-10-09T14:16:32.880Z",
+      "completedAt": "2026-10-09T14:16:48.551Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://walmart.com",
+      "scanId": "bdbf7b64-2092-48a9-a6ac-7285102da900",
+      "startedAt": "2026-10-09T14:16:36.213Z",
+      "completedAt": "2026-10-09T14:16:47.516Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://walmart.com",
+      "scanId": "dfe9e29c-9871-45f4-ad64-7522239ea53e",
+      "startedAt": "2026-10-09T14:16:36.218Z",
+      "completedAt": "2026-10-09T14:16:50.398Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://walmart.com",
+      "scanId": "2fb95b30-eb33-4dec-ab0c-b21924576064",
+      "startedAt": "2026-10-09T14:16:36.218Z",
+      "completedAt": "2026-10-09T14:16:49.968Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "78672d7e-6dd1-4e79-9e36-fcd25b967001",
+      "startedAt": "2026-10-09T14:16:51.149Z",
+      "completedAt": "2026-10-09T14:16:57.505Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "a21b4706-6aeb-41cb-9478-a6125feec8b4",
+      "startedAt": "2026-10-09T14:16:51.150Z",
+      "completedAt": "2026-10-09T14:16:58.790Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "befb8f88-bb78-491a-b1e6-22ce40ebfd3f",
+      "startedAt": "2026-10-09T14:16:51.150Z",
+      "completedAt": "2026-10-09T14:17:04.065Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "scanId": "3466acc4-931b-4f81-9f3e-7f00e81d81f7",
+      "startedAt": "2026-10-09T14:16:52.559Z",
+      "completedAt": "2026-10-09T14:17:03.214Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "scanId": "9ec62710-f2f7-4079-a7f4-28df55b07abe",
+      "startedAt": "2026-10-09T14:16:52.560Z",
+      "completedAt": "2026-10-09T14:17:07.063Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "scanId": "9c07f359-aacb-4146-bf78-c3344202f19d",
+      "startedAt": "2026-10-09T14:16:52.560Z",
+      "completedAt": "2026-10-09T14:17:06.539Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fandango.com",
+      "scanId": "aed553ea-355e-47c7-ad94-7d23c8b9a2cf",
+      "startedAt": "2026-10-09T14:17:04.719Z",
+      "completedAt": "2026-10-09T14:17:16.350Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fandango.com",
+      "scanId": "2d702bfa-15e0-48e4-b2a8-cdf324347ccb",
+      "startedAt": "2026-10-09T14:17:04.720Z",
+      "completedAt": "2026-10-09T14:17:18.620Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://fandango.com",
+      "scanId": "2d1e7713-fc42-4501-add8-1a558ae0effd",
+      "startedAt": "2026-10-09T14:17:04.720Z",
+      "completedAt": "2026-10-09T14:17:20.215Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nih.gov",
+      "scanId": "0c600bcd-c7b8-4939-9624-4e81ba7dae0a",
+      "startedAt": "2026-10-09T14:17:07.923Z",
+      "completedAt": "2026-10-09T14:17:18.752Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nih.gov",
+      "scanId": "a56c59ca-a4d6-4ed0-8c33-4269167fa3da",
+      "startedAt": "2026-10-09T14:17:07.923Z",
+      "completedAt": "2026-10-09T14:17:22.621Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nih.gov",
+      "scanId": "d725ee2f-abf7-4b30-aa1a-00070ef46cdf",
+      "startedAt": "2026-10-09T14:17:07.923Z",
+      "completedAt": "2026-10-09T14:17:22.105Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "scanId": "52f83755-b334-4b5c-8291-9cc35002d2f4",
+      "startedAt": "2026-10-09T14:17:20.846Z",
+      "completedAt": "2026-10-09T14:17:29.677Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "scanId": "fa373a9e-95bb-489b-8c49-1aa5bdcac264",
+      "startedAt": "2026-10-09T14:17:20.846Z",
+      "completedAt": "2026-10-09T14:17:34.913Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "scanId": "c94343fc-d6ec-4aa0-a199-40c1a4ec2da9",
+      "startedAt": "2026-10-09T14:17:20.846Z",
+      "completedAt": "2026-10-09T14:17:36.677Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gatech.edu",
+      "scanId": "29b08d96-4ad4-4f51-a8e8-4ebcf5141180",
+      "startedAt": "2026-10-09T14:17:23.982Z",
+      "completedAt": "2026-10-09T14:17:30.570Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gatech.edu",
+      "scanId": "633f0060-6e5f-416e-b360-3ae626ddf706",
+      "startedAt": "2026-10-09T14:17:23.984Z",
+      "completedAt": "2026-10-09T14:17:29.601Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://gatech.edu",
+      "scanId": "113e69cb-ed13-4786-8e04-2ba5466c1a21",
+      "startedAt": "2026-10-09T14:17:23.984Z",
+      "completedAt": "2026-10-09T14:17:34.771Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

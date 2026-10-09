@@ -1,0 +1,14 @@
+{
+  "sites": 10,
+  "contacts": 30,
+  "actionPacketsValid": 20,
+  "clicksCompleted": 6,
+  "executionStatuses": {
+    "succeeded": 2,
+    "succeeded_with_confirmation": 2,
+    "limited": 2,
+    "not_attempted": 14,
+    "unsupported": 0
+  },
+  "noGoVisits": 0
+}

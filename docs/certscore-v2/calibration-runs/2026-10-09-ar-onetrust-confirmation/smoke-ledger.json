@@ -12,9 +12,9 @@
     },
     "https://cloudflare.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-09T04:01:53.462Z",
-      "lastContactAt": "2026-09-11T04:01:53.462Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-10-09T18:42:41.576575+00:00",
+      "lastContactAt": "2026-09-11T18:42:41.576575+00:00",
+      "lastContactSource": "new-domain-overview",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -22,8 +22,8 @@
     },
     "https://spotify.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:36.691Z",
-      "lastContactAt": "2026-10-09T14:17:36.691Z",
+      "cooldownUntil": "2026-11-06T02:46:57.307Z",
+      "lastContactAt": "2026-10-09T02:46:57.307Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -32,9 +32,9 @@
     },
     "https://msnbc.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-09T04:02:04.207Z",
-      "lastContactAt": "2026-09-11T04:02:04.207Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-10-09T08:33:04.513534+00:00",
+      "lastContactAt": "2026-09-11T08:33:04.513534+00:00",
+      "lastContactSource": "pulse_api",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -42,8 +42,8 @@
     },
     "https://fullstory.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:04.079Z",
-      "lastContactAt": "2026-10-09T14:17:04.079Z",
+      "cooldownUntil": "2026-10-09T04:02:09.802Z",
+      "lastContactAt": "2026-09-11T04:02:09.802Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -52,8 +52,8 @@
     },
     "https://nih.gov": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:22.642Z",
-      "lastContactAt": "2026-10-09T14:17:22.642Z",
+      "cooldownUntil": "2026-10-09T04:02:12.799Z",
+      "lastContactAt": "2026-09-11T04:02:12.799Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -72,8 +72,8 @@
     },
     "https://gatech.edu": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:34.787Z",
-      "lastContactAt": "2026-10-09T14:17:34.787Z",
+      "cooldownUntil": "2026-10-09T04:02:21.442Z",
+      "lastContactAt": "2026-09-11T04:02:21.442Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -104,8 +104,8 @@
     },
     "https://consumerfinance.gov": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:07.077Z",
-      "lastContactAt": "2026-10-09T14:17:07.077Z",
+      "cooldownUntil": "2026-10-09T04:02:51.340Z",
+      "lastContactAt": "2026-09-11T04:02:51.340Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -114,8 +114,8 @@
     },
     "https://notion.so": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:16:32.325Z",
-      "lastContactAt": "2026-10-09T14:16:32.325Z",
+      "cooldownUntil": "2026-11-05T04:10:10.796Z",
+      "lastContactAt": "2026-10-08T04:10:10.796Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -182,8 +182,8 @@
     },
     "https://progressive.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:16:35.249Z",
-      "lastContactAt": "2026-10-09T14:16:35.249Z",
+      "cooldownUntil": "2026-11-05T04:11:28.269Z",
+      "lastContactAt": "2026-10-08T04:11:28.269Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -307,8 +307,8 @@
     },
     "https://forbes.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:16:51.623Z",
-      "lastContactAt": "2026-10-09T14:16:51.623Z",
+      "cooldownUntil": "2026-11-05T20:12:30.255Z",
+      "lastContactAt": "2026-10-08T20:12:30.255Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -325,21 +325,229 @@
       "state": "cooldown",
       "url": "https://hubspot.com"
     },
+    "https://nytimes.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-20T20:20:13.96+00:00",
+      "lastContactAt": "2026-09-22T20:20:13.96+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated",
+        "consent_proof:bot_challenge:301",
+        "runtime_evidence:bot_challenge:301",
+        "policy_evidence:access_denied:301",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://nytimes.com"
+    },
+    "https://washingtonpost.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-09-13T07:56:23.776+00:00",
+      "lastContactAt": "2026-08-16T07:56:23.776+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "dom_text_empty",
+        "scan_no_go:navigation_transport_failure",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://washingtonpost.com"
+    },
+    "https://cnn.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-13T15:52:39.611151+00:00",
+      "lastContactAt": "2026-09-15T15:52:39.611151+00:00",
+      "lastContactSource": "mcp",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://cnn.com"
+    },
     "https://walmart.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:16:50.415Z",
-      "lastContactAt": "2026-10-09T14:16:50.415Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-09-26T06:42:39.151914+00:00",
+      "lastContactAt": "2026-08-29T06:42:39.151914+00:00",
+      "lastContactSource": "pulse_api",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://walmart.com"
     },
+    "https://macys.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T13:55:37.236603+00:00",
+      "lastContactAt": "2026-09-11T13:55:37.236603+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://macys.com"
+    },
+    "https://etsy.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-07T06:26:44.077238+00:00",
+      "lastContactAt": "2026-09-09T06:26:44.077238+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://etsy.com"
+    },
+    "https://homedepot.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-07T05:44:49.412148+00:00",
+      "lastContactAt": "2026-09-09T05:44:49.412148+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://homedepot.com"
+    },
+    "https://ikea.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-20T20:25:23.73+00:00",
+      "lastContactAt": "2026-09-22T20:25:23.73+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ikea.com"
+    },
+    "https://ford.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-11T06:17:46.258767+00:00",
+      "lastContactAt": "2026-09-13T06:17:46.258767+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ford.com"
+    },
+    "https://toyota.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-11T01:45:23.249785+00:00",
+      "lastContactAt": "2026-09-13T01:45:23.249785+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://toyota.com"
+    },
+    "https://supabase.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T12:02:16.172421+00:00",
+      "lastContactAt": "2026-09-11T12:02:16.172421+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://supabase.com"
+    },
+    "https://microsoft.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-30T04:36:01.691875+00:00",
+      "lastContactAt": "2026-10-02T04:36:01.691875+00:00",
+      "lastContactSource": "mcp",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://microsoft.com"
+    },
+    "https://plannedparenthood.org": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-23T01:50:08.426555+00:00",
+      "lastContactAt": "2026-09-25T01:50:08.426555+00:00",
+      "lastContactSource": "sdk",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://plannedparenthood.org"
+    },
+    "https://fidelity.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-09-26T06:56:44.062358+00:00",
+      "lastContactAt": "2026-08-29T06:56:44.062358+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://fidelity.com"
+    },
+    "https://geico.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-09-24T00:15:53.116+00:00",
+      "lastContactAt": "2026-08-27T00:15:53.116+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "state": "cooldown",
+      "url": "https://geico.com"
+    },
+    "https://caltech.edu": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-09T16:04:22.827061+00:00",
+      "lastContactAt": "2026-09-11T16:04:22.827061+00:00",
+      "lastContactSource": "homepage-anonymous",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://caltech.edu"
+    },
+    "https://bbc.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-20T20:26:27.264+00:00",
+      "lastContactAt": "2026-09-22T20:26:27.264+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bbc.com"
+    },
+    "https://unilever.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-09-13T07:55:53.871+00:00",
+      "lastContactAt": "2026-08-16T07:55:53.871+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "homepage_response_403",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://unilever.com"
+    },
+    "https://segment.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-20T20:19:42.436+00:00",
+      "lastContactAt": "2026-09-22T20:19:42.436+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://segment.com"
+    },
+    "https://mozilla.org": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-20T20:21:07.581+00:00",
+      "lastContactAt": "2026-09-22T20:21:07.581+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mozilla.org"
+    },
     "https://fandango.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:17:20.237Z",
-      "lastContactAt": "2026-10-09T14:17:20.237Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-10-09T03:33:21.156332+00:00",
+      "lastContactAt": "2026-09-11T03:33:21.156332+00:00",
+      "lastContactSource": "pulse_api",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -347,5 +555,5 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-09T14:18:50.822Z"
+  "updatedAt": "2026-10-09T14:11:05.779Z"
 }
