@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-10-09T19:58:18.865Z",
+  "results": [
+    {
+      "url": "https://ergoveritas.com/testar1.html",
+      "startedAt": "2026-10-09T19:57:41.219Z",
+      "completedAt": "2026-10-09T19:58:18.865Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://ergoveritas.com/testar2.html",
+      "startedAt": "2026-10-09T19:57:55.992Z",
+      "completedAt": "2026-10-09T19:58:18.865Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://wethepeoples-republic.org/",
+      "startedAt": "2026-10-09T19:58:03.299Z",
+      "completedAt": "2026-10-09T19:58:18.865Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    }
+  ]
+}

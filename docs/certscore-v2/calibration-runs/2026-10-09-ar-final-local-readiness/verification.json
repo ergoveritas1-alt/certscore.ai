@@ -1,0 +1,241 @@
+{
+  "scope": "localhost full reports; not production deployment",
+  "verificationCommit": "39051fc1520819f56fc95ab60e2709e347ccf211",
+  "sourceSha256": "933ad3042aae7f7c1e2dae9397e3828016bdd704c3cfaf2b6c11b4bfdd2c825d",
+  "sourceFilesVerified": 4415,
+  "sourceMismatches": 0,
+  "fullPreflight": {
+    "command": "pnpm preflight:full",
+    "exitCode": 0,
+    "isolatedCleanCheckout": true
+  },
+  "focusedPassiveRegressions": {
+    "tests": 77,
+    "passed": 77,
+    "failed": 0
+  },
+  "publicationRace": {
+    "status": "passed",
+    "localDatabaseHost": "127.0.0.1",
+    "independentHTTPProcesses": 4,
+    "actualHandlers": true,
+    "actualAdvisoryLocks": true,
+    "retainedArtifactReplay": true,
+    "results": [
+      {
+        "mode": "before",
+        "concurrentStatusPolls": 24,
+        "statusPollingHTTP": 200,
+        "reportReady": true,
+        "workerHTTP": 503,
+        "publications": 1,
+        "transferredArtifactsUsed": 0,
+        "operations": [
+          "lock_attempt",
+          "s3_fallback",
+          "lock_attempt",
+          "publication"
+        ]
+      },
+      {
+        "mode": "after",
+        "concurrentStatusPolls": 24,
+        "statusPollingHTTP": 200,
+        "reportReady": true,
+        "workerHTTP": 200,
+        "publications": 1,
+        "transferredArtifactsUsed": 2,
+        "operations": [
+          "lock_attempt",
+          "transfer_used",
+          "publication"
+        ]
+      },
+      {
+        "owner": "active",
+        "recoveryPublished": false
+      },
+      {
+        "owner": "expired",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "failed",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "missing",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "terminal",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "completed",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "unverified",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "new_unverified",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "local",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "limited",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "stale",
+        "recoveryPublished": true
+      },
+      {
+        "owner": "incomplete",
+        "recoveryPublished": false
+      },
+      {
+        "owner": "authenticated_recovery_without_transfer",
+        "published": true
+      }
+    ]
+  },
+  "outcomes": {
+    "status": "passed",
+    "scores": [
+      84,
+      69,
+      87
+    ],
+    "confirmedRejectDeductionPoints": 15,
+    "unconfirmedAcceptRetainedRequests": 4,
+    "unconfirmedAcceptRetainedWrites": 3,
+    "formObservations": 2,
+    "distinctFormClaim": false,
+    "preConsentFields": 7,
+    "afterAcceptFields": 7
+  },
+  "retainedArtifacts": [
+    {
+      "scanId": "8999c43a-8039-4bce-8d5a-9d827ff99e08",
+      "canonicalBundleValid": true,
+      "verifiedMirroredArtifacts": 33,
+      "allSixLanesJoined": true
+    },
+    {
+      "scanId": "31744da2-8406-42ea-bd2b-b5990e982d33",
+      "canonicalBundleValid": true,
+      "verifiedMirroredArtifacts": 33,
+      "allSixLanesJoined": true
+    },
+    {
+      "scanId": "79929c2f-58d8-4baa-8d02-0b16798fd1ee",
+      "canonicalBundleValid": true,
+      "verifiedMirroredArtifacts": 41,
+      "allSixLanesJoined": true
+    }
+  ],
+  "imageDelivery": [
+    {
+      "scanId": "79929c2f-58d8-4baa-8d02-0b16798fd1ee",
+      "capturePhase": "pre_consent",
+      "httpStatus": 200,
+      "contentType": "image/jpeg",
+      "bytes": 12152,
+      "sha256": "ab48cbfbb9c8be2881cb7d6ac8628e677066d4b23b598d25f22650734a9bea2e",
+      "file": "79929c2f-58d8-4baa-8d02-0b16798fd1ee-pre_consent.jpg"
+    },
+    {
+      "scanId": "79929c2f-58d8-4baa-8d02-0b16798fd1ee",
+      "capturePhase": "after_accept",
+      "httpStatus": 200,
+      "contentType": "image/jpeg",
+      "bytes": 9661,
+      "sha256": "31a77adae0801ca0dbc0038fdb49809940b3d0f54a20adf78833e94b10fccf0d",
+      "file": "79929c2f-58d8-4baa-8d02-0b16798fd1ee-after_accept.jpg"
+    }
+  ],
+  "reports": [
+    {
+      "target": "https://ergoveritas.com/testar1.html",
+      "scanId": "8999c43a-8039-4bce-8d5a-9d827ff99e08",
+      "url": "http://localhost:3000/scan/8999c43a-8039-4bce-8d5a-9d827ff99e08",
+      "score": 84,
+      "acceptStatus": "confirmed_observation",
+      "rejectStatus": "confirmed_clean",
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 0,
+        "preConsentObserved": 0,
+        "afterAcceptObserved": 0,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "scannerCompletedToProjectionMs": 1219,
+      "totalToProjectionMs": 11695,
+      "publicationCount": 1
+    },
+    {
+      "target": "https://ergoveritas.com/testar2.html",
+      "scanId": "31744da2-8406-42ea-bd2b-b5990e982d33",
+      "url": "http://localhost:3000/scan/31744da2-8406-42ea-bd2b-b5990e982d33",
+      "score": 69,
+      "acceptStatus": "unconfirmed",
+      "rejectStatus": "confirmed_observation",
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 0,
+        "preConsentObserved": 0,
+        "afterAcceptObserved": 0,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "scannerCompletedToProjectionMs": 425,
+      "totalToProjectionMs": 5675,
+      "publicationCount": 1
+    },
+    {
+      "target": "https://wethepeoples-republic.org/",
+      "scanId": "79929c2f-58d8-4baa-8d02-0b16798fd1ee",
+      "url": "http://localhost:3000/scan/79929c2f-58d8-4baa-8d02-0b16798fd1ee",
+      "score": 87,
+      "acceptStatus": "confirmed_clean",
+      "rejectStatus": "confirmed_clean",
+      "formsSummary": {
+        "contractVersion": "certscore.forms-summary.v1",
+        "scope": "starting_page_reportable_observations",
+        "totalObserved": 2,
+        "preConsentObserved": 1,
+        "afterAcceptObserved": 1,
+        "preConsentCapture": "complete",
+        "afterAcceptCapture": "retained",
+        "countStatus": "captured"
+      },
+      "scannerCompletedToProjectionMs": 1409,
+      "totalToProjectionMs": 14172,
+      "publicationCount": 1
+    }
+  ],
+  "summaryBuilderParity": [
+    "report model",
+    "API v2 scan resource",
+    "MCP summary bundle"
+  ],
+  "authenticatedExternalTransportVerified": false,
+  "centralContactRunKey": "ar-final-release-readiness-20261009",
+  "parentContacts": 3,
+  "laneSessions": 18,
+  "oneTimeCostEstimateUsdUpperBound": 0.5,
+  "recurringCostChangeUsd": 0,
+  "lunaReview": "Retained-result and visual review found no blocking regression. Model-assisted review; not human adjudication.",
+  "deploymentStarted": false
+}
