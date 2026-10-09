@@ -63,7 +63,11 @@ retry or timeout increase. If approved, retain explicit after-click provenance,
 never manufacture a registration timestamp, and keep the observations score-neutral.
 
 The installed mini bot remains unchanged until a between-scans cutover and
-restart. Existing exact terminal-409 pending rows are retired by its startup
+restart. Bonjour resolved the mounted mini to `minibens-Mac-mini.local`; a
+read-only, batch-mode SSH check failed with `Permission denied`. No credentials
+were requested or copied, and no launch agent or running process was altered.
+Authenticated host access is needed for a safe between-scans cutover.
+Existing exact terminal-409 pending rows are retired by its startup
 cleanup; historical policy/action derivatives need the reviewed backfill after
 migration. No full-table backfill or repair was run against the live mounted DB.
 The previous browser-policy block also leaves live report interaction signoff
