@@ -1,6 +1,6 @@
 # @certscore/sdk
 
-## Unreleased
+## 0.2.15
 
 - Type and export canonical `ScanFormsSummary` and `ScanScoreExplanation` on scan resources, scan jobs and Pulse results.
 - Preserve unavailable phase counts and decision-verification states in TypeScript consumers.

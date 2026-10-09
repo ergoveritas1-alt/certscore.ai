@@ -131,6 +131,26 @@ Available resource clients:
 - `certscore.domains.latestPreConsentCookiesTrackers()`
 - `certscore.scan()`
 
+### Form totals and score deductions (0.2.15)
+
+Scan resources, scan jobs and Pulse results expose typed `formsSummary` and `scoreExplanation` objects from the canonical report projection:
+
+```ts
+console.log({
+  allObservedForms: completed.formsSummary?.totalObserved,
+  preConsentForms: completed.formsSummary?.preConsentObserved,
+  afterAcceptForms: completed.formsSummary?.afterAcceptObserved,
+});
+
+for (const deduction of completed.scoreExplanation?.deductions ?? []) {
+  for (const rule of deduction.rules) {
+    console.log(rule.label, rule.policyDeductionPoints, rule.decisionVerification);
+  }
+}
+```
+
+Phase counts can be `null` when unavailable. Use the returned deductions and decision-verification states; request counts alone do not establish a scoring issue. Historical records can omit either summary.
+
 ## Cookies & Trackers (Pre-consent)
 
 Use the API v2 resource client when you need the public report table as JSON instead of parsing report HTML or Pulse prose.
