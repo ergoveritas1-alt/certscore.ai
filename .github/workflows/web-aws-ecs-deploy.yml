@@ -18,6 +18,7 @@ on:
       - "scripts/assert-forward-web-deploy.ts"
       - "scripts/runtime-base-changes.mjs"
       - "scripts/lib/runtime-base-inputs.mjs"
+      - "scripts/docker-source-policy.json"
       - "scripts/configure-marketplace-light.ts"
       - "scripts/configure-marketplace-browser.ts"
       - "scripts/insert-integration-api-key.mjs"
@@ -72,7 +73,7 @@ jobs:
     timeout-minutes: 90
     services:
       marketplace-test-db:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: local-fixture-only
@@ -86,6 +87,7 @@ jobs:
       id-token: write
 
     env:
+      EXPERIMENTAL_BUILDKIT_SOURCE_POLICY: ${{ github.workspace }}/scripts/docker-source-policy.json
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       ECR_WEB_REPOSITORY: ${{ vars.AWS_WEB_ECR_REPOSITORY }}

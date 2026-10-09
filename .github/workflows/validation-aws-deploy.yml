@@ -25,6 +25,7 @@ on:
       - "turbo.json"
       - "scripts/runtime-base-changes.mjs"
       - "scripts/lib/runtime-base-inputs.mjs"
+      - "scripts/docker-source-policy.json"
       - "!apps/validation-worker/**/*.test.ts"
       - "!apps/validation-worker/**/*.spec.ts"
       - "!apps/validation-worker/scripts/**"
@@ -67,6 +68,7 @@ jobs:
       id-token: write
 
     env:
+      EXPERIMENTAL_BUILDKIT_SOURCE_POLICY: ${{ github.workspace }}/scripts/docker-source-policy.json
       AWS_REGION: ${{ vars.AWS_REGION || 'us-west-1' }}
       AWS_ROLE_TO_ASSUME: ${{ vars.AWS_VALIDATION_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
       ECR_WORKER_REPOSITORY: ${{ vars.AWS_VALIDATION_WORKER_ECR_REPOSITORY }}

@@ -105,6 +105,15 @@ step.
 
 ## Reusing verified build work
 
+Web and validation builds use `scripts/docker-source-policy.json` to resolve the
+existing Node 22 build input from its digest-pinned Docker Official Image mirror
+in public ECR. The web CI PostgreSQL service uses the same official mirror.
+This avoids shared-runner Docker Hub anonymous pull limits without changing
+Dockerfiles or rebuilding runtime bases. When updating these pins, verify the
+original Docker Hub and public ECR manifest digests match, retain both ARM64 and
+AMD64 support, and run a local BuildKit conversion smoke test plus deployment
+contract checks. Keep required CI checks and exact-image promotion unchanged.
+
 The required web CI typecheck runs route type generation and the complete web
 TypeScript check before the image build. Only its successful output supplies
 `WEB_TYPECHECK_VERIFIED_SHA`; Next.js reuses that check only when it exactly
