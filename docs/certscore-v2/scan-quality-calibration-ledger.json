@@ -22,8 +22,8 @@
     },
     "https://spotify.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:57:06.971Z",
-      "lastContactAt": "2026-10-09T16:57:06.971Z",
+      "cooldownUntil": "2026-11-06T18:35:18.069Z",
+      "lastContactAt": "2026-10-09T18:35:18.069Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -32,8 +32,8 @@
     },
     "https://msnbc.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:57:44.385Z",
-      "lastContactAt": "2026-10-09T16:57:44.385Z",
+      "cooldownUntil": "2026-11-06T18:36:38.811Z",
+      "lastContactAt": "2026-10-09T18:36:38.811Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -82,8 +82,8 @@
     },
     "https://bestbuy.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-09T04:02:48.211Z",
-      "lastContactAt": "2026-09-11T04:02:48.211Z",
+      "cooldownUntil": "2026-11-06T18:36:24.743Z",
+      "lastContactAt": "2026-10-09T18:36:24.743Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -114,8 +114,8 @@
     },
     "https://notion.so": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:16:32.325Z",
-      "lastContactAt": "2026-10-09T14:16:32.325Z",
+      "cooldownUntil": "2026-11-06T18:36:52.888Z",
+      "lastContactAt": "2026-10-09T18:36:52.888Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -172,8 +172,8 @@
     },
     "https://hotjar.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-05T04:11:14.754Z",
-      "lastContactAt": "2026-10-08T04:11:14.754Z",
+      "cooldownUntil": "2026-11-06T18:35:54.478Z",
+      "lastContactAt": "2026-10-09T18:35:54.478Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -182,8 +182,8 @@
     },
     "https://progressive.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:56:27.927Z",
-      "lastContactAt": "2026-10-09T16:56:27.927Z",
+      "cooldownUntil": "2026-11-06T18:37:23.822Z",
+      "lastContactAt": "2026-10-09T18:37:23.822Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -192,8 +192,8 @@
     },
     "https://usa.gov": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:17:24.640Z",
-      "lastContactAt": "2026-10-09T16:17:24.640Z",
+      "cooldownUntil": "2026-11-06T18:35:15.413Z",
+      "lastContactAt": "2026-10-09T18:35:15.413Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -299,8 +299,8 @@
     },
     "https://healthline.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:18:18.268Z",
-      "lastContactAt": "2026-10-09T16:18:18.268Z",
+      "cooldownUntil": "2026-11-06T18:37:18.892Z",
+      "lastContactAt": "2026-10-09T18:37:18.892Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -359,8 +359,8 @@
     },
     "https://mozilla.org": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T15:01:08.390Z",
-      "lastContactAt": "2026-10-09T15:01:08.390Z",
+      "cooldownUntil": "2026-11-06T18:37:53.417Z",
+      "lastContactAt": "2026-10-09T18:37:53.417Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -412,8 +412,8 @@
     },
     "https://caltech.edu": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:17:47.089Z",
-      "lastContactAt": "2026-10-09T16:17:47.089Z",
+      "cooldownUntil": "2026-11-06T18:37:48.281Z",
+      "lastContactAt": "2026-10-09T18:37:48.281Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -452,5 +452,5 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-09T17:06:51.461Z"
+  "updatedAt": "2026-10-09T18:39:34.393Z"
 }
