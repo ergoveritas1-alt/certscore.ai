@@ -1,0 +1,45 @@
+{
+  "generatedAt": "2026-10-09T15:13:36.880Z",
+  "contactNoGoPolicy": "Each isolated lane contact inherits the authoritative consent-proof visit no-go outcome; not an independent action-lane diagnosis.",
+  "results": [
+    {
+      "group": "owned_repair",
+      "url": "https://ergoveritas.com/testar1.html",
+      "scanId": "2bc041a4-984d-4146-94ba-d2ce348044fa",
+      "startedAt": "2026-10-09T15:08:43.605Z",
+      "completedAt": "2026-10-09T15:08:44.888Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "owned_repair",
+      "url": "https://ergoveritas.com/testar1.html",
+      "scanId": "cad81023-5dfb-4109-aa8b-03b78a8f79cc",
+      "startedAt": "2026-10-09T15:08:43.605Z",
+      "completedAt": "2026-10-09T15:08:45.245Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "owned_repair",
+      "url": "https://ergoveritas.com/testar1.html",
+      "scanId": "7f577d68-cb99-4a20-8524-acefe542fe4d",
+      "startedAt": "2026-10-09T15:08:43.605Z",
+      "completedAt": "2026-10-09T15:08:54.241Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

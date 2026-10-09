@@ -1,0 +1,39 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-09T15:01:56.301Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-retention-owned-20261009",
+  "selected": [
+    {
+      "url": "https://ergoveritas.com/testar1.html",
+      "role": "owned_canary",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://ergoveritas.com/testar2.html",
+      "role": "owned_canary",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner approved broader local A/R validation including owned canaries; exact registered A/R targets only, serial host contacts, no retries or deployment.",
+    "appliedToUrls": [
+      "https://ergoveritas.com/testar1.html",
+      "https://ergoveritas.com/testar2.html"
+    ]
+  }
+}

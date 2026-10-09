@@ -1,0 +1,26 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-09T15:08:42.926Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-retention-owned-repair-20261009",
+  "selected": [
+    {
+      "url": "https://ergoveritas.com/testar1.html",
+      "role": "owned_canary",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner authorized fresh repeat local A/R verification at will; replace overwritten testar1 raw evidence after fixing unique output key; original contacts persisted, no no-go/restriction bypass, no deployment.",
+    "appliedToUrls": [
+      "https://ergoveritas.com/testar1.html"
+    ]
+  }
+}

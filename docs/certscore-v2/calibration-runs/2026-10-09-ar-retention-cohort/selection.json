@@ -1,0 +1,216 @@
+{
+  "excluded": [
+    {
+      "reason": "blocked",
+      "url": "https://nytimes.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://washingtonpost.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://wayfair.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://salesforce.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://adobe.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://mayoclinic.org"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://ftc.gov"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://unilever.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://booking.com"
+    },
+    {
+      "reason": "blocked",
+      "url": "https://openai.com"
+    },
+    {
+      "url": "https://vercel.com",
+      "reason": "repository_platform_prohibition_no_contact"
+    }
+  ],
+  "generatedAt": "2026-10-09T15:00:03.676Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-retention-cohort-20261009",
+  "selected": [
+    {
+      "url": "https://cnn.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://mozilla.org",
+      "role": "headless_or_control",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://macys.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://segment.com",
+      "role": "behavioral_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://healthline.com",
+      "role": "healthcare",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://microsoft.com",
+      "role": "saas_global",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://spotify.com",
+      "role": "global_cmp_heavy",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://geico.com",
+      "role": "finance_insurance",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://caltech.edu",
+      "role": "education",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://usa.gov",
+      "role": "government",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner authorized fresh repeat local A/R reliability scans at will and approved this broader paired cohort; no retry after no-go; holds and blocked/do_not_calibrate are not waived.",
+    "appliedToUrls": [
+      "https://att.com",
+      "https://bbc.com",
+      "https://caltech.edu",
+      "https://chase.com",
+      "https://cloudflare.com",
+      "https://cnn.com",
+      "https://consumerfinance.gov",
+      "https://fandango.com",
+      "https://forbes.com",
+      "https://ford.com",
+      "https://fullstory.com",
+      "https://gatech.edu",
+      "https://healthline.com",
+      "https://hotjar.com",
+      "https://hubspot.com",
+      "https://ikea.com",
+      "https://microsoft.com",
+      "https://mozilla.org",
+      "https://nih.gov",
+      "https://notion.so",
+      "https://plannedparenthood.org",
+      "https://progressive.com",
+      "https://segment.com",
+      "https://spotify.com",
+      "https://target.com",
+      "https://theguardian.com",
+      "https://toyota.com",
+      "https://usa.gov",
+      "https://walmart.com",
+      "https://weather.com"
+    ]
+  },
+  "manualHoldCheck": {
+    "registry": "packages/certscore-scan-core/src/public-test-contact-holds.ts",
+    "checkedBeforeContact": true,
+    "heldDomains": [
+      "sits.com"
+    ],
+    "selectedHoldMatches": []
+  }
+}

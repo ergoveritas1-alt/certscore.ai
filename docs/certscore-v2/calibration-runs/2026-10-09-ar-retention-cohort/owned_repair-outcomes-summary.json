@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-10-09T15:13:36.880Z",
+  "results": [
+    {
+      "url": "https://ergoveritas.com/testar1.html",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:08:54.241Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

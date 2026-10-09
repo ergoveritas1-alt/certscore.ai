@@ -1,0 +1,204 @@
+{
+  "generatedAt": "2026-10-09T15:13:36.879Z",
+  "results": [
+    {
+      "url": "https://mozilla.org",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:01:08.390Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://cnn.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:01:26.526Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "url": "https://mozilla.org",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:01:08.390Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://cnn.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:01:26.526Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "url": "https://macys.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:01:22.428Z",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "access_denied_or_forbidden_page",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "url": "https://segment.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:01:58.762Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://healthline.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:07.285Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://segment.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:01:58.762Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://healthline.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:07.285Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://microsoft.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:30.075Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:41.484Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://microsoft.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:30.075Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://spotify.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:41.484Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://geico.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:56.061Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://caltech.edu",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:03:10.672Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://geico.com",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:02:56.061Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://usa.gov",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:03:25.333Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://caltech.edu",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:03:10.672Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://usa.gov",
+      "status": "completed",
+      "scannerRuntimeStarted": true,
+      "completedAt": "2026-10-09T15:03:25.333Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

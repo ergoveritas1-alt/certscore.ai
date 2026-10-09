@@ -1,0 +1,9 @@
+{
+  "metricsSha256": "e3d66e11a0a3162499fcf0ce36f8fd7d97a0bdbd5ee3b1a8cb9d040deeb2452d",
+  "idempotentRerunIdentical": true,
+  "allPairedDeltasVerifiedFromOriginalVisitTimestamps": true,
+  "deltaDirection": "candidate minus baseline",
+  "uniqueContactCount": 66,
+  "validPacketCount": 42,
+  "missingPacketCount": 2
+}

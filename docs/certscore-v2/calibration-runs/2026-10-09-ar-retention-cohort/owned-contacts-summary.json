@@ -1,0 +1,84 @@
+{
+  "generatedAt": "2026-10-09T15:13:36.879Z",
+  "contactNoGoPolicy": "Each isolated lane contact inherits the authoritative consent-proof visit no-go outcome; not an independent action-lane diagnosis.",
+  "results": [
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar1.html",
+      "scanId": "afa286e6-7f1c-48d9-a9bd-4763b444007c",
+      "startedAt": "2026-10-09T15:01:57.206Z",
+      "completedAt": "2026-10-09T15:01:58.580Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar1.html",
+      "scanId": "70db5e3e-7920-4305-a9a3-f5017eba7420",
+      "startedAt": "2026-10-09T15:01:57.207Z",
+      "completedAt": "2026-10-09T15:01:58.911Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar1.html",
+      "scanId": "69eef395-e20f-4a43-9ea3-95ba04af61b1",
+      "startedAt": "2026-10-09T15:01:57.207Z",
+      "completedAt": "2026-10-09T15:02:07.864Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar2.html",
+      "scanId": "7a21cf4e-4d88-4c2a-a5a2-478bfb5de4f9",
+      "startedAt": "2026-10-09T15:02:09.017Z",
+      "completedAt": "2026-10-09T15:02:11.497Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar2.html",
+      "scanId": "870b29e9-800e-4ad0-8036-8d9ebaf93ea3",
+      "startedAt": "2026-10-09T15:02:09.019Z",
+      "completedAt": "2026-10-09T15:02:13.775Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar2.html",
+      "scanId": "2d78e342-1dca-4e96-8276-dd035fb74476",
+      "startedAt": "2026-10-09T15:02:09.019Z",
+      "completedAt": "2026-10-09T15:02:12.644Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

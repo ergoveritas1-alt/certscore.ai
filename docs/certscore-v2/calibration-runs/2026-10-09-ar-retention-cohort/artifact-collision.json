@@ -1,0 +1,9 @@
+{
+  "affected": "owned testar1 raw packets and screenshot paths overwritten by testar2",
+  "publicCohortAffected": false,
+  "contactsPreserved": "owned-summary.results",
+  "firstSummaryReconstructedNotRaw": true,
+  "secondPacketCopiedPreservingOriginalBytes": true,
+  "preventFutureCollision": "include exact URL pathname in owned output key",
+  "replacementPlan": "One fresh owned testar1 verification after persisting original contacts; no blocked/no-go retry, unchanged identity and windows"
+}

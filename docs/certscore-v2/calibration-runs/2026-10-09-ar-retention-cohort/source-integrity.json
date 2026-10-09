@@ -1,0 +1,16 @@
+{
+  "baseline": {
+    "path": "artifacts/ar-onetrust-confirmation-20261009/candidate",
+    "files": 1003,
+    "mismatches": []
+  },
+  "candidate": {
+    "path": "artifacts/ar-request-retention-20261009/candidate",
+    "files": 1005,
+    "mismatches": []
+  },
+  "candidateVsCurrentProductSource": {
+    "mismatches": [],
+    "filesChecked": 1005
+  }
+}

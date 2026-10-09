@@ -1,0 +1,4232 @@
+{
+  "scope": "Ten-site local counterbalanced diagnostic cohort plus two owned candidate canaries. Prior working baseline, not last deployed. Different live streams/local concurrency; no production or internet-wide reliability/speed claim.",
+  "counts": {
+    "baseline": {
+      "visits": 10,
+      "noGo": 1,
+      "usable": 9,
+      "accept": {
+        "packets": 10,
+        "clicks": 2,
+        "confirmed": 0,
+        "succeeded": 1,
+        "limited": 1,
+        "unclickedLimited": 1,
+        "overflow": 1,
+        "dropped": 15,
+        "replacements": 0
+      },
+      "reject": {
+        "packets": 10,
+        "clicks": 1,
+        "confirmed": 0,
+        "succeeded": 1,
+        "limited": 0,
+        "unclickedLimited": 1,
+        "overflow": 0,
+        "dropped": 0,
+        "replacements": 0
+      }
+    },
+    "candidate": {
+      "visits": 9,
+      "noGo": 0,
+      "usable": 9,
+      "accept": {
+        "packets": 9,
+        "clicks": 2,
+        "confirmed": 0,
+        "succeeded": 1,
+        "limited": 1,
+        "unclickedLimited": 0,
+        "overflow": 1,
+        "dropped": 13,
+        "replacements": 5
+      },
+      "reject": {
+        "packets": 9,
+        "clicks": 1,
+        "confirmed": 0,
+        "succeeded": 1,
+        "limited": 0,
+        "unclickedLimited": 0,
+        "overflow": 0,
+        "dropped": 0,
+        "replacements": 0
+      }
+    }
+  },
+  "pairing": {
+    "attemptedSites": 10,
+    "usablePairs": 9,
+    "medianVisitDeltaMs": -54,
+    "p95VisitDeltaMs": 3344
+  },
+  "pairs": [
+    {
+      "url": "https://mozilla.org",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": 809,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "candidateObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://cnn.com",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": -2081,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "candidateObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://macys.com",
+      "paired": false,
+      "usable": false,
+      "durationDeltaMs": null,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "geometry_unavailable",
+        "captureStatus": "no_evidence"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://segment.com",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": 3344,
+      "baselineObservation": {
+        "accept": true,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_with_controls",
+        "captureStatus": "observed"
+      },
+      "candidateObservation": {
+        "accept": true,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "partial",
+        "captureStatus": "observed"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://healthline.com",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": -54,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "observed"
+      },
+      "candidateObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "observed"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://microsoft.com",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": -1305,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "observed"
+      },
+      "candidateObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://spotify.com",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": -347,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_with_controls",
+        "captureStatus": "observed"
+      },
+      "candidateObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_with_controls",
+        "captureStatus": "observed"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://geico.com",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": -121,
+      "baselineObservation": {
+        "accept": true,
+        "reject": true,
+        "options": true,
+        "inventoryOutcome": "complete_with_controls",
+        "captureStatus": "observed"
+      },
+      "candidateObservation": {
+        "accept": true,
+        "reject": true,
+        "options": true,
+        "inventoryOutcome": "complete_with_controls",
+        "captureStatus": "observed"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://caltech.edu",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": -33,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "candidateObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    },
+    {
+      "url": "https://usa.gov",
+      "paired": true,
+      "usable": true,
+      "durationDeltaMs": 122,
+      "baselineObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "candidateObservation": {
+        "accept": false,
+        "reject": false,
+        "options": false,
+        "inventoryOutcome": "complete_empty",
+        "captureStatus": "no_evidence"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        },
+        {
+          "action": "reject",
+          "baseline": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "candidate": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          }
+        }
+      ]
+    }
+  ],
+  "sites": [
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 15812,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10636,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/mozilla.org/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.mozilla.org/en-US/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "43E82C6BCC1ED85B0A27B1A1C3F62540"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 2072,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/mozilla.org/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.mozilla.org/en-US/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "43E82C6BCC1ED85B0A27B1A1C3F62540"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/mozilla.org/candidate-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/mozilla.org/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "b1664f8a8b7d6cbf59bfbcda0d761f455e58f1bafe42cb70b32476ed61376f6e",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 55,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 691,
+            "resolverMs": 13008,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14827,
+            "readyAtMs": 14833
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:unregistered_cmp_candidate:566426007375e56d"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/mozilla.org/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "5f8da08efae575dc54b88fa252f7768cdf6136d6bebc5b48c970d06e065b3f15",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 55,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 674,
+            "resolverMs": 11157,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15009,
+            "readyAtMs": 15014
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "cmp_action_coverage:reject:unregistered_cmp_candidate:566426007375e56d"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [
+        "potential_security_challenge",
+        "scan_no_go_corroborated"
+      ],
+      "durationMs": 25528,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 22224,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.cnn.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "319468FE5ED77F11C8CA2278B5631F29"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 9709,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.cnn.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "319468FE5ED77F11C8CA2278B5631F29"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 2124,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.cnn.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "319468FE5ED77F11C8CA2278B5631F29"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/baseline-1/consent/screenshot-pre-consent-settled.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/cnn.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "9dc9beb20a345dd3dd36f146263f3e6078c2d794cb2976696179f23d472b471a",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 525,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 193,
+            "resolverMs": 13134,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14406,
+            "readyAtMs": 14410
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:OneTrust:6b060c18698f23c8"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/cnn.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "85500e991ecb550e8a16e9a406a7444854db1b4d15f75b41e2d04e4fe0f1036b",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 578,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 168,
+            "resolverMs": 13003,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 18010,
+            "readyAtMs": 18020
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:28c8e76457c88012"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 15003,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10365,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/mozilla.org/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.mozilla.org/en-US/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "66B5CAC9364E73B1B3D75D016A4A25E7"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 821,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/mozilla.org/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.mozilla.org/en-US/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "66B5CAC9364E73B1B3D75D016A4A25E7"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/mozilla.org/baseline-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/mozilla.org/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "333f133c98be603b0c35e919f81f5ba0567f62b8fcdf0be809d37acc9effa606",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 56,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 284,
+            "resolverMs": 13193,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14105,
+            "readyAtMs": 14107
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:unregistered_cmp_candidate:566426007375e56d"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/mozilla.org/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "58bc040ea1b7dd349f2305db1d830720f0b217868b15703e3370a0af63f169c3",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 55,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 467,
+            "resolverMs": 11036,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13917,
+            "readyAtMs": 13929
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "cmp_action_coverage:reject:unregistered_cmp_candidate:566426007375e56d"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [
+        "potential_security_challenge",
+        "scan_no_go_corroborated"
+      ],
+      "durationMs": 23447,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10556,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.cnn.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "3EFFBEFB48410E05C379EE8EC0D5B2E7"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 6990,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.cnn.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "3EFFBEFB48410E05C379EE8EC0D5B2E7"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1156,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.cnn.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "3EFFBEFB48410E05C379EE8EC0D5B2E7"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/cnn.com/candidate-1/consent/screenshot-pre-consent-settled.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/cnn.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "c72874e9eb7491888675df4e9e8b3f3b79cef4c86ba35a10060566b12aee7131",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 682,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 134,
+            "resolverMs": 13000,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13762,
+            "readyAtMs": 13766
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:OneTrust:fd8f85518b8d741e"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/cnn.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "c97bbf18e81ecb8fd3d709da54ab5d19b49037d2f778bcf9178a611f55e178d9",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 446,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 357,
+            "resolverMs": 13002,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15635,
+            "readyAtMs": 15644
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:dfd3bb0dce1dee93"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://macys.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": true,
+      "noGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated"
+      ],
+      "durationMs": 14031,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "geometry_unavailable",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10251,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/macys.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.macys.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "99CA7873CFDC45E2B51916B15CDD28D9"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 896,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/macys.com/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.macys.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "99CA7873CFDC45E2B51916B15CDD28D9"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/macys.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/macys.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "3c004128ba1c38d371ee7a23aabdf0d2824ff8646accda474fa6bf1428468247",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "aborted",
+            "acceptanceExercised": false,
+            "reason": "abort_requested_during_control_resolution",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 16,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 511,
+            "resolverMs": 11655,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 12756,
+            "readyAtMs": 12762
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/macys.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "68333c367496296bd57ebc716a3d497225abee73a71c9db65e40cd22dd46db84",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "aborted",
+            "refusalExercised": false,
+            "reason": "abort_requested_during_control_resolution",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 16,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 478,
+            "resolverMs": 10052,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 12751,
+            "readyAtMs": 12765
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 19840,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "partial",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_geometry_proof",
+            "capturedAtMs": 18702,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "url": "https://www.twilio.com/en-us/segment",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "E662B2FF4BFD7B479AA5BEC63652AD93"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10315,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.twilio.com/en-us/segment",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "E662B2FF4BFD7B479AA5BEC63652AD93"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 6290,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.twilio.com/en-us/segment",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "E662B2FF4BFD7B479AA5BEC63652AD93"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1315,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.twilio.com/en-us/segment",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "E662B2FF4BFD7B479AA5BEC63652AD93"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/segment.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "0b9219de034f321cace096f947dfeba2b57175c36a0dd47f428ff63479a03aef",
+          "click": "completed",
+          "found": true,
+          "cmp": "TrustArc",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 4069,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 170,
+            "requestsDroppedAfterAction": 13,
+            "postActionRetention": {
+              "policyVersion": "priority_bounded_action_requests.v1",
+              "requestsObserved": 205,
+              "requestsRetained": 192,
+              "replacements": 5,
+              "priorityEvaluations": 13,
+              "omitted": {
+                "delivery_asset": 0,
+                "known_other": 1,
+                "unknown": 4,
+                "tracking": 8,
+                "consent": 0,
+                "document": 0,
+                "unclassified": 0
+              }
+            }
+          },
+          "retainedNetworkRows": 192,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "capture": {
+            "stopReason": "window_elapsed",
+            "requestedWindowMs": 3000,
+            "elapsedMs": 3014
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 551,
+            "resolverMs": 2567,
+            "confirmationMs": 2003,
+            "observationMs": 956,
+            "totalMs": 7098,
+            "readyAtMs": 7107
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/segment.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "1745a856a8151240656282308b789d8bfb2473f7ec977f2514d6ae408a54961c",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 121,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 419,
+            "resolverMs": 13123,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15740,
+            "readyAtMs": 15745
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:TrustArc:f6b983df3250ab4c"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 20393,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10487,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.healthline.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "7CBF283BF450760A0A393CB8603AD6FA"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 6158,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.healthline.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "7CBF283BF450760A0A393CB8603AD6FA"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1182,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.healthline.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "7CBF283BF450760A0A393CB8603AD6FA"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/baseline-1/consent/screenshot-pre-consent-settled.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/healthline.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "b8dd2c13a90d06656ca2bef96a29c4b864c33dd27e188daf6f41d954d0057c62",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 103,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 378,
+            "resolverMs": 13001,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13969,
+            "readyAtMs": 13974
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:OneTrust:51b3c86fb14c582b"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/healthline.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "7721045cbe46d6eb65a8befa7d7f96e4a65371b617c8a5e5425db29ea7fdb1ea",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 106,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 462,
+            "resolverMs": 13094,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15794,
+            "readyAtMs": 15807
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:12cbd3692551172a"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 16496,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10348,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.twilio.com/en-us/segment",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "5CAE6B074D3D33F602B0AF5D3DD567FC"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 6439,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.twilio.com/en-us/segment",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "5CAE6B074D3D33F602B0AF5D3DD567FC"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1542,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.twilio.com/en-us/segment",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "5CAE6B074D3D33F602B0AF5D3DD567FC"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/segment.com/baseline-1/consent/screenshot-pre-consent.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/segment.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "1b17660cd512d0bf04de65d6f8cd8f0c903900a84da9427e2ac3cfde0b9535ea",
+          "click": "completed",
+          "found": true,
+          "cmp": "TrustArc",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 4006,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "limited",
+            "clickCompleted": true,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 166,
+            "requestsDroppedAfterAction": 15
+          },
+          "retainedNetworkRows": 192,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "capture": {
+            "stopReason": "window_elapsed",
+            "requestedWindowMs": 3000,
+            "elapsedMs": 3012
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 506,
+            "resolverMs": 2897,
+            "confirmationMs": 2061,
+            "observationMs": 914,
+            "totalMs": 7043,
+            "readyAtMs": 7050
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/segment.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "41e3a9426a8beb993f31ad350626e4bf3c6c374dca80fa73205c2502ebb32b20",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 128,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 533,
+            "resolverMs": 13072,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15851,
+            "readyAtMs": 15857
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:TrustArc:1b9c63ce2c87c7d1"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 20339,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10545,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.healthline.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "7C0881366840674DD4BF57F4A3FD38B0"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 6198,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.healthline.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "7C0881366840674DD4BF57F4A3FD38B0"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1190,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.healthline.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "7C0881366840674DD4BF57F4A3FD38B0"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/healthline.com/candidate-1/consent/screenshot-pre-consent-settled.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/healthline.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "5bd32e26b2910da1ee82da7668d3a61ea086d5b8cba93a992f3f82f567739cc4",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 121,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 333,
+            "resolverMs": 13051,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14146,
+            "readyAtMs": 14152
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:OneTrust:8efcce5f1e404507"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/healthline.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "77fc6b65c538b6085c02b1ec93b423fd3dccbee139200fbb53b288c17974e553",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 102,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 416,
+            "resolverMs": 13088,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15865,
+            "readyAtMs": 15877
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:12cbd3692551172a"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 15002,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 12133,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/microsoft.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.microsoft.com/en-us",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "F15CCD4B9BAC3642A99FE7267E74CF7A"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 2220,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/microsoft.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.microsoft.com/en-us",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "F15CCD4B9BAC3642A99FE7267E74CF7A"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/microsoft.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/microsoft.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "823eb168b804a192428f48295de744838d8ca176cdf5a927660e4d98fa231487",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 805,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 719,
+            "resolverMs": 13000,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14322,
+            "readyAtMs": 14326
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:3ca78718925c18c9"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/microsoft.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "4b5ec4fe8881052e0ec9ae17e2fbb0a5290d71c0f5a69c317647e1d17df8c783",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 769,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 521,
+            "resolverMs": 11076,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13909,
+            "readyAtMs": 13912
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "cmp_action_coverage:reject:no_cmp_evidence:98d2c548defccbf6"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 17266,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 8327,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://open.spotify.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "4B93C9F75450781C775AFA720575F3C4"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 4470,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://open.spotify.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "4B93C9F75450781C775AFA720575F3C4"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1518,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://open.spotify.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "4B93C9F75450781C775AFA720575F3C4"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/baseline-1/consent/screenshot-pre-consent-settled.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/spotify.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "56f8bb833d10662ecca35c19877bc44066a862d8fd8988fe044118688ee58ed2",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 106,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 632,
+            "resolverMs": 13027,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14335,
+            "readyAtMs": 14340
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:OneTrust:0284de375770b14f"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/spotify.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "b3129bc5cab699a775cb0270972c3579db8dbfcbbbc8fca750d0da163794078a",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 119,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 561,
+            "resolverMs": 13012,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 16012,
+            "readyAtMs": 16031
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:0284de375770b14f"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 16307,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 14506,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/microsoft.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.microsoft.com/en-us",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "FDCAFDDD8F3FB44C8E93A5FD8F1009B2"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 2800,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/microsoft.com/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.microsoft.com/en-us",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "FDCAFDDD8F3FB44C8E93A5FD8F1009B2"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/microsoft.com/baseline-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/microsoft.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "f1dd4845caba765712bd7255d27942d4f000b8a6ea695f5b71d2a02102256e3e",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 640,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 456,
+            "resolverMs": 13022,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14445,
+            "readyAtMs": 14450
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:5ee10075450f0a0b"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/microsoft.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "2b0f34b4b2f01e546f4a0156e1b8c5a5874ba807527935a76759410d8d3a616d",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 643,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 524,
+            "resolverMs": 11319,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14224,
+            "readyAtMs": 14237
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "cmp_action_coverage:reject:no_cmp_evidence:23c4ecef53a6a8f2"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 16919,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 8332,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://open.spotify.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "208CFFA18C82473074CC4906FB8C98E6"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 4550,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://open.spotify.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "208CFFA18C82473074CC4906FB8C98E6"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1417,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://open.spotify.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "208CFFA18C82473074CC4906FB8C98E6"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/spotify.com/candidate-1/consent/screenshot-pre-consent-settled.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/spotify.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "2dc976b4c6a70d88b8889781b81b244c3d5225945396bc26dce8308c89d8be3a",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 121,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 585,
+            "resolverMs": 13001,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14199,
+            "readyAtMs": 14238
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:recognized_recipe_not_resolved:OneTrust:a7b47cb5e8a33573"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/spotify.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "f11103b5caf9158f48f21ef5936ced20dfda438c70f4ae335cef7017019bea49",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 124,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 563,
+            "resolverMs": 13075,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 15921,
+            "readyAtMs": 15927
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:2",
+            "adaptive_late_control_extension_applied:2000",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:reject:recognized_recipe_not_resolved:OneTrust:0284de375770b14f"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 12917,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": true,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_geometry_proof",
+            "capturedAtMs": 6658,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "url": "https://www.geico.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "92639E99EF5CD6EAD3BE27FDF09ABC54"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 6289,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.geico.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "92639E99EF5CD6EAD3BE27FDF09ABC54"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1311,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.geico.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "92639E99EF5CD6EAD3BE27FDF09ABC54"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/geico.com/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "362ed1e4fda75bfe3968f3ad6eec55d9691f8c1f7d69b961ca0894278a3b9bc5",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 3089,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 112,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 110,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "capture": {
+            "stopReason": "window_elapsed",
+            "requestedWindowMs": 3000,
+            "elapsedMs": 3006
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 568,
+            "resolverMs": 1695,
+            "confirmationMs": 2043,
+            "observationMs": 929,
+            "totalMs": 6121,
+            "readyAtMs": 6130
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/geico.com/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "2b2ffa4a5a63e3c062000c8d753718a5fcbcf5b7c9be5f9aae967ebf57204064",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "unconfirmed",
+            "refusalExercised": false,
+            "actionDispatchedAtMs": 4024,
+            "reason": "cmp_rejection_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 110,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "capture": {
+            "stopReason": "window_elapsed",
+            "requestedWindowMs": 8000,
+            "elapsedMs": 8007
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 941,
+            "resolverMs": 764,
+            "confirmationMs": 2001,
+            "observationMs": 5959,
+            "totalMs": 12037,
+            "readyAtMs": 12045
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "refusal_registration_not_confirmed"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 14606,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10288,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/caltech.edu/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.caltech.edu/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "A491FB0CC2C3E7EDB9236685DECDC1CD"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1085,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/caltech.edu/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.caltech.edu/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "A491FB0CC2C3E7EDB9236685DECDC1CD"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/caltech.edu/baseline-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/caltech.edu/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "6e2d3dd558f639f0ef0f1a7df665976740be1c0bcf60748f5dc9557c447731d8",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 70,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 488,
+            "resolverMs": 13002,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13954,
+            "readyAtMs": 13961
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:1f0b78bd797d37fe"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/caltech.edu/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "05795b10d58cc167d1db6711f161f92a34e94c57d5ac6913a2865883a54e3658",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 70,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 529,
+            "resolverMs": 11030,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13756,
+            "readyAtMs": 13762
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:1f0b78bd797d37fe"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 13038,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": true,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_geometry_proof",
+            "capturedAtMs": 7019,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/baseline-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "url": "https://www.geico.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "5CB9A498C297B9DC5C0821A12B00C87A"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 6714,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/baseline-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://www.geico.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "5CB9A498C297B9DC5C0821A12B00C87A"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1656,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.geico.com/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "5CB9A498C297B9DC5C0821A12B00C87A"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/geico.com/baseline-1/consent/screenshot-pre-consent-geometry-proof.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/geico.com/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "87bc292fa05bcc5a092e158f4829ce560f79062c69a077eccb890e9c4fc27360",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 3533,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 117,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 110,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "capture": {
+            "stopReason": "window_elapsed",
+            "requestedWindowMs": 3000,
+            "elapsedMs": 3042
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 648,
+            "resolverMs": 2146,
+            "confirmationMs": 2014,
+            "observationMs": 966,
+            "totalMs": 6583,
+            "readyAtMs": 6588
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/geico.com/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "17accebabd468969e1e1fbd0212b91933a67835df9602f94c5c259a3c94f1cba",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "unconfirmed",
+            "refusalExercised": false,
+            "actionDispatchedAtMs": 4200,
+            "reason": "cmp_rejection_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 95,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 96,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "capture": {
+            "stopReason": "window_elapsed",
+            "requestedWindowMs": 8000,
+            "elapsedMs": 8006
+          },
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 880,
+            "resolverMs": 1059,
+            "confirmationMs": 2019,
+            "observationMs": 5947,
+            "totalMs": 12205,
+            "readyAtMs": 12216
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "refusal_registration_not_confirmed"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 14694,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10207,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/usa.gov/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.usa.gov/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "BF1A5D4937128F66AD2D0F08B45CF346"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 827,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/usa.gov/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.usa.gov/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "BF1A5D4937128F66AD2D0F08B45CF346"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/usa.gov/candidate-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/usa.gov/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "cf1f9e88d5e792846ad0087f5ca6967e9fa3cc6ee469c5804c05adfd2b3ce6ca",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 45,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 447,
+            "resolverMs": 13001,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 14022,
+            "readyAtMs": 14027
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:f79935b8b3511be3"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/usa.gov/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "0986d99e5417dd346b4afd38d8c35896f7c80b9f5c92963fd7b55ddf15af5092",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 45,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 609,
+            "resolverMs": 11025,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13831,
+            "readyAtMs": 13842
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:f79935b8b3511be3"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 14573,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10308,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/caltech.edu/candidate-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.caltech.edu/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "C9311C8F3C7CE42CCF7A59F9C32CABC7"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1023,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/caltech.edu/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.caltech.edu/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "C9311C8F3C7CE42CCF7A59F9C32CABC7"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/caltech.edu/candidate-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/caltech.edu/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "b194614caaab1844424e398e572c6a5f1f366144e68d218cc70341a1b82763a2",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 70,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 378,
+            "resolverMs": 13002,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13942,
+            "readyAtMs": 13944
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:1f0b78bd797d37fe"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/caltech.edu/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "af6384aff6c5b380ea627eef76d4d43a7c914dcea35ee48ea898c470f88efaef",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 70,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 624,
+            "resolverMs": 11031,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13853,
+            "readyAtMs": 13864
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:1f0b78bd797d37fe"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "version": "baseline",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 14572,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": false,
+            "reject": false,
+            "options": false,
+            "inventoryOutcome": "complete_empty",
+            "captureStatus": "no_evidence"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_full_page",
+            "capturedAtMs": 10188,
+            "captureMethod": "primary_full_page",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/usa.gov/baseline-1/consent/screenshot-pre-consent-full-page.jpg",
+            "url": "https://www.usa.gov/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "25E26AE069FB1E8F780AA08C059CB2D5"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 722,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/usa.gov/baseline-1/consent/screenshot-pre-consent.png",
+            "url": "https://www.usa.gov/",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "25E26AE069FB1E8F780AA08C059CB2D5"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/visits/usa.gov/baseline-1/consent/screenshot-pre-consent-full-page.jpg"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/usa.gov/baseline-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "6e811a294e0a967a7dc8fa302b9fa568adf738afe9bce548a0470726cd7108fc",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "acceptanceExercised": false,
+            "reason": "deterministic_accept_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 45,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 502,
+            "resolverMs": 13002,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13997,
+            "readyAtMs": 14002
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "resolver_search_budget_exhausted",
+            "cmp_action_coverage:accept:no_cmp_evidence:f79935b8b3511be3"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/visits/usa.gov/baseline-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "2ab8c5a373f2c6de427b9ea31368d8bbe800bcb2f0cae587578f1787891101d5",
+          "click": "not_attempted",
+          "found": false,
+          "registration": {
+            "status": "not_attempted",
+            "refusalExercised": false,
+            "reason": "deterministic_reject_control_not_found",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "not_attempted",
+            "clickCompleted": false,
+            "observationCompleted": false,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 45,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 476,
+            "resolverMs": 11031,
+            "confirmationMs": 0,
+            "observationMs": 0,
+            "totalMs": 13709,
+            "readyAtMs": 13725
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:1",
+            "cmp_action_coverage:reject:no_cmp_evidence:f79935b8b3511be3"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar1.html",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 11388,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": true,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_geometry_proof",
+            "capturedAtMs": 1111,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "url": "https://ergoveritas.com/testar1.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "22621242F9E3A7652190FE738D48F17F"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 997,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://ergoveritas.com/testar1.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "22621242F9E3A7652190FE738D48F17F"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 666,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://ergoveritas.com/testar1.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "22621242F9E3A7652190FE738D48F17F"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetMissing": true
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetMissing": true
+        }
+      ]
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar2.html",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 5914,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": true,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_geometry_proof",
+            "capturedAtMs": 2041,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "url": "https://ergoveritas.com/testar2.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "031F311B802579162D4C7F4B1453D148"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 1709,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://ergoveritas.com/testar2.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "031F311B802579162D4C7F4B1453D148"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 1253,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://ergoveritas.com/testar2.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "031F311B802579162D4C7F4B1453D148"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/candidate-1/consent/screenshot-pre-consent-geometry-proof.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/testar2.html/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "15f7ae2d8fb5b2122406f43ed9570aeeb442be5705b270c297c5902236be34d8",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "unconfirmed",
+            "acceptanceExercised": false,
+            "actionDispatchedAtMs": 1723,
+            "reason": "cmp_acceptance_state_not_observed",
+            "witnesses": []
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": false
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 6,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "capture": {
+            "stopReason": "window_elapsed",
+            "requestedWindowMs": 3000,
+            "elapsedMs": 3006
+          },
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 281,
+            "resolverMs": 227,
+            "confirmationMs": 2008,
+            "observationMs": 941,
+            "totalMs": 4715,
+            "readyAtMs": 4731
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/owned-visits/ergoveritas.com/testar2.html/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "a637f50fa7cded1e22f0d8d1e273cccb9cf445fab258813c9a57671a67455401",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "confirmed",
+            "refusalExercised": true,
+            "actionDispatchedAtMs": 3141,
+            "refusalRegisteredAtMs": 3179,
+            "witnesses": [
+              {
+                "witnessType": "tcf_user_action_complete",
+                "observedAtMs": 3179,
+                "expectedState": "all_configured_purposes_denied",
+                "observedStateHash": "637cfd1b44ae796e110fae7c1a856cbb852bdd8312602843ad9b48dc05885d4e",
+                "corroboratingOnly": false
+              },
+              {
+                "witnessType": "banner_transition",
+                "observedAtMs": 3179,
+                "corroboratingOnly": true
+              }
+            ]
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded_with_confirmation",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": true
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 6,
+          "postRegistrationNonEssentialRequests": 3,
+          "observationTypes": [
+            "post_refusal_non_essential_activity",
+            "post_refusal_non_essential_activity",
+            "post_refusal_non_essential_activity",
+            "post_refusal_non_essential_activity",
+            "post_refusal_non_essential_activity",
+            "post_refusal_non_essential_activity"
+          ],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 626,
+            "resolverMs": 200,
+            "confirmationMs": 12,
+            "observationMs": 407,
+            "observationEndedAtMs": 3598,
+            "observationExitReason": "non_essential_storage_write_observed",
+            "totalMs": 3593,
+            "readyAtMs": 3604
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:0",
+            "registration_timestamp_is_observation_upper_bound",
+            "observation_early_exit:non_essential_storage_write_observed"
+          ]
+        }
+      ]
+    },
+    {
+      "group": "owned_repair",
+      "url": "https://ergoveritas.com/testar1.html",
+      "version": "candidate",
+      "visitStatus": "completed",
+      "noGo": false,
+      "noGoReasons": [],
+      "durationMs": 11175,
+      "consent": {
+        "status": "completed",
+        "moduleStatus": "completed",
+        "observations": [
+          {
+            "accept": true,
+            "reject": true,
+            "options": true,
+            "inventoryOutcome": "complete_with_controls",
+            "captureStatus": "observed"
+          }
+        ],
+        "screenshots": [
+          {
+            "artifactId": "screenshot_pre_consent_geometry_proof",
+            "capturedAtMs": 1117,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-repair-visits/ergoveritas.com/_testar1.html/candidate-1/consent/screenshot-pre-consent-geometry-proof.png",
+            "url": "https://ergoveritas.com/testar1.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "36C2BC91EB4C814E94AA3381DC4195C8"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent_settled",
+            "capturedAtMs": 1034,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-repair-visits/ergoveritas.com/_testar1.html/candidate-1/consent/screenshot-pre-consent-settled.png",
+            "url": "https://ergoveritas.com/testar1.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "36C2BC91EB4C814E94AA3381DC4195C8"
+            },
+            "pagePhase": "network_idle",
+            "consentStateAtTime": "pre_consent"
+          },
+          {
+            "artifactId": "screenshot_pre_consent",
+            "capturedAtMs": 705,
+            "captureMethod": "primary_viewport_fallback",
+            "path": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-repair-visits/ergoveritas.com/_testar1.html/candidate-1/consent/screenshot-pre-consent.png",
+            "url": "https://ergoveritas.com/testar1.html",
+            "documentIdentity": {
+              "source": "cdp_loader_id",
+              "token": "36C2BC91EB4C814E94AA3381DC4195C8"
+            },
+            "pagePhase": "dom_content_loaded",
+            "consentStateAtTime": "pre_consent"
+          }
+        ],
+        "geometryScreenshot": "/Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-repair-visits/ergoveritas.com/_testar1.html/candidate-1/consent/screenshot-pre-consent-geometry-proof.png"
+      },
+      "actions": [
+        {
+          "action": "accept",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/owned-repair-visits/ergoveritas.com/_testar1.html/candidate-1/accept/PostAcceptEvidencePacket.json",
+          "packetSha256": "639b40c3d26e1807cd7f5226fa9ca84260bb3b3f324cac12b52c05cf56433ab7",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "confirmed",
+            "acceptanceExercised": true,
+            "actionDispatchedAtMs": 1031,
+            "acceptanceRegisteredAtMs": 1070,
+            "witnesses": [
+              {
+                "witnessType": "tcf_user_action_complete",
+                "observedAtMs": 1070,
+                "expectedState": "configured_purposes_granted_after_accept",
+                "observedStateHash": "9f85e35973d5c3fcdbd14a29c05b769cd6f8f5ebfaf68cb7a23cc9481d3528a7",
+                "corroboratingOnly": false
+              },
+              {
+                "witnessType": "banner_transition",
+                "observedAtMs": 1070,
+                "corroboratingOnly": true
+              }
+            ]
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded_with_confirmation",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": true
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 6,
+          "postRegistrationNonEssentialRequests": 3,
+          "observationTypes": [
+            "post_accept_non_essential_activity",
+            "post_accept_non_essential_activity",
+            "post_accept_non_essential_activity",
+            "post_accept_non_essential_activity",
+            "post_accept_non_essential_activity"
+          ],
+          "timing": {
+            "dispatchDelayMs": 0,
+            "navigationMs": 278,
+            "resolverMs": 111,
+            "confirmationMs": 0,
+            "observationMs": 538,
+            "observationEndedAtMs": 1609,
+            "observationExitReason": "non_essential_request_observed",
+            "totalMs": 1617,
+            "readyAtMs": 1622
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "registration_timestamp_is_observation_upper_bound",
+            "observation_early_exit:non_essential_request_observed"
+          ]
+        },
+        {
+          "action": "reject",
+          "status": "completed",
+          "packetPath": "artifacts/ar-retention-cohort-20261009/owned-repair-visits/ergoveritas.com/_testar1.html/candidate-1/reject/PostRefusalEvidencePacket.json",
+          "packetSha256": "56bee79da5358a63b646f54816190d1c2aa351d52cdaf4ee56208460f29b7c9f",
+          "click": "completed",
+          "found": true,
+          "cmp": "OneTrust",
+          "registration": {
+            "status": "confirmed",
+            "refusalExercised": true,
+            "actionDispatchedAtMs": 2578,
+            "refusalRegisteredAtMs": 2604,
+            "witnesses": [
+              {
+                "witnessType": "tcf_user_action_complete",
+                "observedAtMs": 2604,
+                "expectedState": "all_configured_purposes_denied",
+                "observedStateHash": "7207fdbe2ab31d3b898a0ee8c0f266c7ee5a7df659366dcc103b21a8f2fe4866",
+                "corroboratingOnly": false
+              },
+              {
+                "witnessType": "banner_transition",
+                "observedAtMs": 2604,
+                "corroboratingOnly": true
+              }
+            ]
+          },
+          "execution": {
+            "policyVersion": "choice_path_execution.v1",
+            "status": "succeeded_with_confirmation",
+            "clickCompleted": true,
+            "observationCompleted": true,
+            "consentConfirmed": true
+          },
+          "captureCoverage": {
+            "requestsDroppedBeforeAction": 0,
+            "requestsDroppedAfterAction": 0
+          },
+          "retainedNetworkRows": 3,
+          "postRegistrationNonEssentialRequests": 0,
+          "observationTypes": [],
+          "timing": {
+            "dispatchDelayMs": 500,
+            "navigationMs": 229,
+            "resolverMs": 169,
+            "confirmationMs": 1,
+            "observationMs": 8001,
+            "observationEndedAtMs": 10608,
+            "observationExitReason": "window_elapsed",
+            "totalMs": 10607,
+            "readyAtMs": 10611
+          },
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:0",
+            "registration_timestamp_is_observation_upper_bound"
+          ]
+        }
+      ]
+    }
+  ],
+  "validation": [
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "b1664f8a8b7d6cbf59bfbcda0d761f455e58f1bafe42cb70b32476ed61376f6e"
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "5f8da08efae575dc54b88fa252f7768cdf6136d6bebc5b48c970d06e065b3f15"
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "9dc9beb20a345dd3dd36f146263f3e6078c2d794cb2976696179f23d472b471a"
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "85500e991ecb550e8a16e9a406a7444854db1b4d15f75b41e2d04e4fe0f1036b"
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "333f133c98be603b0c35e919f81f5ba0567f62b8fcdf0be809d37acc9effa606"
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "58bc040ea1b7dd349f2305db1d830720f0b217868b15703e3370a0af63f169c3"
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "c72874e9eb7491888675df4e9e8b3f3b79cef4c86ba35a10060566b12aee7131"
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "c97bbf18e81ecb8fd3d709da54ab5d19b49037d2f778bcf9178a611f55e178d9"
+    },
+    {
+      "group": "public",
+      "url": "https://macys.com",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "3c004128ba1c38d371ee7a23aabdf0d2824ff8646accda474fa6bf1428468247"
+    },
+    {
+      "group": "public",
+      "url": "https://macys.com",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "68333c367496296bd57ebc716a3d497225abee73a71c9db65e40cd22dd46db84"
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "0b9219de034f321cace096f947dfeba2b57175c36a0dd47f428ff63479a03aef"
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "1745a856a8151240656282308b789d8bfb2473f7ec977f2514d6ae408a54961c"
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "b8dd2c13a90d06656ca2bef96a29c4b864c33dd27e188daf6f41d954d0057c62"
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "7721045cbe46d6eb65a8befa7d7f96e4a65371b617c8a5e5425db29ea7fdb1ea"
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "1b17660cd512d0bf04de65d6f8cd8f0c903900a84da9427e2ac3cfde0b9535ea"
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "41e3a9426a8beb993f31ad350626e4bf3c6c374dca80fa73205c2502ebb32b20"
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "5bd32e26b2910da1ee82da7668d3a61ea086d5b8cba93a992f3f82f567739cc4"
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "77fc6b65c538b6085c02b1ec93b423fd3dccbee139200fbb53b288c17974e553"
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "823eb168b804a192428f48295de744838d8ca176cdf5a927660e4d98fa231487"
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "4b5ec4fe8881052e0ec9ae17e2fbb0a5290d71c0f5a69c317647e1d17df8c783"
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "56f8bb833d10662ecca35c19877bc44066a862d8fd8988fe044118688ee58ed2"
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "b3129bc5cab699a775cb0270972c3579db8dbfcbbbc8fca750d0da163794078a"
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "f1dd4845caba765712bd7255d27942d4f000b8a6ea695f5b71d2a02102256e3e"
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "2b0f34b4b2f01e546f4a0156e1b8c5a5874ba807527935a76759410d8d3a616d"
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "2dc976b4c6a70d88b8889781b81b244c3d5225945396bc26dce8308c89d8be3a"
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "f11103b5caf9158f48f21ef5936ced20dfda438c70f4ae335cef7017019bea49"
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "362ed1e4fda75bfe3968f3ad6eec55d9691f8c1f7d69b961ca0894278a3b9bc5"
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "2b2ffa4a5a63e3c062000c8d753718a5fcbcf5b7c9be5f9aae967ebf57204064"
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "6e2d3dd558f639f0ef0f1a7df665976740be1c0bcf60748f5dc9557c447731d8"
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "05795b10d58cc167d1db6711f161f92a34e94c57d5ac6913a2865883a54e3658"
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "87bc292fa05bcc5a092e158f4829ce560f79062c69a077eccb890e9c4fc27360"
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "17accebabd468969e1e1fbd0212b91933a67835df9602f94c5c259a3c94f1cba"
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "cf1f9e88d5e792846ad0087f5ca6967e9fa3cc6ee469c5804c05adfd2b3ce6ca"
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "0986d99e5417dd346b4afd38d8c35896f7c80b9f5c92963fd7b55ddf15af5092"
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "b194614caaab1844424e398e572c6a5f1f366144e68d218cc70341a1b82763a2"
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "af6384aff6c5b380ea627eef76d4d43a7c914dcea35ee48ea898c470f88efaef"
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "version": "baseline",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "6e811a294e0a967a7dc8fa302b9fa568adf738afe9bce548a0470726cd7108fc"
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "version": "baseline",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "2ab8c5a373f2c6de427b9ea31368d8bbe800bcb2f0cae587578f1787891101d5"
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar1.html",
+      "version": "candidate",
+      "action": "accept",
+      "packetMissing": true
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar1.html",
+      "version": "candidate",
+      "action": "reject",
+      "packetMissing": true
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar2.html",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "15f7ae2d8fb5b2122406f43ed9570aeeb442be5705b270c297c5902236be34d8"
+    },
+    {
+      "group": "owned",
+      "url": "https://ergoveritas.com/testar2.html",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "a637f50fa7cded1e22f0d8d1e273cccb9cf445fab258813c9a57671a67455401"
+    },
+    {
+      "group": "owned_repair",
+      "url": "https://ergoveritas.com/testar1.html",
+      "version": "candidate",
+      "action": "accept",
+      "packetValid": true,
+      "packetSha256": "639b40c3d26e1807cd7f5226fa9ca84260bb3b3f324cac12b52c05cf56433ab7"
+    },
+    {
+      "group": "owned_repair",
+      "url": "https://ergoveritas.com/testar1.html",
+      "version": "candidate",
+      "action": "reject",
+      "packetValid": true,
+      "packetSha256": "56bee79da5358a63b646f54816190d1c2aa351d52cdaf4ee56208460f29b7c9f"
+    }
+  ],
+  "contacts": 66
+}

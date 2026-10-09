@@ -1,0 +1,92 @@
+{
+  "registry.log": {
+    "sha256": "55d31c664c68897ac460cfef94470d960f6004435010af852a7df63a13526cb7",
+    "exitCode": 0,
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-registry-check /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/verify-scan-quality-calibration-registry.ts",
+      "",
+      "Scan-quality calibration registry passed: 51 rotating targets, 6 stable lanes, 10-site default live sample."
+    ]
+  },
+  "contact-export.log": {
+    "sha256": "bf53abc7a26771f83484e5852f67c6aac9e0394f0f3d068f637a68c1f6ab2b64",
+    "exitCode": 0,
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-ledger-export /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/export-scan-quality-calibration-ledger.ts --ecs-oneoff --manifest artifacts/ar-retention-cohort-20261009/manifest.json --ledger artifacts/ar-retention-cohort-20261009/ledger.json --out artifacts/ar-retention-cohort-20261009/effective-ledger.json",
+      "",
+      "Exported 51 central contact records into /Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/effective-ledger.json"
+    ]
+  },
+  "owned-contact-export.log": {
+    "sha256": "116aaf2f5174757dbd496acea9e0cdbb072176600b49110a7ab973afe3b00716",
+    "exitCode": 0,
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-ledger-export /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/export-scan-quality-calibration-ledger.ts --ecs-oneoff --manifest artifacts/ar-retention-cohort-20261009/owned-manifest.json --ledger artifacts/ar-retention-cohort-20261009/owned-ledger.json --out artifacts/ar-retention-cohort-20261009/owned-effective-ledger.json",
+      "",
+      "Exported 1 central contact records into /Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-effective-ledger.json"
+    ]
+  },
+  "owned-repair-export.log": {
+    "sha256": "239d0b4f78761a88a858576ba8745fd0c1342d83c1ebaab6ddb2a9084351d45d",
+    "exitCode": 0,
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-ledger-export /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/export-scan-quality-calibration-ledger.ts --ecs-oneoff --manifest artifacts/ar-retention-cohort-20261009/owned-manifest.json --ledger artifacts/ar-retention-cohort-20261009/owned-ledger.json --out artifacts/ar-retention-cohort-20261009/owned-repair-effective-ledger.json",
+      "",
+      "Exported 1 central contact records into /Users/benmasek/WC01/artifacts/ar-retention-cohort-20261009/owned-repair-effective-ledger.json"
+    ]
+  },
+  "contact-persist.log": {
+    "sha256": "14791ab8c270f641d4f3f4649276c6a6aa79f8c32927959c4633431a4f50042a",
+    "exitCode": 0,
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-contact-persist /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/persist-scan-quality-calibration-contacts.ts --ecs-oneoff --manifest artifacts/ar-retention-cohort-20261009/combined-manifest.json --run-key ar-retention-cohort-20261009 --summary artifacts/ar-retention-cohort-20261009/combined-contacts-summary.json",
+      "",
+      "Persisted 63 calibration contacts for run ar-retention-cohort-20261009"
+    ]
+  },
+  "owned-repair-persist.log": {
+    "sha256": "dc0f09d065b7e23c9496fb399988a1f81712db8b3f3b4dff14864ae878049c39",
+    "exitCode": 0,
+    "lastLines": [
+      "> website-signal-risk-scanner@0.1.0 v2:calibration-contact-persist /Users/benmasek/WC01",
+      "> node --import tsx ./scripts/persist-scan-quality-calibration-contacts.ts --ecs-oneoff --manifest artifacts/ar-retention-cohort-20261009/owned-repair-manifest.json --run-key ar-retention-owned-repair-20261009 --summary artifacts/ar-retention-cohort-20261009/owned_repair-contacts-summary.json",
+      "",
+      "Persisted 3 calibration contacts for run ar-retention-owned-repair-20261009"
+    ]
+  },
+  "owned-fixtures.log": {
+    "sha256": "f6e5e848ad26d8c3f171a8962c6f3241be84bbd573ec5b7feed50858d437c49d",
+    "exitCode": 1,
+    "lastLines": [
+      "1..5",
+      "# tests 5",
+      "# suites 0",
+      "# pass 4",
+      "# fail 1",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 5290.386041"
+    ]
+  },
+  "baseline-owned-fixtures-adapted.log": {
+    "sha256": "f3c1ef396e05eaf9b36a817d692a1751d5ff06f1fe41a3eeb0dc518f44e03d2c",
+    "exitCode": 1,
+    "lastLines": [
+      "1..5",
+      "# tests 5",
+      "# suites 0",
+      "# pass 4",
+      "# fail 1",
+      "# cancelled 0",
+      "# skipped 0",
+      "# todo 0",
+      "# duration_ms 5292.40225"
+    ]
+  }
+}

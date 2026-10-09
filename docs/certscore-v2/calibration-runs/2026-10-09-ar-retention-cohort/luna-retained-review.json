@@ -1,0 +1,96 @@
+{
+  "reviewVersion": "luna_retained_review.v1",
+  "reviewScope": "Read-only local audit of artifacts/ar-retention-cohort-20261009 retained benchmark data; no live contacts, source edits, or deployment.",
+  "model_assisted": true,
+  "independentlyReviewed": false,
+  "sources": {
+    "baseline": {
+      "path": "artifacts/ar-onetrust-confirmation-20261009/candidate",
+      "files": 1003,
+      "hashMismatches": 0
+    },
+    "candidate": {
+      "path": "artifacts/ar-request-retention-20261009/candidate",
+      "files": 1005,
+      "hashMismatches": 0
+    }
+  },
+  "publicCohort": {
+    "selectedSites": 10,
+    "visits": 19,
+    "usablePairedSites": 9,
+    "noGo": [
+      {
+        "url": "https://macys.com",
+        "version": "baseline",
+        "reason": "Explicit access-denied/403; candidate visit skipped under no-automatic-retry policy. Excluded from usable-pair denominator."
+      }
+    ],
+    "aRoInventory": {
+      "stableAcrossUsablePairs": true,
+      "acceptEligibleClicksPerVersion": "2/2 (Segment and Geico)",
+      "rejectEligibleClicksPerVersion": "1/1 (Geico)",
+      "publicRegistrationConfirmation": "0 confirmed Accept and 0 confirmed Reject registrations in each version.",
+      "notes": [
+        "Segment candidate inventory is partial due a fuller capture surfacing unresolved visible #truste-show-consent / Do Not Sell My Personal Information; Accept and Reject states match baseline.",
+        "Spotify exposes only Your Privacy Choices (do_not_sell_share), not an A/R banner."
+      ]
+    },
+    "retention": {
+      "candidateSegmentAccept": {
+        "requestsObserved": 205,
+        "retained": 192,
+        "omitted": 13,
+        "replacements": 5,
+        "projection": "Limited"
+      },
+      "baselineSegmentAcceptDropped": 15,
+      "comparisonLimit": "Different live request streams; do not infer retention improvement from 13 versus 15 drops."
+    },
+    "latency": {
+      "recordedMedianDeltaMs": -54,
+      "recordedP95DeltaMs": 3344,
+      "recordedInterpretation": "candidate minus baseline; Segment is +3344 ms under this orientation.",
+      "gate": "Not passed: recorded p95 exceeds the 2000 ms target.",
+      "formulaCheck": "analyze.mts binds b=baseline and a=candidate, then computes a.durationMs - b.durationMs; this matches the stored candidate-minus-baseline deltas."
+    },
+    "packets": {
+      "publicPacketsValidated": 38,
+      "eligibleActionDenominators": "Accept 2/2 clicks and Reject 1/1 click per version; these are activation counts, not registration confirmation.",
+      "executionMeaning": "succeeded means verified click plus completed bounded observation; succeeded_with_confirmation separately requires a verified consent decision."
+    }
+  },
+  "ownedCanaries": {
+    "originalRunArtifactCollision": "Both original paths shared an output directory; testar2 overwrote testar1 raw files. The two original testar1 packets remain honestly missing and are not counted as raw-packet-verified.",
+    "freshTestar1Repair": {
+      "noGo": false,
+      "uniqueOutputPath": "artifacts/ar-retention-cohort-20261009/owned-repair-visits/ergoveritas.com/_testar1.html/candidate-1",
+      "rawPacketsValidated": 2,
+      "accept": {
+        "registration": "confirmed",
+        "projection": "succeeded_with_confirmation",
+        "postRegistrationNonEssentialRequests": 3,
+        "postRegistrationAnalyticsWrites": 2
+      },
+      "reject": {
+        "registration": "confirmed",
+        "projection": "succeeded_with_confirmation",
+        "postRegistrationNonEssentialRequests": 0,
+        "postRefusalWrites": 0,
+        "baselineAnalyticsCookie": "absent from post-action storage",
+        "inFlightBoundary": "The retained analytics request began 1 ms before refusal registration and was excluded from post-refusal activity."
+      },
+      "limitations": "The Accept packet's auxiliary form-capture subobject is Limited/window_ended; its canonical action projection remains succeeded_with_confirmation."
+    },
+    "testar2Accept": "Unconfirmed in both candidate run and baseline-adapted fixture test; retained page prose expecting confirmation is not receipt evidence. Do not override missing verified grant proof.",
+    "fixtureTests": "Candidate-owned fixture tests pass 4/5; frozen-baseline-adapted tests pass 4/5 with the same testar2 Accept unconfirmed-versus-confirmed assertion failure. The initial baseline attempt's ENOENT was a fixture-path issue, not a semantic result."
+  },
+  "contacts": {
+    "uniqueAttemptedScanIds": 66,
+    "validRawActionPacketProjections": 42,
+    "missingRawPackets": 2,
+    "missingPacketScope": "The overwritten original testar1 Accept and Reject packets; fresh repair packets are separate validated samples.",
+    "centralPersistence": "63 contacts persisted for the public/original-owned run and 3 persisted for the owned repair run, per contact-persist.log and owned-repair-persist.log."
+  },
+  "baselineDisposition": "Do not promote the prior-working baseline or make production/population claims from this diagnostic cohort."
+}

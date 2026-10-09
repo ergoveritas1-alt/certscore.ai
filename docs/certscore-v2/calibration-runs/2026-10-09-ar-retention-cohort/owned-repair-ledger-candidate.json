@@ -1,0 +1,16 @@
+{
+  "entries": {
+    "https://ergoveritas.com/testar1.html": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T15:08:54.241Z",
+      "lastContactAt": "2026-10-09T15:08:54.241Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ergoveritas.com/testar1.html"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-09T15:12:01.284Z"
+}

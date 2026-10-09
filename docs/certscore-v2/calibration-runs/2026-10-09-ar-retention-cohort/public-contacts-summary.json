@@ -1,0 +1,774 @@
+{
+  "generatedAt": "2026-10-09T15:13:36.878Z",
+  "contactNoGoPolicy": "Each isolated lane contact inherits the authoritative consent-proof visit no-go outcome; not an independent action-lane diagnosis.",
+  "results": [
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "scanId": "95db506a-59e2-48e0-8efe-739a2f360c79",
+      "startedAt": "2026-10-09T15:00:38.349Z",
+      "completedAt": "2026-10-09T15:00:49.380Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "scanId": "c1e01edc-589e-4ce8-ab66-1a4e94b4bfa5",
+      "startedAt": "2026-10-09T15:00:38.350Z",
+      "completedAt": "2026-10-09T15:00:53.371Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "scanId": "82fb6fb3-8b86-4c4e-9eb3-0fa1ac428ee7",
+      "startedAt": "2026-10-09T15:00:38.350Z",
+      "completedAt": "2026-10-09T15:00:53.383Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "scanId": "cb188942-840f-450a-a978-3b7805011b53",
+      "startedAt": "2026-10-09T15:00:38.350Z",
+      "completedAt": "2026-10-09T15:01:03.102Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "scanId": "fa9ec30e-40dd-4ea9-a364-841c6e2a7a54",
+      "startedAt": "2026-10-09T15:00:38.350Z",
+      "completedAt": "2026-10-09T15:00:52.849Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "scanId": "25c6ce53-996b-4a19-addf-36b21d6c5363",
+      "startedAt": "2026-10-09T15:00:38.350Z",
+      "completedAt": "2026-10-09T15:00:56.411Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "scanId": "bd142101-9e0d-4dd3-854f-138d149ce538",
+      "startedAt": "2026-10-09T15:00:54.262Z",
+      "completedAt": "2026-10-09T15:01:04.958Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "scanId": "590e5963-6814-4bbf-8249-d09e632a2dee",
+      "startedAt": "2026-10-09T15:00:54.263Z",
+      "completedAt": "2026-10-09T15:01:08.390Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://mozilla.org",
+      "scanId": "9b56b79c-f214-47e1-b368-42e790784872",
+      "startedAt": "2026-10-09T15:00:54.263Z",
+      "completedAt": "2026-10-09T15:01:08.379Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "scanId": "9225904a-a33d-4d4f-9633-af5941821728",
+      "startedAt": "2026-10-09T15:01:03.750Z",
+      "completedAt": "2026-10-09T15:01:26.526Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "scanId": "214b0485-c10c-4886-91ba-c23cc582b49b",
+      "startedAt": "2026-10-09T15:01:03.751Z",
+      "completedAt": "2026-10-09T15:01:17.576Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://cnn.com",
+      "scanId": "f9fc3c6c-78fb-47f6-8f42-acf8299406bb",
+      "startedAt": "2026-10-09T15:01:03.751Z",
+      "completedAt": "2026-10-09T15:01:19.439Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://macys.com",
+      "scanId": "24549205-0601-476a-a2fe-6752a6a7a9df",
+      "startedAt": "2026-10-09T15:01:09.643Z",
+      "completedAt": "2026-10-09T15:01:22.409Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "access_denied_or_forbidden_page",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://macys.com",
+      "scanId": "d254dfd3-f26e-4770-9aa6-7f1fbb61da72",
+      "startedAt": "2026-10-09T15:01:09.644Z",
+      "completedAt": "2026-10-09T15:01:22.428Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "access_denied_or_forbidden_page",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://macys.com",
+      "scanId": "c1b685a6-29b5-46c0-88dc-2744355e145d",
+      "startedAt": "2026-10-09T15:01:09.644Z",
+      "completedAt": "2026-10-09T15:01:22.428Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": true,
+        "noGoReasons": [
+          "access_denied_or_forbidden_page",
+          "scan_no_go_corroborated"
+        ]
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "scanId": "21c29255-5964-421c-ad93-18c9e09a3079",
+      "startedAt": "2026-10-09T15:01:23.136Z",
+      "completedAt": "2026-10-09T15:01:42.274Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "scanId": "46fbfd79-83b2-4d81-9c28-a64dc5831f67",
+      "startedAt": "2026-10-09T15:01:23.137Z",
+      "completedAt": "2026-10-09T15:01:30.269Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "scanId": "f9941bf7-b50a-45f6-ae21-aebe705ee6cc",
+      "startedAt": "2026-10-09T15:01:23.137Z",
+      "completedAt": "2026-10-09T15:01:38.898Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "scanId": "6e4f32d5-aced-4eac-aabb-8f3ed95927a6",
+      "startedAt": "2026-10-09T15:01:27.405Z",
+      "completedAt": "2026-10-09T15:01:46.952Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "scanId": "375b267f-8c59-4e53-91f2-199f8e853661",
+      "startedAt": "2026-10-09T15:01:27.406Z",
+      "completedAt": "2026-10-09T15:01:41.441Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "scanId": "decb9c2a-a726-419f-996a-01ef749deb2a",
+      "startedAt": "2026-10-09T15:01:27.406Z",
+      "completedAt": "2026-10-09T15:01:43.228Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "scanId": "6e85cad7-fc66-4f15-8d54-e25d39265bf1",
+      "startedAt": "2026-10-09T15:01:42.879Z",
+      "completedAt": "2026-10-09T15:01:54.196Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "scanId": "a0ff721f-fd30-4e7d-bed1-1d85d9132f14",
+      "startedAt": "2026-10-09T15:01:42.880Z",
+      "completedAt": "2026-10-09T15:01:49.964Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://segment.com",
+      "scanId": "b51c1ec1-90f4-4221-b19b-ad7d56995175",
+      "startedAt": "2026-10-09T15:01:42.880Z",
+      "completedAt": "2026-10-09T15:01:58.762Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "scanId": "35358b13-9bf3-40f1-b6f7-33dcfe47143e",
+      "startedAt": "2026-10-09T15:01:47.697Z",
+      "completedAt": "2026-10-09T15:02:07.285Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "scanId": "0a4df1a3-e1e0-446c-b68b-d5c277eca2b6",
+      "startedAt": "2026-10-09T15:01:47.698Z",
+      "completedAt": "2026-10-09T15:02:02.146Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://healthline.com",
+      "scanId": "5eefb683-5eae-43da-beaa-308ee7761faf",
+      "startedAt": "2026-10-09T15:01:47.698Z",
+      "completedAt": "2026-10-09T15:02:03.628Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "scanId": "929fbf92-df24-48af-b267-c8a9b566ff14",
+      "startedAt": "2026-10-09T15:01:59.391Z",
+      "completedAt": "2026-10-09T15:02:12.582Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "scanId": "d5d715ad-9899-4bd2-bff6-ae1a6ab4c681",
+      "startedAt": "2026-10-09T15:01:59.392Z",
+      "completedAt": "2026-10-09T15:02:13.759Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "scanId": "2650ace5-4e9f-4956-b5ed-654fa3e7a375",
+      "startedAt": "2026-10-09T15:01:59.392Z",
+      "completedAt": "2026-10-09T15:02:13.378Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "scanId": "a096abdb-15a9-4f72-a722-0a9c3a3cde37",
+      "startedAt": "2026-10-09T15:02:08.484Z",
+      "completedAt": "2026-10-09T15:02:18.140Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "scanId": "e29b734c-db0b-49c3-83d9-2019d08a7f3f",
+      "startedAt": "2026-10-09T15:02:08.486Z",
+      "completedAt": "2026-10-09T15:02:22.861Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "scanId": "06dfc0dd-8d44-452c-8c3c-f2a1cbf772e1",
+      "startedAt": "2026-10-09T15:02:08.486Z",
+      "completedAt": "2026-10-09T15:02:24.551Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "scanId": "d945554b-6bce-4ef0-af40-62e57d982a44",
+      "startedAt": "2026-10-09T15:02:14.623Z",
+      "completedAt": "2026-10-09T15:02:30.075Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "scanId": "756ec9fe-2f5c-441e-b9c1-bb7d56abea13",
+      "startedAt": "2026-10-09T15:02:14.624Z",
+      "completedAt": "2026-10-09T15:02:29.175Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://microsoft.com",
+      "scanId": "0e472927-b9ec-441e-bcc9-62368edf7814",
+      "startedAt": "2026-10-09T15:02:14.624Z",
+      "completedAt": "2026-10-09T15:02:29.175Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "scanId": "9b4015f8-a6ca-47b6-9bfa-bdee9a5861ef",
+      "startedAt": "2026-10-09T15:02:25.534Z",
+      "completedAt": "2026-10-09T15:02:34.640Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "scanId": "ac651cfb-9e17-4b9a-b70c-7c02602bf4a6",
+      "startedAt": "2026-10-09T15:02:25.535Z",
+      "completedAt": "2026-10-09T15:02:39.801Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://spotify.com",
+      "scanId": "e0ef6a3f-9245-4811-a86e-5b5ca7652d2c",
+      "startedAt": "2026-10-09T15:02:25.535Z",
+      "completedAt": "2026-10-09T15:02:41.484Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "scanId": "16e27142-0e23-4267-aac7-84b4183e7418",
+      "startedAt": "2026-10-09T15:02:30.950Z",
+      "completedAt": "2026-10-09T15:02:38.016Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "scanId": "38a289c3-11f9-4e5f-a865-9aae05e9cc4a",
+      "startedAt": "2026-10-09T15:02:30.950Z",
+      "completedAt": "2026-10-09T15:02:37.105Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "scanId": "12efed5e-dd73-4c5e-a87e-f364f78de077",
+      "startedAt": "2026-10-09T15:02:30.950Z",
+      "completedAt": "2026-10-09T15:02:43.014Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "scanId": "229a2e7e-c084-4c16-a3f1-193718cad267",
+      "startedAt": "2026-10-09T15:02:42.121Z",
+      "completedAt": "2026-10-09T15:02:52.667Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "scanId": "80ce9129-f162-44ea-ae1d-f0ac8ec08f0f",
+      "startedAt": "2026-10-09T15:02:42.122Z",
+      "completedAt": "2026-10-09T15:02:56.094Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "scanId": "8c070ddb-6dc7-4a67-ae34-deaede89ec04",
+      "startedAt": "2026-10-09T15:02:42.122Z",
+      "completedAt": "2026-10-09T15:02:55.896Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "scanId": "e43d1849-cead-47fa-af98-03519a67e5cc",
+      "startedAt": "2026-10-09T15:02:43.824Z",
+      "completedAt": "2026-10-09T15:02:50.983Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "scanId": "8706f0c5-ac5d-43c4-97ab-ccdbd4b613aa",
+      "startedAt": "2026-10-09T15:02:43.825Z",
+      "completedAt": "2026-10-09T15:02:50.448Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://geico.com",
+      "scanId": "facab4e9-d676-4509-a0fc-fc193fd3e67e",
+      "startedAt": "2026-10-09T15:02:43.825Z",
+      "completedAt": "2026-10-09T15:02:56.061Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "scanId": "8e5f730f-231e-481d-be92-906eb6d3bd26",
+      "startedAt": "2026-10-09T15:02:56.714Z",
+      "completedAt": "2026-10-09T15:03:07.193Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "scanId": "4d580cac-147b-4f3d-9eef-84432a07817a",
+      "startedAt": "2026-10-09T15:02:56.715Z",
+      "completedAt": "2026-10-09T15:03:10.755Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "scanId": "1add682a-0199-4477-972f-00fadd39cac4",
+      "startedAt": "2026-10-09T15:02:56.715Z",
+      "completedAt": "2026-10-09T15:03:10.585Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "scanId": "5863b3ee-c76a-4d87-be24-fdd1f67a7646",
+      "startedAt": "2026-10-09T15:02:56.715Z",
+      "completedAt": "2026-10-09T15:03:07.392Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "scanId": "309c7294-9010-4f7d-b571-7ad004bcdc39",
+      "startedAt": "2026-10-09T15:02:56.716Z",
+      "completedAt": "2026-10-09T15:03:10.672Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://caltech.edu",
+      "scanId": "d3d58077-8564-4ed7-a45e-1e19815faed8",
+      "startedAt": "2026-10-09T15:02:56.716Z",
+      "completedAt": "2026-10-09T15:03:10.595Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "scanId": "4529b92e-b1a3-4298-86b9-5eb2e33ba277",
+      "startedAt": "2026-10-09T15:03:11.318Z",
+      "completedAt": "2026-10-09T15:03:21.759Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "scanId": "7cf5e5ce-9f53-4e3c-b357-c5844865f493",
+      "startedAt": "2026-10-09T15:03:11.320Z",
+      "completedAt": "2026-10-09T15:03:25.333Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "group": "public",
+      "url": "https://usa.gov",
+      "scanId": "71291766-17c8-49ec-81f8-e91141b5a4bd",
+      "startedAt": "2026-10-09T15:03:11.320Z",
+      "completedAt": "2026-10-09T15:03:25.057Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}
