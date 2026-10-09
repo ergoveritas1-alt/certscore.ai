@@ -7215,6 +7215,18 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
       scanId: "visual-geometry-proof-fixture",
       schemaVersion: "certscore.v2.canonical-evidence-bundle.v1",
       screenshots: [
+        ...["cmp_controls", "packet_recovery", "cmp_empty"].map((kind) => ({
+          artifactId: `screenshot_pre_consent_${kind}`,
+          capturedAtMs: 32000,
+          captureMethod: "primary_viewport_fallback",
+          consentStateAtTime: "pre_consent",
+          pagePhase: "network_idle",
+          path: `/tmp/certscore-v2/visual-geometry-proof-fixture/screenshot-pre-consent-${kind.replaceAll("_", "-")}.png`,
+          url: "https://example.test/",
+          displayStatus: kind === "cmp_empty" ? "withheld" : "available",
+          retentionStatus: kind === "cmp_empty" ? "withheld" : "available",
+          ...(kind === "cmp_empty" ? { displayWithheldReason: "safety_check_unavailable" } : {}),
+        })),
         {
           artifactId: "screenshot_pre_consent",
           capturedAtMs: 8402,
@@ -7349,7 +7361,19 @@ test("materializeLocalV2DagScanDetail prefers pre-consent geometry proof screens
       visualArtifacts?.[0]?.key,
       "v2-dag-lambda/local/visual-geometry-proof-fixture/auxiliary/screenshot-pre-consent-geometry-proof.png"
     );
-    assert.equal(visualArtifacts?.[1]?.id, "local_v2:screenshot_pre_consent");
+    assert.deepEqual(visualArtifacts?.map((artifact) => artifact.id), [
+      "local_v2:screenshot_pre_consent_geometry_proof",
+      "local_v2:screenshot_pre_consent_packet_recovery",
+      "local_v2:screenshot_pre_consent_cmp_controls",
+      "local_v2:screenshot_pre_consent_cmp_empty",
+      "local_v2:screenshot_pre_consent",
+    ]);
+    assert.equal(visualArtifacts?.[2]?.status, "available");
+    assert.equal(visualArtifacts?.[2]?.key,
+      "v2-dag-lambda/local/visual-geometry-proof-fixture/auxiliary/screenshot-pre-consent-cmp-controls.png");
+    assert.equal(visualArtifacts?.[3]?.status, "withheld");
+    assert.equal(visualArtifacts?.[3]?.key, null, "withheld images must not acquire a serving pointer");
+    assert.equal(visualArtifacts?.[3]?.status_reason, "safety_check_unavailable");
     const firstLayerChoices = detail.runtimeArtifacts?.firstLayerConsentChoices as Record<string, unknown> | undefined;
     assert.equal(detail.runtimeArtifacts?.cmpFrameworkSignalObserved, true);
     assert.equal(detail.runtimeArtifacts?.cmp_vendor_name, "Consentmanager");

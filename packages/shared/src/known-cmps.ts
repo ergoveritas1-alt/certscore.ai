@@ -75,6 +75,14 @@ export type KnownCmpDefinition = {
     expectedNormalizedLabel: string;
   };
   acceptConfirmation?: KnownCmpActionConfirmation;
+  /** Exact first-layer control plus visible label-bound refusal instructions.
+   * Authorizes activation only; semantic registration is verified separately. */
+  rejectLabelBoundNecessaryOnly?: {
+    policyVersion: "label_bound_necessary_only_reject.v1";
+    bannerSelector: string;
+    controlSelector: string;
+    expectedNormalizedLabels: string[];
+  };
   acceptControlSelectors?: string[];
   acceptControlTargets?: KnownCmpControlTarget[];
   acceptanceCookieValues?: Array<{
@@ -257,6 +265,12 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#onetrust-accept-btn-handler"],
     canonicalName: "OneTrust",
+    rejectLabelBoundNecessaryOnly: {
+      policyVersion: "label_bound_necessary_only_reject.v1",
+      bannerSelector: "#onetrust-banner-sdk",
+      controlSelector: "#onetrust-reject-all-handler",
+      expectedNormalizedLabels: ["strictly necessary", "essential cookies"],
+    },
     cookieNames: [
       "OptanonConsent",
       "OptanonConsent_*",
@@ -796,7 +810,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       scopeSelector: '[data-termly-part="banner-actions"]',
       resolution: "scoped_accessible_control",
     }],
-    recipeVersion: "v1",
+    recipeVersion: "v2",
     role: "consent management platform",
     standards: ["gpc", "google_consent_mode"],
     urlPatterns: [/termly/i]
@@ -976,7 +990,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       scopeSelector: "#transcend-shadow-root",
       resolution: "closed_shadow_accessible_control",
     }],
-    recipeVersion: "v1",
+    recipeVersion: "v2",
     role: "consent management platform",
     standards: ["gpc", "google_consent_mode"],
     storageKeys: ["transcend-consent", "airgap"],

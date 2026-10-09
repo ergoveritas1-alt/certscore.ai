@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
   classifyConsentLanguage,
   classifyConsentControlLabel,
   classifyConsentSurfaceText,
@@ -10,6 +11,21 @@ import {
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
   SUPPORTED_PRIVACY_EVIDENCE_LOCALES,
 } from "./index.js";
+
+test("quoted statutory privacy label is an exact, context-bound observation only", () => {
+  for (const label of ['"Do Not Sell My Personal Information"', '“Do Not Sell My Personal Information”']) {
+    const result = classifyConsentControlLabel({ label, hasConsentContext: true, usage: "observation" });
+    assert.equal(result.intent, "privacy_opt_out");
+    assert.equal(result.registryVersion, CONSENT_CONTROL_LABEL_REGISTRY_VERSION);
+    assert.equal(classifyConsentControlLabel({ label, hasConsentContext: false }).intent, "unknown");
+    assert.equal(classifyConsentControlLabel({ label, hasConsentContext: true, usage: "action" }).intent, "unknown");
+  }
+  for (const label of ['Learn about "Do Not Sell My Personal Information"', '"Do Not Sell My Personal Information" now', '"Do Not Sell My Personal Information please"']) {
+    assert.equal(classifyConsentControlLabel({ label, hasConsentContext: true }).intent, "unknown", label);
+  }
+  assert.equal(classifyConsentControlLabel({ label: '"Do Not Sell My Personal Information"', contextText: "Browse our books and account services." }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: "Do Not Sell My Personal Information", hasConsentContext: true }).intent, "privacy_opt_out");
+});
 
 test("separates explicit consent controls from acknowledgments and refusal equivalents", () => {
   assert.equal(
@@ -466,6 +482,17 @@ test("classifies observed Finnish YLE consent controls", () => {
   });
   assert.equal(options.intent, "options");
   assert.equal(options.matchedLocale, "fi");
+});
+
+test("Finnish deny-all requires an exact label and consent context", () => {
+  for (const classifierProfile of ["production_default", "multilingual_v1"] as const) {
+    const input = { label: "Kiellä kaikki", contextText: "Käytämme evästeitä", localeHints: ["fi" as const], classifierProfile };
+    const match = classifyConsentControlLabel(input);
+    assert.equal(match.intent, "reject");
+    assert.equal(match.matchedLocale, "fi");
+    assert.equal(classifyConsentControlLabel({ ...input, contextText: "" }).intent, "unknown");
+    assert.equal(classifyConsentControlLabel({ ...input, label: "Kiellä kaikki ilmoitukset" }).intent, "unknown");
+  }
 });
 
 test("classifies canonical accept, reject, options, and necessary-only controls across all 40 locales", () => {

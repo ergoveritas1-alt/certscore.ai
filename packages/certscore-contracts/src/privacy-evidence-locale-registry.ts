@@ -277,7 +277,7 @@ const CONSENT_LABEL_GUARDS_BY_LOCALE = {
   ja: { negationTokens: ["しない", "しません", "拒否"], informationalPrefixes: ["どうなる", "なぜ"] },
   fr: { categoryPhrases: ["cookies non essentiels", "cookies non nécessaires", "cookies non necessaires"], negationTokens: ["ne", "n'", "pas", "jamais"], informationalPrefixes: ["que se passe", "pourquoi", "comment"] },
   ru: { negationTokens: ["не", "нет"], informationalPrefixes: ["что произойдет", "что будет", "почему", "как"] },
-  pt: { negationTokens: ["não", "nao", "nunca"], informationalPrefixes: ["o que acontece", "por que", "como"] },
+  pt: { categoryPhrases: ["cookies não essenciais", "cookies nao essenciais"], negationTokens: ["não", "nao", "nunca"], informationalPrefixes: ["o que acontece", "por que", "como"] },
   it: { negationTokens: ["non", "mai"], informationalPrefixes: ["cosa succede", "perché", "come"] },
   tr: { negationTokens: ["değil", "hayır", "etme", "etmiyorum"], informationalPrefixes: ["ne olur", "neden", "nasıl"] },
   zh: { negationTokens: ["不", "不要", "拒绝"], informationalPrefixes: ["会发生什么", "为什么", "如何"] },

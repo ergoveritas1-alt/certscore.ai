@@ -51,7 +51,8 @@ const REPORT_PUBLICATION_CHECK: Check = {
   label: "report publication ownership, artifact transfer and recovery contracts",
   command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test",
     "apps/web/server/scans/canonical-scan-report-publisher.test.ts",
-    "apps/web/server/scans/report-artifact-transfer.test.ts"],
+    "apps/web/server/scans/report-artifact-transfer.test.ts",
+    "apps/web/server/scans/local-action-packet-mirror.test.ts"],
 };
 
 const RUNTIME_GRAPH_CAPTURE_CHECK: Check = {
@@ -106,11 +107,26 @@ const CONSENT_ACTION_SEMANTICS_CHECK: Check = {
     "packages/certscore-scan-core/src/cmp-control-actionability.test.ts",
     "packages/certscore-scan-core/src/consent-action-binding.test.ts",
     "packages/certscore-scan-core/src/consent-action-late-label.test.ts",
+    "packages/certscore-scan-core/src/consent-action-opacity-settling.test.ts",
+    "packages/certscore-scan-core/src/consent-action-chain.test.ts",
+    "packages/certscore-scan-core/src/consent-navigation-budget.test.ts",
+    "packages/certscore-scan-core/src/consent-paired-geometry-readiness.test.ts",
+    "packages/certscore-scan-core/src/consent-reject-eligibility.test.ts",
+    "packages/certscore-scan-core/src/onetrust-consent-state.test.ts",
+    "packages/certscore-scan-core/src/action-request-retention.test.ts",
+    "packages/certscore-scan-core/src/consent-action-reliability.test.ts",
+    "packages/certscore-contracts/src/onetrust-group-evidence.test.ts",
     "packages/certscore-scan-core/src/post-accept-observer.test.ts",
+    "packages/certscore-scan-core/src/post-action-owned-canary-pages.test.ts",
     "packages/certscore-scan-core/src/post-refusal-observer.test.ts"],
 };
 
 const ROOT_FULL_CHECKS: Check[] = [
+  {
+    key: "workspace-package-build",
+    label: "bootstrap workspace package exports for clean-checkout tests and typechecks",
+    command: ["pnpm", "turbo", "run", "build", "--filter=./packages/*"]
+  },
   {
     key: "deploy-latency-contracts",
     label: "deploy cache, runtime base and exact-SHA typecheck reuse guards",
@@ -194,7 +210,7 @@ const TARGETS: Target[] = [
     key: "consent-action-semantics",
     label: "consent action semantics and dispatch",
     matches: file => file.startsWith("packages/certscore-contracts/src/") ||
-      /^packages\/certscore-scan-core\/src\/(?:post-accept-|post-refusal-|cmp-action-|consent-)/.test(file),
+      /^packages\/certscore-scan-core\/src\/(?:post-accept-|post-refusal-|cmp-action-|consent-|onetrust-)/.test(file),
     checks: [CONSENT_ACTION_SEMANTICS_CHECK],
   },
   {

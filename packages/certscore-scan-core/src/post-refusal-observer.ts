@@ -1,8 +1,9 @@
+import { createActionRequestRetention } from "./action-request-retention.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
-import { prioritizeConsentActionRecipes, consentActionBindingDeadline, liveConsentActionCmp } from "./consent-action-recipe-priority.js";
+import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, consentActionBindingDeadline, liveConsentActionCmp } from "./consent-action-recipe-priority.js";
 import type { ActionTcfData } from "./consent-action-tcf-state.js";
-import { captureOneTrustBaseline, type OneTrustBaseline } from "./onetrust-consent-state.js";
+import { captureOneTrustBaseline, oneTrustBaselineLimitation, type OneTrustBaseline } from "./onetrust-consent-state.js";
 import { decodeTcfV2PurposeConsents, readConsentActionTcfData } from "./consent-action-tcf-state.js";
 import { canonicalConsentSurfacePresent, consentScopePermitsInteraction, distinctActionTargets, hasActionControlStructure } from "./cmp-action-target.js";
 import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
@@ -63,7 +64,7 @@ import {
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
-import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery } from "./cmp-action-control-proof.js";
+import { assertConsentActionDispatchAllowed, assertReviewedRejectDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
 import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
 import {
@@ -209,6 +210,8 @@ export interface PostRefusalObserverInput {
   observationWindowMs?: number;
   confirmationTimeoutMs?: number;
   actionSearchTimeoutMs?: number;
+  /** Optional terminal budget shared by navigation, resolver and capture. */
+  resultBudgetMs?: number;
   browserMode?: "headless" | "headed";
   browser?: Browser;
   signal?: AbortSignal;
@@ -356,6 +359,17 @@ export async function runPostRefusalObserver(
 
   const branchStartedAtMs = Date.now();
   const parentScanStartedAtMs = input.scanStartedAtMs ?? branchStartedAtMs;
+  const resultBudgetMs = boundedMs(input.resultBudgetMs, 0, 0, 30_000);
+  const resultBudgetDeadlineAtMs = resultBudgetMs > 0 ? branchStartedAtMs + resultBudgetMs : undefined;
+  const budgetController = new AbortController();
+  const effectiveSignal = resultBudgetDeadlineAtMs === undefined ? input.signal
+    : input.signal ? AbortSignal.any([input.signal, budgetController.signal]) : budgetController.signal;
+  const remainingResultBudgetMs = (requested: number) => resultBudgetDeadlineAtMs === undefined ? requested
+    : Math.max(0, Math.min(requested, resultBudgetDeadlineAtMs - Date.now()));
+  const budgetTimer = resultBudgetDeadlineAtMs === undefined ? undefined : setTimeout(() => {
+    budgetController.abort(new Error("Post-refusal observer result budget exhausted."));
+  }, resultBudgetMs);
+  budgetTimer?.unref?.();
   const normalizedUrl = input.normalizedUrl ?? normalizeTargetUrl(input.url);
   const observationWindowMs = boundedMs(input.observationWindowMs, DEFAULT_OBSERVATION_WINDOW_MS, 0, 30_000);
   const confirmationTimeoutMs = boundedMs(
@@ -387,6 +401,7 @@ export async function runPostRefusalObserver(
   ];
   const preRegistrationRequests: CapturedRequest[] = [];
   const postRegistrationRequests: CapturedRequest[] = [];
+  const postActionRetention = createActionRequestRetention(postRegistrationRequests, CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT);
   const requestIds = new WeakMap<Request, string>();
   const requestStartedAtEpochMs = new WeakMap<Request, number>();
   const requestInheritedInFlightAtRegistration = new WeakMap<Request, boolean>();
@@ -398,6 +413,9 @@ export async function runPostRefusalObserver(
   let ownsBrowser = false;
   let context: BrowserContext | undefined;
   let page: Page | undefined;
+  let budgetContextClose: Promise<void> | undefined;
+  const closeBudgetExpiredContext = () => { budgetContextClose ??= context?.close().catch(() => undefined); };
+  budgetController.signal.addEventListener("abort", closeBudgetExpiredContext, { once: true });
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
   let actionDiscovery: ConsentActionDiscovery | undefined;
   let cancellationObservedAtMs: number | undefined;
@@ -435,7 +453,7 @@ export async function runPostRefusalObserver(
   );
 
   const cancellation = () => {
-    if (!input.signal?.aborted) return false;
+    if (!effectiveSignal?.aborted) return false;
     cancellationObservedAtMs ??= elapsed(parentScanStartedAtMs);
     return true;
   };
@@ -456,6 +474,9 @@ export async function runPostRefusalObserver(
     observations?: PostRefusalObservation[];
   }): Promise<PostRefusalEvidencePacket> => {
     const completedAtMs = Date.now();
+    if (budgetController.signal.aborted && !limitations.includes("observer_result_budget_exhausted")) {
+      limitations.push("observer_result_budget_exhausted");
+    }
     const confirmedRefusal = fields.registration.status === "confirmed" &&
       fields.registration.refusalExercised &&
       fields.registration.refusalRegisteredAtMs !== undefined;
@@ -471,7 +492,7 @@ export async function runPostRefusalObserver(
       ...(afterActionCapture ? { afterActionCapture } : {}),
       ...(terminalDecisionEvidence ? { terminalDecisionEvidence } : {}),
       decisionEvidence,
-      captureCoverage,
+      captureCoverage: { ...captureCoverage, postActionRetention: postActionRetention.summary() },
       artifactOnly: true,
       productionProjectable: productionProjectable && confirmedRefusal && Boolean(actionControlProof) && captureCoverage.requestsDroppedAfterAction === 0,
       scanId: input.scanId,
@@ -549,7 +570,7 @@ export async function runPostRefusalObserver(
 
   try {
     if (dispatchDelayMs > 0) {
-      await waitForDelay(dispatchDelayMs, input.signal).catch(() => undefined);
+      await waitForDelay(dispatchDelayMs, effectiveSignal).catch(() => undefined);
     }
     if (cancellation()) {
       return await finalize({
@@ -637,10 +658,8 @@ export async function runPostRefusalObserver(
       requestInheritedInFlightAtRegistration.set(request, inheritedInFlightAtRegistration);
       const afterRegistration = actionDispatched;
       const bucket = afterRegistration ? postRegistrationRequests : preRegistrationRequests;
-      const bucketLimit = afterRegistration ? MAX_POST_REGISTRATION_REQUESTS : MAX_REQUESTS;
-      if (bucket.length >= bucketLimit) {
-        if (actionDispatched) captureCoverage.requestsDroppedAfterAction += 1;
-        else captureCoverage.requestsDroppedBeforeAction += 1;
+      if (!actionDispatched && bucket.length >= MAX_REQUESTS) {
+        captureCoverage.requestsDroppedBeforeAction += 1;
         return;
       }
       const requestId = `post_refusal_request_${++nextRequestNumber}`;
@@ -652,15 +671,20 @@ export async function runPostRefusalObserver(
             entry.requestId === redirectedFromId
           )
         : undefined;
-      requestIds.set(request, requestId);
-      activeRequestIds.add(requestId);
-      bucket.push({
-        request,
-        requestId,
-        startedAtEpochMs,
+      const captured: CapturedRequest = {
+        request, requestId, startedAtEpochMs,
         inFlightAtRefusalRegistration: inheritedInFlightAtRegistration ||
           redirectedFrom?.inFlightAtRefusalRegistration === true,
-      });
+      };
+      if (actionDispatched) {
+        const wasFull = bucket.length >= MAX_POST_REGISTRATION_REQUESTS;
+        const selection = postActionRetention.offer(captured);
+        if (wasFull) captureCoverage.requestsDroppedAfterAction += 1;
+        if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
+        if (!selection.retained) return;
+      } else bucket.push(captured);
+      requestIds.set(request, requestId);
+      activeRequestIds.add(requestId);
     });
     const markCompleted = (request: Request) => {
       const requestId = requestIds.get(request);
@@ -687,7 +711,9 @@ export async function runPostRefusalObserver(
 
     const navigationStartedAtMs = Date.now();
     try {
-      await page.goto(observationTargetUrl, { waitUntil: "commit", timeout: 15_000 });
+      const navigationTimeoutMs = remainingResultBudgetMs(15_000);
+      if (navigationTimeoutMs <= 0 || effectiveSignal?.aborted) throw effectiveSignal?.reason ?? new Error("Navigation budget exhausted.");
+      await page.goto(observationTargetUrl, { waitUntil: "commit", timeout: navigationTimeoutMs });
       const redirectResolution = interactionDiagnostics.navigation.redirectResolution;
       interactionDiagnostics.navigation = {
         outcome: "completed",
@@ -696,6 +722,10 @@ export async function runPostRefusalObserver(
         ...(redirectResolution ? { redirectResolution } : {}),
       };
     } catch (error) {
+      if (cancellation()) return await finalize({
+        resolverFound: false, resolverReason: "observer_cancelled_before_action",
+        registration: unconfirmedRegistration("aborted", "observer_cancelled_before_action"),
+      });
       const failureClass = classifyNavigationFailure(error);
       const recovery = await inspectRecoverableCommittedDocument(
         page,
@@ -714,6 +744,7 @@ export async function runPostRefusalObserver(
       };
       if (!recovery.recovered) {
         if (
+          !effectiveSignal?.aborted && remainingResultBudgetMs(1_000) > 0 &&
           ownsBrowser &&
           input.browserMode !== "headed" &&
           shouldRetryNavigationWithHeaded(error)
@@ -731,6 +762,8 @@ export async function runPostRefusalObserver(
           } = input;
           const headedPacket = await runPostRefusalObserver({
             ...retryInput,
+            signal: effectiveSignal,
+            resultBudgetMs: remainingResultBudgetMs(resultBudgetMs),
             browserMode: "headed",
             dispatchDelayMs: 0,
           }).catch(() => undefined);
@@ -799,7 +832,7 @@ export async function runPostRefusalObserver(
       const settled = await waitForPassiveRedirectSettle(
         page,
         input.interactionAuthorization.resolutionTimeoutMs,
-        input.signal,
+        effectiveSignal,
       );
       const resolution = settled
         ? await bindPostRefusalBrowserResolvedExactTarget({
@@ -906,7 +939,7 @@ export async function runPostRefusalObserver(
           page,
           actionRecipes,
           initialActionSearchTimeoutMs,
-          input.signal,
+          effectiveSignal,
           recordResolverSnapshot,
           actionDiscovery,
         )
@@ -914,7 +947,7 @@ export async function runPostRefusalObserver(
           page,
           actionRecipes,
           initialActionSearchTimeoutMs,
-          input.signal,
+          effectiveSignal,
           recordResolverSnapshot,
           actionDiscovery,
         );
@@ -934,7 +967,7 @@ export async function runPostRefusalObserver(
             page,
             actionRecipes,
             adaptiveExtensionMs,
-            input.signal,
+            effectiveSignal,
             recordResolverSnapshot,
             actionDiscovery,
           )
@@ -942,7 +975,7 @@ export async function runPostRefusalObserver(
             page,
             actionRecipes,
             adaptiveExtensionMs,
-            input.signal,
+            effectiveSignal,
             recordResolverSnapshot,
             actionDiscovery,
           );
@@ -1050,13 +1083,13 @@ export async function runPostRefusalObserver(
         page,
         [selectedRecipe],
         500,
-        input.signal,
+        effectiveSignal,
       );
       if (reResolution.status === "not_found" && input.allowCanonicalRejectDiscovery) {
         reResolution = await waitForCanonicalRejectControlRecipe(
           page,
           500,
-          input.signal,
+          effectiveSignal,
           [selectedRecipe],
         );
       }
@@ -1128,6 +1161,10 @@ export async function runPostRefusalObserver(
       selectedRecipe.confirmation,
       control,
     ).catch(() => undefined);
+    if (confirmationBaseline && "oneTrustBaseline" in confirmationBaseline) {
+      const reason = oneTrustBaselineLimitation(confirmationBaseline.oneTrustBaseline);
+      if (reason) limitations.push(reason);
+    }
     if (!confirmationBaseline) {
       limitations.push("refusal_confirmation_baseline_unavailable");
       return await finalize({
@@ -1164,7 +1201,7 @@ export async function runPostRefusalObserver(
     }
     let proofResolution = await buildConsentActionControlProof({
       onLabelInspection: recordResolverSnapshot,
-      signal: input.signal,
+      signal: effectiveSignal,
       action: "reject",
       ...(authorizedExactTargetUrl
         ? { authorizedTargetSha256: hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) }
@@ -1200,7 +1237,7 @@ export async function runPostRefusalObserver(
       try {
         assertConsentActionDispatchAllowed(
           page,
-          input.signal,
+          effectiveSignal,
           authorizedExactTargetUrl
             ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
             : undefined,
@@ -1208,6 +1245,13 @@ export async function runPostRefusalObserver(
         const remainingRecoveryBudgetMs = () => Math.max(0, resolverStartedAtMs + actionSearchTimeoutMs - Date.now());
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
+        }
+        if (proofResolution.reason === "resolved_control_scope_not_interactive" &&
+          !await waitForTransparentConsentControl({action: "reject", control, page,
+            selectorHint: selectedRecipe.controlSelector, controlFrameUrl: selectedRecipe.controlFrameUrl,
+            authorizedTargetSha256: authorizedExactTargetUrl ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) : undefined,
+            deadlineAtMs: resolverStartedAtMs + actionSearchTimeoutMs, signal: effectiveSignal})) {
+          throw new Error("transparent_consent_scope_not_ready");
         }
         // An unverified named label must not repeatedly select the same control.
         // Spend only the remaining original budget on canonical live discovery.
@@ -1217,7 +1261,7 @@ export async function runPostRefusalObserver(
             page,
             [selectedRecipe],
             Math.min(250, remainingRecoveryBudgetMs()),
-            input.signal,
+            effectiveSignal,
             recordResolverSnapshot,
             actionDiscovery,
           );
@@ -1225,7 +1269,7 @@ export async function runPostRefusalObserver(
           lateResolution = await waitForCanonicalRejectControlRecipe(
             page,
             remainingRecoveryBudgetMs(),
-            input.signal,
+            effectiveSignal,
             [selectedRecipe],
             recordResolverSnapshot,
             actionDiscovery,
@@ -1269,7 +1313,7 @@ export async function runPostRefusalObserver(
           );
           proofResolution = await buildConsentActionControlProof({
             onLabelInspection: recordResolverSnapshot,
-            signal: input.signal,
+            signal: effectiveSignal,
             action: "reject",
             ...(authorizedExactTargetUrl
               ? { authorizedTargetSha256: hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) }
@@ -1307,14 +1351,8 @@ export async function runPostRefusalObserver(
       });
     }
     actionControlProof = proofResolution.proof;
-    const actionDispatchedAtEpochMs = Date.now();
-    const actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
-    actionDispatched = true;
-    try {
-      input.onLifecycleEvent?.({ type: "action_dispatched", atMs: actionDispatchedAtMs });
-    } catch {
-      limitations.push("lifecycle_listener_failed");
-    }
+    let actionDispatchedAtEpochMs = Date.now();
+    let actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
     let clickError: unknown;
     try {
       await dispatchRejectControl(
@@ -1322,10 +1360,25 @@ export async function runPostRefusalObserver(
         control,
         selectedRecipe,
         useVerifiedGeometryDispatch,
-        () => assertConsentActionDispatchAllowed(page!, input.signal, actionControlProof?.authorizedTargetSha256),
+        () => assertConsentActionDispatchAllowed(page!, effectiveSignal, actionControlProof?.authorizedTargetSha256),
+        actionControlProof,
+        effectiveSignal,
+        () => {
+          actionDispatchedAtEpochMs = Date.now();
+          actionDispatchedAtMs = elapsed(parentScanStartedAtMs, actionDispatchedAtEpochMs);
+          actionDispatched = true;
+          try {input.onLifecycleEvent?.({type: "action_dispatched", atMs: actionDispatchedAtMs});}
+          catch {limitations.push("lifecycle_listener_failed");}
+        },
       );
     } catch (error) {
       clickError = error;
+    }
+    if (!actionDispatched) {
+      limitations.push("reviewed_reject_dispatch_guard_failed");
+      return await finalize({resolverFound: true, resolverReason: "dispatch_guard_failed_before_action",
+        registration: unconfirmedRegistration("not_attempted", "dispatch_guard_failed_before_action"),
+        requests: classifyRequests(retainedRequests(), parentScanStartedAtMs)});
     }
     const confirmationStartedAtMs = Date.now();
     const confirmedState = await waitForRefusalConfirmation(
@@ -1335,7 +1388,7 @@ export async function runPostRefusalObserver(
       confirmationBaseline,
       actionDispatchedAtEpochMs,
       confirmationTimeoutMs,
-      input.signal,
+      effectiveSignal,
       (state) => { decisionEvidence = { policyVersion: "semantic_consent_registration.v2",
         decision: state.decision, basis: "verified_state", observedStateSha256: state.stateHash,
         ...(state.oneTrustGroupEvidence ? { oneTrustGroupEvidence: state.oneTrustGroupEvidence } : {}),
@@ -1368,17 +1421,17 @@ export async function runPostRefusalObserver(
       const terminalRead = terminalConsentDecisionRead({
         action: "reject", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        signal: input.signal, targetStillAuthorized, read: () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, input.signal),
+        signal: effectiveSignal, targetStillAuthorized, read: () => waitForRefusalConfirmation(context!, page!, selectedRecipe!.confirmation, confirmationBaseline, actionDispatchedAtEpochMs!, 0, effectiveSignal),
       });
       const stopReason = await finishAfterActionWindow({
         onFinalWindow: terminalRead.start,
         dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
-        clickCompleted: interactionDiagnostics.click.outcome === "completed", signal: input.signal, targetStillAuthorized,
+        clickCompleted: interactionDiagnostics.click.outcome === "completed", signal: effectiveSignal, targetStillAuthorized,
       });
       timing.observationMs = Math.max(0, Date.now() - captureStartedAtMs);
       if (stopReason !== "window_elapsed") limitations.push(`after_action_capture:${stopReason}`);
       cancellation();
-      if (input.retainResolverDiagnostics && input.outDir && !input.signal?.aborted && targetStillAuthorized()) {
+      if (input.retainResolverDiagnostics && input.outDir && !effectiveSignal?.aborted && targetStillAuthorized()) {
         const postActionGeometry = await captureConsentControlGeometry(page, {
           candidateLimit: 48,
           containerLimit: 16,
@@ -1396,10 +1449,10 @@ export async function runPostRefusalObserver(
       }
       limitations.push("refusal_registration_not_confirmed");
       let postActionStorage: PostRefusalStorageItem[] | undefined;
-      if (!input.signal?.aborted && targetStillAuthorized()) {
+      if (!effectiveSignal?.aborted && targetStillAuthorized()) {
         postActionStorage = await captureStorage(context, page, observationTargetUrl, limitations, undefined, (d) => { storageCollectionDiagnostics.postAction = d; }).catch(() => undefined);
       }
-      const capturedWrites = !input.signal?.aborted && targetStillAuthorized()
+      const capturedWrites = !effectiveSignal?.aborted && targetStillAuthorized()
         ? await readStorageWrites(page).catch(() => []) : [];
       const captureEndedAtMs = elapsed(parentScanStartedAtMs);
       const requests = classifyRequests(retainedRequests(), parentScanStartedAtMs);
@@ -1407,7 +1460,7 @@ export async function runPostRefusalObserver(
         policyVersion: "bounded_after_action_capture.v2", action: "reject",
         activationStatus: interactionDiagnostics.click.outcome === "completed" ? "completed" : "uncertain",
         actionDispatchedAtMs, captureEndedAtMs, requestedWindowMs: observationWindowMs,
-        stopReason: input.signal?.aborted ? "aborted" : !targetStillAuthorized() ? "target_changed" : stopReason,
+        stopReason: effectiveSignal?.aborted ? "aborted" : !targetStillAuthorized() ? "target_changed" : stopReason,
         requestsDropped: captureCoverage.requestsDroppedAfterAction,
         storageSnapshotRetained: postActionStorage !== undefined,
         storageWriteCoverage: "bounded_main_document_sample",
@@ -1659,6 +1712,9 @@ export async function runPostRefusalObserver(
       observations,
     });
   } finally {
+    if (budgetTimer) clearTimeout(budgetTimer);
+    budgetController.signal.removeEventListener("abort", closeBudgetExpiredContext);
+    await budgetContextClose;
     finishOptionalRuntimeGraph(graphCapture, "post_reject", "action_capture_closed");
     actionDiscovery?.dispose();
     await context?.close().catch(() => undefined);
@@ -2308,7 +2364,15 @@ async function dispatchRejectControl(
   recipe: PostRefusalActionRecipe,
   useVerifiedGeometryDispatch = false,
   assertDispatchAllowed?: () => void,
+  proof?: ConsentActionControlProof,
+  signal?: AbortSignal,
+  onDispatch?: () => void,
 ) {
+  assertDispatchAllowed?.();
+  await assertReviewedRejectDispatchAllowed({page,control,proof,signal,controlFrameUrl:recipe.controlFrameUrl});
+  assertDispatchAllowed?.();
+  onDispatch?.();
+  // Lifecycle listeners may cancel synchronously after final preparation.
   assertDispatchAllowed?.();
   if (recipe.accessibleControl?.kind === "closed_shadow_accessible_control") {
     await dispatchClosedShadowAccessibleControl(page, recipe.accessibleControl, assertDispatchAllowed);
@@ -2906,7 +2970,17 @@ async function waitForCanonicalRejectControlRecipe(
         : candidateTransitionSurfaceSelector;
       const bannerFrameUrl = useMainFrameCmpSurface ? undefined : controlFrameUrl;
       const registeredCmpRecipe = geometryRegisteredCmpRecipe;
-      const recipe: PostRefusalActionRecipe = {
+      // Preserve the registered activation recipe for the reviewed contextual
+      // necessary-only choice. A generic geometry recipe must not accidentally
+      // bypass (or prevent) the named scope proof at the dispatch boundary.
+      const necessaryOnlyPolicy = geometryCmpDefinition?.rejectLabelBoundNecessaryOnly;
+      const registeredNecessaryOnly = registeredCmpRecipe && necessaryOnlyPolicy?.expectedNormalizedLabels.includes(candidate.normalizedLabel) &&
+        await actionableControls[0]!.evaluate((element, selector) => element.matches(selector), necessaryOnlyPolicy.controlSelector).catch(() => false);
+      const recipe: PostRefusalActionRecipe = registeredNecessaryOnly ? {
+        ...registeredCmpRecipe!,
+        controlExpectedNormalizedLabel: candidate.normalizedLabel,
+        ...(controlFrameUrl ? {controlFrameUrl} : {}),
+      } : {
         artifactVersion: "certscore.post_refusal_action_recipe.v1",
         recipeId: `canonical-control:reject:v2:${hashValue([
           candidate.normalizedLabel,
@@ -2982,13 +3056,11 @@ function selectCanonicalRejectConfirmationRecipe(
   return undefined;
 }
 
-const POST_REFUSAL_RECIPE_CANDIDATE_MAX = 25;
-
 function validatedActionRecipes(input: PostRefusalObserverInput): PostRefusalActionRecipe[] {
   const recipes = input.recipeCandidates?.length ? input.recipeCandidates : [input.recipe];
-  if (recipes.length > POST_REFUSAL_RECIPE_CANDIDATE_MAX) {
+  if (recipes.length > CONSENT_ACTION_RECIPE_CANDIDATE_MAX) {
     throw new Error(
-      `Post-refusal recipe candidate set exceeds the bounded maximum of ${POST_REFUSAL_RECIPE_CANDIDATE_MAX}.`,
+      `Post-refusal recipe candidate set exceeds the bounded maximum of ${CONSENT_ACTION_RECIPE_CANDIDATE_MAX}.`,
     );
   }
   const recipeIds = new Set<string>();
@@ -3258,7 +3330,9 @@ async function waitForRefusalConfirmation(
         snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
       );
       const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
-      if (snapshot?.decision === "denied" && (changed || freshEvent) &&
+      const actionBoundEvent = snapshot?.eventObservedAtEpochMs === undefined ||
+        snapshot.eventObservedAtEpochMs >= actionDispatchedAtEpochMs;
+      if (snapshot?.decision === "denied" && actionBoundEvent && (changed || freshEvent) &&
         (confirmation.provider !== "borlabs" || (baseline.canonicalState !== undefined && freshEvent))) {
         return {
           stateHash: hashValue(snapshot.canonicalState),
@@ -3988,11 +4062,15 @@ export async function inspectRecoverableCommittedDocument(
     interactionAuthorization,
     scanId,
   );
-  const documentState = await page.evaluate(() => ({
-    hasDocumentElement: Boolean(document.documentElement),
-    hasBody: Boolean(document.body),
-    readyState: document.readyState,
-  })).catch(() => undefined);
+  let probeTimer: NodeJS.Timeout | undefined;
+  const documentState = await Promise.race([
+    page.evaluate(() => ({
+      hasDocumentElement: Boolean(document.documentElement),
+      hasBody: Boolean(document.body),
+      readyState: document.readyState,
+    })).catch(() => undefined),
+    new Promise<undefined>(resolve => { probeTimer = setTimeout(() => resolve(undefined), 250); }),
+  ]).finally(() => { if (probeTimer) clearTimeout(probeTimer); });
   const documentCommitted = Boolean(
     documentState?.hasDocumentElement &&
     documentState.hasBody &&

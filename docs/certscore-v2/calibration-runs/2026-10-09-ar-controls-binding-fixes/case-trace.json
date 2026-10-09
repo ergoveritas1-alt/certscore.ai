@@ -1,0 +1,583 @@
+[
+  {
+    "scanId": "00730120-c8e2-468e-8a5f-012b5228455c",
+    "domain": "portaventuraworld.com",
+    "diagnosticClassification": "document_drift",
+    "conclusion": "Image at 8504ms and terminal inventory/geometry have different loader tokens. Earlier pixels cannot prove controls on the final document. Source has inaccessible frames. New selection guard excludes stale-loader references; historical limitation remains.",
+    "originalExportSha256": "d06ef81fea185ce681a3422a7f6b96bbbd2c61caa165cc425905533ddb4dfc0e",
+    "bundleSha256LocalOnly": "1b147136b2e86d901f47488bbc5bb40ee0acac737afdf24188a953b80510c49c",
+    "observations": [
+      {
+        "atMs": 13202,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "F993556253BE685241B4FAC412FD5DE2"
+        },
+        "inventoryOutcome": "complete_empty"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_geometry_proof",
+        "atMs": 8504,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "AF63F26D4F218F079AE16D93D331A764"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 7161,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "AF63F26D4F218F079AE16D93D331A764"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 3080,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "AF63F26D4F218F079AE16D93D331A764"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-10-08T10:56:13.854Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "F993556253BE685241B4FAC412FD5DE2"
+      },
+      "packetScreenshot": null
+    }
+  },
+  {
+    "scanId": "dcc62f4c-456e-4226-af29-621907b93dcb",
+    "domain": "delltechnologies.com",
+    "diagnosticClassification": "omitted_safety_approved_visual",
+    "conclusion": "Retained CMP image at 7270ms visibly shows Manage, Decline All and Accept All. Report artifact allowlist omitted its type. Fixed locally.",
+    "originalExportSha256": "37f339c7f2da4c14d84e8a92991f5626955ab7bdfc1df088e084e4611504a341",
+    "bundleSha256LocalOnly": "b4086013641d7451489c1fb9547e4fecc4dd331dd362ad9050d9047b39e02d1f",
+    "observations": [
+      {
+        "atMs": 7955,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "16EB16E6F2C74F78633607D59F5AA809"
+        },
+        "inventoryOutcome": "partial"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_cmp_controls",
+        "atMs": 7270,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "16EB16E6F2C74F78633607D59F5AA809"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 4618,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "16EB16E6F2C74F78633607D59F5AA809"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 3516,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "16EB16E6F2C74F78633607D59F5AA809"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-10-09T00:06:55.445Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "16EB16E6F2C74F78633607D59F5AA809"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/dcc62f4c-456e-4226-af29-621907b93dcb/lanes/consent_proof/screenshot-pre-consent-cmp-controls.png"
+    }
+  },
+  {
+    "scanId": "c9d35ff5-3fd3-41a5-b63d-0c1e103d3863",
+    "domain": "runna.com",
+    "diagnosticClassification": "omitted_safety_approved_visual",
+    "conclusion": "Retained CMP image at 9059ms visibly shows Accept all, Customize and Reject Non-Essential. Same export omission, fixed locally.",
+    "originalExportSha256": "eca15d9007f01cae55ac0c3f028d2b86283785c87236d5522f3b5386c17502c5",
+    "bundleSha256LocalOnly": "350776137530724a1a9c53ba6c8d2084e7a2bc8ef149672620cd694c98f9a030",
+    "observations": [
+      {
+        "atMs": 9390,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "AC2F71CE7BD7A257A4F021857C4B062E"
+        },
+        "inventoryOutcome": "complete_with_controls"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_cmp_controls",
+        "atMs": 9059,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "AC2F71CE7BD7A257A4F021857C4B062E"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 3579,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "AC2F71CE7BD7A257A4F021857C4B062E"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 1945,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "AC2F71CE7BD7A257A4F021857C4B062E"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-09-30T12:41:13.404Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "AC2F71CE7BD7A257A4F021857C4B062E"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/c9d35ff5-3fd3-41a5-b63d-0c1e103d3863/lanes/consent_proof/screenshot-pre-consent-cmp-controls.png"
+    }
+  },
+  {
+    "scanId": "773f63c2-13e3-42d5-bc8e-0db72491d306",
+    "domain": "ncsoft.com",
+    "diagnosticClassification": "withheld_visual_and_conflicting_references",
+    "conclusion": "Late proof safety finalization exceeded its deadline. Top-level geometry names initial image while visible candidates name withheld proof. Future same-loader reference consistency fixed; historical image remains withheld.",
+    "originalExportSha256": "87387299b8e47df5c061fc22f8e44ae648d9312e48d46d2dce9f063c03ed0fb6",
+    "bundleSha256LocalOnly": "cb9baf8dae87cf856c916255e90ab8ed7544bae634d1ceb9c5f729c3fc03ccf5",
+    "observations": [
+      {
+        "atMs": 12029,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "14EE35A691B02287D6C79B7DDA7E9F88"
+        },
+        "inventoryOutcome": "partial"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_geometry_proof",
+        "atMs": 12303,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "14EE35A691B02287D6C79B7DDA7E9F88"
+        },
+        "displayStatus": "withheld",
+        "safetyFailureCode": "finalization_deadline_exceeded"
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 1981,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "14EE35A691B02287D6C79B7DDA7E9F88"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-09-30T05:38:01.538Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "14EE35A691B02287D6C79B7DDA7E9F88"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/773f63c2-13e3-42d5-bc8e-0db72491d306/lanes/consent_proof/screenshot-pre-consent.png"
+    }
+  },
+  {
+    "scanId": "2bfc18b3-d850-4376-af1e-aa7990089201",
+    "domain": "feedbackcompany.com",
+    "diagnosticClassification": "earlier_visual_than_inventory",
+    "conclusion": "Geometry at 4191ms and images at 2903/4069ms precede typed Allow/Deny at 5515ms. Same-loader timestamps explain why selected images do not disprove later controls. Historical visibility not conclusively reconstructed.",
+    "originalExportSha256": "c0a9132209bc8b70015ba1f8667e3180e65701fc1068644fa95484f188e30f16",
+    "bundleSha256LocalOnly": "db843976d4c38af219de7cff7e8f19e817faffece2161b098360d517565100e6",
+    "observations": [
+      {
+        "atMs": 5515,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "CC0BBB190B50E3DA7FEB2539979CB152"
+        },
+        "inventoryOutcome": "complete_with_controls"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 4069,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "CC0BBB190B50E3DA7FEB2539979CB152"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 2903,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "CC0BBB190B50E3DA7FEB2539979CB152"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-10-01T12:33:19.906Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "CC0BBB190B50E3DA7FEB2539979CB152"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/2bfc18b3-d850-4376-af1e-aa7990089201/lanes/consent_proof/screenshot-pre-consent-settled.png"
+    }
+  },
+  {
+    "scanId": "0c62e639-a6e8-4b23-935c-33892bd0c95f",
+    "domain": "nomura.com",
+    "diagnosticClassification": "hidden_frame_capture_bug_prior_fix",
+    "conclusion": "Earlier inventory reported ACCEPT in child blank.html; later geometry shows one-pixel child frame and off-viewport control. Prior local child-viewport fix passes positive/negative fixtures. Historical earlier visibility remains unresolved.",
+    "originalExportSha256": "9a05792b477cde10411e31b1b8f7b4e25e76ea74e8828524eeee4309941613f5",
+    "bundleSha256LocalOnly": "3ca2f6a408b46a672575299b1f9561449db3f572c2fc5ffc4c8e88e286609990",
+    "observations": [
+      {
+        "atMs": 3094,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1DE0D533CB7C4DAC5B9294583764CA2A"
+        },
+        "inventoryOutcome": "complete_with_controls"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 3159,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1DE0D533CB7C4DAC5B9294583764CA2A"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 1458,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1DE0D533CB7C4DAC5B9294583764CA2A"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent_no_go_confirmation",
+        "atMs": 16766,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1DE0D533CB7C4DAC5B9294583764CA2A"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-10-01T00:13:44.834Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "1DE0D533CB7C4DAC5B9294583764CA2A"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/0c62e639-a6e8-4b23-935c-33892bd0c95f/lanes/consent_proof/screenshot-pre-consent-settled.png"
+    }
+  },
+  {
+    "scanId": "96c02e03-1e87-48bc-b15e-3091460d8f7f",
+    "domain": "gotokyo.org",
+    "diagnosticClassification": "earlier_visual_than_inventory",
+    "conclusion": "Only image at 23087ms precedes typed Agree and continue at 32709ms. No geometry artifact retained. Earlier pixels do not disprove later control. Coverage remains unresolved within existing budget.",
+    "originalExportSha256": "8559527f42f51255b3a8621f7da7ea779cf1b711bf5ca51da729fabae0cdb7b4",
+    "bundleSha256LocalOnly": "3d51a036425dab983e2f8cc73279e7ddd2abc48ca877e726d705ce1336d9dc04",
+    "observations": [
+      {
+        "atMs": 32709,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "126352AFB8D7E5B48BA5E7BBEEC00E93"
+        },
+        "inventoryOutcome": "complete_with_controls"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 23087,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "126352AFB8D7E5B48BA5E7BBEEC00E93"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": null
+  },
+  {
+    "scanId": "acda28ea-6576-4ee0-91c0-8db7b31882bd",
+    "domain": "nttdata.com",
+    "diagnosticClassification": "withheld_visual_and_conflicting_references",
+    "conclusion": "Late proof withheld at safety finalization deadline. Packet points at settled image while visible candidates point at proof. Future consistency fixed; historical image remains withheld.",
+    "originalExportSha256": "ab168bd38390900811dcf2c7cb01c6fd21eedc45ff65c12a45499eb671fd3946",
+    "bundleSha256LocalOnly": "00bc90a054d45b514a84e01ad0fe07d27c643df9008ec871c3f95a998d81b748",
+    "observations": [
+      {
+        "atMs": 9857,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "81FCFE27057A7C426483143EDFFA4A70"
+        },
+        "inventoryOutcome": "partial"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_geometry_proof",
+        "atMs": 10179,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "81FCFE27057A7C426483143EDFFA4A70"
+        },
+        "displayStatus": "withheld",
+        "safetyFailureCode": "finalization_deadline_exceeded"
+      },
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 6301,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "81FCFE27057A7C426483143EDFFA4A70"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 4641,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "81FCFE27057A7C426483143EDFFA4A70"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-10-01T08:49:33.548Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "81FCFE27057A7C426483143EDFFA4A70"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/acda28ea-6576-4ee0-91c0-8db7b31882bd/lanes/consent_proof/screenshot-pre-consent-settled.png"
+    }
+  },
+  {
+    "scanId": "4ebb8d38-be36-4b55-bb77-9b1f7c5ee361",
+    "domain": "infoq.com",
+    "diagnosticClassification": "withheld_late_visual",
+    "conclusion": "Initial image at 2135ms precedes controls at 10982ms. Later full-page image withheld at safety finalization deadline. No false-positive finding established; no additional safety budget added.",
+    "originalExportSha256": "9be730ab62f50358e955ebdccc75e0f3b4244c70b5f7d30d54132dc5011f74ec",
+    "bundleSha256LocalOnly": "49c2fb69df41c911f9679f34ffa2f3f183b8df11a024e01c2f09e12772834fc4",
+    "observations": [
+      {
+        "atMs": 10982,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "8AE7B129142B87B2F9060DA58A118E63"
+        },
+        "inventoryOutcome": "complete_with_controls"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_full_page",
+        "atMs": 11717,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "8AE7B129142B87B2F9060DA58A118E63"
+        },
+        "displayStatus": "withheld",
+        "safetyFailureCode": "finalization_deadline_exceeded"
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 2135,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "8AE7B129142B87B2F9060DA58A118E63"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-10-01T13:44:45.141Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "8AE7B129142B87B2F9060DA58A118E63"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/4ebb8d38-be36-4b55-bb77-9b1f7c5ee361/lanes/consent_proof/screenshot-pre-consent.png"
+    }
+  },
+  {
+    "scanId": "a45a837d-4993-4026-9d67-e59f3c2a5eb4",
+    "domain": "myrealpage.com",
+    "diagnosticClassification": "omitted_visual_and_reused_image_pointer",
+    "conclusion": "Retained CMP image at 13081ms shows Accept Only Necessary, Accept and Decline. Export omitted its type; recovery geometry named an uncaptured new recovery image despite reusing an existing image. Both fixed locally.",
+    "originalExportSha256": "565024f55bf1a36bc1853adebc6bf0906efbbea1722731a8cf09a35ee65e5965",
+    "bundleSha256LocalOnly": "b4010774bba2ae6a12440754905f3644b5eef9047e71284687a625929351c23a",
+    "observations": [
+      {
+        "atMs": 12598,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1D41DABFA8E40578E8BB847E281E778A"
+        },
+        "inventoryOutcome": "partial"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_cmp_controls",
+        "atMs": 13081,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1D41DABFA8E40578E8BB847E281E778A"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 7347,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1D41DABFA8E40578E8BB847E281E778A"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 3869,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "1D41DABFA8E40578E8BB847E281E778A"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-09-30T06:56:15.962Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "1D41DABFA8E40578E8BB847E281E778A"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/a45a837d-4993-4026-9d67-e59f3c2a5eb4/lanes/consent_proof/screenshot-pre-consent-packet-recovery.png"
+    }
+  },
+  {
+    "scanId": "33a54005-42f2-466b-8361-e10b7a79dd4d",
+    "domain": "owncloud.com",
+    "diagnosticClassification": "withheld_visual_and_conflicting_references",
+    "conclusion": "Late proof withheld at safety finalization deadline. Packet/candidate reference inconsistency fixed for future captures; historical image remains withheld.",
+    "originalExportSha256": "69b5dc844cb71f7378bd756ffad5eed1726267b636880116af9540dfcafc4838",
+    "bundleSha256LocalOnly": "014948028c7411107e783b79ab46343347ea97473ae097d8a2dd3fdf9339fc40",
+    "observations": [
+      {
+        "atMs": 5969,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "94B65EA3EF5FE55346951950C54C3E77"
+        },
+        "inventoryOutcome": "partial"
+      }
+    ],
+    "screenshots": [
+      {
+        "artifactId": "screenshot_pre_consent_geometry_proof",
+        "atMs": 6062,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "94B65EA3EF5FE55346951950C54C3E77"
+        },
+        "displayStatus": "withheld",
+        "safetyFailureCode": "finalization_deadline_exceeded"
+      },
+      {
+        "artifactId": "screenshot_pre_consent_settled",
+        "atMs": 4343,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "94B65EA3EF5FE55346951950C54C3E77"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      },
+      {
+        "artifactId": "screenshot_pre_consent",
+        "atMs": 3161,
+        "documentIdentity": {
+          "source": "cdp_loader_id",
+          "token": "94B65EA3EF5FE55346951950C54C3E77"
+        },
+        "displayStatus": "available",
+        "safetyFailureCode": null
+      }
+    ],
+    "geometry": {
+      "capturedAt": "2026-10-08T10:48:28.025Z",
+      "documentIdentity": {
+        "source": "cdp_loader_id",
+        "token": "94B65EA3EF5FE55346951950C54C3E77"
+      },
+      "packetScreenshot": "/tmp/certscore-v2-dag-lambda/33a54005-42f2-466b-8361-e10b7a79dd4d/lanes/consent_proof/screenshot-pre-consent-settled.png"
+    }
+  }
+]

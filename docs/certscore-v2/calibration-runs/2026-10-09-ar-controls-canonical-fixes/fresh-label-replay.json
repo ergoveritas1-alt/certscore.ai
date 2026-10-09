@@ -1,0 +1,63 @@
+{
+  "scope": "Offline classifier replay against retained visible banner text and candidate labels; not a rescan or historical evidence rewrite",
+  "rows": [
+    {
+      "host": "adecco.com",
+      "candidateId": "candidate_1",
+      "label": "STRICTLY NECESSARY",
+      "contextText": "Adecco uses Cookies\n\nWe use cookies on our website. By clicking “Accept All” you agree to the storing of cookies on your device to improve the performance of our site, to enhance functionality and personalization, analyse site usage and assist in our marketing efforts (including personalised advertisements). By clicking “Strictly Necessary” you only agree to the storing of strictly necessary cookies on your device. No other cookies will be used. Do note however that selecting this option may result in a less optimized browsing experience. For more information, please see ourCookie PolicyPrivacy Policy\nCOOKIES SETTINGS\nSTRICTLY NECESSARY\nACCEPT ALL",
+      "geometrySha256": "87eece042061afe0a47f002c0546fd096840509213f0349e5b6c108a069008e0",
+      "domTextSha256": "d790712a83a2d6732fe7934ccd4e3bd5ce5944db3e07c3ad2659f649cf418d57",
+      "originalRegistry": "consent-control-label-registry.v10",
+      "originalAction": "other",
+      "after": {
+        "intent": "reject",
+        "semanticRole": "necessary_only",
+        "confidence": 0.9,
+        "matchedTerm": "strictly necessary",
+        "matchedLocale": "en",
+        "matchStrength": "equivalent",
+        "variant": "necessary_only",
+        "reasonCodes": [
+          "matched_reject",
+          "observation_only_label",
+          "match_strength_equivalent",
+          "variant_necessary_only",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      }
+    },
+    {
+      "host": "sodexo.com",
+      "candidateId": "candidate_1",
+      "label": "Essential Cookies",
+      "contextText": "Sodexo respects your privacy\n\nBy clicking on \"Accept all cookies\", you consent to the installation of cookies by our Site and by third parties (list available on Cookie Settings Link) on your device for the purpose of improving the performance of our Site, your experience and offering you personalized information about our services.\n\nYou are free to change your mind at any time by going to \"Cookie Settings\" or to refuse them by clicking \"essential cookies\" without consequence on your access to the site.\n\nFor more information and to know everything about the consequences of your choices you can consult the Cookie Policy\nCookie Settings\nEssential Cookies Accept All Cookies",
+      "geometrySha256": "1c37a2640904433b63877a10222e8fffb961abae6be0019626eea2b8609ad65c",
+      "domTextSha256": "7cf6dc7005040d6354bbaef2bfc617fc4ab66214e8b94970393da2292391a9c2",
+      "originalRegistry": "consent-control-label-registry.v10",
+      "originalAction": "other",
+      "after": {
+        "intent": "reject",
+        "semanticRole": "necessary_only",
+        "confidence": 0.9,
+        "matchedTerm": "essential cookies",
+        "matchedLocale": "en",
+        "matchStrength": "equivalent",
+        "variant": "necessary_only",
+        "reasonCodes": [
+          "matched_reject",
+          "observation_only_label",
+          "match_strength_equivalent",
+          "variant_necessary_only",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      }
+    }
+  ]
+}

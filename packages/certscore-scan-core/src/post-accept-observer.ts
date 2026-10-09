@@ -1,12 +1,13 @@
+import { createActionRequestRetention } from "./action-request-retention.js";
 import { LATE_FORM_CAPTURE_EXTENSION_MS, startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
 import { inspectCustomAcceptControl, isCustomAcceptControlCandidate, sameCustomAcceptControlBinding } from "./custom-accept-control.js";
-import { prioritizeConsentActionRecipes, consentActionBindingDeadline, liveConsentActionCmp } from "./consent-action-recipe-priority.js";
+import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX, prioritizeConsentActionRecipes, consentActionBindingDeadline, liveConsentActionCmp } from "./consent-action-recipe-priority.js";
 import type { ActionTcfData } from "./consent-action-tcf-state.js";
-import { captureOneTrustBaseline, type OneTrustBaseline } from "./onetrust-consent-state.js";
+import { captureOneTrustBaseline, oneTrustBaselineLimitation, type OneTrustBaseline } from "./onetrust-consent-state.js";
 import { decodeTcfV2PurposeConsents, readConsentActionTcfData } from "./consent-action-tcf-state.js";
 import { canonicalConsentSurfacePresent, consentScopePermitsInteraction, distinctActionTargets, hasActionControlStructure } from "./cmp-action-target.js";
 import { finishOptionalRuntimeGraph, installRuntimeGraphCapture } from "./runtime-evidence-graph-capture.js";
@@ -64,7 +65,7 @@ import {
   type CmpAccessibleActionResolution,
 } from "./cmp-accessible-action.js";
 import { readCmpApiConsentSnapshot } from "./cmp-api-consent-state.js";
-import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery } from "./cmp-action-control-proof.js";
+import { assertConsentActionDispatchAllowed, buildConsentActionControlProof, consentActionLabelNeedsRediscovery, waitForTransparentConsentControl } from "./cmp-action-control-proof.js";
 import { matchingStateWriteTime, readActionStateWrites, verifiedCanonicalStateWrite, verifiedCookieDecision, type SemanticState } from "./consent-action-semantic-state.js";
 import {
   captureConsentControlGeometry,
@@ -368,6 +369,7 @@ export async function runPostAcceptObserver(
   };
   const preActionRequests: CapturedRequest[] = [];
   const postActionRequests: CapturedRequest[] = [];
+  const postActionRetention = createActionRequestRetention(postActionRequests, CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT);
   const captureCoverage = { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 };
   const requestStartedAtEpochMs = new WeakMap<Request, number>();
   const retainedRequests = () => [
@@ -453,7 +455,7 @@ export async function runPostAcceptObserver(
       ...(afterActionCapture ? { afterActionCapture } : {}),
       ...(terminalDecisionEvidence ? { terminalDecisionEvidence } : {}),
       decisionEvidence,
-      captureCoverage,
+      captureCoverage: { ...captureCoverage, postActionRetention: postActionRetention.summary() },
       artifactOnly: true,
       productionProjectable:
         input.productionProjectable === true && confirmed && observationCoverageSufficient &&
@@ -579,19 +581,25 @@ export async function runPostAcceptObserver(
       // Preserve ancestry even when an ancestor's row exceeds the retention cap.
       if (ancestorStart !== undefined) requestStartedAtEpochMs.set(request, Math.min(startedAtEpochMs, ancestorStart));
       const bucket = actionDispatched ? postActionRequests : preActionRequests;
-      if (bucket.length >= (actionDispatched ? CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT : MAX_REQUESTS)) {
-        if (actionDispatched) captureCoverage.requestsDroppedAfterAction += 1;
-        else captureCoverage.requestsDroppedBeforeAction += 1;
+      if (!actionDispatched && bucket.length >= MAX_REQUESTS) {
+        captureCoverage.requestsDroppedBeforeAction += 1;
         return;
       }
       const requestId = `post_accept_request_${++nextRequestNumber}`;
-      requestIds.set(request, requestId);
-      activeRequestIds.add(requestId);
-      bucket.push({
+      const captured: CapturedRequest = {
         request, requestId, startedAtEpochMs,
         inFlightAtAcceptanceRegistration: acceptanceRegisteredAtEpochMs !== undefined &&
           ancestorStart !== undefined && ancestorStart < acceptanceRegisteredAtEpochMs,
-      });
+      };
+      if (actionDispatched) {
+        const wasFull = bucket.length >= CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT;
+        const selection = postActionRetention.offer(captured);
+        if (wasFull) captureCoverage.requestsDroppedAfterAction += 1;
+        if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
+        if (!selection.retained) return;
+      } else bucket.push(captured);
+      requestIds.set(request, requestId);
+      activeRequestIds.add(requestId);
     });
     const markCompleted = (request: Request) => {
       const requestId = requestIds.get(request);
@@ -874,6 +882,10 @@ export async function runPostAcceptObserver(
       selectedRecipe.confirmation,
       control,
     );
+    if ("oneTrustBaseline" in confirmationBaseline) {
+      const reason = oneTrustBaselineLimitation(confirmationBaseline.oneTrustBaseline);
+      if (reason) limitations.push(reason);
+    }
     let proofResolution = await buildConsentActionControlProof({
       onLabelInspection: recordResolverSnapshot,
       signal: effectiveSignal,
@@ -913,6 +925,14 @@ export async function runPostAcceptObserver(
         const remainingRecoveryBudgetMs = () => Math.max(0, resolverStartedAtMs + actionSearchTimeoutMs - Date.now());
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
+        }
+        if (proofResolution.reason === "resolved_control_scope_not_interactive" &&
+          !await waitForTransparentConsentControl({action: "accept", control, page,
+            selectorHint: selectedRecipe.controlSelector,
+            ...(confirmationScope !== page ? {controlFrameUrl: confirmationScope.url()} : {}),
+            authorizedTargetSha256: authorizedExactTargetUrl ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) : undefined,
+            deadlineAtMs: resolverStartedAtMs + actionSearchTimeoutMs, signal: effectiveSignal})) {
+          throw new Error("transparent_consent_scope_not_ready");
         }
         // An unverified named label must not repeatedly select the same control.
         // Spend only the remaining original budget on canonical live discovery.
@@ -1287,8 +1307,11 @@ export async function runPostAcceptObserver(
 
 function validatedRecipes(input: PostAcceptObserverInput) {
   const selected = input.recipeCandidates?.length ? input.recipeCandidates : [input.recipe];
+  if (selected.length > CONSENT_ACTION_RECIPE_CANDIDATE_MAX) {
+    throw new Error(`Post-Accept recipe candidate set exceeds the bounded maximum of ${CONSENT_ACTION_RECIPE_CANDIDATE_MAX}.`);
+  }
   const deduped = new Map<string, PostAcceptActionRecipe>();
-  for (const recipe of selected.slice(0, 24)) {
+  for (const recipe of selected) {
     if (recipe.artifactVersion !== "certscore.post_accept_action_recipe.v1") continue;
     if (!recipe.controlSelector.trim() || !recipe.recipeId.trim()) continue;
     if (
@@ -2116,7 +2139,9 @@ async function waitForAcceptanceConfirmation(
         snapshot?.canonicalState && snapshot.canonicalState !== baseline.canonicalState
       );
       const freshEvent = (snapshot?.eventSequence ?? 0) > baseline.eventSequence;
-      if (snapshot?.decision === "granted" && (changed || freshEvent) &&
+      const actionBoundEvent = snapshot?.eventObservedAtEpochMs === undefined ||
+        snapshot.eventObservedAtEpochMs >= actionDispatchedAtEpochMs;
+      if (snapshot?.decision === "granted" && actionBoundEvent && (changed || freshEvent) &&
         (confirmation.provider !== "borlabs" || (baseline.canonicalState !== undefined && freshEvent))) {
         return {
           stateHash: hashValue(snapshot.canonicalState),

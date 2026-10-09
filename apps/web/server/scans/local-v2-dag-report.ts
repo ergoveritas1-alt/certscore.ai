@@ -403,6 +403,9 @@ function isPreConsentScreenshotArtifact(screenshot: NonNullable<CanonicalEvidenc
   return screenshot?.artifactId === "screenshot_pre_consent" ||
     screenshot?.artifactId === "screenshot_pre_consent_settled" ||
     screenshot?.artifactId === "screenshot_pre_consent_geometry_proof" ||
+    screenshot?.artifactId === "screenshot_pre_consent_cmp_controls" ||
+    screenshot?.artifactId === "screenshot_pre_consent_packet_recovery" ||
+    screenshot?.artifactId === "screenshot_pre_consent_cmp_empty" ||
     screenshot?.artifactId === "screenshot_pre_consent_full_page";
 }
 
@@ -410,12 +413,18 @@ function preConsentScreenshotRank(screenshot: NonNullable<CanonicalEvidenceBundl
   switch (screenshot.artifactId) {
     case "screenshot_pre_consent_geometry_proof":
       return 0;
-    case "screenshot_pre_consent_settled":
+    case "screenshot_pre_consent_packet_recovery":
       return 1;
-    case "screenshot_pre_consent_full_page":
+    case "screenshot_pre_consent_cmp_controls":
       return 2;
-    default:
+    case "screenshot_pre_consent_cmp_empty":
       return 3;
+    case "screenshot_pre_consent_settled":
+      return 4;
+    case "screenshot_pre_consent_full_page":
+      return 5;
+    default:
+      return 6;
   }
 }
 
@@ -423,6 +432,12 @@ function localV2VisualEvidenceArtifactId(screenshot: NonNullable<CanonicalEviden
   switch (screenshot.artifactId) {
     case "screenshot_pre_consent_geometry_proof":
       return "local_v2:screenshot_pre_consent_geometry_proof";
+    case "screenshot_pre_consent_cmp_controls":
+      return "local_v2:screenshot_pre_consent_cmp_controls";
+    case "screenshot_pre_consent_packet_recovery":
+      return "local_v2:screenshot_pre_consent_packet_recovery";
+    case "screenshot_pre_consent_cmp_empty":
+      return "local_v2:screenshot_pre_consent_cmp_empty";
     case "screenshot_pre_consent_settled":
       return "local_v2:screenshot_pre_consent_settled";
     case "screenshot_pre_consent_full_page":
@@ -2003,7 +2018,10 @@ const LOCAL_V2_VISUAL_EVIDENCE_FILE_NAMES = {
   "local_v2:screenshot_pre_consent": "screenshot-pre-consent.png",
   "local_v2:screenshot_pre_consent_settled": "screenshot-pre-consent-settled.png",
   "local_v2:screenshot_pre_consent_full_page": "screenshot-pre-consent-full-page.jpg",
-  "local_v2:screenshot_pre_consent_geometry_proof": "screenshot-pre-consent-geometry-proof.png"
+  "local_v2:screenshot_pre_consent_geometry_proof": "screenshot-pre-consent-geometry-proof.png",
+  "local_v2:screenshot_pre_consent_cmp_controls": "screenshot-pre-consent-cmp-controls.png",
+  "local_v2:screenshot_pre_consent_packet_recovery": "screenshot-pre-consent-packet-recovery.png",
+  "local_v2:screenshot_pre_consent_cmp_empty": "screenshot-pre-consent-cmp-empty.png"
 } as const;
 
 const LOCAL_V2_VISUAL_EVIDENCE_ALTERNATE_FILE_NAMES: Partial<Record<

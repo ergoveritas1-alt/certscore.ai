@@ -5,8 +5,13 @@ import { matchesCanonicalCmpCookieName } from "./cmp-cookie-name.js";
 import type { SemanticState } from "./consent-action-semantic-state.js";
 
 type Group = { id: string; alwaysActive: boolean };
-export type OneTrustBaseline = { status: "invalid" } | {
+export type OneTrustBaseline = {
+  status: "invalid";
+  reason?: "configuration_unverifiable" | "cookie_missing_or_ambiguous" |
+    "cookie_groups_malformed" | "cookie_groups_unconfigured";
+} | {
   status: "verified"; identityHash: string; valueHash: string;
+  coverage: "complete" | "partial";
   groupIds: string[]; configurationHash: string;
 };
 
@@ -53,11 +58,16 @@ export async function captureOneTrustBaseline(context: BrowserContext, scope: Pa
   // Preserve legacy registry decoding where no domain-data API exists. If an
   // API is present but unverifiable, it must not fall back to guessed categories.
   if (configuration === undefined) return undefined;
-  if (configuration === "invalid") return { status: "invalid" };
+  if (configuration === "invalid") return { status: "invalid", reason: "configuration_unverifiable" };
   const cookie = await readCookie(context, scope);
   const groups = cookie ? parseOneTrustCookieGroups(cookie.value) : undefined;
-  if (!cookie || !groups || groups.size !== configuration.length || [...groups.keys()].some((id) => !configuration.some((group) => group.id === id))) return { status: "invalid" };
+  if (!cookie) return { status: "invalid", reason: "cookie_missing_or_ambiguous" };
+  if (!groups) return { status: "invalid", reason: "cookie_groups_malformed" };
+  if ([...groups.keys()].some((id) => !configuration.some((group) => group.id === id))) {
+    return { status: "invalid", reason: "cookie_groups_unconfigured" };
+  }
   return { status: "verified", identityHash: cookie.identityHash, valueHash: hash(cookie.value),
+    coverage: groups.size === configuration.length ? "complete" : "partial",
     groupIds: [...groups.keys()].sort(), configurationHash: hash(JSON.stringify(configuration)) };
 }
 
@@ -71,7 +81,9 @@ export async function verifyOneTrustCookieDecision(context: BrowserContext, scop
   if (!cookie || cookie.identityHash !== baseline.identityHash || !current) return undefined;
   const groups = [...current].map(([id, consent]) => ({ id, consent, alwaysActive: configuration.find((group) => group.id === id)?.alwaysActive }));
   const proof = oneTrustGroupEvidenceSchema.safeParse({
-    policyVersion: "onetrust_cookie_groups.v1", cookieIdentitySha256: cookie.identityHash,
+    // V1 keeps its complete-baseline contract. V2 permits only a known subset
+    // before the click; the fresh decision receipt must still cover every group.
+    policyVersion: baseline.coverage === "partial" ? "onetrust_cookie_groups.v2" : "onetrust_cookie_groups.v1", cookieIdentitySha256: cookie.identityHash,
     beforeValueSha256: baseline.valueHash, afterValueSha256: hash(cookie.value),
     configurationSha256: baseline.configurationHash, baselineGroupIds: baseline.groupIds, configuredGroupIds: configuration.map((group) => group.id), groups,
   });
@@ -83,3 +95,8 @@ export async function verifyOneTrustCookieDecision(context: BrowserContext, scop
 }
 
 function hash(value: string) { return createHash("sha256").update(value).digest("hex"); }
+
+/** Internal diagnostic only. Never substitutes for a complete semantic receipt. */
+export function oneTrustBaselineLimitation(baseline: OneTrustBaseline | undefined): string | undefined {
+  return baseline?.status === "invalid" && baseline.reason ? `onetrust_confirmation_baseline:${baseline.reason}` : undefined;
+}

@@ -1,0 +1,491 @@
+[
+  {
+    "target": "https://mojohost.com/",
+    "scanId": "862e1057-ca32-4eaa-a00e-09c227eda36e",
+    "score": 74,
+    "formsSummary": {
+      "contractVersion": "certscore.forms-summary.v1",
+      "scope": "starting_page_reportable_observations",
+      "totalObserved": 0,
+      "preConsentObserved": 0,
+      "afterAcceptObserved": 0,
+      "preConsentCapture": "limited",
+      "afterAcceptCapture": "limited",
+      "countStatus": "not_captured"
+    },
+    "scoreExplanation": {
+      "contractVersion": "certscore.score-explanation.v1",
+      "scope": "starting_page_canonical_score",
+      "scoreVersion": "overall-posture.v6",
+      "policyVersion": "gdpr-eprivacy-posture.v16",
+      "baseScore": 100,
+      "scoreFloor": 0,
+      "score": 74,
+      "totalPolicyDeductionPoints": 26,
+      "deductions": [
+        {
+          "family": "pre_consent_storage",
+          "label": "Storage",
+          "deductionPoints": 18,
+          "rules": [
+            {
+              "ruleId": "pre_consent_cookies_storage",
+              "label": "Non-essential pre-consent cookies / storage",
+              "policyDeductionPoints": 18,
+              "findingIds": [
+                "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage"
+              ],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        },
+        {
+          "family": "pre_consent_tracking",
+          "label": "Tracking",
+          "deductionPoints": 8,
+          "rules": [
+            {
+              "ruleId": "pre_consent_third_party_tracking",
+              "label": "Pre-consent tracking",
+              "policyDeductionPoints": 8,
+              "findingIds": [
+                "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking"
+              ],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        }
+      ]
+    },
+    "postAccept": {
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "status": "confirmed_clean",
+      "acceptanceExercised": true,
+      "observationCount": 0,
+      "productionProjectable": true,
+      "evidenceDisposition": "confirmed",
+      "indeterminateReason": null,
+      "verdict": "no_eligible_nonessential_activity_observed_during_completed_window",
+      "interpretation": "Accept was confirmed. No eligible non-essential activity was observed during the completed bounded window.",
+      "observationStrategy": "stop_on_first_eligible_activity",
+      "termination": {
+        "kind": "window_elapsed",
+        "intentional": true,
+        "trigger": "window_elapsed"
+      },
+      "completedAt": "2026-10-09T03:58:55.429Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ]
+    },
+    "postReject": {
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "status": "confirmed_observation",
+      "refusalExercised": true,
+      "observationCount": 5,
+      "productionProjectable": true,
+      "evidenceDisposition": "confirmed",
+      "indeterminateReason": null,
+      "verdict": "no_eligible_nonessential_activity_observed_during_completed_window",
+      "interpretation": "Reject was confirmed. No eligible post-refusal request or storage write was observed; unchanged non-essential storage remained as a score-neutral review signal.",
+      "observationStrategy": "stop_on_first_eligible_activity",
+      "termination": {
+        "kind": "window_elapsed",
+        "intentional": true,
+        "trigger": "window_elapsed"
+      },
+      "completedAt": "2026-10-09T03:59:01.293Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:0"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:0"
+      ]
+    },
+    "forms": [],
+    "publicationCount": 1,
+    "scannerToProjectionMs": 7000,
+    "totalToProjectionMs": 23387,
+    "projectionHash": "7f59d3fa945d7e8737b57dfb5195e628d8708da452826b6945d36f197c93c8a5"
+  },
+  {
+    "target": "https://www.aalto.fi/",
+    "scanId": "784c7795-4295-4c1b-b91d-2db7d6e194d3",
+    "score": 92,
+    "formsSummary": {
+      "contractVersion": "certscore.forms-summary.v1",
+      "scope": "starting_page_reportable_observations",
+      "totalObserved": 0,
+      "preConsentObserved": 0,
+      "afterAcceptObserved": 0,
+      "preConsentCapture": "complete",
+      "afterAcceptCapture": "limited",
+      "countStatus": "not_captured"
+    },
+    "scoreExplanation": {
+      "contractVersion": "certscore.score-explanation.v1",
+      "scope": "starting_page_canonical_score",
+      "scoreVersion": "overall-posture.v6",
+      "policyVersion": "gdpr-eprivacy-posture.v16",
+      "baseScore": 100,
+      "scoreFloor": 0,
+      "score": 92,
+      "totalPolicyDeductionPoints": 8,
+      "deductions": [
+        {
+          "family": "pre_consent_storage",
+          "label": "Storage",
+          "deductionPoints": 8,
+          "rules": [
+            {
+              "ruleId": "pre_consent_cookies_storage",
+              "label": "Non-essential pre-consent cookies / storage",
+              "policyDeductionPoints": 8,
+              "findingIds": [
+                "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage"
+              ],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        }
+      ]
+    },
+    "postAccept": {
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "status": "confirmed_observation",
+      "acceptanceExercised": true,
+      "observationCount": 23,
+      "productionProjectable": true,
+      "evidenceDisposition": "confirmed",
+      "indeterminateReason": null,
+      "verdict": "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+      "interpretation": "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward.",
+      "observationStrategy": "stop_on_first_eligible_activity",
+      "termination": {
+        "kind": "evidence_satisfied",
+        "intentional": true,
+        "trigger": "non_essential_request_observed"
+      },
+      "completedAt": "2026-10-09T04:04:07.480Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ]
+    },
+    "postReject": {
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "status": "confirmed_clean",
+      "refusalExercised": true,
+      "observationCount": 0,
+      "productionProjectable": true,
+      "evidenceDisposition": "confirmed",
+      "indeterminateReason": null,
+      "verdict": "no_eligible_nonessential_activity_observed_during_completed_window",
+      "interpretation": "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window.",
+      "observationStrategy": "stop_on_first_eligible_activity",
+      "termination": {
+        "kind": "window_elapsed",
+        "intentional": true,
+        "trigger": "window_elapsed"
+      },
+      "completedAt": "2026-10-09T04:04:08.261Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1"
+      ]
+    },
+    "forms": [],
+    "publicationCount": 1,
+    "scannerToProjectionMs": 4000,
+    "totalToProjectionMs": 27832,
+    "projectionHash": "489e00139be4b0864bb18420166b43f4c77ce2dd2a1f9df6a195b4ffff2d0473"
+  },
+  {
+    "target": "https://www.mailerlite.com/",
+    "scanId": "ff5ca748-27be-4ba2-b781-2c7530231787",
+    "score": 79,
+    "formsSummary": {
+      "contractVersion": "certscore.forms-summary.v1",
+      "scope": "starting_page_reportable_observations",
+      "totalObserved": 1,
+      "preConsentObserved": 1,
+      "afterAcceptObserved": 0,
+      "preConsentCapture": "limited",
+      "afterAcceptCapture": "limited",
+      "countStatus": "limited"
+    },
+    "scoreExplanation": {
+      "contractVersion": "certscore.score-explanation.v1",
+      "scope": "starting_page_canonical_score",
+      "scoreVersion": "overall-posture.v6",
+      "policyVersion": "gdpr-eprivacy-posture.v16",
+      "baseScore": 100,
+      "scoreFloor": 0,
+      "score": 79,
+      "totalPolicyDeductionPoints": 21,
+      "deductions": [
+        {
+          "family": "pre_consent_storage",
+          "label": "Storage",
+          "deductionPoints": 8,
+          "rules": [
+            {
+              "ruleId": "pre_consent_cookies_storage",
+              "label": "Non-essential pre-consent cookies / storage",
+              "policyDeductionPoints": 8,
+              "findingIds": [
+                "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage"
+              ],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        },
+        {
+          "family": "pre_consent_tracking",
+          "label": "Tracking",
+          "deductionPoints": 8,
+          "rules": [
+            {
+              "ruleId": "pre_consent_third_party_tracking",
+              "label": "Pre-consent tracking",
+              "policyDeductionPoints": 8,
+              "findingIds": [
+                "regulatory_gap__gdpr_eprivacy__pre_consent_third_party_tracking"
+              ],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        },
+        {
+          "family": "embedded_third_party",
+          "label": "Embeds",
+          "deductionPoints": 5,
+          "rules": [
+            {
+              "ruleId": "embedded_content_pre_consent",
+              "label": "Embedded third-party content before consent",
+              "policyDeductionPoints": 5,
+              "findingIds": [],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        }
+      ]
+    },
+    "postAccept": {
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "status": "confirmed_observation",
+      "acceptanceExercised": true,
+      "observationCount": 13,
+      "productionProjectable": true,
+      "evidenceDisposition": "confirmed",
+      "indeterminateReason": null,
+      "verdict": "eligible_nonessential_activity_observed_after_confirmed_acceptance",
+      "interpretation": "Accept was confirmed, and eligible non-essential network and storage activity was observed afterward.",
+      "observationStrategy": "stop_on_first_eligible_activity",
+      "termination": {
+        "kind": "evidence_satisfied",
+        "intentional": true,
+        "trigger": "non_essential_request_observed"
+      },
+      "completedAt": "2026-10-09T04:04:46.624Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2"
+      ]
+    },
+    "forms": [
+      {
+        "fieldCount": 1,
+        "snapshotStatus": "available"
+      }
+    ],
+    "publicationCount": 1,
+    "scannerToProjectionMs": 5000,
+    "totalToProjectionMs": 28140,
+    "projectionHash": "0710ebf2b0225653266e1c69b3f70f81cb0ea08ab6da3af64b3beab59df332d3"
+  },
+  {
+    "target": "https://wethepeoples-republic.org/",
+    "scanId": "2c4aa011-1712-47a4-a81c-e4b0b30f1511",
+    "score": 87,
+    "formsSummary": {
+      "contractVersion": "certscore.forms-summary.v1",
+      "scope": "starting_page_reportable_observations",
+      "totalObserved": 2,
+      "preConsentObserved": 1,
+      "afterAcceptObserved": 1,
+      "preConsentCapture": "complete",
+      "afterAcceptCapture": "limited",
+      "countStatus": "limited"
+    },
+    "scoreExplanation": {
+      "contractVersion": "certscore.score-explanation.v1",
+      "scope": "starting_page_canonical_score",
+      "scoreVersion": "overall-posture.v6",
+      "policyVersion": "gdpr-eprivacy-posture.v16",
+      "baseScore": 100,
+      "scoreFloor": 0,
+      "score": 87,
+      "totalPolicyDeductionPoints": 13,
+      "deductions": [
+        {
+          "family": "pre_consent_storage",
+          "label": "Storage",
+          "deductionPoints": 8,
+          "rules": [
+            {
+              "ruleId": "pre_consent_cookies_storage",
+              "label": "Non-essential pre-consent cookies / storage",
+              "policyDeductionPoints": 8,
+              "findingIds": [
+                "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage"
+              ],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        },
+        {
+          "family": "embedded_third_party",
+          "label": "Embeds",
+          "deductionPoints": 5,
+          "rules": [
+            {
+              "ruleId": "embedded_content_pre_consent",
+              "label": "Embedded third-party content before consent",
+              "policyDeductionPoints": 5,
+              "findingIds": [
+                "regulatory_gap__gdpr_eprivacy__embedded_content_pre_consent"
+              ],
+              "decisionVerification": "not_applicable"
+            }
+          ]
+        }
+      ]
+    },
+    "postAccept": {
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "status": "confirmed_clean",
+      "acceptanceExercised": true,
+      "observationCount": 0,
+      "productionProjectable": true,
+      "evidenceDisposition": "confirmed",
+      "indeterminateReason": null,
+      "verdict": "no_eligible_nonessential_activity_observed_during_completed_window",
+      "interpretation": "Accept was confirmed. No eligible non-essential activity was observed during the completed bounded window.",
+      "observationStrategy": "stop_on_first_eligible_activity",
+      "termination": {
+        "kind": "window_elapsed",
+        "intentional": true,
+        "trigger": "window_elapsed"
+      },
+      "completedAt": "2026-10-09T04:21:52.244Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "registration_timestamp_is_observation_upper_bound"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "registration_timestamp_is_observation_upper_bound"
+      ]
+    },
+    "postReject": {
+      "execution": {
+        "policyVersion": "choice_path_execution.v1",
+        "status": "succeeded_with_confirmation",
+        "clickCompleted": true,
+        "observationCompleted": true,
+        "consentConfirmed": true
+      },
+      "status": "confirmed_clean",
+      "refusalExercised": true,
+      "observationCount": 0,
+      "productionProjectable": true,
+      "evidenceDisposition": "confirmed",
+      "indeterminateReason": null,
+      "verdict": "no_eligible_nonessential_activity_observed_during_completed_window",
+      "interpretation": "Reject was confirmed. No eligible non-essential activity was observed during the completed bounded window.",
+      "observationStrategy": "stop_on_first_eligible_activity",
+      "termination": {
+        "kind": "window_elapsed",
+        "intentional": true,
+        "trigger": "window_elapsed"
+      },
+      "completedAt": "2026-10-09T04:21:58.349Z",
+      "coverageLimitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:0",
+        "registration_timestamp_is_observation_upper_bound"
+      ],
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:0",
+        "registration_timestamp_is_observation_upper_bound"
+      ]
+    },
+    "forms": [
+      {
+        "fieldCount": 7,
+        "snapshotStatus": "available"
+      },
+      {
+        "capturePhase": "after_accept",
+        "fieldCount": 7,
+        "snapshotStatus": "available"
+      }
+    ],
+    "publicationCount": 1,
+    "scannerToProjectionMs": 3000,
+    "totalToProjectionMs": 16158,
+    "projectionHash": "32fa03b3904ad1352513f655f21348404242299f7de980556e664c569d8bc183"
+  }
+]

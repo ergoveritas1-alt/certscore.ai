@@ -1,0 +1,463 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-09T11:09:08.054Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-controls-fresh50-20261009",
+  "selected": [
+    {
+      "url": "https://hella.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nintendo.de/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://notamedia.ru/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://rnib.org.uk/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://tottenhamhotspur.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://silverchair.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://xhnetwork.life/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nsf.org/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://kpkduper.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://advancedmd.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://estacio.br/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://rolls-royce.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://gearbox.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://palantir.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://kaseya.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://solitalian.it/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://arcadis.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://world.rugby/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://lancs.ac.uk/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://campusfrance.org/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://usen.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://presscompare.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://agi.it/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://researchmap.jp/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://eurofins.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://ecourtsindia.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://paribucineverse.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://volkswagen.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://tuwien.ac.at/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://ministrybrands.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://adecco.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://sutterhealth.org/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://interieur.gouv.fr/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://visitscotland.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://vivor.net/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://tigerdroppings.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://vinted.nl/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://sodexo.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://meetcircle.co/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nativendo.de/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://115.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://futureplc.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://wavevms.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://vinted.ie/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://acb.com.vn/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://uwe.ac.uk/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://pornhat.tv/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://milanote.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://amfam.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://ssga.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner authorized the recommended 50-site fresh verification and explicitly waived public scan wait periods; blocked and do_not_calibrate remain excluded.",
+    "appliedToUrls": [
+      "https://115.com/",
+      "https://acb.com.vn/",
+      "https://adecco.com/",
+      "https://advancedmd.com/",
+      "https://afnor.org/",
+      "https://agi.it/",
+      "https://aktion-mensch.de/",
+      "https://ala.org.au/",
+      "https://amfam.com/",
+      "https://appcast.io/",
+      "https://arcadis.com/",
+      "https://avrotros.nl/",
+      "https://barclays.co.uk/",
+      "https://bike-components.de/",
+      "https://campusfrance.org/",
+      "https://christianpost.com/",
+      "https://cite-sciences.fr/",
+      "https://cookie-script.com/",
+      "https://earth.org/",
+      "https://ecourtsindia.com/",
+      "https://equifax.com/",
+      "https://essex.ac.uk/",
+      "https://estacio.br/",
+      "https://eurofins.com/",
+      "https://extensis.com/",
+      "https://futureplc.com/",
+      "https://gearbox.com/",
+      "https://government.se/",
+      "https://hella.com/",
+      "https://helpdeskeddy.com/",
+      "https://homechef.com/",
+      "https://idrama.video/",
+      "https://ihaveporn.co/",
+      "https://interieur.gouv.fr/",
+      "https://kaseya.com/",
+      "https://kpkduper.com/",
+      "https://lancs.ac.uk/",
+      "https://learningsuite.io/",
+      "https://luminpdf.com/",
+      "https://lw.com/",
+      "https://meetcircle.co/",
+      "https://milanote.com/",
+      "https://minimax.io/",
+      "https://ministrybrands.com/",
+      "https://mp3.com/",
+      "https://nationwide.co.uk/",
+      "https://nativendo.de/",
+      "https://nature.org/",
+      "https://netxh.live/",
+      "https://nintendo.de/",
+      "https://notamedia.ru/",
+      "https://nowtv.com/",
+      "https://nsf.org/",
+      "https://nyp.org/",
+      "https://ofd-ya.ru/",
+      "https://palantir.com/",
+      "https://paribucineverse.com/",
+      "https://partypoker.com/",
+      "https://phenompeople.com/",
+      "https://podtrac.com/",
+      "https://pornhat.tv/",
+      "https://ppdi.com/",
+      "https://presscompare.com/",
+      "https://privateemail.com/",
+      "https://rebrickable.com/",
+      "https://receitasnestle.com.br/",
+      "https://researchmap.jp/",
+      "https://rnib.org.uk/",
+      "https://rnli.org/",
+      "https://ro.co/",
+      "https://rolls-royce.com/",
+      "https://sciencebasedmedicine.org/",
+      "https://sick.com/",
+      "https://silverchair.com/",
+      "https://sjsu.edu/",
+      "https://sodexo.com/",
+      "https://solitalian.it/",
+      "https://ssga.com/",
+      "https://strikeout.im/",
+      "https://studyinsaudi.sa/",
+      "https://sutterhealth.org/",
+      "https://theforage.com/",
+      "https://tigerdroppings.com/",
+      "https://tottenhamhotspur.com/",
+      "https://tuwien.ac.at/",
+      "https://uema.br/",
+      "https://unleashedsoftware.com/",
+      "https://upshow.tv/",
+      "https://usen.com/",
+      "https://uwe.ac.uk/",
+      "https://vinted.ie/",
+      "https://vinted.nl/",
+      "https://visitscotland.com/",
+      "https://vivor.net/",
+      "https://volkswagen.com/",
+      "https://wavevms.com/",
+      "https://wirepathdns.com/",
+      "https://world.rugby/",
+      "https://xhnetwork.life/",
+      "https://xylem.com/"
+    ]
+  }
+}

@@ -34,19 +34,27 @@ export async function canonicalConsentSurfacePresent(
  * the control's own visibility, uniqueness, label and viewport hit target.
  */
 export async function consentScopePermitsInteraction(scope: Locator): Promise<boolean> {
+  return await consentScopeInteractionState(scope) === "interactive";
+}
+
+/** Opacity-only animation is distinct from hidden, inert or unavailable DOM.
+ * This is a settling aid, never action authorization or proof of visibility. */
+export async function consentScopeInteractionState(scope: Locator, timeoutMs?: number): Promise<"interactive" | "transparent" | "unavailable"> {
   return scope.evaluate((element) => {
-    if (!element.isConnected) return false;
+    if (!element.isConnected) return "unavailable" as const;
+    let transparent = false;
     let current: Element | null = element;
     for (let depth = 0; current && depth < 64; depth += 1) {
       const style = getComputedStyle(current);
       if (current.matches('[hidden], [inert], [aria-hidden="true" i]') ||
         style.display === "none" || style.visibility === "hidden" ||
-        style.visibility === "collapse" || style.opacity === "0") return false;
+        style.visibility === "collapse") return "unavailable" as const;
+      if (style.opacity === "0") transparent = true;
       const root = current.getRootNode();
       current = current.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
     }
-    return current === null;
-  }).catch(() => false);
+    return current !== null ? "unavailable" as const : transparent ? "transparent" as const : "interactive" as const;
+  }, undefined, timeoutMs === undefined ? undefined : {timeout: timeoutMs}).catch(() => "unavailable" as const);
 }
 
 /** Observation text/headings/tabs must not compete with actionable choices. */

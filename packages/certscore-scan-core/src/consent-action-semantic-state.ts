@@ -56,7 +56,11 @@ export async function verifiedCookieDecision(input: {
   if (input.cookieName === "OptanonConsent" && input.oneTrustBaseline) {
     const state = await verifyOneTrustCookieDecision(input.context, input.scope, input.oneTrustBaseline);
     if (!state || state.stateHash !== sha256(cookie.value)) return undefined;
-    return { ...state, observedAtEpochMs: matchingStateWriteTime(writes, cookie.name, cookie.value, input.actionAt, "cookie") };
+    const observedAtEpochMs = matchingStateWriteTime(writes, cookie.name, cookie.value, input.actionAt, "cookie");
+    // A partial pre-click receipt cannot establish the previous decision.
+    // Require the complete replacement value to be written after dispatch.
+    if (state.oneTrustGroupEvidence?.policyVersion === "onetrust_cookie_groups.v2" && observedAtEpochMs === undefined) return undefined;
+    return { ...state, observedAtEpochMs };
   }
   const decision = decodeCanonicalConsentDecision(cookie.name, cookie.value, true);
   if (decision === "unknown") return undefined;

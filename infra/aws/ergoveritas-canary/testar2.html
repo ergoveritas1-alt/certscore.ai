@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow, noarchive">
-  <title>CertScore Accept/Reject canary — indistinguishable outcomes</title>
+  <title>CertScore canary — unconfirmed Accept and ineffective Reject</title>
   <style>
     body { background:#f8fafc; color:#0f172a; font:16px/1.5 system-ui,sans-serif; margin:0; }
     main { margin:48px auto; max-width:780px; padding:0 20px; }
@@ -19,16 +19,17 @@
   </style>
 </head>
 <body>
-  <main data-certscore-canary="post-action-indistinguishable"
+  <main data-certscore-canary="post-action-unconfirmed-accept"
         data-regulatory-audit-scenario="balanced-looking-controls-with-ineffective-rejection"
-        data-accept-path-scenario="contradictory-receipt-and-indistinguishable-outcomes"
-        data-expected-acceptance-registration="confirmed"
-        data-expected-post-accept-activity="true"
-        data-expected-acceptance-contradiction="true"
+        data-accept-path-scenario="unconfirmed-accept-with-denied-state"
+        data-expected-acceptance-registration="unconfirmed"
+        data-expected-post-accept-activity="false"
+        data-expected-after-accept-click-activity="true"
+        data-expected-acceptance-contradiction="false"
         data-expected-refusal-registration="confirmed"
         data-expected-post-refusal-activity="true"
         data-expected-pre-registration-activity="excluded"
-        data-expected-action-comparison="indistinguishable">
+        data-expected-action-comparison="insufficient_evidence">
     <p>Owned synthetic scanner-validation canary. No consumer service, account, or transaction state is involved.</p>
     <section class="banner" id="onetrust-banner-sdk" aria-label="Cookie choices">
       <h1>Cookie choices</h1>
@@ -50,18 +51,18 @@
     </section>
     <section aria-labelledby="audit-scenario-heading">
       <h2 id="audit-scenario-heading">Regulatory audit scenario</h2>
-      <p><strong>Findings of interest:</strong> non-essential analytics operates before any choice, the CMP records Accept while its retained TCF purpose state still says no, and Reject is followed by the same analytics and advertising identities as Accept.</p>
+      <p><strong>Findings of interest:</strong> non-essential analytics operates before any choice, the Accept click changes an opaque receipt while TCF still denies consent, and confirmed Reject is followed by analytics and advertising activity.</p>
       <p>This demonstrates why an auditor must test behavior and retained consent state rather than treating the presence of Accept, Reject, and Manage options as proof that choices are effective.</p>
     </section>
     <section>
       <h2>Expected boundaries</h2>
       <ul>
-        <li>Accept confirms through the changed canonical CMP cookie, not through the contradictory TCF state.</li>
+        <li>The Accept click completes, but its opaque CMP cookie change and denied TCF state do not prove granted consent. Accept registration remains unconfirmed.</li>
         <li>Passive capture sees a pre-choice <code>_ga</code> cookie and Google Analytics request.</li>
-        <li>The retained post-Accept TCF state denies every configured purpose and should create a consent-state contradiction review signal.</li>
+        <li>Accept traffic remains after-click evidence only; it does not establish registered post-Accept activity or an acceptance contradiction.</li>
         <li>Reject confirms through the denied TCF state.</li>
-        <li>Both actions directly write the same exact <code>_ga</code> and <code>_gid</code> identities and request the same analytics and advertising endpoints after registration.</li>
-        <li>The comparison should highlight indistinguishable outcomes and preserve the post-Reject activity issue as the actionable failure.</li>
+        <li>Both actions directly write the same exact <code>_ga</code> and <code>_gid</code> identities and request the same endpoints after the click; only Reject has verified semantic registration.</li>
+        <li>A registered Accept/Reject comparison remains insufficient evidence. Preserve the confirmed post-Reject activity issue.</li>
       </ul>
     </section>
   </main>

@@ -5,6 +5,7 @@ import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes
 import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
 import { runPostRefusalObserver } from "./post-refusal-observer.js";
+import { CONSENT_ACTION_RECIPE_CANDIDATE_MAX } from "./consent-action-recipe-priority.js";
 
 type QualifiedCmp = {
   accept: boolean;
@@ -96,6 +97,34 @@ const QUALIFIED_CMPS: QualifiedCmp[] = [
 ];
 
 const REPEAT_COUNT = 3;
+
+test("the full Accept registry retains Transcend's registered confirmation at its final slot", async () => {
+  const recipes = buildCanonicalPostAcceptActionRecipes();
+  assert.ok(recipes.length <= CONSENT_ACTION_RECIPE_CANDIDATE_MAX);
+  assert.equal(recipes.at(-1)?.cmpId, "Transcend");
+  const cmp = QUALIFIED_CMPS.find(cmp => cmp.canonicalName === "Transcend")!;
+  await withCmpFixture(cmp, async ({ actionCount, url }) => {
+    const packet = await runPostAcceptObserver({
+      url, scanId: "full-registry-transcend", recipe: recipes[0]!, recipeCandidates: recipes,
+      recipeSetId: "full-registry-fixture", allowCanonicalAcceptDiscovery: true,
+      interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+      actionSearchTimeoutMs: 2000, confirmationTimeoutMs: 500, observationWindowMs: 50,
+    });
+    assert.equal(actionCount("accept"), 1);
+    assert.equal(packet.resolver.cmpId, "Transcend");
+    assert.equal(packet.acceptanceRegistration.status, "confirmed");
+    assert.equal(packet.acceptanceRegistration.witnesses[0]?.witnessType, "cmp_api_state");
+  });
+});
+
+test("Accept registry overflow fails explicitly before opening a browser", async () => {
+  const recipes = buildCanonicalPostAcceptActionRecipes();
+  await assert.rejects(runPostAcceptObserver({
+    url: "http://127.0.0.1/", scanId: "registry-overflow", recipe: recipes[0]!,
+    recipeCandidates: [...recipes, recipes[0]!],
+    interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+  }), /exceeds the bounded maximum/);
+});
 
 test("qualified CMP actions dispatch once and opaque receipts never prove registration", async () => {
   const acceptRecipes = buildCanonicalPostAcceptActionRecipes();
@@ -244,7 +273,7 @@ async function withCmpFixture(
       const applyAction = (action) => {
         if (apiProvider === "termly") {
           for (const key of Object.keys(termlyState)) if (key !== "essential") termlyState[key] = action === "accept";
-          termlyHandlers.forEach((handler) => handler({ consentState: { ...termlyState } }));
+          termlyHandlers.forEach((handler) => handler({ categories: Object.keys(termlyState).filter(key => termlyState[key]), cookies: [] }));
         } else if (apiProvider === "transcend") {
           for (const key of Object.keys(transcendState)) if (key !== "Essential") transcendState[key] = action === "accept";
           transcendTimestamp = new Date(Date.now() + 1000).toISOString();

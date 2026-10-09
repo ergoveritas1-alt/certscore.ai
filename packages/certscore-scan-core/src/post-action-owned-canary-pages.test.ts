@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   projectPostAcceptEvidenceForReport,
   projectPostRefusalEvidenceForReport,
@@ -10,7 +11,7 @@ import { chromium } from "playwright";
 import { buildCanonicalPostAcceptActionRecipes } from "./post-accept-cmp-recipes.js";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
-import { buildCanonicalPostRefusalActionRecipes } from "./post-refusal-cmp-recipes.js";
+import { buildCanonicalPostRefusalActionRecipes, CANONICAL_POST_REFUSAL_RECIPE_SET_ID } from "./post-refusal-cmp-recipes.js";
 import { runPostRefusalObserver } from "./post-refusal-observer.js";
 
 const acceptRecipe = buildCanonicalPostAcceptActionRecipes().find((recipe) => recipe.cmpId === "OneTrust");
@@ -56,36 +57,42 @@ test("testar1 separates confirmed Accept activity from a clean confirmed Reject 
   });
 });
 
-test("testar2 confirms the Accept contradiction and gives both choices one exact storage identity", async () => {
+test("testar2 retains unconfirmed Accept facts separately from confirmed Reject activity", async () => {
   await withCanaryServer(async (origin) => {
     const url = `${origin}/testar2.html`;
     const accepted = await observeAccept(url, "testar2-accept");
     const rejected = await observeReject(url, "testar2-reject");
 
-    assert.equal(accepted.acceptanceRegistration.status, "confirmed");
-    assert.equal(accepted.acceptanceRegistration.witnesses[0]?.witnessType, "cmp_cookie_state");
+    assert.equal(accepted.acceptanceRegistration.status, "unconfirmed");
+    assert.deepEqual(accepted.acceptanceRegistration.witnesses, []);
+    assert.equal(accepted.acceptanceRegistration.acceptanceRegisteredAtMs, undefined);
+    assert.equal(accepted.afterActionCapture?.activationStatus, "completed");
+    assert.equal(accepted.afterActionCapture?.stopReason, "window_elapsed");
+    assert.equal(accepted.afterActionCapture?.storageSnapshotRetained, true);
+    assert.deepEqual(accepted.storage.writesAfterAccept, []);
+    assert.deepEqual(accepted.network.postAcceptNonEssentialRequests, []);
     assert.equal(accepted.observations.some((row) =>
       row.observationType === "acceptance_signal_contradicts_action"
-    ), true);
+    ), false);
     assert.equal(rejected.refusalRegistration.status, "confirmed");
     assert.equal(accepted.storage.preAction.some((item) => item.name === "_ga"), true);
     assert.equal(rejected.storage.preAction.some((item) => item.name === "_ga"), true);
     assert.equal(accepted.network.requests.some((request) =>
       request.hostname === "www.google-analytics.com" &&
-      request.startedAtMs < (accepted.acceptanceRegistration.acceptanceRegisteredAtMs ?? 0)
+      request.startedAtMs < (accepted.afterActionCapture?.actionDispatchedAtMs ?? 0)
     ), true);
     assert.equal(rejected.network.requests.some((request) =>
       request.hostname === "www.google-analytics.com" &&
       request.startedAtMs < (rejected.refusalRegistration.refusalRegisteredAtMs ?? 0)
     ), true);
 
-    const acceptStorage = accepted.storage.writesAfterAccept.find((write) =>
+    const acceptStorage = accepted.storage.postAction.find((write) =>
       write.name === "_ga" && write.nonEssential
     );
     const rejectStorage = rejected.storage.writesAfterRefusal.find((write) =>
       write.name === "_ga" && write.nonEssential
     );
-    const acceptAdvertisingStorage = accepted.storage.writesAfterAccept.find((write) =>
+    const acceptAdvertisingStorage = accepted.storage.postAction.find((write) =>
       write.name === "_gid" && write.nonEssential
     );
     const rejectAdvertisingStorage = rejected.storage.writesAfterRefusal.find((write) =>
@@ -100,21 +107,71 @@ test("testar2 confirms the Accept contradiction and gives both choices one exact
       acceptAdvertisingStorage.identityHash,
       rejectAdvertisingStorage.storageIdentityHash,
     );
-    assert.equal(accepted.network.postAcceptNonEssentialRequests.some((request) =>
-      request.hostname === "googleads.g.doubleclick.net"
+    assert.equal(accepted.network.requests.some((request) =>
+      request.hostname === "googleads.g.doubleclick.net" &&
+      accepted.afterActionCapture?.requestIds.includes(request.requestId)
     ), true);
+    assert.equal(accepted.afterActionCapture?.storageWrites.some((write) => write.name === "_ga" && write.nonEssential), true);
+    assert.equal(accepted.afterActionCapture?.storageWrites.some((write) => write.name === "_gid" && write.nonEssential), true);
     assert.equal(rejected.network.postRefusalNonEssentialRequests.some((request) =>
       request.hostname === "googleads.g.doubleclick.net"
     ), true);
 
-    const acceptProjectedStorage = projectPostAcceptEvidenceForReport({ packet: accepted })
-      .postAcceptActivity.find((row) => row.activityType === "storage_write");
+    const acceptProjection = projectPostAcceptEvidenceForReport({
+      packet: accepted,
+      packetSha256: createHash("sha256").update(JSON.stringify(accepted)).digest("hex"),
+    });
+    assert.equal(acceptProjection.execution?.status, "succeeded");
+    assert.equal(acceptProjection.execution?.consentConfirmed, false);
+    assert.equal(acceptProjection.productionProjectable, false);
+    assert.equal(acceptProjection.contradictionObserved, false);
+    assert.deepEqual(acceptProjection.postAcceptActivity, []);
+    assert.equal(acceptProjection.afterActionRequests?.some(row => row.hostname === "googleads.g.doubleclick.net"), true);
+    const acceptProjectedStorage = acceptProjection.afterActionStorage?.find(row => row.name === "_ga");
     const rejectProjectedStorage = projectPostRefusalEvidenceForReport({ packet: rejected })
       .postRefusalActivity.find((row) => row.activityType === "storage_write");
     assert.equal(
-      acceptProjectedStorage?.storageIdentityHash,
+      acceptProjectedStorage?.identityHash,
       rejectProjectedStorage?.storageIdentityHash,
     );
+  });
+});
+
+test("legacy inconsistent Accept receipt does not establish a grant or contradiction", async () => {
+  await withCanaryServer(async (origin) => {
+    const accepted = await observeAccept(`${origin}/post-accept/accept-inconsistent.html`, "legacy-inconsistent");
+    assert.equal(accepted.acceptanceRegistration.status, "unconfirmed");
+    assert.deepEqual(accepted.acceptanceRegistration.witnesses, []);
+    assert.equal(accepted.afterActionCapture?.activationStatus, "completed");
+    assert.equal(accepted.afterActionCapture?.stopReason, "window_elapsed");
+    assert.deepEqual(accepted.network.postAcceptNonEssentialRequests, []);
+    const projection = projectPostAcceptEvidenceForReport({ packet: accepted });
+    assert.equal(projection.productionProjectable, false);
+    assert.equal(projection.contradictionObserved, false);
+    assert.deepEqual(projection.postAcceptActivity, []);
+  });
+});
+
+test("quoted privacy opt-out never authorizes a canonical Reject click", async () => {
+  await withCanaryServer(async (origin) => {
+    const recipes = buildCanonicalPostRefusalActionRecipes();
+    const packet = await runPostRefusalObserver({
+      actionSearchTimeoutMs: 500,
+      confirmationTimeoutMs: 100,
+      observationWindowMs: 100,
+      interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+      recipe: rejectRecipe,
+      recipeCandidates: recipes,
+      recipeSetId: CANONICAL_POST_REFUSAL_RECIPE_SET_ID,
+      allowCanonicalRejectDiscovery: true,
+      scanId: "privacy-only-no-reject",
+      url: `${origin}/privacy-only.html`,
+    });
+    assert.equal(packet.resolver.found, false);
+    assert.equal(packet.refusalRegistration.status, "not_attempted");
+    assert.equal(packet.refusalRegistration.refusalExercised, false);
+    assert.equal(packet.afterActionCapture, undefined);
+    assert.equal(packet.productionProjectable, false);
   });
 });
 
@@ -185,7 +242,10 @@ test("testar canaries document distinct production highlighting boundaries", asy
   assert.match(divergent, /pre-consent-leakage-with-effective-choice-enforcement/);
   assert.match(divergent, /later clean Reject does not cure earlier pre-consent activity/i);
   assert.match(divergent, /_gid/);
-  assert.match(contradictory, /data-accept-path-scenario="contradictory-receipt-and-indistinguishable-outcomes"/);
+  assert.match(contradictory, /data-accept-path-scenario="unconfirmed-accept-with-denied-state"/);
+  assert.match(contradictory, /data-certscore-canary="post-action-unconfirmed-accept"/);
+  assert.match(contradictory, /data-expected-acceptance-registration="unconfirmed"/);
+  assert.match(contradictory, /data-expected-acceptance-contradiction="false"/);
   assert.match(contradictory, /balanced-looking-controls-with-ineffective-rejection/);
   assert.match(contradictory, /must test behavior and retained consent state/i);
   assert.match(contradictory, /same exact <code>_ga<\/code> and <code>_gid<\/code> identities/i);
@@ -227,7 +287,10 @@ async function observeReject(url: string, scanId: string) {
 
 async function withCanaryServer(run: (origin: string) => Promise<void>) {
   const pages = new Map<string, string>();
-  for (const name of ["testar1.html", "testar2.html", "sample_09_03_26_01.html"]) {
+  pages.set("/privacy-only.html", `<!doctype html><section id="truste-consent-track" role="dialog" aria-label="Cookie choices">
+    <p>We use cookies and similar technologies. Choose your preferences.</p>
+    <button id="truste-show-consent">&quot;Do Not Sell My Personal Information&quot;</button></section>`);
+  for (const name of ["testar1.html", "testar2.html", "sample_09_03_26_01.html", "post-accept/accept-inconsistent.html", "post-accept/post-accept-runtime.js"]) {
     const source = await readFile(
       new URL(`../../../infra/aws/ergoveritas-canary/${name}`, import.meta.url),
       "utf8",
@@ -243,7 +306,7 @@ async function withCanaryServer(run: (origin: string) => Promise<void>) {
       response.writeHead(204).end();
       return;
     }
-    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.setHeader("content-type", pathname.endsWith(".js") ? "text/javascript; charset=utf-8" : "text/html; charset=utf-8");
     response.end(page);
   });
   const origin = await listen(server);

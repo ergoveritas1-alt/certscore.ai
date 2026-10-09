@@ -1,0 +1,445 @@
+{
+  "localOnly": true,
+  "deployed": false,
+  "scope": "Fresh passive consent and isolated Accept/Reject observer verification; not a full six-lane production scan or release acceptance cohort",
+  "crawlerIdentity": "ConsentCheckBot HTTP header / native Chromium navigator",
+  "publicSitesAttempted": 11,
+  "parentDiagnosticContacts": 19,
+  "initial": [
+    {
+      "target": "https://www.cimediacloud.com/",
+      "runId": "0f1b50f1-e48f-49e5-8f3b-7f32b9cec441",
+      "startedAt": "2026-10-09T02:30:33.838Z",
+      "accept": {
+        "status": "unconfirmed",
+        "acceptanceExercised": false,
+        "actionDispatchedAtMs": 3985,
+        "reason": "cmp_acceptance_state_not_observed",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "unconfirmed",
+        "refusalExercised": false,
+        "actionDispatchedAtMs": 4362,
+        "reason": "cmp_rejection_state_not_observed",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/www.cimediacloud.com/summary.json"
+    },
+    {
+      "target": "https://mojohost.com/",
+      "runId": "b20d4b80-1d84-42ad-836a-a2fd0d40ab64",
+      "startedAt": "2026-10-09T02:30:46.699Z",
+      "accept": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 2499,
+        "acceptanceRegisteredAtMs": 2524,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2524,
+            "key": "cookieyes-consent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "8d5b498b51bfe08c353ba0d6afba2f0e0eacb01eabc801d750b5e4e6ef4af9a7",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 2524,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "reject": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 2864,
+        "refusalRegisteredAtMs": 2911,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2911,
+            "key": "cookieyes-consent",
+            "expectedState": "canonical_cmp_denied_decision_after_action",
+            "observedStateHash": "58aeaea5e8415b6eb32d6d0a1d3cd075d3f7fcd8045364b715c979d5dbdfe9c5",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 2911,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/mojohost.com/summary.json"
+    },
+    {
+      "target": "https://www.mailerlite.com/",
+      "runId": "bc5c4a21-8fb1-43f7-8095-2b57a9e17490",
+      "startedAt": "2026-10-09T02:30:57.974Z",
+      "accept": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 2257,
+        "acceptanceRegisteredAtMs": 2634,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2634,
+            "key": "CookieConsent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "d12d4b755c27b26fd662c73e3e15a26938d6c5ed24b787f343a1955b3090dc08",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 2634,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "resolved_control_intent_privacy_opt_out",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/www.mailerlite.com/summary.json"
+    },
+    {
+      "target": "https://www.qobuz.com/",
+      "runId": "7480f9e6-ef5c-444c-89ce-06a76ce34824",
+      "startedAt": "2026-10-09T02:31:17.180Z",
+      "accept": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "deterministic_accept_control_not_found",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "deterministic_reject_control_not_found",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/www.qobuz.com/summary.json"
+    },
+    {
+      "target": "https://notion.site/",
+      "runId": "df3d4cf0-32ab-486c-a4b9-6f5c21e8cbc4",
+      "startedAt": "2026-10-09T02:31:35.953Z",
+      "accept": {
+        "status": "unconfirmed",
+        "acceptanceExercised": false,
+        "actionDispatchedAtMs": 3408,
+        "reason": "cmp_acceptance_state_not_observed",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 3071,
+        "refusalRegisteredAtMs": 3113,
+        "witnesses": [
+          {
+            "witnessType": "cmp_api_state",
+            "observedAtMs": 3113,
+            "key": "transcend",
+            "expectedState": "all_configurable_purposes_denied_after_reject",
+            "observedStateHash": "4f5d4a06b2478da9d4e2a7e73b5c0b43eb610ab769f78fcdf59b76358e2587b4",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 3113,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/notion.site/summary.json"
+    },
+    {
+      "target": "https://florencebymillsbeauty.com/",
+      "runId": "0ae9e4a8-962e-45d7-b760-3bc8ffae1f67",
+      "startedAt": "2026-10-09T02:31:47.473Z",
+      "accept": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "deterministic_accept_control_not_found",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "deterministic_reject_control_not_found",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/florencebymillsbeauty.com/summary.json"
+    },
+    {
+      "target": "https://www.larazon.es/",
+      "runId": "9f0b570d-e06e-464b-b0f2-c877c79e14f4",
+      "startedAt": "2026-10-09T02:37:02.541Z",
+      "accept": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "deterministic_accept_control_not_found",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "deterministic_reject_control_not_found",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/www.larazon.es/summary.json"
+    },
+    {
+      "target": "https://www.aalto.fi/",
+      "runId": "44a075fb-c77c-449c-bfea-dc8ad2ec8ccb",
+      "startedAt": "2026-10-09T02:37:21.356Z",
+      "accept": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 1814,
+        "acceptanceRegisteredAtMs": 2064,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2064,
+            "key": "CookieConsent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "c519c513ac5883de4bcabe84ce01b2406611b1a2ea4c726697cb88530cb7e8a1",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "resolved_control_label_not_classified",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/www.aalto.fi/summary.json"
+    },
+    {
+      "target": "https://www.blick.ch/",
+      "runId": "7d3a2921-1f00-4523-a4c9-f675cff014d8",
+      "startedAt": "2026-10-09T02:37:40.577Z",
+      "accept": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 3245,
+        "acceptanceRegisteredAtMs": 3310,
+        "witnesses": [
+          {
+            "witnessType": "tcf_user_action_complete",
+            "observedAtMs": 3310,
+            "expectedState": "configured_purposes_granted_after_accept",
+            "observedStateHash": "a183a9e1cd94db87c3effda28aebc7e001ac7f83cc7f47901f5b534fa44e0528",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "deterministic_reject_control_not_found",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/www.blick.ch/summary.json"
+    },
+    {
+      "target": "https://spotify.com",
+      "runId": "aa8519ea-0b3c-4dba-b415-bc208f7891e8",
+      "startedAt": "2026-10-09T02:46:38.520Z",
+      "accept": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "deterministic_accept_control_not_found",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "deterministic_reject_control_not_found",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/spotify.com/summary.json"
+    },
+    {
+      "target": "https://hubspot.com",
+      "runId": "58a052ff-e3e4-4f2d-91d8-5f496054e89a",
+      "startedAt": "2026-10-09T02:46:57.308Z",
+      "accept": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "resolved_control_scope_not_interactive",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "resolved_control_scope_not_interactive",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/hubspot.com/summary.json"
+    }
+  ],
+  "rechecks": [
+    {
+      "target": "https://notion.site/",
+      "runId": "64c11a05-e613-42b1-8838-be69f85d8b59",
+      "startedAt": "2026-10-09T02:40:42.845Z",
+      "accept": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 3953,
+        "acceptanceRegisteredAtMs": 3983,
+        "witnesses": [
+          {
+            "witnessType": "cmp_api_state",
+            "observedAtMs": 3983,
+            "key": "transcend",
+            "expectedState": "all_configurable_purposes_granted_after_accept",
+            "observedStateHash": "0b1909d142886a97ead37ecaba2d9c1241d93a0983544594441398fd514aee4e",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 3983,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "reject": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 3706,
+        "refusalRegisteredAtMs": 3749,
+        "witnesses": [
+          {
+            "witnessType": "cmp_api_state",
+            "observedAtMs": 3749,
+            "key": "transcend",
+            "expectedState": "all_configurable_purposes_denied_after_reject",
+            "observedStateHash": "0d5c337c05604491e3d68de342dd649035aff9acba98af6299c11dd74a154de7",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 3749,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/fixed-registry-notion.site/summary.json"
+    },
+    {
+      "target": "https://www.aalto.fi/",
+      "runId": "9d789307-ff17-431f-8523-2da014dc4552",
+      "startedAt": "2026-10-09T02:46:18.468Z",
+      "accept": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "resolved_control_no_longer_unique",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 2287,
+        "refusalRegisteredAtMs": 2533,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2533,
+            "key": "CookieConsent",
+            "expectedState": "canonical_cmp_denied_decision_after_action",
+            "observedStateHash": "362c24d53a782192ac1367ab7f6365efc04e7ed3eef5aee934850f0b2111b1a5",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 2533,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/fixed-registry-www.aalto.fi/summary.json"
+    },
+    {
+      "target": "https://www.aalto.fi/",
+      "runId": "e73c808e-84db-4c34-879f-c6bbc99f5ed9",
+      "startedAt": "2026-10-09T02:48:26.614Z",
+      "accept": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 1309,
+        "acceptanceRegisteredAtMs": 1534,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 1534,
+            "key": "CookieConsent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "01d87d14d32f3e4d755ee6e610121d813cadc11028496780f90322c0fc84e0f2",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 1534,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "reject": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 2163,
+        "refusalRegisteredAtMs": 2440,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2440,
+            "key": "CookieConsent",
+            "expectedState": "canonical_cmp_denied_decision_after_action",
+            "observedStateHash": "82e3fb768218cc5e7be34f348d13964a361c448798aa9b0dab958eb64b4ab11d",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 2440,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/inspect-scope-www.aalto.fi/summary.json"
+    },
+    {
+      "target": "https://hubspot.com",
+      "runId": "8583928a-5859-4701-bfcc-bce91f217ded",
+      "startedAt": "2026-10-09T02:48:17.416Z",
+      "accept": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "resolved_control_scope_not_interactive",
+        "witnesses": []
+      },
+      "reject": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "resolved_control_scope_not_interactive",
+        "witnesses": []
+      },
+      "artifact": "artifacts/local-consent-path-cohort-20261008/inspect-scope-hubspot.com/summary.json"
+    }
+  ],
+  "skipped": [
+    {
+      "target": "https://www.freenet.de/",
+      "reason": "Central contact ledger blocked; not contacted"
+    }
+  ]
+}

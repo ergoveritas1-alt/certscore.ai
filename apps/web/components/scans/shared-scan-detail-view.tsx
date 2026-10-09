@@ -1909,19 +1909,22 @@ export function buildExecutiveTimelineEvents(
     });
   }
 
-  // Red milestones project already-assessed canonical concerns and their own
-  // retained times. Raw resource labels and cookie presence remain neutral.
-  const timedConcern = (id: string, timingKey: string, label: string, detail: string) => {
+  // Milestones preserve the assessed status and retained observation time.
+  // A classification review does not establish non-essential activity.
+  const timedConcern = (id: string, timingKey: string, label: string, detail: string, reviewLabel: string) => {
     const row = gdprEprivacyChecklist.find(item => item.id === id &&
       (item.status === "Gap observed" || item.status === "Review signal"));
     const atMs = firstTimelineMs(row?.criticalEvidence?.retainedEvidence?.[timingKey]);
     if (atMs === null) return;
-    pushEvent({ atMs, label, detail, tone: "rose" });
+    const gapObserved = row?.status === "Gap observed";
+    pushEvent({ atMs, label: gapObserved ? label : reviewLabel,
+      detail: gapObserved ? detail : "Classification review · first retained observation",
+      tone: gapObserved ? "rose" : "slate" });
   };
   timedConcern("pre_consent_cookies_storage", "firstPreconsentCookieOrStorageObservedMs",
-    "Non-essential cookie/storage", "Canonical pre-consent cookie/storage concern observed");
+    "Non-essential cookie/storage", "Canonical pre-consent cookie/storage concern observed", "Pre-consent storage review");
   timedConcern("pre_consent_third_party_tracking", "firstPreconsentThirdPartyTrackingObservedMs",
-    "Non-essential request", "Canonical pre-consent tracking concern observed");
+    "Non-essential request", "Canonical pre-consent tracking concern observed", "Pre-consent tracking review");
   const replayRow = gdprEprivacyChecklist.find(item => item.id === "session_replay_fingerprinting_review" &&
     (item.status === "Gap observed" || item.status === "Review signal"));
   const replayEvidence = getRecord(replayRow?.criticalEvidence?.retainedEvidence?.sessionReplayEvidence);

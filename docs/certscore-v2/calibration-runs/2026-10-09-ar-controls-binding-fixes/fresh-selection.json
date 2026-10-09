@@ -1,0 +1,133 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-09T11:48:21.056Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-controls-binding-fresh10-20261009",
+  "selected": [
+    {
+      "url": "https://receitasnestle.com.br/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://podtrac.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://ihaveporn.co/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://nature.org/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://earth.org/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://idrama.video/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://uema.br/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://upshow.tv/",
+      "role": "owner_authorized_fresh_control_audit",
+      "lanes": [
+        "consent_controls"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner authorized expanded localhost A/R audit and waived diagnostic scan wait periods; blocked and do_not_calibrate remain enforced.",
+    "appliedToUrls": [
+      "https://afnor.org/",
+      "https://aktion-mensch.de/",
+      "https://ala.org.au/",
+      "https://appcast.io/",
+      "https://avrotros.nl/",
+      "https://barclays.co.uk/",
+      "https://bike-components.de/",
+      "https://christianpost.com/",
+      "https://cite-sciences.fr/",
+      "https://cookie-script.com/",
+      "https://earth.org/",
+      "https://equifax.com/",
+      "https://essex.ac.uk/",
+      "https://extensis.com/",
+      "https://government.se/",
+      "https://helpdeskeddy.com/",
+      "https://homechef.com/",
+      "https://idrama.video/",
+      "https://ihaveporn.co/",
+      "https://learningsuite.io/",
+      "https://luminpdf.com/",
+      "https://lw.com/",
+      "https://minimax.io/",
+      "https://mp3.com/",
+      "https://nationwide.co.uk/",
+      "https://nature.org/",
+      "https://netxh.live/",
+      "https://nowtv.com/",
+      "https://nyp.org/",
+      "https://ofd-ya.ru/",
+      "https://partypoker.com/",
+      "https://phenompeople.com/",
+      "https://podtrac.com/",
+      "https://ppdi.com/",
+      "https://privateemail.com/",
+      "https://rebrickable.com/",
+      "https://receitasnestle.com.br/",
+      "https://rnli.org/",
+      "https://ro.co/",
+      "https://sciencebasedmedicine.org/",
+      "https://sick.com/",
+      "https://sjsu.edu/",
+      "https://strikeout.im/",
+      "https://studyinsaudi.sa/",
+      "https://theforage.com/",
+      "https://uema.br/",
+      "https://unleashedsoftware.com/",
+      "https://upshow.tv/",
+      "https://wirepathdns.com/",
+      "https://xylem.com/"
+    ]
+  }
+}

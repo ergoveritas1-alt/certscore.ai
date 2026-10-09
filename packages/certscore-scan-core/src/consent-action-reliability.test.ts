@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { chromium, type Browser, type Locator } from "playwright";
 import { runPostAcceptObserver } from "./post-accept-observer.js";
@@ -337,4 +338,58 @@ for (const action of ["accept", "reject"] as const) {
       assert.equal(packet.afterActionCapture?.requestsDropped, packet.captureCoverage!.requestsDroppedAfterAction);
     });
   });
+
+  for (const decision of [false, true]) {
+    test(`${action}: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: ${decision})`, async () => {
+      const browser = await chromium.launch({ headless: true });
+      const newContext = browser.newContext.bind(browser);
+      browser.newContext = async (options) => {
+        const context = await newContext(options);
+        await context.route("https://**/*", async (route) => {
+          const url = new URL(route.request().url());
+          if (url.hostname === "images.ctfassets.net" && url.pathname === "/redirect") {
+            await route.fulfill({ status: 302, headers: { location: "https://www.google-analytics.com/collect" } });
+          } else if (url.hostname === "images.ctfassets.net") {
+            await route.fulfill({ status: 200, contentType: "image/png", body: Buffer.from(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=", "base64") });
+          } else if (url.hostname === "unknown.test") {
+            await route.fulfill({ status: 302, headers: { location: "https://bat.bing.com/action/0" } });
+          } else await route.fulfill({ status: 204 });
+        });
+        return context;
+      };
+      try {
+        await fixture(action, { decision, after: `
+          Promise.all(Array.from({length:205},(_,i)=>new Promise(resolve=>{
+            const image=new Image(); image.onload=image.onerror=resolve;
+            image.src='https://images.ctfassets.net/fixture-'+i+'.png';
+          }))).then(()=>{fetch('/late-unknown');new Image().src='https://unknown.test/redirect';new Image().src='https://images.ctfassets.net/redirect';});
+        ` }, async (url) => {
+          const packet = await observe(action, url, { browser, observationWindowMs: 2_000 });
+          const retained = packet.network.requests;
+          assert.equal(packet.productionProjectable, false);
+          assert.equal(retained.length, 192);
+          assert.ok(retained.some(row => row.sanitizedUrl.endsWith("/late-unknown")));
+          assert.ok(retained.some(row => row.sanitizedUrl === "https://www.google-analytics.com/collect"));
+          assert.equal(retained.some(row => row.sanitizedUrl === "https://images.ctfassets.net/redirect"), false, "redirect root exceeded retention cap");
+          assert.ok(packet.captureCoverage!.requestsDroppedAfterAction > 0);
+          assert.ok(packet.captureCoverage!.postActionRetention!.replacements > 0);
+          assert.equal(packet.limitations.includes("post_action_network_capture_truncated"), true);
+          const packetSha256 = createHash("sha256").update(JSON.stringify(packet)).digest("hex");
+          const projection = "acceptanceRegistration" in packet
+            ? projectPostAcceptEvidenceForReport({ packet: postAcceptEvidencePacketSchema.parse(packet), packetSha256 })
+            : projectPostRefusalEvidenceForReport({ packet: postRefusalEvidencePacketSchema.parse(packet), packetSha256 });
+          assert.equal(projection.execution?.status, "limited");
+          assert.deepEqual(projection.captureCoverage, packet.captureCoverage);
+          if (!decision && action === "reject") {
+            const request = retained.find(row => row.sanitizedUrl === "https://www.google-analytics.com/collect")!;
+            const ancestry = packet.afterActionCapture?.requestAncestry?.find(row => row.requestId === request.requestId);
+            assert.ok(ancestry);
+            assert.ok(ancestry.rootStartedAtMs <= request.startedAtMs);
+            assert.ok(ancestry.rootStartedAtMs >= packet.afterActionCapture!.actionDispatchedAtMs);
+          }
+        });
+      } finally { await browser.close(); }
+    });
+  }
 }

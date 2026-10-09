@@ -1,0 +1,7 @@
+{
+  "runKey": "local-consent-path-cohort-20261008",
+  "persistedContacts": 19,
+  "status": "persisted",
+  "source": "repository ECS psql one-off",
+  "artifactRoot": "artifacts/local-consent-path-cohort-20261008"
+}

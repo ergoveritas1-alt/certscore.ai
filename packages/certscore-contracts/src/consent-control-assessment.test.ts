@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { classifyConsentControlLabel } from "./consent-control-label-classifier";
 import {
   deriveConsentControlAssessment,
   consentControlAssessmentSchema,
@@ -393,6 +394,24 @@ test("privacy opt-out and options do not satisfy reject", () => {
   assert.equal(assessment.controls.privacyOptOut.state, "observed");
   assert.equal(assessment.controls.options.state, "observed");
   assert.equal(assessment.controls.reject.state, "not_observed");
+});
+
+test("reviewed quoted privacy label projects privacy opt-out separately from A/R/O", () => {
+  const label = '"Do Not Sell My Personal Information"';
+  const classified = classifyConsentControlLabel({ label, hasConsentContext: true, usage: "observation" });
+  assert.equal(classified.intent, "privacy_opt_out");
+  const input = baseInput();
+  input.observations = [{
+    observationId: "quoted-privacy-choice", observedAtMs: 200, likelyPresent: true,
+    layerInspected: "first_layer", captureStatus: "observed", inventoryOutcome: "complete_with_controls",
+    completedChannels: ["dom_inventory", "geometry"], documentId: input.document!.canonicalDocumentId,
+    controls: [candidate({ evidenceId: "quoted-opt-out", intent: classified.intent, label })],
+  }];
+  const assessment = deriveConsentControlAssessment(input);
+  assert.equal(assessment.controls.privacyOptOut.state, "observed");
+  assert.equal(assessment.controls.accept.state, "not_observed");
+  assert.equal(assessment.controls.reject.state, "not_observed");
+  assert.equal(assessment.controls.options.state, "not_observed");
 });
 
 test("privacy opt-out alone remains non-actionable and produces factual A/R/O absence", () => {

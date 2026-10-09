@@ -25,7 +25,7 @@ export type ScoringRule = {
 };
 export const SCORING_RULES: readonly ScoringRule[] = [
   { id: "outdated_transfer_framework_reference", anchor: "outdated-transfer-disclosure", label: "Obsolete transfer framework presented as current guidance", family: "policy_transparency", siteWide: true, points: 3 },
-  {"id": "pre_consent_cookies_storage", "anchor": "storage", "label": "Non-essential pre-consent cookies / storage", "family": "pre_consent_storage", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "identity"}},
+  {"id": "pre_consent_cookies_storage", "anchor": "storage", "label": "Pre-consent cookies / storage", "family": "pre_consent_storage", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "identity"}},
   {"id": "pre_consent_third_party_tracking", "anchor": "tracking", "label": "Pre-consent tracking", "family": "pre_consent_tracking", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "vendor"}},
   {"id": "reject_all_path_availability", "anchor": "decline", "label": "Decline / Reject path", "family": "consent_controls", "siteWide": false, "points": 12},
   {"id": "post_reject_tracking_reduction", "anchor": "post-reject", "label": "Post-Reject activity", "family": "post_refusal_enforcement", "siteWide": false, "points": 15},

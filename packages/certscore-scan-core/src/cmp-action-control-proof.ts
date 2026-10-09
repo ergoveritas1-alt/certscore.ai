@@ -12,7 +12,7 @@ import { createHash } from "node:crypto";
 import { inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch } from "./cmp-control-actionability.js";
 import type { Locator, Page } from "playwright";
 import { readConsentActionLabelFields, type ConsentActionLabelFields } from "./consent-action-label-fields.js";
-import { consentScopePermitsInteraction } from "./cmp-action-target.js";
+import { consentScopePermitsInteraction, consentScopeInteractionState } from "./cmp-action-target.js";
 import { inspectCustomAcceptControl, sameCustomAcceptControlBinding } from "./custom-accept-control.js";
 import type { CustomAcceptControlBinding } from "@certscore/contracts";
 import {
@@ -35,12 +35,75 @@ export function consentActionLabelNeedsRediscovery(resolution: ConsentActionCont
   );
 }
 
+/** Owner-approved opacity-only settling: one second inside the original search
+ * deadline, for one directly classified choice. Always rebuild full proof and
+ * refresh the pre-action baseline afterward; this helper never clicks. */
+export async function waitForTransparentConsentControl(input: {
+  action: "accept" | "reject"; control: Locator; page: Page;
+  selectorHint: string; controlFrameUrl?: string;
+  authorizedTargetSha256?: string; deadlineAtMs: number; signal?: AbortSignal;
+}): Promise<boolean> {
+  const deadlineAtMs = Math.min(input.deadlineAtMs, Date.now() + 1_000);
+  const remainingMs = () => Math.max(1, deadlineAtMs - Date.now());
+  while (Date.now() < deadlineAtMs) {
+    if (input.signal?.aborted || input.page.isClosed()) return false;
+    try { assertConsentActionDispatchAllowed(input.page, input.signal, input.authorizedTargetSha256); }
+    catch { return false; }
+    const scopes = input.controlFrameUrl
+      ? input.page.frames().filter(frame => frame.url() === input.controlFrameUrl) : [input.page];
+    if (scopes.length !== 1 || await scopes[0]!.locator(input.selectorHint).count().catch(() => 0) !== 1 ||
+      !await input.control.isEnabled({timeout: remainingMs()}).catch(() => false)) return false;
+    const labels = boundFields(await readControlLabelFields(input.control, remainingMs()));
+    const classified = classifyConsentControlLabel({usage: "action", classifierProfile: "multilingual_v1",
+      label: preferredLabel(labels)?.value, hasConsentContext: true});
+    if (sourceIntentConflict(labels) || classified.intent !== input.action || classified.confidence < 0.8 ||
+      classified.matchedLocale === "mk" || classified.variant === "reject_with_subscription" ||
+      classified.variant === "reject_with_payment") return false;
+    const state = await consentScopeInteractionState(input.control, remainingMs());
+    if (Date.now() >= deadlineAtMs || input.signal?.aborted) return false;
+    if (state === "interactive") return true;
+    if (state !== "transparent") return false;
+    await new Promise<void>(resolve => {
+      const finish = () => {clearTimeout(timer);input.signal?.removeEventListener("abort",finish);resolve();};
+      const timer = setTimeout(finish, Math.min(50, Math.max(0, deadlineAtMs - Date.now())));
+      input.signal?.addEventListener("abort",finish,{once:true});
+    });
+  }
+  return false;
+}
+
 /** Synchronous last-mile check, including after geometry/CDP awaits. */
 export function assertConsentActionDispatchAllowed(page: Page, signal?: AbortSignal, authorizedTargetSha256?: string) {
   if (signal?.aborted) throw new Error("abort_requested_before_action");
   if (authorizedTargetSha256 && sha256(normalizedTarget(page.url())) !== authorizedTargetSha256) {
     throw new Error("redirect_target_not_authorized");
   }
+}
+
+/** Revalidate the reviewed necessary-only scope at the final dispatch boundary,
+ * after any resolver, baseline, geometry or caller awaits. Never clicks. */
+export async function assertReviewedRejectDispatchAllowed(input: {
+  page: Page; control: Locator; proof?: ConsentActionControlProof; controlFrameUrl?: string; signal?: AbortSignal;
+}) {
+  const proof = input.proof;
+  if (!proof || (!proof.labelBoundNecessaryOnly &&
+    !(proof.matchedLocale === "pt" && normalizeConsentControlText(proof.accessibleLabel) === "rejeitar"))) return;
+  const definition = getKnownCmpDefinitionByName(proof.cmpId);
+  if (!proof.authorizedTargetSha256 || (definition?.domSelectors?.[0] &&
+    !await verifyContextualApprovalScope(input.control, definition.domSelectors[0], true))) {
+    throw new Error("reviewed_reject_dispatch_binding_changed");
+  }
+  const current = await buildConsentActionControlProof({action: "reject",page: input.page, control: input.control,
+    cmpId: proof.cmpId, recipeId: proof.recipeId, selectorHint: proof.selectorHint,
+    observedAtMs: proof.observedAtMs, authorizedTargetSha256: proof.authorizedTargetSha256,
+    controlFrameUrl: input.controlFrameUrl, signal: input.signal});
+  if (current.status !== "verified" ||
+    current.proof.accessibleLabel !== proof.accessibleLabel ||
+    current.proof.frameIdentitySha256 !== proof.frameIdentitySha256 ||
+    current.proof.labelBoundNecessaryOnly?.contextText !== proof.labelBoundNecessaryOnly?.contextText) {
+    throw new Error("reviewed_reject_dispatch_binding_changed");
+  }
+  assertConsentActionDispatchAllowed(input.page, input.signal, proof.authorizedTargetSha256);
 }
 
 export async function buildConsentActionControlProof(input: {
@@ -94,21 +157,34 @@ export async function buildConsentActionControlProof(input: {
       frameIdentitySha256: sha256(input.controlFrameUrl ?? input.page.url()),
       labelSources: labelEntries.map((entry) => entry[0]) },
   });
-  const definition = input.action === "accept" ? getKnownCmpDefinitionByName(input.cmpId) : undefined;
+  const definition = getKnownCmpDefinitionByName(input.cmpId);
   const contextualApproval = definition?.acceptContextualApproval &&
     input.recipeId === `canonical-cmp:${definition.canonicalName}:accept:${definition.recipeVersion ?? "v1"}` &&
     input.selectorHint === definition.acceptControlSelectors?.join(", ")
     ? definition.acceptContextualApproval : undefined;
   const contextualLabelVerified = contextualApproval &&
     isRegisteredContextualAcceptLabel(preferredLabel(bounded)?.value ?? "", contextualApproval.expectedNormalizedLabel);
+  const necessaryOnlyRecipe = input.action === "reject" && definition?.rejectLabelBoundNecessaryOnly &&
+    input.recipeId === `canonical-cmp:${definition.canonicalName}:reject:v3` &&
+    input.selectorHint === definition.rejectControlSelectors?.join(", ") &&
+    input.authorizedTargetSha256 && !input.expectedAccessibleControl &&
+    definition.rejectLabelBoundNecessaryOnly.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(bounded)?.value))
+    ? definition.rejectLabelBoundNecessaryOnly : undefined;
+  const necessaryOnlyContext = necessaryOnlyRecipe
+    ? await readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe) : undefined;
+  const labelBoundNecessaryOnly = necessaryOnlyRecipe && necessaryOnlyContext
+    ? { policyVersion: necessaryOnlyRecipe.policyVersion,
+        bannerSelector: "#onetrust-banner-sdk" as const, controlSelector: "#onetrust-reject-all-handler" as const,
+        contextText: necessaryOnlyContext } : undefined;
   const classification = classifyConsentControlLabel({
     // Discovery and every proof check must use the same canonical locale set.
     // In particular, do not lose Dutch intent or miss a cross-language conflict.
-    usage: "action", classifierProfile: "multilingual_v1",
+    usage: labelBoundNecessaryOnly ? "observation" : "action", classifierProfile: "multilingual_v1",
     label: preferredLabel(bounded)?.value,
+    ...(labelBoundNecessaryOnly ? { contextText: labelBoundNecessaryOnly.contextText } : {}),
     hasConsentContext: true,
   });
-  const conflictingIntent = sourceIntentConflict(bounded);
+  const conflictingIntent = sourceIntentConflict(bounded, labelBoundNecessaryOnly?.contextText);
   if (conflictingIntent) {
     return {
       status: "label_mismatch",
@@ -128,7 +204,9 @@ export async function buildConsentActionControlProof(input: {
   if (classification.matchedLocale === "mk") {
     return { status: "label_unverifiable", reason: "observation_only_control_locale" };
   }
-  const necessaryOnlyLabelVerified = input.canonicalNecessaryOnly
+  const necessaryOnlyLabelVerified = labelBoundNecessaryOnly
+    ? classification.intent === "reject" && classification.variant === "necessary_only" && classification.confidence >= 0.8
+    : input.canonicalNecessaryOnly
     ? Object.values(bounded).some((label) =>
         normalizeConsentControlText(label) ===
           normalizeConsentControlText(input.canonicalNecessaryOnly?.expectedNormalizedLabel)
@@ -190,7 +268,13 @@ export async function buildConsentActionControlProof(input: {
     }).catch(() => null);
     const matching = liveLabels?.filter((fields) => {
       const labels = boundFields(fields);
-      if (sourceIntentConflict(labels)) return false;
+      if (sourceIntentConflict(labels, labelBoundNecessaryOnly?.contextText)) return false;
+      if (labelBoundNecessaryOnly) {
+        const classified = classifyConsentControlLabel({usage: "observation", classifierProfile: "multilingual_v1",
+          label: preferredLabel(labels)?.value, contextText: labelBoundNecessaryOnly.contextText, hasConsentContext: true});
+        return necessaryOnlyRecipe!.expectedNormalizedLabels.includes(normalizeConsentControlText(preferredLabel(labels)?.value)) &&
+          classified.intent === "reject" && classified.variant === "necessary_only";
+      }
       if (input.canonicalNecessaryOnly) return Object.values(labels).some((label) =>
         normalizeConsentControlText(label) === normalizeConsentControlText(input.canonicalNecessaryOnly?.expectedNormalizedLabel));
       if (contextualLabelVerified) return isRegisteredContextualAcceptLabel(
@@ -217,6 +301,9 @@ export async function buildConsentActionControlProof(input: {
       input.expectedCustomControlBinding,
     ))) return { status: "label_unverifiable", reason: "custom_control_binding_changed" };
   if (input.signal?.aborted) return { status: "label_unverifiable", reason: "abort_requested_before_action" };
+  if (labelBoundNecessaryOnly && await readLabelBoundNecessaryOnlyContext(input.control, necessaryOnlyRecipe!) !== labelBoundNecessaryOnly.contextText) {
+    return {status: "label_unverifiable", reason: "label_bound_necessary_only_context_changed"};
+  }
   if (input.authorizedTargetSha256 && sha256(normalizedTarget(input.page.url())) !== input.authorizedTargetSha256) {
     return { status: "label_unverifiable", reason: "redirect_target_not_authorized" };
   }
@@ -237,6 +324,7 @@ export async function buildConsentActionControlProof(input: {
           ? "registered_contextual_accept"
           : "direct_label",
       ...(contextualLabelVerified ? { contextualApproval } : {}),
+      ...(labelBoundNecessaryOnly ? { labelBoundNecessaryOnly } : {}),
       classifierIntent: classification.intent,
       classifierConfidence: classification.confidence,
       ...(classification.matchedLocale ? { matchedLocale: classification.matchedLocale } : {}),
@@ -244,6 +332,7 @@ export async function buildConsentActionControlProof(input: {
       classifierReasonCodes: [
         ...classification.reasonCodes,
         ...(necessaryOnlyLabelVerified ? ["canonical_necessary_only_recipe_verified"] : []),
+        ...(labelBoundNecessaryOnly ? ["label_bound_necessary_only_reject.v1"] : []),
         ...(contextualLabelVerified ? ["registered_contextual_accept_scope_verified"] : []),
       ].slice(0, 16),
       ...(input.cmpId ? { cmpId: bound(input.cmpId, 120) } : {}),
@@ -260,11 +349,50 @@ export async function buildConsentActionControlProof(input: {
   };
 }
 
+/** Read only visible instructions in the registered first-layer banner. A
+ * category heading, hidden copy, another dialog or a form cannot authorize it. */
+async function readLabelBoundNecessaryOnlyContext(control: Locator, recipe: {
+  bannerSelector: string; controlSelector: string;
+}): Promise<string | undefined> {
+  return control.evaluate((element, selectors) => {
+    const root = element.getRootNode() as Document | ShadowRoot;
+    const banner = element.closest(selectors.bannerSelector);
+    if (!banner || root.querySelectorAll(selectors.bannerSelector).length !== 1 ||
+      !element.matches(selectors.controlSelector) || element.closest("form") ||
+      !(element instanceof HTMLButtonElement) || element.form || element.hasAttribute("form") ||
+      !(element.type === "button" || element.getAttribute("type") === null)) return undefined;
+    const ancestors: Element[] = [];
+    for (let current: Element | null = banner; current; current = current.parentElement) ancestors.push(current);
+    const descendants = banner.querySelectorAll("*");
+    if (descendants.length > 256) return undefined;
+    const unreadable = new Set([...ancestors, ...descendants].filter(node => {
+      const style = getComputedStyle(node);
+      return style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0 ||
+        node.matches('[hidden], [inert], [aria-hidden="true"]');
+    }));
+    const rect = banner.getBoundingClientRect();
+    if (ancestors.some(node => unreadable.has(node)) || rect.width <= 0 || rect.height <= 0) return undefined;
+    const walker = document.createTreeWalker(banner, NodeFilter.SHOW_TEXT);
+    let text = "", count = 0;
+    while (walker.nextNode()) {
+      if (++count > 256) return undefined;
+      let readable = true;
+      for (let parent = walker.currentNode.parentElement; parent && parent !== banner.parentElement; parent = parent.parentElement) {
+        if (unreadable.has(parent)) {readable = false;break;}
+      }
+      if (readable) text += ` ${walker.currentNode.textContent ?? ""}`;
+      if (text.length > 4096) return undefined;
+    }
+    return text.replace(/\s+/g, " ").trim();
+  }, recipe).catch(() => undefined);
+}
+
 /** Contextual approval is not a blanket license to click “OK”. Verify the
  * reviewed vendor-owned scope, a native non-transactional control, and harmless
  * fragment links (the published plugin nests a link inside its button). */
-async function verifyContextualApprovalScope(control: Locator, bannerSelector: string) {
-  return control.evaluate((element, selector) => {
+async function verifyContextualApprovalScope(control: Locator, bannerSelector: string, allowUnassociatedDefaultButton = false) {
+  return control.evaluate((element, input) => {
+    const selector = input.bannerSelector;
     const root = element.getRootNode() as Document | ShadowRoot;
     const banners = root.querySelectorAll(selector);
     const banner = element.closest(selector);
@@ -273,15 +401,17 @@ async function verifyContextualApprovalScope(control: Locator, bannerSelector: s
     const style = getComputedStyle(banner);
     if (rect.width <= 0 || rect.height <= 0 || style.display === "none" || style.visibility === "hidden" ||
       style.opacity === "0" || banner.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
-    if (!(element instanceof HTMLButtonElement && element.type === "button") && !(element instanceof HTMLAnchorElement)) return false;
+    const nativeButton = element instanceof HTMLButtonElement && !element.form && !element.hasAttribute("form") &&
+      (element.type === "button" || input.allowUnassociatedDefaultButton && element.getAttribute("type") === null);
+    if (!nativeButton && !(element instanceof HTMLAnchorElement)) return false;
     const links = [element, ...element.querySelectorAll("a[href]")].filter((node) => node instanceof HTMLAnchorElement);
     return links.every((link) => (link.getAttribute("href") ?? "") === "#" &&
       !link.hasAttribute("download") && !link.getAttribute("target"));
-  }, bannerSelector).catch(() => false);
+  }, {bannerSelector,allowUnassociatedDefaultButton}).catch(() => false);
 }
 
-async function readControlLabelFields(control: Locator): Promise<ControlLabelFields> {
-  return control.evaluate(readConsentActionLabelFields).catch(() => ({}));
+async function readControlLabelFields(control: Locator, timeoutMs?: number): Promise<ControlLabelFields> {
+  return control.evaluate(readConsentActionLabelFields, undefined, timeoutMs === undefined ? undefined : {timeout: timeoutMs}).catch(() => ({}));
 }
 
 function boundFields(fields: ControlLabelFields): ControlLabelFields {
@@ -304,10 +434,11 @@ function preferredLabel(fields: ControlLabelFields): {
   return undefined;
 }
 
-function sourceIntentConflict(fields: ControlLabelFields) {
+function sourceIntentConflict(fields: ControlLabelFields, necessaryOnlyContext?: string) {
   const classifications = [fields.ariaLabel, fields.visibleText, fields.value, fields.title]
     .filter((value): value is string => Boolean(value))
-    .map((label) => classifyConsentControlLabel({ usage: "action", classifierProfile: "multilingual_v1", label, hasConsentContext: true }));
+    .map((label) => classifyConsentControlLabel({ usage: necessaryOnlyContext ? "observation" : "action",
+      classifierProfile: "multilingual_v1", label, hasConsentContext: true, contextText: necessaryOnlyContext }));
   // An unproven acknowledgment is not actionable, but it can become a valid
   // decision label during the remaining original discovery window. Keep mixed
   // sources vetoed, since an affirmative accessible label cannot override an
@@ -315,7 +446,8 @@ function sourceIntentConflict(fields: ControlLabelFields) {
   if (classifications.length > 0 && classifications.every((classification) =>
     classification.reasonCodes.includes("unproven_acknowledgment_consent")
   )) return undefined;
-  if (classifications.some(hasConsentControlSemanticVeto)) return "semantic_veto";
+  if (classifications.some(classification => hasConsentControlSemanticVeto(classification) ||
+    classification.variant === "reject_with_payment" || classification.variant === "reject_with_subscription")) return "semantic_veto";
   const intents = new Set(classifications.map((classification) => classification.intent)
     .filter((intent) => intent !== "unknown"));
   return intents.size > 1 ? [...intents].sort().join("_") : undefined;

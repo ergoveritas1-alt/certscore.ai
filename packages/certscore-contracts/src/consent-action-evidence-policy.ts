@@ -7,11 +7,12 @@ export const CONSENT_ACTION_CONFIRMATION_POLICY = "semantic_consent_registration
  * This does not change capture windows or make overflow complete.
  */
 export const CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT = 192;
+export const CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT = 256;
 
 const oneTrustGroupId = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 export const oneTrustGroupEvidenceSchema = z.object({
-  policyVersion: z.literal("onetrust_cookie_groups.v1"),
+  policyVersion: z.enum(["onetrust_cookie_groups.v1", "onetrust_cookie_groups.v2"]),
   cookieIdentitySha256: sha256,
   beforeValueSha256: sha256,
   afterValueSha256: sha256,
@@ -23,11 +24,11 @@ export const oneTrustGroupEvidenceSchema = z.object({
   if (proof.beforeValueSha256 === proof.afterValueSha256 ||
     new Set(proof.baselineGroupIds).size !== proof.baselineGroupIds.length ||
     new Set(proof.configuredGroupIds).size !== proof.configuredGroupIds.length ||
-    proof.configuredGroupIds.length !== proof.baselineGroupIds.length ||
+    (proof.policyVersion === "onetrust_cookie_groups.v1" && proof.configuredGroupIds.length !== proof.baselineGroupIds.length) ||
     proof.baselineGroupIds.some((id) => !proof.configuredGroupIds.includes(id)) ||
     new Set(proof.groups.map((group) => group.id)).size !== proof.groups.length ||
-    proof.groups.length !== proof.baselineGroupIds.length ||
-    proof.groups.some((group) => !proof.baselineGroupIds.includes(group.id) || (group.alwaysActive && !group.consent)) ||
+    proof.groups.length !== proof.configuredGroupIds.length ||
+    proof.groups.some((group) => !proof.configuredGroupIds.includes(group.id) || (group.alwaysActive && !group.consent)) ||
     !proof.groups.some((group) => !group.alwaysActive)) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "OneTrust decisions require fresh cookie state and complete stable group identities." });
   }
@@ -67,16 +68,50 @@ export const consentDecisionEvidenceSchema = z.object({
     const decision = optional.every((group) => group.consent) ? "granted"
       : optional.every((group) => !group.consent) ? "denied" : "mixed";
     if (evidence.basis !== "verified_state" || evidence.tcfApiSource ||
-      evidence.observedStateSha256 !== proof.afterValueSha256 || evidence.decision !== decision) {
+      evidence.observedStateSha256 !== proof.afterValueSha256 || evidence.decision !== decision ||
+      (proof.policyVersion === "onetrust_cookie_groups.v2" && evidence.timestampBasis !== "instrumented_state_write")) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: "OneTrust decision must match its retained cookie/configuration proof." });
     }
   }
 });
 
-export const actionCaptureCoverageSchema = z.object({
+export type ActionCaptureCoverage = {
+  requestsDroppedBeforeAction: number;
+  requestsDroppedAfterAction: number;
+  postActionRetention?: {
+    policyVersion: "priority_bounded_action_requests.v1";
+    requestsObserved: number; requestsRetained: number; replacements: number; priorityEvaluations: number;
+    omitted: { delivery_asset: number; known_other: number; unknown: number; tracking: number; consent: number; document: number; unclassified: number };
+  };
+};
+// Bound declaration size for the canonical bundle; retain strict validation.
+export const actionCaptureCoverageSchema: z.ZodType<ActionCaptureCoverage> = z.object({
   requestsDroppedBeforeAction: z.number().int().nonnegative(),
   requestsDroppedAfterAction: z.number().int().nonnegative(),
-}).strict();
+  // Diagnostic accounting only. Summaries do not replace omitted evidence or
+  // relax any existing completeness, finding or score eligibility gate.
+  postActionRetention: z.object({
+    policyVersion: z.literal("priority_bounded_action_requests.v1"),
+    requestsObserved: z.number().int().nonnegative(),
+    requestsRetained: z.number().int().nonnegative().max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
+    replacements: z.number().int().nonnegative(),
+    priorityEvaluations: z.number().int().nonnegative().max(CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT),
+    omitted: z.object({
+      delivery_asset: z.number().int().nonnegative(), known_other: z.number().int().nonnegative(),
+      unknown: z.number().int().nonnegative(), tracking: z.number().int().nonnegative(),
+      consent: z.number().int().nonnegative(), document: z.number().int().nonnegative(),
+      unclassified: z.number().int().nonnegative(),
+    }).strict(),
+  }).strict().optional(),
+}).strict().superRefine((coverage, context) => {
+  const summary = coverage.postActionRetention;
+  if (!summary) return; // Historical packets retain their original coverage.
+  const omitted = Object.values(summary.omitted).reduce((sum, count) => sum + count, 0);
+  if (omitted !== coverage.requestsDroppedAfterAction || summary.replacements > omitted ||
+    summary.requestsObserved !== summary.requestsRetained + omitted) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Priority retention must account for every observed and omitted request." });
+  }
+});
 
 // Legacy packets remain readable. A UI transition or an opaque receipt change
 // is not semantic proof, regardless of a legacy writer's "confirmed" label.

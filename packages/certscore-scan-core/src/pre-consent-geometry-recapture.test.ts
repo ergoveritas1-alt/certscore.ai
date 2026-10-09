@@ -10,6 +10,7 @@ import {
   mergeConsentUiObservations,
   preConsentRuntimeScanner,
   reconcileConsentUiObservationWithCompletedGeometry,
+  reconcileConsentUiRecapture,
 } from "./scanners/pre-consent-runtime-scanner.js";
 
 const rapidOxfamStyleObservation = {
@@ -867,6 +868,13 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
       acceptControl?.screenshotArtifactRef ?? "",
       /screenshot-pre-consent-(?:geometry-proof|cmp-controls)\.png$/,
     );
+    const retainedPaths = new Set(result.screenshots.map((screenshot) => screenshot.path));
+    assert.ok(retainedPaths.has(geometry.screenshotArtifactRef ?? ""),
+      "the geometry packet must reference an image that was actually retained");
+    for (const candidate of geometry.candidates) {
+      if (candidate.screenshotArtifactRef) assert.ok(retainedPaths.has(candidate.screenshotArtifactRef),
+        "candidate references must not name an uncaptured packet-recovery file");
+    }
   } finally {
     await closeServer(server.server);
     await rm(tempRoot, { recursive: true, force: true });
@@ -901,6 +909,79 @@ async function closeServer(server: Server): Promise<void> {
   });
 }
 
+test("early screenshot handoff starts before an unrelated transport probe completes", async () => {
+  let finishProbe: (() => void) | undefined;
+  let probeFinished = false;
+  let handedOffBeforeProbe = false;
+  let probeTimer: ReturnType<typeof setTimeout> | undefined;
+  const server = createServer((request, response) => {
+    if (request.method === "HEAD") {
+      finishProbe = () => { if (response.writableEnded) return; probeFinished = true; response.writeHead(200).end(); };
+      probeTimer = setTimeout(finishProbe, 1800);
+      return;
+    }
+    response.setHeader("content-type", "text/html");
+    response.end('<section role="dialog" aria-label="Cookie consent"><p>Choose optional cookies</p><button>Accept all</button><button>Reject all</button><button>Cookie settings</button></section>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-capture-handoff-"));
+  try {
+    const result = await preConsentRuntimeScanner({
+      url, normalizedUrl: url, scanStartedAtMs: Date.now(), internalBudgetMs: 9000,
+      artifactWriter: await createArtifactWriter(tempRoot), screenshotMode: "always", waitMode: "fast",
+      onScreenshotCaptured: screenshot => {
+        if (screenshot.artifactId !== "screenshot_pre_consent") return;
+        handedOffBeforeProbe = !probeFinished && Boolean(finishProbe);
+        finishProbe?.();
+      },
+    });
+    assert.equal(handedOffBeforeProbe, true, "review handoff must not await unrelated transport work");
+    assert.equal(result.screenshots.filter(image => image.artifactId === "screenshot_pre_consent").length, 1);
+  } finally {
+    if (probeTimer) clearTimeout(probeTimer);
+    finishProbe?.();
+    await closeServer(server); await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("same-URL reload keeps the earlier screenshot separate from the terminal DOM document", async () => {
+  let reload = false;
+  let documents = 0;
+  const server = createServer((request, response) => {
+    if (request.url === "/reload-signal") { response.end(String(reload)); return; }
+    if (request.url !== "/") { response.writeHead(404).end(); return; }
+    documents++;
+    response.setHeader("content-type", "text/html");
+    response.end(documents === 1
+      ? `<h1>Loading original document</h1><script>const timer=setInterval(async()=>{
+        if(await (await fetch('/reload-signal')).text()==='true'){clearInterval(timer);location.reload();}
+        },30);</script>`
+      : '<h1>Terminal document</h1><section role="dialog" aria-label="Cookie consent"><p>Choose optional cookies</p><button>Accept all</button><button>Reject all</button><button>Cookie settings</button></section>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const url = `http://127.0.0.1:${address.port}/`;
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-reload-binding-"));
+  try {
+    const result = await preConsentRuntimeScanner({
+      url, normalizedUrl: url, scanStartedAtMs: Date.now(), internalBudgetMs: 9000,
+      artifactWriter: await createArtifactWriter(tempRoot), screenshotMode: "always", waitMode: "fast",
+      captureScope: "consent_proof",
+      onScreenshotCaptured: screenshot => { if (screenshot.artifactId === "screenshot_pre_consent") reload = true; },
+    });
+    const first = result.screenshots.find(image => image.artifactId === "screenshot_pre_consent");
+    const terminal = result.domSnapshots[0];
+    assert.ok(documents >= 2, "fixture must exercise a real reload");
+    assert.ok(first?.documentIdentity?.token);
+    assert.ok(terminal?.documentIdentity?.token);
+    assert.notEqual(first.documentIdentity.token, terminal.documentIdentity.token);
+    assert.match(await readFile(terminal.path, "utf8"), /Terminal document/);
+    assert.ok(terminal.capturedAtMs >= first.capturedAtMs);
+  } finally { await closeServer(server); await rm(tempRoot, { recursive: true, force: true }); }
+});
+
 
 test("unresolved visible consent decisions survive final geometry reconciliation without invented absence", () => {
   const geometry = oxfamStyleGeometry();
@@ -912,4 +993,27 @@ test("unresolved visible consent decisions survive final geometry reconciliation
   assert.equal(result.inventoryOutcome, "partial");
   assert.ok(result.basis.includes("unresolved_visible_consent_decision"));
   assert.equal(result.controls.length, 0);
+});
+
+
+test("completed empty recapture cannot erase known same-document controls from a partial independent channel", () => {
+  const current = { ...rapidOxfamStyleObservation, documentUrl: "https://inventory.example/",
+    documentIdentity: { source: "cdp_loader_id" as const, token: "same-loader" },
+    captureStatus: "incomplete" as const, inventoryOutcome: "partial" as const };
+  const candidate = { ...current, observedAtMs: 8000, captureStatus: "no_evidence" as const,
+    inventoryOutcome: "complete_empty" as const, controls: [], visibleChoiceLabels: [], likelyPresent: false,
+    acceptControlObserved: false, rejectControlObserved: false, managePreferencesControlObserved: false };
+  const result = reconcileConsentUiRecapture({ current, candidate, strongerBasis: "stronger", completedWithoutControlsBasis: "empty" });
+  assert.equal(result.completedNegativeRetained, false);
+  assert.equal(result.observation.acceptControlObserved, true);
+  assert.equal(result.observation.rejectControlObserved, true);
+  assert.equal(result.observation.controls.length, current.controls.length);
+  assert.equal(result.observation.inventoryOutcome, "partial");
+  const drifted = reconcileConsentUiRecapture({ current, candidate: { ...candidate, documentIdentity: { ...candidate.documentIdentity, token: "new-loader" } },
+    strongerBasis: "stronger", completedWithoutControlsBasis: "empty" });
+  assert.equal(drifted.observation.controls.length, 0, "prior-document controls cannot survive navigation");
+  const unverifiedVisibility = reconcileConsentUiRecapture({ current: { ...current,
+    controls: current.controls.map(control => ({ ...control, visible: undefined })) }, candidate,
+    strongerBasis: "stronger", completedWithoutControlsBasis: "empty" });
+  assert.equal(unverifiedVisibility.completedNegativeRetained, true, "preservation requires positively verified visibility");
 });

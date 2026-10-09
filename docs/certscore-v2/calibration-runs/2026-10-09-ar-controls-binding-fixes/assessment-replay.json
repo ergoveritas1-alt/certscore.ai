@@ -1,0 +1,2812 @@
+[
+  {
+    "domain": "portaventuraworld.com",
+    "kind": "retained",
+    "scanId": "00730120-c8e2-468e-8a5f-012b5228455c",
+    "bundleSha256": "1b147136b2e86d901f47488bbc5bb40ee0acac737afdf24188a953b80510c49c",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "complete",
+    "controls": {
+      "accept": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "consent_control_geometry_evidence"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "reject": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "consent_control_geometry_evidence"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "consent_control_geometry_evidence"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "consent_control_geometry_evidence"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_geometry_proof",
+        "screenshot_pre_consent_settled",
+        "screenshot_pre_consent"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.portaventuraworld.com/",
+      "observedDocumentIds": [
+        "https://www.portaventuraworld.com/"
+      ],
+      "canonicalDocumentToken": "AF63F26D4F218F079AE16D93D331A764",
+      "observedDocumentTokens": [
+        "F993556253BE685241B4FAC412FD5DE2"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "geometry_document_mismatch",
+        "detail": "Geometry was retained for a different document identity and cannot erase bundle evidence.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-fb12914f",
+      "computedAt": "2026-10-08T10:56:27.348Z"
+    }
+  },
+  {
+    "domain": "delltechnologies.com",
+    "kind": "retained",
+    "scanId": "dcc62f4c-456e-4226-af29-621907b93dcb",
+    "bundleSha256": "b4086013641d7451489c1fb9547e4fecc4dd331dd362ad9050d9047b39e02d1f",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept All",
+          "CanonicalEvidenceBundle.json",
+          "candidate_2",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 7955,
+        "lastObservedAtMs": 7955
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Decline All",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 7955,
+        "lastObservedAtMs": 7955
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Manage, Opens the preference center",
+          "CanonicalEvidenceBundle.json",
+          "consent_ui_pre_consent:Manage",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 7955,
+        "lastObservedAtMs": 7955
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_cmp_controls"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.dell.com/en-us",
+      "observedDocumentIds": [
+        "https://www.dell.com/en-us"
+      ],
+      "canonicalDocumentToken": "16EB16E6F2C74F78633607D59F5AA809",
+      "observedDocumentTokens": [
+        "16EB16E6F2C74F78633607D59F5AA809"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-13880692",
+      "computedAt": "2026-10-09T00:07:07.173Z"
+    }
+  },
+  {
+    "domain": "runna.com",
+    "kind": "retained",
+    "scanId": "c9d35ff5-3fd3-41a5-b63d-0c1e103d3863",
+    "bundleSha256": "350776137530724a1a9c53ba6c8d2084e7a2bc8ef149672620cd694c98f9a030",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept all",
+          "CanonicalEvidenceBundle.json",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 9390,
+        "lastObservedAtMs": 9390
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Reject Non-Essential",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 9390,
+        "lastObservedAtMs": 9390
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Customize",
+          "CanonicalEvidenceBundle.json",
+          "consent_ui_pre_consent:Show details",
+          "candidate_3",
+          "ConsentControlGeometryEvidence.json",
+          "candidate_4"
+        ],
+        "firstObservedAtMs": 9390,
+        "lastObservedAtMs": 9390
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_cmp_controls"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.runna.com/",
+      "observedDocumentIds": [
+        "https://www.runna.com/"
+      ],
+      "canonicalDocumentToken": "AC2F71CE7BD7A257A4F021857C4B062E",
+      "observedDocumentTokens": [
+        "AC2F71CE7BD7A257A4F021857C4B062E"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "structured_inspection_incomplete",
+        "detail": "The current retained control inspection did not verify complete structural coverage; a generic complete inventory cannot establish absence.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-a10ccc60",
+      "computedAt": "2026-09-30T12:41:28.744Z"
+    }
+  },
+  {
+    "domain": "ncsoft.com",
+    "kind": "retained",
+    "scanId": "773f63c2-13e3-42d5-bc8e-0db72491d306",
+    "bundleSha256": "cb9baf8dae87cf856c916255e90ab8ed7544bae634d1ceb9c5f729c3fc03ccf5",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Agree to All",
+          "CanonicalEvidenceBundle.json",
+          "candidate_5",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 12029,
+        "lastObservedAtMs": 12029
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Decline All",
+          "CanonicalEvidenceBundle.json",
+          "candidate_4",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 12029,
+        "lastObservedAtMs": 12029
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Settings",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json",
+          "candidate_2"
+        ],
+        "firstObservedAtMs": 12029,
+        "lastObservedAtMs": 12029
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.nc.com/",
+      "observedDocumentIds": [
+        "https://www.nc.com/"
+      ],
+      "canonicalDocumentToken": "14EE35A691B02287D6C79B7DDA7E9F88",
+      "observedDocumentTokens": [
+        "14EE35A691B02287D6C79B7DDA7E9F88"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      },
+      {
+        "code": "structured_inspection_incomplete",
+        "detail": "The current retained control inspection did not verify complete structural coverage; a generic complete inventory cannot establish absence.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-b6c703a9",
+      "computedAt": "2026-09-30T05:38:07.316Z"
+    }
+  },
+  {
+    "domain": "feedbackcompany.com",
+    "kind": "retained",
+    "scanId": "2bfc18b3-d850-4376-af1e-aa7990089201",
+    "bundleSha256": "db843976d4c38af219de7cff7e8f19e817faffece2161b098360d517565100e6",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "complete",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Allow all",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "firstObservedAtMs": 5515,
+        "lastObservedAtMs": 5515
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Deny",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "firstObservedAtMs": 5515,
+        "lastObservedAtMs": 5515
+      },
+      "options": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.feedbackcompany.com/",
+      "observedDocumentIds": [
+        "https://www.feedbackcompany.com/"
+      ],
+      "canonicalDocumentToken": "CC0BBB190B50E3DA7FEB2539979CB152",
+      "observedDocumentTokens": [
+        "CC0BBB190B50E3DA7FEB2539979CB152"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-548c6cc7",
+      "computedAt": "2026-10-01T12:33:37.698Z"
+    }
+  },
+  {
+    "domain": "nomura.com",
+    "kind": "retained",
+    "scanId": "0c62e639-a6e8-4b23-935c-33892bd0c95f",
+    "bundleSha256": "3ca2f6a408b46a672575299b1f9561449db3f572c2fc5ffc4c8e88e286609990",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:ACCEPT",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "firstObservedAtMs": 3094,
+        "lastObservedAtMs": 3094
+      },
+      "reject": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.nomura.com/",
+      "observedDocumentIds": [
+        "https://www.nomura.com/"
+      ],
+      "canonicalDocumentToken": "1DE0D533CB7C4DAC5B9294583764CA2A",
+      "observedDocumentTokens": [
+        "1DE0D533CB7C4DAC5B9294583764CA2A"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "structured_inspection_incomplete",
+        "detail": "The current retained control inspection did not verify complete structural coverage; a generic complete inventory cannot establish absence.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-270ebbfc",
+      "computedAt": "2026-10-01T00:13:59.093Z"
+    }
+  },
+  {
+    "domain": "gotokyo.org",
+    "kind": "retained",
+    "scanId": "96c02e03-1e87-48bc-b15e-3091460d8f7f",
+    "bundleSha256": "3d51a036425dab983e2f8cc73279e7ddd2abc48ca877e726d705ce1336d9dc04",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "complete",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Agree and continue",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "firstObservedAtMs": 32709,
+        "lastObservedAtMs": 32709
+      },
+      "reject": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "CanonicalEvidenceBundle.json",
+            "dom_text_pre_consent"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "complete_first_layer_inventory_without_control",
+          "consent-control-capture.v3"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.gotokyo.org/en/index.html",
+      "observedDocumentIds": [
+        "https://www.gotokyo.org/en/index.html"
+      ],
+      "canonicalDocumentToken": "126352AFB8D7E5B48BA5E7BBEEC00E93",
+      "observedDocumentTokens": [
+        "126352AFB8D7E5B48BA5E7BBEEC00E93"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": null,
+      "sourceHash": "fnv1a-7c487f92",
+      "computedAt": "2026-10-01T03:24:28.301Z"
+    }
+  },
+  {
+    "domain": "nttdata.com",
+    "kind": "retained",
+    "scanId": "acda28ea-6576-4ee0-91c0-8db7b31882bd",
+    "bundleSha256": "00bc90a054d45b514a84e01ad0fe07d27c643df9008ec871c3f95a998d81b748",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 9857,
+        "lastObservedAtMs": 9857
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Decline",
+          "CanonicalEvidenceBundle.json",
+          "candidate_2",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 9857,
+        "lastObservedAtMs": 9857
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Customize",
+          "CanonicalEvidenceBundle.json",
+          "candidate_6",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 9857,
+        "lastObservedAtMs": 9857
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.nttdata.com/en-us",
+      "observedDocumentIds": [
+        "https://www.nttdata.com/en-us"
+      ],
+      "canonicalDocumentToken": "81FCFE27057A7C426483143EDFFA4A70",
+      "observedDocumentTokens": [
+        "81FCFE27057A7C426483143EDFFA4A70"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-d5842b3c",
+      "computedAt": "2026-10-01T08:49:40.188Z"
+    }
+  },
+  {
+    "domain": "infoq.com",
+    "kind": "retained",
+    "scanId": "4ebb8d38-be36-4b55-bb77-9b1f7c5ee361",
+    "bundleSha256": "49c2fb69df41c911f9679f34ffa2f3f183b8df11a024e01c2f09e12772834fc4",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json",
+          "consent_ui_pre_consent:I ACCEPT",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "firstObservedAtMs": 3497,
+        "lastObservedAtMs": 10982
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json",
+          "consent_ui_pre_consent:I DO NOT ACCEPT",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "firstObservedAtMs": 3497,
+        "lastObservedAtMs": 10982
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "candidate_2",
+          "ConsentControlGeometryEvidence.json",
+          "consent_ui_pre_consent:SETTINGS",
+          "CanonicalEvidenceBundle.json"
+        ],
+        "firstObservedAtMs": 3497,
+        "lastObservedAtMs": 10982
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.infoq.com/",
+      "observedDocumentIds": [
+        "https://www.infoq.com/"
+      ],
+      "canonicalDocumentToken": "8AE7B129142B87B2F9060DA58A118E63",
+      "observedDocumentTokens": [
+        "8AE7B129142B87B2F9060DA58A118E63"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-7e50ceac",
+      "computedAt": "2026-10-01T13:45:07.252Z"
+    }
+  },
+  {
+    "domain": "myrealpage.com",
+    "kind": "retained",
+    "scanId": "a45a837d-4993-4026-9d67-e59f3c2a5eb4",
+    "bundleSha256": "b4010774bba2ae6a12440754905f3644b5eef9047e71284687a625929351c23a",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 12598,
+        "lastObservedAtMs": 12598
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept Only Necessary",
+          "CanonicalEvidenceBundle.json",
+          "consent_ui_pre_consent:Decline",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json",
+          "candidate_2"
+        ],
+        "firstObservedAtMs": 12598,
+        "lastObservedAtMs": 12598
+      },
+      "options": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "unavailable",
+      "artifactRefs": [],
+      "reasonCodes": [
+        "representative_consent_screenshot_unavailable"
+      ]
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://myrealpage.com/",
+      "observedDocumentIds": [
+        "https://myrealpage.com/"
+      ],
+      "canonicalDocumentToken": "1D41DABFA8E40578E8BB847E281E778A",
+      "observedDocumentTokens": [
+        "1D41DABFA8E40578E8BB847E281E778A"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      },
+      {
+        "code": "structured_inspection_incomplete",
+        "detail": "The current retained control inspection did not verify complete structural coverage; a generic complete inventory cannot establish absence.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-84d00207",
+      "computedAt": "2026-09-30T06:56:31.878Z"
+    }
+  },
+  {
+    "domain": "owncloud.com",
+    "kind": "retained",
+    "scanId": "33a54005-42f2-466b-8361-e10b7a79dd4d",
+    "bundleSha256": "014948028c7411107e783b79ab46343347ea97473ae097d8a2dd3fdf9339fc40",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Allow all cookies",
+          "CanonicalEvidenceBundle.json",
+          "candidate_2",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 5969,
+        "lastObservedAtMs": 5969
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Use necessary cookies only",
+          "CanonicalEvidenceBundle.json",
+          "candidate_4",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 5969,
+        "lastObservedAtMs": 5969
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Preferences",
+          "CanonicalEvidenceBundle.json",
+          "consent_ui_pre_consent:Allow selection",
+          "consent_ui_pre_consent:Show details",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json",
+          "candidate_3",
+          "candidate_7"
+        ],
+        "firstObservedAtMs": 5969,
+        "lastObservedAtMs": 5969
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://owncloud.com/",
+      "observedDocumentIds": [
+        "https://owncloud.com/"
+      ],
+      "canonicalDocumentToken": "94B65EA3EF5FE55346951950C54C3E77",
+      "observedDocumentTokens": [
+        "94B65EA3EF5FE55346951950C54C3E77"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      },
+      {
+        "code": "structured_inspection_incomplete",
+        "detail": "The current retained control inspection did not verify complete structural coverage; a generic complete inventory cannot establish absence.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-66691041",
+      "computedAt": "2026-10-08T10:48:48.818Z"
+    }
+  },
+  {
+    "domain": "earth.org",
+    "kind": "fresh",
+    "scanId": "04684fed-900e-45b3-8bb4-70a61b9225f7",
+    "bundleSha256": "24323c4f24a5a5bdabcb5aa71eafe57d615c04a8b718cc1e39323b3a32e0575d",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "reject": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_full_page"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://earth.org/",
+      "observedDocumentIds": [
+        "https://earth.org/"
+      ],
+      "canonicalDocumentToken": "E60BC026C6629745EDC7A3C206555C70",
+      "observedDocumentTokens": [
+        "E60BC026C6629745EDC7A3C206555C70"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "surface_inspection_incomplete",
+        "detail": "No complete pre-interaction surface inspection was retained.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-8b93fa8c",
+      "computedAt": "2026-10-09T11:48:49.942Z"
+    }
+  },
+  {
+    "domain": "idrama.video",
+    "kind": "fresh",
+    "scanId": "cb0c3c25-a29b-4a24-bc21-8e004e4c56bf",
+    "bundleSha256": "691982dc8738e13b16154842387f8db4ff66058464a6bd41d75648047576e8c4",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "reject": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_full_page"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://idrama.video/",
+      "observedDocumentIds": [
+        "https://idrama.video/"
+      ],
+      "canonicalDocumentToken": "EE4C76B922C21936F3A8C59801BA45DA",
+      "observedDocumentTokens": [
+        "EE4C76B922C21936F3A8C59801BA45DA"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "surface_inspection_incomplete",
+        "detail": "No complete pre-interaction surface inspection was retained.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-f1fde2a3",
+      "computedAt": "2026-10-09T11:48:54.336Z"
+    }
+  },
+  {
+    "domain": "ihaveporn.co",
+    "kind": "fresh",
+    "scanId": "a9dce21c-477a-48ca-8cc9-0f70cafbe788",
+    "bundleSha256": "651af3d601a76f6753dcaaadb5a723c6dc9a8d64290f1b54b8b7c4f7b8ccc3ef",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "reject": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_full_page"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.ihaveporn.co/",
+      "observedDocumentIds": [
+        "https://www.ihaveporn.co/"
+      ],
+      "canonicalDocumentToken": "7BD19933D3B5BFF2A68A2FEF7F815FCA",
+      "observedDocumentTokens": [
+        "7BD19933D3B5BFF2A68A2FEF7F815FCA"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "surface_inspection_incomplete",
+        "detail": "No complete pre-interaction surface inspection was retained.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-60ac56c3",
+      "computedAt": "2026-10-09T11:48:35.489Z"
+    }
+  },
+  {
+    "domain": "luminpdf.com",
+    "kind": "fresh",
+    "scanId": "080f4d89-a718-4c50-bb0c-331bf223298d",
+    "bundleSha256": "6876e082b754b10add03d3f26caaea1a530432e5a0418f28397afa59a18bfb9a",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "same_document_first_layer_control_observed",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept all",
+          "CanonicalEvidenceBundle.json",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 5878,
+        "lastObservedAtMs": 5878
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "same_document_first_layer_control_observed",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Reject all",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 5878,
+        "lastObservedAtMs": 5878
+      },
+      "options": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "complete_first_layer_inventory_without_control",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "complete_first_layer_inventory_without_control",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_geometry_proof",
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.luminpdf.com/",
+      "observedDocumentIds": [
+        "https://www.luminpdf.com/"
+      ],
+      "canonicalDocumentToken": "0880F62B82023A7D7D790C27FD1E7967",
+      "observedDocumentTokens": [
+        "0880F62B82023A7D7D790C27FD1E7967"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-2e81fdc3",
+      "computedAt": "2026-10-09T11:48:41.518Z"
+    }
+  },
+  {
+    "domain": "nature.org",
+    "kind": "fresh",
+    "scanId": "71e4f1fb-83ce-4193-a2ef-fb48482f72d4",
+    "bundleSha256": "44843644943f9c6781f60a07014240ba5c14d7d2f10a45ef9fba69acaf0b63da",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept Optional Cookies",
+          "CanonicalEvidenceBundle.json",
+          "candidate_2",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 6558,
+        "lastObservedAtMs": 6558
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Reject Optional Cookies",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 6558,
+        "lastObservedAtMs": 6558
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Cookies Settings, Opens the preference center dialog",
+          "CanonicalEvidenceBundle.json",
+          "consent_ui_pre_consent:COOKIES SETTINGS",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 6558,
+        "lastObservedAtMs": 6558
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_geometry_proof",
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.nature.org/en-us",
+      "observedDocumentIds": [
+        "https://www.nature.org/en-us"
+      ],
+      "canonicalDocumentToken": "54EDFC57AA3C353850AB86738011E52A",
+      "observedDocumentTokens": [
+        "54EDFC57AA3C353850AB86738011E52A"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-65c6aa21",
+      "computedAt": "2026-10-09T11:48:33.322Z"
+    }
+  },
+  {
+    "domain": "podtrac.com",
+    "kind": "fresh",
+    "scanId": "6c0331c7-350b-48a0-a4ad-52318be2d701",
+    "bundleSha256": "ae969d667c0a00ed78238396fcd464107474e2053e62505040f9ec376fd214db",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "same_document_first_layer_control_observed",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept all",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 3361,
+        "lastObservedAtMs": 3361
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "same_document_first_layer_control_observed",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Decline all",
+          "CanonicalEvidenceBundle.json",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 3361,
+        "lastObservedAtMs": 3361
+      },
+      "options": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "complete_first_layer_inventory_without_control",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "not_observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "complete",
+          "evidenceRefs": [
+            "ConsentControlGeometryEvidence.json"
+          ]
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "control_specific_inventory_complete",
+          "complete_first_layer_inventory_without_control",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_geometry_proof",
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://analytics.podtrac.com/",
+      "observedDocumentIds": [
+        "https://analytics.podtrac.com/"
+      ],
+      "canonicalDocumentToken": "CC62016B9878CA2FF256FEDF3C418A0D",
+      "observedDocumentTokens": [
+        "CC62016B9878CA2FF256FEDF3C418A0D"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-afda32f7",
+      "computedAt": "2026-10-09T11:48:25.137Z"
+    }
+  },
+  {
+    "domain": "receitasnestle.com.br",
+    "kind": "fresh",
+    "scanId": "39c79661-b5dd-444f-995e-2d0cfa39876c",
+    "bundleSha256": "658316442610a60d9985f780580144e2576738795b76597f5cb76c4d12a36960",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Aceitar todos",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 4349,
+        "lastObservedAtMs": 4349
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Rejeitar",
+          "CanonicalEvidenceBundle.json",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 4349,
+        "lastObservedAtMs": 4349
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Configurar Cookies, Abre a caixa de diálogo do centro de preferências",
+          "CanonicalEvidenceBundle.json",
+          "consent_ui_pre_consent:Configurar Cookies",
+          "candidate_4",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 4349,
+        "lastObservedAtMs": 4349
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_geometry_proof",
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.receitasnestle.com.br/",
+      "observedDocumentIds": [
+        "https://www.receitasnestle.com.br/"
+      ],
+      "canonicalDocumentToken": "00BE0B6285B98BFDA9586D1CCAAC9F36",
+      "observedDocumentTokens": [
+        "00BE0B6285B98BFDA9586D1CCAAC9F36"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-c8ab2233",
+      "computedAt": "2026-10-09T11:48:26.065Z"
+    }
+  },
+  {
+    "domain": "uema.br",
+    "kind": "fresh",
+    "scanId": "c5ead21a-c057-4447-97dc-ac24207ed1c5",
+    "bundleSha256": "bc5a08cee0df8fa0617a37a3984e110517ee596486023af8da7806f98f3d0a9d",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "reject": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_full_page"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.uema.br/",
+      "observedDocumentIds": [
+        "https://www.uema.br/"
+      ],
+      "canonicalDocumentToken": "F90B7EFF73AD73E676BC9C05ABB60307",
+      "observedDocumentTokens": [
+        "F90B7EFF73AD73E676BC9C05ABB60307"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "surface_inspection_incomplete",
+        "detail": "No complete pre-interaction surface inspection was retained.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-0505b961",
+      "computedAt": "2026-10-09T11:49:00.504Z"
+    }
+  },
+  {
+    "domain": "unleashedsoftware.com",
+    "kind": "fresh",
+    "scanId": "7fac1779-e9c6-45f2-a8b0-c280a45cb7c7",
+    "bundleSha256": "172e4ee343e850b5f99ac1a3d574b8ae2c128df67365c23a206b525cd7211fb0",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Accept All Cookies",
+          "CanonicalEvidenceBundle.json",
+          "candidate_2",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 6007,
+        "lastObservedAtMs": 6007
+      },
+      "reject": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Reject All",
+          "CanonicalEvidenceBundle.json",
+          "candidate_1",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 6007,
+        "lastObservedAtMs": 6007
+      },
+      "options": {
+        "state": "observed",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "same_document_first_layer_control_observed",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [
+          "consent_ui_pre_consent:Cookies Settings, Opens the preference center dialog",
+          "CanonicalEvidenceBundle.json",
+          "consent_ui_pre_consent:Cookies Settings",
+          "candidate_0",
+          "ConsentControlGeometryEvidence.json"
+        ],
+        "firstObservedAtMs": 6007,
+        "lastObservedAtMs": 6007
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "first_layer",
+        "reasonCodes": [
+          "first_layer_inventory_incomplete",
+          "unresolved_visible_consent_decision",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "canonical_consent_coverage_incomplete"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_geometry_proof",
+        "screenshot_pre_consent_settled"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "matched",
+      "canonicalDocumentId": "https://www.unleashedsoftware.com/",
+      "observedDocumentIds": [
+        "https://www.unleashedsoftware.com/"
+      ],
+      "canonicalDocumentToken": "AC04CBBCEFDB1E8578796EB8399730D8",
+      "observedDocumentTokens": [
+        "AC04CBBCEFDB1E8578796EB8399730D8"
+      ],
+      "reasonCodes": []
+    },
+    "limitations": [
+      {
+        "code": "typed_inventory_incomplete",
+        "detail": "The retained first-layer inventory did not complete: partial.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-360b5bfc",
+      "computedAt": "2026-10-09T11:48:39.557Z"
+    }
+  },
+  {
+    "domain": "upshow.tv",
+    "kind": "fresh",
+    "scanId": "a5fdf311-e255-48ab-a21c-669f17389bc2",
+    "bundleSha256": "1f24ed5f94812da591d54f57655e25f2279eac11b9b1d4ec3ec0a0973333ee38",
+    "evaluation": "current canonical assessment replay only; no persistence, production mutation or historical upgrade",
+    "assessmentStatus": "limited",
+    "controls": {
+      "accept": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "unknown",
+        "reasonCodes": [
+          "assessment_blocked",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "unresolved_visible_consent_decision",
+          "canonical_consent_coverage_incomplete",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "reject": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "unknown",
+        "reasonCodes": [
+          "assessment_blocked",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "unresolved_visible_consent_decision",
+          "canonical_consent_coverage_incomplete",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "options": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "unknown",
+        "reasonCodes": [
+          "assessment_blocked",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "unresolved_visible_consent_decision",
+          "canonical_consent_coverage_incomplete",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      },
+      "privacyOptOut": {
+        "state": "unknown",
+        "inspection": {
+          "policy": "control_specific_inspection.v2",
+          "status": "limited",
+          "evidenceRefs": []
+        },
+        "layer": "unknown",
+        "reasonCodes": [
+          "assessment_blocked",
+          "regional_egress_unverified_local",
+          "consent-control-capture.v3",
+          "unresolved_visible_consent_decision",
+          "canonical_consent_coverage_incomplete",
+          "geometry_document_mismatch"
+        ],
+        "evidenceRefs": [],
+        "firstObservedAtMs": null,
+        "lastObservedAtMs": null
+      }
+    },
+    "visualEvidence": {
+      "status": "available",
+      "artifactRefs": [
+        "screenshot_pre_consent_geometry_proof",
+        "screenshot_pre_consent_cmp_controls",
+        "screenshot_pre_consent_full_page",
+        "screenshot_pre_consent_settled",
+        "screenshot_pre_consent"
+      ],
+      "reasonCodes": []
+    },
+    "document": {
+      "identityStatus": "mismatched",
+      "canonicalDocumentId": "https://everpass.com/",
+      "observedDocumentIds": [
+        "https://everpass.com/"
+      ],
+      "canonicalDocumentToken": "8D9AA156123B12DDC87764C7472875C6",
+      "observedDocumentTokens": [
+        "28678FEF01FF72AAC36464809BA5C878"
+      ],
+      "reasonCodes": [
+        "document_identity_mismatch"
+      ]
+    },
+    "limitations": [
+      {
+        "code": "document_identity_mismatch",
+        "detail": "Observed consent evidence was not attributable to the canonical scanned document.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      },
+      {
+        "code": "geometry_document_mismatch",
+        "detail": "Geometry was retained for a different document identity and cannot erase bundle evidence.",
+        "affectedFields": [
+          "surface",
+          "accept",
+          "reject",
+          "options",
+          "privacy_opt_out"
+        ]
+      }
+    ],
+    "provenance": {
+      "projectorId": "wc01.consent-control-assessment",
+      "projectorVersion": "2.2.2",
+      "contractVersion": "2.2",
+      "sourceBundleVersion": "certscore.v2.alpha.1",
+      "sourceGeometryVersion": "consent_control_geometry.v1",
+      "sourceHash": "fnv1a-bf9cd2b1",
+      "computedAt": "2026-10-09T11:49:15.766Z"
+    }
+  }
+]

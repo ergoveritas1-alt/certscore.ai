@@ -1,0 +1,136 @@
+{
+  "contractVersion": "certscore.local-reliability-verification.v1",
+  "createdAt": "2026-10-09T12:20:23.280987+00:00",
+  "status": "local_verified_not_deployed",
+  "baseCommit": "fba576bcbc0d7ad1cffdf5375bb9629f63e065d7",
+  "branch": "codex/cmp-consent-event-evidence",
+  "changes": [
+    "Early screenshot URL, loader and completion time are bound at capture completion rather than a later await.",
+    "Consent-proof DOM text keeps the loader, URL and time of its existing read; a failed refresh does not rebind cached text.",
+    "A shorter newer-document sparse-page read replaces stale previous-document text.",
+    "Early geometry references an initial screenshot only after matching its retained loader and exact URL.",
+    "Recovery skips replacement work if the document changes during the existing settle window; the packet remains limited.",
+    "Late synchronized screenshots retain a loader only when before/after cached identities agree.",
+    "Early screenshot safety handoff fires at completion instead of after unrelated transport work.",
+    "New full-registry Finnish Cookiebot fixtures exercise both actions after late mount, replacement and same-URL reload; opaque and opposite receipts stay unconfirmed.",
+    "Capture-binding regressions and action-chain fixtures are included in the canonical A/R and predeploy action gates."
+  ],
+  "verification": [
+    {
+      "log": "artifacts/ar-reliability-cycles-20261009/aro-gate.log",
+      "tests": [
+        384,
+        8
+      ],
+      "pass": [
+        384,
+        8
+      ],
+      "fail": [
+        0,
+        0
+      ],
+      "sha256": "342afdf5d9e7378bbafb6b4b57f4c5f85de89752e9ac52b5853a933d99816411"
+    },
+    {
+      "log": "artifacts/ar-reliability-cycles-20261009/action-gate.log",
+      "tests": [
+        180
+      ],
+      "pass": [
+        180
+      ],
+      "fail": [
+        0
+      ],
+      "sha256": "1df1c05a46ac4cc6f722f65d814d5ccf186968998a00d50d297d9db6c7342ac1"
+    },
+    {
+      "log": "artifacts/ar-reliability-cycles-20261009/screenshot-safety-tests.log",
+      "tests": [
+        9
+      ],
+      "pass": [
+        9
+      ],
+      "fail": [
+        0
+      ],
+      "sha256": "ba73391c4a23704dd0f78625b5809c45c6a4f4870c3df27d126fa4d049ecf536"
+    },
+    {
+      "log": "artifacts/ar-reliability-cycles-20261009/runtime-integration-tests.log",
+      "tests": [
+        6
+      ],
+      "pass": [
+        6
+      ],
+      "fail": [
+        0
+      ],
+      "sha256": "017b022760c77bc757df98838284766197442baf77ec1c46ca8e188247db6ea6"
+    },
+    {
+      "log": "artifacts/ar-reliability-cycles-20261009/soft-deadline-tests.log",
+      "tests": [
+        2
+      ],
+      "pass": [
+        2
+      ],
+      "fail": [
+        0
+      ],
+      "sha256": "9c84dfa7d46f5bf1f69e1639d166d9bad3ed53f09bda44d0e41c446a30c154fe"
+    }
+  ],
+  "additionalChecks": [
+    "scan-core typecheck passed",
+    "calibration registry check passed",
+    "git diff --check passed"
+  ],
+  "actionChainCases": {
+    "scenarios": [
+      "late",
+      "rerender",
+      "same_url_reload",
+      "opaque_receipt",
+      "opposite_receipt"
+    ],
+    "actions": [
+      "accept",
+      "reject"
+    ],
+    "assertions": [
+      "exactly one correct action per fresh isolated context",
+      "no consent cookie reused across contexts",
+      "canonical Finnish intent and label proof",
+      "semantic registration independently checked",
+      "unreadable/opposite receipts remain unconfirmed and non-projectable"
+    ]
+  },
+  "cost": {
+    "incrementalMonthlyEstimateUsdAt100000Scans": "<0.01",
+    "basis": "cached metadata checks only; no additional browser operations, screenshots, paid reviews, storage fields, waits, deadlines, lanes or retries",
+    "livePublicContacts": 0,
+    "paidModelCalls": 0,
+    "deployment": false
+  },
+  "limits": [
+    "No new production defect-rate estimate: selected fixtures are not a random live cohort.",
+    "Historical retained artifacts and assessments are unchanged.",
+    "Earlier safety-withheld screenshots remain withheld; earlier handoff does not guarantee completion for late captures.",
+    "Document changes during recovery still produce limited evidence; no additional recovery budget was authorized.",
+    "No deployment or production scan was performed."
+  ],
+  "sourceSha256": {
+    "packages/certscore-scan-core/src/document-bound-capture.ts": "8470d1c9ef8d8aeadd93e77b73ff7d3f717ea976e8b21a57f3f9fdf57b0feb97",
+    "packages/certscore-scan-core/src/document-bound-capture.test.ts": "97e866fa45d32bac27c63016b741a3793c7bad011475a984c707c15cc3e00bf8",
+    "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts": "ee89d7d781369a091e8c6a150a7fa73460e08773062384ae22263fd4ce01461f",
+    "packages/certscore-scan-core/src/pre-consent-geometry-recapture.test.ts": "afb00b6fef2cf150a49d406b2c84c776717db727b6ab6caf3e38dbde3743dfd7",
+    "packages/certscore-scan-core/src/consent-action-chain.test.ts": "59ed2c2d5d9c85340552d0aef62736a6d417bb4a8571047cd1197637907aec3c",
+    "package.json": "dffb8c8b855bb2911bf5f0b592b7863069b3b39d095612fcc1a73d0cfdb71573",
+    "scripts/predeploy.ts": "8f2bb4b3bd43f0534771fb9a3dc49860f3d9337bc5c87a1dc942c0d06863e501"
+  }
+}

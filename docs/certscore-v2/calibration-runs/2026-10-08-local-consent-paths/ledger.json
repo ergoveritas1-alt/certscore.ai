@@ -1,0 +1,116 @@
+{
+  "entries": {
+    "https://spotify.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:46:57.307Z",
+      "lastContactAt": "2026-10-09T02:46:57.307Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://spotify.com"
+    },
+    "https://hubspot.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:48:21.305Z",
+      "lastContactAt": "2026-10-09T02:48:21.305Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://hubspot.com"
+    },
+    "https://www.cimediacloud.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:34:42.492Z",
+      "lastContactAt": "2026-10-09T02:34:42.492Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "state": "cooldown",
+      "url": "https://www.cimediacloud.com/"
+    },
+    "https://mojohost.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:30:57.972Z",
+      "lastContactAt": "2026-10-09T02:30:57.972Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://mojohost.com/"
+    },
+    "https://www.mailerlite.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:31:17.177Z",
+      "lastContactAt": "2026-10-09T02:31:17.177Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.mailerlite.com/"
+    },
+    "https://www.qobuz.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:31:35.951Z",
+      "lastContactAt": "2026-10-09T02:31:35.951Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.qobuz.com/"
+    },
+    "https://notion.site/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:40:55.205Z",
+      "lastContactAt": "2026-10-09T02:40:55.205Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://notion.site/"
+    },
+    "https://florencebymillsbeauty.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:32:02.168Z",
+      "lastContactAt": "2026-10-09T02:32:02.168Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://florencebymillsbeauty.com/"
+    },
+    "https://www.larazon.es/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:37:21.353Z",
+      "lastContactAt": "2026-10-09T02:37:21.353Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.larazon.es/"
+    },
+    "https://www.aalto.fi/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:48:37.271Z",
+      "lastContactAt": "2026-10-09T02:48:37.271Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.aalto.fi/"
+    },
+    "https://www.blick.ch/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T02:37:59.301Z",
+      "lastContactAt": "2026-10-09T02:37:59.301Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.blick.ch/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-09T02:51:56.083Z"
+}

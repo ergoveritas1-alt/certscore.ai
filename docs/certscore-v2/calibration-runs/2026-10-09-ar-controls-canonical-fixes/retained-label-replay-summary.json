@@ -1,0 +1,564 @@
+{
+  "scope": "retained label/context replay; not a fresh observation or historical assessment rewrite",
+  "count": 1443,
+  "changed": 15,
+  "changes": [
+    {
+      "cohort": "expanded100",
+      "scanId": "aa770be6-cd32-4e08-8136-e9c8d8b1685b",
+      "domain": "www.dream-singles.com",
+      "candidateId": "candidate_1",
+      "geometrySha256": "71c96cd50ef622bc61ff3262a4d74b896bfded7c7a80d8b7573fa86d911dee96",
+      "label": "I decline",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "reject",
+        "semanticRole": "reject",
+        "confidence": 0.91,
+        "matchedTerm": "i decline",
+        "matchedLocale": "en",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_reject",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "f6e00111-9dcc-4b9f-84e3-52e0d2ff07f3",
+      "domain": "theobjective.com",
+      "candidateId": "candidate_0",
+      "geometrySha256": "e274d6570c05118e18e19a2a935a27a11ff3cdd1b5a99abe7c27501cba88d294",
+      "label": "Aceptar y leer GRATIS",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "aceptar y leer gratis",
+        "matchedLocale": "es",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "9e981082-c9e9-4edf-b04d-095bf7b68cc6",
+      "domain": "www.cd.cz",
+      "candidateId": "candidate_3",
+      "geometrySha256": "9b8425e1b8529e6534ea885d16fb4e19303d25bd20cde506ce950f0dd6a93b21",
+      "label": "Povolit v\u0161echny soubory cookie",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "povolit v\u0161echny soubory cookie",
+        "matchedLocale": "cs",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "92502f00-3b8c-49f9-a1df-ed849dcdc9e3",
+      "domain": "raceroster.com",
+      "candidateId": "candidate_1",
+      "geometrySha256": "68e0eb20379f93a896c3deda8b8ad1a8097cf840ee474df8a792aea6a48f4246",
+      "label": "REJECT NON-FUNCTIONAL COOKIES",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "reject",
+        "semanticRole": "reject",
+        "confidence": 0.91,
+        "matchedTerm": "reject non-functional cookies",
+        "matchedLocale": "en",
+        "matchStrength": "direct",
+        "variant": "non_functional_only",
+        "reasonCodes": [
+          "matched_reject",
+          "observation_only_label",
+          "match_strength_direct",
+          "variant_non_functional_only",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "30332f8e-6099-4228-a572-1a701e1c0e63",
+      "domain": "www.govx.com",
+      "candidateId": "candidate_4",
+      "geometrySha256": "f83652198ce0ba3db8124ec7e1a063f300f4ba7eb3a3b21b3d6c8d2c3b0f02d3",
+      "label": "Limit Cookies",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "reject",
+        "semanticRole": "necessary_only",
+        "confidence": 0.9,
+        "matchedTerm": "limit cookies",
+        "matchedLocale": "en",
+        "matchStrength": "equivalent",
+        "variant": "necessary_only",
+        "reasonCodes": [
+          "matched_reject",
+          "observation_only_label",
+          "match_strength_equivalent",
+          "variant_necessary_only",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "aeaabb99-fd0c-4164-8783-e0e814605bd0",
+      "domain": "www.lafeltrinelli.it",
+      "candidateId": "candidate_2",
+      "geometrySha256": "ae44994333254c7e53a6fd5e99658fbb19da6704e37b700c299fae41728af578",
+      "label": "Accetto i cookie",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "accetto i cookie",
+        "matchedLocale": "it",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "f5b53631-8d4b-4144-8df8-f0c6e409dfa5",
+      "domain": "www.babycenter.com",
+      "candidateId": "candidate_2",
+      "geometrySha256": "3fb681071fb6a593db576da2f96f7b56ce291b03b1dd7941e5147cd43a3e0ca3",
+      "label": "I Consent",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "i consent",
+        "matchedLocale": "en",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "94346404-0d06-45ef-b1e5-4a30787f8a2f",
+      "domain": "ki.se",
+      "candidateId": "candidate_4",
+      "geometrySha256": "53b6d54efefa3441cfe0472f234eb4e0ef589092dec5db8d26c1837255a09a1e",
+      "label": "Till\u00e5t alla",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "till\u00e5t alla",
+        "matchedLocale": "sv",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "5e3b0e68-9c64-411c-83d2-c49c8201ed8b",
+      "domain": "umlivro.com.br",
+      "candidateId": "candidate_15",
+      "geometrySha256": "dded9d977514019fa7fcf267693df10ab30de77e198cd547f22b030949b915eb",
+      "label": "Recusar",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "reject",
+        "semanticRole": "reject",
+        "confidence": 0.91,
+        "matchedTerm": "recusar",
+        "matchedLocale": "pt",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_reject",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "af606c68-db97-4770-973d-4254a7f20f0f",
+      "domain": "www.alphatv.gr",
+      "candidateId": "candidate_4",
+      "geometrySha256": "a6d511a3ab08f9499b15e30e663076293f6da8aaf3c00110a66c24142e7420b6",
+      "label": "\u0391\u03c0\u03bf\u03b4\u03bf\u03c7\u03ae",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "\u03b1\u03c0\u03bf\u03b4\u03bf\u03c7\u03ae",
+        "matchedLocale": "el",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "96a83d4c-f631-418a-8c85-6f82857413ce",
+      "domain": "www.etudiant.gouv.fr",
+      "candidateId": "candidate_1",
+      "geometrySha256": "7b8c6e4e844ec21d0c588c7e52f9479b4ddb49f429b6ca2c28d6fcebacdb0b93",
+      "label": "Tout interdire",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "reject",
+        "semanticRole": "reject",
+        "confidence": 0.91,
+        "matchedTerm": "tout interdire",
+        "matchedLocale": "fr",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_reject",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded100",
+      "scanId": "8afbf2bf-ade3-4abe-a157-abe1cea2f46f",
+      "domain": "www.digitalocean.com",
+      "candidateId": "candidate_0",
+      "geometrySha256": "782acf25f918c4d133c8af8b4d7c2a33aa8515bac92e280176af4ad4581b841e",
+      "label": "Agree & proceed",
+      "baselineHash": "19f7efaa63ba397aa2ef2e3d440ecf9155c3dd21de7919a19b0f770b2ec313d7",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "agree & proceed",
+        "matchedLocale": "en",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded200",
+      "scanId": "986c5099-3aca-4b06-abc5-76a41ef87923",
+      "domain": "flashscore.com.tr",
+      "candidateId": "candidate_3",
+      "geometrySha256": "8e23325457e87cf249f2bef3c758a7a6aaf2e959a6b4bb5168161527a3db81e5",
+      "label": "Kabul ediyorum",
+      "baselineHash": "1ad0c9803995419e0852c44056347252926677414eca21a55e51cdac6710a7f9",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "kabul ediyorum",
+        "matchedLocale": "tr",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded200",
+      "scanId": "3b8b955c-e6a0-4ab1-9cfe-85ddbbc4f51d",
+      "domain": "vdab.be",
+      "candidateId": "candidate_18",
+      "geometrySha256": "92552c8df3cff138421ffd8e6e451f9ff8258ce2a4864a8feee0eff0d6e6f95d",
+      "label": "Alle cookies aanvaarden",
+      "baselineHash": "1ad0c9803995419e0852c44056347252926677414eca21a55e51cdac6710a7f9",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "no_term_match"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "accept",
+        "semanticRole": "explicit_accept",
+        "confidence": 0.91,
+        "matchedTerm": "alle cookies aanvaarden",
+        "matchedLocale": "nl",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_accept",
+          "observation_only_label",
+          "match_strength_direct",
+          "requires_consent_context",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    },
+    {
+      "cohort": "expanded200",
+      "scanId": "734269db-e59a-4725-8f7d-78959dbd8c6b",
+      "domain": "nintendo.pt",
+      "candidateId": "candidate_1",
+      "geometrySha256": "73ffdb66fa80ed65cbcfb77841aff6e0819f37cd34d034e0ad7ae3aa8b152c64",
+      "label": "Rejeitar todos os cookies n\u00e3o essenciais",
+      "baselineHash": "1ad0c9803995419e0852c44056347252926677414eca21a55e51cdac6710a7f9",
+      "before": {
+        "intent": "unknown",
+        "semanticRole": "unknown",
+        "confidence": 0.2,
+        "reasonCodes": [
+          "negated_consent_choice"
+        ],
+        "contextSatisfied": false,
+        "registryVersion": "consent-control-label-registry.v9"
+      },
+      "after": {
+        "intent": "reject",
+        "semanticRole": "reject",
+        "confidence": 0.91,
+        "matchedTerm": "rejeitar todos",
+        "matchedLocale": "pt",
+        "matchStrength": "direct",
+        "reasonCodes": [
+          "matched_reject",
+          "match_strength_direct",
+          "context_satisfied"
+        ],
+        "contextSatisfied": true,
+        "registryVersion": "consent-control-label-registry.v11"
+      },
+      "changedIntent": true
+    }
+  ]
+}

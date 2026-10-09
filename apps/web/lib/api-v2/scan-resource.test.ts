@@ -1776,3 +1776,49 @@ test("public A/R summaries require their canonical observed control while action
     assert.deepEqual(record, original);
   }
 });
+
+test("Reject request overflow stays limited and score-neutral through persisted report and API hydration", async () => {
+  const { completedActionProjection } = await import("../scans/test-fixtures/action-execution-projection");
+  const { postRefusalReportProjectionSchema, assessChoicePathExecution } = await import("@certscore/contracts");
+  const projection = completedActionProjection("reject");
+  const limited = postRefusalReportProjectionSchema.parse({
+    ...projection,
+    decisionEvidence: { policyVersion: "semantic_consent_registration.v2", decision: "unknown", basis: "unverified" },
+    captureCoverage: { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 1 },
+    afterActionCapture: { ...projection.afterActionCapture, requestsDropped: 1 },
+    limitations: ["post_action_network_capture_truncated"],
+  });
+  limited.execution = assessChoicePathExecution(limited, "reject");
+  const record = fixture();
+  const hydrate = (input: ScanDetailResponse) => {
+    const persisted = buildPersistedScanReportProjection(input);
+    const result = readPersistedScanReportProjection({ scan: input.scan, snapshot: {
+      report_projection_payload: JSON.parse(persisted.serialized),
+      report_projection_payload_sha256: persisted.sha256,
+      report_projection_payload_size_bytes: persisted.sizeBytes,
+      report_projection_status: "ready",
+      report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+      report_projection_computed_at: new Date().toISOString(),
+    } });
+    assert.ok(result);
+    return result;
+  };
+  const baseline = buildApiV2ScanResource(hydrate(record));
+  record.runtimeArtifacts = {
+    consentControlAssessment: observedControlAssessment,
+    postRefusalEvidenceProjection: limited,
+  } as ScanDetailResponse["runtimeArtifacts"];
+  const hydrated = hydrate(record);
+  const resource = buildApiV2ScanResource(hydrated);
+  assert.equal(resource.postRefusalObservation?.productionProjectable, false);
+  assert.equal(resource.postRefusalObservation?.verdict, "no_confirmed_post_refusal_verdict");
+  assert.equal(resource.postRefusalObservation?.execution?.status, "limited");
+  assert.equal(resource.score, baseline.score);
+  assert.deepEqual(resource.scoreExplanation, baseline.scoreExplanation);
+  assert.deepEqual(buildApiV2ScanStatus(hydrated, { canonicalScan: resource }).postRefusalObservation,
+    resource.postRefusalObservation);
+  const retainedProjection = postRefusalReportProjectionSchema.parse(
+    hydrated.runtimeArtifacts?.postRefusalEvidenceProjection,
+  );
+  assert.equal(retainedProjection.captureCoverage?.requestsDroppedAfterAction, 1);
+});

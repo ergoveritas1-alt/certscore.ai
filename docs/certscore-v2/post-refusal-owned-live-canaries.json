@@ -53,7 +53,7 @@
       "expectedRefusalRegistration": "confirmed",
       "expectedPostRefusalActivity": true,
       "expectedPreRegistrationActivityTreatment": "excluded",
-      "expectedActionComparison": "indistinguishable"
+      "expectedActionComparison": "insufficient_evidence"
     }
   ]
 }

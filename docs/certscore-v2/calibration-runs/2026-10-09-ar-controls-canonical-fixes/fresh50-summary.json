@@ -1,0 +1,1204 @@
+{
+  "runKey": "ar-controls-fresh50-20261009",
+  "scope": "fresh isolated passive consent-proof lane; no actions, forms or model calls",
+  "egress": "local California; en-IE locale; not a production EU replication",
+  "classifierRegistryAtCapture": "consent-control-label-registry.v10",
+  "finalClassifierRegistry": "consent-control-label-registry.v11",
+  "deployed": false,
+  "freshSourceSha256": {
+    "packages/certscore-contracts/src/consent-control-label-classifier.ts": "c4e15cddc3b9fcba64769c557d77f8b748d02804c4c232ac910f53e065b15990",
+    "packages/certscore-contracts/src/privacy-evidence-locale-registry.ts": "19ea53341430810da9305e282bf88dc63b6ed523b9b8c942603efb2ed18d3617",
+    "packages/certscore-scan-core/src/consent-control-geometry.ts": "ce5e04b8a43b1f80ad205fef0a9725daff6d9cfc381e086e5c7be98251be2e91",
+    "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts": "b19d0079a056cc0f47d04e86d8df7e8a82bd3665cbf26adde988f17c6e636ead"
+  },
+  "counts": {
+    "visits": 50,
+    "completed": 50,
+    "captureStatus": {
+      "observed": 40,
+      "no_evidence": 10
+    },
+    "inventoryOutcome": {
+      "partial": 29,
+      "complete_empty": 8,
+      "geometry_unavailable": 3,
+      "complete_with_controls": 10
+    },
+    "acceptObserved": 38,
+    "rejectObserved": 27,
+    "additionalConfirmedRecognitionMisses": 2
+  },
+  "review": {
+    "method": "primary-agent contact-sheet triage of 50 selected frames; native inspection of eight sites; not independent human adjudication or exhaustive frame-by-frame verification",
+    "nativeSites": [
+      "nsf.org",
+      "tottenhamhotspur.com",
+      "advancedmd.com",
+      "campusfrance.org",
+      "adecco.com",
+      "sodexo.com",
+      "xhnetwork.life",
+      "milanote.com"
+    ],
+    "confirmedRecognitionMissSites": [
+      "adecco.com",
+      "sodexo.com"
+    ],
+    "captureTimingComparisonUnresolved": [
+      "vinted.ie"
+    ],
+    "rateInterpretation": "2/50 = 4% of this selected cohort; not a population estimate or comparable to the earlier model-disagreement rate"
+  },
+  "results": [
+    {
+      "url": "https://nintendo.de/",
+      "scanId": "b17b3a7e-7b04-4c66-9938-6474c21152a1",
+      "startedAt": "2026-10-09T11:09:30.446Z",
+      "completedAt": "2026-10-09T11:09:35.029Z",
+      "status": "completed",
+      "durationMs": 4583,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "68A0CE1E91200B50F93E133DCA4CA82D"
+          }
+        }
+      ],
+      "bundleSha256": "c1ab13b00ad9ad7edb4d3fbf600129ffccc63a5b9af1193ffb80024000f36ae3",
+      "geometrySha256": "081e806c7dce0729098f8eb5273b3883e3f561c30f178646dd07dbabc4d56397"
+    },
+    {
+      "url": "https://hella.com/",
+      "scanId": "b9d15f2e-4c98-4b83-8b0a-7d2aef493ecf",
+      "startedAt": "2026-10-09T11:09:30.445Z",
+      "completedAt": "2026-10-09T11:09:35.253Z",
+      "status": "completed",
+      "durationMs": 4808,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "99EB35855F952061DD4AADFFEC2AC9D0"
+          }
+        }
+      ],
+      "bundleSha256": "3f92086cf999856876f950a4163f40cabb5c9dc45f7e0de1f722e6a40de6ad31",
+      "geometrySha256": "46847c8070aeb5726f8ccfee019456005b8f78b5bf6e9374121793f7fd539b6f"
+    },
+    {
+      "url": "https://notamedia.ru/",
+      "scanId": "a1543756-c011-459a-a0ca-07874fee463b",
+      "startedAt": "2026-10-09T11:09:35.029Z",
+      "completedAt": "2026-10-09T11:09:45.567Z",
+      "status": "completed",
+      "durationMs": 10538,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "35312E0E5A6BBAA30AEDA99BE43EA9BC"
+          }
+        }
+      ],
+      "bundleSha256": "cb15fb2999103c83710210477b6c3553eca8dccedf80558ec734be2c97180d7a",
+      "geometrySha256": "fdf2b91a53d235d223a9c753cec34843b2824e4a8073450bac9907823be8b2b5"
+    },
+    {
+      "url": "https://rnib.org.uk/",
+      "scanId": "4231ef6f-d98a-4357-8949-e21c39abe57c",
+      "startedAt": "2026-10-09T11:09:35.253Z",
+      "completedAt": "2026-10-09T11:09:37.832Z",
+      "status": "completed",
+      "durationMs": 2579,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "682204D6BB12637D2E9FEF93B8D4DEFE"
+          }
+        }
+      ],
+      "bundleSha256": "4174082b570807c86a0e0a133dad9b0cb29fca76f2b93724565d310851e9be17",
+      "geometrySha256": "5fc28782fd66c0a8358a56a3b9f11e1a9c9572f44f01b9aa795d878904f87fb7"
+    },
+    {
+      "url": "https://tottenhamhotspur.com/",
+      "scanId": "58695ef2-00e6-4f67-b4e7-b4ba1f6269bf",
+      "startedAt": "2026-10-09T11:09:37.832Z",
+      "completedAt": "2026-10-09T11:09:56.869Z",
+      "status": "completed",
+      "durationMs": 19037,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "F2F47A31CD6551852CD1F1179A8F1F35"
+          }
+        }
+      ],
+      "bundleSha256": "eb4ca71df8c121b9bef76b658720b93e18bc6a22faefd282db3e820974ca1c2c",
+      "geometrySha256": "e78c3297428a1d42b53c5676349dd2d71ae28cb3ab5fe8380049231bac12a08b"
+    },
+    {
+      "url": "https://silverchair.com/",
+      "scanId": "94093248-7b47-4af9-9d50-5c671b4beff5",
+      "startedAt": "2026-10-09T11:09:45.567Z",
+      "completedAt": "2026-10-09T11:09:48.133Z",
+      "status": "completed",
+      "durationMs": 2566,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "510BBD945A57416AEB9C293BD87AA215"
+          }
+        }
+      ],
+      "bundleSha256": "d32e3b511b942895606b8325772e5cdae33b524ff04ea8f4f05626539b66dcfd",
+      "geometrySha256": "6079f1c4620e915038b95479bdaa6953f169a98161e0f80586cf66b3e1503dbe"
+    },
+    {
+      "url": "https://xhnetwork.life/",
+      "scanId": "69bcb447-980f-4400-b1c9-4f9e68be58a4",
+      "startedAt": "2026-10-09T11:09:48.133Z",
+      "completedAt": "2026-10-09T11:10:00.767Z",
+      "status": "completed",
+      "durationMs": 12634,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "AF63F73E014DB0A8A1F813D6274D1E7A"
+          }
+        }
+      ],
+      "bundleSha256": "80894bf9c1a81b447523e83b2500cfca76296b2be16f2a03682e61200c5dc20d",
+      "geometrySha256": "28413352d10e0a089e1e581c6ecbd3c6b7479d5ef9973fb048816fe834f09ea5"
+    },
+    {
+      "url": "https://nsf.org/",
+      "scanId": "6c6a5e71-edc6-44bc-a640-937f30d0cbba",
+      "startedAt": "2026-10-09T11:09:56.869Z",
+      "completedAt": "2026-10-09T11:10:15.462Z",
+      "status": "completed",
+      "durationMs": 18593,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "9993B697CCC3F471278BD152283F6E2E"
+          }
+        }
+      ],
+      "bundleSha256": "049fde68fe1417220b7806ed62570f7e5e3cf70f31b2c076220f09c2cbabd3ec",
+      "geometrySha256": "8149643be90e1659e9f0772704377a144232e3e06c4197ba846e6045c4f643d4"
+    },
+    {
+      "url": "https://kpkduper.com/",
+      "scanId": "92f86741-d8a2-4e8d-ab99-c3f9a4446692",
+      "startedAt": "2026-10-09T11:10:00.768Z",
+      "completedAt": "2026-10-09T11:10:12.675Z",
+      "status": "completed",
+      "durationMs": 11907,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "geometry_unavailable",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "38D3EA36E676C6EB0BD02AB00BB135E1"
+          }
+        }
+      ],
+      "bundleSha256": "2a1804ce64932fa46558de543518f06abbf2f8479e47ab65ccdf675f3845c8aa",
+      "geometrySha256": "f362ab68aea97988c93d474f10f6870eb01fbb6fbc0e81f3f1f6373e7301f2b7"
+    },
+    {
+      "url": "https://advancedmd.com/",
+      "scanId": "fcf6c5c3-d45a-4753-9c73-9e4262345562",
+      "startedAt": "2026-10-09T11:10:12.675Z",
+      "completedAt": "2026-10-09T11:10:31.561Z",
+      "status": "completed",
+      "durationMs": 18886,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "6BB055D147C1C9BAC817C75A6FC6ABBD"
+          }
+        }
+      ],
+      "bundleSha256": "f2760febb56f73d8ea418d0676dca922cb95982066758424156b1fa139f22ef5",
+      "geometrySha256": "6ec60b89dc874af6968641cb12c2bbc4f8932b5ac5cab4b5caa0ac1834d3e73e"
+    },
+    {
+      "url": "https://estacio.br/",
+      "scanId": "c2d68eb5-2bc5-44c0-b63a-dafbed0e631d",
+      "startedAt": "2026-10-09T11:10:15.463Z",
+      "completedAt": "2026-10-09T11:10:34.230Z",
+      "status": "completed",
+      "durationMs": 18767,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "4DBAEACA4AA22A43B2711ECDDA2C5E55"
+          }
+        }
+      ],
+      "bundleSha256": "c438646a3037b6d0804974906c4e85caf1dbf3eb18a9fa8645b8b1527580e83f",
+      "geometrySha256": "9d3de36a02e8c6082701f079e1bf302098331b9180b73fa4179978f23bda3625"
+    },
+    {
+      "url": "https://rolls-royce.com/",
+      "scanId": "d1876f50-cbe0-4cf8-b6d0-d1cd619a68f0",
+      "startedAt": "2026-10-09T11:10:31.561Z",
+      "completedAt": "2026-10-09T11:10:35.970Z",
+      "status": "completed",
+      "durationMs": 4409,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "9276E98B46C9723F1A736A322E152A81"
+          }
+        }
+      ],
+      "bundleSha256": "8e3a23a1554e596854ab6479b700f34788a7c43e3b831f2717f4653853685d7e",
+      "geometrySha256": "5fac9e9c426af451c1a166b683f3df40a2beb680d0aa76e38df123515508925b"
+    },
+    {
+      "url": "https://gearbox.com/",
+      "scanId": "39f4fe14-5209-4c7a-b75a-ca4563f318e6",
+      "startedAt": "2026-10-09T11:10:34.231Z",
+      "completedAt": "2026-10-09T11:10:52.700Z",
+      "status": "completed",
+      "durationMs": 18469,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "60C89D53ABF7C5383258C6A17E84A86A"
+          }
+        }
+      ],
+      "bundleSha256": "678d8c143e0a4de2a0b2cdadf1f25e51e94d4bfecfc4b8e6152aee6ae967c404",
+      "geometrySha256": "ae4eef82268dca81a002f220686f221140962369f24ad2bca5271a7bdfb207fe"
+    },
+    {
+      "url": "https://palantir.com/",
+      "scanId": "d15df5e6-c971-482e-be08-82e3578f7a93",
+      "startedAt": "2026-10-09T11:10:35.971Z",
+      "completedAt": "2026-10-09T11:10:42.012Z",
+      "status": "completed",
+      "durationMs": 6041,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "5A466D660F8A7DCA4BD3B63134E8365C"
+          }
+        }
+      ],
+      "bundleSha256": "98fa5197c1b308a60530a9d005b0a6ae064806f1185caf30d7d3b82faa201b9b",
+      "geometrySha256": "3c9b4f2bf642abe37f60c8575f2eb41c4029c1750d3d0170338c5f021d8e0173"
+    },
+    {
+      "url": "https://kaseya.com/",
+      "scanId": "cf5a3ed3-9b8e-4e75-a0c0-d958c9217b87",
+      "startedAt": "2026-10-09T11:10:42.012Z",
+      "completedAt": "2026-10-09T11:10:43.683Z",
+      "status": "completed",
+      "durationMs": 1671,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "5FCE368CD2E9048BCDB47D0EDA3119A7"
+          }
+        }
+      ],
+      "bundleSha256": "8ae73bb22c53e5f0793b69c65b3fd3d8e13075265ce999843a70647572b4ccae",
+      "geometrySha256": "3119a5e82822f2df7ada30fe40337134969c230e5df3b63aca75a69fc55ef3ac"
+    },
+    {
+      "url": "https://solitalian.it/",
+      "scanId": "ae8e72f8-96f0-4bae-ab17-c2c9abf0feac",
+      "startedAt": "2026-10-09T11:10:43.684Z",
+      "completedAt": "2026-10-09T11:10:47.120Z",
+      "status": "completed",
+      "durationMs": 3436,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "418B4A6843FF67F2D75A5BD69EC32A32"
+          }
+        }
+      ],
+      "bundleSha256": "5be09dc471f08c0f5901257a3510346ac279205758bb2b602589b496fb6c3682",
+      "geometrySha256": "03d4b85be0f4b81ed32b68555701910aca1e23e9452fbe9ba5988e5e2e7b1b82"
+    },
+    {
+      "url": "https://arcadis.com/",
+      "scanId": "8ebc174e-a979-4cc6-9225-b871133a8a71",
+      "startedAt": "2026-10-09T11:10:47.120Z",
+      "completedAt": "2026-10-09T11:10:54.251Z",
+      "status": "completed",
+      "durationMs": 7131,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "E07DA4DA953DE60058BA3F4D3AEF7E02"
+          }
+        }
+      ],
+      "bundleSha256": "431f8f2c2655c3572ba4e32d79cc6b34cd0a2fa24a80791b30ff2647810eec84",
+      "geometrySha256": "9d1cf2d194e1c821161d7e3795131929394126d74ab748104ea37ed4d62751a0"
+    },
+    {
+      "url": "https://world.rugby/",
+      "scanId": "12d41db9-f623-4fe5-b2ff-8a0b8842501f",
+      "startedAt": "2026-10-09T11:10:52.701Z",
+      "completedAt": "2026-10-09T11:10:57.030Z",
+      "status": "completed",
+      "durationMs": 4329,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "F1AF54085263DE8017E9475450280BBC"
+          }
+        }
+      ],
+      "bundleSha256": "745683d271a91994e640a4a6a18eff718bed831b1129eb787997c3c9fe74b67e",
+      "geometrySha256": "4fe3a9dd982db831ec8c0f7f6b7117f9d058ff226537be245bb21b27a8ed54f9"
+    },
+    {
+      "url": "https://lancs.ac.uk/",
+      "scanId": "3d13ddc7-c821-4d4e-aaf6-368f54ca9300",
+      "startedAt": "2026-10-09T11:10:54.252Z",
+      "completedAt": "2026-10-09T11:10:58.339Z",
+      "status": "completed",
+      "durationMs": 4087,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "A0DCC4CBDC09B4E8EB400BE9B576B0D8"
+          }
+        }
+      ],
+      "bundleSha256": "8ffb774e9170e6a131025af62b258eb56e656de55735bccc9658979fb74562eb",
+      "geometrySha256": "42c71eea186b15d931776afba59f8afb6469c9745559ad5bb645559be152d800"
+    },
+    {
+      "url": "https://campusfrance.org/",
+      "scanId": "055172da-96a0-464e-8601-85ccec64edf0",
+      "startedAt": "2026-10-09T11:10:57.031Z",
+      "completedAt": "2026-10-09T11:11:01.960Z",
+      "status": "completed",
+      "durationMs": 4929,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "413C489087002321F8E6C01A8066A4C9"
+          }
+        }
+      ],
+      "bundleSha256": "1d50ab185abd98e80ea3a3e6fb458a12850d73a3c9997efd9e5e7419646a2bac",
+      "geometrySha256": "10c26e5281235b7516d1141dcff9325b258091134f72b9567f64c6d868c48ae4"
+    },
+    {
+      "url": "https://usen.com/",
+      "scanId": "c7e546ca-1400-4072-a041-77d2455f8633",
+      "startedAt": "2026-10-09T11:10:58.339Z",
+      "completedAt": "2026-10-09T11:11:08.855Z",
+      "status": "completed",
+      "durationMs": 10516,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "24AB40669CF0C3901B19976B79C13002"
+          }
+        }
+      ],
+      "bundleSha256": "57169571baab1ce8914b626e41daccd8c7159d9e0f704a2a4031287f8e13e183",
+      "geometrySha256": "668b773c0961939caa069517efd3fb487d69bd4855b1013c5376160ac026b1d0"
+    },
+    {
+      "url": "https://presscompare.com/",
+      "scanId": "10545670-b460-4012-b137-5f9f896c972d",
+      "startedAt": "2026-10-09T11:11:01.960Z",
+      "completedAt": "2026-10-09T11:11:05.140Z",
+      "status": "completed",
+      "durationMs": 3180,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "4D54C34CB02B11D353850AEB7BF172D8"
+          }
+        }
+      ],
+      "bundleSha256": "be087a126a8a060d8beecc735515272e8c3e7b2ef13c44de3ece1ddef8376000",
+      "geometrySha256": "ff033fbf0778f7c071a1456f70ed6f067e483916e5fde17e29a4aed783f79575"
+    },
+    {
+      "url": "https://agi.it/",
+      "scanId": "d8212ba7-3637-4fc2-9049-df01b82f1cea",
+      "startedAt": "2026-10-09T11:11:05.141Z",
+      "completedAt": "2026-10-09T11:11:07.997Z",
+      "status": "completed",
+      "durationMs": 2856,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "8281DE7EC0502E3A6BFDE7711AA9C48A"
+          }
+        }
+      ],
+      "bundleSha256": "8c3b38833bd62ad2773397d3053c42173a3dd92c267d14ba034d58c5cac9240c",
+      "geometrySha256": "04cc109aeb584743306052ff99ffb91954b774cda723ca3ecf9ee4ace0f0f951"
+    },
+    {
+      "url": "https://researchmap.jp/",
+      "scanId": "a8822761-ad14-42ea-8ec7-8a76ec88559f",
+      "startedAt": "2026-10-09T11:11:07.998Z",
+      "completedAt": "2026-10-09T11:11:21.090Z",
+      "status": "completed",
+      "durationMs": 13092,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "geometry_unavailable",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "C75FCA62AD16DA4D43C51025F5B4DBCB"
+          }
+        }
+      ],
+      "bundleSha256": "e601cfca646ce4cbbb1e6bfebf222888dfe05c237f77e4f6aa3a050034ab04be",
+      "geometrySha256": "89a1a81b1fd78c3f3ddef2602e1ef42838ebf5b77236ae121683ed2097ae6735"
+    },
+    {
+      "url": "https://eurofins.com/",
+      "scanId": "6ff6be8a-d041-48ba-8cfd-840472d8ffc2",
+      "startedAt": "2026-10-09T11:11:08.856Z",
+      "completedAt": "2026-10-09T11:11:28.071Z",
+      "status": "completed",
+      "durationMs": 19215,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "DF3F29982B5CDBDFEB9EC07B9CA24700"
+          }
+        }
+      ],
+      "bundleSha256": "83b83d172fd06cee6742fd0c1a2dd41fb83c2402bec7802e9b5f7d0475d97bf2",
+      "geometrySha256": "2e83224bfd7ac189b09c68ea27199c3bfe72f48132475d62237bb2ada92ac238"
+    },
+    {
+      "url": "https://ecourtsindia.com/",
+      "scanId": "06bb2ed2-39e9-4ba1-8efd-51b790d62c16",
+      "startedAt": "2026-10-09T11:11:21.091Z",
+      "completedAt": "2026-10-09T11:11:33.325Z",
+      "status": "completed",
+      "durationMs": 12234,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "geometry_unavailable",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "00C92F8CA616EA7E639EE192CD4C6FCB"
+          }
+        }
+      ],
+      "bundleSha256": "33be29653b8afb21fad1df62e1afe7a363ed3ce13b333604e4d8d88f724e6a5b",
+      "geometrySha256": "269a7ff58f0bc9ade5e4e5fe229db9ee953a52d86716412bbf6697157a2b55ba"
+    },
+    {
+      "url": "https://paribucineverse.com/",
+      "scanId": "377a58ce-4909-46a2-bc4f-5f89faba6644",
+      "startedAt": "2026-10-09T11:11:28.072Z",
+      "completedAt": "2026-10-09T11:11:36.745Z",
+      "status": "completed",
+      "durationMs": 8673,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "B40E28BB890E7B493FA470614789841D"
+          }
+        }
+      ],
+      "bundleSha256": "7f470021ab108631ace890399355065c2c1a4a33f4b4632090d00b3f862666a1",
+      "geometrySha256": "76280ebdc8234dd6e8568b4f7da1c0356a4e3332f532f3107be846a492c3f792"
+    },
+    {
+      "url": "https://volkswagen.com/",
+      "scanId": "d840f76b-ebd3-46b0-add1-2b6008e8ca54",
+      "startedAt": "2026-10-09T11:11:33.326Z",
+      "completedAt": "2026-10-09T11:11:40.075Z",
+      "status": "completed",
+      "durationMs": 6749,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "FC58F58C913764C22D79809CD0EA4091"
+          }
+        }
+      ],
+      "bundleSha256": "dadb6273332c2f10310ea7fb3fa641f984a4dce9a58d851d7b9796aae3395a3d",
+      "geometrySha256": "f1354f68f1dc3d5f6d28622f6abd12ef36782b2f8b3afa9ebec6d78d92255613"
+    },
+    {
+      "url": "https://tuwien.ac.at/",
+      "scanId": "5e111cfa-def4-45c0-922f-bdd557df984a",
+      "startedAt": "2026-10-09T11:11:36.746Z",
+      "completedAt": "2026-10-09T11:11:47.909Z",
+      "status": "completed",
+      "durationMs": 11163,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "D3DE7F433C91CA958F23BB3757B34503"
+          }
+        }
+      ],
+      "bundleSha256": "036fd9633ba3a94a4747e0fe7ee9a620d4d33dc7dcc1e4bb6e0a9f0b65d322d7",
+      "geometrySha256": "b4eb5f33f72be34ccd565753fbe69c8344db7d1ee3764327960b622c33e247b1"
+    },
+    {
+      "url": "https://ministrybrands.com/",
+      "scanId": "8d3be78a-a384-4f73-8c8c-5abf2d963d76",
+      "startedAt": "2026-10-09T11:11:40.075Z",
+      "completedAt": "2026-10-09T11:11:46.056Z",
+      "status": "completed",
+      "durationMs": 5981,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "EFC9812B872ACBD4B340E1EB51883E3C"
+          }
+        }
+      ],
+      "bundleSha256": "c5409590590a094c4bc1b6690fd303d363e09b1f07af1f580f08c3d9425a2039",
+      "geometrySha256": "708e9697e4ab469dc57bcbf9d4ee71ca6a664fcf686faf912ded907c5ee5328f"
+    },
+    {
+      "url": "https://adecco.com/",
+      "scanId": "f514291e-f888-492a-a5fa-d97aa7a3c69b",
+      "startedAt": "2026-10-09T11:11:46.056Z",
+      "completedAt": "2026-10-09T11:12:04.629Z",
+      "status": "completed",
+      "durationMs": 18573,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "72737BC62C94E8695536BC2520ABCB46"
+          }
+        }
+      ],
+      "bundleSha256": "dee7fd57232da67ed670cf06fb863e78e85d335b6f799c6f9eaee4683b7c6707",
+      "geometrySha256": "87eece042061afe0a47f002c0546fd096840509213f0349e5b6c108a069008e0"
+    },
+    {
+      "url": "https://sutterhealth.org/",
+      "scanId": "33d734a8-d704-4fb6-9dbe-5f9bae1862cf",
+      "startedAt": "2026-10-09T11:11:47.910Z",
+      "completedAt": "2026-10-09T11:12:06.768Z",
+      "status": "completed",
+      "durationMs": 18858,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "9B0DEBAA0B3D947A1F5BBCF95D457534"
+          }
+        }
+      ],
+      "bundleSha256": "a892e7ab335263dd8298c9c9cd705b334075eed712270e9af4ab1e1cc3e56da2",
+      "geometrySha256": "eff906cc2c7daebbd8677b25e7fb77fb7535af3d93f699060b1da891832c662a"
+    },
+    {
+      "url": "https://interieur.gouv.fr/",
+      "scanId": "a678cd08-22ea-41f0-a4c7-d4190ffcb8cd",
+      "startedAt": "2026-10-09T11:12:04.630Z",
+      "completedAt": "2026-10-09T11:12:09.248Z",
+      "status": "completed",
+      "durationMs": 4618,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "5489EB771B7AD03A867849AAA102D4A1"
+          }
+        }
+      ],
+      "bundleSha256": "a10b99ed65aa2ea6e8c222b7b5061acd5aeffc668fa6f66d7bb1cc4b1b818377",
+      "geometrySha256": "ae2fe29d487ac406bcb924944f0911e489e982a87c07bf4621c69b5fb6942ae7"
+    },
+    {
+      "url": "https://visitscotland.com/",
+      "scanId": "d9c5e2ea-7bae-46fa-9c61-74d8359955d6",
+      "startedAt": "2026-10-09T11:12:06.769Z",
+      "completedAt": "2026-10-09T11:12:13.099Z",
+      "status": "completed",
+      "durationMs": 6330,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "E08627181289770CF8857166B6B7F14B"
+          }
+        }
+      ],
+      "bundleSha256": "c2f6e8ac6c5a0dfda78b55c863cd9d019e0a46e022eaf694c887ba4cde02d568",
+      "geometrySha256": "541c560f285118c4539999f5716f21ef9688daf3e112ebb0859f83290562f907"
+    },
+    {
+      "url": "https://vivor.net/",
+      "scanId": "05509b95-441c-4a2e-9cd0-caa3b31e4f51",
+      "startedAt": "2026-10-09T11:12:09.249Z",
+      "completedAt": "2026-10-09T11:12:19.685Z",
+      "status": "completed",
+      "durationMs": 10436,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "F62203C35099FD7928D01B0E89C8CD90"
+          }
+        }
+      ],
+      "bundleSha256": "94915e664e17b7082bd8e852c4c78cc3f09085a5565643de2da43d0d43b53dc8",
+      "geometrySha256": "fe8f0bba62ade4a6363ad9d08bfd2fe9c7c57f05b2741db713f1602bec08ee69"
+    },
+    {
+      "url": "https://tigerdroppings.com/",
+      "scanId": "40972ea8-a531-403a-840d-92ed27afe55a",
+      "startedAt": "2026-10-09T11:12:13.100Z",
+      "completedAt": "2026-10-09T11:12:34.646Z",
+      "status": "completed",
+      "durationMs": 21546,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "B5CC3082CEC36F8DC6D5630DD3E70D18"
+          }
+        }
+      ],
+      "bundleSha256": "ffc738b768cdb1b2661a8ed7f4a7aa6d6bda0167ada550a7ec00327fd6a5fd04",
+      "geometrySha256": "0cd39f8c301003e620accb72423875b8bb36cf8cb931201668a03b148a6c490f"
+    },
+    {
+      "url": "https://vinted.nl/",
+      "scanId": "b1974f45-9b48-43c2-b8f2-1c7c524b1359",
+      "startedAt": "2026-10-09T11:12:19.687Z",
+      "completedAt": "2026-10-09T11:12:38.869Z",
+      "status": "completed",
+      "durationMs": 19182,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "4F599B269C7B7D97731C592FC53211A3"
+          }
+        }
+      ],
+      "bundleSha256": "08e1cbf4db89d4589e20fdf2627bbc3864bd26e82e414661b185b1cdefc1f4f0",
+      "geometrySha256": "379ddc7b428e0e29b10546e865aeddf00bf52532095cf3be1794c72a81f6d63a"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "053c6b02-b315-4772-98cc-387d95245910",
+      "startedAt": "2026-10-09T11:12:34.647Z",
+      "completedAt": "2026-10-09T11:12:53.353Z",
+      "status": "completed",
+      "durationMs": 18706,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "28F80EDEC11B837DFC9F887BB8A16A92"
+          }
+        }
+      ],
+      "bundleSha256": "abcf65cb58a0ac721e499377ee84f8c5243b56f4f5f25b167db56c919a688e6d",
+      "geometrySha256": "1c37a2640904433b63877a10222e8fffb961abae6be0019626eea2b8609ad65c"
+    },
+    {
+      "url": "https://meetcircle.co/",
+      "scanId": "2c9817fd-7b07-420e-ae9c-62776e6109b6",
+      "startedAt": "2026-10-09T11:12:38.870Z",
+      "completedAt": "2026-10-09T11:12:45.296Z",
+      "status": "completed",
+      "durationMs": 6426,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "07DBB4FDCEDD5C60F2A4B349C19D6A01"
+          }
+        }
+      ],
+      "bundleSha256": "2e7916dd7c4cc2611c15c727b88e1d486007b77adfbd49a00b0f6819492c3b93",
+      "geometrySha256": "1d6608ff85c3c7d206f154afda3cad63678dee29bc5375ddfac0e5e23ff005ff"
+    },
+    {
+      "url": "https://nativendo.de/",
+      "scanId": "cc5016f8-df0a-4b85-b49d-7335497b23d5",
+      "startedAt": "2026-10-09T11:12:45.297Z",
+      "completedAt": "2026-10-09T11:12:49.780Z",
+      "status": "completed",
+      "durationMs": 4483,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "83AF73CD5FC89D9C2D9CA77759B3B59D"
+          }
+        }
+      ],
+      "bundleSha256": "6fc6319130a3df0920b7ed5e7c874bdc798412bad9013347a495cca873e4d896",
+      "geometrySha256": "947ff992c0fda95b56eb195a8a221ac011ae40344928264891bba75b6cd54a58"
+    },
+    {
+      "url": "https://115.com/",
+      "scanId": "c6b4ea34-4245-4e0f-a26d-2e2c929bc4ca",
+      "startedAt": "2026-10-09T11:12:49.781Z",
+      "completedAt": "2026-10-09T11:13:00.100Z",
+      "status": "completed",
+      "durationMs": 10319,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "FCFDC8A6D067BB3AF70A643B2482A3D0"
+          }
+        }
+      ],
+      "bundleSha256": "aeaccdb09f0efe0f6c60fb3e036f3d31311d028697618b9935463a906d7b9631",
+      "geometrySha256": "e1bd46b433bb5f177c6c97a54452f6293c79d142de9f4c6096fa964a7a01b7ac"
+    },
+    {
+      "url": "https://futureplc.com/",
+      "scanId": "1cd52c8d-4e64-4748-9f14-1643552f3165",
+      "startedAt": "2026-10-09T11:12:53.354Z",
+      "completedAt": "2026-10-09T11:13:11.631Z",
+      "status": "completed",
+      "durationMs": 18277,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "08E4E82AB385CCA429BC072049A10E78"
+          }
+        }
+      ],
+      "bundleSha256": "f17168bd919e6dccd867744673f0fa05ee0451c3585d3f1f28951beed4e80682",
+      "geometrySha256": "482f81b418d8082a8b5329ab7d79cb2716f6454f0f1c44c440fabe69a2bd2a6b"
+    },
+    {
+      "url": "https://wavevms.com/",
+      "scanId": "cf3b5eb3-9041-417c-bd66-53d178c3c879",
+      "startedAt": "2026-10-09T11:13:00.101Z",
+      "completedAt": "2026-10-09T11:13:06.155Z",
+      "status": "completed",
+      "durationMs": 6054,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "E43B163CA1439DB11D06ECBCC31DA53F"
+          }
+        }
+      ],
+      "bundleSha256": "96d2c158aa2fe90f24f1503b9668420aa95cf73f0cdef8073037e21813999639",
+      "geometrySha256": "bb95f6639980f7ec3b8d712a70a3619123e7e363317f095dbca8d363b5cb2ad9"
+    },
+    {
+      "url": "https://vinted.ie/",
+      "scanId": "7b700f42-6493-442a-b90b-ed3ef3f7c182",
+      "startedAt": "2026-10-09T11:13:06.156Z",
+      "completedAt": "2026-10-09T11:13:14.397Z",
+      "status": "completed",
+      "durationMs": 8241,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "E47F1FE807D4F715F36F35880136BC66"
+          }
+        }
+      ],
+      "bundleSha256": "ce338fd2af21a3ef6f4851f5c94076cd1cb8cfa77db87cda030f28422e1f1cbf",
+      "geometrySha256": "96f0df9adc071252cc33ea150cf4113baa89a913062e83efebe2ab90b401ecf0"
+    },
+    {
+      "url": "https://acb.com.vn/",
+      "scanId": "3702c817-22a5-45e2-87c0-60ed58904d25",
+      "startedAt": "2026-10-09T11:13:11.632Z",
+      "completedAt": "2026-10-09T11:13:21.780Z",
+      "status": "completed",
+      "durationMs": 10148,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "B7EF19018C4596CB7A7E720F6D590CA9"
+          }
+        }
+      ],
+      "bundleSha256": "cdd7627063b78ec66d87f1e8dd9e2300c109eb01170775406e6d686b0a798009",
+      "geometrySha256": "428416156c699e6af892dd5137207585349f4c8660c6c904166993e51574a823"
+    },
+    {
+      "url": "https://uwe.ac.uk/",
+      "scanId": "ea20fed0-c804-42d0-806e-07b8025e0b7f",
+      "startedAt": "2026-10-09T11:13:14.398Z",
+      "completedAt": "2026-10-09T11:13:24.870Z",
+      "status": "completed",
+      "durationMs": 10472,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "6AB3B62F5334BE741509DDBDDFA429E6"
+          }
+        }
+      ],
+      "bundleSha256": "9a6ffa8bd993d08d4f9e33af798c43a5a844ad3f17f5a4968a370ff4a187f933",
+      "geometrySha256": "fdeef549ca3d689f87710d2a8683fb211b3cde2e00f0d141565d369f2dee2e17"
+    },
+    {
+      "url": "https://pornhat.tv/",
+      "scanId": "099c0a1e-9e56-4bd1-93e4-178b32eed8fc",
+      "startedAt": "2026-10-09T11:13:21.781Z",
+      "completedAt": "2026-10-09T11:13:33.257Z",
+      "status": "completed",
+      "durationMs": 11476,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "no_evidence",
+          "inventoryOutcome": "complete_empty",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "FB306F336D6A2233E546513866BFD133"
+          }
+        }
+      ],
+      "bundleSha256": "8f510682e217c3c0415b44edd777141f6cd0e85cfcb44b5113562f8b9631da81",
+      "geometrySha256": "102fc827acb14f7df88b5311dc5baa74e80d3a0e8be2563f7e11f06df4ed849e"
+    },
+    {
+      "url": "https://milanote.com/",
+      "scanId": "f41e190b-115b-4df8-8756-542634cfc39d",
+      "startedAt": "2026-10-09T11:13:24.871Z",
+      "completedAt": "2026-10-09T11:13:33.490Z",
+      "status": "completed",
+      "durationMs": 8619,
+      "observations": [
+        {
+          "accept": false,
+          "reject": false,
+          "options": false,
+          "captureStatus": "observed",
+          "inventoryOutcome": "complete_with_controls",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "3FD6B04A85133058B1BBB59F79F4E35D"
+          }
+        }
+      ],
+      "bundleSha256": "2a09c46a38cbf2aabdb070bdbeb32c5c0d14ea310eb33fa90d9299a7f56a7fe0",
+      "geometrySha256": "754b84486a77a974ce03aed17f84954929f7c60db2145efb1d104f55555c1dc7"
+    },
+    {
+      "url": "https://amfam.com/",
+      "scanId": "93a7af12-65c6-45c7-a01d-d8b70bcfaf0c",
+      "startedAt": "2026-10-09T11:13:33.259Z",
+      "completedAt": "2026-10-09T11:13:37.061Z",
+      "status": "completed",
+      "durationMs": 3802,
+      "observations": [
+        {
+          "accept": true,
+          "reject": true,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "3911CDBF65B3E8C3062FB6B54D17A63C"
+          }
+        }
+      ],
+      "bundleSha256": "5f84485399ef6ccad863ccc475e2bf655612627a2a58bd3a7fd3c3378e431a0b",
+      "geometrySha256": "33c0c359940dac7f727c733e20a2fbfbe399b30bc84e1e45a6881b7c24067b16"
+    },
+    {
+      "url": "https://ssga.com/",
+      "scanId": "4a48e877-edfe-45f4-bd5e-75fc9bb89b86",
+      "startedAt": "2026-10-09T11:13:33.491Z",
+      "completedAt": "2026-10-09T11:13:52.115Z",
+      "status": "completed",
+      "durationMs": 18624,
+      "observations": [
+        {
+          "accept": true,
+          "reject": false,
+          "options": true,
+          "captureStatus": "observed",
+          "inventoryOutcome": "partial",
+          "documentIdentity": {
+            "source": "cdp_loader_id",
+            "token": "D9D1012CC4576B738DD299EC5E252AA9"
+          }
+        }
+      ],
+      "bundleSha256": "2170fbe8ca277cf0cb2e9fa7d47d5065545ea86e2b84d8be550243b43a565aaa",
+      "geometrySha256": "b14feb3cae0832a1db4cf033180f545d1e31b35b81ff42165988cb387bf201b3"
+    }
+  ]
+}

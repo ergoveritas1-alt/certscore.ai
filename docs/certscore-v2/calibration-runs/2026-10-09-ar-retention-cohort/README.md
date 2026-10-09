@@ -1,5 +1,7 @@
 # Local A/R retention cohort — release remains blocked
 
+Follow-up: [local quoted privacy and canary corrections](../2026-10-09-ar-quoted-privacy-canary/README.md) resolves the stale canary expectations and recognizes the quoted privacy label. It also corrects the causal diagnosis: the observed extra gate wait is independently tied to the positive-geometry diagnostic flag lifecycle; label recognition alone does not establish a latency saving. The original measurements below remain unchanged.
+
 This is a local diagnostic benchmark of `priority_bounded_action_requests.v1`, not a production deployment, full six-lane scan/report test or internet-wide accuracy estimate. Baseline is the previous working frozen source, not the last deployed revision. Luna reviewed composition, retained screenshots, packet bindings and outcome interpretation; this is model-assisted review, not independent human adjudication.
 
 ## Protocol and contact accounting

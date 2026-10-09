@@ -38,15 +38,19 @@ import {
   postRefusalLaneOutcomeSchema,
   type PostRefusalEvidencePacket,
   type PostRefusalEvidencePacketInput,
+  type PostRefusalLaneOutcome,
 } from "./post-refusal-observation";
 import {
   postAcceptEvidencePacketSchema,
   postAcceptLaneOutcomeSchema,
   type PostAcceptEvidencePacket,
   type PostAcceptEvidencePacketInput,
+  type PostAcceptLaneOutcome,
 } from "./post-accept-observation";
 const canonicalPostRefusalPacketSchema: z.ZodType<PostRefusalEvidencePacket, z.ZodTypeDef, PostRefusalEvidencePacketInput> = postRefusalEvidencePacketSchema;
 const canonicalPostAcceptPacketSchema: z.ZodType<PostAcceptEvidencePacket, z.ZodTypeDef, PostAcceptEvidencePacketInput> = postAcceptEvidencePacketSchema;
+const canonicalPostRefusalLaneSchema: z.ZodType<PostRefusalLaneOutcome, z.ZodTypeDef, z.input<typeof postRefusalLaneOutcomeSchema>> = postRefusalLaneOutcomeSchema;
+const canonicalPostAcceptLaneSchema: z.ZodType<PostAcceptLaneOutcome, z.ZodTypeDef, z.input<typeof postAcceptLaneOutcomeSchema>> = postAcceptLaneOutcomeSchema;
 import {
   gpcResponseAssessmentSchema,
   gpcSignalObservationSchema,
@@ -757,6 +761,10 @@ export const consentUiObservationSchema = z.object({
     classifierReasonCodes: consentControlClassifierReasonCodesSchema,
     classifierVariant: z.string().max(80).optional(),
     linkDestination: consentControlLinkDestinationSchema.optional(),
+    labelBinding: z.object({
+      version: z.literal("adjacent_text_node.v1"),
+      text: z.string().max(320),
+    }).optional(),
   })).default([]),
   impliedConsentLanguageObserved: z.boolean().default(false).optional(),
   impliedConsentLanguageEvidence: z.array(z.object({
@@ -1741,7 +1749,17 @@ export const visualCaptureSummarySchema = z.object({
   notes: z.array(z.string().max(240)).default([]),
 });
 
+export const blockingFrameChallengeSchema = z.object({
+  policyVersion: z.literal("blocking_frame_challenge.v1"),
+  frameUrl: z.string().url().max(2000),
+  viewportCoverage: z.number().finite().min(0).max(1),
+  hitTestSamples: z.literal(5),
+  hitTestMatches: z.number().int().min(0).max(5),
+  screenshotArtifactRef: z.string().min(1),
+});
+
 export const domSnapshotArtifactSchema = z.object({
+  blockingFrameChallenge: blockingFrameChallengeSchema.optional(),
   siteMetadata: siteMetadataSchema.optional(),
   artifactId: z.string(),
   capturedAtMs: z.number().int().nonnegative(),
@@ -3332,6 +3350,7 @@ export const displaySafeEvidenceExcerptSchema = z.object({
 // Type annotation bounds declaration size; runtime validation is unchanged.
 const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceObservationSchema>, z.ZodTypeDef, unknown> = policySurfaceObservationSchema;
 const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
+const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiObservationSchema>, z.ZodTypeDef, z.input<typeof consentUiObservationSchema>> = consentUiObservationSchema;
 const canonicalEvidenceBundleBaseSchema = z.object({
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
   resourceInventoryContext: z.object({
@@ -3348,9 +3367,9 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   modulesRun: z.array(scanModuleRunSchema),
   scanLaneRuns: z.array(scanLaneRunSchema).max(8).default([]),
   postAcceptEvidence: canonicalPostAcceptPacketSchema.optional(),
-  postAcceptLaneOutcome: postAcceptLaneOutcomeSchema.optional(),
+  postAcceptLaneOutcome: canonicalPostAcceptLaneSchema.optional(),
   postRefusalEvidence: canonicalPostRefusalPacketSchema.optional(),
-  postRefusalLaneOutcome: postRefusalLaneOutcomeSchema.optional(),
+  postRefusalLaneOutcome: canonicalPostRefusalLaneSchema.optional(),
   gpcResponseAssessment: canonicalBundleGpcResponseAssessmentSchema.optional(),
   gpcActivityComparison: canonicalGpcActivityComparisonSchema.optional(),
   gpcSignalObservation: canonicalBundleGpcSignalObservationSchema.optional(),
@@ -3368,7 +3387,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   storageSnapshots: z.array(storageSnapshotSchema),
   scriptEvents: z.array(scriptEventSchema),
   iframeEvents: z.array(iframeEventSchema),
-  consentUiObservations: z.array(consentUiObservationSchema),
+  consentUiObservations: z.array(canonicalConsentUiObservationSchema),
   collectionSurfaceObservations: z.array(collectionSurfaceObservationSchema).default([]),
   collectionSurfaceInventory: collectionSurfaceInventorySchema.optional(),
   formDestinationTrace: formDestinationTraceSchema.optional(),

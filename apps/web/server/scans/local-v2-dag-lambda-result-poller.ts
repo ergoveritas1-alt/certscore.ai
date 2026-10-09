@@ -59,7 +59,7 @@ type S3GetClient = {
 };
 
 type MirroredLambdaArtifact = {
-  field: "manifestUri" | "scanArtifactUri" | "reviewArtifactUri" | "reportAdapterArtifactUri" | "auxiliaryArtifact";
+  field: "manifestUri" | "scanArtifactUri" | "reviewArtifactUri" | "reportAdapterArtifactUri" | "postAcceptPacketUri" | "auxiliaryArtifact";
   fileName: string;
   localPath: string;
   sha256: string;
@@ -266,6 +266,7 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
   const artifacts = [
     { field: "manifestUri" as const, fileName: "LocalV2DagLambdaManifest.json", uri: pointers.manifestUri },
     { field: "scanArtifactUri" as const, fileName: "CanonicalEvidenceBundle.json", uri: pointers.scanArtifactUri },
+    { field: "postAcceptPacketUri" as const, fileName: "lanes/accept_observation/PostAcceptEvidencePacket.json", uri: pointers.postAcceptPacketUri },
     { field: "reviewArtifactUri" as const, fileName: "ReviewResult.json", uri: pointers.reviewArtifactUri },
     { field: "reportAdapterArtifactUri" as const, fileName: "V2ReportProjectionDraft.json", uri: pointers.reportAdapterArtifactUri }
   ];
@@ -284,6 +285,7 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
         throw new Error(`Local v2 DAG Lambda artifact size mismatch for ${artifact.fileName}.`);
       }
       const localPath = path.join(outDir, artifact.fileName);
+      await mkdir(path.dirname(localPath), { recursive: true });
       await writeFile(localPath, body);
       return {
         field: artifact.field,

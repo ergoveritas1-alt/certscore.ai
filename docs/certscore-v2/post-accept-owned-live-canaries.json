@@ -35,9 +35,9 @@
       "key": "ergoveritas-post-accept-inconsistent",
       "url": "https://ergoveritas.com/.well-known/certscore-canary/post-accept/accept-inconsistent.html",
       "cmpRecipe": "OneTrust",
-      "expectedAcceptanceRegistration": "confirmed",
+      "expectedAcceptanceRegistration": "unconfirmed",
       "expectedPostAcceptActivity": false,
-      "expectedAcceptanceContradiction": true
+      "expectedAcceptanceContradiction": false
     },
     {
       "key": "ergoveritas-post-action-divergent",
@@ -55,13 +55,14 @@
       "key": "ergoveritas-post-action-indistinguishable",
       "url": "https://ergoveritas.com/testar2.html",
       "cmpRecipe": "OneTrust",
-      "expectedAcceptanceRegistration": "confirmed",
-      "expectedPostAcceptActivity": true,
-      "expectedAcceptanceContradiction": true,
+      "expectedAcceptanceRegistration": "unconfirmed",
+      "expectedPostAcceptActivity": false,
+      "expectedAcceptanceContradiction": false,
       "expectedRefusalRegistration": "confirmed",
       "expectedPostRefusalActivity": true,
       "expectedPreRegistrationActivityTreatment": "excluded",
-      "expectedActionComparison": "indistinguishable"
+      "expectedActionComparison": "insufficient_evidence",
+      "expectedAfterAcceptClickActivity": true
     }
   ]
 }

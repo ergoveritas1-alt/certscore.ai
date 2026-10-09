@@ -1,0 +1,106 @@
+{
+  "entries": {
+    "https://podtrac.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:25.166Z",
+      "lastContactAt": "2026-10-09T11:48:25.166Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://podtrac.com/"
+    },
+    "https://receitasnestle.com.br/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:26.101Z",
+      "lastContactAt": "2026-10-09T11:48:26.101Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://receitasnestle.com.br/"
+    },
+    "https://ihaveporn.co/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:35.498Z",
+      "lastContactAt": "2026-10-09T11:48:35.498Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ihaveporn.co/"
+    },
+    "https://nature.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:33.386Z",
+      "lastContactAt": "2026-10-09T11:48:33.386Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://nature.org/"
+    },
+    "https://unleashedsoftware.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:39.621Z",
+      "lastContactAt": "2026-10-09T11:48:39.621Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://unleashedsoftware.com/"
+    },
+    "https://luminpdf.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:41.559Z",
+      "lastContactAt": "2026-10-09T11:48:41.559Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://luminpdf.com/"
+    },
+    "https://earth.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:49.945Z",
+      "lastContactAt": "2026-10-09T11:48:49.945Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://earth.org/"
+    },
+    "https://idrama.video/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:48:54.341Z",
+      "lastContactAt": "2026-10-09T11:48:54.341Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://idrama.video/"
+    },
+    "https://uema.br/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:49:00.524Z",
+      "lastContactAt": "2026-10-09T11:49:00.524Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://uema.br/"
+    },
+    "https://upshow.tv/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T11:49:15.831Z",
+      "lastContactAt": "2026-10-09T11:49:15.831Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://upshow.tv/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-09T11:50:51.889Z"
+}

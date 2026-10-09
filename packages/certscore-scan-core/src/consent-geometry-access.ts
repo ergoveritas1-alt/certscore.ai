@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import type { DomSnapshotArtifact } from "@certscore/contracts";
 
 export type ConsentGeometryAccessStatus =
   | "loaded"
@@ -14,6 +15,13 @@ export interface ConsentGeometryAccessDiagnostic {
   httpStatus?: number;
   title?: string;
   textExcerpt?: string;
+  blockingFrameChallenge?: {
+    frameUrl: string;
+    textExcerpt: string;
+    viewportCoverage: number;
+    hitTestSamples: 5;
+    hitTestMatches: number;
+  };
 }
 
 export interface ConsentGeometryEgressDiagnostic {
@@ -106,15 +114,16 @@ export async function collectConsentGeometryPageAccess(
   options: { frameTextTimeoutMs?: number; supplementalBodyText?: string } = {},
 ): Promise<ConsentGeometryAccessDiagnostic> {
   const frameTextTimeoutMs = Math.max(50, options.frameTextTimeoutMs ?? 750);
-  const frameTexts = await Promise.all(page.frames().slice(0, 12).map((frame) =>
-    withTimeout(frame.evaluate(() => {
-      function collectOpenShadowText(root: ParentNode, depth = 0): string[] {
+  const frames = page.frames().slice(0, 12);
+  const frameTexts = await Promise.all(frames.map((frame) =>
+    withTimeout(frame.evaluate<{ title: string; documentUrl: string; bodyText: string; blockingFrames: Array<{ frameUrl: string; viewportCoverage: number; hitTestMatches: number }> }>(String.raw`(() => {
+      function collectOpenShadowText(root, depth = 0) {
         if (depth > 3) {
           return [];
         }
-        const texts: string[] = [];
+        const texts = [];
         for (const element of Array.from(root.querySelectorAll("*")).slice(0, 700)) {
-          const htmlElement = element as HTMLElement & { shadowRoot?: ShadowRoot | null };
+          const htmlElement = element;
           const ariaLabel = htmlElement.getAttribute?.("aria-label");
           if (ariaLabel) {
             texts.push(ariaLabel);
@@ -132,27 +141,108 @@ export async function collectConsentGeometryPageAccess(
 
       return {
         title: document.title,
+        documentUrl: location.href,
         bodyText: [
           document.body?.innerText ?? "",
           ...collectOpenShadowText(document),
         ].join(" ").slice(0, 4_000),
+        // Reuse this existing document read. Frame titles alone (for example
+        // an embedded CAPTCHA widget) do not establish a blocked page.
+        blockingFrames: window !== window.top ? [] : Array.from(document.querySelectorAll("iframe")).slice(0, 12).flatMap(element => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          const width = innerWidth, height = innerHeight;
+          if (width <= 0 || height <= 0 || style.display === "none" ||
+            style.visibility !== "visible" || Number(style.opacity) < 0.95 || style.pointerEvents === "none") return [];
+          const coverage = Math.max(0, Math.min(width, rect.right) - Math.max(0, rect.left)) *
+            Math.max(0, Math.min(height, rect.bottom) - Math.max(0, rect.top)) / (width * height);
+          if (coverage < 0.8) return [];
+          let ancestor = element;
+          let effectiveOpacity = 1;
+          for (let depth = 0; ancestor && depth < 20; depth++, ancestor = ancestor.parentElement) {
+            const ancestorStyle = getComputedStyle(ancestor);
+            effectiveOpacity *= Number(ancestorStyle.opacity);
+            if (ancestorStyle.display === "none" || ancestorStyle.visibility !== "visible" || effectiveOpacity < 0.95) return [];
+          }
+          if (ancestor) return [];
+          const points = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]];
+          const matches = points.filter(([x, y]) => document.elementFromPoint(width * x, height * y) === element).length;
+          return matches >= 4 ? [{ frameUrl: element.src, viewportCoverage: coverage, hitTestMatches: matches }] : [];
+        }),
       };
-    }), frameTextTimeoutMs, { title: "", bodyText: "" })
-      .catch(() => ({ title: "", bodyText: "" }))
+    })()`), frameTextTimeoutMs, { title: "", documentUrl: "", bodyText: "", blockingFrames: [] })
+      .catch(() => ({ title: "", documentUrl: "", bodyText: "", blockingFrames: [] }))
   ));
   const text = {
-    title: frameTexts.map((entry) => entry.title).filter(Boolean).join(" | "),
+    title: frameTexts[0]?.title ?? "",
     bodyText: [
-      ...frameTexts.map((entry) => entry.bodyText).filter(Boolean),
+      frameTexts[0]?.bodyText ?? "",
       options.supplementalBodyText ?? "",
     ].join(" ").slice(0, 6_000),
   };
-  return classifyConsentGeometryAccess({
+  const diagnostic = classifyConsentGeometryAccess({
     pageUrl: page.url?.(),
     httpStatus,
     title: text.title,
     bodyText: text.bodyText,
   });
+  if (!frameTexts[0]?.documentUrl) {
+    const independent = classifyConsentGeometryAccess({ pageUrl: page.url?.(), httpStatus });
+    return { ...independent, status: independent.status === "loaded" ? "unknown" : independent.status,
+      reasonCodes: [...independent.reasonCodes, "main_document_access_read_unavailable"] };
+  }
+  const mainFrames = frameTexts[0] && "blockingFrames" in frameTexts[0] ? frameTexts[0].blockingFrames : [];
+  for (const frame of mainFrames) {
+    const matches = frames.slice(1).filter(candidate => candidate.parentFrame() === page.mainFrame() && candidate.url() === frame.frameUrl);
+    const match = matches[0];
+    if (matches.length !== 1 || !match) continue;
+    const captured = frameTexts[frames.indexOf(match)];
+    const excerpt = blockingChallengeExcerpt(captured?.bodyText ?? "");
+    if (!captured || captured.documentUrl !== match.url() ||
+      !page.frames().includes(match) || !isExplicitBlockingChallengeText(excerpt)) continue;
+    const retainedFrameUrl = new URL(match.url());
+    retainedFrameUrl.search = "";
+    retainedFrameUrl.hash = "";
+    retainedFrameUrl.username = "";
+    retainedFrameUrl.password = "";
+    if (retainedFrameUrl.href.length > 2_000) continue;
+    // Exact live URL matching above precedes redaction for retained diagnostics.
+    diagnostic.blockingFrameChallenge = { ...frame, frameUrl: retainedFrameUrl.href, textExcerpt: excerpt, hitTestSamples: 5 };
+    diagnostic.status = "rate_limited_or_security_challenge";
+    diagnostic.reasonCodes = [...new Set([...diagnostic.reasonCodes, "bot_security_check", "viewport_blocking_frame_challenge"])].slice(0, 8);
+    break;
+  }
+  return diagnostic;
+}
+
+export function isExplicitBlockingChallengeText(text: string): boolean {
+  return blockingChallengeExcerpt(text).length > 0;
+}
+
+export function isRetainedBlockingFrameChallengeBound(snapshot: DomSnapshotArtifact, artifact: unknown): boolean {
+  const record = (value: unknown): Record<string, unknown> | undefined =>
+    value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+  const geometry = record(artifact);
+  const identity = record(geometry?.documentIdentity);
+  const proof = record(record(geometry?.access)?.blockingFrameChallenge);
+  return Boolean(snapshot.blockingFrameChallenge && snapshot.documentIdentity?.token &&
+    geometry?.pageUrl === snapshot.url && identity?.source === snapshot.documentIdentity.source &&
+    identity?.token === snapshot.documentIdentity.token &&
+    proof?.frameUrl === snapshot.blockingFrameChallenge.frameUrl &&
+    proof?.textExcerpt === snapshot.textExcerpt &&
+    proof?.viewportCoverage === snapshot.blockingFrameChallenge.viewportCoverage &&
+    proof?.hitTestSamples === snapshot.blockingFrameChallenge.hitTestSamples &&
+    proof?.hitTestMatches === snapshot.blockingFrameChallenge.hitTestMatches);
+}
+
+function blockingChallengeExcerpt(text: string): string {
+  const bounded = compactText(text).slice(0, 4_000);
+  const match = /\bpress\s*(?:&|and)\s*hold\b.{0,120}?\b(?:human|not (?:a )?bot|verification)\b/i.exec(bounded) ??
+    /\b(?:verify|confirm)\b.{0,50}\b(?:you are|you'?re)\s+(?:a )?human\b/i.exec(bounded) ??
+    /^(?:checking your browser|performing security verification)\b/i.exec(bounded);
+  // Retain only the matched instruction, never unrelated preceding frame text.
+  return (match?.[0] ?? "")
+    .replace(/https?:\/\/\S+|\b[^\s@]+@[^\s@]+\.[^\s@]+|\b[A-Za-z0-9_-]{24,}\b/g, "[redacted]");
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {

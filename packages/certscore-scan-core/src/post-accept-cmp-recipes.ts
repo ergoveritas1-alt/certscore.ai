@@ -6,7 +6,7 @@ import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import type { PostAcceptActionRecipe } from "./post-accept-observer.js";
 
 export const CANONICAL_POST_ACCEPT_RECIPE_SET_ID =
-  "canonical-consent-control-accept-v9" as const;
+  "canonical-consent-control-accept-v10" as const;
 
 const DEFAULT_TCF_ACCEPT_PURPOSE_IDS = [1, 3, 4, 7, 9, 10];
 
@@ -121,7 +121,7 @@ export function buildCanonicalPostAcceptActionRecipes(): PostAcceptActionRecipe[
       for (const [index, target] of (definition.acceptControlTargets ?? []).entries()) {
         recipes.push({
           artifactVersion: "certscore.post_accept_action_recipe.v1",
-          recipeId: `canonical-cmp:${definition.canonicalName}:accept:accessible-v${index + 1}`,
+          recipeId: `canonical-cmp:${definition.canonicalName}:accept:accessible-v${index + 1}${definition.recipeVersion && definition.recipeVersion !== "v1" ? `:${definition.recipeVersion}` : ""}`,
           cmpId: definition.canonicalName,
           resolverMethod: definition.standards?.includes("tcf")
             ? "tcf_api_cmp_registry_recipe"

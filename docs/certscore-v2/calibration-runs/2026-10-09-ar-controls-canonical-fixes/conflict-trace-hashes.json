@@ -1,0 +1,17 @@
+[
+  {
+    "scanId": "2bfc18b3-d850-4376-af1e-aa7990089201",
+    "localBundleSha256": "db843976d4c38af219de7cff7e8f19e817faffece2161b098360d517565100e6",
+    "integrityScope": "hash of downloaded original bundle bytes; no expected bundle hash in the retained manifest"
+  },
+  {
+    "scanId": "00730120-c8e2-468e-8a5f-012b5228455c",
+    "localBundleSha256": "1b147136b2e86d901f47488bbc5bb40ee0acac737afdf24188a953b80510c49c",
+    "integrityScope": "hash of downloaded original bundle bytes; no expected bundle hash in the retained manifest"
+  },
+  {
+    "scanId": "0c62e639-a6e8-4b23-935c-33892bd0c95f",
+    "localBundleSha256": "3ca2f6a408b46a672575299b1f9561449db3f572c2fc5ffc4c8e88e286609990",
+    "integrityScope": "hash of downloaded original bundle bytes; no expected bundle hash in the retained manifest"
+  }
+]

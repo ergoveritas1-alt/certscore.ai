@@ -439,6 +439,31 @@ Primary protocol references:
 - [IAB CMP API v2](https://github.com/InteractiveAdvertisingBureau/GDPR-Transparency-and-Consent-Framework/blob/master/TCFv2/IAB%20Tech%20Lab%20-%20CMP%20API%20v2.md)
 - [OneTrust JavaScript API](https://developer.onetrust.com/onetrust/docs/javascript-api)
 
+### Partial OneTrust baseline correction (local, October 9)
+
+The owner approved a bounded correction to the pre-click completeness gate.
+`onetrust_cookie_groups.v2` permits a nonempty, well-formed baseline subset of
+the verified configured group IDs. Retain its exact cookie identity, value hash,
+actual baseline IDs and full configuration hash. A baseline with unknown IDs,
+malformed groups, ambiguous cookies or unverifiable configuration remains invalid.
+Complete baselines continue to produce v1 proof; stored v1 rules are unchanged.
+
+V2 confirmation still requires the same exact cookie identity, unchanged full
+configuration, a different value hash, and every configured group explicitly
+present in the post-click receipt. It additionally requires a same-scope
+instrumented write of that exact verified value after dispatch. Missing groups
+are never filled or inferred. The decision uses only the complete post-click
+values, preserving the existing always-active handling and action-specific
+confirmation. Partial-after, unchanged, opposite/mixed, stale, unbound and drifted
+receipts cannot establish the requested decision. Click eligibility and bounded
+after-click capture remain independent of confirmation quality.
+
+This correction uses existing reads/windows and adds no lane, wait, timeout,
+retry, screenshot or model call. Incremental retained proof storage is estimated
+below $0.10/month at 100,000 scans; one-time history bookkeeping below $0.10.
+No deployment is authorized by this local implementation. Readers supporting v2
+must ship before or with its writer in a separately authorized release.
+
 ### Customer presentation of action outcomes
 
 Lead Accept/Reject results with the directly observed behavior. For the existing

@@ -157,6 +157,7 @@ export interface ConsentControlCandidateEvidence {
   classifierReasonCodes: string[];
   classifierConfidence: number;
   consentContextConfirmed?: boolean;
+  labelBinding?: { version: "adjacent_text_node.v1"; text: string };
   linkDestination?: "same_document" | "other_document" | "unverified";
   diagnosticClassifications?: ConsentControlDiagnosticClassification[];
   effectiveVisibility?: "direct" | "visible_via_actionable_proxy";
@@ -270,6 +271,7 @@ interface RawGeometryCandidate {
   contextText: string;
   scopeText?: string;
   scopeKind?: "paragraph" | "dialog";
+  adjacentText?: string;
 }
 
 interface RawGeometryCapture {
@@ -906,6 +908,9 @@ function buildCandidateEvidence(
     classifierRegistryVersion: classification.registryVersion,
     classifierReasonCodes: classification.reasonCodes,
     classifierConfidence: classification.confidence,
+    ...(classification.reasonCodes.includes("adjacent_text_node_label_binding") ? {
+      labelBinding: { version: "adjacent_text_node.v1" as const, text: `${candidate.label} ${candidate.adjacentText}` },
+    } : {}),
     consentContextConfirmed: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
     linkDestination: candidate.linkHref !== undefined ? classifyConsentControlLinkDestination(candidate.linkHref, candidate.frameUrl) : undefined,
     diagnosticClassifications,
@@ -944,6 +949,7 @@ function classifyCandidate(candidate: RawGeometryCandidate): ConsentControlLabel
     contextText: candidate.contextText,
     scopeText: candidate.scopeText,
     scopeKind: candidate.scopeKind,
+    adjacentText: candidate.adjacentText,
     hasConsentContext: CONSENT_CONTEXT_PATTERN.test(candidate.contextText),
     hasPreferenceContext:
       candidate.layer === "preference_center" ||
@@ -1596,8 +1602,13 @@ function collectConsentGeometryInPage(input: {
         : undefined,
       occlusion: occlusionFor(element, box),
       contextText: contextText.slice(0, 1_000),
-      scopeText: compactText(element.closest("p,li,[role=dialog],[role=alertdialog],dialog")?.textContent || "").slice(0, 2_000),
+      scopeText: (() => {
+        const scope = element.closest("p,li,[role=dialog],[role=alertdialog],dialog");
+        return scope ? readableContextText(scope).slice(0, 2_000) : "";
+      })(),
       scopeKind: element.closest("p,li") ? "paragraph" : "dialog",
+      adjacentText: element.nextSibling?.nodeType === Node.TEXT_NODE && contextTextIsReadable(element)
+        ? compactText(element.nextSibling.textContent || "").slice(0, 160) : undefined,
       linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
     };
   }
@@ -1740,7 +1751,9 @@ function collectConsentGeometryInPage(input: {
       }
       if (/^(?:main|article)$/i.test(current.tagName) || current.getAttribute("role") === "main") return undefined;
       const text = independentContextText(current, element);
-      if (text.length <= 4_000 && text.length > Math.max(label.length + 24, 48) && pattern.test(text)) {
+      // Independent text is already stripped of control labels and hidden
+      // descendants. Short visible consent headings can bind submit inputs too.
+      if (text.length >= 8 && text.length <= 4_000 && pattern.test(text)) {
         textContextRootCache.set(element, current);
         return current;
       }

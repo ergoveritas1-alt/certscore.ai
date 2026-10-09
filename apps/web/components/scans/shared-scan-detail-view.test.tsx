@@ -3455,7 +3455,7 @@ test("raw vendor, replay, embed and request observations do not become timeline 
   assert.ok(events.every(event => event.tone === "slate"));
 });
 
-test("canonical timed concerns are red without coloring an earlier essential cookie", async () => {
+test("canonical timed gaps are red while classification reviews and cookie snapshots remain neutral", async () => {
   const { buildExecutiveTimelineEvents } = await import("./shared-scan-detail-view");
   const runtime = { hybridRuntimeEvidence: { timelineMarkers: { firstCookieObservedMs: 1000 },
     cookieWriteObservations: [{ cookieName: "functional", firstObservedAtMs: 1000, beforeConsent: true,
@@ -3465,13 +3465,24 @@ test("canonical timed concerns are red without coloring an earlier essential coo
       criticalEvidence: { retainedEvidence: { firstPreconsentCookieOrStorageObservedMs: 2000 } } }]);
     assert.equal(events.find(event => event.label === "Cookie observed")?.tone, "slate");
     const concern = events.find(event => event.label === "Non-essential cookie/storage");
-    assert.equal(Boolean(concern), ["Gap observed", "Review signal"].includes(status));
+    assert.equal(Boolean(concern), status === "Gap observed");
     if (concern) assert.deepEqual([concern.atMs, concern.tone], [2000, "rose"]);
+    const review = events.find(event => event.label === "Pre-consent storage review");
+    assert.equal(Boolean(review), status === "Review signal");
+    if (review) {
+      assert.deepEqual([review.atMs, review.tone], [2000, "slate"]);
+      assert.match(review.detail ?? "", /first retained observation/);
+      assert.doesNotMatch(review.label + review.detail, /non-essential|write|set at/i);
+    }
   }
   const requests = buildExecutiveTimelineEvents(runtime, [{ id: "pre_consent_third_party_tracking", status: "Gap observed",
     criticalEvidence: { retainedEvidence: { firstPreconsentThirdPartyTrackingObservedMs: 3000 } } }]);
   assert.equal(requests.find(event => event.label === "Non-essential request")?.tone, "rose");
   assert.equal(requests.find(event => event.label === "Non-essential request")?.atMs, 3000);
+  const reviewRequests = buildExecutiveTimelineEvents(runtime, [{ id: "pre_consent_third_party_tracking", status: "Review signal",
+    criticalEvidence: { retainedEvidence: { firstPreconsentThirdPartyTrackingObservedMs: 3000 } } }]);
+  assert.equal(reviewRequests.find(event => event.label === "Pre-consent tracking review")?.tone, "slate");
+  assert.ok(!reviewRequests.some(event => event.label === "Non-essential request"));
   for (const timing of [undefined, -1, NaN]) {
     assert.ok(!buildExecutiveTimelineEvents(runtime, [{ id: "pre_consent_cookies_storage", status: "Gap observed",
       criticalEvidence: { retainedEvidence: { firstPreconsentCookieOrStorageObservedMs: timing } } }]).some(event => event.tone === "rose"));

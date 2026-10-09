@@ -1,0 +1,10 @@
+{
+  "package.json": "a689d80888697800aabc5f8b1b805b02849380a4562a3ce56b8b79880bee07fe",
+  "packages/certscore-contracts/src/index.ts": "b0b142db3c49bbae5337f7a54d6b87340cb4821c8acc7545d004f5f92f854d2d",
+  "packages/certscore-contracts/src/consent-control-label-classifier.ts": "65f4ce7937e75aa5313b8ad51c26f3ba5594c45901991c118ab3611cbdfac907",
+  "packages/certscore-contracts/src/privacy-evidence-locale-registry.ts": "19ea53341430810da9305e282bf88dc63b6ed523b9b8c942603efb2ed18d3617",
+  "packages/certscore-scan-core/src/consent-control-geometry.ts": "ce5e04b8a43b1f80ad205fef0a9725daff6d9cfc381e086e5c7be98251be2e91",
+  "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts": "adb9dfc77e7d6d1be189ee1f640c6bf9629dfb79af68a1b5242ac5e7cf1986e5",
+  "packages/certscore-contracts/src/consent-control-retained-audit.test.ts": "8406b8ab892afbaa569ff88f13d184f29da1437c4b44b0ca4749c39042652dce",
+  "packages/certscore-scan-core/src/consent-retained-audit-regressions.test.ts": "680fcfe8e3d757c565393db036d95cea85ac99d5b75ac446849789d688cd7998"
+}

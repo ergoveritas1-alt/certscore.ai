@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-10-09T04:22:03.617Z",
+  "results": [
+    {
+      "url": "https://mojohost.com/",
+      "startedAt": "2026-10-09T03:58:45.902Z",
+      "completedAt": "2026-10-09T03:59:03.531Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.aalto.fi/",
+      "startedAt": "2026-10-09T04:03:54.780Z",
+      "completedAt": "2026-10-09T04:04:19.630Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.mailerlite.com/",
+      "startedAt": "2026-10-09T04:04:25.368Z",
+      "completedAt": "2026-10-09T04:04:49.549Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://wethepeoples-republic.org/",
+      "startedAt": "2026-10-09T04:21:44.452Z",
+      "completedAt": "2026-10-09T04:21:58.389Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.cimediacloud.com/",
+      "startedAt": "2026-10-09T04:05:10.266Z",
+      "completedAt": "2026-10-09T04:05:12.156Z",
+      "status": "failed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.cimediacloud.com/",
+      "startedAt": "2026-10-09T04:06:26.723Z",
+      "completedAt": "2026-10-09T04:06:28.519Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    }
+  ]
+}

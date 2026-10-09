@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
+import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "@certscore/contracts";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 
 let browser: Browser | undefined;
@@ -1413,7 +1414,7 @@ test("capture policy recognizes reviewed observation labels in a local consent s
   ] as const) {
     const artifact = await captureFixture(`<section id="cookie-banner" role="dialog" aria-label="Cookie consent" style="position:fixed;bottom:0;padding:20px;background:white"><p>We use optional cookies for analytics. Choose your cookie preferences.</p><button>${label}</button></section>`);
     assert.equal(artifact.summary[field], true, label);
-    assert.equal(findCandidate(artifact, label)?.classifierRegistryVersion, "consent-control-label-registry.v8");
+    assert.equal(findCandidate(artifact, label)?.classifierRegistryVersion, CONSENT_CONTROL_LABEL_REGISTRY_VERSION);
   }
 });
 
@@ -1584,6 +1585,22 @@ test("reviewed multilingual vocabulary retains unrelated, disabled and hidden co
     <section><h2>Account invitation</h2><button>Принять</button></section>`);
   assert.equal(artifact.summary.firstLayerAccept, false);
   assert.equal(artifact.summary.firstLayerReject, false);
+});
+
+test("quoted TrustArc privacy control resolves without creating a first-layer Reject or Options", async () => {
+  const artifact = await captureFixture(`<section id="truste-consent-track" role="dialog" aria-label="Cookie choices" style="position:fixed;bottom:0;background:white;padding:20px">
+    <div id="truste-consent-text"><p>We use cookies and similar technologies. Choose your preferences.</p>
+    <button id="truste-consent-button">Accept all</button>
+    <button id="truste-show-consent">&quot;Do Not Sell My Personal Information&quot;</button></div></section>`);
+  const privacy = findCandidate(artifact, '"Do Not Sell My Personal Information"');
+  assert.equal(privacy?.actionType, "do_not_sell_share");
+  assert.equal(privacy?.classifierRegistryVersion, CONSENT_CONTROL_LABEL_REGISTRY_VERSION);
+  assert.equal(privacy?.decisionStatus, "confirmed_visible");
+  assert.equal(artifact.summary.firstLayerAccept, true);
+  assert.equal(artifact.summary.firstLayerReject, false);
+  assert.equal(artifact.summary.firstLayerOptions, false);
+  assert.equal(artifact.summary.limitations.includes("unresolved_visible_consent_decision"), false);
+  assert.equal(artifact.controlInspection?.candidates.some(c => c.unresolvedIntents.length > 0), false);
 });
 
 test("retains reviewed necessary-only and role-button settings controls from the same passive capture", async () => {

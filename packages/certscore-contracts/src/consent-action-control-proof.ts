@@ -53,6 +53,12 @@ export const consentActionControlProofSchema = z.object({
     expectedNormalizedLabel: z.string().min(1).max(160),
   }).strict().optional(),
   customControlBinding: customAcceptControlBindingSchema.optional(),
+  labelBoundNecessaryOnly: z.object({
+    policyVersion: z.literal("label_bound_necessary_only_reject.v1"),
+    bannerSelector: z.literal("#onetrust-banner-sdk"),
+    controlSelector: z.literal("#onetrust-reject-all-handler"),
+    contextText: z.string().min(1).max(4096),
+  }).strict().optional(),
   classifierIntent: z.enum(["accept", "reject", "options", "privacy_opt_out", "unknown"]),
   classifierConfidence: z.number().min(0).max(1),
   matchedLocale: consentActionControlLocaleSchema.optional(),
@@ -67,6 +73,25 @@ export const consentActionControlProofSchema = z.object({
   enabled: z.literal(true),
   uniquelyActionable: z.literal(true),
 }).strict().superRefine((proof, context) => {
+  if (!proof.labelBoundNecessaryOnly && proof.classifierReasonCodes.includes("label_bound_necessary_only_reject.v1")) {
+    context.addIssue({code: z.ZodIssueCode.custom, path: ["labelBoundNecessaryOnly"],
+      message: "Reviewed necessary-only labels must retain their scoped instruction proof."});
+  }
+  if (proof.labelBoundNecessaryOnly) {
+    const classification = classifyConsentControlLabel({ usage: "observation", classifierProfile: "multilingual_v1",
+      label: proof.accessibleLabel, contextText: proof.labelBoundNecessaryOnly.contextText, hasConsentContext: true });
+    if (proof.contractVersion !== CONSENT_ACTION_CONTROL_PROOF_VERSION || proof.action !== "reject" ||
+      proof.actionSemantics !== "canonical_necessary_only_recipe" || proof.cmpId !== "OneTrust" ||
+      proof.recipeId !== "canonical-cmp:OneTrust:reject:v3" || !proof.frameIdentitySha256 || !proof.authorizedTargetSha256 ||
+      proof.selectorHint !== "#onetrust-reject-all-handler, #onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button" ||
+      !["strictly necessary", "essential cookies"].includes(normalizeConsentControlText(proof.accessibleLabel)) ||
+      classification.intent !== "reject" || classification.variant !== "necessary_only" ||
+      proof.classifierIntent !== classification.intent || proof.classifierConfidence !== classification.confidence ||
+      proof.matchStrength !== classification.matchStrength || proof.matchedLocale !== classification.matchedLocale) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["labelBoundNecessaryOnly"],
+        message: "Necessary-only activation requires authorized named-CMP proof and exact label-bound refusal instructions." });
+    }
+  }
   if (proof.recipeId.startsWith("canonical-control:accept:custom-v1:") && !proof.customControlBinding) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["customControlBinding"], message: "Custom recipe proof must retain its binding." });
   }

@@ -17,9 +17,9 @@
 </head>
 <body data-post-accept-canary-variant="inconsistent">
   <main data-certscore-canary="post-accept-inconsistent"
-        data-expected-acceptance-registration="confirmed"
+        data-expected-acceptance-registration="unconfirmed"
         data-expected-post-accept-activity="false"
-        data-expected-acceptance-contradiction="true">
+        data-expected-acceptance-contradiction="false">
     <p>Owned synthetic scanner-validation canary. No consumer service or account state is involved.</p>
     <section class="banner" id="onetrust-banner-sdk" aria-label="Cookie choices">
       <h1>Cookie choices</h1>
@@ -29,7 +29,7 @@
     </section>
     <section>
       <h2>Expected observation</h2>
-      <p>The CMP cookie transition confirms the action while the retained TCF state continues to deny configured purposes.</p>
+      <p>The click completes, but the opaque CMP cookie transition and denied TCF state do not prove granted consent. Accept registration remains unconfirmed and does not establish an acceptance contradiction.</p>
     </section>
   </main>
   <script src="./post-accept-runtime.js?v=1"></script>

@@ -6,6 +6,8 @@ export type CmpApiConsentSnapshot = {
   canonicalState: string;
   decision: "granted" | "denied" | "mixed" | "unknown";
   eventSequence: number;
+  /** Ephemeral event clock for action binding; never a retained state-write timestamp. */
+  eventObservedAtEpochMs?: number;
 };
 
 export async function readCmpApiConsentSnapshot(
@@ -49,16 +51,18 @@ export async function readCmpApiConsentSnapshot(
       const target = window as unknown as {
         Termly?: {
           getConsentState?: () => unknown;
-          on?: (event: string, callback: (data: any) => void) => void;
+          on?: (event: string, callback: (data: { categories?: unknown } | null) => void) => void;
         };
         __certscoreTermlyConsentEvents?: {
           sequence: number;
-          consentState?: unknown;
+          categories?: string[];
+          observedAtEpochMs?: number;
         };
       };
       if (!target.Termly || typeof target.Termly.getConsentState !== "function") return undefined;
       if (!target.__certscoreTermlyConsentEvents && typeof target.Termly.on === "function") {
-        const tracker = { sequence: 0, consentState: undefined as unknown };
+        const tracker = { sequence: 0, categories: undefined as string[] | undefined,
+          observedAtEpochMs: undefined as number | undefined };
         Object.defineProperty(target, "__certscoreTermlyConsentEvents", {
           configurable: false,
           enumerable: false,
@@ -66,17 +70,27 @@ export async function readCmpApiConsentSnapshot(
           writable: false,
         });
         target.Termly.on("consent", (data) => {
+          // Termly's documented event carries the complete approved category
+          // list, not a consentState object. Do not retain cookies or UUIDs.
+          // Reject malformed/unknown categories before counting a fresh event.
+          const categories = data?.categories;
+          const known = ["essential", "performance", "analytics", "advertising", "social_networking", "unclassified"];
+          if (!Array.isArray(categories) || categories.length > known.length ||
+            categories.some(category => typeof category !== "string" || !known.includes(category)) ||
+            new Set(categories).size !== categories.length) return;
           tracker.sequence += 1;
-          tracker.consentState = data?.consentState;
+          tracker.categories = categories.slice();
+          tracker.observedAtEpochMs = Date.now();
         });
       }
-      const raw = target.__certscoreTermlyConsentEvents?.consentState ??
-        await Promise.resolve(target.Termly.getConsentState());
-      if (!raw || typeof raw !== "object") return undefined;
-      const entries = Object.entries(raw as Record<string, unknown>)
-        .filter(([key, value]) =>
-          typeof value === "boolean" && key.toLowerCase() !== "essential"
-        )
+      const categoryNames = ["performance", "analytics", "advertising", "social_networking", "unclassified"];
+      const eventCategories = target.__certscoreTermlyConsentEvents?.categories;
+      const raw = eventCategories
+        ? Object.fromEntries(categoryNames.map(category => [category, eventCategories.includes(category)]))
+        : await Promise.resolve(target.Termly.getConsentState());
+      if (!raw || typeof raw !== "object" || Array.isArray(raw) ||
+        categoryNames.some(category => typeof (raw as Record<string, unknown>)[category] !== "boolean")) return undefined;
+      const entries = categoryNames.map(key => [key, (raw as Record<string, unknown>)[key]] as const)
         .sort(([left], [right]) => left.localeCompare(right));
       if (entries.length === 0) return undefined;
       const values = entries.map(([, value]) => value === true);
@@ -89,17 +103,19 @@ export async function readCmpApiConsentSnapshot(
         canonicalState: JSON.stringify(entries),
         decision,
         eventSequence: target.__certscoreTermlyConsentEvents?.sequence ?? 0,
+        ...(eventCategories ? { eventObservedAtEpochMs: target.__certscoreTermlyConsentEvents?.observedAtEpochMs } : {}),
       };
     }
 
     const target = window as unknown as {
       airgap?: {
         getConsent?: () => { purposes?: unknown; timestamp?: unknown };
-        sync?: () => Promise<unknown>;
       };
     };
     if (!target.airgap || typeof target.airgap.getConsent !== "function") return undefined;
-    if (typeof target.airgap.sync === "function") await target.airgap.sync().catch(() => undefined);
+    // getConsent reads the current local state. Cross-domain synchronization
+    // is neither a passive read nor a prerequisite for confirming this click;
+    // awaiting it can exhaust the existing bounded confirmation window.
     const consent = target.airgap.getConsent();
     const purposes = consent?.purposes;
     if (!purposes || typeof purposes !== "object") return undefined;

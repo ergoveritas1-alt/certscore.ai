@@ -188,7 +188,7 @@ type LambdaLaneTimingSummary = {
 };
 
 type MirroredLambdaArtifact = {
-  field: "manifestUri" | "scanArtifactUri" | "reviewArtifactUri" | "reportAdapterArtifactUri" | "auxiliaryArtifact";
+  field: "manifestUri" | "scanArtifactUri" | "reviewArtifactUri" | "reportAdapterArtifactUri" | "postAcceptPacketUri" | "auxiliaryArtifact";
   fileName: string;
   localPath: string;
   sha256: string;
@@ -1747,6 +1747,7 @@ async function mirrorS3Artifact(input: {
     throw new Error(`Lambda artifact size mismatch for ${input.fileName}.`);
   }
   const localPath = path.join(input.outDir, input.fileName);
+  await mkdir(path.dirname(localPath), { recursive: true });
   await writeFile(localPath, body);
   return {
     field: input.field,
@@ -1837,6 +1838,9 @@ export async function mirrorLocalV2DagLambdaArtifacts(input: {
   const artifacts = [
     { field: "manifestUri" as const, fileName: "LocalV2DagLambdaManifest.json", uri: stringValue(pointers.manifestUri) },
     { field: "scanArtifactUri" as const, fileName: "CanonicalEvidenceBundle.json", uri: scanArtifactUri },
+    // Optional action pixels are served from their original verified packet.
+    // Preserve its lane path in localhost mirrors; production reads S3 directly.
+    { field: "postAcceptPacketUri" as const, fileName: "lanes/accept_observation/PostAcceptEvidencePacket.json", uri: stringValue(pointers.postAcceptPacketUri) },
     { field: "reviewArtifactUri" as const, fileName: "ReviewResult.json", uri: stringValue(pointers.reviewArtifactUri) },
     { field: "reportAdapterArtifactUri" as const, fileName: "V2ReportProjectionDraft.json", uri: stringValue(pointers.reportAdapterArtifactUri) }
   ];

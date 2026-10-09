@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-10-09T11:56:31.335972+00:00",
+  "files": {
+    "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts": "f491d331647adb8c4948bdae1864e3e779572dd07657cf8e03329f30e061c38d",
+    "packages/certscore-scan-core/src/consent-geometry-screenshot-binding.ts": "e00f5251e20b4afb1c5f25857daf5ddb51b86153d4e3f89678936493d33834a0",
+    "packages/certscore-scan-core/src/consent-geometry-screenshot-binding.test.ts": "1db723c974b306ef3df7b89fc13d74e12ba2a576e91e6bb75985b15070ab71c4",
+    "packages/certscore-scan-core/src/pre-consent-geometry-recapture.test.ts": "a3ef0accd29ef1a0494478de040377e21411fac46ba7138accac0ce66653e8b0",
+    "apps/web/server/scans/local-v2-dag-report.ts": "497e542821a10dd2eabc6c18e4412036e0a665216815d109b03c3777fb8bc770",
+    "apps/web/server/scans/local-v2-dag-report.test.ts": "4a53588d86943f8370ebaec448ceeedfd0e591b1f86114a070c18f30d39da642",
+    "package.json": "638c13cbd8160444e393822d8cdaa5d65ce368b13858ec37da1da0040783acfa"
+  },
+  "freshCohortNote": "Fresh10 preceded the final reused-recovery-path correction. That final pointer-only change was checked in the final regression gate; no public retry occurred."
+}

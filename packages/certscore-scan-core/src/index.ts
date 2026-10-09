@@ -37,11 +37,13 @@ import {
   type VisualCaptureSummary,
   SCHEMA_VERSION,
   canonicalEvidenceBundleSchema,
+  domSnapshotArtifactSchema,
   deriveConsentSurfaceInspectionOutcome,
   derivePolicySurfaceInspectionOutcome,
   isVerifiedTerminalConsentPacket,
   verifyConsentControlInspection,
 } from "@certscore/contracts";
+import { isExplicitBlockingChallengeText } from "./consent-geometry-access.js";
 import { resolveCanonicalVendor, resolveVendorObservations } from "@certscore/vendor-resolver";
 import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser } from "playwright";
@@ -2368,6 +2370,22 @@ export function buildScanNoGoAssessment(input: {
   visualAccessReview: VisualAccessReview;
 } | null {
   const representativeScreenshots = input.screenshots.filter(isRepresentativeScreenshotArtifact);
+  const blockingFrameSnapshot = input.domSnapshots.find(snapshot => {
+    const parsed = domSnapshotArtifactSchema.safeParse(snapshot);
+    if (!parsed.success) return false;
+    const retained = parsed.data, proof = retained.blockingFrameChallenge;
+    if (!proof || retained.artifactId !== "dom_blocking_frame_challenge" ||
+      retained.consentStateAtTime !== "pre_consent" || !retained.documentIdentity?.token ||
+      proof.viewportCoverage < 0.8 || proof.hitTestMatches < 4 ||
+      !isExplicitBlockingChallengeText(retained.textExcerpt ?? "")) return false;
+    return representativeScreenshots.some(image => image.path === proof.screenshotArtifactRef &&
+      image.url === retained.url && image.documentIdentity?.source === retained.documentIdentity?.source &&
+      image.documentIdentity?.token === retained.documentIdentity?.token &&
+      image.consentStateAtTime === "pre_consent" && image.retentionStatus !== "withheld" &&
+      image.captureMethod && ["primary_full_page", "primary_viewport_fallback"].includes(image.captureMethod) &&
+      retained.capturedAtMs >= image.capturedAtMs && retained.capturedAtMs - image.capturedAtMs <= 2000 &&
+      !representativeScreenshots.some(later => later.capturedAtMs > retained.capturedAtMs));
+  });
   const navigationFailureText = input.modulesRun
     .find((moduleRun) =>
       moduleRun.moduleName === "preConsentRuntimeScanner" &&
@@ -2427,6 +2445,7 @@ export function buildScanNoGoAssessment(input: {
 
   const domTextCandidates = uniqueStrings(
     input.domSnapshots
+      .filter(snapshot => snapshot.artifactId !== "dom_blocking_frame_challenge" && !snapshot.blockingFrameChallenge)
       .map((snapshot) => boundedScanNoGoText(snapshot.textExcerpt))
       .filter((text): text is string => Boolean(text)),
   );
@@ -2543,7 +2562,11 @@ export function buildScanNoGoAssessment(input: {
   const explicitTextChallenge = textPageState?.reasonCode === "captcha_or_challenge"
     ? textPageState
     : null;
-  const pageState = challengePageState ?? explicitTextChallenge ?? httpPageState ?? textPageState;
+  const blockingFramePageState: ClassifiedNoGoPageState | null = blockingFrameSnapshot
+    ? { confidence: 0.95, evidenceText: blockingFrameSnapshot.textExcerpt!.slice(0, 360), hardTerminal: true,
+        reasonCode: "captcha_or_challenge", visualPageState: "captcha_or_challenge" }
+    : null;
+  const pageState = blockingFramePageState ?? challengePageState ?? explicitTextChallenge ?? httpPageState ?? textPageState;
   const visualBlankPageState: ClassifiedNoGoPageState | null = visuallyBlankSuccessfulPage
     ? {
         confidence: 0.94,
@@ -2710,6 +2733,7 @@ export function buildScanNoGoAssessment(input: {
     visualScreenshotNoGoConfidence: screenshot ? confidence : undefined,
     reasonCodes: [primaryReasonCode, "scan_no_go_corroborated"],
     corroboratorCodes: [
+      blockingFrameSnapshot ? "viewport_blocking_frame_challenge_observed" : null,
       securityChallengeRequestObserved ? "network_security_challenge_request_observed" : null,
       networkChallengeEvidence?.corroboratorCode ?? null,
       settledPageState ? "terminal_page_text_or_status_observed" : null,
@@ -2721,6 +2745,7 @@ export function buildScanNoGoAssessment(input: {
     ].filter((value): value is string => Boolean(value)),
     contradictorCodes: decision === "continue_with_diagnostics" ? positiveSiteSignals : [],
     supportingSignals: {
+      blockingFrameChallengeObserved: Boolean(blockingFrameSnapshot),
       challengeSignalsDetected: securityChallengeRequestObserved,
       documentStatusBlocked: blockedMainDocument,
       expectedOriginReached: mainDocumentStatus !== null && mainDocumentStatus >= 200 && mainDocumentStatus < 400,

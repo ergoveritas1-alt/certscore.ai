@@ -181,9 +181,15 @@ test("collectConsentGeometryPageAccess bounds hanging frame text extraction", as
     supplementalBodyText: "Supplemental privacy text.",
   });
 
-  assert.equal(diagnostic.status, "loaded");
-  assert.match(diagnostic.textExcerpt ?? "", /We use cookies/);
+  assert.equal(diagnostic.status, "unknown", "a child document cannot substitute for the missing main-document read");
+  assert.ok(diagnostic.reasonCodes.includes("main_document_access_read_unavailable"));
   assert.ok(Date.now() - startedAt < 250);
+  for (const [httpStatus, status] of [[403, "access_no_go"], [429, "rate_limited_or_security_challenge"], [504, "timeout"]] as const) {
+    const failedRead = await collectConsentGeometryPageAccess(page as never, httpStatus, { frameTextTimeoutMs: 20 });
+    assert.equal(failedRead.status, status, "independent HTTP evidence survives a failed document text read");
+    assert.ok(failedRead.reasonCodes.includes(`http_status_${httpStatus}`));
+    assert.ok(failedRead.reasonCodes.includes("main_document_access_read_unavailable"));
+  }
 });
 
 test("egress diagnostic detects configured proxy env without exposing value", () => {

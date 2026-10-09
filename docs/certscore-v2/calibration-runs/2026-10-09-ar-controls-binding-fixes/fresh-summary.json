@@ -1,0 +1,143 @@
+{
+  "runKey": "ar-controls-binding-fresh10-20261009",
+  "localOnly": true,
+  "noDeployment": true,
+  "scope": "fresh isolated passive consent-proof lane; no actions, forms or model calls",
+  "egress": "local California; en-IE locale; not a production EU replication",
+  "generatedAt": "2026-10-09T11:49:15.832Z",
+  "results": [
+    {
+      "url": "https://podtrac.com/",
+      "scanId": "6c0331c7-350b-48a0-a4ad-52318be2d701",
+      "startedAt": "2026-10-09T11:48:21.536Z",
+      "completedAt": "2026-10-09T11:48:25.166Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 3630,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "scanId": "39c79661-b5dd-444f-995e-2d0cfa39876c",
+      "startedAt": "2026-10-09T11:48:21.535Z",
+      "completedAt": "2026-10-09T11:48:26.101Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 4566,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://ihaveporn.co/",
+      "scanId": "a9dce21c-477a-48ca-8cc9-0f70cafbe788",
+      "startedAt": "2026-10-09T11:48:25.166Z",
+      "completedAt": "2026-10-09T11:48:35.498Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 10332,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "71e4f1fb-83ce-4193-a2ef-fb48482f72d4",
+      "startedAt": "2026-10-09T11:48:26.101Z",
+      "completedAt": "2026-10-09T11:48:33.386Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 7285,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "7fac1779-e9c6-45f2-a8b0-c280a45cb7c7",
+      "startedAt": "2026-10-09T11:48:33.386Z",
+      "completedAt": "2026-10-09T11:48:39.621Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 6235,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://luminpdf.com/",
+      "scanId": "080f4d89-a718-4c50-bb0c-331bf223298d",
+      "startedAt": "2026-10-09T11:48:35.498Z",
+      "completedAt": "2026-10-09T11:48:41.559Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 6061,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://earth.org/",
+      "scanId": "04684fed-900e-45b3-8bb4-70a61b9225f7",
+      "startedAt": "2026-10-09T11:48:39.621Z",
+      "completedAt": "2026-10-09T11:48:49.945Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 10324,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://idrama.video/",
+      "scanId": "cb0c3c25-a29b-4a24-bc21-8e004e4c56bf",
+      "startedAt": "2026-10-09T11:48:41.559Z",
+      "completedAt": "2026-10-09T11:48:54.341Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 12782,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://uema.br/",
+      "scanId": "c5ead21a-c057-4447-97dc-ac24207ed1c5",
+      "startedAt": "2026-10-09T11:48:49.946Z",
+      "completedAt": "2026-10-09T11:49:00.524Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 10578,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    },
+    {
+      "url": "https://upshow.tv/",
+      "scanId": "a5fdf311-e255-48ab-a21c-669f17389bc2",
+      "startedAt": "2026-10-09T11:48:54.341Z",
+      "completedAt": "2026-10-09T11:49:15.831Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "durationMs": 21490,
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": [
+          "potential_security_challenge",
+          "scan_no_go_corroborated"
+        ]
+      }
+    }
+  ]
+}

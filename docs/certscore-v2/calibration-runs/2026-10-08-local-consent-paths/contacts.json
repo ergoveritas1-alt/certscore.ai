@@ -1,0 +1,137 @@
+{
+  "generatedAt": "2026-10-09T02:50:29.264066+00:00",
+  "results": [
+    {
+      "url": "https://www.cimediacloud.com/",
+      "startedAt": "2026-10-09T02:30:33.838Z",
+      "completedAt": "2026-10-09T02:30:46.697Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://mojohost.com/",
+      "startedAt": "2026-10-09T02:30:46.699Z",
+      "completedAt": "2026-10-09T02:30:57.972Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.mailerlite.com/",
+      "startedAt": "2026-10-09T02:30:57.974Z",
+      "completedAt": "2026-10-09T02:31:17.177Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.qobuz.com/",
+      "startedAt": "2026-10-09T02:31:17.180Z",
+      "completedAt": "2026-10-09T02:31:35.951Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://notion.site/",
+      "startedAt": "2026-10-09T02:31:35.953Z",
+      "completedAt": "2026-10-09T02:31:47.471Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://florencebymillsbeauty.com/",
+      "startedAt": "2026-10-09T02:31:47.473Z",
+      "completedAt": "2026-10-09T02:32:02.168Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.cimediacloud.com/",
+      "completedAt": "2026-10-09T02:32:47.043831+00:00",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://notion.site/",
+      "startedAt": "2026-10-09T02:34:34.398Z",
+      "completedAt": "2026-10-09T02:34:40.949Z",
+      "status": "failed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.cimediacloud.com/",
+      "startedAt": "2026-10-09T02:34:35.400Z",
+      "completedAt": "2026-10-09T02:34:42.492Z",
+      "status": "failed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.larazon.es/",
+      "startedAt": "2026-10-09T02:37:02.541Z",
+      "completedAt": "2026-10-09T02:37:21.353Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://notion.site/",
+      "startedAt": "2026-10-09T02:37:08.262Z",
+      "completedAt": "2026-10-09T02:37:20.081Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.aalto.fi/",
+      "startedAt": "2026-10-09T02:37:21.356Z",
+      "completedAt": "2026-10-09T02:37:40.576Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.blick.ch/",
+      "startedAt": "2026-10-09T02:37:40.577Z",
+      "completedAt": "2026-10-09T02:37:59.301Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://notion.site/",
+      "startedAt": "2026-10-09T02:40:42.845Z",
+      "completedAt": "2026-10-09T02:40:55.205Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.aalto.fi/",
+      "startedAt": "2026-10-09T02:46:18.468Z",
+      "completedAt": "2026-10-09T02:46:29.500Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://spotify.com",
+      "startedAt": "2026-10-09T02:46:38.520Z",
+      "completedAt": "2026-10-09T02:46:57.307Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://hubspot.com",
+      "startedAt": "2026-10-09T02:46:57.308Z",
+      "completedAt": "2026-10-09T02:47:04.438Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://hubspot.com",
+      "startedAt": "2026-10-09T02:48:17.416Z",
+      "completedAt": "2026-10-09T02:48:21.305Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    },
+    {
+      "url": "https://www.aalto.fi/",
+      "startedAt": "2026-10-09T02:48:26.614Z",
+      "completedAt": "2026-10-09T02:48:37.271Z",
+      "status": "completed",
+      "scannerRuntimeStarted": true
+    }
+  ]
+}

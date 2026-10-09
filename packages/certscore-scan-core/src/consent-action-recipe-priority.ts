@@ -1,6 +1,9 @@
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { Locator } from "playwright";
 
+/** Shared bounded registry capacity; both action observers fail on overflow. */
+export const CONSENT_ACTION_RECIPE_CANDIDATE_MAX = 25;
+
 /** Resolve CSS scope against the live composed ancestry, including wildcard
  * selectors and shadow hosts. Only registered selectors participate. */
 export async function liveConsentActionCmp(control: Locator,
