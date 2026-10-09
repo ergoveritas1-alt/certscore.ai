@@ -1,0 +1,274 @@
+{
+  "sites": [
+    {
+      "url": "https://adecco.com/",
+      "versions": {
+        "baseline": {
+          "accept": [
+            {
+              "scanId": "b768690d-fde2-43ec-b6b1-44166a81af62",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                "acceptance_registration_not_confirmed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "4e4a2e9d-6a92-4940-8bc9-9ea02475b9d9",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                "refusal_registration_not_confirmed"
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "accept": [
+            {
+              "scanId": "d9607b2a-3fa6-4a9c-a69e-3c3fcf448fba",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "action_dispatch_verified_geometry_fallback",
+                "acceptance_registration_not_confirmed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "5cd58eb7-8eb3-4edc-bfd6-431cf7029663",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "refusal_registration_not_confirmed"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://receitasnestle.com.br/",
+      "versions": {
+        "baseline": {
+          "accept": [
+            {
+              "scanId": "314cbdb6-1480-4915-a3f9-69161c9f531f",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "action_dispatch_verified_geometry_fallback",
+                "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                "acceptance_registration_not_confirmed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "4bb475ff-747f-47cf-9642-d295d6903e7a",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "action_dispatch_verified_geometry_fallback",
+                "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                "refusal_registration_not_confirmed"
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "accept": [
+            {
+              "scanId": "7280e5da-5b29-4548-a014-a502fca55ba6",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "action_dispatch_verified_geometry_fallback",
+                "acceptance_registration_not_confirmed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "e12ec242-0650-4bff-acf7-07a1780785cd",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "action_dispatch_verified_geometry_fallback",
+                "refusal_registration_not_confirmed"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://sodexo.com/",
+      "versions": {
+        "baseline": {
+          "accept": [
+            {
+              "scanId": "a915a20e-1d02-4b2f-9c5e-3bf26481dea5",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                "acceptance_registration_not_confirmed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "9ce1fbf7-7726-446a-a2a3-eb26008a0d7d",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+                "refusal_registration_not_confirmed"
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "accept": [
+            {
+              "scanId": "eb436f48-13e1-49b5-8e9c-2d5e91f93051",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "acceptance_registration_not_confirmed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "ee6dda28-8a44-4781-8214-e687abc5ad64",
+              "click": "completed",
+              "registration": "unconfirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": "window_elapsed",
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "refusal_registration_not_confirmed"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "versions": {
+        "baseline": {
+          "accept": [
+            {
+              "scanId": "e3e22720-70ad-4998-aed5-f7a3c62cb02b",
+              "click": "completed",
+              "registration": "confirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": null,
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "observation_early_exit:non_essential_request_observed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "2cc5dd3d-bea8-46ec-b759-0b484df8354b",
+              "click": "completed",
+              "registration": "confirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": null,
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "observation_early_exit:non_essential_request_observed",
+                "persistence_observation_not_settled_due_to_early_exit"
+              ]
+            }
+          ]
+        },
+        "candidate": {
+          "accept": [
+            {
+              "scanId": "4248497c-e9e1-4a2a-a211-8ce84a1c4fb7",
+              "click": "completed",
+              "registration": "confirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": null,
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "observation_early_exit:non_essential_request_observed"
+              ]
+            }
+          ],
+          "reject": [
+            {
+              "scanId": "c667b7e2-ac6d-4b20-90c4-c29f0c7fd137",
+              "click": "completed",
+              "registration": "confirmed",
+              "proofVersion": "certscore.consent_action_control_proof.v2",
+              "boundedCapture": null,
+              "limitations": [
+                "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+                "redirect_target_resolved_exact:1",
+                "observation_early_exit:non_essential_request_observed",
+                "persistence_observation_not_settled_due_to_early_exit"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "visits": 8,
+  "contacts": 24,
+  "localOnly": true,
+  "populationEstimate": false,
+  "measuredConfirmationImprovement": 0
+}
