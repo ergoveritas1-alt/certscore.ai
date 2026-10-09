@@ -1,0 +1,13 @@
+# Local action-navigation and confirmation diagnostics
+
+This cycle bounds stalled committed-document reads shared by Accept and Reject, makes Reject honor its optional terminal result budget, and records the precise internal OneTrust baseline-verification failure. It does not add action eligibility, a lane, a retry, a timeout extension, a model call, a score effect, or a customer disclaimer. No deployment was performed.
+
+The recovery read returns unknown after at most a 250 ms probe. Reject's configured result budget covers its existing navigation, resolver and capture, and is carried through the existing local headed fallback rather than reset. Budget expiration closes the observer's context and preserves a caller-owned browser. Final cleanup is awaited. This is not a general guarantee against every possible browser-process shutdown hang.
+
+OneTrust confirmation still requires a complete category receipt, stable configuration and cookie identity, and a fresh value hash. Nature and Sodexo diagnostics found five configured categories but four in the pre-click cookie. The missing category is not inferred. The retained internal limitation identifies incomplete category coverage; completed clicks and bounded after-click facts remain separate from confirmed registration.
+
+Verification: 110 action regression tests and 22 focused navigation/OneTrust tests pass; scan-core typecheck and whitespace checks pass. The new navigation test covers a never-resolving document probe and a stalled localhost navigation for each action, with no click, an unknown decision, a retained budget reason, and no leaked context. An initial Reject cleanup assertion failed and was repaired by awaiting the in-flight budget-triggered context close; the final suite passes.
+
+Fresh local paired measurements and methodology are retained in `../calibration-runs/2026-10-09-ar-action-cycle/results.json`. They are diagnostic measurements from three selected sites, with two repeats per source; they do not estimate population defect rates or production latency. Production Reject currently receives its worker deadline through the existing abort signal rather than this newly supported optional result-budget argument. The shared recovery bound applies to both callers. Local macOS headed fallback behavior must not be extrapolated to Lambda.
+
+Remaining work: GoTokyo still fails navigation; incomplete OneTrust receipts remain unconfirmed; necessary-only and Portuguese Reject action eligibility awaits the separately requested cost approval. No new cost-bearing eligibility was implemented. Local diagnostics have no recurring infrastructure increase; central history export/contact persistence is estimated below $0.10 once.

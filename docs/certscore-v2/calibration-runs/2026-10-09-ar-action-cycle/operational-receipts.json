@@ -1,0 +1,42 @@
+{
+  "generatedAt": "2026-10-09T13:03:34.972861+00:00",
+  "centralHistoryExport": "completed:12 target records",
+  "contactPersistence": {
+    "runKey": "ar-action-cycle-20261009",
+    "attemptedSessions": 42,
+    "status": "completed"
+  },
+  "ledgerReview": {
+    "entries": 4,
+    "allCooldown": true,
+    "existingRootEntriesPreserved": true,
+    "nomuraExclusionPreserved": true
+  },
+  "deploymentPerformed": false,
+  "recurringCostIncrease": 0,
+  "oneTimeBookkeepingEstimateUsdLessThan": 0.1,
+  "pending": "New necessary-only/PT Reject action eligibility cost approval; not implemented.",
+  "verification": {
+    "actionRegressions": {
+      "passed": 110,
+      "failed": 0
+    },
+    "focusedNavigationAndOneTrust": {
+      "passed": 22,
+      "failed": 0
+    },
+    "scanCoreTypecheck": "passed",
+    "diffWhitespace": "passed",
+    "lunaReview": {
+      "provenance": "model_assisted_audit",
+      "humanIndependentLabels": false,
+      "countsAndSourceHashes": "verified",
+      "proofSchema": "all16completedClicksValid",
+      "limitations": [
+        "Selected repeated diagnostic sample, not population reliability.",
+        "Reject30s abort budget has60\u2013105ms observed finalization/wrapper overhead.",
+        "Fixture uses caller-owned browser; live GoTokyo verifies owned-browser headed fallback cap."
+      ]
+    }
+  }
+}

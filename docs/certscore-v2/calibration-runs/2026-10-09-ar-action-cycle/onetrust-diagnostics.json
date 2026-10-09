@@ -1,0 +1,374 @@
+{
+  "internalOnly": true,
+  "rawCookieValuesRetained": false,
+  "observations": [
+    {
+      "source": "probe-nature.log",
+      "kind": "onetrust-config-diagnostic",
+      "observation": {
+        "url": "https://www.nature.org/en-us/",
+        "raw": [
+          {
+            "id": "C0001",
+            "status": "always active"
+          },
+          {
+            "id": "C0004",
+            "status": "active"
+          },
+          {
+            "id": "C0002",
+            "status": "active"
+          },
+          {
+            "id": "C0005",
+            "status": "active"
+          },
+          {
+            "id": "C0003",
+            "status": "active"
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-nature.log",
+      "kind": "onetrust-config-diagnostic",
+      "observation": {
+        "url": "https://www.nature.org/en-us/",
+        "raw": [
+          {
+            "id": "C0001",
+            "status": "always active"
+          },
+          {
+            "id": "C0004",
+            "status": "active"
+          },
+          {
+            "id": "C0002",
+            "status": "active"
+          },
+          {
+            "id": "C0005",
+            "status": "active"
+          },
+          {
+            "id": "C0003",
+            "status": "active"
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-nature-2.log",
+      "kind": "onetrust-config-diagnostic",
+      "observation": {
+        "url": "https://www.nature.org/en-us/",
+        "raw": [
+          {
+            "id": "C0001",
+            "status": "always active"
+          },
+          {
+            "id": "C0004",
+            "status": "active"
+          },
+          {
+            "id": "C0002",
+            "status": "active"
+          },
+          {
+            "id": "C0005",
+            "status": "active"
+          },
+          {
+            "id": "C0003",
+            "status": "active"
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-nature-2.log",
+      "kind": "onetrust-cookie-diagnostic",
+      "observation": {
+        "url": "https://www.nature.org/en-us/",
+        "cookies": [
+          {
+            "name": "OptanonConsent",
+            "domain": ".nature.org",
+            "path": "/",
+            "valueSha256": "1ffbd5ee6f0de764eb75d3b1f4a8474d5f2f3db49620fdf7e48898431a6de2eb",
+            "groups": [
+              [
+                "C0001",
+                true
+              ],
+              [
+                "C0004",
+                true
+              ],
+              [
+                "C0002",
+                true
+              ],
+              [
+                "C0003",
+                true
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-nature-2.log",
+      "kind": "onetrust-config-diagnostic",
+      "observation": {
+        "url": "https://www.nature.org/en-us/",
+        "raw": [
+          {
+            "id": "C0001",
+            "status": "always active"
+          },
+          {
+            "id": "C0004",
+            "status": "active"
+          },
+          {
+            "id": "C0002",
+            "status": "active"
+          },
+          {
+            "id": "C0005",
+            "status": "active"
+          },
+          {
+            "id": "C0003",
+            "status": "active"
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-nature-2.log",
+      "kind": "onetrust-cookie-diagnostic",
+      "observation": {
+        "url": "https://www.nature.org/en-us/",
+        "cookies": [
+          {
+            "name": "OptanonConsent",
+            "domain": ".nature.org",
+            "path": "/",
+            "valueSha256": "892e58766d8e2e51b9f026defdf521ef0beecbecc04d04ec1b9ddc0d6e937646",
+            "groups": [
+              [
+                "C0001",
+                true
+              ],
+              [
+                "C0004",
+                true
+              ],
+              [
+                "C0002",
+                true
+              ],
+              [
+                "C0003",
+                true
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-sodexo.log",
+      "kind": "onetrust-config-diagnostic",
+      "observation": {
+        "url": "https://www.sodexo.com/",
+        "raw": [
+          {
+            "id": "1",
+            "status": "always active"
+          },
+          {
+            "id": "2",
+            "status": "inactive"
+          },
+          {
+            "id": "3",
+            "status": "inactive"
+          },
+          {
+            "id": "5",
+            "status": "inactive"
+          },
+          {
+            "id": "4",
+            "status": "inactive"
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-sodexo.log",
+      "kind": "onetrust-cookie-diagnostic",
+      "observation": {
+        "url": "https://www.sodexo.com/",
+        "cookies": [
+          {
+            "name": "OptanonConsent",
+            "domain": ".sodexo.com",
+            "path": "/",
+            "valueSha256": "4f9e1f9c6c1049bf4da15f5654bf4a7dccba4a481d64989dba7034190cbbb1ce",
+            "groups": [
+              [
+                "1",
+                true
+              ],
+              [
+                "2",
+                false
+              ],
+              [
+                "3",
+                false
+              ],
+              [
+                "4",
+                false
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-sodexo.log",
+      "kind": "onetrust-config-diagnostic",
+      "observation": {
+        "url": "https://www.sodexo.com/",
+        "raw": [
+          {
+            "id": "1",
+            "status": "always active"
+          },
+          {
+            "id": "2",
+            "status": "inactive"
+          },
+          {
+            "id": "3",
+            "status": "inactive"
+          },
+          {
+            "id": "5",
+            "status": "inactive"
+          },
+          {
+            "id": "4",
+            "status": "inactive"
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-sodexo.log",
+      "kind": "onetrust-cookie-diagnostic",
+      "observation": {
+        "url": "https://www.sodexo.com/",
+        "cookies": [
+          {
+            "name": "OptanonConsent",
+            "domain": ".sodexo.com",
+            "path": "/",
+            "valueSha256": "a02d049ee616309b802bf6b3d39f26737602e2a463e520944d75efc18503a925",
+            "groups": [
+              [
+                "1",
+                true
+              ],
+              [
+                "2",
+                false
+              ],
+              [
+                "3",
+                false
+              ],
+              [
+                "4",
+                false
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-sodexo.log",
+      "kind": "onetrust-config-diagnostic",
+      "observation": {
+        "url": "https://www.sodexo.com/",
+        "raw": [
+          {
+            "id": "1",
+            "status": "always active"
+          },
+          {
+            "id": "2",
+            "status": "inactive"
+          },
+          {
+            "id": "3",
+            "status": "inactive"
+          },
+          {
+            "id": "5",
+            "status": "inactive"
+          },
+          {
+            "id": "4",
+            "status": "inactive"
+          }
+        ]
+      }
+    },
+    {
+      "source": "probe-sodexo.log",
+      "kind": "onetrust-cookie-diagnostic",
+      "observation": {
+        "url": "https://www.sodexo.com/",
+        "cookies": [
+          {
+            "name": "OptanonConsent",
+            "domain": ".sodexo.com",
+            "path": "/",
+            "valueSha256": "a02d049ee616309b802bf6b3d39f26737602e2a463e520944d75efc18503a925",
+            "groups": [
+              [
+                "1",
+                true
+              ],
+              [
+                "2",
+                false
+              ],
+              [
+                "3",
+                false
+              ],
+              [
+                "4",
+                false
+              ]
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

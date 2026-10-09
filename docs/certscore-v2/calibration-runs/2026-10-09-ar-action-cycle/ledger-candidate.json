@@ -1,0 +1,46 @@
+{
+  "entries": {
+    "https://sodexo.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:50:32.515Z",
+      "lastContactAt": "2026-10-09T12:50:32.515Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sodexo.com/"
+    },
+    "https://gotokyo.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T13:01:58.082Z",
+      "lastContactAt": "2026-10-09T13:01:58.082Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://gotokyo.org/"
+    },
+    "https://unleashedsoftware.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:57:55.843Z",
+      "lastContactAt": "2026-10-09T12:57:55.843Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://unleashedsoftware.com/"
+    },
+    "https://nature.org/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-06T12:49:46.543Z",
+      "lastContactAt": "2026-10-09T12:49:46.543Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://nature.org/"
+    }
+  },
+  "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
+  "updatedAt": "2026-10-09T13:02:17.107Z"
+}

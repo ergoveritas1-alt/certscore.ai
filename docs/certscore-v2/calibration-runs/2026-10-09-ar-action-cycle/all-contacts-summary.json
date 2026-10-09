@@ -1,0 +1,384 @@
+{
+  "runKey": "ar-action-cycle-20261009",
+  "generatedAt": "2026-10-09T13:02:05.054328+00:00",
+  "results": [
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "585d4f5f-ad60-4bdc-8dfa-0e37d3cbf6ab",
+      "startedAt": "2026-10-09T12:57:30.208Z",
+      "completedAt": "2026-10-09T12:57:38.771Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "83f0dd19-dbbb-49b3-99d7-7f4f207e5b0e",
+      "startedAt": "2026-10-09T12:57:30.208Z",
+      "completedAt": "2026-10-09T12:57:35.285Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "e18137a1-abf0-4a63-9fdb-e716688d453f",
+      "startedAt": "2026-10-09T12:57:30.208Z",
+      "completedAt": "2026-10-09T12:57:35.675Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "d47808bc-86ff-483e-beb4-0eb6200389a7",
+      "startedAt": "2026-10-09T12:57:30.549Z",
+      "completedAt": "2026-10-09T12:57:39.138Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "49b71def-e4f5-4aa8-92de-d62dc10e66c5",
+      "startedAt": "2026-10-09T12:57:30.549Z",
+      "completedAt": "2026-10-09T12:57:38.985Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "bee3db6a-d0b8-4d62-b9e8-576478f40915",
+      "startedAt": "2026-10-09T12:57:30.549Z",
+      "completedAt": "2026-10-09T12:57:43.714Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "b1c61fee-ed35-497e-92d0-c2cfd9315053",
+      "startedAt": "2026-10-09T12:57:39.389Z",
+      "completedAt": "2026-10-09T12:57:45.080Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "d85a4007-2738-425f-8ce1-f87ed2950027",
+      "startedAt": "2026-10-09T12:57:39.392Z",
+      "completedAt": "2026-10-09T12:57:42.657Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "50375015-8bc3-434c-90dc-a5523527981b",
+      "startedAt": "2026-10-09T12:57:39.392Z",
+      "completedAt": "2026-10-09T12:57:43.637Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "64427acf-e2fe-4b73-9799-b39e02dda6cd",
+      "startedAt": "2026-10-09T12:57:44.317Z",
+      "completedAt": "2026-10-09T12:57:51.441Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "ac025278-c9eb-4335-833f-91df19de141e",
+      "startedAt": "2026-10-09T12:57:44.318Z",
+      "completedAt": "2026-10-09T12:57:50.644Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "a18c6758-4567-4188-90dc-78154cf536dd",
+      "startedAt": "2026-10-09T12:57:44.318Z",
+      "completedAt": "2026-10-09T12:57:55.737Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "65ab9a05-c51b-4128-a947-7d9654303cc2",
+      "startedAt": "2026-10-09T12:57:45.966Z",
+      "completedAt": "2026-10-09T12:57:51.437Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "e7de6469-82ab-4eb1-9c12-135e68ef0ef7",
+      "startedAt": "2026-10-09T12:57:45.967Z",
+      "completedAt": "2026-10-09T12:57:49.963Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "42a5f1a3-ee41-4e9c-80a2-91461ec8a53e",
+      "startedAt": "2026-10-09T12:57:45.967Z",
+      "completedAt": "2026-10-09T12:57:50.134Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "b649550b-6352-44d9-b4a7-e82b37cec263",
+      "startedAt": "2026-10-09T12:57:52.031Z",
+      "completedAt": "2026-10-09T12:57:56.555Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "978fd269-6143-4ddb-8b29-5ec0df0a124f",
+      "startedAt": "2026-10-09T12:57:52.031Z",
+      "completedAt": "2026-10-09T12:57:55.195Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "scanId": "e060b959-455f-474e-bbd7-3014c3e1fd5a",
+      "startedAt": "2026-10-09T12:57:52.031Z",
+      "completedAt": "2026-10-09T12:57:55.843Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "2c400251-c384-4e80-96fa-19b6f9c13ab4",
+      "startedAt": "2026-10-09T12:57:56.279Z",
+      "completedAt": "2026-10-09T12:58:03.508Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "f6ecdcbd-8b9a-4d65-91ff-268f06d04111",
+      "startedAt": "2026-10-09T12:57:56.279Z",
+      "completedAt": "2026-10-09T12:58:02.780Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "639efd92-01d2-43ad-b3c2-fc04be2d07ba",
+      "startedAt": "2026-10-09T12:57:56.279Z",
+      "completedAt": "2026-10-09T12:58:07.999Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "449c0963-1cd1-4684-b297-3353b3048b08",
+      "startedAt": "2026-10-09T12:57:57.315Z",
+      "completedAt": "2026-10-09T12:58:23.594Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "c0ca7ab7-6af9-4a6f-b78d-fb6e517f4cb7",
+      "startedAt": "2026-10-09T12:57:57.316Z",
+      "completedAt": "2026-10-09T12:59:12.812Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "124d5063-db9b-4488-94f8-660915763572",
+      "startedAt": "2026-10-09T12:57:57.316Z",
+      "completedAt": "2026-10-09T12:59:26.622Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "fabbbe05-4c55-4960-808c-da053554ccba",
+      "startedAt": "2026-10-09T12:58:08.571Z",
+      "completedAt": "2026-10-09T12:58:15.657Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "20652279-94a4-46ce-8b42-9c933e81900c",
+      "startedAt": "2026-10-09T12:58:08.571Z",
+      "completedAt": "2026-10-09T12:58:15.046Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "23038868-ec6a-41c3-b81e-d59cf63d7671",
+      "startedAt": "2026-10-09T12:58:08.571Z",
+      "completedAt": "2026-10-09T12:58:20.452Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "843fd087-09b4-4c5a-a84c-27bde40905c8",
+      "startedAt": "2026-10-09T12:59:27.178Z",
+      "completedAt": "2026-10-09T12:59:53.248Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "8c16b738-209c-414c-9e34-2d4d59081a58",
+      "startedAt": "2026-10-09T12:59:27.179Z",
+      "completedAt": "2026-10-09T12:59:42.740Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "0b456ceb-858e-444b-b4c8-4b641d015fb2",
+      "startedAt": "2026-10-09T12:59:27.179Z",
+      "completedAt": "2026-10-09T12:59:57.284Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "0415995c-a45c-4a72-8061-d25d646c559b",
+      "startedAt": "2026-10-09T12:59:57.929Z",
+      "completedAt": "2026-10-09T13:00:23.841Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "7a25b95c-aa48-4fe2-8136-81b8a40d9bac",
+      "startedAt": "2026-10-09T12:59:57.930Z",
+      "completedAt": "2026-10-09T13:00:13.580Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "8d12bbb0-510f-4637-a3ab-5310c50477fc",
+      "startedAt": "2026-10-09T12:59:57.930Z",
+      "completedAt": "2026-10-09T13:00:27.992Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "7be52952-4fb5-4bbb-ae4e-2468b49d6a20",
+      "startedAt": "2026-10-09T13:00:28.657Z",
+      "completedAt": "2026-10-09T13:00:54.757Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "consent"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "e9d4b372-c871-46e1-a008-015df827a04d",
+      "startedAt": "2026-10-09T13:00:28.658Z",
+      "completedAt": "2026-10-09T13:01:44.027Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "scanId": "783393c3-add7-4721-98b6-2e29fbeac935",
+      "startedAt": "2026-10-09T13:00:28.658Z",
+      "completedAt": "2026-10-09T13:01:58.082Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "cfcc8003-631d-4926-a06f-c81f74bb8a8b",
+      "startedAt": "2026-10-09T12:48:56.164Z",
+      "completedAt": "2026-10-09T12:49:03.480Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "0a0345f3-1b47-4bde-9a45-81561eb85190",
+      "startedAt": "2026-10-09T12:48:56.165Z",
+      "completedAt": "2026-10-09T12:49:08.316Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "e9a75d3e-9fde-488d-ac03-e145b1654460",
+      "startedAt": "2026-10-09T12:49:33.649Z",
+      "completedAt": "2026-10-09T12:49:41.370Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://nature.org/",
+      "scanId": "fee875b7-b1c8-4bf8-bbfc-0a7a8f15182f",
+      "startedAt": "2026-10-09T12:49:33.650Z",
+      "completedAt": "2026-10-09T12:49:46.543Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "1f5311c4-3b6f-41e1-ae3b-03d27bb45caa",
+      "startedAt": "2026-10-09T12:50:29.187Z",
+      "completedAt": "2026-10-09T12:50:34.872Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "accept"
+    },
+    {
+      "url": "https://sodexo.com/",
+      "scanId": "10ab5104-8f63-46ff-8472-8c39e10eccf0",
+      "startedAt": "2026-10-09T12:50:29.190Z",
+      "completedAt": "2026-10-09T12:50:32.515Z",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "lane": "reject"
+    }
+  ]
+}

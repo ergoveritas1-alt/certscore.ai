@@ -1,0 +1,37 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-09T12:54:39.695Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "ar-action-cycle-20261009",
+  "selected": [
+    {
+      "url": "https://nature.org/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "role": "owner_authorized_paired_comparison",
+      "lanes": [
+        "consent_controls"
+      ]
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "role": "owner_authorized_paired_regression",
+      "lanes": [
+        "consent_controls"
+      ]
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner authorized repeat live sites at will and next fix cycle. Excludes known blocked/do_not_calibrate targets.",
+    "appliedToUrls": [
+      "https://gotokyo.org/",
+      "https://nature.org/",
+      "https://unleashedsoftware.com/"
+    ]
+  }
+}

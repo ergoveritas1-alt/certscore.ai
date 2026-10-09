@@ -1,0 +1,4710 @@
+{
+  "runKey": "ar-action-cycle-20261009",
+  "generatedAt": "2026-10-09T13:02:05.054328+00:00",
+  "localOnly": true,
+  "deployed": false,
+  "protocol": "3 selected sites;2 repeats/source balanced ABBA/BAAB. Before is frozen previous working source;after adds bounded recovery and explicit Reject budget. Same local identity and independent fresh consent/Accept/Reject sessions. Legacy Reject ignores30s input;after enforces it. No forms/scanner model calls/deployment.",
+  "visits": 12,
+  "benchmarkSessions": 36,
+  "diagnosticSessions": 6,
+  "totalContactSessions": 42,
+  "metrics": {
+    "baseline": {
+      "accept": {
+        "sessions": 6,
+        "completedClicks": 4,
+        "verifiedClickProofs": 4,
+        "confirmed": 2,
+        "unconfirmedClicked": 2
+      },
+      "reject": {
+        "sessions": 6,
+        "completedClicks": 4,
+        "verifiedClickProofs": 4,
+        "confirmed": 2,
+        "unconfirmedClicked": 2
+      }
+    },
+    "candidate": {
+      "accept": {
+        "sessions": 6,
+        "completedClicks": 4,
+        "verifiedClickProofs": 4,
+        "confirmed": 2,
+        "unconfirmedClicked": 2
+      },
+      "reject": {
+        "sessions": 6,
+        "completedClicks": 4,
+        "verifiedClickProofs": 4,
+        "confirmed": 2,
+        "unconfirmedClicked": 2
+      }
+    }
+  },
+  "timing": {
+    "nature.org": {
+      "baseline": {
+        "accept": {
+          "samplesMs": [
+            8436,
+            6475
+          ],
+          "medianMs": 7455.5
+        },
+        "reject": {
+          "samplesMs": [
+            13165,
+            11881
+          ],
+          "medianMs": 12523.0
+        }
+      },
+      "candidate": {
+        "accept": {
+          "samplesMs": [
+            6326,
+            6501
+          ],
+          "medianMs": 6413.5
+        },
+        "reject": {
+          "samplesMs": [
+            11419,
+            11720
+          ],
+          "medianMs": 11569.5
+        }
+      }
+    },
+    "unleashedsoftware.com": {
+      "baseline": {
+        "accept": {
+          "samplesMs": [
+            3265,
+            3996
+          ],
+          "medianMs": 3630.5
+        },
+        "reject": {
+          "samplesMs": [
+            4245,
+            4167
+          ],
+          "medianMs": 4206.0
+        }
+      },
+      "candidate": {
+        "accept": {
+          "samplesMs": [
+            5077,
+            3164
+          ],
+          "medianMs": 4120.5
+        },
+        "reject": {
+          "samplesMs": [
+            5467,
+            3812
+          ],
+          "medianMs": 4639.5
+        }
+      }
+    },
+    "gotokyo.org": {
+      "baseline": {
+        "accept": {
+          "samplesMs": [
+            75496,
+            75369
+          ],
+          "medianMs": 75432.5
+        },
+        "reject": {
+          "samplesMs": [
+            89306,
+            89424
+          ],
+          "medianMs": 89365.0
+        }
+      },
+      "candidate": {
+        "accept": {
+          "samplesMs": [
+            15561,
+            15650
+          ],
+          "medianMs": 15605.5
+        },
+        "reject": {
+          "samplesMs": [
+            30105,
+            30062
+          ],
+          "medianMs": 30083.5
+        }
+      }
+    }
+  },
+  "actionsAndVisits": [
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "durationMs": 8563,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "durationMs": 5077,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 3932,
+        "acceptanceRegisteredAtMs": 4496,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 4496,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "8580499487bda5ecc23718529a2354542dabf88815ddc84eae5a8fdd462b9e98",
+            "corroboratingOnly": false
+          },
+          {
+            "witnessType": "banner_transition",
+            "observedAtMs": 4496,
+            "corroboratingOnly": true
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 153,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "registration_timestamp_is_observation_upper_bound",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/candidate-1/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "durationMs": 5467,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 5071,
+        "refusalRegisteredAtMs": 5145,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 5145,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_denied_decision_after_action",
+            "observedStateHash": "2bdd788c40bca5c1b43b9a6b9bd5ef89743566369ee0ac13b358f2167cc55b0a",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 3376,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/candidate-1/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "durationMs": 8589,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "durationMs": 8436,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "acceptanceExercised": false,
+        "actionDispatchedAtMs": 5383,
+        "reason": "cmp_acceptance_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 152,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v1",
+        "action": "accept",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 5383,
+        "captureEndedAtMs": 8394,
+        "requestedWindowMs": 3000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5419,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5419,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_visit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5420,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_ppn",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5420,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_invisit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5420,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_pdom",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5420,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_sq",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5420,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga_KC7E53LEVG",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5428,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5431,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5432,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonAlertBoxClosed",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5434,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5434,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5435,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5435,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5437,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5437,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5437,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5437,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5437,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5438,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "AMCV_5D7F123F5245B1730A490D45%40AdobeOrg",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5451,
+            "nonEssential": true,
+            "vendor": "Adobe"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5619,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5650,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5650,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_clsk",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5994,
+            "nonEssential": true,
+            "vendor": "Microsoft"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6193,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6193,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6193,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6193,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6194,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6194,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6194,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6194,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6194,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_accept_request_97",
+          "post_accept_request_98",
+          "post_accept_request_99",
+          "post_accept_request_100",
+          "post_accept_request_101",
+          "post_accept_request_102",
+          "post_accept_request_103",
+          "post_accept_request_104",
+          "post_accept_request_105",
+          "post_accept_request_106",
+          "post_accept_request_107",
+          "post_accept_request_108",
+          "post_accept_request_109",
+          "post_accept_request_110",
+          "post_accept_request_111",
+          "post_accept_request_112",
+          "post_accept_request_113",
+          "post_accept_request_114",
+          "post_accept_request_115",
+          "post_accept_request_116",
+          "post_accept_request_117",
+          "post_accept_request_118",
+          "post_accept_request_119",
+          "post_accept_request_120",
+          "post_accept_request_121",
+          "post_accept_request_122",
+          "post_accept_request_123",
+          "post_accept_request_124",
+          "post_accept_request_125",
+          "post_accept_request_126",
+          "post_accept_request_127",
+          "post_accept_request_128",
+          "post_accept_request_129",
+          "post_accept_request_130",
+          "post_accept_request_131",
+          "post_accept_request_132",
+          "post_accept_request_133",
+          "post_accept_request_134",
+          "post_accept_request_135",
+          "post_accept_request_136",
+          "post_accept_request_137",
+          "post_accept_request_138",
+          "post_accept_request_139",
+          "post_accept_request_140",
+          "post_accept_request_141",
+          "post_accept_request_142",
+          "post_accept_request_143",
+          "post_accept_request_144",
+          "post_accept_request_145",
+          "post_accept_request_146",
+          "post_accept_request_147",
+          "post_accept_request_148",
+          "post_accept_request_149"
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/baseline-1/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "durationMs": 13165,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "refusalExercised": false,
+        "actionDispatchedAtMs": 5124,
+        "reason": "cmp_rejection_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 2586,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v2",
+        "action": "reject",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 5124,
+        "captureEndedAtMs": 13134,
+        "requestedWindowMs": 8000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 5195,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 5195,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 5195,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 5195,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 5196,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 5196,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid",
+            "hostname": "nature.org",
+            "observedAtMs": 5198,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid_C89S8MDDQ966AV1CSJM0",
+            "hostname": "nature.org",
+            "observedAtMs": 5198,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5201,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5201,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5201,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "AMCV_5D7F123F5245B1730A490D45%40AdobeOrg",
+            "hostname": "nature.org",
+            "observedAtMs": 5201,
+            "nonEssential": true,
+            "vendor": "Adobe"
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_rdt_cfg",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5261,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "_cltk",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5370,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_clck",
+            "hostname": "nature.org",
+            "observedAtMs": 5370,
+            "nonEssential": true,
+            "vendor": "Microsoft"
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5429,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5429,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ndp_settings",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5437,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ndp_settings_expiry",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5437,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5505,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5505,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5505,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 5562,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5628,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_token",
+            "hostname": "nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_consent",
+            "hostname": "nature.org",
+            "observedAtMs": 5629,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_clsk",
+            "hostname": "nature.org",
+            "observedAtMs": 6027,
+            "nonEssential": true,
+            "vendor": "Microsoft"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6202,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 6507,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_refusal_request_97",
+          "post_refusal_request_98",
+          "post_refusal_request_99",
+          "post_refusal_request_100",
+          "post_refusal_request_101",
+          "post_refusal_request_102",
+          "post_refusal_request_103",
+          "post_refusal_request_104",
+          "post_refusal_request_105",
+          "post_refusal_request_106",
+          "post_refusal_request_107",
+          "post_refusal_request_108",
+          "post_refusal_request_109",
+          "post_refusal_request_110",
+          "post_refusal_request_111",
+          "post_refusal_request_112",
+          "post_refusal_request_113",
+          "post_refusal_request_114",
+          "post_refusal_request_115",
+          "post_refusal_request_116",
+          "post_refusal_request_117",
+          "post_refusal_request_118",
+          "post_refusal_request_119",
+          "post_refusal_request_120",
+          "post_refusal_request_121",
+          "post_refusal_request_122",
+          "post_refusal_request_123",
+          "post_refusal_request_124",
+          "post_refusal_request_125",
+          "post_refusal_request_126",
+          "post_refusal_request_127",
+          "post_refusal_request_128",
+          "post_refusal_request_129",
+          "post_refusal_request_130",
+          "post_refusal_request_131",
+          "post_refusal_request_132",
+          "post_refusal_request_133",
+          "post_refusal_request_134",
+          "post_refusal_request_135",
+          "post_refusal_request_136",
+          "post_refusal_request_137",
+          "post_refusal_request_138",
+          "post_refusal_request_139",
+          "post_refusal_request_140",
+          "post_refusal_request_141",
+          "post_refusal_request_142",
+          "post_refusal_request_143",
+          "post_refusal_request_144",
+          "post_refusal_request_145",
+          "post_refusal_request_146",
+          "post_refusal_request_147",
+          "post_refusal_request_148",
+          "post_refusal_request_149"
+        ],
+        "requestAncestry": [
+          {
+            "requestId": "post_refusal_request_97",
+            "rootStartedAtMs": 4536
+          },
+          {
+            "requestId": "post_refusal_request_98",
+            "rootStartedAtMs": 5135
+          },
+          {
+            "requestId": "post_refusal_request_99",
+            "rootStartedAtMs": 5153
+          },
+          {
+            "requestId": "post_refusal_request_100",
+            "rootStartedAtMs": 5153
+          },
+          {
+            "requestId": "post_refusal_request_101",
+            "rootStartedAtMs": 5201
+          },
+          {
+            "requestId": "post_refusal_request_102",
+            "rootStartedAtMs": 5201
+          },
+          {
+            "requestId": "post_refusal_request_103",
+            "rootStartedAtMs": 5202
+          },
+          {
+            "requestId": "post_refusal_request_104",
+            "rootStartedAtMs": 5202
+          },
+          {
+            "requestId": "post_refusal_request_105",
+            "rootStartedAtMs": 5203
+          },
+          {
+            "requestId": "post_refusal_request_106",
+            "rootStartedAtMs": 5204
+          },
+          {
+            "requestId": "post_refusal_request_107",
+            "rootStartedAtMs": 5204
+          },
+          {
+            "requestId": "post_refusal_request_108",
+            "rootStartedAtMs": 5205
+          },
+          {
+            "requestId": "post_refusal_request_109",
+            "rootStartedAtMs": 5373
+          },
+          {
+            "requestId": "post_refusal_request_110",
+            "rootStartedAtMs": 5373
+          },
+          {
+            "requestId": "post_refusal_request_111",
+            "rootStartedAtMs": 4553
+          },
+          {
+            "requestId": "post_refusal_request_112",
+            "rootStartedAtMs": 5374
+          },
+          {
+            "requestId": "post_refusal_request_113",
+            "rootStartedAtMs": 5426
+          },
+          {
+            "requestId": "post_refusal_request_114",
+            "rootStartedAtMs": 5480
+          },
+          {
+            "requestId": "post_refusal_request_115",
+            "rootStartedAtMs": 4553
+          },
+          {
+            "requestId": "post_refusal_request_116",
+            "rootStartedAtMs": 4553
+          },
+          {
+            "requestId": "post_refusal_request_117",
+            "rootStartedAtMs": 5629
+          },
+          {
+            "requestId": "post_refusal_request_118",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_119",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_120",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_121",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_122",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_123",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_124",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_125",
+            "rootStartedAtMs": 5718
+          },
+          {
+            "requestId": "post_refusal_request_126",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_127",
+            "rootStartedAtMs": 5824
+          },
+          {
+            "requestId": "post_refusal_request_128",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_129",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_130",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_131",
+            "rootStartedAtMs": 5630
+          },
+          {
+            "requestId": "post_refusal_request_132",
+            "rootStartedAtMs": 6383
+          },
+          {
+            "requestId": "post_refusal_request_133",
+            "rootStartedAtMs": 6448
+          },
+          {
+            "requestId": "post_refusal_request_134",
+            "rootStartedAtMs": 6449
+          },
+          {
+            "requestId": "post_refusal_request_135",
+            "rootStartedAtMs": 6449
+          },
+          {
+            "requestId": "post_refusal_request_136",
+            "rootStartedAtMs": 6487
+          },
+          {
+            "requestId": "post_refusal_request_137",
+            "rootStartedAtMs": 6530
+          },
+          {
+            "requestId": "post_refusal_request_138",
+            "rootStartedAtMs": 6530
+          },
+          {
+            "requestId": "post_refusal_request_139",
+            "rootStartedAtMs": 6566
+          },
+          {
+            "requestId": "post_refusal_request_140",
+            "rootStartedAtMs": 6572
+          },
+          {
+            "requestId": "post_refusal_request_141",
+            "rootStartedAtMs": 6599
+          },
+          {
+            "requestId": "post_refusal_request_142",
+            "rootStartedAtMs": 6628
+          },
+          {
+            "requestId": "post_refusal_request_143",
+            "rootStartedAtMs": 6629
+          },
+          {
+            "requestId": "post_refusal_request_144",
+            "rootStartedAtMs": 6449
+          },
+          {
+            "requestId": "post_refusal_request_145",
+            "rootStartedAtMs": 6449
+          },
+          {
+            "requestId": "post_refusal_request_146",
+            "rootStartedAtMs": 6935
+          },
+          {
+            "requestId": "post_refusal_request_147",
+            "rootStartedAtMs": 6935
+          },
+          {
+            "requestId": "post_refusal_request_148",
+            "rootStartedAtMs": 8600
+          },
+          {
+            "requestId": "post_refusal_request_149",
+            "rootStartedAtMs": 10164
+          }
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/baseline-1/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "durationMs": 5691,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "durationMs": 3265,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 2581,
+        "acceptanceRegisteredAtMs": 2686,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2686,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "87f35b0712679176949928d198c13bc371087f334bd189500a86726f61964750",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 152,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/baseline-1/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "durationMs": 4245,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 3841,
+        "refusalRegisteredAtMs": 3916,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 3916,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_denied_decision_after_action",
+            "observedStateHash": "c67338ae3c41c24041c5252fdfda8c77dff063e536b3f0ac56cc9581cc3fb103",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 2802,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/baseline-1/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "durationMs": 7124,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "durationMs": 6326,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "acceptanceExercised": false,
+        "actionDispatchedAtMs": 3256,
+        "reason": "cmp_acceptance_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 156,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+        "acceptance_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v1",
+        "action": "accept",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 3256,
+        "captureEndedAtMs": 6280,
+        "requestedWindowMs": 3000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "cookie",
+            "name": "ttcsid_C89S8MDDQ966AV1CSJM0",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3386,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_SI_SID_1.8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3386,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3387,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3387,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_visit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3387,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_ppn",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3388,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_invisit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3388,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_pdom",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3388,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_sq",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3388,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga_KC7E53LEVG",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3392,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3395,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3396,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonAlertBoxClosed",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3398,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3399,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3399,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3399,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3401,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3401,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3401,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3402,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3402,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3402,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3698,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3855,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3855,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3856,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3856,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3856,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3856,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3856,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3856,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3856,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3892,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3892,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4013,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4013,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4013,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4013,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4013,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4014,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_accept_request_97",
+          "post_accept_request_98",
+          "post_accept_request_99",
+          "post_accept_request_100",
+          "post_accept_request_101",
+          "post_accept_request_102",
+          "post_accept_request_103",
+          "post_accept_request_104",
+          "post_accept_request_105",
+          "post_accept_request_106",
+          "post_accept_request_107",
+          "post_accept_request_108",
+          "post_accept_request_109",
+          "post_accept_request_110",
+          "post_accept_request_111",
+          "post_accept_request_112",
+          "post_accept_request_113",
+          "post_accept_request_114",
+          "post_accept_request_115",
+          "post_accept_request_116",
+          "post_accept_request_117",
+          "post_accept_request_118",
+          "post_accept_request_119",
+          "post_accept_request_120",
+          "post_accept_request_121",
+          "post_accept_request_122",
+          "post_accept_request_123",
+          "post_accept_request_124",
+          "post_accept_request_125",
+          "post_accept_request_126",
+          "post_accept_request_127",
+          "post_accept_request_128",
+          "post_accept_request_129",
+          "post_accept_request_130",
+          "post_accept_request_131",
+          "post_accept_request_132",
+          "post_accept_request_133",
+          "post_accept_request_134",
+          "post_accept_request_135",
+          "post_accept_request_136"
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/candidate-1/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "durationMs": 11419,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "refusalExercised": false,
+        "actionDispatchedAtMs": 3377,
+        "reason": "cmp_rejection_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 2031,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+        "refusal_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v2",
+        "action": "reject",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 3377,
+        "captureEndedAtMs": 11386,
+        "requestedWindowMs": 8000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3451,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3451,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3451,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3451,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3451,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3452,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3505,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3505,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_clsk",
+            "hostname": "nature.org",
+            "observedAtMs": 3642,
+            "nonEssential": true,
+            "vendor": "Microsoft"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3720,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4280,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4315,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_token",
+            "hostname": "nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_consent",
+            "hostname": "nature.org",
+            "observedAtMs": 4568,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid_C89S8MDDQ966AV1CSJM0",
+            "hostname": "nature.org",
+            "observedAtMs": 4744,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid",
+            "hostname": "nature.org",
+            "observedAtMs": 4744,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "tt_pixel_is_enrich_ipv6_triggered_by_enrich_am",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4744,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5281,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5281,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5281,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_refusal_request_97",
+          "post_refusal_request_98",
+          "post_refusal_request_99",
+          "post_refusal_request_100",
+          "post_refusal_request_101",
+          "post_refusal_request_102",
+          "post_refusal_request_103",
+          "post_refusal_request_104",
+          "post_refusal_request_105",
+          "post_refusal_request_106",
+          "post_refusal_request_107",
+          "post_refusal_request_108",
+          "post_refusal_request_109",
+          "post_refusal_request_110",
+          "post_refusal_request_111",
+          "post_refusal_request_112",
+          "post_refusal_request_113",
+          "post_refusal_request_114",
+          "post_refusal_request_115",
+          "post_refusal_request_116",
+          "post_refusal_request_117",
+          "post_refusal_request_118",
+          "post_refusal_request_119",
+          "post_refusal_request_120",
+          "post_refusal_request_121",
+          "post_refusal_request_122",
+          "post_refusal_request_123",
+          "post_refusal_request_124",
+          "post_refusal_request_125",
+          "post_refusal_request_126",
+          "post_refusal_request_127",
+          "post_refusal_request_128",
+          "post_refusal_request_129",
+          "post_refusal_request_130",
+          "post_refusal_request_131",
+          "post_refusal_request_132",
+          "post_refusal_request_133",
+          "post_refusal_request_134",
+          "post_refusal_request_135",
+          "post_refusal_request_136",
+          "post_refusal_request_137",
+          "post_refusal_request_138",
+          "post_refusal_request_139",
+          "post_refusal_request_140",
+          "post_refusal_request_141",
+          "post_refusal_request_142",
+          "post_refusal_request_143",
+          "post_refusal_request_144",
+          "post_refusal_request_145",
+          "post_refusal_request_146",
+          "post_refusal_request_147"
+        ],
+        "requestAncestry": [
+          {
+            "requestId": "post_refusal_request_97",
+            "rootStartedAtMs": 3402
+          },
+          {
+            "requestId": "post_refusal_request_98",
+            "rootStartedAtMs": 3454
+          },
+          {
+            "requestId": "post_refusal_request_99",
+            "rootStartedAtMs": 3456
+          },
+          {
+            "requestId": "post_refusal_request_100",
+            "rootStartedAtMs": 3456
+          },
+          {
+            "requestId": "post_refusal_request_101",
+            "rootStartedAtMs": 3456
+          },
+          {
+            "requestId": "post_refusal_request_102",
+            "rootStartedAtMs": 3457
+          },
+          {
+            "requestId": "post_refusal_request_103",
+            "rootStartedAtMs": 3458
+          },
+          {
+            "requestId": "post_refusal_request_104",
+            "rootStartedAtMs": 3458
+          },
+          {
+            "requestId": "post_refusal_request_105",
+            "rootStartedAtMs": 3458
+          },
+          {
+            "requestId": "post_refusal_request_106",
+            "rootStartedAtMs": 3458
+          },
+          {
+            "requestId": "post_refusal_request_107",
+            "rootStartedAtMs": 3459
+          },
+          {
+            "requestId": "post_refusal_request_108",
+            "rootStartedAtMs": 3459
+          },
+          {
+            "requestId": "post_refusal_request_109",
+            "rootStartedAtMs": 3460
+          },
+          {
+            "requestId": "post_refusal_request_110",
+            "rootStartedAtMs": 3461
+          },
+          {
+            "requestId": "post_refusal_request_111",
+            "rootStartedAtMs": 3463
+          },
+          {
+            "requestId": "post_refusal_request_112",
+            "rootStartedAtMs": 3471
+          },
+          {
+            "requestId": "post_refusal_request_113",
+            "rootStartedAtMs": 3554
+          },
+          {
+            "requestId": "post_refusal_request_114",
+            "rootStartedAtMs": 3564
+          },
+          {
+            "requestId": "post_refusal_request_115",
+            "rootStartedAtMs": 3565
+          },
+          {
+            "requestId": "post_refusal_request_116",
+            "rootStartedAtMs": 4168
+          },
+          {
+            "requestId": "post_refusal_request_117",
+            "rootStartedAtMs": 4447
+          },
+          {
+            "requestId": "post_refusal_request_118",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_119",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_120",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_121",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_122",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_123",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_124",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_125",
+            "rootStartedAtMs": 4570
+          },
+          {
+            "requestId": "post_refusal_request_126",
+            "rootStartedAtMs": 4744
+          },
+          {
+            "requestId": "post_refusal_request_127",
+            "rootStartedAtMs": 4745
+          },
+          {
+            "requestId": "post_refusal_request_128",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_129",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_130",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_131",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_132",
+            "rootStartedAtMs": 4569
+          },
+          {
+            "requestId": "post_refusal_request_133",
+            "rootStartedAtMs": 5683
+          },
+          {
+            "requestId": "post_refusal_request_134",
+            "rootStartedAtMs": 5752
+          },
+          {
+            "requestId": "post_refusal_request_135",
+            "rootStartedAtMs": 5755
+          },
+          {
+            "requestId": "post_refusal_request_136",
+            "rootStartedAtMs": 5755
+          },
+          {
+            "requestId": "post_refusal_request_137",
+            "rootStartedAtMs": 5824
+          },
+          {
+            "requestId": "post_refusal_request_138",
+            "rootStartedAtMs": 5858
+          },
+          {
+            "requestId": "post_refusal_request_139",
+            "rootStartedAtMs": 5858
+          },
+          {
+            "requestId": "post_refusal_request_140",
+            "rootStartedAtMs": 5755
+          },
+          {
+            "requestId": "post_refusal_request_141",
+            "rootStartedAtMs": 5902
+          },
+          {
+            "requestId": "post_refusal_request_142",
+            "rootStartedAtMs": 5941
+          },
+          {
+            "requestId": "post_refusal_request_143",
+            "rootStartedAtMs": 5755
+          },
+          {
+            "requestId": "post_refusal_request_144",
+            "rootStartedAtMs": 5974
+          },
+          {
+            "requestId": "post_refusal_request_145",
+            "rootStartedAtMs": 5974
+          },
+          {
+            "requestId": "post_refusal_request_146",
+            "rootStartedAtMs": 7766
+          },
+          {
+            "requestId": "post_refusal_request_147",
+            "rootStartedAtMs": 8418
+          }
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/candidate-1/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "durationMs": 5471,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "durationMs": 3996,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 3070,
+        "acceptanceRegisteredAtMs": 3302,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 3302,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "ff46ceab9a8f42219e2c72950335bc2d1d440ae7ca006ab8f46104db12d4a9d3",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 153,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/baseline-2/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "durationMs": 4167,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 3668,
+        "refusalRegisteredAtMs": 3839,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 3839,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_denied_decision_after_action",
+            "observedStateHash": "5a5611c1e107d8ee67b803f2dfbe3cc92962f332db58138444db014e48301deb",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 2365,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/baseline-2/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "durationMs": 4524,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "durationMs": 3164,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "acceptanceExercised": true,
+        "actionDispatchedAtMs": 2456,
+        "acceptanceRegisteredAtMs": 2613,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 2613,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_granted_decision_after_action",
+            "observedStateHash": "62a20ca3fd8c32c44e87f66444dcb5de0b7f79342ed389e90f7492d1eddd87a8",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 151,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observation_early_exit:non_essential_request_observed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/candidate-2/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://unleashedsoftware.com/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "durationMs": 3812,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "confirmed",
+        "refusalExercised": true,
+        "actionDispatchedAtMs": 3425,
+        "refusalRegisteredAtMs": 3506,
+        "witnesses": [
+          {
+            "witnessType": "cmp_cookie_state",
+            "observedAtMs": 3506,
+            "key": "OptanonConsent",
+            "expectedState": "canonical_cmp_denied_decision_after_action",
+            "observedStateHash": "1bff1c439331399c2795509bb536b076c71fb4bce6ee419ae4bac28570847005",
+            "corroboratingOnly": false
+          }
+        ]
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 2212,
+          "finalExactTargetSha256": "7799f362a1736287580627a2ef5c942e13eab0f6b631f2a489a20014c7c61da1",
+          "redirectCount": 1,
+          "requestedTargetSha256": "383242e6e055b1cd7d97403963002c0d98ce11ffbe49a45ef6fa8a76c1d20d00",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:1",
+        "observation_early_exit:non_essential_request_observed",
+        "persistence_observation_not_settled_due_to_early_exit"
+      ],
+      "proofValid": true,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/unleashedsoftware.com/candidate-2/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "durationMs": 7229,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "durationMs": 6501,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false,
+        "actionability": {
+          "controlVisible": true,
+          "controlEnabled": true,
+          "boundingBoxInViewport": true,
+          "centerHitTargetRelation": "control_or_descendant"
+        }
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "acceptanceExercised": false,
+        "actionDispatchedAtMs": 3400,
+        "reason": "cmp_acceptance_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 154,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "action_dispatch_verified_geometry_fallback",
+        "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+        "acceptance_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v1",
+        "action": "accept",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 3400,
+        "captureEndedAtMs": 6430,
+        "requestedWindowMs": 3000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "cookie",
+            "name": "ttcsid",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3415,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3419,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid_C89S8MDDQ966AV1CSJM0",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3419,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_SI_SID_1.8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3420,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3420,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3421,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_visit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3421,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_ppn",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3421,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_invisit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3422,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_pdom",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3422,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_sq",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3422,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga_KC7E53LEVG",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3429,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3432,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3433,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonAlertBoxClosed",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3435,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3436,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3436,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3436,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3438,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3438,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3438,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3438,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3438,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3439,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3526,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3526,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3703,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3845,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3845,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3845,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3845,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3846,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3846,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3846,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3846,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3846,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "engrid_attribution_memory_cookie",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3982,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4134,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4134,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4134,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4134,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4135,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4135,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4135,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4135,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4135,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid_C89S8MDDQ966AV1CSJM0",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4183,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4183,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_accept_request_97",
+          "post_accept_request_98",
+          "post_accept_request_99",
+          "post_accept_request_100",
+          "post_accept_request_101",
+          "post_accept_request_102",
+          "post_accept_request_103",
+          "post_accept_request_104",
+          "post_accept_request_105",
+          "post_accept_request_106",
+          "post_accept_request_107",
+          "post_accept_request_108",
+          "post_accept_request_109",
+          "post_accept_request_110",
+          "post_accept_request_111",
+          "post_accept_request_112",
+          "post_accept_request_113",
+          "post_accept_request_114",
+          "post_accept_request_115",
+          "post_accept_request_116",
+          "post_accept_request_117",
+          "post_accept_request_118",
+          "post_accept_request_119",
+          "post_accept_request_120",
+          "post_accept_request_121",
+          "post_accept_request_122",
+          "post_accept_request_123"
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/candidate-2/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "durationMs": 11720,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "refusalExercised": false,
+        "actionDispatchedAtMs": 3674,
+        "reason": "cmp_rejection_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 1983,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "onetrust_confirmation_baseline:cookie_group_coverage_incomplete",
+        "refusal_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v2",
+        "action": "reject",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 3674,
+        "captureEndedAtMs": 11687,
+        "requestedWindowMs": 8000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3727,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3727,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3728,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3728,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3728,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3728,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3779,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3779,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ndp_settings",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ndp_settings_expiry",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3961,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_clsk",
+            "hostname": "nature.org",
+            "observedAtMs": 4179,
+            "nonEssential": true,
+            "vendor": "Microsoft"
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid_C89S8MDDQ966AV1CSJM0",
+            "hostname": "nature.org",
+            "observedAtMs": 4818,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid",
+            "hostname": "nature.org",
+            "observedAtMs": 4818,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "tt_pixel_is_enrich_ipv6_triggered_by_enrich_am",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4819,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_refusal_request_97",
+          "post_refusal_request_98",
+          "post_refusal_request_99",
+          "post_refusal_request_100",
+          "post_refusal_request_101",
+          "post_refusal_request_102",
+          "post_refusal_request_103",
+          "post_refusal_request_104",
+          "post_refusal_request_105",
+          "post_refusal_request_106",
+          "post_refusal_request_107",
+          "post_refusal_request_108",
+          "post_refusal_request_109",
+          "post_refusal_request_110",
+          "post_refusal_request_111",
+          "post_refusal_request_112",
+          "post_refusal_request_113"
+        ],
+        "requestAncestry": [
+          {
+            "requestId": "post_refusal_request_97",
+            "rootStartedAtMs": 3685
+          },
+          {
+            "requestId": "post_refusal_request_98",
+            "rootStartedAtMs": 3730
+          },
+          {
+            "requestId": "post_refusal_request_99",
+            "rootStartedAtMs": 3730
+          },
+          {
+            "requestId": "post_refusal_request_100",
+            "rootStartedAtMs": 3730
+          },
+          {
+            "requestId": "post_refusal_request_101",
+            "rootStartedAtMs": 3731
+          },
+          {
+            "requestId": "post_refusal_request_102",
+            "rootStartedAtMs": 3731
+          },
+          {
+            "requestId": "post_refusal_request_103",
+            "rootStartedAtMs": 3732
+          },
+          {
+            "requestId": "post_refusal_request_104",
+            "rootStartedAtMs": 3119
+          },
+          {
+            "requestId": "post_refusal_request_105",
+            "rootStartedAtMs": 3806
+          },
+          {
+            "requestId": "post_refusal_request_106",
+            "rootStartedAtMs": 3870
+          },
+          {
+            "requestId": "post_refusal_request_107",
+            "rootStartedAtMs": 3119
+          },
+          {
+            "requestId": "post_refusal_request_108",
+            "rootStartedAtMs": 4217
+          },
+          {
+            "requestId": "post_refusal_request_109",
+            "rootStartedAtMs": 4242
+          },
+          {
+            "requestId": "post_refusal_request_110",
+            "rootStartedAtMs": 4682
+          },
+          {
+            "requestId": "post_refusal_request_111",
+            "rootStartedAtMs": 4819
+          },
+          {
+            "requestId": "post_refusal_request_112",
+            "rootStartedAtMs": 4820
+          },
+          {
+            "requestId": "post_refusal_request_113",
+            "rootStartedAtMs": 8699
+          }
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/candidate-2/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "consent",
+      "durationMs": 26279,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "accept",
+      "durationMs": 75496,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "target_navigation_failed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "failureClass": "timeout",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout",
+        "observer_result_budget_exhausted_before_packet_finalization"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/baseline-1/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 1,
+      "lane": "reject",
+      "durationMs": 89306,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "target_navigation_failed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "failureClass": "aborted",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:aborted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/baseline-1/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "durationMs": 7086,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "durationMs": 6475,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "acceptanceExercised": false,
+        "actionDispatchedAtMs": 3409,
+        "reason": "cmp_acceptance_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 151,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "acceptance_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v1",
+        "action": "accept",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 3409,
+        "captureEndedAtMs": 6425,
+        "requestedWindowMs": 3000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "cookie",
+            "name": "_SI_SID_1.8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3465,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3465,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3465,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_visit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3466,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_ppn",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3466,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_invisit",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3466,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_pdom",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3467,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "s_sq",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3467,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_ga_KC7E53LEVG",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3472,
+            "nonEssential": true,
+            "vendor": "Google"
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3476,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_gcl_au",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3477,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonAlertBoxClosed",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3479,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3480,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3480,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3480,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3482,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3483,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3483,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3483,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3483,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3484,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3608,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3724,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3724,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_clsk",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3819,
+            "nonEssential": true,
+            "vendor": "Microsoft"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3853,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "tealium_timing",
+            "hostname": "www.nature.org",
+            "observedAtMs": 4150,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_accept_request_97",
+          "post_accept_request_98",
+          "post_accept_request_99",
+          "post_accept_request_100",
+          "post_accept_request_101",
+          "post_accept_request_102",
+          "post_accept_request_103",
+          "post_accept_request_104",
+          "post_accept_request_105",
+          "post_accept_request_106",
+          "post_accept_request_107",
+          "post_accept_request_108",
+          "post_accept_request_109",
+          "post_accept_request_110",
+          "post_accept_request_111",
+          "post_accept_request_112",
+          "post_accept_request_113",
+          "post_accept_request_114",
+          "post_accept_request_115",
+          "post_accept_request_116",
+          "post_accept_request_117",
+          "post_accept_request_118",
+          "post_accept_request_119",
+          "post_accept_request_120",
+          "post_accept_request_121",
+          "post_accept_request_122",
+          "post_accept_request_123",
+          "post_accept_request_124",
+          "post_accept_request_125",
+          "post_accept_request_126",
+          "post_accept_request_127",
+          "post_accept_request_128",
+          "post_accept_request_129",
+          "post_accept_request_130",
+          "post_accept_request_131",
+          "post_accept_request_132",
+          "post_accept_request_133",
+          "post_accept_request_134",
+          "post_accept_request_135",
+          "post_accept_request_136"
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/baseline-2/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://nature.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "durationMs": 11881,
+      "click": {
+        "outcome": "completed",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "unconfirmed",
+        "refusalExercised": false,
+        "actionDispatchedAtMs": 3817,
+        "reason": "cmp_rejection_state_not_observed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "completed",
+        "documentCommitted": true,
+        "finalUrlAuthorized": true,
+        "redirectResolution": {
+          "durationMs": 1974,
+          "finalExactTargetSha256": "a7a26ea893a129b4fc47819d73e0c988cd4d602f64016b007bbb7c12f5c294c0",
+          "redirectCount": 2,
+          "requestedTargetSha256": "49db1f313d2b49e4031629b8ef0282c0fcab72fc0dfb6bcf1eec7b78ab585d2a",
+          "status": "resolved"
+        }
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "redirect_target_resolved_exact:2",
+        "refusal_registration_not_confirmed"
+      ],
+      "proofValid": true,
+      "afterActionCapture": {
+        "policyVersion": "bounded_after_action_capture.v2",
+        "action": "reject",
+        "activationStatus": "completed",
+        "actionDispatchedAtMs": 3817,
+        "captureEndedAtMs": 11838,
+        "requestedWindowMs": 8000,
+        "stopReason": "window_elapsed",
+        "requestsDropped": 0,
+        "storageSnapshotRetained": true,
+        "storageWriteCoverage": "bounded_main_document_sample",
+        "storageWrites": [
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3894,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3894,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3894,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3894,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3894,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 3895,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_token",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_token",
+            "hostname": "nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_sync",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "local_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent_exp",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "dtm_consent",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "dtm_consent",
+            "hostname": "nature.org",
+            "observedAtMs": 3902,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3961,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "ciq2_8492fb88d90001069a15c6dd",
+            "hostname": "www.nature.org",
+            "observedAtMs": 3961,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "_clsk",
+            "hostname": "nature.org",
+            "observedAtMs": 4068,
+            "nonEssential": true,
+            "vendor": "Microsoft"
+          },
+          {
+            "storageType": "cookie",
+            "name": "OptanonConsent",
+            "hostname": "nature.org",
+            "observedAtMs": 4078,
+            "nonEssential": false,
+            "vendor": "OneTrust"
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid_C89S8MDDQ966AV1CSJM0",
+            "hostname": "nature.org",
+            "observedAtMs": 5169,
+            "nonEssential": false
+          },
+          {
+            "storageType": "cookie",
+            "name": "ttcsid",
+            "hostname": "nature.org",
+            "observedAtMs": 5169,
+            "nonEssential": false
+          },
+          {
+            "storageType": "session_storage",
+            "name": "tt_pixel_is_enrich_ipv6_triggered_by_enrich_am",
+            "hostname": "www.nature.org",
+            "observedAtMs": 5169,
+            "nonEssential": false
+          }
+        ],
+        "requestIds": [
+          "post_refusal_request_97",
+          "post_refusal_request_98",
+          "post_refusal_request_99",
+          "post_refusal_request_100",
+          "post_refusal_request_101",
+          "post_refusal_request_102",
+          "post_refusal_request_103",
+          "post_refusal_request_104",
+          "post_refusal_request_105",
+          "post_refusal_request_106",
+          "post_refusal_request_107",
+          "post_refusal_request_108",
+          "post_refusal_request_109",
+          "post_refusal_request_110",
+          "post_refusal_request_111",
+          "post_refusal_request_112",
+          "post_refusal_request_113",
+          "post_refusal_request_114",
+          "post_refusal_request_115",
+          "post_refusal_request_116",
+          "post_refusal_request_117",
+          "post_refusal_request_118",
+          "post_refusal_request_119",
+          "post_refusal_request_120",
+          "post_refusal_request_121",
+          "post_refusal_request_122",
+          "post_refusal_request_123",
+          "post_refusal_request_124",
+          "post_refusal_request_125",
+          "post_refusal_request_126",
+          "post_refusal_request_127",
+          "post_refusal_request_128"
+        ],
+        "requestAncestry": [
+          {
+            "requestId": "post_refusal_request_97",
+            "rootStartedAtMs": 3818
+          },
+          {
+            "requestId": "post_refusal_request_98",
+            "rootStartedAtMs": 3852
+          },
+          {
+            "requestId": "post_refusal_request_99",
+            "rootStartedAtMs": 3852
+          },
+          {
+            "requestId": "post_refusal_request_100",
+            "rootStartedAtMs": 3856
+          },
+          {
+            "requestId": "post_refusal_request_101",
+            "rootStartedAtMs": 3896
+          },
+          {
+            "requestId": "post_refusal_request_102",
+            "rootStartedAtMs": 3897
+          },
+          {
+            "requestId": "post_refusal_request_103",
+            "rootStartedAtMs": 3898
+          },
+          {
+            "requestId": "post_refusal_request_104",
+            "rootStartedAtMs": 3898
+          },
+          {
+            "requestId": "post_refusal_request_105",
+            "rootStartedAtMs": 3898
+          },
+          {
+            "requestId": "post_refusal_request_106",
+            "rootStartedAtMs": 3899
+          },
+          {
+            "requestId": "post_refusal_request_107",
+            "rootStartedAtMs": 3903
+          },
+          {
+            "requestId": "post_refusal_request_108",
+            "rootStartedAtMs": 3904
+          },
+          {
+            "requestId": "post_refusal_request_109",
+            "rootStartedAtMs": 3904
+          },
+          {
+            "requestId": "post_refusal_request_110",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_111",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_112",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_113",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_114",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_115",
+            "rootStartedAtMs": 3965
+          },
+          {
+            "requestId": "post_refusal_request_116",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_117",
+            "rootStartedAtMs": 3904
+          },
+          {
+            "requestId": "post_refusal_request_118",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_119",
+            "rootStartedAtMs": 4467
+          },
+          {
+            "requestId": "post_refusal_request_120",
+            "rootStartedAtMs": 3905
+          },
+          {
+            "requestId": "post_refusal_request_121",
+            "rootStartedAtMs": 4530
+          },
+          {
+            "requestId": "post_refusal_request_122",
+            "rootStartedAtMs": 3904
+          },
+          {
+            "requestId": "post_refusal_request_123",
+            "rootStartedAtMs": 4850
+          },
+          {
+            "requestId": "post_refusal_request_124",
+            "rootStartedAtMs": 5026
+          },
+          {
+            "requestId": "post_refusal_request_125",
+            "rootStartedAtMs": 5108
+          },
+          {
+            "requestId": "post_refusal_request_126",
+            "rootStartedAtMs": 5171
+          },
+          {
+            "requestId": "post_refusal_request_127",
+            "rootStartedAtMs": 5172
+          },
+          {
+            "requestId": "post_refusal_request_128",
+            "rootStartedAtMs": 8857
+          }
+        ]
+      },
+      "packet": "artifacts/ar-action-cycle-20261009/visits/nature.org/baseline-2/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "consent",
+      "durationMs": 26070,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "accept",
+      "durationMs": 15561,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "target_navigation_failed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "failureClass": "timeout",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/candidate-1/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 1,
+      "lane": "reject",
+      "durationMs": 30105,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "aborted",
+        "refusalExercised": false,
+        "reason": "observer_cancelled_before_action",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observer_result_budget_exhausted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/candidate-1/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "consent",
+      "durationMs": 25912,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "accept",
+      "durationMs": 15650,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "target_navigation_failed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "failureClass": "timeout",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/candidate-2/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "candidate",
+      "repeat": 2,
+      "lane": "reject",
+      "durationMs": 30062,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "aborted",
+        "refusalExercised": false,
+        "reason": "observer_cancelled_before_action",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "observer_result_budget_exhausted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/candidate-2/reject/PostRefusalEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "consent",
+      "durationMs": 26100,
+      "click": null,
+      "registration": null,
+      "navigation": null,
+      "limitations": null
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "accept",
+      "durationMs": 75369,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "not_attempted",
+        "acceptanceExercised": false,
+        "reason": "target_navigation_failed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "failureClass": "timeout",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:timeout",
+        "observer_result_budget_exhausted_before_packet_finalization"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/baseline-2/accept/PostAcceptEvidencePacket.json"
+    },
+    {
+      "url": "https://gotokyo.org/",
+      "version": "baseline",
+      "repeat": 2,
+      "lane": "reject",
+      "durationMs": 89424,
+      "click": {
+        "outcome": "not_attempted",
+        "reResolvedBeforeDispatch": false,
+        "confirmationCheckedAfterError": false
+      },
+      "registration": {
+        "status": "not_attempted",
+        "refusalExercised": false,
+        "reason": "target_navigation_failed",
+        "witnesses": []
+      },
+      "navigation": {
+        "outcome": "failed",
+        "failureClass": "aborted",
+        "documentCommitted": false,
+        "finalUrlAuthorized": false
+      },
+      "limitations": [
+        "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+        "target_navigation_failed:aborted",
+        "headed_local_navigation_retry_after:timeout"
+      ],
+      "proofValid": false,
+      "afterActionCapture": null,
+      "packet": "artifacts/ar-action-cycle-20261009/visits/gotokyo.org/baseline-2/reject/PostRefusalEvidencePacket.json"
+    }
+  ],
+  "sourceHashes": {
+    "before": {
+      "count": 490,
+      "sha256": "b9e25634a06d017a07c159110081cb19c685940ea20223e9dcc0fb3cd50fe934"
+    },
+    "after": {
+      "count": 491,
+      "sha256": "6ada651b7d5856afac7959f400e6366035ba5bcb8916246982127ef0df878176"
+    }
+  },
+  "limitations": [
+    "Three selected diagnostic sites with correlated repeats; not a production reliability or defect-rate estimate.",
+    "Legacy Reject ignored the harness 30-second result budget. Candidate honors it. Timing reflects corrected bounding, not successful GoTokyo interaction.",
+    "Local macOS navigation can use the existing headed fallback; AWS Lambda does not use that fallback. Do not extrapolate the measured savings to production.",
+    "Nature incomplete category coverage remains semantically unconfirmed; no missing category was inferred.",
+    "The six instrumented existing-action diagnostic sessions are excluded from paired metrics.",
+    "No new necessary-only or Portuguese Reject click eligibility was enabled; pending cost approval."
+  ]
+}
