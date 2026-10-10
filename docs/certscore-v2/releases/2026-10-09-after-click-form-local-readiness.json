@@ -1,0 +1,77 @@
+{
+  "fullGate": {
+    "gitSha": "25368601d263217c8081498285aebdfb5c3567b5",
+    "command": "pnpm preflight:full",
+    "exitCode": 0,
+    "startedAt": "2026-10-10T00:01:09.821845+00:00",
+    "completedAt": "2026-10-10T00:13:16.042191+00:00",
+    "logSha256": "7d85aae7c1f1925610c5609b73a6b9230a96796c998ca70f64bdb5acd2588e5f",
+    "verificationWorktree": "/Users/benmasek/.codex/worktrees/after-click-form-gate/WC01",
+    "sourceManifestEntries": 4446,
+    "primarySourceMismatches": [],
+    "ciTypecheckReceipt": false
+  },
+  "focusedVerification": {
+    "sourceSha": "25368601d263217c8081498285aebdfb5c3567b5",
+    "checks": {
+      "contracts-tests.log": {
+        "sha256": "5f7c8b6a69070baac68f016c6109fa28f61f948fd1efab08966750eb7f972b89",
+        "bytes": 127836,
+        "tests": 573,
+        "fail": 0
+      },
+      "legacy-browser-tests.log": {
+        "sha256": "c73b7c828715c4a04989dd31fa5bc1fca1281f1d104963b6690fbbc2f30bec4a",
+        "bytes": 25432,
+        "tests": 50,
+        "fail": 0
+      },
+      "browser-tests-final.log": {
+        "sha256": "6037db9f471de6810cfd32f0246e4065ccdbc987377112fc6a1405df49946506",
+        "bytes": 3746,
+        "tests": 4,
+        "fail": 0
+      },
+      "projection-tests-final.log": {
+        "sha256": "f40298e77398ca7e756c72b5b776a758e30bad50c11fb6b35116a7c3290bfa87",
+        "bytes": 4995,
+        "tests": 19,
+        "fail": 0
+      },
+      "public-surface-tests.log": {
+        "sha256": "6cb31dca88d7708116de00b85650dda40d7e10351b5c9f970058491fc993cbbd",
+        "bytes": 21741,
+        "tests": 99,
+        "fail": 0
+      },
+      "contracts-typecheck.log": {
+        "sha256": "32a8443b89449fd03b8b0b84a16b47aa6af9c664d96467e7f60e14325e5e0abc",
+        "bytes": 123,
+        "tests": null,
+        "fail": null
+      },
+      "scan-core-typecheck.log": {
+        "sha256": "b4a890755af2aceccca6100fb8d5b00423e238bf530041c1af46a25b8d7999b6",
+        "bytes": 133,
+        "tests": null,
+        "fail": null
+      },
+      "web-typecheck-final.log": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0,
+        "tests": null,
+        "fail": null
+      }
+    },
+    "visualInspection": {
+      "forms": 2,
+      "valuesMasked": true,
+      "firstFormScopedPrivacyNoticeVisible": true
+    },
+    "verificationScope": "Owned localhost fixtures; no fresh public site contact, deployment, live-report interaction signoff or bot restart.",
+    "approvedIncrementalUsdPerMonthAt100000NewlyAffectedScans": 20
+  },
+  "deploymentStatus": "not deployed",
+  "miniBotStatus": "not installed or restarted; authenticated host access unresolved",
+  "liveReportInteractionSignoff": "pending; prior browser tool security block not bypassed"
+}
