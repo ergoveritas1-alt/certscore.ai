@@ -1,3 +1,5 @@
+import { projectAccessibilityPriorities } from "./accessibility-priority";
+import { comparePriorityReviewFindings } from "./priority-review-order";
 import { projectFormDestinationPriority } from "./form-destination-report";
 import { projectCmsSecurityPriority } from "./cms-security-report";
 import { projectSiteIntegrityPriority, projectSiteIntegritySitePriority, type SiteIntegritySiteReport } from "./site-integrity-report";
@@ -22,13 +24,16 @@ export type PriorityPage = { id: string; url: string; homepage: boolean; finding
 
 /** Presentation of canonical checklist and policy-eligible unified findings only; never promote inventory labels. */
 export function buildSitePriorityReview(rows: GdprEprivacyCoverageChecklistItem[], pages: PriorityPage[], executive: CertScoreFinding[] = [], unified: UnifiedFindingDisplayPacket[] = [], siteIntegrity?: SiteIntegritySiteReport): SitePriorityFinding[] {
-  const priorities: SitePriorityFinding[] = selectCanonicalHighPriorityFindings([...buildChecklistConcernTopFindings(rows), ...executive]).map((finding, index) => {
+  const priorities: SitePriorityFinding[] = selectCanonicalHighPriorityFindings([...buildChecklistConcernTopFindings(rows), ...executive.filter(finding => finding.section !== "Accessibility"), ...projectAccessibilityPriorities(unified)]).map((finding, index) => {
     const policy = finding.evidenceDetails?.policyEvidenceDetails;
     const rowId = policy?.rowId;
     const grouped = Array.isArray(policy?.groupedRuntimeSignals) ? policy.groupedRuntimeSignals : [];
     const rowIds = [String(rowId ?? finding.id), ...grouped.flatMap(item => item && typeof item === "object" && "id" in item && typeof item.id === "string" ? [item.id] : [])];
     const evidenceRows = rows.filter(item => rowIds.includes(item.id));
-    const affected = pages.filter(page => page.findingIds.some(id => rowIds.includes(id)));
+    const axeRows = finding.evidenceDetails?.accessibilityEvidence?.axeEvidence;
+    const accessibilityPages = finding.section === "Accessibility" && Array.isArray(axeRows)
+      ? axeRows.flatMap(row => row && typeof row === "object" && "pageUrl" in row && typeof row.pageUrl === "string" ? [row.pageUrl] : []) : [];
+    const affected = pages.filter(page => page.findingIds.some(id => rowIds.includes(id)) || accessibilityPages.includes(page.url));
     const primary = policy?.primaryRuntimeSignal;
     const components = primary && typeof primary === "object" ? [primary, ...grouped] : [];
     const observations = components.flatMap(component => {
@@ -46,10 +51,11 @@ export function buildSitePriorityReview(rows: GdprEprivacyCoverageChecklistItem[
     const correctionSteps = [...new Set(evidenceRows.flatMap(row => readChecklistRemediation(row.criticalEvidence.retainedEvidence?.remediation)?.steps ?? []))];
     return {
       id: finding.id, rank: index + 1, title: finding.label,
+      ...(finding.section === "Accessibility" ? { priority: "high" as const } : {}),
       summary,
-      status: (evidenceRows.length > 0 && !evidenceRows.some(row => row.assessmentStatus === "gap_observed") && evidenceRows.some(row => row.assessmentStatus === "review_signal")) || policy?.regulatoryConcernKind === "partial_rating" || finding.id === "acceptance_signal_contradicts_action" ? "Partial concern" : "Potential gap",
+      status: finding.section === "Accessibility" ? "Observed" : (evidenceRows.length > 0 && !evidenceRows.some(row => row.assessmentStatus === "gap_observed") && evidenceRows.some(row => row.assessmentStatus === "review_signal")) || policy?.regulatoryConcernKind === "partial_rating" || finding.id === "acceptance_signal_contradicts_action" ? "Partial concern" : "Potential gap",
       evidence: finding.evidencePreview,
-      evidenceJson: { findingId: finding.id, evidenceRefs: finding.evidenceRefs, criticalEvidence: evidenceRows.map(row => ({ rowId: row.id, ...row.criticalEvidence })), pages: affected, observations },
+      evidenceJson: { findingId: finding.id, evidenceRefs: finding.evidenceRefs, ...(finding.section === "Accessibility" ? { evidenceDetails: finding.evidenceDetails } : {}), criticalEvidence: evidenceRows.map(row => ({ rowId: row.id, ...row.criticalEvidence })), pages: affected, observations },
       correctionSteps: correctionSteps.length ? correctionSteps : [finding.remediation],
       ...(observations.length ? { observations } : {}),
       pages: affected.map(({ id, url, homepage }) => ({ id, url, homepage })),
@@ -65,5 +71,5 @@ export function buildSitePriorityReview(rows: GdprEprivacyCoverageChecklistItem[
     ...integrity, rank: priorities.length + 1,
     pages: "pages" in integrity ? integrity.pages : pages.filter(page => page.homepage).map(({ id, url, homepage }) => ({ id, url, homepage })),
   });
-  return priorities.sort((a, b) => Number(b.priority === "high") - Number(a.priority === "high")).map((finding, index) => ({ ...finding, rank: index + 1 }));
+  return priorities.sort(comparePriorityReviewFindings).map((finding, index) => ({ ...finding, rank: index + 1 }));
 }

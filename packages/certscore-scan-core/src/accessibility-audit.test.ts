@@ -44,6 +44,56 @@ test("an evaluated page with no failures completes without a fabricated accessib
   });
 });
 
+test("image-only links retain shared DOM identity without private content or selector inference", async () => {
+  await withPage('<p><a href="/private?secret=1" target="_blank"><img src="data:image/png;base64,AA=="></a></p><img src="data:image/png;base64,AA=="><a href="/other"></a>', async page => {
+    const result = await audit(page);
+    const images = result.violations.find(rule => rule.ruleId === "image-alt")!.representativeNodes;
+    const links = result.violations.find(rule => rule.ruleId === "link-name")!.representativeNodes;
+    assert.equal(images.length, 2);
+    assert.equal(links.length, 2);
+    const linkedImage = images.find(node => node.imageLinkIdentity?.imageOnlyLinkId !== null)!;
+    const imageLink = links.find(node => node.imageLinkIdentity?.imageOnlyLinkId !== null)!;
+    assert.ok(linkedImage.imageLinkIdentity);
+    assert.ok(imageLink.imageLinkIdentity);
+    assert.equal(linkedImage.imageLinkIdentity.imageOnlyLinkId, imageLink.imageLinkIdentity.nodeId);
+    assert.equal(imageLink.imageLinkIdentity.imageOnlyLinkId, imageLink.imageLinkIdentity.nodeId);
+    assert.notEqual(linkedImage.imageLinkIdentity.nodeId, imageLink.imageLinkIdentity.nodeId);
+    assert.equal(images.filter(node => node.imageLinkIdentity?.imageOnlyLinkId === null).length, 1);
+    assert.equal(links.filter(node => node.imageLinkIdentity?.imageOnlyLinkId === null).length, 1);
+    assert.doesNotMatch(JSON.stringify(result), /secret=1|"element":/);
+  });
+});
+
+test("identity uses real child nodes even when sanitized markup would look image-only", async () => {
+  await withPage('<a href="/test"> <img src="data:image/png;base64,AA==">\u200b</a>', async page => {
+    const result = await audit(page);
+    const image = result.violations.find(rule => rule.ruleId === "image-alt")!.representativeNodes[0]!;
+    assert.equal(image.imageLinkIdentity?.imageOnlyLinkId, null, "non-whitespace text prevents image-only classification");
+  });
+});
+
+test("image-link identity remains bounded by the existing example limit", async () => {
+  await withPage('<a href="/test"><img src="data:image/png;base64,AA=="></a>'.repeat(8), async page => {
+    const result = await audit(page);
+    for (const rule of result.violations.filter(rule => ["image-alt", "link-name"].includes(rule.ruleId))) {
+      assert.equal(rule.nodeCount, 8);
+      assert.equal(rule.representativeNodes.length, 5);
+    }
+  });
+});
+
+test("frame selectors cannot manufacture a top-document DOM relationship", async () => {
+  await withPage('<iframe title="Embedded" srcdoc="&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;title&gt;Embedded&lt;/title&gt;&lt;/head&gt;&lt;body&gt;&lt;a href=&quot;/test&quot;&gt;&lt;img src=&quot;data:image/png;base64,AA==&quot;&gt;&lt;/a&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>', async page => {
+    const result = await audit(page);
+    for (const id of ["image-alt", "link-name"]) {
+      const rule = result.violations.find(rule => rule.ruleId === id)!;
+      assert.ok(rule, id);
+      assert.equal(rule.nodeCount, 1);
+      assert.equal(rule.representativeNodes[0]!.imageLinkIdentity, undefined);
+    }
+  });
+});
+
 test("timeout closes the audit page and returns limited coverage with no clean result", async () => {
   await withPage('<p>Content</p>', async page => {
     const closed = page.waitForEvent("close");

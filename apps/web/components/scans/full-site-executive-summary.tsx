@@ -23,7 +23,7 @@ export function buildSiteAssessmentSummary(priorities: ReadonlyArray<{ title: st
   const otherIssues = topFinding && otherTitles.length && otherTitles.every(value => value && value.length <= 80) && otherTitles.join("; ").length <= 140
     ? ` Other issues include ${otherTitles.map(value => `“${value}”`).join(" and ")}.` : "";
   const more = priorities.length > 3 || !topFinding || (priorities.length > 1 && !otherIssues)
-    ? " See Priority review for the full list." : "";
+    ? " See Regulatory Risk Review for the full list." : "";
   return `${lead}${topFinding}${detail}${otherIssues}${more}`;
 }
 
@@ -69,7 +69,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
   return <section aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
       <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold tracking-tight text-zinc-950">Executive overview</h2>{actions}</div>
-      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{statusLabel ? `Site assessment · ${statusLabel}` : pending ? "Scan in progress" : "Site assessment"}</span>
+      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{pending ? statusLabel ?? "Scan in progress" : statusLabel ? `Site assessment · ${statusLabel}` : scannedPages !== null ? `${scannedPages} ${singlePage ? "page" : "pages"} assessed` : "Site assessment"}</span>
     </div>
     <div ref={panesRef} style={{ "--overview-height": `${collapsedHeight}px` } as CSSProperties} className="grid items-start gap-6 p-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)] lg:p-5 lg:gap-8">
       <div className="flex min-w-0 flex-col justify-between gap-5 md:min-h-[var(--overview-height)]">
@@ -94,7 +94,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
       </div>
       <div className="flex min-w-0 flex-col justify-between gap-4 md:min-h-[var(--overview-height)]">
         <div data-overview-block>
-        <h3 className="text-sm font-bold tracking-tight text-zinc-900">{singlePage ? "Single page assessment" : "Site assessment"}</h3>
+        <h3 className="text-sm font-bold tracking-tight text-zinc-900">Assessment highlights</h3>
         {singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600">{homepageVerdict ?? "The single page assessment will appear when ready."}</p>
           : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700">{buildSiteAssessmentSummary(priorities, scannedPages ?? score?.scoredPages ?? null)}</p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{loadingSavedResult ? "Loading the saved site assessment." : pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}

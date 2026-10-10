@@ -8,9 +8,13 @@ import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "./scan-report-summary";
 import { buildApiV2ScanResource, buildApiV2ScanStatus } from "./scan-resource";
 import { buildTimelineReportModel } from "../../components/scans/report-lab/timeline-report-model";
+import { accessibilityProjectionFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
+import { buildUnifiedFindingDisplayPackets } from "../scans/unified-findings";
 import { buildReportDisplayExport } from "./report-display-export";
 import { selectReportEvidenceSection } from "./report-evidence-selection";
 import { projectRetainedActionTimeline } from "../scans/action-timeline-projection";
+import { deriveCanonicalOverallScoreExplanationForReport } from "../../server/scans/canonical-overall-score";
+import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 
 const scanId = "00000000-0000-4000-8000-000000000123";
 const pageUrl = "https://sits.example/en/";
@@ -207,4 +211,57 @@ test("score explanations fail closed for historical, mismatched and unscored res
   assert.equal(projectScanScoreExplanation({ ...scan, snapshot: { ...scan.snapshot, score_version: "historical" } }, 85), null);
   assert.equal(projectScanScoreExplanation({ ...scan, snapshot: { ...scan.snapshot, score_version: null } }, 85), null);
   assert.equal(projectScanFormsSummary({ ...scan, scan: { ...scan.scan, status: "running" } }), null);
+});
+
+test("accessibility presentation preserves the versioned historical score without recalculation", () => {
+  const scan = fixture();
+  scan.snapshot = { ...scan.snapshot!, score_version: "overall-posture.v6" };
+  const accessibilityAudit = accessibilityProjectionFixture({ scanId: scan.scan.id });
+  scan.runtimeArtifacts = { ...scan.runtimeArtifacts, accessibilityAudit };
+  const packets = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { accessibilityAudit },
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const canonical = (scan as unknown as { canonicalReportProjection: { ownerUnifiedFindings: typeof packets; globalUnifiedFindings: typeof packets } }).canonicalReportProjection;
+  canonical.ownerUnifiedFindings = packets;
+  canonical.globalUnifiedFindings = packets;
+  const retained = JSON.stringify(scan);
+  const report = buildTimelineReportModel(scan);
+  assert.ok("findings" in report);
+  assert.ok(report.findings.some(finding => finding.id === "visual_contrast_accessibility_issue" && finding.priority === "high"));
+  assert.ok(report.findings.some(finding => finding.id === "text_alternative_accessibility_issue" && finding.status === "Observed"));
+  assert.match(report.verdict, /4 accessibility issues \(4 high-impact checks\)/);
+  assert.equal(report.accessibilityAudit?.failedRuleCount, 4);
+  assert.equal(report.score.value, 85);
+  assert.equal(buildApiV2ScanResource(scan).score, 85);
+  assert.equal(projectScanScoreExplanation(scan, 85), null);
+  assert.equal(JSON.stringify(scan), retained, "report presentation leaves the retained projection unchanged");
+});
+
+test("fresh accessibility scoring agrees across report, API status and evidence export", () => {
+  const scan = fixture();
+  const accessibilityAudit = accessibilityProjectionFixture({ scanId: scan.scan.id });
+  scan.runtimeArtifacts = { ...scan.runtimeArtifacts, accessibilityAudit };
+  const packets = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { accessibilityAudit },
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const canonical = (scan as unknown as { canonicalReportProjection: { ownerUnifiedFindings: typeof packets; globalUnifiedFindings: typeof packets } }).canonicalReportProjection;
+  canonical.ownerUnifiedFindings = packets;
+  canonical.globalUnifiedFindings = packets;
+  const persisted = getPersistedCanonicalReportProjection(scan)!;
+  const score = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: scan,
+    checklistRows: persisted.checklistRows, unifiedFindings: persisted.globalUnifiedFindings })!;
+  assert.equal(score.score, 75, "15 existing privacy points plus 10 accessibility points");
+  scan.snapshot = { ...scan.snapshot!, certscore_overall: score.score, score_version: score.scoreVersion };
+  const original = JSON.stringify(scan);
+  const api = buildApiV2ScanResource(scan);
+  const status = buildApiV2ScanStatus(scan, { canonicalScan: api });
+  const report = buildTimelineReportModel(scan);
+  const exported = buildReportDisplayExport(report as unknown as Record<string, unknown>) as any;
+  assert.ok("scoreExplanation" in report);
+  assert.equal(api.score, 75);
+  assert.equal(status.score, 75);
+  assert.equal(report.score.value, 75);
+  assert.deepEqual(api.scoreExplanation, report.scoreExplanation);
+  assert.deepEqual(status.scoreExplanation, report.scoreExplanation);
+  assert.deepEqual(exported.scoreExplanation, report.scoreExplanation);
+  assert.equal(api.scoreExplanation?.deductions.find(row => row.family === "accessibility")?.deductionPoints, 10);
+  assert.equal(JSON.stringify(scan), original);
 });

@@ -1,3 +1,6 @@
+import { projectAccessibilityPriorities } from "../../../lib/scans/accessibility-priority";
+import { comparePriorityReviewFindings } from "../../../lib/scans/priority-review-order";
+import { accessibilityOverviewCopy } from "../../../lib/scans/accessibility-report";
 import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
 import { readAccessibilityAudit, projectAccessibilityAuditSummary } from "../../../lib/scans/accessibility-audit-evidence";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../../../lib/api-v2/scan-report-summary";
@@ -430,6 +433,7 @@ function mapChecklistFinding(
     : finding.evidencePreview;
   return {
     correctionSteps: row?.correctionSteps.length ? row.correctionSteps : [finding.remediation],
+    ...(finding.section === "Accessibility" ? { priority: "high" as const } : {}),
     evidence: [...evidence, ...[finding.evidenceDetails?.policyEvidenceDetails?.primaryRuntimeSignal,
       ...(Array.isArray(finding.evidenceDetails?.policyEvidenceDetails?.groupedRuntimeSignals) ? finding.evidenceDetails.policyEvidenceDetails.groupedRuntimeSignals : [])]
       .flatMap(signal => signal && typeof signal === "object" && "shortSummary" in signal && typeof signal.shortSummary === "string" ? [signal.shortSummary] : [])],
@@ -448,7 +452,7 @@ function mapChecklistFinding(
     focus: category,
     id: finding.id,
     rank,
-    status: concernKind === "partial_rating" || finding.id === "acceptance_signal_contradicts_action"
+    status: finding.section === "Accessibility" ? "Observed" : concernKind === "partial_rating" || finding.id === "acceptance_signal_contradicts_action"
       ? "Partial concern"
       : "Potential gap",
     summary,
@@ -675,6 +679,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const findings = selectCanonicalHighPriorityFindings([
     ...buildChecklistConcernTopFindings(reportableChecklistRows),
     ...executiveUnifiedFindings,
+    ...projectAccessibilityPriorities(canonical.ownerUnifiedFindings),
   ]).map((finding, index) => mapChecklistFinding(finding, index + 1, evidenceRows));
   const formDestinationPriority = projectFormDestinationPriority(canonical.ownerUnifiedFindings);
   if (formDestinationPriority) findings.unshift({ ...formDestinationPriority, rank: 1, focus: "Form destinations", vendors: [] });
@@ -682,7 +687,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   if (cmsPriority) findings.unshift({ ...cmsPriority, rank: 1, focus: "CMS security", vendors: [] });
   const integrityPriority = projectSiteIntegrityPriority(canonical.ownerUnifiedFindings);
   if (integrityPriority) findings.push({ ...integrityPriority, rank: findings.length + 1, focus: "Site integrity", vendors: [] });
-  findings.sort((a, b) => Number(b.priority === "high") - Number(a.priority === "high"));
+  findings.sort(comparePriorityReviewFindings);
   findings.forEach((finding, index) => { finding.rank = index + 1; });
   const inventoryProjection = buildRuntimeInventoryProjectionFromScan(scanRecord);
   const retainedRequests = buildRetainedRequestInventory(getHybridRuntimeEvidence(scanRecord.runtimeArtifacts));
@@ -734,6 +739,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const durationMs = retainedDurationMs ?? 0;
   const consentVendor = retainedConsentVendor(scanRecord);
   const runtimeArtifacts = record(scanRecord.runtimeArtifacts);
+  const accessibilityAudit = projectAccessibilityAuditSummary(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id);
+  const accessibilityEvidence = readAccessibilityAudit(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id)?.observation ?? null;
   const policySurfaceCoverage = getPolicySurfaceCoverageStatus(runtimeArtifacts);
   const acceptPath = buildAcceptPathProjection({ ...runtimeArtifacts, consentControlAssessment: retainedConsentAssessment(scanRecord) }, canonical.ownerUnifiedFindings);
   const acceptContradictionRow = mapAcceptContradictionFinding(
@@ -798,6 +805,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
   const verdict = buildExecutiveOverview({
     acceptPath,
+    accessibility: accessibilityOverviewCopy(accessibilityAudit, accessibilityEvidence),
     controls,
     findings,
     limitedCount: summaryCounts.technical_limitation,
@@ -848,8 +856,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   return {
     ...(scanConfig?.fullSite === true && crawlOptions ? { fullSite: { maxPages: Number(crawlOptions.maxPages), concurrency: Number(crawlOptions.concurrency), waitSeconds: Number(crawlOptions.waitSeconds) } } : {}),
     siteMetadata: metadata.success ? metadata.data : null,
-    accessibilityAudit: projectAccessibilityAuditSummary(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id),
-    accessibilityEvidence: readAccessibilityAudit(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id)?.observation ?? null,
+    accessibilityAudit,
+    accessibilityEvidence,
     formDestinations: (() => { const parsed = formDestinationProjectionSchema.safeParse(runtimeArtifacts?.formDestinations); return parsed.success ? parsed.data : null; })(),
     formDestinationWarning: Boolean(formDestinationPriority),
     cmsSecurity: (() => { const cms = cmsSecurityProjectionSchema.safeParse(runtimeArtifacts?.cmsSecurity); return cms.success ? cms.data : null; })(),

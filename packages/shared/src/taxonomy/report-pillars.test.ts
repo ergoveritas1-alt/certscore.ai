@@ -66,12 +66,21 @@ test("defines a source-aware signal registry", () => {
 });
 
 test("defines the unified-finding registry with one owner alignment", () => {
-  assert.equal(REPORT_UNIFIED_FINDINGS.length, 164);
+  assert.equal(REPORT_UNIFIED_FINDINGS.length, 168);
   assert.ok(
     REPORT_UNIFIED_FINDINGS.every(
       (finding) => finding.categoryAlignments.filter((alignment) => alignment.relation === "owner").length === 1
     )
   );
+});
+
+test("zoom and pointer-target concerns retain separate accessibility owners", () => {
+  for (const [id, owner] of [["zoom_restriction_accessibility_issue", "perceivability_barriers"],
+    ["target_size_accessibility_issue", "navigation_interaction_and_task_path_barriers"]]) {
+    const finding = getReportUnifiedFinding(id!);
+    assert.ok(finding);
+    assert.equal(finding.categoryAlignments.find(alignment => alignment.relation === "owner")?.evidenceCategoryId, owner);
+  }
 });
 
 test("maps score-neutral post-Accept signals through the unified finding registry", () => {

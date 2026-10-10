@@ -356,6 +356,8 @@ const ACCESSIBILITY_IDS = [
   "semantic_labeling_accessibility_issue",
   "text_alternative_accessibility_issue",
   "visual_contrast_accessibility_issue",
+  "zoom_restriction_accessibility_issue",
+  "target_size_accessibility_issue",
   "landmark_issues",
   "aria_issues",
   "accessibility_claim_mismatch",

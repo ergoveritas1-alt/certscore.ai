@@ -1,3 +1,5 @@
+import { AccessibilityEvidence, AccessibilitySnapshotContent } from "../accessibility-evidence";
+import { ACCESSIBILITY_REPORT_LABEL, accessibilityIssueCountLabel } from "../../../lib/scans/accessibility-report";
 import { EvidenceHeaderStatus } from "../evidence-header-status";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { ViewerTimestamp } from "../../time/viewer-timestamp";
@@ -358,7 +360,7 @@ function RatingMix({ report, homepage = false }: { report: ShadowReportData; hom
       className="w-full max-w-[43rem] border-y border-zinc-200 py-3 lg:ml-auto"
     >
       <div className="flex items-baseline justify-between gap-4">
-        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{homepage ? "Evidence Ratings" : "Rating mix"}{homepage ? <span className="ml-2 font-normal normal-case text-zinc-400">Starting page</span> : null}</p>
+        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{report.accessibilityAudit ? "Privacy & security ratings" : homepage ? "Evidence Ratings" : "Rating mix"}{homepage ? <span className="ml-2 font-normal normal-case text-zinc-400">Starting page</span> : null}</p>
         <p className={`${monoClass} text-xs font-semibold text-zinc-800`}>{coverage.rows} rows</p>
       </div>
       <div className="mt-2 flex h-2 overflow-hidden rounded-full bg-zinc-100" role="img">
@@ -533,21 +535,13 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
         {report.accessibilityAudit ? (
           <details className={signalRowClass} data-testid="accessibility-audit-status">
             <summary className={signalSummaryClass}>
-              <span className="text-xs font-medium text-zinc-500">Automated accessibility</span>
-              <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">
-                {report.accessibilityAudit.status === "completed" ? "Completed" : report.accessibilityAudit.status === "not_testable" ? "Not evaluated" : "Limited"}
+              <span className="text-xs font-medium text-zinc-500">{ACCESSIBILITY_REPORT_LABEL}</span>
+              <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-zinc-800">
+                {accessibilityIssueCountLabel(report.accessibilityAudit)}
                 <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
               </span>
             </summary>
-            <div className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
-              <p>WCAG 2.2 A/AA automated checks on the starting page.</p>
-              {report.accessibilityAudit.failedRuleCount !== null ? <p>{report.accessibilityAudit.failedRuleCount} failed rules · {report.accessibilityAudit.affectedNodeCount} element instances{report.accessibilityAudit.reviewRuleCount ? ` · ${report.accessibilityAudit.reviewRuleCount} rules need review` : ""}</p> : <p>The audit did not return evaluable results.</p>}
-              {report.accessibilityEvidence?.violations.map(rule => <div key={rule.ruleId}>
-                <a className="underline" href={rule.helpUrl} target="_blank" rel="noreferrer">{rule.help}</a>
-                <span> · {rule.nodeCount} elements</span>
-                <ul>{rule.representativeNodes.map((node, index) => <li className="break-words font-mono" key={index}>{node.selectors.map(selector => Array.isArray(selector) ? selector.join(" >>> ") : selector).join(", ")}</li>)}</ul>
-              </div>)}
-            </div>
+            <AccessibilitySnapshotContent audit={report.accessibilityAudit} observation={report.accessibilityEvidence} />
           </details>
         ) : null}
         {!siteOverview && (report.gpcResponse ? (
@@ -607,15 +601,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             </p>
           </details>
         ))}
-        {report.metrics.forms > 0 ? (
-          <details className={signalRowClass}>
-            <summary className={signalSummaryClass}>
-              <span className="text-xs font-medium text-zinc-500">Forms &amp; fields</span>
-              <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800"><span className={monoClass}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</span><DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
-            </summary>
-            <p className="mt-3 text-xs leading-5 text-zinc-600">Read-only main-document inventory. Field details in Collection surface evidence below.</p>
-          </details>
-        ) : null}
+
       </div>
     </div>
   );
@@ -1333,7 +1319,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
       </div>
     </header>
-    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1} statusLabel={report.accessibilityAudit && report.accessibilityAudit.status !== "completed" ? "Limited coverage" : "Completed"}
+    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1}
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview report={report} />} homepageVerdict={report.verdict} />
     <SitePriorityReview findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
@@ -1663,6 +1649,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
                 ))}
               </div>
             </details>
+            {report.accessibilityAudit ? <AccessibilityEvidence audit={report.accessibilityAudit} observation={report.accessibilityEvidence} /> : null}
             {!compact ? <details aria-label="Site metadata" className="group/metadata border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Site metadata</p><h3 className={`mt-1 ${reportCardTitle}`}>{metadataFields.length} details</h3></div>

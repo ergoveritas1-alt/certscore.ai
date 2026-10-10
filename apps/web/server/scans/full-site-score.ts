@@ -1,5 +1,6 @@
 import { orderedEvidencePrefetch } from "./ordered-evidence-prefetch";
 import { projectAdditionalPageSiteIntegrity } from "./site-integrity-projection";
+import { projectAdditionalPageAccessibilityAudit } from "./accessibility-audit-projection";
 import { selectSiteIntegrityFinding, siteIntegritySiteReportSchema, type SiteIntegritySiteReport } from "../../lib/scans/site-integrity-report";
 import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
 import { canAssessRetainedCrawl } from "../../lib/scans/full-site-crawl-limitation";
@@ -29,7 +30,7 @@ import { buildSitePriorityReview, sitePriorityFindingSchema, type SitePriorityFi
 import { buildChecklistConcernTopFindings } from "../../lib/scans/checklist-concern-top-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
-const PRIORITY_VERSION = "site-priority-review.v18";
+const PRIORITY_VERSION = "site-priority-review.v19";
 const persistedScoreSchema = z.object({
   version: z.literal(VERSION), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
@@ -209,6 +210,10 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       const observation = page.observation!;
       const evidence = packet.value;
       try {
+        const accessibilityProjection = projectAdditionalPageAccessibilityAudit(evidence, observation, crawl.scan_id);
+        if (accessibilityProjection) scoringFindings.push(...buildUnifiedFindingDisplayPackets({
+          runtimeArtifacts: { accessibilityAudit: accessibilityProjection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
+        }));
         const integrityProjection = projectAdditionalPageSiteIntegrity(evidence, observation, crawl.scan_id);
         if (integrityProjection) {
           const coverage = siteIntegrity.coverage.find(row => row.pageId === page.id)!;
@@ -244,7 +249,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     ], executive, canonical.ownerUnifiedFindings, siteIntegrity);
     const assessedNonEssentialStorage = countAssessedNonEssentialStorage(checklistRows);
     const assessedStorageRecords = (checklistRows.find(row => row.id === "pre_consent_cookies_storage")?.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows ?? []) as Record<string, unknown>[];
-    const result = { siteIntegrity, assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ scanRecord: home, checklistRows, unifiedFindings: scoringFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface, embed and site-integrity evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
+    const result = { siteIntegrity, assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ scanRecord: home, checklistRows, unifiedFindings: scoringFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface, embed, site-integrity and any already-retained verified accessibility evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
     // Persist the versioned, evidence-bound result once; table filtering and downloads reuse it.
     // Failed/partial scan pages are permanent coverage limitations, not failed reads.
     // Persist their honest limited result; retryable/unverifiable evidence reads must not

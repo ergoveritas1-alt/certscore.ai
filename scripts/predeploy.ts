@@ -139,6 +139,18 @@ const ACCESSIBILITY_AUDIT_CHECK: Check = {
     "packages/certscore-mcp/src/tools.test.ts"],
 };
 
+const ACCESSIBILITY_SCORING_CHECK: Check = {
+  key: "accessibility-scoring",
+  label: "canonical accessibility scoring, caps, persistence and API parity",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test",
+    "apps/web/lib/scans/accessibility-score-policy.test.ts",
+    "apps/web/lib/scans/scoring-policy.test.ts",
+    "apps/web/server/scans/accessibility-audit-projection.test.ts",
+    "apps/web/server/scans/persisted-canonical-report-projection.test.ts",
+    "apps/web/server/scans/full-site-score.test.ts",
+    "apps/web/lib/api-v2/scan-report-summary.test.ts"],
+};
+
 const ROOT_FULL_CHECKS: Check[] = [
   {
     key: "workspace-package-build",
@@ -152,6 +164,7 @@ const ROOT_FULL_CHECKS: Check[] = [
   },
   CONSENT_ACTION_SEMANTICS_CHECK,
   ACCESSIBILITY_AUDIT_CHECK,
+  ACCESSIBILITY_SCORING_CHECK,
   GPC_OBSERVATION_RELEASE_CHECK,
   SCAN_NO_GO_RELEASE_CHECK,
   REPORT_PUBLICATION_CHECK,
@@ -261,6 +274,7 @@ const TARGETS: Target[] = [
     checks: [
       RUNTIME_GRAPH_RELEASE_CHECK,
       SCAN_NO_GO_RELEASE_CHECK,
+      ACCESSIBILITY_SCORING_CHECK,
       REPORT_PUBLICATION_CHECK,
       {
         key: "web-typecheck",

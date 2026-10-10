@@ -24,7 +24,7 @@ test("large issue lists retain the total but preview at most three projected tit
     assert.ok(summary.includes(`${count.toLocaleString("en-US")} priority issues`));
     assert.match(summary, /The leading finding is “Issue 1”\. Other issues include “Issue 2” and “Issue 3”\./);
     assert.doesNotMatch(summary, /Issue 4/);
-    assert.match(summary, /Priority review for the full list/);
+    assert.match(summary, /Regulatory Risk Review for the full list/);
     assert.ok(summary.length < 400);
   }
 });
@@ -45,7 +45,7 @@ test("long titles cannot overwhelm the summary or cause lower-ranked titles to j
     const summary = buildSiteAssessmentSummary(titles.map(title => ({ title })), null);
     assert.ok(summary.length < 400);
     assert.doesNotMatch(summary, /Long title|Later issue|across 0 pages/);
-    assert.match(summary, /Priority review for the full list/);
+    assert.match(summary, /Regulatory Risk Review for the full list/);
   }
 });
 
@@ -54,7 +54,7 @@ test("executive score uses the full-site projection while homepage context remai
   assert.match(html, /Site score 29 out of 100/);
   assert.match(html, /10 pages scanned/);
   assert.match(html, /Consent controls/);
-  assert.match(html, /Site assessment/);
+  assert.match(html, /Assessment highlights/);
   assert.doesNotMatch(html, /Retained homepage assessment|10 assessed/);
   assert.doesNotMatch(html, /benchmark/i);
   assert.doesNotMatch(html, /Diagnostic score|62 out of 100/);
@@ -84,7 +84,8 @@ test("one scanned page shows only the single page assessment", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary score={{...score,scoredPages:1}} pending={false} scannedPages={1} homepageVerdict="Retained single-page verdict." />);
   assert.match(html,/Page score 29 out of 100/);
   assert.match(html,/>Page score</);
-  assert.match(html,/Single page assessment/);
+  assert.match(html,/Assessment highlights/);
+  assert.match(html,/1 page assessed/);
   assert.match(html,/Retained single-page verdict/);
   assert.doesNotMatch(html,/>Site score</);
   assert.doesNotMatch(html,/<h3[^>]*>Site assessment/);

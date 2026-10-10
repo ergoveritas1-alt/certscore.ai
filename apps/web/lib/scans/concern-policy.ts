@@ -2,6 +2,7 @@ import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-di
 import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
 import { buildSiteIntegrityScoreEffects } from "./site-integrity-score-policy";
+import { buildAccessibilityScoreEffects, buildFocusAccessibilityScoreEffects } from "./accessibility-score-policy";
 import { qualifiesSiteIntegrityReview, SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { readRejectClickTrackingAssessment, REJECT_CLICK_TRACKING_FINDING, REJECT_CLICK_TRACKING_SIGNAL } from "./reject-click-tracking-policy";
 import type {
@@ -2606,6 +2607,13 @@ export function deriveConcernPolicy(input: {
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [],
       regulatoryChecklistEligibility: "none", scoreEffects: eligible ? buildSiteIntegrityScoreEffects(input.rawEvidence?.siteIntegrity) : [] };
   }
+  if (["zoom_restriction_accessibility_issue", "target_size_accessibility_issue"].includes(input.concern.suggestedUnifiedFindingId ?? "")) {
+    const effects = input.concern.originType === "runtime_artifact"
+      ? buildAccessibilityScoreEffects(input.concern.suggestedUnifiedFindingId!, input.rawEvidence) : [];
+    return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: effects.length ? "eligible" : "suppress",
+      promotionEligibility: effects.length ? "eligible" : "blocked", regulatoryChecklistEligibility: "none",
+      negativeEvidenceFlags: [], scoreEffects: effects };
+  }
   const hasDirectRuntime = input.evidenceStrengthFlags.includes("direct_runtime");
   const hasPageAttribution = input.evidenceStrengthFlags.includes("page_attributed");
   const hasKeyPageDiscovery = input.evidenceStrengthFlags.includes("key_page_discovery");
@@ -3624,6 +3632,7 @@ export function deriveConcernPolicy(input: {
   }
 
   if (isFocusManagementIssueConcern(input.concern)) {
+    const scoreEffects = input.concern.originType === "runtime_artifact" ? buildFocusAccessibilityScoreEffects(input.rawEvidence) : [];
     if (!hasBehaviorReproducedFocusManagementEvidence(input.rawEvidence)) {
       return {
         allowedNarrativeTier: "weak",
@@ -3637,12 +3646,14 @@ export function deriveConcernPolicy(input: {
       allowedNarrativeTier: "strong",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "eligible"
+      promotionEligibility: "eligible",
+      ...(scoreEffects.length ? { scoreEffects } : {})
     };
   }
 
   if (isSplitAccessibilityIssueConcern(input.concern)) {
     const findingId = input.concern.suggestedUnifiedFindingId ?? "";
+    const scoreEffects = input.concern.originType === "runtime_artifact" ? buildAccessibilityScoreEffects(findingId, input.rawEvidence) : [];
     const hasFindingExamples = hasCompleteExamplesForAccessibilityFinding(input.rawEvidence, findingId);
     const hasOnlyDocumentMetadataExamples = hasOnlyDocumentMetadataAccessibilityExamples(input.rawEvidence);
     const keyboardPromotable =
@@ -3666,7 +3677,8 @@ export function deriveConcernPolicy(input: {
         allowedNarrativeTier: "weak",
         externalSurfacingEligibility: "audit_only",
         negativeEvidenceFlags: [...negativeEvidenceFlags],
-        promotionEligibility: "internal_only"
+        promotionEligibility: "internal_only",
+        ...(scoreEffects.length ? { scoreEffects } : {})
       };
     }
 
@@ -3674,7 +3686,8 @@ export function deriveConcernPolicy(input: {
       allowedNarrativeTier: findingId === "keyboard_navigation_accessibility_issue" ? "strong" : "moderate",
       externalSurfacingEligibility: "eligible",
       negativeEvidenceFlags: [...negativeEvidenceFlags],
-      promotionEligibility: "eligible"
+      promotionEligibility: "eligible",
+      ...(scoreEffects.length ? { scoreEffects } : {})
     };
   }
 

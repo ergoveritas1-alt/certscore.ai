@@ -3,6 +3,7 @@ export const EXECUTIVE_OVERVIEW_MIN_LENGTH = 340;
 export const EXECUTIVE_OVERVIEW_MAX_LENGTH = 450;
 
 type ExecutiveOverviewInput = {
+  accessibility?: string | null;
   acceptPath?: {
     afterClickCoverage?: "complete" | "partial";
     note?: string | null;
@@ -64,7 +65,7 @@ function fitExecutiveOverview(sentences: string[]) {
     if (next.length > EXECUTIVE_OVERVIEW_MAX_LENGTH) break;
     bounded = next;
   }
-  return bounded || "See Priority review for the retained assessment details.";
+  return bounded || "See Regulatory Risk Review for the retained assessment details.";
 }
 
 export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
@@ -105,7 +106,7 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
             : "Reject-path testing did not complete."
           : null;
   const limitation = (() => {
-    if (input.limitedCount === 0) return "No checklist items were technically limited in this retained scan.";
+    if (input.limitedCount === 0) return "";
     if (input.limitedCount === 1 && limitedItems[0] === "Post-choice tracking reduction") {
       return input.rejectPath?.afterClickCoverage
         ? "The after-click observations remain available; consent-state confirmation is recorded separately."
@@ -127,15 +128,12 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
       "Overall, this scan did not surface a priority issue in the retained evidence.",
       "That is encouraging, but it is not a legal conclusion or proof that every site behavior was observed.",
       "Captured consent, runtime, policy, and transport signals should still be read alongside the underlying evidence before decisions are made.",
+      input.accessibility ?? "",
       limitation,
     ]);
   }
 
-  const opening = findingCount <= 2
-    ? "Overall, the results point to a narrow review, not a broad pattern of concern."
-    : findingCount <= 4
-      ? "Overall, this scan points to a focused review rather than a site-wide breakdown."
-      : "Overall, several projected issues deserve a coordinated review across the affected areas.";
+  const opening = `This page has ${findingCount} priority ${findingCount === 1 ? "issue" : "issues"} for review.`;
   const concernAreas = [
     hasConsentConcern ? "visitor choice" : null,
     hasTrackingConcern ? "pre-consent third-party activity" : null,
@@ -143,7 +141,7 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
   ].filter((value): value is string => Boolean(value));
   const focus = exactFirstLayerPattern && hasConsentConcern
     ? "The clearest issue is visitor choice: Accept was retained on the first layer, while Reject and Options were not."
-    : `The review centers on ${formatList(concernAreas)}.`;
+    : concernAreas.length ? `Review ${formatList(concernAreas)}.` : "Open Regulatory Risk Review for the findings and recommended fixes.";
   const activityLabel = hasTrackingConcern && hasStorageConcern
     ? "Tracking activity and cookies/storage"
     : hasTrackingConcern
@@ -152,7 +150,7 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
         ? "Cookies/storage"
         : null;
   const activity = activityLabel
-    ? `${activityLabel} was retained in the pre-consent observations.`
+    ? `${activityLabel} ${hasTrackingConcern && hasStorageConcern ? "were" : "was"} retained in the pre-consent observations.`
     : null;
   const positive = input.transportPositiveCount > 0
     ? "Transport security checks were observed."
@@ -162,5 +160,5 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
   const introduction = input.priorityIntroduction
     ? `${input.priorityIntroduction.title}: ${input.priorityIntroduction.summary}`
     : "";
-  return fitExecutiveOverview([introduction, opening, focus, acceptOutcome ?? "", rejectOutcome ?? "", activity ?? "", positive ?? "", limitation]);
+  return fitExecutiveOverview([introduction, opening, focus, acceptOutcome ?? "", rejectOutcome ?? "", limitation, activity ?? "", input.accessibility ?? "", positive ?? ""]);
 }

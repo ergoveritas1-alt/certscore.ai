@@ -1,8 +1,8 @@
 import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS } from "./california-gpc-response-policy";
 
-/** Owner-approved September 6 and 17, 2026. Numeric policy shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v16";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v5";
+/** Owner-approved September 6/17 and October 10, 2026. Shared by scoring and review UI. */
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v17";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v6";
 export const SCORE_FLOOR = 0;
 export const SCORE_BASE = 100;
 export const SCORING_FAMILIES = {
@@ -16,6 +16,7 @@ export const SCORING_FAMILIES = {
   policy_transparency: { label: "Policy transparency", cap: 12 },
   transport_security: { label: "Transport", cap: 20 },
   site_integrity: { label: "Site integrity", cap: 40 },
+  accessibility: { label: "Accessibility (WCAG)", cap: 12 },
   gpc: { label: "GPC", cap: CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS },
 } as const;
 export type ScoringRule = {
@@ -43,6 +44,12 @@ export const SCORING_RULES: readonly ScoringRule[] = [
   {"id": "transport_security_http_redirect", "anchor": "redirect", "label": "HTTP redirect handling", "family": "transport_security", "siteWide": false, "points": 2},
   {"id": "gpc_response", "anchor": "gpc", "label": "Eligible California GPC finding", "family": "gpc", "siteWide": false, "points": CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS},
   { id: "site_integrity_hidden_outbound_links", anchor: "hidden-links", label: "Hidden outbound links", family: "site_integrity", siteWide: true, points: 17, identity: { first: 17, second: 5, subsequentEach: 5, unit: "link occurrence" } },
+  { id: "text_alternative_accessibility_issue", anchor: "accessibility-evidence", label: "Text alternatives", family: "accessibility", siteWide: true, points: 3 },
+  { id: "semantic_labeling_accessibility_issue", anchor: "accessibility-evidence", label: "Accessible names, labels and semantics", family: "accessibility", siteWide: true, points: 4 },
+  { id: "visual_contrast_accessibility_issue", anchor: "accessibility-evidence", label: "Visual contrast", family: "accessibility", siteWide: true, points: 3 },
+  { id: "zoom_restriction_accessibility_issue", anchor: "accessibility-evidence", label: "Author-declared zoom restrictions", family: "accessibility", siteWide: true, points: 2 },
+  { id: "target_size_accessibility_issue", anchor: "accessibility-evidence", label: "Pointer-target size and spacing", family: "accessibility", siteWide: true, points: 2 },
+  { id: "keyboard_navigation_accessibility_issue", anchor: "accessibility-evidence", label: "Keyboard navigation and reproduced focus barriers", family: "accessibility", siteWide: true, points: 6 },
  ];
 export const SCORING_RULE_BY_ID = new Map(SCORING_RULES.map(rule => [rule.id, rule]));
 export function scoringRuleDescription(rule: ScoringRule) {

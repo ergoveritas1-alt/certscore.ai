@@ -332,7 +332,7 @@ test("full runtime inventory shows six rows before becoming vertically scrollabl
   assert.match(source, /data-inventory-scroll=/);
   assert.match(source, /detailsLabel="Resource details"/);
   assert.ok(source.includes('eyebrow="Resource inventory"'));
-  assert.ok(source.includes("Field details in Collection surface evidence below."));
+  assert.ok(!source.includes("Field details in Collection surface evidence below."));
   assert.ok(source.indexOf("<RuntimeInventoryTable report={report} />") < source.indexOf("<ChoicePathResults report={report} />"));
   assert.ok(source.includes("detailsHint={<InventoryEvidenceLegend />}"));
   assert.doesNotMatch(source, /names, purposes, timing, domains, and evidence/);

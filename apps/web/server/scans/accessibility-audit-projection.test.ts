@@ -3,7 +3,10 @@ import test from "node:test";
 import { createRequire } from "node:module";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
-import { projectAccessibilityAudit } from "./accessibility-audit-projection";
+import { projectAccessibilityAudit, projectAdditionalPageAccessibilityAudit } from "./accessibility-audit-projection";
+import { createHash } from "node:crypto";
+import type { CrawlObservation } from "@website-signal-risk-scanner/shared";
+import { accessibilityDeductionBreakdown } from "../../lib/scans/accessibility-score-policy";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { projectAccessibilityAuditSummary } from "../../lib/scans/accessibility-audit-evidence";
@@ -16,6 +19,39 @@ function bundle(): CanonicalEvidenceBundle {
   } as unknown as CanonicalEvidenceBundle;
 }
 const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
+
+test("existing additional-page audits require verified bytes and exact attempt, configuration and document binding", () => {
+  const pageId = "10000000-0000-4000-8000-000000000001", parentScanId = "parent-scan", attemptId = "20000000-0000-4000-8000-000000000001";
+  const a = accessibilityAuditFixture({ scanId: pageId });
+  const capture = { pageId, parentScanId, attemptId, configurationHash: "c".repeat(64), startedAt: a.startedAt, completedAt: a.completedAt, finalUrl: a.documentUrl };
+  const evidence = { accessibilityAudit: a, siteIntegrityPageCapture: capture,
+    moduleRun: { moduleName: "preConsentRuntimeScanner", status: "completed", startedAt: a.startedAt },
+    domSnapshots: [{ artifactId: "dom", capturedAtMs: 6000, path: "dom.json", url: a.documentUrl, pagePhase: "network_idle", consentStateAtTime: "pre_consent", documentIdentity: { source: "cdp_loader_id", token: a.documentToken } }],
+  };
+  const packet = { ...capture, pageJobId: pageId, executionProfile: "inventory_only", status: "completed", httpStatus: 200, failureKind: null,
+    sourceHash: createHash("sha256").update(JSON.stringify(evidence)).digest("hex") } as unknown as CrawlObservation;
+  const projection = projectAdditionalPageAccessibilityAudit(evidence, packet, parentScanId);
+  assert.ok(projection);
+  assert.equal(projection.contractVersion, "certscore.accessibility-audit-projection.v2");
+  const packets = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { accessibilityAudit: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const effects = packets.flatMap(row => row.scoreEffects ?? []);
+  assert.equal(accessibilityDeductionBreakdown([...effects, ...effects]).deductionPoints, 10);
+  for (const change of [{ sourceHash: "d".repeat(64) }, { attemptId: pageId }, { pageJobId: attemptId }, { configurationHash: "d".repeat(64) },
+    { parentScanId: "wrong" }, { finalUrl: "https://example.com/other" }, { status: "partial" }, { httpStatus: 500 }]) {
+    assert.equal(projectAdditionalPageAccessibilityAudit(evidence, { ...packet, ...change } as CrawlObservation, parentScanId), null);
+  }
+  assert.equal(projectAdditionalPageAccessibilityAudit({ ...evidence, accessibilityAudit: { ...a, documentToken: "stale" } }, packet, parentScanId), null);
+  assert.equal(projectAdditionalPageAccessibilityAudit({ ...evidence, accessibilityAudit: undefined }, packet, parentScanId), null);
+  for (const changed of [
+    { ...evidence, accessibilityAudit: { ...a, documentToken: "stale" } },
+    { ...evidence, accessibilityAudit: { ...a, startedAt: "2026-10-09T12:00:04.000Z" } },
+    { ...evidence, domSnapshots: [...evidence.domSnapshots, { ...evidence.domSnapshots[0], capturedAtMs: 7000,
+      documentIdentity: { source: "cdp_loader_id", token: "new-document" } }] },
+  ]) {
+    const changedPacket = { ...packet, sourceHash: createHash("sha256").update(JSON.stringify(changed)).digest("hex") };
+    assert.equal(projectAdditionalPageAccessibilityAudit(changed, changedPacket, parentScanId), null, "matching bytes alone cannot replace document/timing proof");
+  }
+});
 
 async function runtimeDocumentSelector() {
   const require = createRequire(import.meta.url);
@@ -45,6 +81,28 @@ test("verified retained accessibility observations enter concerns, policy and un
     status: "completed", required: true, scope: "starting_page_rendered_content", engine: "axe-core", engineVersion: "4.11.3",
     durationMs: 1000, failedRuleCount: 4, affectedNodeCount: 4, reviewRuleCount: 0,
   });
+});
+
+test("captured image-link identity survives verified projection, concerns and policy", () => {
+  const input = bundle();
+  const base = input.accessibilityAudit!.violations[0]!;
+  input.accessibilityAudit!.rulesEvaluated = ["image-alt", "link-name"];
+  input.accessibilityAudit!.violations = [
+    { ...base, ruleId: "image-alt", nodeCount: 1, representativeNodes: [{ ...base.representativeNodes[0]!,
+      selectors: ["a[target]:nth-child(2) > img"], htmlSnippet: "<img src>", imageLinkIdentity: {
+        contractVersion: "certscore.accessibility-image-link-identity.v1", nodeId: 2, imageOnlyLinkId: 1 } }] },
+    { ...base, ruleId: "link-name", nodeCount: 1, representativeNodes: [{ ...base.representativeNodes[0]!,
+      selectors: ["p:nth-child(2) > a[target]:nth-child(2)"], htmlSnippet: "<a href><img src></a>", imageLinkIdentity: {
+        contractVersion: "certscore.accessibility-image-link-identity.v1", nodeId: 1, imageOnlyLinkId: 1 } }] },
+  ];
+  const accessibilityAudit = projectAccessibilityAudit(input, source, input.accessibilityAudit!.documentUrl)!;
+  assert.deepEqual(accessibilityAudit.observation.violations, input.accessibilityAudit!.violations);
+  const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { accessibilityAudit }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const breakdown = accessibilityDeductionBreakdown(findings.flatMap(finding => finding.scoreEffects ?? []));
+  assert.equal(breakdown.imageLinkOverlap, "verified");
+  assert.equal(breakdown.deductionPoints, 4);
+  const stale = projectAccessibilityAudit({ ...input, accessibilityAudit: { ...input.accessibilityAudit!, documentToken: "other" } }, source, input.accessibilityAudit!.documentUrl);
+  assert.deepEqual(stale?.observation.violations, []);
 });
 
 test("independent runtime document binding preserves session-specific URLs without normalizing them away", async () => {

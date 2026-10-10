@@ -20,3 +20,16 @@ test("new malformed or incomplete evidence is limited while historical records s
   const malformed = accessibilityProjectionFixture(); malformed.observation.violations[0]!.helpUrl = "invalid-url";
   assert.equal(isAccessibilityAuditLimited(malformed), true);
 });
+
+test("optional image-link identity is bounded, versioned and preserves historical audits", () => {
+  const audit = accessibilityAuditFixture();
+  const node = audit.violations[0]!.representativeNodes[0]!;
+  node.imageLinkIdentity = { contractVersion: "certscore.accessibility-image-link-identity.v1", nodeId: 2, imageOnlyLinkId: 1 };
+  assert.equal(accessibilityAuditObservationSchema.safeParse(audit).success, true);
+  for (const invalid of [{ nodeId: 0 }, { nodeId: 1.2 }, { imageOnlyLinkId: -1 }, { contractVersion: "unknown" }, { selector: "private" }]) {
+    assert.equal(accessibilityAuditObservationSchema.safeParse({ ...audit, violations: [{ ...audit.violations[0],
+      representativeNodes: [{ ...node, imageLinkIdentity: { ...node.imageLinkIdentity, ...invalid } }] }] }).success, false);
+  }
+  delete node.imageLinkIdentity;
+  assert.equal(accessibilityAuditObservationSchema.safeParse(audit).success, true);
+});

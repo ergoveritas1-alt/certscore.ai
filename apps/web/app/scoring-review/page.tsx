@@ -26,7 +26,7 @@ export default function ScoringReviewPage() {
 
         <section aria-labelledby="ccpa-scoring-heading" className="mb-7 rounded-xl border border-sky-200 bg-white p-5 sm:p-6">
           <h2 id="ccpa-scoring-heading" className="text-xl font-semibold tracking-tight">CCPA/CPRA interpretation</h2>
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600">The current overall technical score combines GDPR/ePrivacy-based posture with eligible GPC and site-integrity deductions. It is not a separate CCPA/CPRA score or a determination of legal compliance. Changing the report’s review focus changes emphasis, not evidence or scoring. The California evidence scorecard keeps link-availability and GPC-disclosure checklist rows score-neutral; they cannot duplicate the verified GPC deduction.</p>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600">The overall technical score combines privacy posture with eligible GPC, site-integrity and accessibility deductions. Both review views share this score. Changing review focus changes emphasis while preserving evidence and scoring. The California evidence scorecard keeps link-availability and GPC-disclosure checklist rows score-neutral; they cannot duplicate the verified GPC deduction.</p>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full min-w-[600px] text-left text-sm">
               <caption className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-left font-semibold">Do Not Sell/Share and opt-out scoring</caption>
@@ -80,7 +80,7 @@ export default function ScoringReviewPage() {
             </thead>
             <tbody>
               {SCORING_RULES.map((rule, index) => (
-                <tr key={rule.id} id={`deduction-${rule.anchor}`} className={`border-t border-slate-100 align-top hover:bg-sky-50 ${rule.siteWide ? "bg-sky-50/50" : ""}`}>
+                <tr key={rule.id} id={`deduction-${rule.family === "accessibility" ? rule.id : rule.anchor}`} className={`border-t border-slate-100 align-top hover:bg-sky-50 ${rule.siteWide ? "bg-sky-50/50" : ""}`}>
                   <th scope="row" className="w-[28%] px-5 py-4 font-medium"><span className="mr-2 text-xs tabular-nums text-slate-400">{String(index + 1).padStart(2, "0")}</span>{rule.label}</th>
                   <td className="w-[26%] px-5 py-4 leading-6">{scoringRuleDescription(rule)}</td>
                   <td className="w-[29%] px-5 py-4 leading-6 text-slate-600">{rule.siteWide ? `Site-wide: ${scoringRuleDescription(rule)}. ${rule.identity ? rule.family === "site_integrity" ? "Each verified page/link occurrence counts once; the cap applies once across the site." : "Each eligible identity counts once." : "Applied once across assessed pages."}` : "Homepage only; applied once"}</td>
@@ -93,6 +93,7 @@ export default function ScoringReviewPage() {
 
         <footer className="mt-5 space-y-2 text-xs leading-5 text-slate-500">
           <p>Caps are shared across rows in the same category. Repeated page observations do not multiply flat deductions. Identity-based deductions count each eligible identity once across the site.</p>
+          <p>Accessibility deducts at most {SCORING_FAMILIES.accessibility.cap} points from the shared overall score. Each category charges once across assessed pages. Keyboard and reproduced focus barriers share one allowance. Overlapping image/link barriers charge the stronger category once; unresolved overlap receives the same conservative allowance.</p>
           <p>Obsolete transfer guidance deducts {SCORING_RULES.find(rule => rule.id === "outdated_transfer_framework_reference")?.points} points once across the site only when verified retained policy text presents it as current guidance. Historical or explicitly corrected references remain neutral. This is a disclosure-quality finding, not proof of unlawful transfers.</p>
           <p>Missing or unverified evidence does not itself create a deduction. An inventory “Review” label does not automatically deduct points.</p>
           <p>Source of truth: scoring-policy.ts. Evidence eligibility remains governed by canonical concern policy. Stored historical reports retain their recorded policy version.</p>

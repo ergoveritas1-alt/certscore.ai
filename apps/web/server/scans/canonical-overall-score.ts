@@ -1,4 +1,5 @@
 import { siteIntegrityDeduction } from "../../lib/scans/site-integrity-score-policy";
+import { accessibilityDeductionBreakdown } from "../../lib/scans/accessibility-score-policy";
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { SCORE_FLOOR, SCORE_BASE, SCORING_POLICY_VERSION, SCORING_RULE_BY_ID, SCORING_FAMILIES } from "../../lib/scans/scoring-policy";
 import { projectScanReportNoGo, type ScanReportAccessContext } from "../../lib/scans/scan-report-disposition";
@@ -45,6 +46,12 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
     .filter(finding => finding.unifiedFindingId === SITE_INTEGRITY_FINDING_ID)
     .flatMap(finding => finding.scoreEffects ?? []);
   const deductions = deriveGdprEprivacyDeductionBreakdown(input.checklistRows);
+  const accessibility = accessibilityDeductionBreakdown(input.unifiedFindings.flatMap(finding => (finding.scoreEffects ?? []).filter(effect =>
+    effect.policyKey === `accessibility.${finding.unifiedFindingId}` ||
+    (finding.unifiedFindingId === "focus_management_issue" && effect.reasonCode === "verified_reproduced_focus_barrier"))));
+  if (accessibility.deductionPoints) {
+    deductions.push({ family: accessibility.family, label: accessibility.label, deductionPoints: accessibility.deductionPoints, rules: accessibility.rules });
+  }
   for (const [ruleId, points] of [["gpc_response", californiaGpcDeduction(input.unifiedFindings)],
     ["site_integrity_hidden_outbound_links", siteIntegrityDeduction(integrityEffects)]] as const) {
     if (!points) continue;

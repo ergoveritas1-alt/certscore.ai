@@ -800,6 +800,16 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     remediation:
       "Review each retained rule's WCAG guidance: adjust foreground, background, and state contrast, and add a non-color distinction for links where required."
   },
+  zoom_restriction_accessibility_issue: {
+    id: "zoom_restriction_accessibility_issue", label: "Author-declared zoom restriction", section: "Accessibility", defaultSurfacePriority: 40,
+    whyItMatters: "A viewport declaration restricting zoom can limit text enlargement for people with low vision.",
+    remediation: "Remove user-scalable=no and verify text can be enlarged without losing content or functionality."
+  },
+  target_size_accessibility_issue: {
+    id: "target_size_accessibility_issue", label: "Pointer-target size and spacing issue", section: "Accessibility", defaultSurfacePriority: 40,
+    whyItMatters: "Small, closely spaced controls can be difficult to activate accurately.",
+    remediation: "Increase the retained control's target size or spacing, accounting for the WCAG 2.5.8 exceptions."
+  },
   focus_management_issue: {
     id: "focus_management_issue",
     label: "Focus management issue",

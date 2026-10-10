@@ -347,6 +347,8 @@ export function getAccessibilityFindingIdForRuleCode(ruleCode: string | null | u
   if (!ruleCode) {
     return null;
   }
+  if (ruleCode === "meta-viewport") return "zoom_restriction_accessibility_issue";
+  if (ruleCode === "target-size") return "target_size_accessibility_issue";
 
   if (TEXT_ALTERNATIVE_ACCESSIBILITY_RULE_IDS.has(ruleCode)) {
     return "text_alternative_accessibility_issue";

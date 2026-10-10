@@ -37,7 +37,7 @@ test("executive overview explains a narrow consent review in plain language", ()
     findings: [{ summary: "Reject was not observed.", title: "Decline consent control" }],
   });
   assertBounded(copy);
-  assert.match(copy, /narrow review/i);
+  assert.match(copy, /1 priority issue for review/i);
   assert.match(copy, /visitor choice/i);
 });
 
@@ -125,7 +125,7 @@ test("executive overview summarizes a focused mixed review without creating new 
     ],
   });
   assertBounded(copy);
-  assert.match(copy, /focused review/i);
+  assert.match(copy, /3 priority issues for review/i);
   assert.match(copy, /tracking activity and cookies\/storage/i);
   assert.doesNotMatch(copy, /3\.9s|before the first consent surface/);
   assert.match(copy, /device identification \/ fingerprinting signal/i);
@@ -138,7 +138,7 @@ test("executive overview scales to a broader review while preserving the length 
   }));
   const copy = buildExecutiveOverview({ ...baseInput, findings });
   assertBounded(copy);
-  assert.match(copy, /coordinated review/i);
+  assert.match(copy, /6 priority issues for review/i);
 });
 
 test("executive overview explains the deferred post-choice check without implying a finding", () => {
@@ -199,7 +199,7 @@ test("oversized projected introductions are not cut into a partial assertion", (
     priorityIntroduction: { title: "Review", summary: `${"Retained context ".repeat(50)}requires verification.` },
   });
   assert.ok(copy.length <= EXECUTIVE_OVERVIEW_MAX_LENGTH);
-  assert.equal(copy, "See Priority review for the retained assessment details.");
+  assert.equal(copy, "See Regulatory Risk Review for the retained assessment details.");
 });
 
 

@@ -41,7 +41,7 @@ export const GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION = SCORING_POLICY_VERSION;
 
 type GdprEprivacyRiskFamily = keyof typeof SCORING_FAMILIES;
 const GDPR_EPRIVACY_POSTURE_POLICIES = Object.fromEntries(
-  [...SCORING_RULE_BY_ID.values()].filter(rule => rule.family !== "gpc" && rule.family !== "site_integrity").map(rule => [rule.id, {
+  [...SCORING_RULE_BY_ID.values()].filter(rule => !["gpc", "site_integrity", "accessibility"].includes(rule.family)).map(rule => [rule.id, {
     family: rule.family, gapDeduction: rule.points, confirmedContradictionDeduction: rule.points,
   }])
 );

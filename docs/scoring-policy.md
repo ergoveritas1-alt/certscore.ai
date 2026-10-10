@@ -5,8 +5,8 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Versions: `gdpr-eprivacy-posture.v16`, `overall-posture.v6`, and
-`full-site-distinct-findings.v5`. The California GPC evidence policy remains v1;
+Versions: `gdpr-eprivacy-posture.v17`, `overall-posture.v7`, and
+`full-site-distinct-findings.v6`. The California GPC evidence policy remains v1;
 its existing eligible 15-point effect is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
@@ -38,8 +38,8 @@ hosts. Storage retains exact storage identity; tracking uses canonical vendors.
 Decline/Reject deducts 12, within the 22-point consent-control cap. Eligible
 post-Reject activity deducts 15, including the already-authorized click-tracking
 review and confirmed contradiction paths; only the strongest effect applies.
-The evidence and registration requirements are unchanged. Removed accessibility,
-choice-quality, withdrawal and cross-border rows have no direct deduction;
+The evidence and registration requirements are unchanged. Legacy privacy-checklist accessibility, choice-quality, withdrawal and
+cross-border rows have no direct deduction;
 the underlying findings/checklist evidence remains available.
 
 Sensitive-surface tracking deducts 12. Each of embedded content, social embeds,
@@ -79,7 +79,8 @@ three months of retention; no new scans, model calls or infrastructure are added
 Single-page scores consume that page's canonical checklist and unified findings.
 Full-site scores keep homepage consent, action, policy, transport and GPC
 assessments, and combine eligible runtime evidence from assessed pages for
-storage, tracking, replay, sensitive-surface tracking, fingerprinting and embeds.
+storage, tracking, replay, sensitive-surface tracking, fingerprinting, embeds
+and any already-retained verified accessibility audits.
 Identity-based rows union eligible identities; flat deductions apply once across
 the site, never once per page. The same family caps and zero floor apply.
 
@@ -160,3 +161,28 @@ The accompanying passive form fix retains styled native choices through a
 visible browser-associated label in the same form, preserving hidden/inert/CMP
 exclusions and existing field caps. It adds no interaction, wait, or model call;
 incremental compute is estimated below $0.10/month at 100,000 scans.
+
+## Accessibility — October 10, 2026 update
+
+The owner approved six overall-score categories: text alternatives 3; accessible
+names/labels/semantics 4; contrast 3; author-declared zoom restrictions 2; measured
+pointer-target size/spacing 2; keyboard and reproduced focus together 6. The
+shared accessibility cap is 12 across the report, once per category regardless
+of repeated nodes, rules, packets or pages. Both privacy views use the same
+overall score; framework-specific privacy scores remain unchanged.
+
+Typed effects originate only from verified retained audit concerns and concern
+policy, then pass through unified findings to central scoring. Unsupported,
+manual-review, malformed, stale or unbound evidence is neutral. Scoring
+eligibility is separate from executive prominence. Verified image/link overlap
+charges the stronger category once; unresolved overlap with image-only-link
+evidence is explicitly recorded and conservatively charged once. Independently
+evidenced distinct barriers can contribute both categories within the cap.
+
+The retained ASPCA replay gives 52 → 41 (11 accessibility points) without changing
+its production record. Historical single-page scores are preserved; no backfill
+is introduced. See `accessibility-scoring-proposal.md` for eligibility, overlap,
+additional-page provenance and regression details. No scans, browser work, model
+calls, waits or new artifact reads are added to the scan path. Incremental
+metadata/processing is estimated below $0.50/month at 100,000 scans/month with
+three months of retention; the one read-only replay retrieval is below $0.02.

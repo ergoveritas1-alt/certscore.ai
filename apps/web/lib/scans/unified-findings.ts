@@ -1002,6 +1002,8 @@ const ACCESSIBILITY_ISSUE_FINDING_IDS = new Set([
   "semantic_labeling_accessibility_issue",
   "text_alternative_accessibility_issue",
   "visual_contrast_accessibility_issue",
+  "zoom_restriction_accessibility_issue",
+  "target_size_accessibility_issue",
   "wcag_issue_summary"
 ]);
 

@@ -72,6 +72,16 @@ jobs:
       - name: Test canonical scan no-go reports
         run: pnpm test:scan-no-go
 
+      - name: Test canonical accessibility scoring
+        run: |
+          pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
+            apps/web/lib/scans/accessibility-score-policy.test.ts \
+            apps/web/lib/scans/scoring-policy.test.ts \
+            apps/web/server/scans/accessibility-audit-projection.test.ts \
+            apps/web/server/scans/persisted-canonical-report-projection.test.ts \
+            apps/web/server/scans/full-site-score.test.ts \
+            apps/web/lib/api-v2/scan-report-summary.test.ts
+
       - name: Validate main app split contract example
         run: |
           APP_FLAVOR=certscore \

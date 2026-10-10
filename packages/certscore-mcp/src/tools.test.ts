@@ -19,6 +19,26 @@ test("MCP bundles retain required accessibility status and link to rule evidence
   assert.equal(mcpScanBundleOutputSchema.safeParse(bundle).success, true);
 });
 
+test("MCP preserves the canonical accessibility score and capped deduction explanation", () => {
+  const scoreExplanation = { contractVersion: "certscore.score-explanation.v1", scope: "starting_page_canonical_score",
+    scoreVersion: "overall-posture.v7", policyVersion: "gdpr-eprivacy-posture.v17", baseScore: 100, scoreFloor: 0,
+    score: 88, totalPolicyDeductionPoints: 12, deductions: [{ family: "accessibility", label: "Accessibility (WCAG)",
+      deductionPoints: 12, rules: [{ ruleId: "keyboard_navigation_accessibility_issue", label: "Keyboard navigation", policyDeductionPoints: 6,
+        findingIds: ["keyboard_navigation_accessibility_issue"], decisionVerification: "not_applicable" },
+      { ruleId: "semantic_labeling_accessibility_issue", label: "Names and labels", policyDeductionPoints: 4,
+        findingIds: ["semantic_labeling_accessibility_issue"], decisionVerification: "not_applicable" },
+      { ruleId: "visual_contrast_accessibility_issue", label: "Contrast (remaining cap)", policyDeductionPoints: 2,
+        findingIds: ["visual_contrast_accessibility_issue"], decisionVerification: "not_applicable" }] }] };
+  const bundle = buildScanBundle({ detail: "summary", maxBytes: 8000, report: null,
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+    scan: { type: "certscore_scan", scanId: "scan_123", domain: "example.com", url: "https://example.com/", status: "completed",
+      score: 88, scoreStatus: "final", scoreExplanation } as any });
+  assert.equal(bundle.score, 88);
+  assert.deepEqual(bundle.scoreExplanation, scoreExplanation);
+  assert.match(scanBundleText(bundle), /Canonical score deduction: 12 points \(Accessibility \(WCAG\)\)/);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+});
+
 test("bounded MCP bundles retain form phases, canonical Reject deductions and focused forms navigation", () => {
   const formsSummary = { contractVersion: "certscore.forms-summary.v1", scope: "starting_page_reportable_observations",
     totalObserved: 2, preConsentObserved: 0, afterAcceptObserved: 2, preConsentCapture: "complete", afterAcceptCapture: "retained" };

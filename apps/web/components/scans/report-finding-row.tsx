@@ -20,12 +20,13 @@ export function DisclosureChevron({ className = "" }: { className?: string }) {
 }
 
 export function StatusBadge({ status, priority }: { status: ShadowEvidenceStatus; priority?: "high" }) {
-  const tone: EvidenceBadgeTone = priority === "high" || status === "Potential gap" ? "concern"
-    : status === "Partial concern" ? "review"
+  const label = priority === "high" && status === "Observed" ? "Review" : status;
+  const tone: EvidenceBadgeTone = label === "Potential gap" ? "concern"
+    : label === "Review" || status === "Partial concern" ? "review"
     : status === "Limited" || status === "Not confirmed" ? "limited"
     : status === "Observed" ? "positive"
     : status === "Not observed" ? "neutral" : "context";
-  return <EvidenceStatusBadge label={priority === "high" ? "High priority" : status} tone={tone} />;
+  return <EvidenceStatusBadge label={label} tone={tone} />;
 }
 
 export function JsonEvidence({ value }: { value: Record<string, unknown> }) {

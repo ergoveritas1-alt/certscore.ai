@@ -3540,6 +3540,18 @@ export const REPORT_UNIFIED_FINDINGS = [
     aliases: ["Contrast failures"]
   }),
   defineReportUnifiedFinding({
+    id: "zoom_restriction_accessibility_issue",
+    label: "Author-declared zoom restriction",
+    owner: "perceivability_barriers",
+    overlays: ["perceivable_content_barriers", "representative_rule_level_evidence"]
+  }),
+  defineReportUnifiedFinding({
+    id: "target_size_accessibility_issue",
+    label: "Pointer-target size and spacing issue",
+    owner: "navigation_interaction_and_task_path_barriers",
+    overlays: ["navigation_interaction_form_barriers", "representative_rule_level_evidence"]
+  }),
+  defineReportUnifiedFinding({
     id: "focus_management_issue",
     label: "Focus management issue",
     owner: "navigation_interaction_and_task_path_barriers",

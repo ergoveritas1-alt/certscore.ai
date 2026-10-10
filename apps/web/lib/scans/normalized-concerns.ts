@@ -171,7 +171,7 @@ export type NormalizedConcernScoreEffect = {
   appliesTo: "certscore_overall";
   deductionPoints: number;
   evidenceRefs: string[];
-  framework: "california" | "site_integrity";
+  framework: "california" | "site_integrity" | "accessibility";
   observedActivity: string[];
   policyKey: string;
   policyVersion: string;
@@ -4447,7 +4447,13 @@ function buildAccessibilityAuditConcerns(runtimeArtifacts: Record<string, unknow
         contractVersion: projection.contractVersion, verificationStatus: projection.verificationStatus,
         sourceHash: projection.sourceHash, evidenceRef: projection.evidenceRef,
         engine: projection.observation.engine, engineVersion: projection.observation.engineVersion,
+        scanId: projection.observation.scanId, documentUrl: projection.observation.documentUrl,
+        documentToken: projection.observation.documentToken, status: projection.observation.status,
+        evaluatedRules: examples.map(example => example.ruleCode),
       }, accessibilityRuleExamples: examples,
+        ...(["text_alternative_accessibility_issue", "semantic_labeling_accessibility_issue"].includes(id) ? {
+          accessibilityImageLinkExamples: accessibilityExamples(projection.observation).filter(example => ["image-alt", "link-name"].includes(example.ruleCode)),
+        } : {}),
         pageUrl: projection.observation.documentUrl, runtimeEvidenceArtifacts: [projection.evidenceRef] },
     });
   });

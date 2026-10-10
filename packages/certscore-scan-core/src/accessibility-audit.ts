@@ -1,10 +1,13 @@
-import axe, { type AxeResults, type Result } from "axe-core";
+import axe, { type AxeResults, type Result, type NodeResult } from "axe-core";
 import type { Page } from "playwright";
 import {
   ACCESSIBILITY_AUDIT_BUDGET_MS, ACCESSIBILITY_AUDIT_VERSION, ACCESSIBILITY_LIMITS,
   ACCESSIBILITY_WCAG_TAGS, accessibilityAuditObservationSchema,
   type AccessibilityAuditObservation, type AccessibilityRuleObservation,
 } from "@certscore/contracts";
+
+type Identity = NonNullable<AccessibilityRuleObservation["representativeNodes"][number]["imageLinkIdentity"]>;
+type IdentifiedNode = NodeResult & { imageLinkIdentity?: Identity };
 
 function safeText(value: string, max: number) {
   return value.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]")
@@ -39,6 +42,7 @@ function normalizeRule(rule: Result): AccessibilityRuleObservation {
       const expected = Number.parseFloat(String(data?.expectedContrastRatio ?? ""));
       if (Number.isFinite(expected)) colorContrast.requiredContrastRatio = expected;
       return {
+        ...((node as IdentifiedNode).imageLinkIdentity ? { imageLinkIdentity: (node as IdentifiedNode).imageLinkIdentity } : {}),
         selectors: node.target.slice(0, ACCESSIBILITY_LIMITS.selectorsPerNode).map(target => Array.isArray(target)
           ? target.slice(0, 8).map(value => safeText(value, 400)) : safeText(target, 400)),
         htmlSnippet: safeHtml(node.html),
@@ -93,10 +97,32 @@ export async function runAccessibilityAudit(input: {
       catch { if (frame === input.page.mainFrame()) throw new Error("engine_injection_failed"); limitations.push("frame_unavailable"); }
     }
     if (stopped) throw new Error("cancelled");
-    const results = await input.page.evaluate(async (tags): Promise<AxeResults> => {
+    const results = await input.page.evaluate(async ({ tags, exampleLimit }): Promise<AxeResults> => {
       const engine = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<AxeResults> } }).axe;
-      return engine.run(document, { runOnly: { type: "tag", values: tags }, resultTypes: ["violations", "incomplete"], preload: false });
-    }, [...ACCESSIBILITY_WCAG_TAGS]);
+      const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, resultTypes: ["violations", "incomplete"], preload: false, elementRef: true });
+      const identities = new WeakMap<Element, number>();
+      let nextId = 0;
+      for (const rule of [...results.violations, ...results.incomplete, ...results.passes, ...results.inapplicable]) {
+        const captureIdentity = results.violations.includes(rule) && ["image-alt", "link-name"].includes(rule.id);
+        for (const [index, node] of rule.nodes.entries()) {
+          const element = node.element;
+          if (captureIdentity && index < exampleLimit && element?.isConnected && element.ownerDocument === document) {
+            const link = element.localName === "a" ? element : element.localName === "img" ? element.parentElement : null;
+            const imageOnly = link?.localName === "a" && link.children.length === 1 && link.firstElementChild?.localName === "img" &&
+              Array.from(link.childNodes).every(child => child === link.firstElementChild || child.nodeType === Node.TEXT_NODE && !child.textContent?.trim());
+            for (const target of imageOnly ? [element, link!] : [element]) {
+              if (!identities.has(target)) identities.set(target, ++nextId);
+            }
+            (node as IdentifiedNode).imageLinkIdentity = { contractVersion: "certscore.accessibility-image-link-identity.v1",
+              nodeId: identities.get(element)!, imageOnlyLinkId: imageOnly ? identities.get(link!)! : null };
+          }
+          // Never serialize live elements (including check-related nodes) out of the browser.
+          delete node.element;
+          for (const check of [...(node.any ?? []), ...(node.all ?? []), ...(node.none ?? [])]) for (const related of check.relatedNodes ?? []) delete related.element;
+        }
+      }
+      return results;
+    }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule });
     if (results.testEngine.name !== "axe-core" || results.testEngine.version !== axe.version) return unavailable("engine_identity_mismatch");
     if (input.page.url() !== documentUrl || input.documentIdentity()?.token !== documentToken) return unavailable("document_changed");
     const afterFrames = input.page.frames();

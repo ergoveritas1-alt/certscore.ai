@@ -10,6 +10,12 @@ const nodeSchema = z.object({
   selectors: z.array(selectorSchema).min(1).max(ACCESSIBILITY_LIMITS.selectorsPerNode),
   htmlSnippet: z.string().min(1).max(500),
   failureSummary: z.string().min(1).max(800),
+  // Opaque identities share one audit/document scope; no DOM text or attributes.
+  imageLinkIdentity: z.object({
+    contractVersion: z.literal("certscore.accessibility-image-link-identity.v1"),
+    nodeId: z.number().int().positive().max(1_000_000),
+    imageOnlyLinkId: z.number().int().positive().max(1_000_000).nullable(),
+  }).strict().optional(),
   colorContrast: z.object({
     foregroundColor: z.string().max(40).optional(), backgroundColor: z.string().max(40).optional(),
     contrastRatio: z.number().nonnegative().optional(), requiredContrastRatio: z.number().nonnegative().optional(),
@@ -62,12 +68,24 @@ export const accessibilityAuditObservationSchema = z.object({
 export type AccessibilityAuditObservation = z.infer<typeof accessibilityAuditObservationSchema>;
 export type AccessibilityRuleObservation = z.infer<typeof accessibilityRuleObservationSchema>;
 
-export const accessibilityAuditProjectionSchema = z.object({
+const startingPageAccessibilityProjectionSchema = z.object({
   contractVersion: z.literal("certscore.accessibility-audit-projection.v1"),
   verificationStatus: z.literal("verified"), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
   evidenceRef: z.literal("CanonicalEvidenceBundle.json#accessibilityAudit"),
   observation: accessibilityAuditObservationSchema,
 }).strict();
+const additionalPageAccessibilityProjectionSchema = z.object({
+  contractVersion: z.literal("certscore.accessibility-audit-projection.v2"),
+  verificationStatus: z.literal("verified"), sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+  parentScanId: z.string().min(1), pageId: z.string().uuid(), attemptId: z.string().uuid(), configurationHash: z.string().regex(/^[a-f0-9]{64}$/),
+  evidenceRef: z.string(), observation: accessibilityAuditObservationSchema,
+}).strict().superRefine((projection, ctx) => {
+  if (projection.observation.scanId !== projection.pageId ||
+    projection.evidenceRef !== `full-site:${projection.pageId}:${projection.attemptId}:evidence.json#accessibilityAudit`) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Additional accessibility evidence identity mismatch" });
+  }
+});
+export const accessibilityAuditProjectionSchema = z.union([startingPageAccessibilityProjectionSchema, additionalPageAccessibilityProjectionSchema]);
 export type AccessibilityAuditProjection = z.infer<typeof accessibilityAuditProjectionSchema>;
 
 /** Historical records without this contract retain their original status. Malformed new evidence fails closed. */

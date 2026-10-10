@@ -496,16 +496,16 @@ export function ShareReportActions({
             className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
             role="dialog"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-              <div className="space-y-1">
+            <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-200 px-3 py-3 sm:flex-row sm:gap-4 sm:px-5 sm:py-4">
+              <div className="min-w-0 space-y-1">
                 <h2 id="visual-evidence-modal-title" className="text-xl font-semibold tracking-normal text-slate-950">
                   Captured image
                 </h2>
-                <p className="text-sm leading-6 text-slate-600">
+                <p className="break-words text-sm leading-6 text-slate-600">
                   Visual evidence retained for {domainLabel}.
                 </p>
               </div>
-              <div className="flex flex-none items-center gap-2">
+              <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:w-auto sm:flex-none">
                 <div className="flex items-center overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
                   <button
                     type="button"
@@ -549,14 +549,14 @@ export function ShareReportActions({
                 <button
                   type="button"
                   aria-label="Close captured image"
-                  className="scan-report-button inline-flex h-11 w-11 items-center justify-center rounded-xl text-slate-500 hover:text-slate-950"
+                  className="scan-report-button inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:text-slate-950 sm:h-11 sm:w-11"
                   onClick={closeVisualEvidenceDialog}
                 >
                   <CloseIcon />
                 </button>
               </div>
             </div>
-            <div ref={visualEvidenceViewerRef} className="relative min-h-[18rem] flex-1 overflow-auto bg-slate-950/95 p-4">
+            <div ref={visualEvidenceViewerRef} className="relative min-h-[min(18rem,35vh)] flex-1 overflow-auto bg-slate-950/95 p-4">
               {isVisualEvidenceImageLoading ? (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="inline-flex items-center gap-3 rounded-full border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm font-semibold text-slate-100 shadow-xl">
