@@ -11,6 +11,16 @@ SLOT_SECONDS = 20 * 60
 MAX_DELIVERY_DELAY_SECONDS = 180
 ACTIVE_SCAN_STATUSES = {"queued", "running", "finalizing"}
 USABLE_SCAN_STATUSES = {"completed", "completed_limited", "complete", "limited"}
+ACCESSIBILITY_EXPECTATIONS = {
+    "contractVersion": "certscore.sentinel-accessibility.v1",
+    "requiredRules": [
+        {"ruleId": "image-alt", "selector": "#sentinel-missing-alt"},
+        {"ruleId": "label", "selector": "#sentinel-unlabelled-input"},
+        {"ruleId": "button-name", "selector": "#sentinel-unnamed-button"},
+        {"ruleId": "color-contrast", "selector": "#sentinel-low-contrast"},
+        {"ruleId": "nested-interactive", "selector": "#sentinel-nested-control"},
+    ],
+}
 ssm = boto3.client("ssm", region_name=REGION)
 sm = boto3.client("secretsmanager", region_name=REGION)
 # SES identity verification is regional; support@certscore.ai is verified in us-east-1.
@@ -225,6 +235,10 @@ def scanner_incident_for_row(row):
     """Return at most one execution incident per scan, with all reason codes."""
     reasons = []
     reason_codes = []
+    accessibility = row.get("accessibility") or {}
+    if accessibility.get("issue"):
+        reasons.append("required WCAG canary detection failed: " + ", ".join(accessibility.get("reasonCodes", [])))
+        reason_codes.extend(accessibility.get("reasonCodes", []))
     if row.get("freshnessIssue"):
         reasons.append("freshness verification failed: " + str(row.get("freshnessReason") or "unknown reason"))
         reason_codes.extend(row.get("freshnessReasonCodes") or ["freshness_invariant_failed"])
@@ -268,6 +282,10 @@ def reconcile_scanner_incidents(incidents, api_key, run_started_at):
                 "reconciledAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
             refreshed.pop("freshnessVerificationError", None)
+            if incident.get("accessibility", {}).get("issue") and status(authoritative) in USABLE_SCAN_STATUSES:
+                refreshed["accessibility"] = check_accessibility_evidence(
+                    requested_url, sid, api_key, incident["accessibility"].get("expected")
+                )
             reconciled_incident = scanner_incident_for_row(refreshed)
             if reconciled_incident:
                 unresolved.append(reconciled_incident)
@@ -302,7 +320,7 @@ def rest_scan(url, loc, client, key):
                 time.sleep(15)
                 continue
             raise
-        if status(st) in ("complete", "completed", "failed", "expired", "error", "no_go", "limited"): break
+        if status(st) in USABLE_SCAN_STATUSES | {"failed", "expired", "error", "no_go"}: break
         if time.time() - began > 840: raise RuntimeError("scan timed out at " + status(st))
         time.sleep(5)
     try:
@@ -439,6 +457,131 @@ def signals(value):
     aliases = {"pre_consent_storage":["pre_consent","pre-consent","storage"],"fingerprinting":["fingerprint"],"policy_runtime_comparison":["policy/runtime","policy_runtime","comparison"],"consent_controls":["consent","accept","reject"],"responsive_geometry":["geometry","viewport"],"aria_controls":["aria"],"shadow_dom":["shadow"],"split_labels":["split_label","nested span"],"false_positive_decoy":["false_positive","decoy"],"truncated_policy":["truncated"],"wrong_domain_supplement":["wrong-domain","wrong_domain"],"missing_topics":["missing_topics","insufficient"],"third_party_iframe":["iframe"],"canvas_fingerprinting":["canvas"],"rtl_layout":["rtl"],"mixed_scripts":["mixed-script","cjk","arabic"],"necessary_only":["necessary-only","essential only"],"localized_controls":["localized","locale"]}
     return {k: any(w in text for w in ws) for k, ws in aliases.items()}
 
+
+def accessibility_report_values(entries):
+    """Reconstruct relevant RFC 6901 entries, including root and array containers.
+
+    The report API exports small objects whole and expands larger objects into
+    parent container markers and child entries. Missing parents, duplicate writes,
+    sparse arrays and split required values fail closed rather than losing proof.
+    """
+    if not isinstance(entries, list) or len(entries) > 2000:
+        raise ValueError("invalid evidence entries")
+    root, seen = None, set()
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            raise ValueError("invalid evidence entry")
+        path = entry["path"]
+        if path and not path.startswith("/"):
+            raise ValueError("invalid JSON pointer")
+        parts = path[1:].split("/") if path else []
+        if parts and parts[0] not in {"accessibilityAudit", "accessibilityEvidence"}:
+            continue
+        if path in seen or "stringPart" in entry or "stringParts" in entry or "value" not in entry:
+            raise ValueError("ambiguous required evidence")
+        seen.add(path)
+        if any("~" in p.replace("~1", "").replace("~0", "") for p in parts):
+            raise ValueError("invalid JSON pointer escape")
+        parts = [p.replace("~1", "/").replace("~0", "~") for p in parts]
+        value = json.loads(json.dumps(entry["value"]))
+        if not parts:
+            root = value
+            continue
+        parent = root
+        for index, part in enumerate(parts):
+            last = index == len(parts) - 1
+            if isinstance(parent, dict):
+                if last:
+                    if part in parent:
+                        raise ValueError("overlapping evidence entries")
+                    parent[part] = value
+                else:
+                    parent = parent[part]
+            elif isinstance(parent, list):
+                if not part.isascii() or not part.isdecimal() or str(int(part)) != part:
+                    raise ValueError("invalid evidence array index")
+                item = int(part)
+                if last:
+                    if item != len(parent):
+                        raise ValueError("sparse or overlapping evidence array")
+                    parent.append(value)
+                else:
+                    parent = parent[item]
+            else:
+                raise ValueError("missing evidence container")
+    if not isinstance(root, dict):
+        raise ValueError("missing report root")
+    return root
+
+
+def assess_accessibility_evidence(url, sid, expected, page):
+    """Check retained typed rule violations, never narrative keywords or review items."""
+    result = {"contractVersion": "certscore.sentinel-accessibility-check.v1", "expected": expected,
+              "issue": True, "reasonCodes": [], "observedRuleIds": [], "missingRuleIds": []}
+    if not isinstance(expected, dict) or expected.get("contractVersion") != "certscore.sentinel-accessibility.v1":
+        result["reasonCodes"] = ["accessibility_fixture_contract_unavailable"]
+        return result
+    required = expected.get("requiredRules")
+    if (not isinstance(required, list) or not 1 <= len(required) <= 20
+            or any(not isinstance(r, dict) or not isinstance(r.get("ruleId"), str)
+                   or not r["ruleId"] or not isinstance(r.get("selector"), str)
+                   or not r["selector"].startswith("#") for r in required)
+            or len({r["ruleId"] for r in required}) != len(required)):
+        result["reasonCodes"] = ["accessibility_fixture_contract_invalid"]
+        return result
+    if not isinstance(page, dict) or page.get("scanId") != sid or page.get("section") != "accessibility":
+        result["reasonCodes"] = ["accessibility_evidence_identity_mismatch"]
+        return result
+    try:
+        values = accessibility_report_values(page.get("entries"))
+    except (ValueError, KeyError, IndexError, TypeError):
+        result["reasonCodes"] = ["accessibility_evidence_invalid"]
+        return result
+    audit = values.get("accessibilityAudit")
+    evidence = values.get("accessibilityEvidence")
+    if not isinstance(evidence, dict):
+        result["reasonCodes"] = ["accessibility_evidence_incomplete"]
+        return result
+    document = evidence.get("documentUrl")
+    if (not isinstance(audit, dict) or audit.get("required") is not True
+            or audit.get("engine") != "axe-core" or not audit.get("engineVersion")
+            or audit.get("status") not in {"completed", "limited"}
+            or evidence.get("contractVersion") != "certscore.accessibility-audit.v1"
+            or evidence.get("engineVersion") != audit["engineVersion"]
+            or evidence.get("scanId") != sid
+            or document != url):
+        result["reasonCodes"] = ["accessibility_audit_unavailable_or_unbound"]
+        return result
+    violations = evidence.get("violations")
+    if not isinstance(violations, list):
+        result["reasonCodes"] = ["accessibility_evidence_incomplete"]
+        return result
+    for rule in required:
+        observed = any(
+            isinstance(v, dict) and v.get("ruleId") == rule["ruleId"]
+            and type(v.get("nodeCount")) is int and v["nodeCount"] > 0
+            and isinstance(v.get("representativeNodes"), list)
+            and any(isinstance(n, dict) and isinstance(n.get("selectors"), list)
+                    and rule["selector"] in n["selectors"] for n in v["representativeNodes"])
+            for v in violations
+        )
+        result["observedRuleIds" if observed else "missingRuleIds"].append(rule["ruleId"])
+    result["reasonCodes"] = ["accessibility_required_rule_missing"] if result["missingRuleIds"] else []
+    result["issue"] = bool(result["reasonCodes"])
+    return result
+
+
+def check_accessibility_evidence(url, sid, api_key, expected):
+    try:
+        page = request(API + "/api/v2/scans/" + sid + "/report-evidence?section=accessibility",
+                       headers={"authorization": "Bearer " + api_key}, timeout=30)
+        return assess_accessibility_evidence(url, sid, expected, page)
+    except Exception:
+        # Operational coverage failure only; never invent a clean result or retry a scan.
+        return {"contractVersion": "certscore.sentinel-accessibility-check.v1", "expected": expected,
+                "issue": True, "reasonCodes": ["accessibility_evidence_unavailable"],
+                "observedRuleIds": [], "missingRuleIds": []}
+
 def scheduled_slot(event, now):
     """Reject late/legacy events rather than spending a later slot's scan quota.
 
@@ -497,7 +640,7 @@ def handler(event, context):
         # recorded as a corpus diagnostic rather than preventing all scans or
         # generating a misleading scanner alert.
         corpus_issues.append({"issue": "sentinel manifest unavailable: " + str(e)[:500]})
-        manifest = {"sentinelCorpus": {"pages": [
+        manifest = {"sentinelCorpus": {"accessibility": ACCESSIBILITY_EXPECTATIONS, "pages": [
             {"key":"sentinel-broad-baseline","url":"/.well-known/certscore-canary/sentinels/broad-baseline.html","expectedSignals":["pre_consent_storage","fingerprinting","policy_runtime_comparison","consent_controls"]},
             {"key":"sentinel-consent-stress","url":"/.well-known/certscore-canary/sentinels/consent-stress.html","expectedSignals":["responsive_geometry","aria_controls","shadow_dom","split_labels"]},
             {"key":"sentinel-privacy-evidence","url":"/.well-known/certscore-canary/sentinels/privacy-evidence.html","expectedSignals":["false_positive_decoy","truncated_policy","wrong_domain_supplement","missing_topics"]},
@@ -505,6 +648,7 @@ def handler(event, context):
             {"key":"sentinel-multilingual-rtl","url":"/.well-known/certscore-canary/sentinels/multilingual-rtl.html","expectedSignals":["rtl_layout","mixed_scripts","necessary_only","localized_controls"]}
         ]}}
     pages = manifest.get("sentinelCorpus", {}).get("pages", [])
+    accessibility_expected = manifest.get("sentinelCorpus", {}).get("accessibility")
     if len(pages) != 5: raise RuntimeError("sentinel manifest does not contain exactly five pages")
     jobs = [build_slot_job(pages, slot)]
     selected_pages = [job["page"] for job in jobs]
@@ -532,6 +676,8 @@ def handler(event, context):
                 except Exception as error:
                     freshness = assess_freshness_verification_failure(error, created)
             row = {"page": p["key"], "requestedUrl": requested_url, "location": loc, "transport": transport, "scanId": sid, "status": scan_status, "terminalError": terminal_error, "terminalErrorCode": terminal_error_code, "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "pollCount": st.get("sentinelPollCount", 0) if isinstance(st, dict) else 0, "firstPollAt": st.get("sentinelFirstPollAt") if isinstance(st, dict) else None, "lastPollAt": st.get("sentinelLastPollAt") if isinstance(st, dict) else None, **freshness}
+            if scan_status in USABLE_SCAN_STATUSES:
+                row["accessibility"] = check_accessibility_evidence(requested_url, sid, key, accessibility_expected)
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
             incident = scanner_incident_for_row(row)
             if incident:
@@ -556,7 +702,7 @@ def handler(event, context):
     run = {"runId": run_id, "startedAt": started, "slot": slot, "cycleSlot": slot % 45, "scheduledTime": event["scheduledTime"], "cadenceMinutes": 20, "jobs": len(results), "selectedPages": [p["key"] for p in selected_pages], "failures": len(failures), "scannerFailures": len(scanner_failures), "reconciledScannerIncidents": len(reconciled_incidents), "reconciledScannerIncidentIds": [row.get("scanId") for row in reconciled_incidents if row.get("scanId")], "corpusIssues": len(corpus_issues), "regionalVariance": variance, "results": results}
     ddb.put_item(Item={"pk": "run#" + run_id, **run, "expiresAt": int(time.time()) + 90 * 86400})
     if scanner_failures:
-        summary = f"{len(scanner_failures)} scanner execution issue(s) detected across {len(results)} sentinel scans. {len(corpus_issues)} expected canary-signal mismatch(es) were recorded for diagnostics but are not alert conditions."
+        summary = f"{len(scanner_failures)} scanner execution or required WCAG detection issue(s) detected across {len(results)} sentinel scans. {len(corpus_issues)} keyword-based canary-signal mismatch(es) were recorded for diagnostics but are not alert conditions."
         def failure_line(f):
             return "- page={page} location={location} transport={transport} scanId={sid} issue={issue}".format(
                 page=f.get("page", "n/a"), location=f.get("location", "n/a"), transport=f.get("transport", "n/a"),

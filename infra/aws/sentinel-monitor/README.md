@@ -21,8 +21,36 @@ Only the selected page is preflighted; inter-scan sleeps are removed. REST
 creation retries only explicit 429 refusals, because an ambiguous 5xx may have
 already created a scan. MCP creation remains non-retrying. Existing completion,
 freshness, canonical result reads and alert semantics remain in place.
-Keyword-based signal diagnostics are not correctness alerts. Typed fixture
-assertions and real SDK execution remain separate improvements.
+Keyword-based privacy signal diagnostics are not correctness alerts. Required
+WCAG detection uses a separate typed check described below. Real SDK execution
+remains a separate improvement.
+
+## Required accessibility detection
+
+All five rotating pages contain the same five inline WCAG failures: missing
+image text, an unlabelled input, an unnamed button, low-contrast text, and a
+nested interactive control. The manifest's versioned `sentinelCorpus.accessibility`
+contract declares the required axe rule IDs and exact fixture selectors.
+
+After a completed or `completed_limited` scan, the monitor reads the existing
+`report-evidence?section=accessibility` API once. It requires a matching scan,
+document URL, required axe audit and concrete retained violation examples for
+every declared rule. Review-only items, prose mentions, zero counts and unrelated
+selectors cannot satisfy the check. Unavailable or malformed evidence fails
+closed to an operational incident. An unrelated audit review limitation does
+not cancel independently retained required violations.
+
+The typed outcome and observed/missing rules are retained in the existing run
+record. Detection failures enter the existing scanner alert and reconciliation
+path. Reconciliation may reread that completed report; it never starts another
+scan. The existing one-scan-per-20-minute rotation, locks, regions, transports,
+timeouts and alert destination remain unchanged. Each page is visited once per
+five slots (100 minutes), not every page every 20 minutes.
+
+Publish the five pages and manifest before deploying this handler, using
+`scripts/deploy-ergoveritas-canary-bundle.sh --sentinels-only --apply`.
+`test2.html` separately contains twelve WCAG failures and can be published with
+`scripts/deploy-ergoveritas-test2-canary.sh --page-only --apply`.
 
 ## Deploy
 
@@ -49,3 +77,9 @@ Estimated additional scheduling, request, storage and initialization overhead
 is below $0.25/month before savings from removing 16–30 seconds of hourly
 inter-scan sleeps. This is below the owner's $1/month pre-approved threshold;
 actual net billing depends on execution time and free-tier availability.
+
+October 10 WCAG fixture/check additions are estimated below $0.50/month at
+2,160 scheduled runs and up to 15,000 total canary scans/month, including small
+HTML/evidence growth, incremental audit work and one retained API evidence read
+per successful run. Static publication/checksum checks are estimated below
+$0.05 once. No scan volume, service, browser lane, model call or capacity is added.

@@ -8,6 +8,7 @@ import { classifyPrivacySurface, locateCaliforniaNoticePassages } from "@certsco
 import { chromium } from "playwright";
 import { createArtifactWriter } from "./artifact-writer.js";
 import { policySurfaceScanner } from "./scanners/policy-surface-scanner.js";
+import { runAccessibilityAudit } from "./accessibility-audit.js";
 
 const canaryRoot = new URL("../../../infra/aws/ergoveritas-canary/", import.meta.url);
 const assetNames = [
@@ -53,6 +54,29 @@ test("owned test2 canary separates partial GPC reduction from complete manual Do
     assert.equal(await baseline.page.locator('a[href="/test2-privacy-choices.html"]').textContent(), "Your Privacy Choices");
     assert.equal(await baseline.page.locator('a[href="/test2-cookie-settings.html"]').textContent(), "Cookie Settings");
     assert.equal(await baseline.page.locator("#test2-choice-status").textContent(), "No manual privacy choice is saved in this browser.");
+    const accessibility = await runAccessibilityAudit({
+      page: baseline.page, scanId: "owned-test2-wcag-fixture", documentIdentity: () => ({ token: "test2-document" }),
+    });
+    for (const [ruleId, selector] of [
+      ["image-alt", "#wcag-missing-alt"],
+      ["input-image-alt", "#wcag-image-control"],
+      ["label", "#wcag-unlabelled-input"],
+      ["select-name", "#wcag-unlabelled-select"],
+      ["button-name", "#wcag-unnamed-button"],
+      ["link-name", "#wcag-unnamed-link"],
+      ["color-contrast", "#wcag-low-contrast"],
+      ["aria-valid-attr-value", "#wcag-invalid-aria"],
+      ["aria-required-attr", "#wcag-missing-aria-state"],
+      ["aria-allowed-attr", "#wcag-disallowed-aria"],
+      ["nested-interactive", "#wcag-nested-control"],
+      ["target-size", "#wcag-tiny-target"],
+    ]) {
+      const violation = accessibility.violations.find(row => row.ruleId === ruleId);
+      assert.ok(violation, `test2 must retain the intentional ${ruleId} failure; observed=${accessibility.violations.map(row => row.ruleId).join(",")}; review=${accessibility.reviewItems.map(row => row.ruleId).join(",")}`);
+      assert.ok(violation.representativeNodes.some(node => node.selectors.includes(selector)), `${ruleId} must identify ${selector}`);
+    }
+    assert.equal(accessibility.engineVersion, "4.11.3");
+    assert.equal(baseline.requests.length, 6, "inline accessibility fixtures must add no asset requests");
     for (const [path, kind] of [
       ["test2-do-not-sell-or-share.html", "do_not_sell_or_share"],
       ["test2-privacy-choices.html", "your_privacy_choices"],

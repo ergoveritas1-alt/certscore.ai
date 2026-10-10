@@ -10,14 +10,26 @@ expected_account="199536052647"
 aws_region="us-west-1"
 bucket="ergoveritas-com-static-199536052647"
 distribution_id="E3334DYFHSC1PR"
+apply=false
+page_only=false
+for arg in "$@"; do
+  case "${arg}" in
+    --apply) apply=true ;;
+    --page-only) page_only=true ;;
+    *) echo "Usage: $0 [--apply] [--page-only]" >&2; exit 1 ;;
+  esac
+done
+if [[ "${page_only}" == true ]]; then
+  assets=(test2.html)
+fi
 
 [[ -f "${runtime_source}" ]] || { echo "Missing source file: ${runtime_source}" >&2; exit 1; }
 for asset in "${assets[@]}"; do
   [[ -f "${canary_root}/${asset}" ]] || { echo "Missing source file: ${canary_root}/${asset}" >&2; exit 1; }
 done
 
-if [[ "${1:-}" != "--apply" ]]; then
-  echo "Dry run: would verify the existing shared canary runtime, upload the test2 page, choice pages, notices, and choice runtime, then invalidate only those paths."
+if [[ "${apply}" != true ]]; then
+  echo "Dry run: would verify the existing shared canary runtime, upload ${assets[*]}, then invalidate only those paths."
   exit 0
 fi
 

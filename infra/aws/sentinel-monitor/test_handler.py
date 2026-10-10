@@ -427,7 +427,7 @@ class SlotRotationTests(unittest.TestCase):
         pages = [{"key": f"page-{i}", "url": f"/page-{i}.html", "expectedSignals": []} for i in range(5)]
         for slot in range(3):
             job = handler.build_slot_job(pages, slot)
-            with mock.patch.object(handler, "scheduled_slot", return_value=slot), mock.patch.object(handler, "acquire_slot_lock", return_value=True), mock.patch.object(handler, "request", return_value={"sentinelCorpus": {"pages": pages}}), mock.patch.object(handler, "corpus_preflight", return_value=[]) as preflight, mock.patch.object(handler, "ssm") as ssm, mock.patch.object(handler, "get_secret", return_value="test") as secret, mock.patch.object(handler, "rest_scan", return_value=("scan", {"status": "completed"}, {}, {})) as rest, mock.patch.object(handler, "mcp_scan", return_value=("scan", {"status": "completed"}, {}, {})) as mcp, mock.patch.object(handler, "load_authoritative_scan", return_value={}), mock.patch.object(handler, "assess_authoritative_freshness", return_value={"freshnessIssue": False}), mock.patch.object(handler, "ddb"), mock.patch.object(handler, "ses") as ses, mock.patch("builtins.print"):
+            with mock.patch.object(handler, "scheduled_slot", return_value=slot), mock.patch.object(handler, "acquire_slot_lock", return_value=True), mock.patch.object(handler, "request", return_value={"sentinelCorpus": {"pages": pages}}), mock.patch.object(handler, "corpus_preflight", return_value=[]) as preflight, mock.patch.object(handler, "ssm") as ssm, mock.patch.object(handler, "get_secret", return_value="test") as secret, mock.patch.object(handler, "check_accessibility_evidence", return_value={"issue": False}) as accessibility, mock.patch.object(handler, "rest_scan", return_value=("scan", {"status": "completed"}, {}, {})) as rest, mock.patch.object(handler, "mcp_scan", return_value=("scan", {"status": "completed"}, {}, {})) as mcp, mock.patch.object(handler, "load_authoritative_scan", return_value={}), mock.patch.object(handler, "assess_authoritative_freshness", return_value={"freshnessIssue": False}), mock.patch.object(handler, "ddb"), mock.patch.object(handler, "ses") as ses, mock.patch("builtins.print"):
                 ssm.get_parameter.return_value = {"Parameter": {"Value": "test"}}
                 result = handler.handler({"scheduledTime": "2026-09-15T17:20:00Z"}, None)
             preflight.assert_called_once_with([job["page"]])
@@ -435,6 +435,8 @@ class SlotRotationTests(unittest.TestCase):
             self.assertEqual(mcp.call_count, int(job["transport"] == "mcp"))
             self.assertEqual(secret.call_count, mcp.call_count)
             self.assertEqual(result["jobs"], 1)
+            accessibility.assert_called_once()
+            self.assertFalse(result["results"][0]["accessibility"]["issue"])
             self.assertEqual(result["cycleSlot"], slot)
             self.assertEqual(result["results"][0]["location"], job["location"])
             ses.send_email.assert_not_called()
@@ -444,6 +446,149 @@ class SlotRotationTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 handler.rest_scan("https://example.com", "eu_ie", "api", "test")
         self.assertEqual(request.call_count, 1)
+
+
+class AccessibilityEvidenceTests(unittest.TestCase):
+    url = "https://ergoveritas.com/.well-known/certscore-canary/sentinels/broad-baseline.html"
+
+    def page(self):
+        values = {
+            "/accessibilityAudit": {"required": True, "engine": "axe-core", "engineVersion": "4.11.3", "status": "limited"},
+            "/accessibilityEvidence/contractVersion": "certscore.accessibility-audit.v1",
+            "/accessibilityEvidence/engineVersion": "4.11.3",
+            "/accessibilityEvidence/scanId": "scan-123",
+            "/accessibilityEvidence/documentUrl": self.url,
+            "/accessibilityEvidence/violations": [
+                {"ruleId": r["ruleId"], "nodeCount": 1, "representativeNodes": [{"selectors": [r["selector"]]}]}
+                for r in handler.ACCESSIBILITY_EXPECTATIONS["requiredRules"]
+            ],
+        }
+        return {"scanId": "scan-123", "section": "accessibility", "entries": [
+            {"path": "", "value": {}}, {"path": "/accessibilityEvidence", "value": {}},
+            *[{"path": k, "value": v} for k, v in values.items()],
+        ]}
+
+    def assess(self, page):
+        return handler.assess_accessibility_evidence(self.url, "scan-123", handler.ACCESSIBILITY_EXPECTATIONS, page)
+
+    def test_all_bound_required_violations_pass_even_with_unrelated_review_limits(self):
+        result = self.assess(self.page())
+        self.assertFalse(result["issue"])
+        self.assertEqual(len(result["observedRuleIds"]), 5)
+
+    def test_small_root_objects_and_expanded_violation_arrays_are_both_supported(self):
+        page = self.page()
+        root = handler.accessibility_report_values(page["entries"])
+        page["entries"] = [{"path": "", "value": root}]
+        self.assertFalse(self.assess(page)["issue"])
+        page = self.page()
+        entry = next(e for e in page["entries"] if e["path"].endswith("/violations"))
+        violations = entry["value"]
+        entry["value"] = []
+        page["entries"].extend({"path": f"/accessibilityEvidence/violations/{i}", "value": v} for i, v in enumerate(violations))
+        self.assertFalse(self.assess(page)["issue"])
+        page["entries"].append({"path": "/findings/0/title", "value": "ignored narrative", "stringPart": 0, "stringParts": 2})
+        self.assertFalse(self.assess(page)["issue"])
+
+    def test_partial_sparse_overlapping_or_malformed_required_entries_fail_closed(self):
+        pages = [self.page() for _ in range(5)]
+        pages[0]["entries"].pop(0)  # No root container.
+        pages[1]["entries"].pop(1)  # No accessibility container.
+        entry = next(e for e in pages[2]["entries"] if e["path"].endswith("/violations"))
+        violations, entry["value"] = entry["value"], []
+        pages[2]["entries"].append({"path": "/accessibilityEvidence/violations/2", "value": violations[0]})
+        pages[3]["entries"].append({"path": "/accessibilityEvidence/bad~2path", "value": True})
+        pages[4]["entries"][0]["value"] = {"accessibilityAudit": {}}
+        for page in pages:
+            self.assertTrue(self.assess(page)["issue"])
+
+    def test_keyword_mentions_review_items_and_zero_counts_cannot_replace_violations(self):
+        for change in ("review", "zero", "wrong_selector"):
+            page = self.page()
+            violations = next(e for e in page["entries"] if e["path"].endswith("/violations"))["value"]
+            if change == "review":
+                page["entries"].append({"path": "/accessibilityEvidence/reviewItems", "value": violations[:]})
+                violations.clear()
+                page["description"] = "image-alt label button-name color-contrast nested-interactive"
+            elif change == "zero":
+                violations[0]["nodeCount"] = 0
+            else:
+                violations[0]["representativeNodes"] = [{"selectors": ["#unrelated-image"]}]
+            result = self.assess(page)
+            self.assertTrue(result["issue"])
+            self.assertIn("image-alt", result["missingRuleIds"])
+
+    def test_missing_malformed_wrong_scan_or_wrong_document_fails_closed(self):
+        pages = [None, {}, self.page(), self.page(), self.page()]
+        pages[2]["scanId"] = "other-scan"
+        next(e for e in pages[3]["entries"] if e["path"].endswith("/documentUrl"))["value"] = "https://example.com/"
+        pages[4]["entries"].append(pages[4]["entries"][0])
+        for page in pages:
+            self.assertTrue(self.assess(page)["issue"])
+        self.assertTrue(handler.assess_accessibility_evidence(self.url, "scan-123", None, self.page())["issue"])
+
+    def test_rule_miss_remains_an_incident_after_freshness_reconciliation(self):
+        page = self.page()
+        next(e for e in page["entries"] if e["path"].endswith("/violations"))["value"].clear()
+        row = {"scanId": "scan-123", "requestedUrl": self.url, "status": "completed_limited",
+               "accessibility": self.assess(page), "freshnessIssue": False}
+        incident = handler.scanner_incident_for_row(row)
+        self.assertIn("accessibility_required_rule_missing", incident["issueCodes"])
+        with mock.patch.object(handler, "load_authoritative_scan", return_value={"status": "completed_limited"}), mock.patch.object(handler, "assess_authoritative_freshness", return_value={"freshnessIssue": False}), mock.patch.object(handler, "check_accessibility_evidence", return_value=row["accessibility"]):
+            unresolved, resolved = handler.reconcile_scanner_incidents([incident], "test", "2026-10-10T12:00:00Z")
+        self.assertEqual(len(unresolved), 1)
+        self.assertEqual(resolved, [])
+
+    def test_one_retained_evidence_read_creates_no_scan_and_transport_failure_is_limited(self):
+        with mock.patch.object(handler, "request", return_value=self.page()) as request:
+            self.assertFalse(handler.check_accessibility_evidence(self.url, "scan-123", "test", handler.ACCESSIBILITY_EXPECTATIONS)["issue"])
+        request.assert_called_once()
+        self.assertEqual(request.call_args.args, (handler.API + "/api/v2/scans/scan-123/report-evidence?section=accessibility",))
+        with mock.patch.object(handler, "request", side_effect=RuntimeError("503")):
+            result = handler.check_accessibility_evidence(self.url, "scan-123", "test", handler.ACCESSIBILITY_EXPECTATIONS)
+        self.assertEqual(result["reasonCodes"], ["accessibility_evidence_unavailable"])
+
+    def test_manifest_and_pinned_fallback_contract_match(self):
+        path = module_path.parent.parent / "ergoveritas-canary/.well-known/certscore-canary/manifest.json"
+        corpus = json.loads(path.read_text())["sentinelCorpus"]
+        self.assertEqual(corpus["accessibility"], handler.ACCESSIBILITY_EXPECTATIONS)
+        self.assertEqual(corpus["cadence"], "PT20M")
+
+    def test_missing_wcag_detection_is_persisted_and_alerted_without_an_extra_scan(self):
+        pages = [{"key": f"page-{i}", "url": f"/page-{i}.html", "expectedSignals": []} for i in range(5)]
+        issue = {"issue": True, "reasonCodes": ["accessibility_required_rule_missing"],
+                 "expected": handler.ACCESSIBILITY_EXPECTATIONS, "missingRuleIds": ["image-alt"]}
+        with mock.patch.object(handler, "scheduled_slot", return_value=0), \
+                mock.patch.object(handler, "acquire_slot_lock", return_value=True), \
+                mock.patch.object(handler, "request", return_value={"sentinelCorpus": {"pages": pages, "accessibility": handler.ACCESSIBILITY_EXPECTATIONS}}), \
+                mock.patch.object(handler, "corpus_preflight", return_value=[]), \
+                mock.patch.object(handler, "ssm") as ssm, \
+                mock.patch.object(handler, "rest_scan", return_value=("scan-123", {"status": "completed"}, {}, {})) as scan, \
+                mock.patch.object(handler, "mcp_scan") as mcp, \
+                mock.patch.object(handler, "load_authoritative_scan", return_value={"status": "completed"}), \
+                mock.patch.object(handler, "assess_authoritative_freshness", return_value={"freshnessIssue": False}), \
+                mock.patch.object(handler, "check_accessibility_evidence", return_value=issue) as check, \
+                mock.patch.object(handler, "ddb") as ddb, \
+                mock.patch.object(handler, "ses") as ses, mock.patch("builtins.print"):
+            ssm.get_parameter.return_value = {"Parameter": {"Value": "test"}}
+            result = handler.handler({"scheduledTime": "2026-10-10T12:00:00Z"}, None)
+        scan.assert_called_once()
+        mcp.assert_not_called()
+        self.assertEqual(check.call_count, 2)  # Initial read and existing reconciliation.
+        self.assertEqual(result["scannerFailures"], 1)
+        self.assertEqual(ddb.put_item.call_args.kwargs["Item"]["results"][0]["accessibility"], issue)
+        ses.send_email.assert_called_once()
+        self.assertIn("required WCAG", ses.send_email.call_args.kwargs["Content"]["Simple"]["Body"]["Text"]["Data"])
+
+    def test_rest_completed_limited_stops_polling_without_another_scan(self):
+        with mock.patch.object(handler, "request", side_effect=[
+            {"scanId": "scan-123"}, {"status": "completed_limited"}, {}, {},
+        ]) as request, mock.patch.object(handler.time, "sleep") as sleep:
+            _, scan_status, _, _ = handler.rest_scan(self.url, "eu_ie", "api", "test")
+        self.assertEqual(scan_status["status"], "completed_limited")
+        self.assertEqual(request.call_count, 4)
+        self.assertEqual(sum(call.args[1:2] == ("POST",) for call in request.call_args_list), 1)
+        sleep.assert_not_called()
 
 
 class ScheduleConfigurationTests(unittest.TestCase):

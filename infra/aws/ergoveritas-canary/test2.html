@@ -1,11 +1,11 @@
-<!-- OWNED CANARY TEST PAGE — intentionally varied privacy behavior for scanner validation -->
+<!-- OWNED CANARY TEST PAGE — intentional privacy behavior and WCAG failures for scanner validation -->
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow, noarchive">
-  <title>CertScore GPC and Do Not Sell/Share canary — test 2</title>
+  <title>CertScore privacy and WCAG canary — test 2</title>
   <style>
     body { background:#f8fafc; color:#0f172a; font:16px/1.5 system-ui,sans-serif; margin:0; }
     main { margin:36px auto; max-width:800px; padding:0 20px 48px; }
@@ -18,6 +18,12 @@
     button.secondary { background:#e2e8f0; color:#0f172a; }
     .choice ul { margin:10px 0; padding-left:22px; }
     .note { color:#475569; font-size:0.9rem; }
+    .wcag-fixtures { background:#fff; border:2px dashed #7c2d12; border-radius:12px; padding:20px; }
+    .wcag-example { border-top:1px solid #e2e8f0; margin-top:16px; padding-top:12px; }
+    .wcag-example input, .wcag-example select { font:inherit; }
+    .wcag-icon { display:block; width:24px; height:24px; }
+    .wcag-tiny-targets { display:flex; gap:2px; }
+    .wcag-tiny-targets button { border-radius:0; font-size:8px; height:12px; line-height:12px; padding:0; width:12px; }
     a { color:#075985; }
     [hidden] { display:none !important; }
   </style>
@@ -28,7 +34,7 @@
         data-expected-gpc-comparison="partial_reduction_when_comparable"
         data-expected-prechoice-categories="analytics,advertising,session_replay,product_analytics"
         data-expected-post-refusal-activity="true">
-    <h1>GPC and privacy-choice canary</h1>
+    <h1>Privacy and accessibility canary</h1>
     <p class="note">Owned synthetic test page. It loads optional technologies before a choice and reduces advertising activity when browser GPC is enabled. No account or transaction state is involved.</p>
 
     <section class="banner" id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
@@ -70,6 +76,72 @@
         <li>Six vendor requests without GPC, five with GPC, spanning analytics, advertising, session replay, and product measurement. Their observed transmission and classification must be verified from retained network evidence.</li>
       </ul>
       <p class="note">Expected GPC outcome: the Meta advertising request and its test cookie appear only without GPC; five other optional requests remain. A complete, verified paired comparison can show this partial reduction. A limited comparison remains indeterminate.</p>
+    </section>
+
+    <section class="wcag-fixtures" aria-labelledby="test2-wcag-fixtures" data-certscore-accessibility-fixture="wcag-starting-page.v1">
+      <h2 id="test2-wcag-fixtures">Intentional accessibility failures</h2>
+      <p>These synthetic examples deliberately fail automated WCAG checks. The fields contain no personal data, submit nothing, and all images are embedded in this file.</p>
+
+      <div class="wcag-example">
+        <h3>Image without a text alternative</h3>
+        <img id="wcag-missing-alt" width="96" height="48" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='48'%3E%3Crect width='96' height='48' fill='%23075985'/%3E%3C/svg%3E">
+      </div>
+
+      <div class="wcag-example">
+        <h3>Image control without a text alternative</h3>
+        <input id="wcag-image-control" type="image" width="96" height="48" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='48'%3E%3Crect width='96' height='48' fill='%237c2d12'/%3E%3C/svg%3E">
+      </div>
+
+      <div class="wcag-example">
+        <h3>Text field without a programmatic label</h3>
+        <p>The nearby heading is intentionally not associated with this empty test field.</p>
+        <input id="wcag-unlabelled-input" type="text" autocomplete="off">
+      </div>
+
+      <div class="wcag-example">
+        <h3>Select without a programmatic label</h3>
+        <select id="wcag-unlabelled-select"><option>Example option</option></select>
+      </div>
+
+      <div class="wcag-example">
+        <h3>Icon button without an accessible name</h3>
+        <button id="wcag-unnamed-button" type="button"><svg class="wcag-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 12h16M12 4v16" stroke="currentColor" stroke-width="3"/></svg></button>
+      </div>
+
+      <div class="wcag-example">
+        <h3>Icon link without an accessible name</h3>
+        <a id="wcag-unnamed-link" href="#test2-wcag-fixtures"><svg class="wcag-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 5v15" fill="none" stroke="currentColor" stroke-width="3"/></svg></a>
+      </div>
+
+      <div class="wcag-example">
+        <h3>Insufficient text contrast</h3>
+        <p id="wcag-low-contrast" style="background:#fff;color:#aaa;font-size:16px;font-weight:400">This deliberately pale text has insufficient contrast against its white background.</p>
+      </div>
+
+      <div class="wcag-example">
+        <h3>Invalid ARIA state value</h3>
+        <div id="wcag-invalid-aria" role="checkbox" aria-label="Invalid state example" aria-checked="sometimes" tabindex="0">Example checkbox with an invalid state</div>
+      </div>
+
+      <div class="wcag-example">
+        <h3>Required ARIA state omitted</h3>
+        <div id="wcag-missing-aria-state" role="checkbox" aria-label="Missing state example" tabindex="0">Example checkbox without its required state</div>
+      </div>
+
+      <div class="wcag-example">
+        <h3>ARIA attribute unsupported by its role</h3>
+        <div id="wcag-disallowed-aria" role="button" aria-checked="true" tabindex="0">Button role with an unsupported checked state</div>
+      </div>
+
+      <div class="wcag-example">
+        <h3>Interactive control nested inside another control</h3>
+        <button id="wcag-nested-control" type="button">Outer control <span role="button" tabindex="0">Inner control</span></button>
+      </div>
+
+      <div class="wcag-example">
+        <h3>Small, closely spaced pointer targets</h3>
+        <div class="wcag-tiny-targets"><button id="wcag-tiny-target" type="button">1</button><button type="button">2</button><button type="button">3</button></div>
+      </div>
     </section>
   </main>
   <script>
