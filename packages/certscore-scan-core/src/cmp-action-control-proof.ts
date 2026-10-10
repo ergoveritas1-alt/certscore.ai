@@ -12,7 +12,8 @@ import { createHash } from "node:crypto";
 import { inspectLocatorActionability, locatorActionabilitySupportsVerifiedDispatch } from "./cmp-control-actionability.js";
 import type { Locator, Page } from "playwright";
 import { readConsentActionLabelFields, type ConsentActionLabelFields } from "./consent-action-label-fields.js";
-import { consentScopePermitsInteraction, consentScopeInteractionState } from "./cmp-action-target.js";
+import { consentScopePermitsInteraction } from "./cmp-action-target.js";
+import { readConsentActionSettlingSnapshot } from "./consent-action-settling-snapshot.js";
 import { inspectCustomAcceptControl, sameCustomAcceptControlBinding } from "./custom-accept-control.js";
 import type { CustomAcceptControlBinding } from "@certscore/contracts";
 import {
@@ -51,15 +52,27 @@ export async function waitForTransparentConsentControl(input: {
     catch { return false; }
     const scopes = input.controlFrameUrl
       ? input.page.frames().filter(frame => frame.url() === input.controlFrameUrl) : [input.page];
-    if (scopes.length !== 1 || await scopes[0]!.locator(input.selectorHint).count().catch(() => 0) !== 1 ||
+    if (scopes.length !== 1 ||
       !await input.control.isEnabled({timeout: remainingMs()}).catch(() => false)) return false;
-    const labels = boundFields(await readControlLabelFields(input.control, remainingMs()));
+    // evaluateAll does not auto-wait or enforce strict locator uniqueness. Read
+    // all matches atomically and reject duplicates in the callback. Bound the
+    // RPC by the original settling deadline, including a stalled browser.
+    let clearSnapshotTimer = () => {};
+    const snapshot = await Promise.race([
+      scopes[0]!.locator(input.selectorHint).evaluateAll(readConsentActionSettlingSnapshot).catch(() => undefined),
+      new Promise<undefined>(resolve => {
+        const timer = setTimeout(resolve, remainingMs());
+        clearSnapshotTimer = () => clearTimeout(timer);
+      }),
+    ]).finally(() => clearSnapshotTimer());
+    if (!snapshot || Date.now() >= deadlineAtMs || input.signal?.aborted) return false;
+    const labels = boundFields(snapshot.labels);
     const classified = classifyConsentControlLabel({usage: "action", classifierProfile: "multilingual_v1",
       label: preferredLabel(labels)?.value, hasConsentContext: true});
     if (sourceIntentConflict(labels) || classified.intent !== input.action || classified.confidence < 0.8 ||
       classified.matchedLocale === "mk" || classified.variant === "reject_with_subscription" ||
       classified.variant === "reject_with_payment") return false;
-    const state = await consentScopeInteractionState(input.control, remainingMs());
+    const state = snapshot.state;
     if (Date.now() >= deadlineAtMs || input.signal?.aborted) return false;
     if (state === "interactive") return true;
     if (state !== "transparent") return false;
