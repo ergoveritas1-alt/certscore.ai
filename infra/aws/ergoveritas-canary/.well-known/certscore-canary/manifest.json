@@ -3504,7 +3504,7 @@
     }
   ],
   "sentinelCorpus": {
-    "cadence": "PT1H",
+    "cadence": "PT20M",
     "pages": [
       {
         "key": "sentinel-broad-baseline",
@@ -3568,6 +3568,31 @@
       "evidence_incomplete",
       "scan_duration_regression"
     ],
-    "requireConsecutiveFailures": 2
+    "requireConsecutiveFailures": 2,
+    "accessibility": {
+      "contractVersion": "certscore.sentinel-accessibility.v1",
+      "requiredRules": [
+        {
+          "ruleId": "image-alt",
+          "selector": "#sentinel-missing-alt"
+        },
+        {
+          "ruleId": "label",
+          "selector": "#sentinel-unlabelled-input"
+        },
+        {
+          "ruleId": "button-name",
+          "selector": "#sentinel-unnamed-button"
+        },
+        {
+          "ruleId": "color-contrast",
+          "selector": "#sentinel-low-contrast"
+        },
+        {
+          "ruleId": "nested-interactive",
+          "selector": "#sentinel-nested-control"
+        }
+      ]
+    }
   }
 }
