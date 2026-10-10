@@ -155,7 +155,17 @@ const PROJECTION_SQL = `select s.id,
          when snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit}' is null
            or snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit}' = 'null'::jsonb then null
          when snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,contractVersion}' = 'certscore.accessibility-audit-projection.v1'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,verificationStatus}' = 'verified'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,sourceHash}' ~ '^[a-f0-9]{64}$'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,contractVersion}' = 'certscore.accessibility-audit.v1'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,required}' = 'true'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,engine}' = 'axe-core'
+           and coalesce(snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,documentToken}', '') <> ''
            and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,scanId}' = s.id::text
+           and snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,limitations}' = '[]'::jsonb
+           and snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,reviewItems}' = '[]'::jsonb
+           and case when jsonb_typeof(snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,rulesEvaluated}') = 'array'
+             then jsonb_array_length(snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,rulesEvaluated}') > 0 else false end
            and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,status}' = 'completed' then 'completed'
          else 'limited'
        end as accessibility_audit_status,

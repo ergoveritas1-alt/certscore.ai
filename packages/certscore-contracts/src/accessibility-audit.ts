@@ -21,7 +21,10 @@ export const accessibilityRuleObservationSchema = z.object({
   impact: z.enum(["minor", "moderate", "serious", "critical"]).nullable(),
   tags: z.array(z.string().max(80)).max(24),
   help: z.string().max(300), description: z.string().max(600),
-  helpUrl: z.string().url().max(400).refine(value => new URL(value).hostname === "dequeuniversity.com"),
+  helpUrl: z.string().url().max(400).refine(value => {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "dequeuniversity.com" && !url.username && !url.password;
+  }),
   nodeCount: z.number().int().positive().max(1_000_000),
   representativeNodes: z.array(nodeSchema).min(1).max(ACCESSIBILITY_LIMITS.examplesPerRule),
 }).strict().refine(rule => rule.representativeNodes.length <= rule.nodeCount, "Examples exceed the observed node count.");
