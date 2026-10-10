@@ -12,7 +12,7 @@ import { observedControlAssessment } from "../../../apps/web/lib/scans/test-fixt
 import { verifiedPostAcceptFormSnapshotForRow } from "../../../apps/web/server/scans/form-snapshot-evidence.js";
 import { buildReportDisplayExport } from "../../../apps/web/lib/api-v2/report-display-export.js";
 
-async function fixture(run: (url: string, counts: { submissions: number }) => Promise<void>) {
+async function fixture(run: (url: string, counts: { submissions: number }) => Promise<void>, fullyMaskedFirstForm = false) {
   const counts = { submissions: 0 };
   const server = createServer((request, response) => {
     if (request.method === "POST") counts.submissions++;
@@ -23,7 +23,9 @@ async function fixture(run: (url: string, counts: { submissions: number }) => Pr
         document.querySelector('section').remove();
         // The click completes, but the CMP never confirms a consent decision.
         document.body.insertAdjacentHTML('beforeend',
-          '<form method="post" action="/contact"><h2>Contact</h2><label>Name<input name="name" value="private-entered-value"></label><label>Email<input name="email" type="email"></label><p>See our <a href="/privacy">Privacy notice</a></p></form>'+
+          '${fullyMaskedFirstForm
+            ? '<form method="post" action="/contact" style="width:1000px;height:32px"><input name="email" aria-label="Email" type="email" value="private-entered-value" style="box-sizing:border-box;width:100%;height:100%"></form>'
+            : '<form method="post" action="/contact"><h2>Contact</h2><label>Name<input name="name" value="private-entered-value"></label><label>Email<input name="email" type="email"></label><p>See our <a href="/privacy">Privacy notice</a></p></form>'}'+
           '<form method="post" action="/subscribe"><h2>Newsletter</h2><label>Business email<input name="email" type="email"></label></form>'+
           '<form method="post" action="/third"><label>Third form<input name="third"></label></form>');
       };</script>`);
@@ -104,6 +106,54 @@ test("completed unconfirmed Accept captures two reviewed form images inside the 
       }
     }
   });
+});
+
+test("an empty after-click crop keeps both form observations and only serves the useful image", async () => {
+  await fixture(async (url, counts) => {
+    let reviews = 0;
+    const reportScanId = "1de3d884-3d97-4f88-bc2d-2a332fc301ed";
+    const packet = await runPostAcceptObserver({ url, scanId: reportScanId,
+      interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+      recipe: CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE, actionSearchTimeoutMs: 500, confirmationTimeoutMs: 100,
+      observationWindowMs: 3000, formSnapshotReviewer: async () => { reviews++; return { safeForDisplay: true }; },
+    });
+    assert.equal(packet.acceptanceRegistration.status, "unconfirmed");
+    assert.equal(packet.productionProjectable, false);
+    assert.deepEqual(packet.observations, []);
+    const capture = packet.formSnapshotCapture;
+    assert.ok(capture);
+    assert.equal(capture.contractVersion, "certscore.post_accept_form_snapshots.v7");
+    assert.equal(capture.inventory.forms.length, 2);
+    const emptyForm = capture.inventory.forms.find(form => form.fields.some(field => field.label === "Email"));
+    assert.ok(emptyForm);
+    const emptyImage = capture.snapshots.find(image => image.formRef === emptyForm.formRef);
+    assert.equal(emptyImage?.reason, "no_visible_context");
+    assert.equal(emptyImage?.data, undefined);
+    assert.equal(capture.snapshots.filter(image => image.status === "available").length, 1);
+    assert.equal(reviews, 1);
+    assert.equal(counts.submissions, 0);
+    assert.ok(postAcceptEvidencePacketSchema.safeParse(packet).success);
+    const projection = projectPostAcceptEvidenceForReport({ packet, packetSha256: "a".repeat(64) });
+    const assessment = { ...observedControlAssessment, scan: { ...observedControlAssessment.scan, scanId: reportScanId } };
+    const rows = projectPostAcceptForms({ consentControlAssessment: assessment,
+      postAcceptEvidenceProjection: projection }).rows;
+    assert.equal(rows.length, 2, "snapshot quality does not reduce the observed form tally");
+    const emptyRow = rows.find(row => row.form.fields.some(field => field.label === "Email"));
+    const usefulRow = rows.find(row => row.snapshot.status === "available");
+    assert.ok(emptyRow); assert.ok(usefulRow);
+    assert.equal(emptyRow.form.fields.length, 1);
+    assert.equal(emptyRow.snapshot.status, "unavailable");
+    assert.equal(emptyRow.snapshot.reason, "no_visible_context");
+    assert.equal(verifiedPostAcceptFormSnapshotForRow(packet, emptyRow), null);
+    assert.ok(verifiedPostAcceptFormSnapshotForRow(packet, usefulRow));
+    const api = buildReportDisplayExport({ scan: { id: reportScanId },
+      collectionTableRows: rows }) as { collectionTableRows: typeof rows };
+    assert.equal(api.collectionTableRows.length, 2);
+    const apiEmptyRow = api.collectionTableRows.find(row => row.id === emptyRow.id);
+    assert.equal(apiEmptyRow?.snapshot.status, "unavailable");
+    assert.equal(apiEmptyRow?.snapshot.reason, "no_visible_context");
+    assert.equal(api.collectionTableRows.find(row => row.id === usefulRow.id)?.snapshot.status, "available");
+  }, true);
 });
 
 test("unconfirmed Accept images fail closed when safety review withholds them", async () => {

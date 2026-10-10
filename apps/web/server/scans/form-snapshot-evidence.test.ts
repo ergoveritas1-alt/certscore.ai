@@ -63,9 +63,12 @@ test("form images require inventory, document and byte integrity and never expos
   const verify = (override = {}) => verifiedFormSnapshots({ collectionSurfaceInventory: inventory, collectionSurfaceSnapshots: [{ ...snapshot, ...override }] });
   assert.deepEqual(verify()[0]?.bytes, bytes);
   assert.equal(verify({ reason: "review_timed_out" }).length, 0, "available images cannot carry a failure reason");
-  const failure = verify({ status: "unavailable", data: undefined, reason: "review_timed_out" });
-  assert.equal(failure[0]?.snapshot.reason, "review_timed_out");
-  assert.equal(failure[0]?.bytes, null);
+  for (const reason of ["review_timed_out", "no_visible_context"]) {
+    const failure = verify({ status: "unavailable", data: undefined, reason });
+    assert.equal(failure[0]?.snapshot.reason, reason);
+    assert.equal(failure[0]?.bytes, null);
+    assert.equal(verify({ reason }).length, 0, "available images cannot carry a failure reason");
+  }
   assert.equal(verify({ status: "unavailable", data: undefined, reason: "guessed" }).length, 0);
   for (const override of [{ sourceInventoryHash: "0".repeat(64) }, { pageUrl: "https://other.test/" }, { formRef: "collection_form_9" }, { sha256: "0".repeat(64) }, { status: "withheld" }]) assert.equal(verify(override).some(item => item.bytes !== null), false);
 });

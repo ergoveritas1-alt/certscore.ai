@@ -3,7 +3,7 @@ import { z } from "zod";
 export const collectionSurfaceSnapshotReasonSchema = z.enum([
   "capture_cancelled", "capture_budget_exhausted", "document_changed", "control_identity_unavailable",
   "control_binding_changed", "form_not_visible", "form_bounds_exceeded", "screenshot_failed",
-  "image_processing_failed", "image_size_exceeded", "review_failed", "review_timed_out", "review_withheld",
+  "image_processing_failed", "image_size_exceeded", "no_visible_context", "review_failed", "review_timed_out", "review_withheld",
 ]);
 // Pixels are presentation evidence only; unavailable/withheld images retain no bytes.
 const collectionSurfaceSnapshotObjectSchema = z.object({

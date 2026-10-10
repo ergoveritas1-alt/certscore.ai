@@ -5,6 +5,60 @@ import sharp from "sharp";
 import { buildCollectionSurfaceInventory } from "./collection-surface-inventory";
 import { captureCollectionSurfaceSnapshots, FORM_SNAPSHOT_BUDGET_MS } from "./collection-surface-snapshots";
 
+test("fully masked form crops retain fields without publishing an empty image or blocking a useful second form", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent(`<form style="width:1000px;height:32px"><input aria-label="Email" type="email"
+      value="private@example.test" style="box-sizing:border-box;width:100%;height:100%"></form>
+      <form><label>Name<input type="text" value="private-name"></label></form>`);
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: page.url(), inspectedFieldCandidateCount: 2,
+      candidateScanTruncated: false, rows: [
+        { groupKey: "first", structure: "native_form", elementType: "input", inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 },
+        { groupKey: "second", structure: "native_form", elementType: "input", inputType: "text", label: "Name", required: false, disabled: false, readOnly: false, domOrder: 1 },
+      ] }, Date.now());
+    const originalInventory = JSON.stringify(inventory);
+    let reviews = 0;
+    const images = await captureCollectionSurfaceSnapshots(page, inventory, async () => {
+      reviews++; return { safeForDisplay: true };
+    });
+    assert.equal(images.length, 2);
+    assert.equal(images[0]?.status, "unavailable");
+    assert.equal(images[0]?.reason, "no_visible_context");
+    assert.equal(images[0]?.data, undefined);
+    assert.equal(images[0]?.sha256, undefined);
+    assert.equal(images[1]?.status, "available");
+    assert.equal(reviews, 1, "only the image with visible context should reach safety review");
+    assert.equal(JSON.stringify(inventory), originalInventory, "image quality must not remove forms or fields");
+    assert.equal(await page.locator("input").first().inputValue(), "private@example.test");
+    assert.equal(await page.locator("[data-certscore-form-capture]").count(), 0);
+  } finally { await browser.close(); }
+});
+
+test("blank form pixels are unavailable while a small crop with visible detail remains reviewable", async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  try {
+    await page.setContent(`<form style="width:300px;height:20px;background:white">
+      <input aria-label="Email" type="email" style="position:absolute;width:0;height:0;padding:0;border:0"></form>`);
+    const inventory = buildCollectionSurfaceInventory({ pageUrl: page.url(), inspectedFieldCandidateCount: 1,
+      candidateScanTruncated: false, rows: [{ groupKey: "0", structure: "native_form", elementType: "input",
+        inputType: "email", label: "Email", required: false, disabled: false, readOnly: false, domOrder: 0 }] }, Date.now());
+    let reviews = 0;
+    const reviewer = async () => { reviews++; return { safeForDisplay: true }; };
+    const blank = await captureCollectionSurfaceSnapshots(page, inventory, reviewer);
+    assert.equal(blank[0]?.status, "unavailable");
+    assert.equal(blank[0]?.reason, "no_visible_context");
+    assert.equal(blank[0]?.data, undefined);
+    assert.equal(reviews, 0);
+    await page.locator("form").evaluate(form => form.prepend("Email"));
+    const visible = await captureCollectionSurfaceSnapshots(page, inventory, reviewer);
+    assert.equal(visible[0]?.status, "available");
+    assert.equal(visible[0]?.height, 20, "small images must not be rejected solely by dimensions");
+    assert.equal(reviews, 1);
+  } finally { await browser.close(); }
+});
+
 test("default text inputs bind for current and legacy inventories but changed types fail closed",async()=>{
   const browser=await chromium.launch({headless:true});const page=await browser.newPage();
   try {

@@ -241,8 +241,18 @@ async function captureWithinBudget(page: Page, inventory: FormSnapshotInventory,
       onStage?.(`form_${formIndex}_mask_and_review`);
       timingStartedAtMs = Date.now();
       const { data, info } = await sharp(original, { limitInputPixels: 40_000_000 }).resize({ width: 640, height: 960, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 45 }).toBuffer({ resolveWithObject: true });
-      options?.onCaptureTiming?.("image_processing", Date.now() - timingStartedAtMs);
       if (data.byteLength > 96 * 1024) { results.push(retain(unavailable("image_size_exceeded"))); continue; }
+      // Safety approval alone cannot make a blank/fully masked crop useful.
+      // Inspect only the final bounded, masked image. Exact uniformity avoids
+      // guessing from dimensions, field labels, or low-contrast visible detail.
+      const stats = await sharp(data, { limitInputPixels: 640 * 960 }).stats();
+      options?.onCaptureTiming?.("image_processing", Date.now() - timingStartedAtMs);
+      if (pixelSignal.aborted || reviewSignal.aborted || Date.now() >= deadline || page.url() !== inventory.pageUrl) {
+        results.push(retain(unavailable(pixelSignal.aborted || reviewSignal.aborted ? "capture_cancelled" : page.url() !== inventory.pageUrl ? "document_changed" : "capture_budget_exhausted"))); continue;
+      }
+      if (stats.channels.every(channel => channel.min === channel.max)) {
+        results.push(retain(unavailable("no_visible_context"))); continue;
+      }
       const boundedSignal = AbortSignal.any([AbortSignal.timeout(Math.max(1, reviewDeadline - Date.now())), reviewSignal]);
       onReviewStarted?.(formIndex);
       const reviewStartedAtMs = Date.now();

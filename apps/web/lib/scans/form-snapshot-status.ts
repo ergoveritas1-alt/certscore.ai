@@ -12,6 +12,7 @@ export function formSnapshotExplanation(reason?: string): string {
     screenshot_failed: "The browser could not capture the form image.",
     image_processing_failed: "The captured image could not be processed.",
     image_size_exceeded: "The image exceeded the retained size limit.",
+    no_visible_context: "No visible form detail remained in the masked image.",
     review_failed: "Image safety review could not complete.",
     review_timed_out: "Image safety review reached its time limit.",
     review_withheld: "The image was withheld by safety review.",

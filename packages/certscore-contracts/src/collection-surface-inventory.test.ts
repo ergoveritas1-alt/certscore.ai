@@ -132,6 +132,9 @@ test("form snapshot contracts reject unapproved bytes and oversized or incomplet
   const { collectionSurfaceSnapshotSchema } = await import("./index");
   const base = { contractVersion: "certscore.collection-surface-snapshot.v1", formRef: "collection_form_0", pageUrl: "https://example.test/contact", capturedAt: "2026-09-07T00:00:00Z", sourceInventoryHash: "a".repeat(64), mimeType: "image/jpeg", valuesMasked: true };
   assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "unavailable" }).success, true);
+  assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "unavailable", reason: "no_visible_context" }).success, true);
+  assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "unavailable", reason: "no_visible_context", data: "empty-image" }).success, false);
+  assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "withheld", reason: "no_visible_context" }).success, false);
   assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "withheld", data: "hidden-image" }).success, false);
   assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "available", data: "jpeg" }).success, false);
   assert.equal(collectionSurfaceSnapshotSchema.safeParse({ ...base, status: "available", data: "jpeg", width: 641, height: 300, sha256: "b".repeat(64), sizeBytes: 4 }).success, false);

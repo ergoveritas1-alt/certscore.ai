@@ -42,3 +42,42 @@ No fresh public-site scan, production deployment or Mac mini bot restart was
 performed for this verification. Deterministic tests establish the bounded
 capture and delivery behavior, not live-site screenshot yield or production
 latency. The previous live-report browser interaction signoff remains open.
+
+## Uniform masked-image check (local, not deployed)
+
+The October 9 follow-up reproduced a retained FreeImages/iStock form crop that
+was only a 640×21 solid gray strip. Safety approval did not establish that the
+image contained visible form detail. Shared capture now checks the final masked,
+bounded JPEG before safety review. If every color channel is exactly uniform,
+it retains `unavailable` / `no_visible_context` without bytes. This applies to
+pre-consent, registered Accept and completed unconfirmed Accept-click captures.
+Small images and low-contrast detail are not rejected by a dimension or variance
+threshold. Nonuniform pixels still require the existing safety review; this is
+not a general semantic image-quality assessment.
+
+Both new local reproduction tests failed against the previous implementation
+because it returned `available`. Verification after the change passed 25 shared
+capture tests, five unconfirmed Accept tests, 20 registered Accept tests, 573
+contract tests and 13 focused web projection/retrieval/export tests. Contract,
+scan-core and web typechecks passed. The after-click integration retains both
+form rows, serves only the useful image, preserves unconfirmed registration and
+submits no forms.
+
+The structured form inventory, field count, phase, provenance, consent conclusions
+and scoring are unchanged. Shared report/API rows keep the form and the retained
+snapshot reason; image follow-up cannot serve unavailable bytes. Historical
+images remain unchanged. There is no new banner or disclaimer, browser capture,
+retry, lane, timeout extension, model call or live-site test.
+
+The local maximum-size (640×960) image-check benchmark measured 8.86 ms at p95
+over 100 warmed samples. Two checks at 100,000 scans, assuming three GB of worker
+and one GB of coordinator compute at $0.0000166667/GB-second, estimate $0.12;
+the conservative incremental budget is below $0.50 per 100,000 scans, before
+savings from skipped safety reviews. This is below the $1/month approval
+threshold at that volume and was disclosed before implementation. The benchmark
+is local, not a production latency measurement.
+
+The new reason is additive to the shared snapshot enum. For a future release,
+deploy and verify WC01 readers before scanner producers so an older strict
+reader cannot reject a packet containing the new reason. No deployment is
+authorized by this verification step.
