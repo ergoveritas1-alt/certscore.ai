@@ -14,6 +14,7 @@ export {
   ThrottledError
 } from "./errors.js";
 export type {
+  AccessibilityAuditSummary,
   ReportEvidencePage,
   AfterActionSummary,
   ChoicePathExecution,

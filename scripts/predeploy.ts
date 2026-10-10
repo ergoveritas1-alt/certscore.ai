@@ -131,6 +131,7 @@ const ACCESSIBILITY_AUDIT_CHECK: Check = {
     "apps/web/lib/api-v2/report-evidence-selection.test.ts",
     "apps/web/lib/api-v2/scan-resource.test.ts",
     "apps/web/server/scans/scan-status-projection.test.ts",
+    "packages/certscore-sdk/src/client.test.ts",
     "packages/certscore-mcp/src/tools.test.ts"],
 };
 
