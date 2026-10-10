@@ -216,6 +216,8 @@ const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
 export interface PreConsentRuntimeScannerInput {
   /** Required entry-page audit; omitted in consent, GPC and inventory workers. */
   accessibilityScanId?: string;
+  /** Release only the passive deadline after all baseline observers are frozen. */
+  onPassiveCaptureComplete?: () => void;
   url: string;
   normalizedUrl: string;
   scanStartedAtMs: number;
@@ -4052,6 +4054,7 @@ export async function preConsentRuntimeScanner(
     const finalizedFormDestinationTrace = formTracing && !input.signal?.aborted ? formTracing.finish() : undefined;
     const finalizedProxyGraph = proxyDestinations || input.accessibilityScanId ? finishGraph() : undefined;
     if (input.accessibilityScanId) responseCaptureFinalized = true;
+    if (input.accessibilityScanId) input.onPassiveCaptureComplete?.();
     const accessibilityAudit = input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only"
       ? await recordTiming(timingBreakdown, "required accessibility audit", "Bundled axe WCAG A/AA audit after frozen baseline capture, before single-result publication.", () =>
           runAccessibilityAudit({ page, scanId: input.accessibilityScanId!, documentIdentity: () => currentBrowserDocumentIdentity(page), signal: input.signal }))

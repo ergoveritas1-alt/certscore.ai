@@ -559,14 +559,16 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const preConsentResultPromise = preConsentEnabled
     ? settlePreConsentRuntimeWithinDeadline({
       deadlineMs: preConsentModuleDeadlineMs,
+      passiveDeadlineMs: accessibilityRequired ? canonicalPreConsentModuleDeadlineMs : undefined,
       getLatestLifecycleCheckpoint: () => latestPreConsentLifecycleCheckpoint,
       startedAtMs,
-      run: (softDeadlineSignal) => preConsentRuntimeScanner({
+      run: (softDeadlineSignal, completePassiveCapture) => preConsentRuntimeScanner({
         url: input.url,
         normalizedUrl,
         scanStartedAtMs: startedAtMs,
-        internalBudgetMs: accessibilityRequired ? canonicalPreConsentModuleDeadlineMs : scanProfile.internalBudgetMs,
+        internalBudgetMs: scanProfile.internalBudgetMs,
         accessibilityScanId: accessibilityRequired ? scanId : undefined,
+        onPassiveCaptureComplete: accessibilityRequired ? completePassiveCapture : undefined,
         artifactWriter,
         captureScope: evidenceLane === "consent_proof"
           ? "consent_proof"
@@ -3826,27 +3828,40 @@ export function isLateConsentGeometryShadowEnabled() {
 
 export async function settlePreConsentRuntimeWithinDeadline(input: {
   deadlineMs: number;
+  /** Preserve the original passive deadline while reserving a later audit window. */
+  passiveDeadlineMs?: number;
   getLatestLifecycleCheckpoint?: () => {
     atMs: number;
     label: string;
     status: "started" | "completed";
   } | undefined;
   graceMs?: number;
-  run: (softDeadlineSignal: AbortSignal) => Promise<PreConsentRuntimeScannerResult>;
+  run: (softDeadlineSignal: AbortSignal, completePassiveCapture: () => void) => Promise<PreConsentRuntimeScannerResult>;
   startedAtMs: number;
 }): Promise<PreConsentRuntimeScannerResult> {
   const controller = new AbortController();
-  const deadlineMessage =
-    `Pre-consent runtime reached its ${input.deadlineMs}ms module budget; retained bounded partial evidence.`;
+  let reachedDeadlineMs = input.deadlineMs;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let passiveDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let graceTimer: ReturnType<typeof setTimeout> | undefined;
   const deadlinePromise = new Promise<"deadline">((resolve) => {
-    deadlineTimer = setTimeout(() => {
-      controller.abort(new Error(deadlineMessage));
+    const reachDeadline = (deadlineMs: number) => {
+      if (controller.signal.aborted) return;
+      reachedDeadlineMs = deadlineMs;
+      controller.abort(new Error(
+        `Pre-consent runtime reached its ${deadlineMs}ms module budget; retained bounded partial evidence.`,
+      ));
       resolve("deadline");
-    }, input.deadlineMs);
+    };
+    deadlineTimer = setTimeout(() => reachDeadline(input.deadlineMs), input.deadlineMs);
+    if (input.passiveDeadlineMs !== undefined) {
+      const passiveDeadlineMs = input.passiveDeadlineMs;
+      passiveDeadlineTimer = setTimeout(() => reachDeadline(passiveDeadlineMs), passiveDeadlineMs);
+    }
   });
-  const workPromise = Promise.resolve().then(() => input.run(controller.signal));
+  const workPromise = Promise.resolve().then(() => input.run(controller.signal, () => {
+    if (passiveDeadlineTimer) clearTimeout(passiveDeadlineTimer);
+  }));
 
   try {
     const initialResult = await Promise.race([
@@ -3870,12 +3885,13 @@ export async function settlePreConsentRuntimeWithinDeadline(input: {
 
     return deadlineLimitedPreConsentResult({
       completedAtMs: Date.now(),
-      deadlineMs: input.deadlineMs,
+      deadlineMs: reachedDeadlineMs,
       latestLifecycleCheckpoint: input.getLatestLifecycleCheckpoint?.(),
       startedAtMs: input.startedAtMs,
     });
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (passiveDeadlineTimer) clearTimeout(passiveDeadlineTimer);
     if (graceTimer) clearTimeout(graceTimer);
   }
 }
