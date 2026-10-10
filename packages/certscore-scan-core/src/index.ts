@@ -1214,7 +1214,10 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     const audit = preConsentResult.accessibilityAudit;
     modulesRun.push({ moduleName: "accessibilityAudit", status: audit.status === "limited" ? "partial" : audit.status,
       startedAt: audit.startedAt, completedAt: audit.completedAt, durationMs: audit.durationMs,
-      evidenceRefs: [{ refId: "accessibility_audit", artifactId: "accessibility_audit", path: "CanonicalEvidenceBundle.json#accessibilityAudit" }], errors: audit.limitations });
+      // The observation is embedded in the checksum-verified canonical bundle.
+      // Module evidenceRefs are separate files that the coordinator mirrors;
+      // a bundle fragment must not be advertised as an auxiliary file.
+      evidenceRefs: [], errors: audit.limitations });
   }
   const networkEvents = [
     ...preConsentResult.networkEvents,
