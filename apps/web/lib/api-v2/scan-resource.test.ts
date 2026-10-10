@@ -1,4 +1,5 @@
 import { observedControlAssessment } from "../scans/test-fixtures/observed-control-assessment";
+import { accessibilityProjectionFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
 import { createHash } from "node:crypto";
 import { gpcProductionRuntimeFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-production";
 import { buildGpcProductionAssessment } from "../../../../packages/certscore-scan-core/src/gpc-production-observation";
@@ -94,6 +95,36 @@ function fixture(overrides: Partial<ScanDetailResponse["scan"]> = {}) {
     validationFindings: []
   } as unknown as ScanDetailResponse;
 }
+
+test("accessibility status and concrete findings survive checksum-verified persistence and API retrieval", () => {
+  const record = fixture();
+  const baseline = buildApiV2ScanResource(record);
+  record.runtimeArtifacts = { accessibilityAudit: accessibilityProjectionFixture() };
+  const persisted = buildPersistedScanReportProjection(record);
+  const restored = readPersistedScanReportProjection({ scan: record.scan, snapshot: {
+    report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+    report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+    report_projection_computed_at: new Date().toISOString(),
+  } });
+  assert.ok(restored);
+  const retained = { ...record, runtimeArtifacts: restored.runtimeArtifacts };
+  const result = apiV2ScanResourceSchema.parse(buildApiV2ScanResource(retained));
+  assert.equal(result.accessibilityAudit?.status, "completed");
+  assert.equal(result.accessibilityAudit?.failedRuleCount, 4);
+  assert.equal(result.score, baseline.score);
+  const { buildPulseProjection } = require("../pulse/projection") as typeof import("../pulse/projection");
+  const pulse = buildPulseProjection({ scanRecord: retained, detail: "full", format: "json", freshnessMode: "latest",
+    requestedUrl: "https://example.com/", resolutionMode: "test", pulseRequestId: "accessibility-fixture", waitSeconds: 0 }) as import("@certscore/api-contracts").PulseResponse;
+  for (const id of ["text_alternative_accessibility_issue", "semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"]) {
+    assert.ok(projectedFindingsFromPulse(pulse).some(finding => finding.id === id), id);
+  }
+  for (const status of ["limited", "failed", "not_testable"] as const) {
+    const limited = { ...record, runtimeArtifacts: { accessibilityAudit: accessibilityProjectionFixture({ status, violations: [], rulesEvaluated: [], limitations: ["audit_timeout"] }) } };
+    assert.equal(buildApiV2ScanResource(limited).status, "completed_limited");
+    assert.equal(buildApiV2ScanStatus(limited).status, "completed_limited");
+    assert.equal(buildApiV2ScanResource(limited).accessibilityAudit?.failedRuleCount, null);
+  }
+});
 
 test("retained graph survives verified artifact/reference persistence through inventory/API without changing findings or score", async () => {
   const record = fixture(); const baseline = buildApiV2ScanResource(record);

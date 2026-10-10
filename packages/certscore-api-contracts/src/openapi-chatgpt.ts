@@ -207,6 +207,16 @@ export function buildPulseChatGptOpenApiDocument() {
             type: { type: "string", enum: ["certscore_pulse", "certscore_pulse_summary", "certscore_pulse_evidence"] },
             scanStatus: { type: "string" },
             target: { type: "object", additionalProperties: true },
+            accessibilityAudit: {
+              type: ["object", "null"], additionalProperties: false,
+              description: "Required automated WCAG starting-page audit status and bounded counts. Limited or unavailable results are not clean results. Retrieve rule and element evidence through API v2 report-evidence?section=accessibility.",
+              properties: {
+                status: { type: "string", enum: ["completed", "limited", "failed", "not_testable"] }, required: { type: "boolean", const: true },
+                scope: { type: "string", const: "starting_page_rendered_content" }, engine: { type: "string", const: "axe-core" },
+                engineVersion: { type: ["string", "null"] }, durationMs: { type: ["integer", "null"] },
+                failedRuleCount: { type: ["integer", "null"] }, affectedNodeCount: { type: ["integer", "null"] }, reviewRuleCount: { type: ["integer", "null"] },
+              },
+            },
             gpcResponse: {
               type: ["object", "null"],
               additionalProperties: true,

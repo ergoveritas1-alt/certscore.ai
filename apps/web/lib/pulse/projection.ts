@@ -1,4 +1,7 @@
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../api-v2/scan-report-summary";
+import { isAccessibilityAuditLimited } from "@certscore/contracts";
+import { projectAccessibilityAuditSummary } from "../scans/accessibility-audit-evidence";
+import { SPLIT_ACCESSIBILITY_FINDING_IDS } from "../scans/accessibility-evidence";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { projectScanReportNoGo, resolveScanReportScore } from "../scans/scan-report-disposition";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../scans/executive-findings-projection";
@@ -933,7 +936,7 @@ const PUBLIC_PULSE_DIAGNOSTIC_FINDING_IDS = new Set([
 ]);
 
 export function isPublicPulseApiFinding(finding: Pick<CertScoreFinding, "id" | "section">) {
-  return PUBLIC_PULSE_DIAGNOSTIC_FINDING_IDS.has(finding.id) ||
+  return SPLIT_ACCESSIBILITY_FINDING_IDS.has(finding.id) || PUBLIC_PULSE_DIAGNOSTIC_FINDING_IDS.has(finding.id) ||
     /consent|cookie|privacy|tracking|vendor|fingerprinting/i.test(`${finding.section} ${finding.id}`);
 }
 
@@ -1752,6 +1755,7 @@ function buildSummaryArtifact(input: {
     resultDisposition: input.base.resultDisposition,
     noGo: input.base.noGo,
     gpcResponse: input.base.gpcResponse,
+    accessibilityAudit: input.base.accessibilityAudit,
     postAcceptObservation: input.base.postAcceptObservation,
     postRefusalObservation: input.base.postRefusalObservation,
     formsSummary: input.base.formsSummary,
@@ -1954,6 +1958,7 @@ function buildEvidenceArtifact(input: {
     scan_id: input.base.scan_id,
     scanStatus: input.base.scanStatus,
     gpcResponse: input.base.gpcResponse,
+    accessibilityAudit: input.base.accessibilityAudit,
     postAcceptObservation: input.base.postAcceptObservation,
     postRefusalObservation: input.base.postRefusalObservation,
     formsSummary: input.base.formsSummary,
@@ -2275,7 +2280,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const noGoProjection = pulseNoGoState
     ? { resultDisposition: pulseNoGoState.resultDisposition, noGo: pulseNoGoState.noGo }
     : null;
-  const effectiveScanStatus = pulseNoGoState?.scanStatus ?? scan.status;
+  const effectiveScanStatus = pulseNoGoState?.scanStatus ?? (scan.status === "completed" &&
+    isAccessibilityAuditLimited(hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id) ? "completed_limited" : scan.status);
   const coverage = deriveCoverage(hydratedScanRecord);
   const quality = assessPulseScanRecordQuality(hydratedScanRecord);
   const gpcResponse = deriveApiV2GpcResponse(hydratedScanRecord) ?? null;
@@ -2487,6 +2493,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     scanId: scan.id,
     scan_id: scan.id,
     scanStatus: effectiveScanStatus,
+    accessibilityAudit: projectAccessibilityAuditSummary(hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id),
     ...(noGoProjection ?? {}),
     gpcResponse,
     postAcceptObservation,

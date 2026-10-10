@@ -1,101 +1,34 @@
-# ADA Accessibility Operations
+# Automated accessibility operations
 
-`WC01` surfaces DOJ / ADA accessibility findings only after scanner evidence has produced representative axe examples. The expected flow is:
+The October 9, 2026 implementation adds a required, bounded axe-core 4.11.3 audit to the existing baseline runtime-evidence lane. This describes the implementation; it does not establish that a revision has been deployed. Historical scans without the versioned audit remain unchanged.
 
-1. The WC01 v2 DAG Lambda scanner runs axe-core during evidence collection.
-2. The v2 DAG pipeline persists representative axe examples into `scan_accessibility_rule_examples`.
-3. `WC01` loads those rows as `accessibilityRuleExamples`.
-4. `WC01` normalizes the examples into accessibility concerns.
-5. Concern policy promotes only representative, example-backed concerns into unified findings.
+## Capture and completion
 
-Broad score-only or count-only accessibility signals should remain audit-only. If the executive summary shows DOJ / ADA accessibility as `Audit-only` with `—`, first confirm whether `scan_accessibility_rule_examples` contains rows for that scan.
+The worker freezes privacy network, cookie/storage, form and GPC-comparison observations before injecting the locally bundled engine into the existing page. It tests the starting page's rendered content with WCAG 2.0/2.1/2.2 A/AA tags. There is no additional lane, browser session, navigation, consent click, screenshot, CDN request or model call.
 
-## When ADA Is Unexpectedly Audit-Only
+Every eligible baseline runtime run attempts the audit. Its separate ceiling is eight seconds, within the existing parent worker/Lambda safety deadlines. A terminal result is required before the existing coordinator merges and publishes once. Timeouts, cancellation, blocked pages, changing documents, unavailable frames and unevaluable rules are explicit limitations. `completed` means the configured automated audit completed; it does not mean there were zero failures or establish WCAG/ADA conformance. `limited`, `failed` and `not_testable` cannot produce a clean result. A completed scan with a limited audit is exposed as `completed_limited` through Pulse and API v2.
 
-Use this order:
+The retained `CanonicalEvidenceBundle.accessibilityAudit` contains engine/version, scan and runtime-lane identity, document URL/loader binding, timestamps, evaluated rule IDs, concrete violations, separate review items and limitations. Examples are bounded to five nodes per rule; HTML retains tag/attribute structure without text or attribute values. No accessibility score is fabricated.
 
-1. In `WC01`, check the scan ID:
+## Canonical projection
 
-   ```bash
-   ADA_SCAN_ID=<scan-id> pnpm ops:smoke:ada-financial
-   ```
+Original artifact bytes must pass the existing SHA-256 verification before materialization. The audit must match the scan, independent runtime document snapshot, reportable target and capture interval. Failed binding clears rule results and retains limited coverage. Malformed or unverified required evidence blocks publication.
 
-2. If `scan_accessibility_rule_examples` is empty, inspect the v2 DAG Lambda phase and artifact manifests for:
+Verified audit -> persisted typed accessibility projection -> normalized accessibility concerns -> existing concern policy -> unified findings -> report/Pulse/API/MCP.
 
-   - axe-core startup/execution
-   - page-level accessibility audit completion
-   - persistence errors writing `scan_accessibility_rule_examples`
+The typed projection is retained in the checksum-verified report projection payload. Compatibility `accessibilityRuleExamples` and counts are derived from it; the new path does not rely on writes to the legacy `scan_accessibility_rule_examples` table. Existing representative-example policies determine which rule families become findings. All retained rule violations, including rules outside those families, remain available in accessibility evidence. Review items never become observed failures. This change adds no ADA legal conclusion, separate regulatory score or scoring deduction.
 
-3. If examples exist but the report is still audit-only, check the `WC01` report page with:
+## Customer and operator retrieval
 
-   ```bash
-   ADA_SCAN_ID=<scan-id> ADA_SCAN_URL=https://certscore.ai/scan/<scan-id> pnpm ops:smoke:ada-financial
-   ```
+- Scan resources and MCP scan bundles expose `accessibilityAudit`: required status, engine/version, duration, failed rules, affected elements and review counts. Unavailable results have null counts, never an invented zero.
+- The report shows automated accessibility status and retained failing rules/elements.
+- API: `GET /api/v2/scans/<scanId>/report-evidence?section=accessibility` returns retained rule evidence using the existing authorization and cursor protocol.
+- MCP: `certscore_get_report_evidence_page` with `scanId` and `section: accessibility` retrieves the same evidence. Existing finding-list tools include eligible canonical accessibility findings.
 
-4. If `WC01` receives examples but does not surface a finding, inspect:
+To diagnose missing results, inspect the checksum-verified canonical bundle's `accessibilityAudit` and `accessibilityAudit` module timing first, then its persisted projection, normalized concerns and unified findings. An empty legacy examples table is not evidence that this new audit did not run. Historical scans are not backfilled or silently rescanned. Production inspection remains read-only through the approved AWS operational paths; new scans require explicit authorization.
 
-   - `apps/web/lib/scans/accessibility-evidence.ts`
-   - `apps/web/lib/scans/concern-policy.ts`
-   - `apps/web/lib/scans/unified-findings.ts`
-   - `apps/web/lib/scans/report-surfacing-policy.ts`
+## Latency and cost
 
-Keep new ADA surfacing logic in the normalized concern flow:
+The owner requested implementation after reviewing the October 8 evidence and cost proposal. Expected planning increment at 100,000 scans/month is approximately $5–$15 for runtime-worker compute if audits average one to three seconds, plus coordinator waiting and bounded evidence storage. This is an estimate, not a measured Lambda price or cap. At the eight-second ceiling, runtime-worker compute alone would be approximately $39/100,000 scans using the proposal's 3 GB ARM64 rate; coordinator and storage costs are additional. No paid accessibility service or model usage is added. A spare-time-only alternative was rejected because it could skip the audit.
 
-1. normalize scanner inputs into a concern
-2. apply concern policy
-3. promote eligible concerns into unified findings
-
-Do not add raw count/score-only report exceptions for ADA findings.
-
-## Production Smoke Pairing
-
-The preferred one-shot production check is the manual `ADA Live Verification`
-GitHub Actions workflow. It implements the operator sequence:
-
-1. queue a fresh ADA-sensitive scan through the v2 DAG Lambda path, unless `ada_scan_id` and `ada_scan_url` are provided
-2. confirm `scan_accessibility_rule_examples` has representative axe examples
-3. confirm the WC01 report renders DOJ / ADA from those examples
-4. optionally confirm Financial & commercial claims remains `Audit-only`
-
-Required repository configuration for live ADA verification:
-
-- secret `PROD_DATABASE_URL` or `DATABASE_URL`
-- variable `AWS_WEB_CERTSCORE_BASE_URL`, or the workflow default `https://certscore.ai`
-
-The same verification can be run locally:
-
-```bash
-set -a
-source apps/web/.env.local
-set +a
-
-ADA_SCAN_DOMAIN=w3.org \
-FINANCIAL_EMPTY_SCAN_URL=https://certscore.ai/scan/<editorial-finance-scan-id> \
-pnpm ops:verify:ada-live
-```
-
-To verify an existing scan instead of queueing a fresh one:
-
-```bash
-ADA_SCAN_ID=<ada-scan-id> \
-ADA_SCAN_URL=https://certscore.ai/scan/<ada-scan-id> \
-FINANCIAL_EMPTY_SCAN_URL=https://certscore.ai/scan/<editorial-finance-scan-id> \
-pnpm ops:verify:ada-live
-```
-
-After accessibility or financial-claims surfacing changes, run:
-
-```bash
-SESSION_REPLAY_SCAN_URL=https://certscore.ai/scan/<clarity-scan-id> \
-FINANCIAL_EMPTY_SCAN_URL=https://certscore.ai/scan/<editorial-finance-scan-id> \
-pnpm ops:smoke:findings
-```
-
-Then run the ADA-specific check with a scan known to have persisted axe examples:
-
-```bash
-ADA_SCAN_ID=<ada-scan-id> \
-ADA_SCAN_URL=https://certscore.ai/scan/<ada-scan-id> \
-FINANCIAL_EMPTY_SCAN_URL=https://certscore.ai/scan/<editorial-finance-scan-id> \
-pnpm ops:smoke:ada-financial
-```
+Historical modeling across 42 recent completed exports estimated that a fixed one/two/three/five/eight-second audit would extend the passive barrier on 7/7/8/12/18 scans respectively. Those are conditional projections, not measured production audit timings. Local fixtures verify engine behavior; deployment should retain the existing lane timing telemetry and measure a fresh cohort before making a customer latency guarantee. Existing parent deadlines remain unchanged, so pathological pages can return explicitly limited coverage.

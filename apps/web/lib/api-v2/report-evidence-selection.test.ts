@@ -6,6 +6,17 @@ import { buildReportDisplayExport } from "./report-display-export";
 import { buildReportEvidencePage, ReportPageCursorError } from "./report-evidence-page";
 
 const scanId = "9ba99a8c-b1ad-44c1-985f-92cef760ab40";
+test("accessibility evidence survives focused selection, display export and pagination", () => {
+  const audit = { status: "limited", failedRuleCount: 1 };
+  const evidence = { violations: [{ ruleId: "image-alt", representativeNodes: [{ selectors: ["#logo"] }] }] };
+  const selected = selectReportEvidenceSection({ scan: { id: scanId }, accessibilityAudit: audit, accessibilityEvidence: evidence, unrelated: true }, "accessibility");
+  const exported = buildReportDisplayExport(selected.report) as Record<string, unknown>;
+  assert.deepEqual(exported.accessibilityAudit, audit);
+  assert.deepEqual(exported.accessibilityEvidence, evidence);
+  const page = buildReportEvidencePage({ scanId, report: exported, section: "accessibility" });
+  assert.equal(reportEvidencePageSchema.parse(page).section, "accessibility");
+  assert.match(JSON.stringify(page.entries), /image-alt|accessibilityEvidence/);
+});
 test("each focused section preserves canonical context without inventing missing evidence", () => {
   const report = { scan: { id: scanId, scanFrom: "eu_ie", completedAt: "2026-09-12T20:26:00Z" }, score: { value: 72 },
     findings: [{ id: "canonical-finding", confidence: "review" }], coverage: { limitations: ["Partial capture"] },

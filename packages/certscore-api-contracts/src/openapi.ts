@@ -240,6 +240,16 @@ export function buildPulseV1OpenApiDocument() {
             scanStatus: { type: "string" },
             resultDisposition: { type: "string", enum: ["no_go"] },
             noGo: { type: "object", additionalProperties: true, description: "Reason-specific public no-go presentation; includes reasonCode, title, explanation, summary, limitationKind, recommendedNextAction, retryLikelyToHelp, and a bounded evidenceExcerpt when available." },
+            accessibilityAudit: {
+              type: ["object", "null"], additionalProperties: false,
+              description: "Required automated WCAG starting-page audit status and bounded counts. Limited or unavailable results are not clean results. Retrieve rule and element evidence through API v2 report-evidence?section=accessibility.",
+              properties: {
+                status: { type: "string", enum: ["completed", "limited", "failed", "not_testable"] }, required: { type: "boolean", const: true },
+                scope: { type: "string", const: "starting_page_rendered_content" }, engine: { type: "string", const: "axe-core" },
+                engineVersion: { type: ["string", "null"] }, durationMs: { type: ["integer", "null"] },
+                failedRuleCount: { type: ["integer", "null"] }, affectedNodeCount: { type: ["integer", "null"] }, reviewRuleCount: { type: ["integer", "null"] },
+              },
+            },
             gpcResponse: {
               type: ["object", "null"],
               additionalProperties: true,

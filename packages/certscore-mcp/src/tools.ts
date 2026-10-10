@@ -1,4 +1,4 @@
-import { privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, scanFormsSummarySchema, scanScoreExplanationSchema, describeGpcActivityComparison } from "@certscore/api-contracts";
+import { privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, scanFormsSummarySchema, scanScoreExplanationSchema, apiAccessibilityAuditSummarySchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 
 import { bundleReviewNavigation } from "./review-navigation.js";
 
@@ -1808,6 +1808,7 @@ export function buildScanBundle(input: {
       (audit.contractVersion === "certscore.privacy-audit-evidence.v2" && audit.controlCandidates.length > 3) ||
       audit.notices.length > 2,
   }) : null;
+  const accessibilityAudit = apiAccessibilityAuditSummarySchema.safeParse(input.scan.accessibilityAudit);
   const formsSummary = scanFormsSummarySchema.safeParse(input.scan.formsSummary);
   const scoreExplanation = scanScoreExplanationSchema.safeParse(input.scan.scoreExplanation);
   const guidedScan = withMcpAgentGuidance(input.scan as unknown as Record<string, any>);
@@ -1827,6 +1828,7 @@ export function buildScanBundle(input: {
     scoreVersion: input.scan.scoreVersion ?? null,
     scoreUpdatedAt: input.scan.scoreUpdatedAt ?? null,
     riskLevel: input.scan.riskLevel ?? null,
+    ...(accessibilityAudit.success ? { accessibilityAudit: accessibilityAudit.data } : {}),
     ...(input.scan.gpcResponse ? { gpcResponse: input.scan.gpcResponse } : {}),
     postAcceptObservation: input.scan.postAcceptObservation ?? null,
     postRefusalObservation: input.scan.postRefusalObservation ?? null,
@@ -2141,6 +2143,7 @@ export function buildScanBundle(input: {
       scoreVersion: bundle.scoreVersion,
       scoreUpdatedAt: bundle.scoreUpdatedAt,
       riskLevel: bundle.riskLevel,
+      ...(bundle.accessibilityAudit ? { accessibilityAudit: bundle.accessibilityAudit } : {}),
       ...(bundle.gpcResponse ? { gpcResponse: bundle.gpcResponse } : {}),
       postAcceptObservation: bundle.postAcceptObservation,
       postRefusalObservation: bundle.postRefusalObservation,

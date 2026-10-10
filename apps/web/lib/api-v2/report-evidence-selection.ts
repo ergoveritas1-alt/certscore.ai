@@ -9,6 +9,7 @@ const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
   tracking: ["preConsentRuntimeRows", "trackingExternalRows", "inventory", "inventorySummary", "resourceInventory", "trackerVendors", "fullSiteReport"],
   transport: ["transportRows"],
   forms: ["formsSummary", "collectionFields", "collectionLimitations", "collectionStatus", "collectionSurfaces", "collectionTableRows", "fullSiteReport"],
+  accessibility: ["accessibilityAudit", "accessibilityEvidence"],
 };
 
 export function selectReportEvidenceSection(report: Record<string, unknown>, section: ReportEvidenceSection) {

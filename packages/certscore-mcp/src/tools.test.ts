@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { apiAccessibilityAuditSummarySchema } from "@certscore/api-contracts";
 import { readFileSync } from "node:fs";
 import { CertScoreError, type PulseResult } from "@certscore/sdk";
 import { mcpScanBundleOutputSchema, mcpScanStatusOutputSchema, mcpPreConsentCookiesTrackersOutputSchema } from "@certscore/api-contracts";
 import { boundEvidencePacket, buildScanBundle, explainFinding, exportFindings, limitPreConsentRows, paginateFindingList, pulseReportText, scanBundleText, scanSiteText, scanStatusText, toToolError, toToolResult, withMcpAgentGuidance, withMcpScanProvenanceGuidance } from "./tools.js";
+
+test("MCP bundles retain required accessibility status and link to rule evidence", () => {
+  const accessibilityAudit = apiAccessibilityAuditSummarySchema.parse({ status: "limited", required: true, scope: "starting_page_rendered_content",
+    engine: "axe-core", engineVersion: "4.11.3", durationMs: 8000, failedRuleCount: null, affectedNodeCount: null, reviewRuleCount: null });
+  const bundle = buildScanBundle({ detail: "summary", maxBytes: 8000, report: null,
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+    scan: { type: "certscore_scan", scanId: "scan_123", domain: "example.com", url: "https://example.com/", status: "completed_limited",
+      score: 85, scoreStatus: "final", accessibilityAudit } as any });
+  assert.deepEqual(bundle.accessibilityAudit, accessibilityAudit);
+  assert.deepEqual(bundle.reviewNavigation?.evidenceIndex.find((row: any) => row.key === "accessibility")?.retrieval?.arguments,
+    { scanId: "scan_123", section: "accessibility" });
+  assert.equal(mcpScanBundleOutputSchema.safeParse(bundle).success, true);
+});
 
 test("bounded MCP bundles retain form phases, canonical Reject deductions and focused forms navigation", () => {
   const formsSummary = { contractVersion: "certscore.forms-summary.v1", scope: "starting_page_reportable_observations",

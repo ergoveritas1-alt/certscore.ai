@@ -1,4 +1,5 @@
 import type { FullSiteReportExport } from "./full-site-report";
+import { readAccessibilityAudit, projectAccessibilityAuditSummary } from "../../lib/scans/accessibility-audit-evidence";
 import { deriveApiV2GpcResponse, deriveApiV2PostAcceptObservation, deriveApiV2PostRefusalObservation } from "../../lib/api-v2/scan-resource";
 import { readPrivacyAuditEvidence, resolveReportReviewFocus, reviewFocusScopeNote, REVIEW_FOCUS_LABELS } from "../../lib/scans/report-review-focus";
 import {
@@ -333,6 +334,8 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     reviewFocusLabel: REVIEW_FOCUS_LABELS[focus],
     reviewScope: reviewFocusScopeNote(focus, scanRecord.scan.scanFromValue),
     privacyAuditEvidence,
+    accessibilityAudit: projectAccessibilityAuditSummary(scanRecord.runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id),
+    accessibilityEvidence: readAccessibilityAudit(scanRecord.runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id)?.observation ?? null,
     gpcResponse: gpcResponse ?? null,
     ...(postAcceptObservation ? { postAcceptObservation } : {}),
     ...(postRefusalObservation ? { postRefusalObservation } : {}),

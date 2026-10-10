@@ -1,4 +1,5 @@
 import { scanFormsSummarySchema, scanScoreExplanationSchema } from "./scan-report-summary.js";
+import { apiAccessibilityAuditSummarySchema } from "./accessibility-audit.js";
 import { z } from "zod";
 import {
   apiV2GpcResponseSchema,
@@ -8,7 +9,7 @@ import {
 import { scanNoGoResultSchema, scanResultDispositionSchema } from "./scan-no-go.js";
 
 export const PULSE_API_VERSION = "v1";
-export const PULSE_SCHEMA_VERSION = "0.5.5";
+export const PULSE_SCHEMA_VERSION = "0.5.6";
 export const PULSE_SOURCE = "certscore.ai";
 
 export const PULSE_PURPOSE_STATEMENT =
@@ -214,6 +215,7 @@ export const pulseResponseSchema = z
     resultDisposition: scanResultDispositionSchema.optional(),
     noGo: scanNoGoResultSchema.optional(),
     gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
+    accessibilityAudit: apiAccessibilityAuditSummarySchema.nullable().optional(),
     postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     formsSummary: scanFormsSummarySchema.nullable().optional(),

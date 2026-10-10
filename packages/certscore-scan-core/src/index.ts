@@ -1,4 +1,6 @@
 import { buildScanEvidenceLaneAssessment } from "./scan-evidence-lane-assessment.js";
+import { unavailableAccessibilityAudit } from "./accessibility-audit.js";
+import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
 export { buildScanEvidenceLaneAssessment } from "./scan-evidence-lane-assessment.js";
 import { revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
 export { buildGpcProductionAssessment, buildGpcProductionObservation } from "./gpc-production-observation.js";
@@ -495,7 +497,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   );
   const lateConsentGeometryShadowEnabled = evidenceLane === "consent_proof" &&
     isLateConsentGeometryShadowEnabled();
+  const accessibilityRequired = preConsentEnabled && (evidenceLane === "runtime_evidence" || evidenceLane === "combined");
   const preConsentModuleDeadlineMs = canonicalPreConsentModuleDeadlineMs +
+    (accessibilityRequired ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0) +
     (lateConsentGeometryShadowEnabled ? LATE_CONSENT_GEOMETRY_SHADOW_BUDGET_MS : 0);
   let latestPreConsentLifecycleCheckpoint: {
     atMs: number;
@@ -561,7 +565,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         url: input.url,
         normalizedUrl,
         scanStartedAtMs: startedAtMs,
-        internalBudgetMs: scanProfile.internalBudgetMs,
+        internalBudgetMs: accessibilityRequired ? canonicalPreConsentModuleDeadlineMs : scanProfile.internalBudgetMs,
+        accessibilityScanId: accessibilityRequired ? scanId : undefined,
         artifactWriter,
         captureScope: evidenceLane === "consent_proof"
           ? "consent_proof"
@@ -1202,6 +1207,13 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           : undefined)]
         : []),
   ];
+  if (accessibilityRequired) {
+    preConsentResult.accessibilityAudit ??= unavailableAccessibilityAudit({ scanId, documentUrl: normalizedUrl, reason: "runtime_unavailable" });
+    const audit = preConsentResult.accessibilityAudit;
+    modulesRun.push({ moduleName: "accessibilityAudit", status: audit.status === "limited" ? "partial" : audit.status,
+      startedAt: audit.startedAt, completedAt: audit.completedAt, durationMs: audit.durationMs,
+      evidenceRefs: [{ refId: "accessibility_audit", artifactId: "accessibility_audit", path: "CanonicalEvidenceBundle.json#accessibilityAudit" }], errors: audit.limitations });
+  }
   const networkEvents = [
     ...preConsentResult.networkEvents,
     ...(consentFlowResult?.networkEvents ?? []),
@@ -1343,6 +1355,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
+    accessibilityAudit: preConsentResult.accessibilityAudit,
     resourceInventoryContext,
     runtimeEvidenceGraphs: preConsentResult.runtimeEvidenceGraph ? [preConsentResult.runtimeEvidenceGraph] : undefined,
     scanId,

@@ -196,6 +196,8 @@ export type ShadowReportData = {
   consentVendor: string | null;
   gpcResponse?: GpcResponseReportProjection | null;
   gpcLaneStatus?: "completed" | "not_requested" | "unavailable";
+  accessibilityAudit?: import("@certscore/api-contracts").ApiAccessibilityAuditSummary | null;
+  accessibilityEvidence?: import("@certscore/contracts").AccessibilityAuditObservation | null;
   policySurfaceCoverage: "complete" | "limited" | "unavailable";
   policySurfaceLinkObserved?: boolean;
   verifiedPolicyDocumentUrls?: string[] | null;

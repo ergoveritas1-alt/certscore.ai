@@ -11,6 +11,7 @@ import {
 } from "./scan-report-projection-contract";
 
 export type ScanStatusProjection = {
+  accessibilityAuditStatus?: "completed" | "limited" | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completedAt: string | null;
   createdAt: string;
@@ -59,6 +60,7 @@ export function deriveCanonicalScanProgressStage(
 }
 
 type ScanStatusProjectionRow = {
+  accessibility_audit_status?: "completed" | "limited" | null;
   full_site?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completed_at: string | Date | null;
   created_at: string | Date;
@@ -125,6 +127,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     browserExtensionNormalizationReady: row.browser_extension_normalization_ready,
     startedAt: iso(row.started_at),
     status: row.status,
+    accessibilityAuditStatus: row.accessibility_audit_status,
     visualAccessReview: row.visual_access_review,
   };
 }
@@ -148,6 +151,14 @@ const PROJECTION_SQL = `select s.id,
        snapshot.report_projection_status,
        snapshot.scan_no_go_assessment,
        snapshot.visual_access_review,
+       case
+         when snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit}' is null
+           or snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit}' = 'null'::jsonb then null
+         when snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,contractVersion}' = 'certscore.accessibility-audit-projection.v1'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,scanId}' = s.id::text
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,status}' = 'completed' then 'completed'
+         else 'limited'
+       end as accessibility_audit_status,
        coalesce(
          (select max(event.created_at) from scan_events event where event.scan_id = s.id),
          s.completed_at,
@@ -330,7 +341,7 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
 }
 
 function apiV2ProjectionStatus(projection: ScanStatusProjection, hasNoGo: boolean) {
-  if (hasNoGo && (projection.status === "completed" || projection.status === "completed_limited")) {
+  if ((hasNoGo || projection.accessibilityAuditStatus === "limited" && projection.reportReady) && (projection.status === "completed" || projection.status === "completed_limited")) {
     return "completed_limited" as const;
   }
   if (projection.reportProjectionStatus === "failed" && (projection.status === "completed" || projection.status === "completed_limited")) {

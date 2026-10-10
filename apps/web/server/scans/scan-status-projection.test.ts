@@ -51,6 +51,14 @@ function projection(overrides: Partial<ScanStatusProjection> = {}): ScanStatusPr
   };
 }
 
+test("lightweight API status cannot call a required limited accessibility audit completed", async () => {
+  const build = await getBuildLightweightApiV2ScanStatusInput();
+  assert.equal(build(projection({ reportReady: true, accessibilityAuditStatus: "limited" })).status, "completed_limited");
+  assert.equal(build(projection({ reportReady: true, accessibilityAuditStatus: "completed" })).status, "completed");
+  assert.equal(build(projection({ reportReady: false, accessibilityAuditStatus: "limited" })).status, "finalizing");
+  assert.equal(build(projection({ reportReady: true })).status, "completed");
+});
+
 test("lightweight status keeps completed scans finalizing without a canonical projection", async () => {
   const build = await getBuildLightweightScanStatusResponse();
   const response = build(projection());

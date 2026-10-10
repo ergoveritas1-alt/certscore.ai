@@ -1,4 +1,6 @@
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
+import { readAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
+import { getAccessibilityFindingIdForRuleCode } from "./accessibility-evidence";
 import { formDestinationProjectionSchema, formDestinationCopy, qualifiesFormDestinationReview, FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
 import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL } from "@certscore/contracts";
 import { projectConsentControlBehavior } from "./consent-control-behavior";
@@ -4424,6 +4426,33 @@ function resolveGdprTransparencyConcernConflicts(concerns: NormalizedConcern[]) 
 }
 
 
+function buildAccessibilityAuditConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const projection = readAccessibilityAudit(runtimeArtifacts?.accessibilityAudit);
+  if (!projection) return [];
+  const grouped = new Map<string, ReturnType<typeof accessibilityExamples>>();
+  for (const example of accessibilityExamples(projection.observation)) {
+    const id = getAccessibilityFindingIdForRuleCode(example.ruleCode);
+    if (!id) continue;
+    grouped.set(id, [...(grouped.get(id) ?? []), example]);
+  }
+  return [...grouped].map(([id, examples]) => {
+    const title = getReportUnifiedFinding(id)?.label ?? "Automated accessibility issue";
+    const description = `${examples.map(example => example.ruleCode).join(", ")} failed on the tested page.`;
+    return buildConcernFromSharedInput({
+      categoryId: "accessibility", originType: "runtime_artifact", originKey: `accessibility.audit.${id}`,
+      title, description, observedValue: description, severity: examples.some(example => example.severity === "high") ? "high" : "medium",
+      sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `accessibility.audit.${id}`, signalLabel: title,
+      evidence: [projection.observation.documentUrl],
+      rawEvidence: { unifiedFindingId: id, accessibilityAuditProvenance: {
+        contractVersion: projection.contractVersion, verificationStatus: projection.verificationStatus,
+        sourceHash: projection.sourceHash, evidenceRef: projection.evidenceRef,
+        engine: projection.observation.engine, engineVersion: projection.observation.engineVersion,
+      }, accessibilityRuleExamples: examples,
+        pageUrl: projection.observation.documentUrl, runtimeEvidenceArtifacts: [projection.evidenceRef] },
+    });
+  });
+}
+
 function buildFormDestinationConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   const result = formDestinationProjectionSchema.safeParse(runtimeArtifacts?.formDestinations);
   if (!result.success || !qualifiesFormDestinationReview(result.data)) return [];
@@ -4489,6 +4518,7 @@ export function buildNormalizedConcerns(input: {
       return normalizedFinding ? [normalizeConcernFromValidationFinding(normalizedFinding, input.domainContext, consentControlAssessment)] : [];
     }),
     ...buildSiteIntegrityConcerns(input.runtimeArtifacts),
+    ...buildAccessibilityAuditConcerns(input.runtimeArtifacts),
     ...buildFormDestinationConcerns(input.runtimeArtifacts),
     ...buildCmsSecurityConcerns(input.runtimeArtifacts),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),

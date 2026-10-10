@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const REPORT_EVIDENCE_SECTIONS = ["consent", "gpc", "policy", "tracking", "transport", "forms"] as const;
+export const REPORT_EVIDENCE_SECTIONS = ["consent", "gpc", "policy", "tracking", "transport", "forms", "accessibility"] as const;
 export const reportEvidenceSectionSchema = z.enum(REPORT_EVIDENCE_SECTIONS);
 export type ReportEvidenceSection = z.infer<typeof reportEvidenceSectionSchema>;
 
