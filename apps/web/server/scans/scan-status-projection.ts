@@ -11,6 +11,7 @@ import {
 } from "./scan-report-projection-contract";
 
 export type ScanStatusProjection = {
+  accessibilityAuditStatus?: "completed" | "limited" | null;
   fullSite?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completedAt: string | null;
   createdAt: string;
@@ -59,6 +60,7 @@ export function deriveCanonicalScanProgressStage(
 }
 
 type ScanStatusProjectionRow = {
+  accessibility_audit_status?: "completed" | "limited" | null;
   full_site?: import("@website-signal-risk-scanner/shared").CrawlOptions;
   completed_at: string | Date | null;
   created_at: string | Date;
@@ -125,6 +127,7 @@ function project(row: ScanStatusProjectionRow | null): ScanStatusProjection | nu
     browserExtensionNormalizationReady: row.browser_extension_normalization_ready,
     startedAt: iso(row.started_at),
     status: row.status,
+    accessibilityAuditStatus: row.accessibility_audit_status,
     visualAccessReview: row.visual_access_review,
   };
 }
@@ -148,6 +151,24 @@ const PROJECTION_SQL = `select s.id,
        snapshot.report_projection_status,
        snapshot.scan_no_go_assessment,
        snapshot.visual_access_review,
+       case
+         when snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit}' is null
+           or snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit}' = 'null'::jsonb then null
+         when snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,contractVersion}' = 'certscore.accessibility-audit-projection.v1'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,verificationStatus}' = 'verified'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,sourceHash}' ~ '^[a-f0-9]{64}$'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,contractVersion}' = 'certscore.accessibility-audit.v1'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,required}' = 'true'
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,engine}' = 'axe-core'
+           and coalesce(snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,documentToken}', '') <> ''
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,scanId}' = s.id::text
+           and snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,limitations}' = '[]'::jsonb
+           and snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,reviewItems}' = '[]'::jsonb
+           and case when jsonb_typeof(snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,rulesEvaluated}') = 'array'
+             then jsonb_array_length(snapshot.report_projection_payload #> '{runtimeArtifacts,accessibilityAudit,observation,rulesEvaluated}') > 0 else false end
+           and snapshot.report_projection_payload #>> '{runtimeArtifacts,accessibilityAudit,observation,status}' = 'completed' then 'completed'
+         else 'limited'
+       end as accessibility_audit_status,
        coalesce(
          (select max(event.created_at) from scan_events event where event.scan_id = s.id),
          s.completed_at,
@@ -330,7 +351,7 @@ export function buildLightweightScanStatusResponse(projection: ScanStatusProject
 }
 
 function apiV2ProjectionStatus(projection: ScanStatusProjection, hasNoGo: boolean) {
-  if (hasNoGo && (projection.status === "completed" || projection.status === "completed_limited")) {
+  if ((hasNoGo || projection.accessibilityAuditStatus === "limited" && projection.reportReady) && (projection.status === "completed" || projection.status === "completed_limited")) {
     return "completed_limited" as const;
   }
   if (projection.reportProjectionStatus === "failed" && (projection.status === "completed" || projection.status === "completed_limited")) {
@@ -418,11 +439,11 @@ export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProje
           limitations: [noGoProjection.noGo.explanation],
         }
       : {
-          status: pagesScanned >= pagesRequested && projection.status === "completed" ? "complete" : "partial",
-          summary: pagesScanned > 0
+          status: pagesScanned >= pagesRequested && projection.status === "completed" && projection.accessibilityAuditStatus !== "limited" ? "complete" : "partial",
+          summary: projection.accessibilityAuditStatus === "limited" ? "Automated public-web scan completed with limited accessibility coverage." : pagesScanned > 0
             ? "Automated public-web scan completed for the observed public surfaces."
             : "Coverage was limited; absence of findings should not be interpreted as absence of risk.",
-          limitations: ["Automated public-web scan only."],
+          limitations: ["Automated public-web scan only.", ...(projection.accessibilityAuditStatus === "limited" ? ["The required automated accessibility audit has incomplete or unavailable coverage."] : [])],
         },
     retryAfterSeconds: terminal ? null : undefined,
   };

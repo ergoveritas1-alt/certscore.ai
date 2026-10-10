@@ -2541,6 +2541,9 @@ test("scan pipeline completes with explicit limited coverage after the pre-conse
 
     assert.equal(preConsentRun?.status, "partial");
     assert.ok(bundle.runtimeCoverage?.limitationKeys.includes("pre_consent_runtime_partial"));
+    assert.ok(bundle.accessibilityAudit, "required audit must retain a terminal outcome after the passive deadline");
+    assert.notEqual(bundle.accessibilityAudit.status, "completed");
+    assert.equal(bundle.accessibilityAudit.violations.length, 0);
     assert.ok(bundle.policySurfaceInspection, "canonical bundle should retain typed policy inspection coverage");
     assert.equal(
       bundle.policySurfaceInspection?.coverageStatus,

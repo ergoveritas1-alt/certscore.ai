@@ -1,4 +1,5 @@
 import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
+import { readAccessibilityAudit, projectAccessibilityAuditSummary } from "../../../lib/scans/accessibility-audit-evidence";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../../../lib/api-v2/scan-report-summary";
 import { projectPostAcceptForms } from "../../../lib/scans/post-accept-form-projection";
 import { projectRetainedActionTimeline } from "../../../lib/scans/action-timeline-projection";
@@ -847,6 +848,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   return {
     ...(scanConfig?.fullSite === true && crawlOptions ? { fullSite: { maxPages: Number(crawlOptions.maxPages), concurrency: Number(crawlOptions.concurrency), waitSeconds: Number(crawlOptions.waitSeconds) } } : {}),
     siteMetadata: metadata.success ? metadata.data : null,
+    accessibilityAudit: projectAccessibilityAuditSummary(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id),
+    accessibilityEvidence: readAccessibilityAudit(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id)?.observation ?? null,
     formDestinations: (() => { const parsed = formDestinationProjectionSchema.safeParse(runtimeArtifacts?.formDestinations); return parsed.success ? parsed.data : null; })(),
     formDestinationWarning: Boolean(formDestinationPriority),
     cmsSecurity: (() => { const cms = cmsSecurityProjectionSchema.safeParse(runtimeArtifacts?.cmsSecurity); return cms.success ? cms.data : null; })(),

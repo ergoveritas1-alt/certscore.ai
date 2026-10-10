@@ -530,6 +530,26 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             ))}
           </ul>
         </details>
+        {report.accessibilityAudit ? (
+          <details className={signalRowClass} data-testid="accessibility-audit-status">
+            <summary className={signalSummaryClass}>
+              <span className="text-xs font-medium text-zinc-500">Automated accessibility</span>
+              <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">
+                {report.accessibilityAudit.status === "completed" ? "Completed" : report.accessibilityAudit.status === "not_testable" ? "Not evaluated" : "Limited"}
+                <DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" />
+              </span>
+            </summary>
+            <div className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
+              <p>WCAG 2.2 A/AA automated checks on the starting page.</p>
+              {report.accessibilityAudit.failedRuleCount !== null ? <p>{report.accessibilityAudit.failedRuleCount} failed rules · {report.accessibilityAudit.affectedNodeCount} element instances{report.accessibilityAudit.reviewRuleCount ? ` · ${report.accessibilityAudit.reviewRuleCount} rules need review` : ""}</p> : <p>The audit did not return evaluable results.</p>}
+              {report.accessibilityEvidence?.violations.map(rule => <div key={rule.ruleId}>
+                <a className="underline" href={rule.helpUrl} target="_blank" rel="noreferrer">{rule.help}</a>
+                <span> · {rule.nodeCount} elements</span>
+                <ul>{rule.representativeNodes.map((node, index) => <li className="break-words font-mono" key={index}>{node.selectors.map(selector => Array.isArray(selector) ? selector.join(" >>> ") : selector).join(", ")}</li>)}</ul>
+              </div>)}
+            </div>
+          </details>
+        ) : null}
         {!siteOverview && (report.gpcResponse ? (
           <details className={signalRowClass} data-testid="executive-gpc-snapshot">
             <summary className={signalSummaryClass}>
@@ -1313,7 +1333,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
       </div>
     </header>
-    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1} statusLabel="Completed"
+    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1} statusLabel={report.accessibilityAudit && report.accessibilityAudit.status !== "completed" ? "Limited coverage" : "Completed"}
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview report={report} />} homepageVerdict={report.verdict} />
     <SitePriorityReview findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />

@@ -1,4 +1,5 @@
 import { scanFormsSummarySchema, scanScoreExplanationSchema } from "./scan-report-summary.js";
+import { apiAccessibilityAuditSummarySchema } from "./accessibility-audit.js";
 import { z } from "zod";
 import { privacyAuditEvidenceSchema, type PrivacyAuditEvidence } from "./privacy-audit.js";
 const apiPrivacyAuditEvidenceSchema: z.ZodType<PrivacyAuditEvidence> = privacyAuditEvidenceSchema;
@@ -247,6 +248,7 @@ export const apiV2ScanJobSchema = z
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
+    accessibilityAudit: apiAccessibilityAuditSummarySchema.nullable().optional(),
     postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     preConsentPreview: apiV2PreConsentRuntimePreviewSchema.optional(),
@@ -308,6 +310,7 @@ export const apiV2ScanResourceSchema = z
     scoreUpdatedAt: z.string().nullable().optional(),
     riskLevel: z.string().nullable().optional(),
     gpcResponse: apiV2GpcResponseSchema.nullable().optional(),
+    accessibilityAudit: apiAccessibilityAuditSummarySchema.nullable().optional(),
     postAcceptObservation: apiV2PostAcceptObservationSchema.nullable().optional(),
     postRefusalObservation: apiV2PostRefusalObservationSchema.nullable().optional(),
     coverage: z

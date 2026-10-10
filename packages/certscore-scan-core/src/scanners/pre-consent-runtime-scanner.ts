@@ -1,4 +1,6 @@
 import { readDocumentSiteMetadata as captureDocumentSiteMetadata, captureWordpressFeedVersion } from "../cms-version-capture.js";
+import { runAccessibilityAudit, unavailableAccessibilityAudit } from "../accessibility-audit.js";
+import type { AccessibilityAuditObservation } from "@certscore/contracts";
 import { revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
 import { installFormDestinationTracing } from "../form-destination-trace.js";
 import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
@@ -212,6 +214,10 @@ const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
 );
 
 export interface PreConsentRuntimeScannerInput {
+  /** Required entry-page audit; omitted in consent, GPC and inventory workers. */
+  accessibilityScanId?: string;
+  /** Release only the passive deadline after all baseline observers are frozen. */
+  onPassiveCaptureComplete?: () => void;
   url: string;
   normalizedUrl: string;
   scanStartedAtMs: number;
@@ -542,6 +548,7 @@ export function applyFinalDocumentPartyClassification(input: {
 }
 
 export interface PreConsentRuntimeScannerResult {
+  accessibilityAudit?: AccessibilityAuditObservation;
   gpcSignalObservation?: GpcSignalObservation;
   gpcOptOutObservation?: GpcOptOutObservation;
   gpcObservationSession?: GpcObservationSession;
@@ -737,6 +744,7 @@ export async function preConsentRuntimeScanner(
   };
   let pageCrashObserved = false;
   const recordPageCrash = () => {
+    if (responseCaptureFinalized) return;
     recordConsentFrameChange();
     impactCapture?.invalidate("renderer_crash");
     if (pageCrashObserved) return;
@@ -960,6 +968,7 @@ export async function preConsentRuntimeScanner(
     if (isHttpUrl(request.url())) passiveEvidenceActivity.markRequestFinished(request);
   });
   page.on("requestfailed", (request) => {
+    if (responseCaptureFinalized) return;
     const formRequestId = requestIds.get(request);
     if (formRequestId) formTracing?.status(formRequestId, "failed");
     const requestUrl = request.url();
@@ -975,6 +984,7 @@ export async function preConsentRuntimeScanner(
     });
   });
   page.on("console", (message) => {
+    if (responseCaptureFinalized) return;
     const text = message.text();
     if (/mixed content|blocked.+http:|insecure.+http:/i.test(text)) {
       mixedContentConsoleMessages.push(text.slice(0, 500));
@@ -4038,7 +4048,17 @@ export async function preConsentRuntimeScanner(
     const retainPolicyRecoverySession = input.retainRenderedPolicyRecoverySession === true &&
       retainedRenderedPolicyLinkEvidence.length > 0;
     retainOwnedBrowserForPolicyRecovery = ownsBrowser && retainPolicyRecoverySession;
-    const finalizedProxyGraph = proxyDestinations ? finishGraph() : undefined;
+    // Every privacy observer finishes before axe injection. Audit activity must
+    // never become baseline requests, fingerprinting, storage or GPC evidence.
+    const baselineDocumentIdentity = currentBrowserDocumentIdentity(page);
+    const finalizedFormDestinationTrace = formTracing && !input.signal?.aborted ? formTracing.finish() : undefined;
+    const finalizedProxyGraph = proxyDestinations || input.accessibilityScanId ? finishGraph() : undefined;
+    if (input.accessibilityScanId) responseCaptureFinalized = true;
+    if (input.accessibilityScanId) input.onPassiveCaptureComplete?.();
+    const accessibilityAudit = input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only"
+      ? await recordTiming(timingBreakdown, "required accessibility audit", "Bundled axe WCAG A/AA audit after frozen baseline capture, before single-result publication.", () =>
+          runAccessibilityAudit({ page, scanId: input.accessibilityScanId!, documentIdentity: () => currentBrowserDocumentIdentity(page), signal: input.signal }))
+      : undefined;
     if (proxyDestinations && !retainOwnedBrowserForPolicyRecovery) {
       responseCaptureFinalized = true;
       await boundedCleanup(browser.close(), Math.min(1000, remainingModuleBudgetMs()));
@@ -4067,6 +4087,7 @@ export async function preConsentRuntimeScanner(
       retainedBlockingChallengeSnapshot = isRetainedBlockingFrameChallengeBound(snapshot, retainedGeometry) ? snapshot : undefined;
     }
     return {
+      accessibilityAudit,
       collectionSurfaceSnapshots,
       runtimeEvidenceGraph: finalizedProxyGraph ?? finishGraph(),
       moduleRun: {
@@ -4100,9 +4121,9 @@ export async function preConsentRuntimeScanner(
       iframeEvents,
       consentUiObservations: captureConsentEvidence ? [consentObservation] : [],
       ...("siteIntegrityObservation" in pageEvidence && pageEvidence.siteIntegrityObservation &&
-        currentBrowserDocumentIdentity(page)?.token === pageEvidence.siteIntegrityObservation.documentToken &&
+        baselineDocumentIdentity?.token === pageEvidence.siteIntegrityObservation.documentToken &&
         !input.signal?.aborted ? { siteIntegrityObservation: pageEvidence.siteIntegrityObservation } : {}),
-      ...(formTracing && !input.signal?.aborted ? { formDestinationTrace: formTracing.finish() } : {}),
+      ...(finalizedFormDestinationTrace ? { formDestinationTrace: finalizedFormDestinationTrace } : {}),
       ...(collectionSurfaceInventory ? { collectionSurfaceInventory } : {}),
       collectionSurfaceObservations,
       cmpRuntimeObservations: captureConsentEvidence ? cmpRuntimeObservations : [],
@@ -4209,6 +4230,10 @@ export async function preConsentRuntimeScanner(
     await emitPassiveRuntimeCheckpoint();
     return {
       runtimeEvidenceGraph: finishGraph("runtime_capture_incomplete"),
+      ...(input.accessibilityScanId ? { accessibilityAudit: unavailableAccessibilityAudit({
+        scanId: input.accessibilityScanId, documentUrl: input.normalizedUrl,
+        reason: moduleBudgetEnded ? "runtime_deadline" : "runtime_unavailable",
+      }) } : {}),
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
         status: moduleBudgetEnded

@@ -4,6 +4,8 @@ import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition"
 import { scanFailureExplanation } from "../../lib/scans/scan-failure-explanation";
 import type { ReactNode } from "react";
 import { afterClickCoverage, afterClickSummary } from "./after-action-summary";
+import { projectAccessibilityAuditSummary } from "../../lib/scans/accessibility-audit-evidence";
+import { isAccessibilityAuditLimited } from "@certscore/contracts";
 import { InventoryResourceProvider, InventoryResourceRow, InventoryResourceMobile } from "./inventory-resource-details";
 import Link from "next/link";
 import {
@@ -7871,7 +7873,8 @@ export async function SharedScanDetailView({
   });
   const isScanInFlight = scanRecord.scan.status === "queued" || scanRecord.scan.status === "running";
   const isScanFailed = scanRecord.scan.status === "failed";
-  const isIncompleteScanCoverage = hasIncompleteScanCoverage(scanRecord);
+  const accessibilityAudit = projectAccessibilityAuditSummary(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id);
+  const isIncompleteScanCoverage = hasIncompleteScanCoverage(scanRecord) || isAccessibilityAuditLimited(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id);
   const executiveAccessNoticeCardProps = executiveAccessLimitationNotice
     ? {
         blockerLabel: executiveAccessLimitationNotice.review.blockerLabel,
@@ -8162,6 +8165,12 @@ export async function SharedScanDetailView({
           </span>
         }
       />
+      {accessibilityAudit ? <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" data-testid="accessibility-audit-status">
+        <span className="font-semibold">Automated accessibility: </span>
+        {accessibilityAudit.status === "completed" ? "Completed" : accessibilityAudit.status === "not_testable" ? "Not evaluated" : "Limited"}
+        {accessibilityAudit.failedRuleCount !== null ? ` · ${accessibilityAudit.failedRuleCount} failed rules · ${accessibilityAudit.affectedNodeCount} element instances` : null}
+        {accessibilityAudit.reviewRuleCount ? ` · ${accessibilityAudit.reviewRuleCount} rules need review` : null}
+      </div> : null}
       {isScanInFlight ? (
         localV2DagInFlightProgress ?? (
           <FullScanProgressCard

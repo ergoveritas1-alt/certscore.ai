@@ -1,4 +1,5 @@
 export * from "./api-v2.js";
+export * from "./accessibility-audit.js";
 export * from "./scan-report-summary.js";
 export * from "./mcp.js";
 export * from "./openapi.js";

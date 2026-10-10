@@ -19,6 +19,9 @@ export * from "./collection-field-review";
 export * from "./collection-field-labels";
 import { siteMetadataSchema } from "./site-metadata";
 export * from "./site-metadata";
+import { accessibilityAuditObservationSchema, type AccessibilityAuditObservation } from "./accessibility-audit";
+export * from "./accessibility-audit";
+const canonicalAccessibilityAuditSchema: z.ZodType<AccessibilityAuditObservation> = accessibilityAuditObservationSchema;
 export * from "./cms-version-evidence";
 import { z } from "zod";
 import { consentControlLinkDestinationSchema } from "./consent-control-link";
@@ -3352,6 +3355,7 @@ const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceO
 const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
 const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiObservationSchema>, z.ZodTypeDef, z.input<typeof consentUiObservationSchema>> = consentUiObservationSchema;
 const canonicalEvidenceBundleBaseSchema = z.object({
+  accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
   resourceInventoryContext: z.object({
     finalUrl: z.string().max(2000), links: z.array(z.string().max(2000)).max(5000),

@@ -5,7 +5,7 @@ const REPORT_FIELDS = new Set([
   "scan", "score", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
   "coverage", "controls", "consentVendor", "consentRows", "gdprTransparencyRows",
   "preConsentRuntimeRows", "trackingExternalRows", "transportRows", "relatedRows",
-  "policySurfaceCoverage", "gpcResponse", "gpcLaneStatus", "acceptPath", "rejectPath",
+  "policySurfaceCoverage", "gpcResponse", "gpcLaneStatus", "acceptPath", "rejectPath", "accessibilityAudit", "accessibilityEvidence",
   "choicePathComparison", "timeline", "inventory", "inventorySummary", "resourceInventory",
   "trackerVendors", "collectionFields", "collectionLimitations", "collectionStatus",
   "collectionSurfaces", "collectionTableRows", "siteMetadata", "fullSiteReport",

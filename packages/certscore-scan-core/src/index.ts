@@ -1,4 +1,6 @@
 import { buildScanEvidenceLaneAssessment } from "./scan-evidence-lane-assessment.js";
+import { unavailableAccessibilityAudit } from "./accessibility-audit.js";
+import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
 export { buildScanEvidenceLaneAssessment } from "./scan-evidence-lane-assessment.js";
 import { revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
 export { buildGpcProductionAssessment, buildGpcProductionObservation } from "./gpc-production-observation.js";
@@ -495,7 +497,9 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   );
   const lateConsentGeometryShadowEnabled = evidenceLane === "consent_proof" &&
     isLateConsentGeometryShadowEnabled();
+  const accessibilityRequired = preConsentEnabled && (evidenceLane === "runtime_evidence" || evidenceLane === "combined");
   const preConsentModuleDeadlineMs = canonicalPreConsentModuleDeadlineMs +
+    (accessibilityRequired ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0) +
     (lateConsentGeometryShadowEnabled ? LATE_CONSENT_GEOMETRY_SHADOW_BUDGET_MS : 0);
   let latestPreConsentLifecycleCheckpoint: {
     atMs: number;
@@ -555,13 +559,16 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const preConsentResultPromise = preConsentEnabled
     ? settlePreConsentRuntimeWithinDeadline({
       deadlineMs: preConsentModuleDeadlineMs,
+      passiveDeadlineMs: accessibilityRequired ? canonicalPreConsentModuleDeadlineMs : undefined,
       getLatestLifecycleCheckpoint: () => latestPreConsentLifecycleCheckpoint,
       startedAtMs,
-      run: (softDeadlineSignal) => preConsentRuntimeScanner({
+      run: (softDeadlineSignal, completePassiveCapture) => preConsentRuntimeScanner({
         url: input.url,
         normalizedUrl,
         scanStartedAtMs: startedAtMs,
         internalBudgetMs: scanProfile.internalBudgetMs,
+        accessibilityScanId: accessibilityRequired ? scanId : undefined,
+        onPassiveCaptureComplete: accessibilityRequired ? completePassiveCapture : undefined,
         artifactWriter,
         captureScope: evidenceLane === "consent_proof"
           ? "consent_proof"
@@ -1202,6 +1209,13 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           : undefined)]
         : []),
   ];
+  if (accessibilityRequired) {
+    preConsentResult.accessibilityAudit ??= unavailableAccessibilityAudit({ scanId, documentUrl: normalizedUrl, reason: "runtime_unavailable" });
+    const audit = preConsentResult.accessibilityAudit;
+    modulesRun.push({ moduleName: "accessibilityAudit", status: audit.status === "limited" ? "partial" : audit.status,
+      startedAt: audit.startedAt, completedAt: audit.completedAt, durationMs: audit.durationMs,
+      evidenceRefs: [{ refId: "accessibility_audit", artifactId: "accessibility_audit", path: "CanonicalEvidenceBundle.json#accessibilityAudit" }], errors: audit.limitations });
+  }
   const networkEvents = [
     ...preConsentResult.networkEvents,
     ...(consentFlowResult?.networkEvents ?? []),
@@ -1343,6 +1357,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
+    accessibilityAudit: preConsentResult.accessibilityAudit,
     resourceInventoryContext,
     runtimeEvidenceGraphs: preConsentResult.runtimeEvidenceGraph ? [preConsentResult.runtimeEvidenceGraph] : undefined,
     scanId,
@@ -3813,27 +3828,40 @@ export function isLateConsentGeometryShadowEnabled() {
 
 export async function settlePreConsentRuntimeWithinDeadline(input: {
   deadlineMs: number;
+  /** Preserve the original passive deadline while reserving a later audit window. */
+  passiveDeadlineMs?: number;
   getLatestLifecycleCheckpoint?: () => {
     atMs: number;
     label: string;
     status: "started" | "completed";
   } | undefined;
   graceMs?: number;
-  run: (softDeadlineSignal: AbortSignal) => Promise<PreConsentRuntimeScannerResult>;
+  run: (softDeadlineSignal: AbortSignal, completePassiveCapture: () => void) => Promise<PreConsentRuntimeScannerResult>;
   startedAtMs: number;
 }): Promise<PreConsentRuntimeScannerResult> {
   const controller = new AbortController();
-  const deadlineMessage =
-    `Pre-consent runtime reached its ${input.deadlineMs}ms module budget; retained bounded partial evidence.`;
+  let reachedDeadlineMs = input.deadlineMs;
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let passiveDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let graceTimer: ReturnType<typeof setTimeout> | undefined;
   const deadlinePromise = new Promise<"deadline">((resolve) => {
-    deadlineTimer = setTimeout(() => {
-      controller.abort(new Error(deadlineMessage));
+    const reachDeadline = (deadlineMs: number) => {
+      if (controller.signal.aborted) return;
+      reachedDeadlineMs = deadlineMs;
+      controller.abort(new Error(
+        `Pre-consent runtime reached its ${deadlineMs}ms module budget; retained bounded partial evidence.`,
+      ));
       resolve("deadline");
-    }, input.deadlineMs);
+    };
+    deadlineTimer = setTimeout(() => reachDeadline(input.deadlineMs), input.deadlineMs);
+    if (input.passiveDeadlineMs !== undefined) {
+      const passiveDeadlineMs = input.passiveDeadlineMs;
+      passiveDeadlineTimer = setTimeout(() => reachDeadline(passiveDeadlineMs), passiveDeadlineMs);
+    }
   });
-  const workPromise = Promise.resolve().then(() => input.run(controller.signal));
+  const workPromise = Promise.resolve().then(() => input.run(controller.signal, () => {
+    if (passiveDeadlineTimer) clearTimeout(passiveDeadlineTimer);
+  }));
 
   try {
     const initialResult = await Promise.race([
@@ -3857,12 +3885,13 @@ export async function settlePreConsentRuntimeWithinDeadline(input: {
 
     return deadlineLimitedPreConsentResult({
       completedAtMs: Date.now(),
-      deadlineMs: input.deadlineMs,
+      deadlineMs: reachedDeadlineMs,
       latestLifecycleCheckpoint: input.getLatestLifecycleCheckpoint?.(),
       startedAtMs: input.startedAtMs,
     });
   } finally {
     if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (passiveDeadlineTimer) clearTimeout(passiveDeadlineTimer);
     if (graceTimer) clearTimeout(graceTimer);
   }
 }

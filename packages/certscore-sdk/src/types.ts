@@ -6,6 +6,17 @@ export type PulseFormat = "json" | "markdown";
 export type FreshnessMode = "latest" | "refresh";
 export type ScanFrom = "eu_de" | "eu_ie" | "california";
 export type ScanResultDisposition = "no_go";
+export interface AccessibilityAuditSummary {
+  status: "completed" | "limited" | "failed" | "not_testable";
+  required: true;
+  scope: "starting_page_rendered_content";
+  engine: "axe-core";
+  engineVersion: string | null;
+  durationMs: number | null;
+  failedRuleCount: number | null;
+  affectedNodeCount: number | null;
+  reviewRuleCount: number | null;
+}
 export type ScanNoGoReasonCode =
   | "blank_or_unusable_page" | "loading_or_stalled" | "not_found_404" | "parked_or_placeholder"
   | "site_not_ready" | "captcha_or_challenge" | "access_denied_or_forbidden_page" | "rate_limited_429"
@@ -289,6 +300,7 @@ export interface GpcResponse {
 }
 
 export interface ScanResource extends ScanCreationMetadata {
+  accessibilityAudit?: AccessibilityAuditSummary | null;
   formsSummary?: ScanFormsSummary | null;
   scoreExplanation?: ScanScoreExplanation | null;
   privacyAuditEvidence?: import("./privacy-audit.js").PrivacyAuditEvidence | null;
@@ -324,6 +336,7 @@ export interface ScanResource extends ScanCreationMetadata {
 }
 
 export interface ScanJob extends ScanCreationMetadata {
+  accessibilityAudit?: AccessibilityAuditSummary | null;
   formsSummary?: ScanFormsSummary | null;
   scoreExplanation?: ScanScoreExplanation | null;
   type: "certscore_scan_job";
@@ -838,6 +851,7 @@ export interface TransportSecurityProjection {
 }
 
 export interface PulseResultBase {
+  accessibilityAudit?: AccessibilityAuditSummary | null;
   formsSummary?: ScanFormsSummary | null;
   scoreExplanation?: ScanScoreExplanation | null;
   type: "certscore_pulse" | "certscore_pulse_summary" | "certscore_pulse_evidence";
@@ -893,6 +907,7 @@ export interface PulseResultFull extends PulseResultStandard {
 export type PulseResult = PulseResultTiny | PulseResultStandard | PulseResultFull;
 
 export interface JobStatus {
+  accessibilityAudit?: AccessibilityAuditSummary | null;
   type: "certscore_pulse_status";
   meta?: PulseMeta;
   jobId: string;
@@ -984,7 +999,7 @@ export interface ReportEvidencePage {
   snapshot: string;
   reportUrl: string;
   workpaper?: "tracking";
-  section?: "consent" | "gpc" | "policy" | "tracking" | "transport" | "forms";
+  section?: "consent" | "gpc" | "policy" | "tracking" | "transport" | "forms" | "accessibility";
   selection?: { version: "certscore.report-evidence-selection.v1"; fields: string[]; notReturnedFields: string[]; interpretation: string };
   download?: { url: string; csvUrl?: string; mediaType: "application/json"; expiresAt?: string; bytes: number; authentication: "same_access_rules_as_mcp" | "short_lived_report_link" | "public"; instructions: string };
   entries: Array<{ path: string; value: unknown; stringPart?: number; stringParts?: number }>;

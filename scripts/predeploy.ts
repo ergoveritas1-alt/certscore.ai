@@ -121,6 +121,24 @@ const CONSENT_ACTION_SEMANTICS_CHECK: Check = {
     "packages/certscore-scan-core/src/post-refusal-observer.test.ts"],
 };
 
+const ACCESSIBILITY_AUDIT_CHECK: Check = {
+  key: "accessibility-audit",
+  label: "required accessibility capture, evidence isolation, persistence and API/MCP contracts",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test",
+    "packages/certscore-contracts/src/accessibility-audit.test.ts",
+    "packages/certscore-contracts/src/gpc-public-contract.test.ts",
+    "packages/certscore-scan-core/src/accessibility-audit.test.ts",
+    "packages/certscore-api-contracts/src/pulse-v1.test.ts",
+    "packages/certscore-scan-core/src/pre-consent-deadline.test.ts",
+    "apps/web/server/scans/accessibility-audit-projection.test.ts",
+    "apps/web/lib/api-v2/report-evidence-selection.test.ts",
+    "apps/web/lib/api-v2/scan-resource.test.ts",
+    "apps/web/server/scans/scan-status-projection.test.ts",
+    "packages/certscore-sdk/src/client.test.ts",
+    "packages/certscore-mcp/src/review-navigation.test.ts",
+    "packages/certscore-mcp/src/tools.test.ts"],
+};
+
 const ROOT_FULL_CHECKS: Check[] = [
   {
     key: "workspace-package-build",
@@ -133,6 +151,7 @@ const ROOT_FULL_CHECKS: Check[] = [
     command: ["node", "--import", "tsx", "--test", "scripts/deploy-latency.test.ts", "scripts/web-deployment-skew-protection.test.ts"]
   },
   CONSENT_ACTION_SEMANTICS_CHECK,
+  ACCESSIBILITY_AUDIT_CHECK,
   GPC_OBSERVATION_RELEASE_CHECK,
   SCAN_NO_GO_RELEASE_CHECK,
   REPORT_PUBLICATION_CHECK,
@@ -317,6 +336,7 @@ const TARGETS: Target[] = [
       file.startsWith("scripts/local-v2-dag-lambda/") ||
       file === ".github/workflows/v2-regulatory-gold-corpus.yml",
     checks: [
+      ACCESSIBILITY_AUDIT_CHECK,
       RUNTIME_GRAPH_CAPTURE_CHECK,
       REPRESENTATIVE_PROOF_CHECK,
       {

@@ -11,9 +11,10 @@ Use `WS01` for scanner-runtime-specific deploy and operational validation.
 
 For ADA accessibility surfacing specifically, also keep
 [ADA Accessibility Operations](./ada-accessibility-operations.md) open. `WC01`
-should surface DOJ / ADA findings only when `WS01` persisted representative
-axe examples into `scan_accessibility_rule_examples`; score-only/count-only ADA
-signals should remain audit-only.
+surfaces accessibility findings through verified v2 DAG runtime-lane axe evidence,
+normalized concerns and concern policy. The required audit and its examples persist
+in the canonical report projection; the legacy examples table is not authoritative
+for this path. Score-only/count-only signals remain ineligible.
 
 ## 1. Environment readiness
 
@@ -196,7 +197,7 @@ If a scan fails, check:
 - scan detail page error message
 - `scan_events` timeline
 - standalone scanner logs for the failing stage
-- `WS01` scanner worker logs when DOJ / ADA accessibility remains audit-only unexpectedly; first confirm whether `scan_accessibility_rule_examples` has representative axe examples for the scan
+- v2 DAG runtime-lane audit status and verified canonical accessibility projection when automated accessibility findings are unexpectedly unavailable; inspect typed audit evidence before the legacy examples table
 
 ## 11. First production validation order
 

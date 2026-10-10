@@ -857,3 +857,13 @@ test("focused evidence forwards section and cursor through the existing authoriz
     assert.equal(new Headers(mock.callDetails[0]!.headers).get("authorization"), "Bearer test-key");
   } finally { mock.restore(); }
 });
+
+test("accessibility evidence uses the same authenticated SDK retrieval path", async () => {
+  const mock = installFetch([{ status: 200, body: { type: "certscore_report_evidence_page", section: "accessibility", entries: [] } }]);
+  try {
+    const page = await new CertScoreClient({ apiKey: "test-key" }).getReportEvidencePage("scan_123", { section: "accessibility" });
+    assert.equal(page.section, "accessibility");
+    assert.equal(new URL(mock.calls[0]!).searchParams.get("section"), "accessibility");
+    assert.equal(new Headers(mock.callDetails[0]!.headers).get("authorization"), "Bearer test-key");
+  } finally { mock.restore(); }
+});

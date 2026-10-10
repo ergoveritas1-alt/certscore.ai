@@ -627,13 +627,13 @@ export function buildCertScoreApiV2OpenApiDocument() {
         get: {
           operationId: "getReportEvidencePage", tags: ["Scans", "Runtime Inventory"],
           summary: "Retrieve retained report evidence or the tracking workpaper.",
-          description: "Use section=consent, gpc, policy, tracking, transport or forms for focused retained report sections with shared identity, score, findings and coverage context. For forms, follow scan.links.formsEvidence; collectionTableRows includes phase-labelled field metadata and each available snapshot.url is a separate API JPEG read using the same bearer credential. Preserve section on cursor continuation. Unselected or not-returned fields do not establish absence. Use workpaper=tracking separately for the starting-page inventory, privacy choices/notices and GPC evidence; section and workpaper cannot be combined. Default returns paginated JSON with download URLs; format=download returns one JSON document; format=csv requires workpaper=tracking. Preserve workpaper on cursor continuation. Workspace reports require an authorized read credential or a returned five-minute download capability. Anonymous access is limited to eligible public scans. Existing report-page read quotas apply; no scan is created. Inventory sale, sharing and vendor-specific GPC honoring remain not_assessed.",
+          description: "Use section=consent, gpc, policy, tracking, transport, forms or accessibility for focused retained report sections with shared identity, score, findings and coverage context. For forms, follow scan.links.formsEvidence; collectionTableRows includes phase-labelled field metadata and each available snapshot.url is a separate API JPEG read using the same bearer credential. Preserve section on cursor continuation. Unselected or not-returned fields do not establish absence. Use workpaper=tracking separately for the starting-page inventory, privacy choices/notices and GPC evidence; section and workpaper cannot be combined. Default returns paginated JSON with download URLs; format=download returns one JSON document; format=csv requires workpaper=tracking. Preserve workpaper on cursor continuation. Workspace reports require an authorized read credential or a returned five-minute download capability. Anonymous access is limited to eligible public scans. Existing report-page read quotas apply; no scan is created. Inventory sale, sharing and vendor-specific GPC honoring remain not_assessed.",
           security: [{ bearerAuth: [] }, {}],
           parameters: [
             { name: "scanId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
             { name: "cursor", in: "query", schema: { type: "string" } },
             { name: "workpaper", in: "query", schema: { type: "string", enum: ["tracking"] } },
-            { name: "section", in: "query", schema: { type: "string", enum: ["consent", "gpc", "policy", "tracking", "transport", "forms"] } },
+            { name: "section", in: "query", schema: { type: "string", enum: ["consent", "gpc", "policy", "tracking", "transport", "forms", "accessibility"] } },
             { name: "format", in: "query", schema: { type: "string", enum: ["download", "csv"] } },
             { name: "downloadTicket", in: "query", description: "Confidential report-scoped capability from download.url; downloads only.", schema: { type: "string" } },
           ],
@@ -1136,6 +1136,18 @@ export function buildCertScoreApiV2OpenApiDocument() {
             observationOnlyDisclaimer: { type: "string", minLength: 1, maxLength: 500 }
           }
         },
+        AccessibilityAudit: {
+          type: ["object", "null"], additionalProperties: false,
+          description: "Required automated WCAG A/AA audit of starting-page rendered content. Limited, failed and not_testable are not clean results. Retained rules and affected elements are available through report-evidence?section=accessibility. Historical scans may omit this field.",
+          required: ["status", "required", "scope", "engine", "engineVersion", "durationMs", "failedRuleCount", "affectedNodeCount", "reviewRuleCount"],
+          properties: {
+            status: { type: "string", enum: ["completed", "limited", "failed", "not_testable"] },
+            required: { type: "boolean", const: true }, scope: { type: "string", const: "starting_page_rendered_content" },
+            engine: { type: "string", const: "axe-core" }, engineVersion: { type: ["string", "null"] },
+            durationMs: { type: ["integer", "null"], minimum: 0 }, failedRuleCount: { type: ["integer", "null"], minimum: 0 },
+            affectedNodeCount: { type: ["integer", "null"], minimum: 0 }, reviewRuleCount: { type: ["integer", "null"], minimum: 0 },
+          },
+        },
         ScanJob: {
           type: "object",
           additionalProperties: true,
@@ -1159,6 +1171,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            accessibilityAudit: { $ref: "#/components/schemas/AccessibilityAudit" },
             gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
             postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },
@@ -1227,6 +1240,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
             riskLevel: { type: ["string", "null"] },
+            accessibilityAudit: { $ref: "#/components/schemas/AccessibilityAudit" },
             gpcResponse: { $ref: "#/components/schemas/GpcResponse" },
             postAcceptObservation: { $ref: "#/components/schemas/PostAcceptObservation" },
             postRefusalObservation: { $ref: "#/components/schemas/PostRefusalObservation" },

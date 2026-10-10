@@ -328,6 +328,9 @@ importers:
       '@website-signal-risk-scanner/web-bot-auth':
         specifier: workspace:*
         version: link:../web-bot-auth
+      axe-core:
+        specifier: 4.11.3
+        version: 4.11.3
       maxmind:
         specifier: ^5.0.6
         version: 5.0.6

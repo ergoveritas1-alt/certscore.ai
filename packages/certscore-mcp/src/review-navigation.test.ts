@@ -60,5 +60,8 @@ test('form summary points to the retained forms section without inventing a scan
   const forms = navigation.evidenceIndex.find(row => row.key === 'forms')!;
   assert.equal(forms.delivery, 'included');
   assert.deepEqual(forms.retrieval, { tool: 'certscore_get_report_evidence_page', arguments: { scanId, section: 'forms' }, createsScan: false });
-  assert.equal(navigation.evidenceIndex.length, 9);
+  assert.equal(navigation.evidenceIndex.length, 10);
+  const accessibility = navigation.evidenceIndex.find(row => row.key === 'accessibility')!;
+  assert.equal(accessibility.delivery, 'not_returned');
+  assert.deepEqual(accessibility.retrieval, { tool: 'certscore_get_report_evidence_page', arguments: { scanId, section: 'accessibility' }, createsScan: false });
 });

@@ -11,6 +11,7 @@ import { projectSiteIntegrity } from "./site-integrity-projection";
 import { projectOriginBoundBrowserStorage } from "./pre-consent-browser-storage-projection";
 import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
 import { projectSiteMetadata } from "./site-metadata-projection";
+import { projectAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-projection";
 import "server-only";
 import { retainedPolicySectionHeading } from "../../lib/scans/retained-policy-source";
 import { projectRuntimeEvidenceGraphs } from "./runtime-evidence-graph-projection";
@@ -6128,6 +6129,7 @@ function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
+    accessibilityAudit: projectAccessibilityAudit(bundle, options.policyTextEvidenceContext?.sourceBundle, runtimeEvidenceReportable ? canonicalDocumentUrl : null),
     privacyAuditEvidence: runtimeEvidenceReportable ? projectPrivacyAuditEvidenceForMaterialization(
       bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl,
       inheritedRuntimeArtifacts.privacyAuditEvidence,
@@ -6576,6 +6578,12 @@ function buildMaterializedLocalV2Detail(
       : [],
     primaryPolicyEnrichment: scanRecord.primaryPolicyEnrichment ?? policyEnrichmentRows.find((row) => row.pageType === "privacy_policy") ?? policyEnrichmentRows[0] ?? null,
     runtimeArtifacts,
+    ...(runtimeArtifacts.accessibilityAudit ? {
+      accessibilityRuleExamples: accessibilityExamples(runtimeArtifacts.accessibilityAudit.observation),
+      accessibilityRuleCounts: accessibilityExamples(runtimeArtifacts.accessibilityAudit.observation).map(example => ({
+        ruleCode: example.ruleCode, ruleGroup: example.ruleGroup, severity: example.severity, instanceCount: example.nodeCount,
+      })),
+    } : {}),
     scan: {
       ...scanRecord.scan,
       pagesScanned: localV2NoGo ? 0 : Math.max(scanRecord.scan.pagesScanned, 1)
@@ -6610,7 +6618,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v28";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v29";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({

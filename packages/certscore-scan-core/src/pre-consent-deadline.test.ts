@@ -106,6 +106,53 @@ test("outer pre-consent deadline retains the latest startup lifecycle checkpoint
   assert.equal(result.moduleRun.timingBreakdown?.[0]?.durationMs, 5);
 });
 
+test("a reserved audit window does not extend the passive capture deadline", async () => {
+  const result = await settlePreConsentRuntimeWithinDeadline({
+    deadlineMs: 500,
+    passiveDeadlineMs: 20,
+    graceMs: 10,
+    startedAtMs: Date.now(),
+    run: () => new Promise<PreConsentRuntimeScannerResult>(() => undefined),
+  });
+  assert.equal(result.moduleRun.status, "skipped_budget");
+  assert.match(result.moduleRun.errors.join("; "), /20ms module budget/);
+});
+
+test("frozen passive capture permits audit work beyond the passive deadline", async () => {
+  const expected = retainedPartialResult(Date.now());
+  let aborted = false;
+  const result = await settlePreConsentRuntimeWithinDeadline({
+    deadlineMs: 500,
+    passiveDeadlineMs: 20,
+    startedAtMs: Date.now(),
+    run: (signal, completePassiveCapture) => {
+      completePassiveCapture();
+      signal.addEventListener("abort", () => { aborted = true; }, { once: true });
+      return new Promise(resolve => setTimeout(() => resolve(expected), 40));
+    },
+  });
+  assert.equal(result, expected);
+  assert.equal(aborted, false);
+});
+
+test("releasing the passive deadline preserves the outer audit deadline", async () => {
+  let aborted = false;
+  const result = await settlePreConsentRuntimeWithinDeadline({
+    deadlineMs: 40,
+    passiveDeadlineMs: 20,
+    graceMs: 10,
+    startedAtMs: Date.now(),
+    run: (signal, completePassiveCapture) => {
+      completePassiveCapture();
+      signal.addEventListener("abort", () => { aborted = true; }, { once: true });
+      return new Promise<PreConsentRuntimeScannerResult>(() => undefined);
+    },
+  });
+  assert.equal(aborted, true);
+  assert.equal(result.moduleRun.status, "skipped_budget");
+  assert.match(result.moduleRun.errors.join("; "), /40ms module budget/);
+});
+
 test("dedicated runtime lane may terminalize retained evidence after parent capture cancellation", () => {
   const controller = new AbortController();
   const cancellation = new Error("Parent Lambda scanner deadline reached.");

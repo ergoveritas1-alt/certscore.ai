@@ -1,4 +1,6 @@
 import { projectScanFormsSummary, projectScanScoreExplanation } from "./scan-report-summary";
+import { isAccessibilityAuditLimited } from "@certscore/contracts";
+import { projectAccessibilityAuditSummary } from "../scans/accessibility-audit-evidence";
 import { readPrivacyAuditEvidence } from "../scans/report-review-focus";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../scans/choice-path-execution";
@@ -118,6 +120,7 @@ type PulseStatusLike = {
   formsSummary?: ApiV2ScanResource["formsSummary"];
   scoreExplanation?: ApiV2ScanResource["scoreExplanation"];
   gpcResponse?: ApiV2ScanResource["gpcResponse"];
+  accessibilityAudit?: ApiV2ScanResource["accessibilityAudit"];
   preConsentPreview?: ApiV2ScanJob["preConsentPreview"];
   error?: {
     code: string;
@@ -946,6 +949,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     : null;
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
   const limited =
+    isAccessibilityAuditLimited(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id) ||
     scanRecord.scan.status !== "completed" ||
     scanRecord.scan.pagesScanned < Math.max(1, scanRecord.scan.pagesRequested) ||
     Boolean(posture.stopReason || posture.interruptionReason);
@@ -964,6 +968,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     summary,
     limitations: [
       "Automated public-web scan only.",
+      ...(isAccessibilityAuditLimited(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id) ? ["The required automated accessibility audit has incomplete or unavailable coverage."] : []),
       ...(postAcceptLimitation ? [postAcceptLimitation] : []),
       ...(postRefusalLimitation ? [postRefusalLimitation] : []),
     ]
@@ -1055,7 +1060,7 @@ export function buildApiV2ScanResource(
         ? "failed"
         : canonicalResultState === "finalizing"
           ? "finalizing"
-          : "completed",
+          : isAccessibilityAuditLimited(scanRecord.runtimeArtifacts?.accessibilityAudit, scan.id) ? "completed_limited" : "completed",
     ...(noGoProjection ?? {}),
     scanFrom: publicScanFrom(scan.scanFromValue),
     createdAt: dateStringOrNull(scan.createdAt),
@@ -1068,6 +1073,7 @@ export function buildApiV2ScanResource(
     scoreUpdatedAt,
     riskLevel: noGoProjection ? null : riskLevelFromScore(score),
     gpcResponse,
+    accessibilityAudit: projectAccessibilityAuditSummary(scanRecord.runtimeArtifacts?.accessibilityAudit, scan.id),
     postAcceptObservation,
     postRefusalObservation,
     ...(formsSummary ? { formsSummary } : {}),
@@ -1215,7 +1221,7 @@ export function buildApiV2ScanStatus(
   const noGoProjection = projectScanReportNoGo(scanRecord);
   const normalizedScanStatus = normalizeScanStatus(scan.status);
   const canonicalResultState = apiV2CanonicalResultState(scanRecord);
-  const status = noGoProjection && scan.status === "completed"
+  const status = (noGoProjection || canonicalResultState === "final" && isAccessibilityAuditLimited(scanRecord.runtimeArtifacts?.accessibilityAudit, scan.id)) && scan.status === "completed"
     ? "completed_limited"
     : canonicalResultState === "failed"
       ? "failed"
@@ -1278,6 +1284,7 @@ export function buildApiV2ScanStatus(
     scoreUpdatedAt: canonicalScan.scoreUpdatedAt ?? null,
     riskLevel: canonicalScan.riskLevel ?? null,
     gpcResponse: canonicalScan.gpcResponse ?? null,
+    accessibilityAudit: canonicalScan.accessibilityAudit ?? null,
     postAcceptObservation: canonicalScan.postAcceptObservation ?? null,
     postRefusalObservation: canonicalScan.postRefusalObservation ?? null,
     ...(canonicalScan.formsSummary ? { formsSummary: canonicalScan.formsSummary } : {}),
@@ -1383,6 +1390,7 @@ export function buildApiV2ScanJobFromPulseStatus(
     scoreUpdatedAt: dateStringOrNull(status.scoreUpdatedAt),
     riskLevel: status.riskLevel ?? null,
     gpcResponse: status.gpcResponse ?? null,
+    accessibilityAudit: status.accessibilityAudit ?? null,
     postAcceptObservation: status.postAcceptObservation ?? null,
     postRefusalObservation: status.postRefusalObservation ?? null,
     ...(status.formsSummary ? { formsSummary: status.formsSummary } : {}),

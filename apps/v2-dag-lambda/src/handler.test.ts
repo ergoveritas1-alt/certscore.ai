@@ -1,4 +1,5 @@
 import { siteIntegrityObservationFixture } from "../../../packages/certscore-contracts/src/site-integrity.fixture.js";
+import { accessibilityAuditFixture } from "../../../packages/certscore-contracts/src/accessibility-audit.fixture.js";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
@@ -4565,6 +4566,20 @@ test("handler does not emit SQS for invalid dispatch payloads", async () => {
     /contract version/
   );
   assert.equal(sendCount, 0);
+});
+
+test("accessibility evidence belongs exclusively to the runtime lane during canonical merge", () => {
+  const runtimeAudit = accessibilityAuditFixture({ scanId: "lane-fixture" });
+  const otherAudit = accessibilityAuditFixture({ scanId: "lane-fixture", documentToken: "wrong-session" });
+  const merged = mergeLocalV2DagLambdaEvidenceLaneBundles({ scanId: "lane-fixture", artifactRoot: "/tmp/lane-fixture",
+    consentProof: canonicalBundleFixture("lane-fixture", { accessibilityAudit: otherAudit, scanLaneRuns: [laneRunFixture("consent_proof", "consent")] }),
+    runtimeEvidence: canonicalBundleFixture("lane-fixture", { accessibilityAudit: runtimeAudit, scanLaneRuns: [laneRunFixture("runtime_evidence", "runtime")],
+      runtimeCoverage: { coverageStatus: "usable", fallbackModesUsed: [], limitationKeys: [], notes: [], silentEmpty: false,
+        observationCounts: { cookieEvents: 0, cookiesBeforeConsent: 0, networkEvents: 0, normalizedVendors: 0, observedJourneys: 0, thirdPartyRequests: 0 } },
+    }),
+    policyEvidence: canonicalBundleFixture("lane-fixture", { accessibilityAudit: otherAudit, scanLaneRuns: [laneRunFixture("policy_evidence", "policy")] }),
+  });
+  assert.deepEqual(merged.accessibilityAudit, runtimeAudit);
 });
 
 function canonicalBundleFixture(

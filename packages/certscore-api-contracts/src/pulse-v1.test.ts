@@ -126,6 +126,7 @@ test("Pulse ChatGPT OpenAPI stays compact and action-compatible", () => {
   assert.equal(serialized.includes("\"evidence\""), true);
   assert.equal(serialized.includes("\"text/markdown\""), false);
   assert.equal(serialized.includes("\"const\""), false);
+  assert.ok(document.components.schemas.PulseResponse.properties.accessibilityAudit);
   assert.ok(document.components.schemas.PulseResponse.properties.gpcResponse);
   assert.ok(document.components.schemas.PulseResponse.properties.postAcceptObservation);
   assert.ok(document.components.schemas.PulseResponse.properties.postRefusalObservation);
