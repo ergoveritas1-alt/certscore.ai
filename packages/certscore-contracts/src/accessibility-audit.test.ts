@@ -17,4 +17,6 @@ test("new malformed or incomplete evidence is limited while historical records s
   assert.equal(isAccessibilityAuditLimited(accessibilityProjectionFixture(), "other-scan"), true);
   assert.equal(isAccessibilityAuditLimited({}), true);
   assert.equal(isAccessibilityAuditLimited(accessibilityProjectionFixture({ status: "limited", limitations: ["rules_need_review"] })), true);
+  const malformed = accessibilityProjectionFixture(); malformed.observation.violations[0]!.helpUrl = "invalid-url";
+  assert.equal(isAccessibilityAuditLimited(malformed), true);
 });

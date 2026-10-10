@@ -22,8 +22,10 @@ export const accessibilityRuleObservationSchema = z.object({
   tags: z.array(z.string().max(80)).max(24),
   help: z.string().max(300), description: z.string().max(600),
   helpUrl: z.string().url().max(400).refine(value => {
-    const url = new URL(value);
-    return url.protocol === "https:" && url.hostname === "dequeuniversity.com" && !url.username && !url.password;
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.hostname === "dequeuniversity.com" && !url.username && !url.password;
+    } catch { return false; }
   }),
   nodeCount: z.number().int().positive().max(1_000_000),
   representativeNodes: z.array(nodeSchema).min(1).max(ACCESSIBILITY_LIMITS.examplesPerRule),
