@@ -123,6 +123,9 @@ test("accessibility status and concrete findings survive checksum-verified persi
     assert.equal(buildApiV2ScanResource(limited).status, "completed_limited");
     assert.equal(buildApiV2ScanStatus(limited).status, "completed_limited");
     assert.equal(buildApiV2ScanResource(limited).accessibilityAudit?.failedRuleCount, null);
+    assert.equal(buildApiV2ScanResource(limited).coverage?.status, "partial");
+    assert.equal(buildApiV2ScanResource(limited).score, baseline.score);
+    assert.match(JSON.stringify(buildApiV2ScanResource(limited).coverage), /accessibility/);
   }
 });
 

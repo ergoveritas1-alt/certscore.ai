@@ -1,6 +1,6 @@
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../api-v2/scan-report-summary";
 import { isAccessibilityAuditLimited } from "@certscore/contracts";
-import { projectAccessibilityAuditSummary } from "../scans/accessibility-audit-evidence";
+import { projectAccessibilityAuditSummary, withAccessibilityAuditCoverage } from "../scans/accessibility-audit-evidence";
 import { SPLIT_ACCESSIBILITY_FINDING_IDS } from "../scans/accessibility-evidence";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { projectScanReportNoGo, resolveScanReportScore } from "../scans/scan-report-disposition";
@@ -2283,6 +2283,7 @@ export function buildPulseProjection(input: PulseProjectionInput) {
   const effectiveScanStatus = pulseNoGoState?.scanStatus ?? (scan.status === "completed" &&
     isAccessibilityAuditLimited(hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id) ? "completed_limited" : scan.status);
   const coverage = deriveCoverage(hydratedScanRecord);
+  const publicCoverage = withAccessibilityAuditCoverage(coverage, hydratedScanRecord.runtimeArtifacts?.accessibilityAudit, scan.id);
   const quality = assessPulseScanRecordQuality(hydratedScanRecord);
   const gpcResponse = deriveApiV2GpcResponse(hydratedScanRecord) ?? null;
   const postAcceptObservation = deriveApiV2PostAcceptObservation(hydratedScanRecord) ?? null;
@@ -2508,8 +2509,8 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     transportSecurity,
     capabilities: PULSE_CAPABILITIES,
     coverage: {
-      status: coverage.status,
-      summary: coverage.summary
+      status: publicCoverage.status,
+      summary: publicCoverage.summary
     },
     links,
     feedback,
@@ -2592,12 +2593,12 @@ export function buildPulseProjection(input: PulseProjectionInput) {
     evidenceHighlights,
     recommendedActions: buildRecommendedActions(topFindings),
     coverage: {
-      ...coverage,
-      status: quality.usable ? coverage.status : "unavailable"
+      ...publicCoverage,
+      status: quality.usable ? publicCoverage.status : "unavailable"
     },
     resultQuality: {
-      level: quality.usable ? (coverage.status === "complete" ? "usable" : "usable_with_limitations") : "unavailable",
-      summary: quality.usable ? coverage.summary : quality.message,
+      level: quality.usable ? (publicCoverage.status === "complete" ? "usable" : "usable_with_limitations") : "unavailable",
+      summary: quality.usable ? publicCoverage.summary : quality.message,
       reason: pulseNoGoState?.resultQuality.reason ?? quality.reason
     },
     usageGuidance: PULSE_USAGE_GUIDANCE

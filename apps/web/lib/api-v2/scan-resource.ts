@@ -949,6 +949,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     : null;
   const homepageObserved = scanRecord.scan.pagesScanned > 0 || posture.homepageFetchStatus === "ok";
   const limited =
+    isAccessibilityAuditLimited(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id) ||
     scanRecord.scan.status !== "completed" ||
     scanRecord.scan.pagesScanned < Math.max(1, scanRecord.scan.pagesRequested) ||
     Boolean(posture.stopReason || posture.interruptionReason);
@@ -967,6 +968,7 @@ function deriveCoverage(scanRecord: ScanDetailResponse) {
     summary,
     limitations: [
       "Automated public-web scan only.",
+      ...(isAccessibilityAuditLimited(runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id) ? ["The required automated accessibility audit has incomplete or unavailable coverage."] : []),
       ...(postAcceptLimitation ? [postAcceptLimitation] : []),
       ...(postRefusalLimitation ? [postRefusalLimitation] : []),
     ]

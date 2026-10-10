@@ -8,7 +8,7 @@ The worker freezes privacy network, cookie/storage, form and GPC-comparison obse
 
 Every eligible baseline runtime run attempts the audit. Its separate ceiling is eight seconds, within the existing parent worker/Lambda safety deadlines. A terminal result is required before the existing coordinator merges and publishes once. Timeouts, cancellation, blocked pages, changing documents, unavailable frames and unevaluable rules are explicit limitations. `completed` means the configured automated audit completed; it does not mean there were zero failures or establish WCAG/ADA conformance. `limited`, `failed` and `not_testable` cannot produce a clean result. A completed scan with a limited audit is exposed as `completed_limited` through Pulse and API v2.
 
-The retained `CanonicalEvidenceBundle.accessibilityAudit` contains engine/version, scan and runtime-lane identity, document URL/loader binding, timestamps, evaluated rule IDs, concrete violations, separate review items and limitations. Examples are bounded to five nodes per rule; HTML retains tag/attribute structure without text or attribute values. No accessibility score is fabricated.
+The retained `CanonicalEvidenceBundle.accessibilityAudit` contains engine/version, scan and runtime-lane identity, document URL/loader binding, timestamps, evaluated rule IDs, concrete violations, separate review items and limitations. Evidence is capped at 256 KiB; overflow returns limited coverage. Examples are bounded to five nodes per rule; HTML retains tag/attribute structure without text or attribute values. No accessibility score is fabricated.
 
 ## Canonical projection
 
@@ -20,7 +20,7 @@ The typed projection is retained in the checksum-verified report projection payl
 
 ## Customer and operator retrieval
 
-- Scan resources and MCP scan bundles expose `accessibilityAudit`: required status, engine/version, duration, failed rules, affected elements and review counts. Unavailable results have null counts, never an invented zero.
+- Scan resources and MCP scan bundles expose `accessibilityAudit`: required status, engine/version, duration, failed rules, affected element instances (summed across rules, not unique DOM elements) and review counts. Unavailable results have null counts, never an invented zero.
 - The report shows automated accessibility status and retained failing rules/elements.
 - API: `GET /api/v2/scans/<scanId>/report-evidence?section=accessibility` returns retained rule evidence using the existing authorization and cursor protocol.
 - MCP: `certscore_get_report_evidence_page` with `scanId` and `section: accessibility` retrieves the same evidence. Existing finding-list tools include eligible canonical accessibility findings.

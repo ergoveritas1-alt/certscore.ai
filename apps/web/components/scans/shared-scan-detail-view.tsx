@@ -8168,7 +8168,7 @@ export async function SharedScanDetailView({
       {accessibilityAudit ? <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" data-testid="accessibility-audit-status">
         <span className="font-semibold">Automated accessibility: </span>
         {accessibilityAudit.status === "completed" ? "Completed" : accessibilityAudit.status === "not_testable" ? "Not evaluated" : "Limited"}
-        {accessibilityAudit.failedRuleCount !== null ? ` · ${accessibilityAudit.failedRuleCount} failed rules · ${accessibilityAudit.affectedNodeCount} affected elements` : null}
+        {accessibilityAudit.failedRuleCount !== null ? ` · ${accessibilityAudit.failedRuleCount} failed rules · ${accessibilityAudit.affectedNodeCount} element instances` : null}
         {accessibilityAudit.reviewRuleCount ? ` · ${accessibilityAudit.reviewRuleCount} rules need review` : null}
       </div> : null}
       {isScanInFlight ? (

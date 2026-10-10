@@ -1,4 +1,4 @@
-import { accessibilityAuditProjectionSchema, type AccessibilityAuditObservation, type AccessibilityAuditProjection } from "@certscore/contracts";
+import { accessibilityAuditProjectionSchema, isAccessibilityAuditLimited, type AccessibilityAuditObservation, type AccessibilityAuditProjection } from "@certscore/contracts";
 
 export function readAccessibilityAudit(value: unknown, scanId?: string): AccessibilityAuditProjection | null {
   const result = accessibilityAuditProjectionSchema.safeParse(value);
@@ -16,6 +16,15 @@ export function projectAccessibilityAuditSummary(value: unknown, scanId?: string
     durationMs: audit.durationMs, failedRuleCount: audit.rulesEvaluated.length ? audit.violations.length : null,
     affectedNodeCount: audit.rulesEvaluated.length ? audit.violations.reduce((sum, rule) => sum + rule.nodeCount, 0) : null,
     reviewRuleCount: audit.rulesEvaluated.length ? audit.reviewItems.length : null };
+}
+
+/** Overall delivery coverage changes without changing privacy evidence or finding eligibility. */
+export function withAccessibilityAuditCoverage<T extends { status: string; summary: string; limitations?: string[] }>(coverage: T, value: unknown, scanId?: string): T {
+  if (!isAccessibilityAuditLimited(value, scanId)) return coverage;
+  return { ...coverage, status: coverage.status === "complete" ? "partial" : coverage.status,
+    summary: coverage.status === "complete" ? "Automated public-web scan completed with limited accessibility coverage." : coverage.summary,
+    limitations: [...(coverage.limitations ?? []), "The required automated accessibility audit has incomplete or unavailable coverage."],
+  };
 }
 
 /** Compatibility rows are derived once from typed observations, never from scores or counts alone. */

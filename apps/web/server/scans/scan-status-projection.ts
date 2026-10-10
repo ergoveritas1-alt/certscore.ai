@@ -439,11 +439,11 @@ export function buildLightweightApiV2ScanStatusInput(projection: ScanStatusProje
           limitations: [noGoProjection.noGo.explanation],
         }
       : {
-          status: pagesScanned >= pagesRequested && projection.status === "completed" ? "complete" : "partial",
-          summary: pagesScanned > 0
+          status: pagesScanned >= pagesRequested && projection.status === "completed" && projection.accessibilityAuditStatus !== "limited" ? "complete" : "partial",
+          summary: projection.accessibilityAuditStatus === "limited" ? "Automated public-web scan completed with limited accessibility coverage." : pagesScanned > 0
             ? "Automated public-web scan completed for the observed public surfaces."
             : "Coverage was limited; absence of findings should not be interpreted as absence of risk.",
-          limitations: ["Automated public-web scan only."],
+          limitations: ["Automated public-web scan only.", ...(projection.accessibilityAuditStatus === "limited" ? ["The required automated accessibility audit has incomplete or unavailable coverage."] : [])],
         },
     retryAfterSeconds: terminal ? null : undefined,
   };
