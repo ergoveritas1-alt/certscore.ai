@@ -331,6 +331,7 @@ class McpIdentityTests(unittest.TestCase):
             ({"result": {"structuredContent": {"scanId": "scan-123", "status": "running", "retryAfterSeconds": 1}}}, {}),
             ({"result": {"structuredContent": {"scanId": "scan-123", "status": "completed"}}}, {}),
             ({"result": {"structuredContent": {"scanId": "scan-123", "status": "completed", "findings": []}}}, {}),
+            ({"result": {"structuredContent": {"type": "certscore_finding_list", "scanId": "scan-123", "findings": [], "pagination": {"truncated": False}}}}, {}),
         ]
 
         class FakeResponse:
@@ -366,8 +367,9 @@ class McpIdentityTests(unittest.TestCase):
         self.assertEqual(scan_status["sentinelPollCount"], 2)
         self.assertEqual(calls.count("certscore_scan_site"), 1)
         self.assertEqual(calls.count("certscore_get_scan_status"), 2)
-        self.assertEqual(calls[-1], "certscore_get_scan_bundle")
+        self.assertEqual(calls[-2:], ["certscore_get_scan_bundle", "certscore_list_findings"])
         self.assertEqual(bundle["scan"]["status"], "completed")
+        self.assertEqual(bundle["findings"]["type"], "certscore_finding_list")
         self.assertTrue(all(call.args[0] >= 20 for call in sleep.call_args_list))
 
 
@@ -471,6 +473,42 @@ class AccessibilityEvidenceTests(unittest.TestCase):
     def assess(self, page):
         return handler.assess_accessibility_evidence(self.url, "scan-123", handler.ACCESSIBILITY_EXPECTATIONS, page)
 
+    def findings(self):
+        return {"type": "certscore_finding_list", "scanId": "scan-123", "findings": [
+            {"type": "certscore_finding", "scanId": "scan-123", "id": i}
+            for i in handler.ACCESSIBILITY_FINDING_IDS
+        ]}
+
+    def test_required_raw_rules_do_not_mask_a_missing_canonical_finding(self):
+        findings = self.findings()
+        findings["findings"].pop()
+        with mock.patch.object(handler, "request", return_value=self.page()) as read:
+            result = handler.check_accessibility_evidence(self.url, "scan-123", "test", handler.ACCESSIBILITY_EXPECTATIONS, findings)
+        self.assertTrue(result["issue"])
+        self.assertEqual(result["reasonCodes"], ["accessibility_canonical_finding_missing"])
+        self.assertEqual(result["missingFindingIds"], ["keyboard_navigation_accessibility_issue"])
+        self.assertEqual(len(result["observedRuleIds"]), 5)
+        self.assertEqual(read.call_count, 1, "reuse findings already read through REST or MCP")
+
+    def test_canonical_findings_require_typed_same_scan_complete_results(self):
+        good = self.findings()
+        self.assertFalse(handler.assess_accessibility_findings("scan-123", good)["reasonCodes"])
+        for bad in ({}, {**good, "scanId": "other"}, {**good, "pagination": None},
+                    {**good, "pagination": {"truncated": True}},
+                    {**good, "findings": [{**good["findings"][0], "scanId": "other"}]},
+                    {**good, "findings": ["keyboard_navigation_accessibility_issue"]}):
+            self.assertEqual(handler.assess_accessibility_findings("scan-123", bad)["reasonCodes"],
+                             ["accessibility_findings_unavailable_or_unbound"])
+
+    def test_reconciliation_rereads_only_existing_completed_evidence_and_findings(self):
+        with mock.patch.object(handler, "request", side_effect=[self.page(), self.findings()]) as read:
+            result = handler.check_accessibility_evidence(self.url, "scan-123", "test", handler.ACCESSIBILITY_EXPECTATIONS)
+        self.assertFalse(result["issue"])
+        self.assertEqual(result["contractVersion"], "certscore.sentinel-accessibility-check.v2")
+        self.assertEqual(len(result["observedFindingIds"]), 4)
+        self.assertEqual(read.call_count, 2)
+        self.assertTrue(all(c.kwargs.get("method", "GET") == "GET" for c in read.call_args_list))
+
     def test_all_bound_required_violations_pass_even_with_unrelated_review_limits(self):
         result = self.assess(self.page())
         self.assertFalse(result["issue"])
@@ -541,7 +579,7 @@ class AccessibilityEvidenceTests(unittest.TestCase):
 
     def test_one_retained_evidence_read_creates_no_scan_and_transport_failure_is_limited(self):
         with mock.patch.object(handler, "request", return_value=self.page()) as request:
-            self.assertFalse(handler.check_accessibility_evidence(self.url, "scan-123", "test", handler.ACCESSIBILITY_EXPECTATIONS)["issue"])
+            self.assertFalse(handler.check_accessibility_evidence(self.url, "scan-123", "test", handler.ACCESSIBILITY_EXPECTATIONS, self.findings())["issue"])
         request.assert_called_once()
         self.assertEqual(request.call_args.args, (handler.API + "/api/v2/scans/scan-123/report-evidence?section=accessibility",))
         with mock.patch.object(handler, "request", side_effect=RuntimeError("503")):

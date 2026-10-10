@@ -21,6 +21,10 @@ ACCESSIBILITY_EXPECTATIONS = {
         {"ruleId": "nested-interactive", "selector": "#sentinel-nested-control"},
     ],
 }
+ACCESSIBILITY_FINDING_IDS = (
+    "text_alternative_accessibility_issue", "semantic_labeling_accessibility_issue",
+    "visual_contrast_accessibility_issue", "keyboard_navigation_accessibility_issue",
+)
 ssm = boto3.client("ssm", region_name=REGION)
 sm = boto3.client("secretsmanager", region_name=REGION)
 # SES identity verification is regional; support@certscore.ai is verified in us-east-1.
@@ -450,7 +454,16 @@ def mcp_scan(url, loc, secret):
     evidence = {}
     if status(current) in USABLE_SCAN_STATUSES:
         evidence = tool_call({"jsonrpc": "2.0", "id": next_call_id, "method": "tools/call", "params": {"name": "certscore_get_scan_bundle", "arguments": {"scanId": sid, "detail": "evidence", "maxBytes": 24000}}})
-    return sid, current, {"scan": current, "evidence": evidence}, created
+    findings = {}
+    if status(current) in USABLE_SCAN_STATUSES:
+        # Read canonical findings through MCP as well as its bounded bundle.
+        # A failed/truncated read is a monitoring limitation, never a new scan.
+        try:
+            finding_call = tool_call({"jsonrpc": "2.0", "id": next_call_id + 1, "method": "tools/call", "params": {"name": "certscore_list_findings", "arguments": {"scanId": sid, "limit": 200, "offset": 0}}})
+            _, findings = mcp_tool_payload(finding_call)
+        except Exception:
+            pass
+    return sid, current, {"scan": current, "evidence": evidence, "findings": findings}, created
 
 def signals(value):
     text = json.dumps(value, ensure_ascii=False).lower()
@@ -571,16 +584,49 @@ def assess_accessibility_evidence(url, sid, expected, page):
     return result
 
 
-def check_accessibility_evidence(url, sid, api_key, expected):
+def assess_accessibility_findings(sid, page):
+    """Require canonical projected families; retained raw rules alone cannot pass."""
+    result = {"expectedFindingIds": list(ACCESSIBILITY_FINDING_IDS), "observedFindingIds": [],
+              "missingFindingIds": [], "reasonCodes": []}
+    if (not isinstance(page, dict) or page.get("type") != "certscore_finding_list"
+            or page.get("scanId") != sid or not isinstance(page.get("findings"), list)
+            or len(page["findings"]) > 200 or not isinstance(page.get("pagination", {}), dict)
+            or page.get("pagination", {}).get("truncated") is True
+            or any(not isinstance(f, dict) or f.get("type") != "certscore_finding"
+                   or f.get("scanId") != sid for f in page.get("findings", []))):
+        result["reasonCodes"] = ["accessibility_findings_unavailable_or_unbound"]
+        return result
+    ids = {f.get("id") for f in page["findings"] if isinstance(f.get("id"), str)}
+    result["observedFindingIds"] = [i for i in ACCESSIBILITY_FINDING_IDS if i in ids]
+    result["missingFindingIds"] = [i for i in ACCESSIBILITY_FINDING_IDS if i not in ids]
+    if result["missingFindingIds"]:
+        result["reasonCodes"] = ["accessibility_canonical_finding_missing"]
+    return result
+
+
+def check_accessibility_evidence(url, sid, api_key, expected, findings=None):
     try:
         page = request(API + "/api/v2/scans/" + sid + "/report-evidence?section=accessibility",
                        headers={"authorization": "Bearer " + api_key}, timeout=30)
-        return assess_accessibility_evidence(url, sid, expected, page)
+        result = assess_accessibility_evidence(url, sid, expected, page)
     except Exception:
         # Operational coverage failure only; never invent a clean result or retry a scan.
-        return {"contractVersion": "certscore.sentinel-accessibility-check.v1", "expected": expected,
+        return {"contractVersion": "certscore.sentinel-accessibility-check.v2", "expected": expected,
                 "issue": True, "reasonCodes": ["accessibility_evidence_unavailable"],
-                "observedRuleIds": [], "missingRuleIds": []}
+                "observedRuleIds": [], "missingRuleIds": [], "expectedFindingIds": list(ACCESSIBILITY_FINDING_IDS),
+                "observedFindingIds": [], "missingFindingIds": []}
+    # REST reuses its existing findings read. MCP supplies its own typed list;
+    # only reconciliation needs a fresh API read of this completed scan.
+    if findings is None:
+        try:
+            findings = request(API + "/api/v2/scans/" + sid + "/findings",
+                               headers={"authorization": "Bearer " + api_key}, timeout=30)
+        except Exception:
+            findings = {}
+    canonical = assess_accessibility_findings(sid, findings)
+    reasons = result["reasonCodes"] + canonical.pop("reasonCodes")
+    return {**result, **canonical, "contractVersion": "certscore.sentinel-accessibility-check.v2",
+            "reasonCodes": reasons, "issue": bool(reasons)}
 
 def scheduled_slot(event, now):
     """Reject late/legacy events rather than spending a later slot's scan quota.
@@ -677,7 +723,7 @@ def handler(event, context):
                     freshness = assess_freshness_verification_failure(error, created)
             row = {"page": p["key"], "requestedUrl": requested_url, "location": loc, "transport": transport, "scanId": sid, "status": scan_status, "terminalError": terminal_error, "terminalErrorCode": terminal_error_code, "durationMs": int((time.time()-t)*1000), "throttleSeconds": throttle_seconds, "expectedSignals": p.get("expectedSignals", []), "observedSignals": [name for name, present in observed.items() if present], "missing": missing, "comparison": "findings_and_evidence", "pollCount": st.get("sentinelPollCount", 0) if isinstance(st, dict) else 0, "firstPollAt": st.get("sentinelFirstPollAt") if isinstance(st, dict) else None, "lastPollAt": st.get("sentinelLastPollAt") if isinstance(st, dict) else None, **freshness}
             if scan_status in USABLE_SCAN_STATUSES:
-                row["accessibility"] = check_accessibility_evidence(requested_url, sid, key, accessibility_expected)
+                row["accessibility"] = check_accessibility_evidence(requested_url, sid, key, accessibility_expected, bundle.get("findings", {}))
             if missing: corpus_issues.append({**row, "issue": "required signals missing: " + ", ".join(missing)})
             incident = scanner_incident_for_row(row)
             if incident:

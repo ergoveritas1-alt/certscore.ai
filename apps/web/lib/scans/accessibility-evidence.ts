@@ -39,6 +39,7 @@ export type NormalizedAccessibilityRuleExample = {
 export const TEXT_ALTERNATIVE_ACCESSIBILITY_RULE_IDS = new Set([
   "audio-caption",
   "image-alt",
+  "input-image-alt",
   "image-redundant-alt",
   "object-alt",
   "video-caption"
@@ -46,12 +47,15 @@ export const TEXT_ALTERNATIVE_ACCESSIBILITY_RULE_IDS = new Set([
 
 export const VISUAL_CONTRAST_ACCESSIBILITY_RULE_IDS = new Set([
   "color-contrast",
-  "color-contrast-enhanced"
+  "color-contrast-enhanced",
+  "link-in-text-block"
 ]);
 
 export const SEMANTIC_LABELING_ACCESSIBILITY_RULE_IDS = new Set([
   "aria-command-name",
   "aria-input-field-name",
+  "aria-prohibited-attr",
+  "aria-required-children",
   "aria-toggle-field-name",
   "aria-tooltip-name",
   "aria-treeitem-name",
@@ -65,6 +69,8 @@ export const SEMANTIC_LABELING_ACCESSIBILITY_RULE_IDS = new Set([
 const STRONG_SEMANTIC_LABELING_RULE_IDS = new Set([
   "aria-command-name",
   "aria-input-field-name",
+  "aria-prohibited-attr",
+  "aria-required-children",
   "aria-toggle-field-name",
   "aria-tooltip-name",
   "aria-treeitem-name",

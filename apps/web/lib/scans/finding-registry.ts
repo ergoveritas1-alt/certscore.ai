@@ -796,9 +796,9 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     section: "Accessibility",
     defaultSurfacePriority: 70,
     whyItMatters:
-      "Insufficient contrast can make text and controls difficult to perceive, especially for users with low vision or color-vision differences.",
+      "Insufficient contrast or links distinguished only by color can make content difficult to perceive, especially for users with low vision or color-vision differences.",
     remediation:
-      "Adjust foreground, background, and state colors for the retained contrast examples until they meet the applicable WCAG contrast threshold."
+      "Review each retained rule's WCAG guidance: adjust foreground, background, and state contrast, and add a non-color distinction for links where required."
   },
   focus_management_issue: {
     id: "focus_management_issue",
