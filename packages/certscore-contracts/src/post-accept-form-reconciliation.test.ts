@@ -35,6 +35,19 @@ test("loader-bound terminal inventory enriches three imaged fields to seven with
   assert.equal(JSON.stringify({images,capture}),original);
 });
 
+test("click-only images reconcile terminal fields only against the dispatch-anchored window",()=>{
+  const {images,capture}=fixture();
+  const {acceptanceRegisteredAtMs:_registered,...common}=images;
+  const afterClick=postAcceptFormSnapshotProjectionSchema.parse({...common,
+    contractVersion:"certscore.post_accept_form_snapshots.v7",phase:"after_accept_click",captureDeadlineAtMs:3100});
+  const boundCapture=postAcceptFormCaptureSchema.parse({...capture,
+    window:{...capture.window,startedAtMs:100,endedAtMs:3100}});
+  assert.equal(reconcilePostAcceptFormInventory(afterClick,boundCapture)?.inventory.forms[0]?.fields.length,7);
+  assert.equal(reconcilePostAcceptFormInventory(afterClick,capture)?.structuredFrame,undefined);
+  assert.equal(reconcilePostAcceptFormInventory(afterClick,{...boundCapture,frames:[{...boundCapture.frames[0]!,
+    documentBinding:{source:"cdp_loader_id",token:"other",boundAtMs:200}}]})?.structuredFrame,undefined);
+});
+
 test("historical, incomplete, mismatched and ambiguous captures cannot enrich an imaged form",()=>{
   const {images,capture}=fixture();
   const frame=capture.frames[0]!; const form=frame.forms[0]!;

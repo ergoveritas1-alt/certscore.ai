@@ -89,7 +89,7 @@ test("documented Termly refusal event confirms one Reject click without inventin
 });
 
 for(const mode of ["mixed","malformed","none","preexisting","before_click"] as const) {
-  test(`Termly ${mode} Accept remains unconfirmed and retains only bounded after-click form fields`, async()=>{
+  test(`Termly ${mode} Accept remains unconfirmed with bounded after-click form evidence`, async()=>{
     await withFixture(mode,async(url,counts)=>{
       const recipe=buildCanonicalPostAcceptActionRecipes().find(r=>r.cmpId==="Termly");assert.ok(recipe);
       const packet=await runPostAcceptObserver({url,scanId:`termly-event-${mode}`,recipe,
@@ -98,7 +98,12 @@ for(const mode of ["mixed","malformed","none","preexisting","before_click"] as c
       assert.equal(counts.actions,1);assert.equal(counts.submissions,0);
       assert.equal(packet.acceptanceRegistration.status,"unconfirmed");
       assert.equal(packet.productionProjectable,false);
-      assert.equal(packet.formSnapshotCapture,undefined);
+      if(packet.formSnapshotCapture) {
+        assert.equal(packet.formSnapshotCapture.contractVersion,"certscore.post_accept_form_snapshots.v7");
+        assert.equal(packet.formSnapshotCapture.phase,"after_accept_click");
+        assert.equal(packet.formSnapshotCapture.acceptanceRegisteredAtMs,undefined);
+        assert.ok(packet.formSnapshotCapture.snapshots.length<=2);
+      }
       assert.equal(packet.formCapture?.frames[0]?.forms[0]?.fields.length,2);
       assert.ok(postAcceptEvidencePacketSchema.safeParse(packet).success);
     });

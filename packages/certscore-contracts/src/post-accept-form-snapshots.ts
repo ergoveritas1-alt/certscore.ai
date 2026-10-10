@@ -27,7 +27,7 @@ type PostCaptureInventory = {
   documentIdentity: { source: "cdp_loader_id"; token: string };
   inventory: z.output<typeof postAcceptFormInventorySchema>;
 };
-export type PostAcceptFormSnapshotCapture = PostAcceptFormSnapshotCommon & (
+type RegisteredPostAcceptFormSnapshotCapture = PostAcceptFormSnapshotCommon & (
   | { contractVersion: "certscore.post_accept_form_snapshots.v1"; lateForm?: never }
   | { contractVersion: "certscore.post_accept_form_snapshots.v2"; lateForm: {
       baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 1500;
@@ -49,7 +49,7 @@ export type PostAcceptFormSnapshotCapture = PostAcceptFormSnapshotCommon & (
 type PostAcceptFormSnapshotProjectionCommon = Omit<PostAcceptFormSnapshotCommon, "snapshots"> & {
   snapshots: Array<Omit<CollectionSurfaceSnapshot, "data">>;
 };
-export type PostAcceptFormSnapshotProjection = PostAcceptFormSnapshotProjectionCommon & (
+type RegisteredPostAcceptFormSnapshotProjection = PostAcceptFormSnapshotProjectionCommon & (
   | { contractVersion: "certscore.post_accept_form_snapshots.v1"; lateForm?: never }
   | { contractVersion: "certscore.post_accept_form_snapshots.v2"; lateForm: {
       baseCaptureDeadlineAtMs: number; detectedAtMs: number; extensionMs: 1500;
@@ -68,6 +68,27 @@ export type PostAcceptFormSnapshotProjection = PostAcceptFormSnapshotProjectionC
     }; postCaptureInventory: PostCaptureInventory;
     postCaptureSnapshots: { capturedAtMs: number; snapshots: Array<Omit<CollectionSurfaceSnapshot, "data">> } }
 );
+/** Completed-click pixels have no consent-registration claim or late extension.
+ * Inventory/ref namespaces remain compatible with the existing Accept lane. */
+type AfterAcceptClickFormSnapshotCommon = Omit<PostAcceptFormSnapshotCommon, "phase" | "acceptanceRegisteredAtMs" | "snapshots"> & {
+  contractVersion: "certscore.post_accept_form_snapshots.v7";
+  phase: "after_accept_click";
+  captureDeadlineAtMs: number;
+  acceptanceRegisteredAtMs?: never;
+  lateForm?: never;
+};
+export type PostAcceptFormSnapshotCapture = RegisteredPostAcceptFormSnapshotCapture |
+  (AfterAcceptClickFormSnapshotCommon & { snapshots: CollectionSurfaceSnapshot[] });
+export type PostAcceptFormSnapshotProjection = RegisteredPostAcceptFormSnapshotProjection |
+  (AfterAcceptClickFormSnapshotCommon & { snapshots: Array<Omit<CollectionSurfaceSnapshot, "data">> });
+
+export function postAcceptFormSnapshotDeadline(capture: PostAcceptFormSnapshotProjection, observationWindowMs: number) {
+  if (capture.contractVersion === "certscore.post_accept_form_snapshots.v7") return capture.captureDeadlineAtMs;
+  return capture.contractVersion === "certscore.post_accept_form_snapshots.v1"
+    ? capture.acceptanceRegisteredAtMs + observationWindowMs
+    : capture.lateForm.baseCaptureDeadlineAtMs + capture.lateForm.extensionMs;
+}
+
 // Packet pixels and persisted metadata share the same provenance contract.
 const common = {
   phase: z.literal("after_accept"),
@@ -139,7 +160,9 @@ export function projectPostAcceptFormInventory(
   }) };
 }
 function validateBinding(value: PostAcceptFormSnapshotProjection, ctx: z.RefinementCtx) {
-  if (value.actionDispatchedAtMs > value.acceptanceRegisteredAtMs || value.acceptanceRegisteredAtMs > value.capturedAtMs ||
+  const anchorAtMs = value.contractVersion === "certscore.post_accept_form_snapshots.v7"
+    ? value.actionDispatchedAtMs : value.acceptanceRegisteredAtMs;
+  if (value.actionDispatchedAtMs > anchorAtMs || anchorAtMs > value.capturedAtMs ||
     value.inventory.forms.length > 2 || value.inventory.forms.length === 0 ||
     value.inventory.forms.some(form => form.pageUrl !== value.inventory.pageUrl) ||
     new Set(value.inventory.forms.map(form => form.formRef)).size !== value.inventory.forms.length ||
@@ -149,9 +172,13 @@ function validateBinding(value: PostAcceptFormSnapshotProjection, ctx: z.Refinem
       snapshot.pageUrl !== value.inventory.pageUrl ||
       !value.inventory.forms.some(form => form.formRef === snapshot.formRef)) ||
     new Set(value.snapshots.map(snapshot => snapshot.formRef)).size !== value.snapshots.length) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "After-Accept form images require bounded registered inventory binding" });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "After-Accept form images require bounded action and inventory binding" });
   }
-  if (value.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
+  if (value.contractVersion === "certscore.post_accept_form_snapshots.v7" &&
+    (value.captureDeadlineAtMs <= value.actionDispatchedAtMs || value.capturedAtMs > value.captureDeadlineAtMs)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "After-click images must finish within their original action deadline" });
+  }
+  if (value.contractVersion !== "certscore.post_accept_form_snapshots.v1" && value.contractVersion !== "certscore.post_accept_form_snapshots.v7" &&
     (value.lateForm.baseCaptureDeadlineAtMs < value.acceptanceRegisteredAtMs ||
       value.lateForm.detectedAtMs < value.acceptanceRegisteredAtMs + (value.contractVersion === "certscore.post_accept_form_snapshots.v2" ? 1500 : 1000) ||
       value.lateForm.detectedAtMs < value.lateForm.baseCaptureDeadlineAtMs - (value.contractVersion === "certscore.post_accept_form_snapshots.v2" ? 1500 : 2000) ||
@@ -183,9 +210,15 @@ function validateBinding(value: PostAcceptFormSnapshotProjection, ctx: z.Refinem
     }
   }
 }
+const afterClickCommon = {
+  ...common, phase: z.literal("after_accept_click"),
+  acceptanceRegisteredAtMs: z.never().optional(), captureDeadlineAtMs: z.number().int().nonnegative(),
+  contractVersion: z.literal("certscore.post_accept_form_snapshots.v7"),
+};
 const captureCommon = { ...common, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotSchema)).max(2) };
 const projectionCommon = { ...common, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotMetadataSchema)).max(2) };
 export const postAcceptFormSnapshotCaptureSchema: z.ZodType<PostAcceptFormSnapshotCapture, z.ZodTypeDef, unknown> = z.union([
+  z.object({ ...afterClickCommon, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotSchema)).max(2) }).strict(),
   z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v1") }).strict(),
   z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v2"), lateForm: lateFormSchema }).strict(),
   z.object({ ...captureCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v3"), lateForm: extendedLateFormSchema }).strict(),
@@ -197,6 +230,7 @@ export const postAcceptFormSnapshotCaptureSchema: z.ZodType<PostAcceptFormSnapsh
     }).strict() }).strict(),
 ]).superRefine(validateBinding);
 export const postAcceptFormSnapshotProjectionSchema: z.ZodType<PostAcceptFormSnapshotProjection, z.ZodTypeDef, unknown> = z.union([
+  z.object({ ...afterClickCommon, snapshots: z.array(z.lazy(() => collectionSurfaceSnapshotMetadataSchema)).max(2) }).strict(),
   z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v1") }).strict(),
   z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v2"), lateForm: lateFormSchema }).strict(),
   z.object({ ...projectionCommon, contractVersion: z.literal("certscore.post_accept_form_snapshots.v3"), lateForm: extendedLateFormSchema }).strict(),

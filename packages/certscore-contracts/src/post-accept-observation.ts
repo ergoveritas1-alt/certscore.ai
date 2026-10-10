@@ -1,5 +1,5 @@
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
-import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema } from "./post-accept-form-snapshots";
+import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema, postAcceptFormSnapshotDeadline } from "./post-accept-form-snapshots";
 import { postAcceptFormCaptureSchema } from "./post-accept-form-capture";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
@@ -221,20 +221,29 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     packet.timing.observationEndedAtMs < (packet.acceptanceRegistration.acceptanceRegisteredAtMs ?? packet.acceptanceRegistration.actionDispatchedAtMs ?? 0)
   )) context.addIssue({code:z.ZodIssueCode.custom,path:["timing","observationEndedAtMs"],message:"Observation end must retain the action and result clock binding."});
   const images = packet.formSnapshotCapture;
-  const imageCaptureDeadlineAtMs = images && images.contractVersion !== "certscore.post_accept_form_snapshots.v1"
-    ? images.lateForm.baseCaptureDeadlineAtMs + images.lateForm.extensionMs
-    : (images?.acceptanceRegisteredAtMs ?? 0) + packet.observationWindowMs;
-  if (images && (packet.acceptanceRegistration.status !== "confirmed" || !packet.acceptanceRegistration.acceptanceExercised ||
-    images.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 || images.exactTargetSha256 !== packet.exactTargetSha256 ||
-    images.actionDispatchedAtMs !== packet.acceptanceRegistration.actionDispatchedAtMs ||
-    images.acceptanceRegisteredAtMs !== packet.acceptanceRegistration.acceptanceRegisteredAtMs ||
-    (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
-      images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + packet.observationWindowMs) ||
-    images.capturedAtMs > imageCaptureDeadlineAtMs || images.capturedAtMs > packet.timing.readyAtMs ||
-    ((images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6") &&
-      images.postCaptureInventory.capturedAtMs > packet.timing.readyAtMs) ||
-    (images.contractVersion === "certscore.post_accept_form_snapshots.v6" && images.postCaptureSnapshots.capturedAtMs > packet.timing.readyAtMs) ||
-    packet.interactionDiagnostics?.click.outcome !== "completed")) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form snapshots require confirmed same-target completed Accept inside the bounded image window"});
+  if (images) {
+    const afterClick = images.contractVersion === "certscore.post_accept_form_snapshots.v7";
+    const imageCaptureDeadlineAtMs = postAcceptFormSnapshotDeadline(images, packet.observationWindowMs);
+    const invalidPhaseBinding = afterClick
+      ? !packet.afterActionCapture || packet.afterActionCapture.activationStatus !== "completed" ||
+        images.actionDispatchedAtMs !== packet.afterActionCapture.actionDispatchedAtMs ||
+        images.captureDeadlineAtMs > images.actionDispatchedAtMs + packet.observationWindowMs ||
+        images.capturedAtMs > packet.afterActionCapture.captureEndedAtMs ||
+        packet.interactionDiagnostics?.navigation.documentCommitted !== true ||
+        packet.interactionDiagnostics?.navigation.finalUrlAuthorized !== true
+      : packet.acceptanceRegistration.status !== "confirmed" || !packet.acceptanceRegistration.acceptanceExercised ||
+        images.acceptanceRegisteredAtMs !== packet.acceptanceRegistration.acceptanceRegisteredAtMs ||
+        (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
+          images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + packet.observationWindowMs);
+    if (invalidPhaseBinding ||
+      images.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 || images.exactTargetSha256 !== packet.exactTargetSha256 ||
+      images.actionDispatchedAtMs !== packet.acceptanceRegistration.actionDispatchedAtMs ||
+      images.capturedAtMs > imageCaptureDeadlineAtMs || images.capturedAtMs > packet.timing.readyAtMs ||
+      ((images.contractVersion === "certscore.post_accept_form_snapshots.v5" || images.contractVersion === "certscore.post_accept_form_snapshots.v6") &&
+        images.postCaptureInventory.capturedAtMs > packet.timing.readyAtMs) ||
+      (images.contractVersion === "certscore.post_accept_form_snapshots.v6" && images.postCaptureSnapshots.capturedAtMs > packet.timing.readyAtMs) ||
+      packet.interactionDiagnostics?.click.outcome !== "completed") context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form snapshots require verified same-target completed Accept and their original capture clock"});
+  }
   if (packet.formCapture && (packet.formCapture.exactTargetSha256 !== packet.actionControlProof?.authorizedTargetSha256 ||
     packet.formCapture.exactTargetSha256 !== packet.exactTargetSha256 ||
     packet.interactionDiagnostics?.navigation.documentCommitted !== true ||
@@ -557,15 +566,24 @@ export const postAcceptReportProjectionSchema = z.object({
   ]),
 }).superRefine((projection, context) => {
   const images = projection.formSnapshotCapture;
-  const imageCaptureDeadlineAtMs = images && images.contractVersion !== "certscore.post_accept_form_snapshots.v1"
-    ? images.lateForm.baseCaptureDeadlineAtMs + images.lateForm.extensionMs
-    : (images?.acceptanceRegisteredAtMs ?? 0) + projection.observationWindowMs;
-  if (images && (!projection.packetSha256 || !projection.acceptanceExercised || projection.registrationStatus !== "confirmed" ||
-    images.exactTargetSha256 !== projection.actionControlProof?.authorizedTargetSha256 ||
-    images.acceptanceRegisteredAtMs !== projection.acceptanceRegisteredAtMs || projection.interactionDiagnostics?.click.outcome !== "completed" ||
-    (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
-      images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + projection.observationWindowMs) ||
-    images.capturedAtMs > imageCaptureDeadlineAtMs)) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form image projection requires verified registered packet provenance"});
+  if (images) {
+    const afterClick = images.contractVersion === "certscore.post_accept_form_snapshots.v7";
+    const invalidPhaseBinding = afterClick
+      ? !projection.afterActionCapture || projection.afterActionCapture.activationStatus !== "completed" ||
+        images.actionDispatchedAtMs !== projection.afterActionCapture.actionDispatchedAtMs ||
+        images.captureDeadlineAtMs > images.actionDispatchedAtMs + projection.observationWindowMs ||
+        images.capturedAtMs > projection.afterActionCapture.captureEndedAtMs ||
+        projection.interactionDiagnostics?.navigation.documentCommitted !== true ||
+        projection.interactionDiagnostics?.navigation.finalUrlAuthorized !== true
+      : !projection.acceptanceExercised || projection.registrationStatus !== "confirmed" ||
+        images.acceptanceRegisteredAtMs !== projection.acceptanceRegisteredAtMs ||
+        (images.contractVersion !== "certscore.post_accept_form_snapshots.v1" &&
+          images.lateForm.baseCaptureDeadlineAtMs > images.acceptanceRegisteredAtMs + projection.observationWindowMs);
+    if (!projection.packetSha256 || invalidPhaseBinding ||
+      images.exactTargetSha256 !== projection.actionControlProof?.authorizedTargetSha256 ||
+      projection.interactionDiagnostics?.click.outcome !== "completed" ||
+      images.capturedAtMs > postAcceptFormSnapshotDeadline(images, projection.observationWindowMs)) context.addIssue({code:z.ZodIssueCode.custom,path:["formSnapshotCapture"],message:"Form image projection requires verified action packet provenance and capture clock"});
+  }
   if (projection.registeredObservationCompletion && (
     projection.registeredObservationCompletion.action !== "accept" ||
     projection.registeredObservationCompletion.startedAtMs !== projection.acceptanceRegisteredAtMs ||

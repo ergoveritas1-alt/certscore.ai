@@ -33,6 +33,39 @@ test('after-click forms require a valid retained projection and observed first-l
   }
 });
 
+test('reviewed click-only images reach report and API rows without claiming consent registration',()=>{
+  const forms=[0,1].map(index=>({...form,formRef:`collection_form_${index}`}));
+  const value=postAcceptReportProjectionSchema.parse({...projection,formCapture:undefined,observationWindowMs:3000,
+    afterActionCapture:{policyVersion:'bounded_after_action_capture.v1',action:'accept',activationStatus:'completed',
+      actionDispatchedAtMs:100,captureEndedAtMs:3100,requestedWindowMs:3000,stopReason:'window_elapsed',
+      requestsDropped:0,storageSnapshotRetained:false,storageWriteCoverage:'bounded_main_document_sample',
+      storageWrites:[],requestIds:[]},afterActionRequests:[],afterActionStorage:[],
+    formSnapshotCapture:{contractVersion:'certscore.post_accept_form_snapshots.v7',phase:'after_accept_click',
+      sessionId:randomUUID(),exactTargetSha256:proof.authorizedTargetSha256,actionDispatchedAtMs:100,
+      captureDeadlineAtMs:3100,capturedAtMs:2200,documentIdentity:{source:'cdp_loader_id',token:'loader'},
+      inventory:{contractVersion:'certscore.post_accept_form_inventory.v1',sourceLane:'accept_observation',phase:'after_accept',
+        coverage:'bounded_sample',pageUrl:form.pageUrl,forms},
+      snapshots:forms.map(form=>({contractVersion:'certscore.collection-surface-snapshot.v1',formRef:form.formRef,
+        pageUrl:form.pageUrl,capturedAt:'2026-10-09T10:00:00.000Z',sourceInventoryHash:'c'.repeat(64),
+        mimeType:'image/jpeg',valuesMasked:true,status:'available',width:640,height:400,sha256:'d'.repeat(64),sizeBytes:1000}))}});
+  const source={consentControlAssessment:observedControlAssessment,postAcceptEvidenceProjection:value};
+  const rows=projectPostAcceptForms(source).rows;
+  assert.equal(rows.length,2);
+  for(const row of rows){
+    assert.equal(row.capturePhase,'after_accept_click');
+    assert.equal(row.snapshot.status,'available');
+    assert.ok(row.snapshot.status==='available' && row.snapshot.url.includes('after_accept%3Acollection_form_'));
+  }
+  assert.equal(value.registrationStatus,'unconfirmed');
+  assert.equal(value.acceptanceExercised,false);
+  assert.equal(value.productionProjectable,false);
+  assert.deepEqual(value.postAcceptActivity,[]);
+  for(const patch of [{packetSha256:undefined},{actionControlProof:undefined},{afterActionCapture:undefined},
+    {interactionDiagnostics:{...value.interactionDiagnostics,click:{...value.interactionDiagnostics!.click,outcome:'uncertain'}}}])
+    assert.deepEqual(projectPostAcceptForms({...source,postAcceptEvidenceProjection:{...value,...patch}}).rows,[]);
+  assert.deepEqual(projectPostAcceptForms({...source,consentControlAssessment:undefined}).rows,[]);
+});
+
 
 test('verified registered form metadata produces After Accept image URLs without altering the control assessment',()=>{
   const inventory={contractVersion:'certscore.post_accept_form_inventory.v1',sourceLane:'accept_observation',phase:'after_accept',coverage:'bounded_sample',pageUrl:form.pageUrl,forms:[{...form,formRef:'collection_form_0'}]};

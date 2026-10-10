@@ -6,9 +6,10 @@ import { buildReportDisplayExport } from "./report-display-export";
 const scanId = "9ba99a8c-b1ad-44c1-985f-92cef760ab40";
 const pageId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
-test("pre-consent and After Accept fields retain their phase and API image follow-ups", () => {
-  const rows = ["collection_form_0", "after_accept:collection_form_1"].map((ref, index) => ({
-    id: ref, capturePhase: index ? "after_accept" : "pre_consent",
+test("pre-consent, registered Accept and unconfirmed Accept click fields retain their phase and API image follow-ups", () => {
+  const phases = ["pre_consent", "after_accept", "after_accept_click"];
+  const rows = ["collection_form_0", "after_accept:collection_form_1", "after_accept:collection_form_2"].map((ref, index) => ({
+    id: ref, capturePhase: phases[index],
     form: { formRef: `collection_form_${index}`, fields: [{ fieldRef: "email", semanticCategory: "email" }] },
     snapshot: { status: "available", url: `/api/scans/${scanId}/form-snapshot?formRef=${encodeURIComponent(ref)}` },
   }));

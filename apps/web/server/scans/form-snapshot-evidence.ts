@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { collectionSurfaceInventorySchema, collectionSurfaceSnapshotSchema, postAcceptFormSnapshotCaptureSchema,
-  type PostAcceptEvidencePacket, type CollectionSurfaceSnapshot } from "@certscore/contracts";
+  reconcilePostAcceptFormInventory, type PostAcceptEvidencePacket, type CollectionSurfaceSnapshot } from "@certscore/contracts";
+import type { CollectionSurfaceTableRow } from "../../lib/scans/collection-surface-table-row";
 
 export function verifiedPostAcceptFormSnapshots(value: unknown) {
   const parsed = postAcceptFormSnapshotCaptureSchema.safeParse(value);
@@ -23,6 +24,29 @@ export function verifiedPostAcceptFormSnapshots(value: unknown) {
     images.push({ snapshot, bytes, capturedAtMs:group.capturedAtMs });
   }
   return { capture, images };
+}
+
+/** Verify the row's reconciled field provenance separately from its original pixels. */
+export function verifiedPostAcceptFormSnapshotForRow(packet: Pick<PostAcceptEvidencePacket,"formSnapshotCapture" | "formCapture">, row: CollectionSurfaceTableRow) {
+  const verified = verifiedPostAcceptFormSnapshots(packet.formSnapshotCapture);
+  const provenance = row.captureProvenance;
+  if (!verified || !provenance || row.snapshot.status !== "available") return null;
+  const reconciled = reconcilePostAcceptFormInventory(verified.capture, packet.formCapture);
+  if (!reconciled) return null;
+  const frame = reconciled.structuredFrame;
+  const image = verified.images.find(item => item.snapshot.formRef === row.form.formRef);
+  const later = verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v5" ||
+    verified.capture.contractVersion === "certscore.post_accept_form_snapshots.v6"
+    ? verified.capture.postCaptureInventory : undefined;
+  if (provenance.sessionId !== (frame ? packet.formCapture!.sessionId : verified.capture.sessionId) ||
+    provenance.frameRef !== (frame?.frameRef ?? "main") ||
+    provenance.documentToken !== (frame?.documentBinding?.token ?? verified.capture.documentIdentity.token) ||
+    provenance.exactTargetSha256 !== verified.capture.exactTargetSha256 ||
+    provenance.actionDispatchedAtMs !== verified.capture.actionDispatchedAtMs ||
+    provenance.capturedAtMs !== (frame?.capturedAtMs ?? image?.capturedAtMs ?? later?.capturedAtMs ?? verified.capture.capturedAtMs) ||
+    row.capturePhase !== verified.capture.phase || row.capturedAt !== image?.snapshot.capturedAt ||
+    JSON.stringify(reconciled.inventory.forms.find(form => form.formRef === row.form.formRef)) !== JSON.stringify(row.form)) return null;
+  return image?.bytes ?? null;
 }
 
 /** Preserve independently valid action evidence when optional pixels fail verification. */

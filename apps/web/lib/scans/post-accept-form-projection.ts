@@ -33,7 +33,7 @@ export function projectPostAcceptForms(value: unknown): { rows: CollectionSurfac
         ? images.postCaptureSnapshots.snapshots.find(snapshot=>snapshot.formRef===form.formRef) : undefined;
       const snapshot = images.snapshots.find(snapshot => snapshot.formRef === form.formRef) ?? laterSnapshot;
       return { id: `after_accept:${images.sessionId}:${form.formRef}`, form,
-        capturedAt: snapshot?.capturedAt ?? "", capturePhase: "after_accept" as const,
+        capturedAt: snapshot?.capturedAt ?? "", capturePhase: images.phase,
         captureProvenance: {packetSha256: parsed.data.packetSha256!, sessionId: reconciled.structuredFrame ? capture!.sessionId : images.sessionId,
           frameRef:reconciled.structuredFrame?.frameRef ?? "main",
           documentToken:reconciled.structuredFrame?.documentBinding?.token ?? images.documentIdentity.token, exactTargetSha256:images.exactTargetSha256,

@@ -1,5 +1,5 @@
 import { createActionRequestRetention } from "./action-request-retention.js";
-import { LATE_FORM_CAPTURE_EXTENSION_MS, startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
+import { LATE_FORM_CAPTURE_EXTENSION_MS, startAfterAcceptClickFormSnapshots, startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
 import { startPostAcceptFormCapture } from "./post-accept-form-capture.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
@@ -1069,6 +1069,15 @@ export async function runPostAcceptObserver(
         try { return !page!.isClosed() && normalizeTargetUrl(page!.url()) === normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl); }
         catch { return false; }
       };
+      if (input.formSnapshotReviewer && diagnostics.click.outcome === "completed" && !actionDocumentChanged &&
+        targetStillAuthorized() && !effectiveSignal?.aborted) {
+        formSnapshotHandle = startAfterAcceptClickFormSnapshots({ page,
+          exactTargetUrl: normalizeTargetUrl(authorizedExactTargetUrl ?? observationTargetUrl), parentScanStartedAtMs,
+          actionDispatchedAtMs, reviewer: input.formSnapshotReviewer,
+          deadlineAtMs: Math.min(actionDispatchedAtEpochMs + observationWindowMs,
+            resultBudgetDeadlineAtMs ?? Number.POSITIVE_INFINITY), signal: effectiveSignal,
+          onDocumentBound: token => formCaptureHandle?.bindMainDocument(token) });
+      }
       const terminalRead = terminalConsentDecisionRead({
         action: "accept", authorizedTargetSha256: actionControlProof?.authorizedTargetSha256,
         parentScanStartedAtMs, dispatchedAtEpochMs: actionDispatchedAtEpochMs, observationWindowMs,
@@ -1080,6 +1089,7 @@ export async function runPostAcceptObserver(
         clickCompleted: diagnostics.click.outcome === "completed", signal: effectiveSignal, targetStillAuthorized,
       });
       formCapture = formCaptureHandle?.finish();
+      formSnapshotCapture = await formSnapshotHandle?.finish();
       timing.observationMs = Math.max(0, Date.now() - captureStartedAtMs);
       if (stopReason !== "window_elapsed") limitations.push(`after_action_capture:${stopReason}`);
       cancellation();

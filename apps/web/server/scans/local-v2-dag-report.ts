@@ -1,6 +1,6 @@
 import { reportArtifactIdentityKey, verifyReportArtifactTransfer } from "../../../../packages/shared/src/report-artifact-transfer";
 import { createVerifiedPolicyTextCache } from "./verified-policy-text-cache";
-import { postAcceptEvidencePacketSchema, projectPostAcceptFormInventory } from "@certscore/contracts";
+import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
@@ -18,7 +18,7 @@ import { projectRuntimeEvidenceGraphs } from "./runtime-evidence-graph-projectio
 import { GetObjectCommand, S3Client, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { verifiedPostAcceptFormSnapshots, verifyPostAcceptPacketFormImages, verifiedFormSnapshots } from "./form-snapshot-evidence";
+import { verifiedPostAcceptFormSnapshotForRow, verifyPostAcceptPacketFormImages, verifiedFormSnapshots } from "./form-snapshot-evidence";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -6880,16 +6880,7 @@ export async function loadSinglePageFormSnapshot(scanRecord: ScanDetailResponse,
       : await readLocalV2DagJsonArtifactFromS3({ uri:pointer.uri, expectedSha256:pointer.sha256, expectedSizeBytes:pointer.sizeBytes });
     const packet = postAcceptEvidencePacketSchema.safeParse(raw);
     if (!packet.success || packet.data.parentScanId !== scanRecord.scan.id) return null;
-    const verified = verifiedPostAcceptFormSnapshots(packet.data.formSnapshotCapture);
-    const provenance = row.captureProvenance;
-    const displayedInventory = verified ? projectPostAcceptFormInventory(verified.capture) : null;
-    if (!verified || !provenance || verified.capture.sessionId !== provenance.sessionId ||
-      verified.capture.documentIdentity.token !== provenance.documentToken ||
-      verified.capture.exactTargetSha256 !== provenance.exactTargetSha256 ||
-      verified.capture.actionDispatchedAtMs !== provenance.actionDispatchedAtMs ||
-      verified.images.find(item => item.snapshot.formRef === row.form.formRef)?.capturedAtMs !== provenance.capturedAtMs ||
-      JSON.stringify(displayedInventory?.forms.find(form => form.formRef === row.form.formRef)) !== JSON.stringify(row.form)) return null;
-    return verified.images.find(item => item.snapshot.formRef === row.form.formRef)?.bytes ?? null;
+    return verifiedPostAcceptFormSnapshotForRow(packet.data, row);
   }
   return verifiedFormSnapshots(bundle).find(item => item.snapshot.formRef === formRef)?.bytes ?? null;
 }

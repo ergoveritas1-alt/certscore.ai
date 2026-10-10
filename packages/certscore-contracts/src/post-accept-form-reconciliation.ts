@@ -12,7 +12,8 @@ export function reconcilePostAcceptFormInventory(images: PostAcceptFormSnapshotP
   if (capture?.version !== "post_accept_form_capture.v3" || capture.status !== "captured" ||
     !capture.window?.terminalSampleCompleted || capture.exactTargetSha256 !== images.exactTargetSha256 ||
     capture.actionDispatchedAtMs !== images.actionDispatchedAtMs ||
-    capture.window.startedAtMs !== images.acceptanceRegisteredAtMs) return unchanged;
+    capture.window.startedAtMs !== (images.contractVersion === "certscore.post_accept_form_snapshots.v7"
+      ? images.actionDispatchedAtMs : images.acceptanceRegisteredAtMs)) return unchanged;
   const originalCapturedAtMs = images.contractVersion === "certscore.post_accept_form_snapshots.v5" ||
     images.contractVersion === "certscore.post_accept_form_snapshots.v6" ? images.postCaptureInventory.capturedAtMs : images.capturedAtMs;
   const frames = capture.frames.filter(frame => frame.frameRef === "accept_frame_0" &&

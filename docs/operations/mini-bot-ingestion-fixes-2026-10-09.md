@@ -55,12 +55,13 @@ The installer is intentionally not automated into the WC01 AWS release workflow.
 
 ## Remaining work
 
-The additional completed-but-unconfirmed Accept screenshot branch is not
-implemented. A separate owner cost decision was requested: at most two masked,
+The owner subsequently approved and the local implementation now includes the
+completed-but-unconfirmed Accept screenshot branch: at most two masked,
 safety-reviewed images within the existing action deadline, conservative
 incremental estimate up to $20/month per 100,000 newly affected scans, no lane,
-retry or timeout increase. If approved, retain explicit after-click provenance,
-never manufacture a registration timestamp, and keep the observations score-neutral.
+retry or timeout increase. See the [capture policy and local verification](../certscore-v2/after-accept-click-form-snapshots.md).
+It retains explicit after-click provenance without manufacturing a registration
+timestamp or changing scoring. Production rollout remains outstanding.
 
 The installed mini bot remains unchanged until a between-scans cutover and
 restart. Bonjour resolved the mounted mini to `minibens-Mac-mini.local`; a
@@ -73,5 +74,6 @@ migration. No full-table backfill or repair was run against the live mounted DB.
 The previous browser-policy block also leaves live report interaction signoff
 outstanding; local server tests do not establish that signoff.
 
-Recurring infrastructure cost increase for the implemented changes: **$0**.
-The screenshot proposal is excluded from this implementation and cost estimate.
+Recurring infrastructure cost increase for the ingestion fixes: **$0**.
+The separately approved screenshot change is estimated up to **$20/month per
+100,000 newly affected scans**; no production usage was added in this local run.

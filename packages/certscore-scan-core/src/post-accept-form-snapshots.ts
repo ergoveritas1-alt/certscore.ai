@@ -22,16 +22,27 @@ function retainedFormInventory(raw: Awaited<ReturnType<typeof capturePostAcceptF
   });
 }
 
-/** Optional registered form pixels use the original action window, or one
- * owner-approved bounded extension after a late form is actually seen.
- * Consent observations keep their original window. */
-export function startRegisteredPostAcceptFormSnapshots(input: {
+type FormSnapshotInput = {
   page: Page; exactTargetUrl: string; parentScanStartedAtMs: number;
-  actionDispatchedAtMs: number; acceptanceRegisteredAtMs: number;
-  deadlineAtMs: number; reviewer: FormSnapshotReviewer; signal?: AbortSignal;
-  onLateFormDetected?: () => number | undefined;
+  actionDispatchedAtMs: number; deadlineAtMs: number; reviewer: FormSnapshotReviewer; signal?: AbortSignal;
   onDocumentBound?: (loaderId: string) => void;
+};
+
+export function startRegisteredPostAcceptFormSnapshots(input: FormSnapshotInput & {
+  acceptanceRegisteredAtMs: number; onLateFormDetected?: () => number | undefined;
 }) {
+  return startPostAcceptFormSnapshots(input);
+}
+
+/** No extension or post-deadline safety review is allowed on the click-only path. */
+export function startAfterAcceptClickFormSnapshots(input: FormSnapshotInput) {
+  return startPostAcceptFormSnapshots({ ...input, afterClickOnly: true });
+}
+
+function startPostAcceptFormSnapshots(input: FormSnapshotInput & ({
+  acceptanceRegisteredAtMs: number; onLateFormDetected?: () => number | undefined; afterClickOnly?: false;
+} | { acceptanceRegisteredAtMs?: never; onLateFormDetected?: never; afterClickOnly: true })) {
+
   const controller = new AbortController();
   const signal = AbortSignal.any([controller.signal, ...(input.signal ? [input.signal] : [])]);
   let frozen = false, done = false, changed = false;
@@ -50,7 +61,7 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
     timer.unref?.();
   };
   const extendForDetectedForm = (raw: Awaited<ReturnType<typeof capturePostAcceptFormInventory>>, detectedAtEpochMs: number) => {
-    if (!raw.forms.length || raw.pageUrl !== input.exactTargetUrl || !active() || lateFormExtensionActive ||
+    if (input.afterClickOnly || !raw.forms.length || raw.pageUrl !== input.exactTargetUrl || !active() || lateFormExtensionActive ||
       detectedAtEpochMs >= input.deadlineAtMs ||
       detectedAtEpochMs < input.parentScanStartedAtMs + input.acceptanceRegisteredAtMs + LATE_FORM_MINIMUM_AGE_MS ||
       detectedAtEpochMs < input.deadlineAtMs - LATE_FORM_REMAINING_WINDOW_MS) return;
@@ -152,8 +163,9 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
           maxCropHeight: 480,
           fitFormToCrop: true,
           hideControlsDuringCapture: true,
+          ...(input.afterClickOnly ? { layoutRetryAllowed: false } : {}),
           ...(lateFormExtensionActive ? { pixelBudgetMs: Math.max(1, captureDeadlineAtMs - Date.now()) } : {}),
-          reviewDeadlineAtMs: lateFormExtensionActive ? captureDeadlineAtMs : input.deadlineAtMs + 1500,
+          reviewDeadlineAtMs: input.afterClickOnly || lateFormExtensionActive ? captureDeadlineAtMs : input.deadlineAtMs + 1500,
           onPixelWorkCompleted: () => {
             if (!laterInventoryWork) return;
             // All initial browser mutations/pixels have finished. The second
@@ -217,16 +229,19 @@ export function startRegisteredPostAcceptFormSnapshots(input: {
       if (changed || input.signal?.aborted || input.page.isClosed() || input.page.url() !== input.exactTargetUrl) return;
       nextStage("packet_validation");
       result = postAcceptFormSnapshotCaptureSchema.parse({
+        ...(input.afterClickOnly ? {
+          contractVersion: "certscore.post_accept_form_snapshots.v7", phase: "after_accept_click",
+          captureDeadlineAtMs: input.deadlineAtMs - input.parentScanStartedAtMs,
+        } : { phase: "after_accept", acceptanceRegisteredAtMs: input.acceptanceRegisteredAtMs,
         ...(lateFormExtensionActive ? {
           contractVersion: postCaptureSnapshots ? "certscore.post_accept_form_snapshots.v6" : postCaptureInventory ? "certscore.post_accept_form_snapshots.v5" : "certscore.post_accept_form_snapshots.v4",
           lateForm: { baseCaptureDeadlineAtMs: input.deadlineAtMs - input.parentScanStartedAtMs,
             detectedAtMs: lateFormDetectedAtMs, extensionMs: LATE_FORM_CAPTURE_EXTENSION_MS },
           ...(postCaptureInventory ? { postCaptureInventory } : {}),
           ...(postCaptureSnapshots ? { postCaptureSnapshots } : {}),
-        } : { contractVersion: "certscore.post_accept_form_snapshots.v1" }),
-        phase: "after_accept",
+        } : { contractVersion: "certscore.post_accept_form_snapshots.v1" }) }),
         sessionId: randomUUID(), exactTargetSha256: createHash("sha256").update(input.exactTargetUrl).digest("hex"),
-        actionDispatchedAtMs: input.actionDispatchedAtMs, acceptanceRegisteredAtMs: input.acceptanceRegisteredAtMs,
+        actionDispatchedAtMs: input.actionDispatchedAtMs,
         capturedAtMs: pixelProvedAtMs,
         documentIdentity: { source: "cdp_loader_id", token }, inventory, snapshots,
       });
