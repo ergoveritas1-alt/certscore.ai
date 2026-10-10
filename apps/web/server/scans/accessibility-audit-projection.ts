@@ -17,11 +17,16 @@ export function projectAccessibilityAudit(bundle: CanonicalEvidenceBundle, sourc
   }
   let observation = result.data;
   const start = Date.parse(bundle.startedAt), end = Date.parse(bundle.completedAt);
-  const snapshot = (bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots).find(row =>
-    row.url === observation.documentUrl && row.documentIdentity?.token === observation.documentToken && row.consentStateAtTime === "pre_consent");
-  const bound = observation.documentUrl === documentUrl && Boolean(snapshot) && Number.isFinite(start) && Number.isFinite(end) &&
+  const snapshot = [...(bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots ?? [])]
+    .filter(row => row.consentStateAtTime === "pre_consent")
+    .sort((left, right) => right.capturedAtMs - left.capturedAtMs)[0];
+  const bound = observation.documentUrl === documentUrl && snapshot?.url === observation.documentUrl &&
+    snapshot.documentIdentity?.token === observation.documentToken && Boolean(observation.documentToken) &&
+    Number.isFinite(start) && Number.isFinite(end) &&
     Date.parse(observation.startedAt) >= start && Date.parse(observation.completedAt) <= end;
-  if (!bound) {
+  // Failed/not-testable observations contain no evaluable results. Preserve
+  // their actual coverage reason rather than inventing a binding failure.
+  if (!bound && observation.status !== "failed" && observation.status !== "not_testable") {
     observation = { ...observation, status: "limited", rulesEvaluated: [], violations: [], reviewItems: [], limitations: ["evidence_binding_invalid"] };
   }
   return accessibilityAuditProjectionSchema.parse({

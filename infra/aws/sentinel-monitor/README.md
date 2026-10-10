@@ -47,6 +47,14 @@ scan. The existing one-scan-per-20-minute rotation, locks, regions, transports,
 timeouts and alert destination remain unchanged. Each page is visited once per
 five slots (100 minutes), not every page every 20 minutes.
 
+The October 10 `certscore.sentinel-accessibility-check.v2` check additionally
+requires the four canonical accessibility finding families (text alternatives,
+semantic labeling, visual contrast and keyboard navigation). REST reuses its
+existing findings read; MCP calls `certscore_list_findings` once with a 200-row
+limit. Same-scan typed results are required and truncated or unavailable lists
+fail closed. Raw violations cannot mask a concern/policy/projection regression.
+Reconciliation rereads only the completed scan, never creates another scan.
+
 Publish the five pages and manifest before deploying this handler, using
 `scripts/deploy-ergoveritas-canary-bundle.sh --sentinels-only --apply`.
 `test2.html` separately contains twelve WCAG failures and can be published with
@@ -83,3 +91,10 @@ October 10 WCAG fixture/check additions are estimated below $0.50/month at
 HTML/evidence growth, incremental audit work and one retained API evidence read
 per successful run. Static publication/checksum checks are estimated below
 $0.05 once. No scan volume, service, browser lane, model call or capacity is added.
+
+The projection repair and canonical-finding monitoring add an estimated less
+than $0.25/month at 100,000 scans and 2,160 scheduled runs, including bounded
+additional canonical projection rows, up to 720 small MCP finding reads and
+bounded run-record growth under the existing retention. They add no
+scanner work or model usage. This estimate was disclosed before implementation
+under the owner's below-$1/month pre-approval policy.

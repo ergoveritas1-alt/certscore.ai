@@ -20,6 +20,33 @@ The typed projection is retained in the checksum-verified report projection payl
 
 ## Customer and operator retrieval
 
+### October 10 evidence binding and rule projection review
+
+New materializations select the latest pre-consent runtime-owned document proof
+for accessibility, independently of the consent lane's report URL. Exact URL,
+loader token, scan identity, retained-source checksum and audit interval checks
+remain required. Session-bearing URLs are not stripped or equated. Empty runtime
+proof cannot borrow consent evidence; auxiliary navigation and non-reportable
+runtime visits remain excluded. Failed/not-testable observations retain their
+original coverage status and never expose clean or zero-failure counts.
+
+The seven rule types found outside the existing finding taxonomy in the retained
+audit cohort were reviewed as follows. All remain available as retained rule
+evidence, regardless of finding eligibility:
+
+| Rule | Canonical treatment |
+| --- | --- |
+| `input-image-alt` | Text alternative finding, through normalized concerns and existing policy. |
+| `aria-prohibited-attr` | Semantic labeling/ARIA finding, requiring concrete representative node proof. |
+| `aria-required-children` | Semantic labeling/ARIA finding with the same evidence requirement. |
+| `link-in-text-block` | Visual contrast/color distinction family; rule-specific guidance preserves WCAG use-of-color semantics rather than calling it a text/background contrast failure. |
+| `html-has-lang` | Existing document-metadata support-only policy; not promoted to a control-labeling or priority finding. |
+| `target-size` | Evidence-only: pointer target sizing needs a separate reviewed finding family and exception handling; it is not a keyboard-navigation failure. |
+| `meta-viewport` | Evidence-only: zoom/viewport restrictions need a separate reviewed finding family; they are not a contrast failure. |
+
+This review changes no scoring weight, legal conclusion or manual-review
+requirement. Historical persisted projections are not rewritten.
+
 - Scan resources and MCP scan bundles expose `accessibilityAudit`: required status, engine/version, duration, failed rules, affected element instances (summed across rules, not unique DOM elements) and review counts. Unavailable results have null counts, never an invented zero.
 - The report shows automated accessibility status and retained failing rules/elements.
 - API: `GET /api/v2/scans/<scanId>/report-evidence?section=accessibility` returns retained rule evidence using the existing authorization and cursor protocol.

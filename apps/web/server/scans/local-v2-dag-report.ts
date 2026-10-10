@@ -749,6 +749,19 @@ export function isThirdPartyRuntimeEventForDocument(
   return event.thirdParty === true || event.isThirdParty === true;
 }
 
+/** Accessibility belongs to the independent runtime visit, not the consent visit. */
+export function getLocalV2AccessibilityDocumentUrl(
+  bundle: CanonicalEvidenceBundle,
+  reportDocumentUrl: string | null = getLocalV2FinalDocumentUrl(bundle),
+) {
+  const snapshot = [...(bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots ?? [])]
+    .filter((row) => row.consentStateAtTime === "pre_consent")
+    .sort((left, right) => right.capturedAtMs - left.capturedAtMs)[0];
+  const url = safeLocalV2DocumentUrl(snapshot?.url);
+  return url && reportDocumentUrl && isPrimaryAssessmentRuntimeEvent({ documentUrl: url }, reportDocumentUrl)
+    ? url : null;
+}
+
 export function isAuxiliaryNavigationContextUrl(value: string | null | undefined) {
   if (!value) return false;
   try {
@@ -6129,7 +6142,8 @@ function buildMaterializedLocalV2Detail(
     : withoutStaleLocalV2NoGoArtifacts(scanRecord.runtimeArtifacts);
   const runtimeArtifacts = {
     ...inheritedRuntimeArtifacts,
-    accessibilityAudit: projectAccessibilityAudit(bundle, options.policyTextEvidenceContext?.sourceBundle, runtimeEvidenceReportable ? canonicalDocumentUrl : null),
+    accessibilityAudit: projectAccessibilityAudit(bundle, options.policyTextEvidenceContext?.sourceBundle,
+      runtimeEvidenceReportable ? getLocalV2AccessibilityDocumentUrl(bundle, canonicalDocumentUrl) : null),
     privacyAuditEvidence: runtimeEvidenceReportable ? projectPrivacyAuditEvidenceForMaterialization(
       bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl,
       inheritedRuntimeArtifacts.privacyAuditEvidence,
