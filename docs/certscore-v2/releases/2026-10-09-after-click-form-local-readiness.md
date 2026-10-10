@@ -29,3 +29,22 @@ Mac mini bot restart occurred. Existing reports cannot acquire images that were
 not captured. Live-report browser interaction signoff remains outstanding, and
 bot installation still needs authenticated host access. A later documentation
 commit records this receipt without changing the tested application source.
+
+## PR verification follow-up
+
+Draft PR #208 exposed a developer-docs parity failure: the SDK page embedded
+the previous canonical resource example. The follow-up changes only that code
+sample to match the packaged example, including form counts and score deductions.
+Developer-docs quality guards, the packaged SDK consumer smoke check and web
+typechecking passed locally after the correction. The full gate above still
+identifies its exact tested source; it is not relabeled as testing the later
+documentation-page edit. CI must pass on the updated PR before release.
+
+Read-only release planning confirmed web ECS plus the three approved Lambda
+scanner regions, with existing runtime bases and no migration. Validation reads
+and transfers the retained artifacts but does not consume the changed form
+capture/projection behavior; the conservative file classifier alone does not
+justify a validation deployment. Public npm still reported SDK 0.2.14 during
+this check, so 0.2.15 publication remains separate and outstanding. The bot
+installation is being handled by Codex on the Mac mini. No deployment or new
+scan was performed in this follow-up.
