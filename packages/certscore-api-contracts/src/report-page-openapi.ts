@@ -44,7 +44,8 @@ export const reportEvidencePageOpenApi = {
         "policy",
         "tracking",
         "transport",
-        "forms"
+        "forms",
+        "accessibility"
       ]
     },
     "selection": {

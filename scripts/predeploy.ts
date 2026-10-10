@@ -126,12 +126,14 @@ const ACCESSIBILITY_AUDIT_CHECK: Check = {
   label: "required accessibility capture, evidence isolation, persistence and API/MCP contracts",
   command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test",
     "packages/certscore-contracts/src/accessibility-audit.test.ts",
+    "packages/certscore-contracts/src/gpc-public-contract.test.ts",
     "packages/certscore-scan-core/src/accessibility-audit.test.ts",
     "apps/web/server/scans/accessibility-audit-projection.test.ts",
     "apps/web/lib/api-v2/report-evidence-selection.test.ts",
     "apps/web/lib/api-v2/scan-resource.test.ts",
     "apps/web/server/scans/scan-status-projection.test.ts",
     "packages/certscore-sdk/src/client.test.ts",
+    "packages/certscore-mcp/src/review-navigation.test.ts",
     "packages/certscore-mcp/src/tools.test.ts"],
 };
 
