@@ -4443,7 +4443,7 @@ function buildAccessibilityAuditConcerns(runtimeArtifacts: Record<string, unknow
       title, description, observedValue: description, severity: examples.some(example => example.severity === "high") ? "high" : "medium",
       sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `accessibility.audit.${id}`, signalLabel: title,
       evidence: [projection.observation.documentUrl],
-      rawEvidence: { unifiedFindingId: id, accessibilityAuditProvenance: {
+      rawEvidence: { unifiedFindingId: id, findingSubtype: id, accessibilityAuditProvenance: {
         contractVersion: projection.contractVersion, verificationStatus: projection.verificationStatus,
         sourceHash: projection.sourceHash, evidenceRef: projection.evidenceRef,
         engine: projection.observation.engine, engineVersion: projection.observation.engineVersion,

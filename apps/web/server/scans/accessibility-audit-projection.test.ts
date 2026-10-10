@@ -23,10 +23,15 @@ test("verified retained accessibility observations enter concerns, policy and un
   const concerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
   assert.ok(concerns.length >= 3);
   assert.ok(concerns.every(concern => concern.categoryId === "accessibility"));
+  for (const concern of concerns) {
+    assert.ok(!concern.evidenceBundle.flags.includes("consent_governance_disclosure_gap"));
+    assert.equal(concern.evidenceBundle.entities.consentGovernanceDisclosureEvidence, undefined);
+  }
   const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
   for (const id of ["text_alternative_accessibility_issue", "semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"]) {
     assert.ok(findings.some(finding => finding.unifiedFindingId === id), `${id}: ${JSON.stringify(findings.map(f => f.unifiedFindingId))}`);
   }
+  assert.ok(findings.every(finding => !(finding.evidence?.snippets ?? []).some(snippet => snippet.startsWith("Consent governance disclosure note:"))));
   assert.deepEqual(projectAccessibilityAuditSummary(accessibilityAudit), {
     status: "completed", required: true, scope: "starting_page_rendered_content", engine: "axe-core", engineVersion: "4.11.3",
     durationMs: 1000, failedRuleCount: 4, affectedNodeCount: 4, reviewRuleCount: 0,
