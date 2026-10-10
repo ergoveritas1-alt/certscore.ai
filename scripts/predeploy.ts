@@ -128,6 +128,7 @@ const ACCESSIBILITY_AUDIT_CHECK: Check = {
     "packages/certscore-contracts/src/accessibility-audit.test.ts",
     "packages/certscore-contracts/src/gpc-public-contract.test.ts",
     "packages/certscore-scan-core/src/accessibility-audit.test.ts",
+    "packages/certscore-api-contracts/src/pulse-v1.test.ts",
     "packages/certscore-scan-core/src/pre-consent-deadline.test.ts",
     "apps/web/server/scans/accessibility-audit-projection.test.ts",
     "apps/web/lib/api-v2/report-evidence-selection.test.ts",

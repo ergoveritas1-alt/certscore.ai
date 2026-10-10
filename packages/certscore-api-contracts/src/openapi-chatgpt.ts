@@ -211,8 +211,8 @@ export function buildPulseChatGptOpenApiDocument() {
               type: ["object", "null"], additionalProperties: false,
               description: "Required automated WCAG starting-page audit status and bounded counts. Limited or unavailable results are not clean results. Retrieve rule and element evidence through API v2 report-evidence?section=accessibility.",
               properties: {
-                status: { type: "string", enum: ["completed", "limited", "failed", "not_testable"] }, required: { type: "boolean", const: true },
-                scope: { type: "string", const: "starting_page_rendered_content" }, engine: { type: "string", const: "axe-core" },
+                status: { type: "string", enum: ["completed", "limited", "failed", "not_testable"] }, required: { type: "boolean", enum: [true] },
+                scope: { type: "string", enum: ["starting_page_rendered_content"] }, engine: { type: "string", enum: ["axe-core"] },
                 engineVersion: { type: ["string", "null"] }, durationMs: { type: ["integer", "null"] },
                 failedRuleCount: { type: ["integer", "null"] }, affectedNodeCount: { type: ["integer", "null"] }, reviewRuleCount: { type: ["integer", "null"] },
               },
