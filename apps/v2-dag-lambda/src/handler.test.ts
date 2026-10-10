@@ -1,5 +1,6 @@
 import { siteIntegrityObservationFixture } from "../../../packages/certscore-contracts/src/site-integrity.fixture.js";
 import { accessibilityAuditFixture } from "../../../packages/certscore-contracts/src/accessibility-audit.fixture.js";
+import { runScan } from "../../../packages/certscore-scan-core/src/index.js";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
@@ -4580,6 +4581,38 @@ test("accessibility evidence belongs exclusively to the runtime lane during cano
     policyEvidence: canonicalBundleFixture("lane-fixture", { accessibilityAudit: otherAudit, scanLaneRuns: [laneRunFixture("policy_evidence", "policy")] }),
   });
   assert.deepEqual(merged.accessibilityAudit, runtimeAudit);
+});
+
+test("a captured WCAG audit survives worker path rewriting and canonical serialization", async () => {
+  const server = createHttpServer((_request, response) => {
+    response.setHeader("Content-Type", "text/html");
+    response.end(`<!doctype html><html lang="en"><head><title>Accessibility fixture</title></head>
+      <body><main><h1>Contact our team</h1><p>This local fixture provides ordinary public website content
+      for a deterministic accessibility capture. Review our services and contact information below.</p>
+      <input><button></button><img src="data:image/png;base64,AA=="></main></body></html>`);
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const root = await mkdtemp(path.join(os.tmpdir(), "wcag-worker-handoff-"));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === "object");
+    const url = `http://127.0.0.1:${address.port}/`;
+    const scanId = "wcag-worker-handoff";
+    const runtimeEvidence = await runScan({ scanId, url, profile: "tiny", evidenceLane: "runtime_evidence",
+      outDir: path.join(root, "runtime"), scenarioResourceMode: "lean", preConsentModuleDeadlineMs: 6000 });
+    assert.ok(runtimeEvidence.accessibilityAudit?.violations.some(rule => rule.ruleId === "label"));
+    const merged = mergeLocalV2DagLambdaEvidenceLaneBundles({ scanId, artifactRoot: root, runtimeEvidence,
+      consentProof: canonicalBundleFixture(scanId, { url, normalizedUrl: url }),
+      policyEvidence: canonicalBundleFixture(scanId, { url, normalizedUrl: url }),
+    });
+    const retained = JSON.parse(serializeCanonicalEvidenceBundle(merged));
+    assert.deepEqual(retained.accessibilityAudit, runtimeEvidence.accessibilityAudit);
+    assert.equal(retained.modulesRun.find((module: { moduleName: string }) => module.moduleName === "accessibilityAudit").status, "completed");
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 function canonicalBundleFixture(
