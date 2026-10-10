@@ -65,9 +65,9 @@ test("cancellation and unavailable document identity cannot produce a clean audi
 });
 
 test("a substituted engine identity cannot supply projectable results", async () => {
-  await withPage('<input><script>let engine; Object.defineProperty(window,"axe",{configurable:true,get(){return engine},set(value){
-    engine=value; const run=value.run; value.run=async function(...args){const results=await run.apply(this,args); results.testEngine.version="unknown"; return results};
-  }});</script>', async page => {
+  await withPage(`<input><script>let engine; Object.defineProperty(window,"axe",{configurable:true,get(){return engine},set(value){
+    engine=value; value.version="unknown";
+  }});</script>`, async page => {
     const result = await audit(page);
     assert.equal(result.status, "limited");
     assert.deepEqual(result.limitations, ["engine_identity_mismatch"]);
