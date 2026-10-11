@@ -733,8 +733,64 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://spiegel.de"
+    },
+    "https://thomann.de": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:15:00.479Z",
+      "lastContactAt": "2026-10-11T14:15:00.479Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://thomann.de"
+    },
+    "https://wordpress.org": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:15:11.878Z",
+      "lastContactAt": "2026-10-11T14:15:11.878Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://wordpress.org"
+    },
+    "https://posthog.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:15:32.734Z",
+      "lastContactAt": "2026-10-11T14:15:32.734Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://posthog.com"
+    },
+    "https://zalando.de": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T14:16:01.231Z",
+      "lastContactAt": "2026-10-11T14:16:01.231Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://zalando.de"
+    },
+    "https://zeit.de": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T14:16:16.165Z",
+      "lastContactAt": "2026-10-11T14:16:16.165Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://zeit.de"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-11T14:11:00.808Z"
+  "updatedAt": "2026-10-11T14:16:16.343Z"
 }
