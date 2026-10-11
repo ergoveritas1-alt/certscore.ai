@@ -206,6 +206,10 @@ export function isGdprEprivacyChecklistPresentation(
       if (seenRowIds.has(row.id)) return false;
       seenRowIds.add(row.id);
       if (!GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id)) return true;
+      if (row.id === "privacy_notice_availability" && row.status === "Gap observed") {
+        return row.evidenceLabel === "Potential gap" && row.assessmentStatus === "gap_observed" &&
+          row.assessmentDirection === "potential_concern" && row.evidenceState === "observed";
+      }
       if (!(
         GDPR_TRANSPARENCY_REPORT_VALUE_SET.has(
           row.evidenceLabel as GdprTransparencyReportEvidenceLabel,

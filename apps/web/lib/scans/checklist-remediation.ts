@@ -51,6 +51,10 @@ export function checklistRemediation(input: { rowId: string; status: string }): 
     return { kind: "none", message: "No remediation is established by this check alone. Retain its evidence and reassess after relevant changes.", steps: [] };
   }
   const confirmedGap = input.status === "Gap observed";
+  if (input.rowId === "privacy_notice_availability" && confirmedGap) return { kind: "steps", steps: [
+    "Publish a privacy policy explaining the site's personal-data practices.",
+    "Link the policy clearly from footer navigation and collection forms, and verify the page loads publicly.",
+  ] };
   const runtimeSteps = runtimeChecks[input.rowId];
   if (runtimeSteps) return { kind: "steps", steps: runtimeSteps };
   if (input.rowId === "reject_all_path_availability" && confirmedGap) return { kind: "steps", steps: [

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, type CSSProperties, type ReactNode 
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import { ScanLiveValue } from "./scan-live-value";
+import { PrivacyPolicyScoreDeduction, type ScoreDeductions } from "./privacy-policy-score-deduction";
 
 export function buildSiteAssessmentSummary(priorities: ReadonlyArray<{ title: string; summary?: string }>, scannedPages: number | null) {
   if (!priorities.length) return "No priority issues were identified in the assessed evidence.";
@@ -28,7 +29,7 @@ export function buildSiteAssessmentSummary(priorities: ReadonlyArray<{ title: st
 }
 
 export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, inventorySummary }: {
-  score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number }) | null;
+  score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
   pending: boolean;
   loadingSavedResult?: boolean;
   statusLabel?: string;
@@ -87,6 +88,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
             <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? loadingSavedResult ? "Loading sitewide page totals" : "Waiting for page outcomes" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`}</p>
           </div>
         </div>
+        {value !== null ? <PrivacyPolicyScoreDeduction deductions={score?.deductions} /> : null}
         {!score ? <p className="mt-2 text-xs text-zinc-500">{loadingSavedResult ? "The sitewide score will appear when the saved result loads." : pending ? `${singlePage ? "The page score" : "The site-wide score"} will appear when the assessment is ready.` : `${singlePage ? "Page scoring" : "Site-wide scoring"} is unavailable for this scan.`}</p> : null}
         {score?.limitedPages ? <p className="mt-1 text-xs text-amber-800">{score.limitedPages} {score.limitedPages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
         </div>

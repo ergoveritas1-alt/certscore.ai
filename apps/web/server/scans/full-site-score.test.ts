@@ -7,7 +7,8 @@ const require = createRequire(import.meta.url);
 (require.cache as Record<string, unknown>)[require.resolve("server-only")] = { exports: {}, loaded: true };
 const { countAssessedNonEssentialStorage, isFullSiteScoringCaptureComplete, mergeSiteChecklistRows, projectFullSiteScoringEvidence } = require("./full-site-score") as typeof import("./full-site-score");
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
-import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { deriveCanonicalOverallScoreForReport, deriveCanonicalOverallScoreExplanationForReport } from "./canonical-overall-score";
 
 const baseline = () => deriveGdprEprivacyCoverageChecklist({ scanCompleted: false, coverageLimited: true, unifiedFindings: [] });
 function storage(names: string[]) {
@@ -62,6 +63,24 @@ test("additional unassessed and limited checks cannot create deductions", () => 
   assert.deepEqual(mergeSiteChecklistRows(home, baseline()), home);
   const inventedConsentGap = baseline().map(row => ({ ...row, assessmentStatus: "gap_observed" as const }));
   assert.deepEqual(mergeSiteChecklistRows(home, inventedConsentGap.filter(row => ["reject_all_path_availability", "post_reject_tracking_reduction", "privacy_notice_availability"].includes(row.id))), home);
+});
+
+test("missing policy remains a homepage-supported site issue with one nine-point charge", () => {
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ scanCompleted: true, coverageLimited: false,
+    runtimeArtifacts: { policyDisclosureSummary: { privacyPolicyPresent: false }, policySurfaceInspection: {
+      coverageStatus: "complete", inspectionCompleted: true, linkDiscoveryCoverageStatus: "complete",
+      documentRetrievalCoverageStatus: "insufficient", limitationKeys: [], observedSurfaceTypes: [],
+      outcome: "no_privacy_policy_observed_complete_coverage", privacyPolicyObserved: false,
+    } }, snapshot: { privacy_policy_present: false } });
+  const home = deriveGdprEprivacyCoverageChecklist({ scanCompleted: true, coverageLimited: false,
+    coverageOutcomes, unifiedFindings: [] }).filter(row => row.id === "privacy_notice_availability");
+  const merged = mergeSiteChecklistRows(home, [...home, ...home]);
+  const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null },
+    checklistRows: merged, unifiedFindings: [] })!;
+  assert.equal(explanation.score, 91);
+  assert.equal(explanation.totalPolicyDeductionPoints, 9);
+  assert.equal(explanation.deductions[0]?.rules.length, 1);
+  assert.equal(explanation.deductions[0]?.rules[0]?.ruleId, "privacy_notice_availability");
 });
 test("malformed or missing retained runtime packets fail closed", () => {
   assert.equal(projectFullSiteScoringEvidence({}, "page", "hash"), null);

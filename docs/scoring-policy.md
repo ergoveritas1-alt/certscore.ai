@@ -5,8 +5,8 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Versions: `gdpr-eprivacy-posture.v17`, `overall-posture.v7`, and
-`full-site-distinct-findings.v6`. The California GPC evidence policy remains v1;
+Versions: `gdpr-eprivacy-posture.v18`, `overall-posture.v8`, and
+`full-site-distinct-findings.v7`. The California GPC evidence policy remains v1;
 its existing eligible 15-point effect is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
@@ -44,7 +44,13 @@ the underlying findings/checklist evidence remains available.
 
 Sensitive-surface tracking deducts 12. Each of embedded content, social embeds,
 and third-party iframes deducts 5, sharing the 20-point embed cap. Privacy-notice
-availability remains 12. Transport and eligible California GPC retain the
+availability deducts 9 (owner-approved October 11, 2026), shown as
+“Privacy policy not found: −9 points” when
+the canonical deduction applies. The report attribution uses the same capped
+calculation as the score; other transparency rows do not add another charge
+when the missing-policy deduction applies. A supported missing-policy finding
+also appears in the site assessment, scoped to its retained homepage evidence.
+Stored historical scores retain their recorded versions and amounts. Transport and eligible California GPC retain the
 registry's existing deductions. Zero-deduction checks are omitted from the table.
 
 ## Hidden outbound links — September 17, 2026 update

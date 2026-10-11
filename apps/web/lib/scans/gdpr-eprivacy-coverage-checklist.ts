@@ -3434,7 +3434,10 @@ function collapseSessionReplayDiagnosticRows(items: GdprEprivacyCoverageChecklis
 function canonicalizeGdprTransparencyChecklistItem(
   item: GdprEprivacyCoverageChecklistItem,
 ): GdprEprivacyCoverageChecklistItem {
-  if (!isGdprTransparencyReportRowId(item.id) || item.status === "Observed") {
+  // A policy-surface absence is a discovery result, not a failed topic match.
+  // Preserve the gap already established by the owning coverage policy.
+  if (!isGdprTransparencyReportRowId(item.id) || item.status === "Observed" ||
+      (item.id === "privacy_notice_availability" && item.status === "Gap observed")) {
     return item;
   }
 

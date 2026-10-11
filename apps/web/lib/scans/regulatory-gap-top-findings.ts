@@ -213,6 +213,11 @@ function findingsForArea(
   return projectedRows
     .filter((entry) => hasConcernOrGap ? entry.concernKind !== "review_signal" : true)
     .sort((left, right) => {
+      // Rank an already-projected privacy-notice gap ahead of the other
+      // checklist concerns. Discovery failures do not establish this status.
+      const privacyGapDelta = Number(right.row.id === "privacy_notice_availability" && right.concernKind === "potential_gap") -
+        Number(left.row.id === "privacy_notice_availability" && left.concernKind === "potential_gap");
+      if (privacyGapDelta !== 0) return privacyGapDelta;
       const kindDelta = getRegulatoryTopFindingConcernRank(left.concernKind) - getRegulatoryTopFindingConcernRank(right.concernKind);
       return kindDelta !== 0 ? kindDelta : left.index - right.index;
     })
@@ -220,7 +225,9 @@ function findingsForArea(
       const statusLabel = row.statusLabel ?? humanizeStatus(row.status ?? "gap_observed");
       const descriptiveCopy = row.id === "post_reject_tracking_reduction"
         ? describePostRejectFinding(row.criticalEvidence?.retainedEvidence ?? row.retainedEvidence) : null;
-      const label = descriptiveCopy?.title ?? row.label;
+      const label = row.id === "privacy_notice_availability" && concernKind === "potential_gap"
+        ? "Privacy policy not found"
+        : descriptiveCopy?.title ?? row.label;
       const shortSummary = descriptiveCopy?.summary ?? getRegulatoryGapTopFindingSummary(row, config);
       const policySourceUrl = getPolicySourceUrl(row);
       return {

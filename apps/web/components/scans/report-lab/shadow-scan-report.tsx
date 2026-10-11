@@ -17,6 +17,7 @@ import { SinglePageResourceInventory } from "../single-page-resource-inventory";
 import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
+import { PrivacyPolicyScoreDeduction } from "../privacy-policy-score-deduction";
 import { ReportInventoryNavigation } from "../report-inventory-navigation";
 import { ReportInventorySummary } from "../report-inventory-summary";
 import { ReportPageEventTimeline } from "../report-page-event-timeline";
@@ -302,6 +303,7 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
         <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{report.fullSite ? "Diagnostic score" : "Overall score"}</p>
         <p className="mt-1 text-lg font-semibold leading-tight text-zinc-950">{assessment}</p>
         <p className="mt-2 text-xs leading-5 text-zinc-500">{focus}</p>
+        {report.scoreExplanation?.score === score ? <PrivacyPolicyScoreDeduction deductions={report.scoreExplanation.deductions} /> : null}
       </div>
     </div>
   );
@@ -1319,7 +1321,7 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
         <div className="mt-3 flex justify-end sm:col-start-2 sm:row-start-1 sm:mt-0 sm:w-full sm:max-w-xl sm:justify-self-end"><ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} /></div>
       </div>
     </header>
-    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1 }} pending={false} scannedPages={1}
+    <FullSiteExecutiveSummary inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1, deductions: report.scoreExplanation?.score === report.score.value ? report.scoreExplanation.deductions : undefined }} pending={false} scannedPages={1}
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
       snapshot={<SignalSnapshot siteOverview report={report} />} homepageVerdict={report.verdict} />
     <SitePriorityReview findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />

@@ -1,8 +1,8 @@
 import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS } from "./california-gpc-response-policy";
 
-/** Owner-approved September 6/17 and October 10, 2026. Shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v17";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v6";
+/** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v18";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v7";
 export const SCORE_FLOOR = 0;
 export const SCORE_BASE = 100;
 export const SCORING_FAMILIES = {
@@ -36,7 +36,7 @@ export const SCORING_RULES: readonly ScoringRule[] = [
   {"id": "embedded_content_pre_consent", "anchor": "embedded-content", "label": "Embedded third-party content before consent", "family": "embedded_third_party", "siteWide": true, "points": 5},
   {"id": "social_media_embed_pre_consent", "anchor": "social", "label": "Social-media embeds before consent", "family": "embedded_third_party", "siteWide": true, "points": 5},
   {"id": "third_party_iframe_pre_consent", "anchor": "iframes", "label": "Third-party iframes before consent", "family": "embedded_third_party", "siteWide": true, "points": 5},
-  {"id": "privacy_notice_availability", "anchor": "privacy-notice", "label": "Privacy-notice availability", "family": "policy_transparency", "siteWide": false, "points": 12},
+  {"id": "privacy_notice_availability", "anchor": "privacy-notice", "label": "Privacy policy not found", "family": "policy_transparency", "siteWide": false, "points": 9},
   {"id": "transport_security_https_delivery", "anchor": "https", "label": "HTTPS delivery", "family": "transport_security", "siteWide": false, "points": 12},
   {"id": "transport_security_tls_certificate", "anchor": "tls", "label": "TLS certificate", "family": "transport_security", "siteWide": false, "points": 12},
   {"id": "transport_security_form_transport", "anchor": "forms", "label": "Insecure form transport", "family": "transport_security", "siteWide": false, "points": 10},

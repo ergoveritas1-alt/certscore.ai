@@ -65,6 +65,18 @@ test("canonical explanations preserve family caps and independently approved ove
   assert.equal(explanation.deductions.find(row => row.family === "post_refusal_enforcement")?.rules[0]?.decisionVerification, "confirmed");
 });
 
+test("missing-policy attribution uses nine points once within the transparency cap", () => {
+  const privacy = { id: "privacy_notice_availability", assessmentStatus: "gap_observed", evidenceState: "observed",
+    status: "Gap observed" } as GdprEprivacyCoverageChecklistItem;
+  const otherPolicyGap = { ...privacy, id: "cookie_notice_policy_availability" };
+  const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null },
+    checklistRows: [...checkedChecklist, privacy, otherPolicyGap], unifiedFindings: [] })!;
+  assert.equal(explanation.score, 91);
+  assert.equal(explanation.totalPolicyDeductionPoints, 9);
+  assert.deepEqual(explanation.deductions[0]?.rules.map(rule => [rule.ruleId, rule.label, rule.policyDeductionPoints]),
+    [["privacy_notice_availability", "Privacy policy not found", 9]]);
+});
+
 test("limited critical coverage preserves the canonical score from supported findings", () => {
   assert.equal(deriveCanonicalOverallScoreForReport({
     scanRecord: { runtimeArtifacts: { scoreConfidence: "withheld_incomplete_critical_coverage" } },

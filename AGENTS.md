@@ -633,6 +633,15 @@ WC01 display, executive summary, checklist, and top-finding code must not infer 
 
 ### Display and summary rules
 
+For everything a user sees—including product UI, reports, review tools and agent
+messages—lead with the evidence we have, the useful result and the next action.
+Keep disclaimers and missing-evidence callouts to a minimum. Include a brief
+caveat only when it materially affects the user's interpretation or decision;
+keep detailed diagnostics in internal records or optional evidence details.
+Use `estimate` for tentative conclusions, with concise confidence where useful.
+This presentation rule preserves truthful status, provenance, finding eligibility
+and scoring; it does not turn an estimate into a verified observation.
+
 Display copy may explain retained evidence and the already-determined policy/checklist status. Display copy must not create, upgrade, suppress, or infer findings, and must not change status, severity, eligibility, or regulatory posture.
 
 Before introducing any new customer-facing disclaimer or coverage caveat, check
@@ -1193,6 +1202,15 @@ bash /Users/benmasek/WC01/scripts/ensure-local-scan-stack.sh
 ## Agent Notes Maintenance
 
 Keep `AGENTS.md` focused on durable repo-wide guidance. Do not add one-off task instructions, temporary prompts, or scan-specific notes. When guidance conflicts with current code/tests, inspect the code/tests and call out the mismatch before acting.
+
+## October 11, 2026 missing privacy-policy scoring
+
+The owner approved a nine-point deduction for a supported missing privacy policy.
+Use the canonical scoring registry and its capped deduction projection for both
+the score and visible attribution. Include the already-projected finding in the
+site assessment when applicable, charge it once, and preserve historical score
+versions and amounts. Incomplete discovery or failed retrieval alone does not
+establish a missing-policy finding.
 
 ## Finding flow note
 

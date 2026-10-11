@@ -8,6 +8,12 @@ import {
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 import type { CertScoreFinding } from "./finding-registry";
 import { summarizePostRejectActivity } from "./post-reject-finding-copy";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
+import { getAssessmentDirection, getEvidenceLabel } from "./gdpr-eprivacy-assessment-direction";
+import { buildGdprEprivacyChecklistPresentation, isGdprEprivacyChecklistPresentation } from "./gdpr-eprivacy-checklist-presentation";
+import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { buildSitePriorityReview } from "./full-site-priority-review";
 
 const pipeline = {
   concernPolicyKey: "test.concern",
@@ -21,7 +27,7 @@ function row(input: Partial<GdprEprivacyCoverageChecklistItem> & Pick<GdprEpriva
     assessmentStatus: input.status === "Gap observed" ? "gap_observed" : "review_signal",
     criticalEvidence: {
       missingOrIncompleteSourceSignals: [],
-      pipeline,
+      pipeline: { ...pipeline },
       projectedFindings: [],
       retainedEvidence: {},
       statusBasis: input.note ?? input.label
@@ -149,4 +155,88 @@ test("unconfirmed grouped inventory cannot produce an executive finding", () => 
   item.criticalEvidence.pipeline.projectionStage = "coverage_fallback";
   item.criticalEvidence.pipeline.ws01EvidenceRole = "retained_pre_consent_tracker_inventory";
   assert.deepEqual(buildChecklistConcernTopFindings([item]), []);
+});
+
+test("completed policy absence flows through coverage policy and checklist to the leading priority", () => {
+  const runtimeArtifacts = {
+    policyDisclosureSummary: { privacyPolicyPresent: false },
+    policySurfaceInspection: {
+      coverageStatus: "complete", documentRetrievalCoverageStatus: "insufficient",
+      inspectionCompleted: true, linkDiscoveryCoverageStatus: "complete", limitationKeys: [],
+      observedSurfaceTypes: [], outcome: "no_privacy_policy_observed_complete_coverage",
+      privacyPolicyObserved: false
+    }
+  };
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    scanCompleted: true, coverageLimited: false, runtimeArtifacts,
+    snapshot: { privacy_policy_present: false }
+  });
+  assert.equal(outcomes.privacy_notice_availability?.status, "Gap observed");
+  const checklist = deriveGdprEprivacyCoverageChecklist({
+    scanCompleted: true, coverageLimited: false, coverageOutcomes: outcomes, unifiedFindings: []
+  });
+  const privacyRow = checklist.find(item => item.id === "privacy_notice_availability");
+  assert.ok(privacyRow);
+  assert.equal(privacyRow.assessmentStatus, "gap_observed");
+  assert.equal(getEvidenceLabel(privacyRow), "Potential gap");
+  assert.equal(getAssessmentDirection(privacyRow), "potential_concern");
+  const compact = buildGdprEprivacyChecklistPresentation(checklist);
+  assert.equal(isGdprEprivacyChecklistPresentation(compact), true);
+  assert.equal(compact.rows.find(item => item.id === privacyRow.id)?.status, "Gap observed");
+  const privacyPresentation = buildGdprEprivacyChecklistPresentation([privacyRow]);
+  assert.equal(isGdprEprivacyChecklistPresentation({ ...privacyPresentation,
+    rows: privacyPresentation.rows.map(item => ({ ...item, id: "controller_contact_disclosure" }))
+  }), false, "The availability exception must not allow topic absence findings.");
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [privacyRow] }).score, 91,
+    "The confirmed gap uses the owner-approved nine-point missing-policy deduction.");
+  const otherGaps = ["transport_security_https_delivery", "transport_security_form_transport", "cookie_notice_policy_availability"]
+    .map(id => row({ id, label: id, status: "Gap observed" }));
+  const findings = selectCanonicalHighPriorityFindings(buildChecklistConcernTopFindings([...otherGaps, privacyRow]));
+  assert.equal(findings.length, 4);
+  const first = findings[0]!;
+  assert.equal(first.id, "regulatory_gap__gdpr_eprivacy__privacy_notice_availability");
+  assert.equal(first.label, "Privacy policy not found");
+  assert.match(first.remediation, /Publish a privacy policy/);
+  assert.deepEqual(first.evidenceDetails?.policyEvidenceDetails?.retainedEvidence,
+    privacyRow.criticalEvidence.retainedEvidence);
+  assert.ok(first.defaultSurfacePriority > findings[1]!.defaultSurfacePriority);
+  const siteAssessment = buildSitePriorityReview([privacyRow], [
+    { id: "homepage", url: "https://example.test/", homepage: true, findingIds: [privacyRow.id] },
+    { id: "contact", url: "https://example.test/contact", homepage: false, findingIds: [] },
+  ]);
+  assert.equal(siteAssessment.length, 1);
+  assert.equal(siteAssessment[0]?.title, "Privacy policy not found");
+  assert.equal(siteAssessment[0]?.status, "Potential gap");
+  assert.deepEqual(siteAssessment[0]?.pages.map(page => page.id), ["homepage"]);
+});
+
+test("incomplete, failed, and positive policy inspection do not create a missing-policy priority", () => {
+  const variants = [
+    {},
+    { coverageStatus: "limited", inspectionCompleted: false, privacyPolicyObserved: false, outcome: "indeterminate" },
+    { coverageStatus: "complete", inspectionCompleted: true, privacyPolicyObserved: false,
+      linkDiscoveryCoverageStatus: "complete", outcome: "no_privacy_policy_observed_complete_coverage",
+      limitationKeys: ["privacy_policy_negative_search_coverage_not_verified"] },
+    { coverageStatus: "limited", inspectionCompleted: true, privacyPolicyObserved: true,
+      outcome: "privacy_policy_observed", limitationKeys: ["privacy_policy_link_observed_document_not_retained"] }
+  ];
+  for (const policySurfaceInspection of variants) {
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      scanCompleted: true, coverageLimited: false,
+      runtimeArtifacts: { policyDisclosureSummary: { privacyPolicyPresent: false }, policySurfaceInspection },
+      snapshot: { privacy_policy_present: false }
+    });
+    assert.notEqual(outcomes.privacy_notice_availability?.status, "Gap observed");
+    const checklist = deriveGdprEprivacyCoverageChecklist({
+      scanCompleted: true, coverageLimited: false, coverageOutcomes: outcomes, unifiedFindings: []
+    });
+    assert.ok(!buildChecklistConcernTopFindings(checklist).some(finding =>
+      finding.id === "regulatory_gap__gdpr_eprivacy__privacy_notice_availability"));
+    assert.ok(!buildSitePriorityReview(checklist, []).some(finding =>
+      finding.id === "regulatory_gap__gdpr_eprivacy__privacy_notice_availability"));
+  }
+  assert.deepEqual(buildChecklistConcernTopFindings([row({
+    id: "privacy_notice_availability", label: "Privacy notice discovered", status: "Observed",
+    assessmentStatus: "checked", evidenceState: "observed"
+  })]), []);
 });

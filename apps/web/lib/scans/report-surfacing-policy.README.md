@@ -46,6 +46,19 @@ Each finding receives:
 - Keep evidence-strength logic separate from importance and prominence.
 - Retain suppressed findings in debug output with reasons.
 
+## Missing privacy-policy priority
+
+Version `v2` gives an evidence-qualified `privacy_policy_missing_surface` finding
+headline priority. The shared executive issue list ranks an already-projected
+`privacy_notice_availability` gap first, titled **Privacy policy not found**.
+The checklist preserves this upstream discovery result instead of converting it
+to a policy-topic extraction limitation. Privacy-notice availability can retain
+`Gap observed` / `Potential gap`; semantic disclosure topics keep their existing
+three-value report contract. Failed retrieval, partial discovery and missing
+capture evidence do not establish this gap. The owner-approved October 11 scoring policy deducts nine points for the missing
+privacy policy, once in the site assessment. Its prominence and evidence gates
+remain independent of that weight.
+
 ## Versioning
 
 - `REPORT_SURFACING_POLICY_VERSION` identifies the active policy behavior.

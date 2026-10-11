@@ -15,6 +15,8 @@ import { selectReportEvidenceSection } from "./report-evidence-selection";
 import { projectRetainedActionTimeline } from "../scans/action-timeline-projection";
 import { deriveCanonicalOverallScoreExplanationForReport } from "../../server/scans/canonical-overall-score";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../scans/gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyCoverageChecklist } from "../scans/gdpr-eprivacy-coverage-checklist";
 
 const scanId = "00000000-0000-4000-8000-000000000123";
 const pageUrl = "https://sits.example/en/";
@@ -211,6 +213,40 @@ test("score explanations fail closed for historical, mismatched and unscored res
   assert.equal(projectScanScoreExplanation({ ...scan, snapshot: { ...scan.snapshot, score_version: "historical" } }, 85), null);
   assert.equal(projectScanScoreExplanation({ ...scan, snapshot: { ...scan.snapshot, score_version: null } }, 85), null);
   assert.equal(projectScanFormsSummary({ ...scan, scan: { ...scan.scan, status: "running" } }), null);
+});
+
+test("missing-policy score and attribution agree across report, API, status and export", () => {
+  const scan = fixture();
+  const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ scanCompleted: true, coverageLimited: false,
+    runtimeArtifacts: { policyDisclosureSummary: { privacyPolicyPresent: false }, policySurfaceInspection: {
+      coverageStatus: "complete", inspectionCompleted: true, linkDiscoveryCoverageStatus: "complete",
+      documentRetrievalCoverageStatus: "insufficient", limitationKeys: [], observedSurfaceTypes: [],
+      outcome: "no_privacy_policy_observed_complete_coverage", privacyPolicyObserved: false,
+    } }, snapshot: { privacy_policy_present: false } });
+  const checklistRows = deriveGdprEprivacyCoverageChecklist({ scanCompleted: true, coverageLimited: false,
+    coverageOutcomes, unifiedFindings: [] }).filter(row => row.id === "privacy_notice_availability");
+  (scan as unknown as { canonicalReportProjection: { checklistRows: typeof checklistRows } }).canonicalReportProjection.checklistRows = checklistRows;
+  scan.snapshot = { ...scan.snapshot!, certscore_overall: 91, score_version: CANONICAL_OVERALL_SCORE_VERSION };
+  const api = buildApiV2ScanResource(scan);
+  const status = buildApiV2ScanStatus(scan, { canonicalScan: api });
+  const report = buildTimelineReportModel(scan);
+  const exported = buildReportDisplayExport(report as unknown as Record<string, unknown>) as any;
+  assert.equal(api.score, 91);
+  assert.equal(status.score, 91);
+  assert.equal(report.score.value, 91);
+  assert.ok("scoreExplanation" in report);
+  assert.deepEqual(api.scoreExplanation, report.scoreExplanation);
+  assert.deepEqual(status.scoreExplanation, api.scoreExplanation);
+  assert.deepEqual(exported.scoreExplanation, api.scoreExplanation);
+  const family = api.scoreExplanation?.deductions.find(row => row.family === "policy_transparency");
+  assert.equal(family?.deductionPoints, 9);
+  assert.equal(family?.rules[0]?.label, "Privacy policy not found");
+  assert.deepEqual(family?.rules[0]?.findingIds, ["regulatory_gap__gdpr_eprivacy__privacy_notice_availability"]);
+
+  scan.snapshot = { ...scan.snapshot!, certscore_overall: 88, score_version: "overall-posture.v7" };
+  assert.equal(buildApiV2ScanResource(scan).score, 88, "historical score is preserved");
+  assert.equal(buildTimelineReportModel(scan).score.value, 88);
+  assert.equal(projectScanScoreExplanation(scan, 88), null, "historical deductions are not reinterpreted at nine points");
 });
 
 test("accessibility presentation preserves the versioned historical score without recalculation", () => {

@@ -89,6 +89,8 @@ export function summarizeGdprEprivacyAssessmentDirections(
 }
 
 export function getEvidenceLabel(item: GdprEprivacyCoverageChecklistItem): EvidenceLabel {
+  if (item.id === "privacy_notice_availability" && item.status === "Gap observed" &&
+      item.assessmentStatus === "gap_observed") return "Potential gap";
   if (isGdprTransparencyReportRowId(item.id)) {
     return deriveGdprTransparencyReportEvidenceLabel({
       assessmentResult: getPolicyEvidenceAssessmentResult(item),
@@ -465,6 +467,7 @@ function getObservedAssessmentDirection(item: GdprEprivacyCoverageChecklistItem)
 
 export function getAssessmentDirection(item: GdprEprivacyCoverageChecklistItem): AssessmentDirection {
   const evidenceLabel = getEvidenceLabel(item);
+  if (item.id === "privacy_notice_availability" && evidenceLabel === "Potential gap") return "potential_concern";
   if (isGdprTransparencyReportRowId(item.id)) {
     if (evidenceLabel === "Observed") {
       return "positive_signal";

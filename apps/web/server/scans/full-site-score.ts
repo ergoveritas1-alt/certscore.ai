@@ -19,7 +19,7 @@ import { isPromotionGradePreconsentRequestRow } from "../../lib/scans/preconsent
 import { classifyRetainedRequestActivity, retainedRequestEssentiality, summarizeFullSiteRuntimeEvidence } from "./local-v2-dag-report";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist, type GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
-import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
+import { deriveCanonicalOverallScoreForReport, deriveCanonicalOverallScoreExplanationForReport } from "./canonical-overall-score";
 import { getGdprEprivacyRowDeduction, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION } from "../../lib/scans/regulatory-coverage-score";
 import { readPersistedScanReportProjection } from "./scan-report-projection-contract";
 import { getPersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
@@ -31,10 +31,17 @@ import { buildChecklistConcernTopFindings } from "../../lib/scans/checklist-conc
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
+const PREVIOUS_VERSION = "full-site-distinct-findings.v6";
+const PREVIOUS_POSTURE_VERSION = "gdpr-eprivacy-posture.v17";
 const persistedScoreSchema = z.object({
-  version: z.literal(VERSION), value: z.number().int().min(0).max(100).nullable(),
+  version: z.enum([VERSION, PREVIOUS_VERSION]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
   priorityReview: z.array(sitePriorityFindingSchema),
+  deductions: z.array(z.object({
+    family: z.string(), label: z.string(), deductionPoints: z.number().int().positive(),
+    rules: z.array(z.object({ ruleId: z.string(), label: z.string(), policyDeductionPoints: z.number().int().positive(),
+      decisionVerification: z.enum(["confirmed", "unconfirmed", "not_applicable", "unknown"]) })),
+  })).optional(),
   evidencePages: z.array(sitewideEvidencePageSchema),
   siteIntegrity: siteIntegritySiteReportSchema,
   assessedStorageRecords: z.array(z.record(z.unknown())),
@@ -55,6 +62,7 @@ export type FullSiteScore = {
   limitedPages: number;
   scope: string;
   priorityReview: SitePriorityFinding[];
+  deductions?: z.infer<typeof persistedScoreSchema>["deductions"];
   evidencePages?: SitewideEvidencePage[];
   siteIntegrity?: SiteIntegritySiteReport;
   assessedNonEssentialStorage: number | null;
@@ -143,11 +151,18 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
   if (!home || projectScanReportNoGo(home)) return null;
   const canonical = getPersistedCanonicalReportProjection(home);
   if (!canonical) return null;
-  const key = createHash("sha256").update(JSON.stringify([VERSION, PRIORITY_VERSION, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION, snapshot.report_projection_payload_sha256, crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash])])).digest("hex");
+  const scoreKey = (version: string, postureVersion: string) => createHash("sha256").update(JSON.stringify([
+    version, PRIORITY_VERSION, postureVersion, snapshot.report_projection_payload_sha256,
+    crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash]),
+  ])).digest("hex");
+  const key = scoreKey(VERSION, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION);
+  const previousKey = scoreKey(PREVIOUS_VERSION, PREVIOUS_POSTURE_VERSION);
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
-  if (saved.success && saved.data.fullSiteScore.sourceHash === key) {
+  if (saved.success && [key, previousKey].includes(saved.data.fullSiteScore.sourceHash)) {
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
-    if (parsed.success) {
+    if (parsed.success && saved.data.fullSiteScore.sourceHash === (parsed.data.version === VERSION ? key : previousKey)) {
+      // Preserve the source-bound historical amount when a scoring weight changes.
+      if (parsed.data.version === PREVIOUS_VERSION) return parsed.data;
       const homeScore = deriveCanonicalOverallScoreForReport({
         scanRecord: home,
         checklistRows: canonical.checklistRows,
@@ -249,7 +264,8 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     ], executive, canonical.ownerUnifiedFindings, siteIntegrity);
     const assessedNonEssentialStorage = countAssessedNonEssentialStorage(checklistRows);
     const assessedStorageRecords = (checklistRows.find(row => row.id === "pre_consent_cookies_storage")?.criticalEvidence.retainedEvidence.eligiblePreconsentCookieStorageRows ?? []) as Record<string, unknown>[];
-    const result = { siteIntegrity, assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: deriveCanonicalOverallScoreForReport({ scanRecord: home, checklistRows, unifiedFindings: scoringFindings }), scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface, embed, site-integrity and any already-retained verified accessibility evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
+    const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: home, checklistRows, unifiedFindings: scoringFindings });
+    const result = { siteIntegrity, assessedStorageRecords, evidencePages, assessedNonEssentialStorage, version: VERSION, priorityReview, value: explanation?.score ?? null, deductions: explanation?.deductions ?? [], scoredPages, limitedPages, sources, scope: "Homepage audit plus eligible retained storage, tracking, session replay, fingerprinting, sensitive-surface, embed, site-integrity and any already-retained verified accessibility evidence across scanned pages; duplicate identities count once. Additional-page consent, policy and action checks remain unassessed." };
     // Persist the versioned, evidence-bound result once; table filtering and downloads reuse it.
     // Failed/partial scan pages are permanent coverage limitations, not failed reads.
     // Persist their honest limited result; retryable/unverifiable evidence reads must not

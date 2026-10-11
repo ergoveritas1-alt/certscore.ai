@@ -198,6 +198,7 @@ import { PendingButtonLink } from "../ui/pending-link";
 import { ViewerTimestamp } from "../time/viewer-timestamp";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { deriveCanonicalOverallScoreForReport } from "../../server/scans/canonical-overall-score";
+import { projectScanScoreExplanation } from "../../lib/api-v2/scan-report-summary";
 import { deriveSharedScanDetailGdprEprivacyCoverageChecklist } from "../../server/scans/scan-detail-checklist";
 import {
   getPersistedCanonicalReportProjection,
@@ -8239,6 +8240,7 @@ export async function SharedScanDetailView({
             rejectPath={executiveRejectPath}
             resolvedVendorNames={executiveResolvedVendorNames}
             score={executiveDisplayedScore}
+            scoreDeductions={projectScanScoreExplanation(scanRecord, executiveDisplayedScore)?.deductions}
             scoreLabel="Overall score"
             scanDurationMs={scanDurationMs}
             scanProof={scanProof}

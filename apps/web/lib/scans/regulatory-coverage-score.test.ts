@@ -729,7 +729,7 @@ test("a missing privacy notice is scored once instead of stacking every content 
     ]
   });
 
-  assert.equal(result.score, 88);
+  assert.equal(result.score, 91);
 });
 
 test("captured privacy policy transparency omissions are currently score-neutral", () => {

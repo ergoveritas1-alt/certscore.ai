@@ -4,6 +4,7 @@ import { build } from "esbuild";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 
 test("completed crawls persist permanent page limitations but never persist failed evidence reads", async () => {
   const directory = await mkdtemp(resolve("apps/web/.site-score-loading-"));
@@ -23,7 +24,7 @@ test("completed crawls persist permanent page limitations but never persist fail
           `,
           "./scan-report-projection-contract": "export const readPersistedScanReportProjection=()=>({runtimeArtifacts:{}});",
           "./persisted-canonical-report-projection": "export const getPersistedCanonicalReportProjection=()=>({checklistRows:[],globalUnifiedFindings:[],ownerUnifiedFindings:[]});",
-          "./canonical-overall-score": "export const deriveCanonicalOverallScoreForReport=()=>100;",
+          "./canonical-overall-score": "export const deriveCanonicalOverallScoreForReport=()=>100; export const deriveCanonicalOverallScoreExplanationForReport=()=>({score:100,deductions:[]});",
         };
         builder.onResolve({filter:/.*/}, args => args.path in fixtures ? {path:args.path,namespace:"fixture"} : undefined);
         builder.onLoad({filter:/.*/,namespace:"fixture"}, args => ({contents:fixtures[args.path]!,loader:"js"}));
@@ -38,11 +39,27 @@ test("completed crawls persist permanent page limitations but never persist fail
     const first = await loadFullSiteScore(crawl,[home,failed]);
     assert.equal(first.limitedPages,1);
     assert.equal(first.value,100);
+    assert.deepEqual(first.deductions,[]);
     assert.equal(globals.scoreWrites.length,1, "permanent failed page must not prevent durable reuse");
     delete require.cache[output];
     const cached = await require(output).loadFullSiteScore({...crawl,policy_json:{fullSiteScore:globals.scoreWrites[0]}},[home,failed]);
     assert.deepEqual(cached,first);
     assert.equal(globals.scoreWrites.length,1);
+    const historical = { ...first, version: "full-site-distinct-findings.v6", value: 88,
+      deductions: [{ family: "policy_transparency", label: "Policy transparency", deductionPoints: 12,
+        rules: [{ ruleId: "privacy_notice_availability", label: "Privacy policy not found", policyDeductionPoints: 12,
+          decisionVerification: "not_applicable" }] }] };
+    const historicalKey = createHash("sha256").update(JSON.stringify([
+      historical.version, "site-priority-review.v19", "gdpr-eprivacy-posture.v17", globals.snapshotHash,
+      crawl.configuration_hash, [home, failed].map(page => [page.id, page.status, undefined]),
+    ])).digest("hex");
+    const preserved = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash: historicalKey, score: historical } } }, [home, failed]);
+    assert.deepEqual(preserved, historical, "source-bound historical scores keep their original twelve-point amount");
+    assert.equal(globals.scoreWrites.length, 1, "historical read does not rewrite or recapture evidence");
+    const mismatched = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: {
+      sourceHash: historicalKey, score: { ...historical, version: first.version },
+    } } }, [home, failed]);
+    assert.deepEqual(mismatched, first, "a historical key cannot authenticate current-version deductions");
     globals.snapshotHash = "c".repeat(64);
     const missing = {...failed,status:"completed",observation:{status:"completed",httpStatus:200,attemptId:"attempt",parentScanId:"scan",pageJobId:"child",configurationHash:"config",sourceHash:"a".repeat(64),runtimeGraph:{sourceSizeBytes:100}}};
     const limited = await loadFullSiteScore(crawl,[home,missing]);

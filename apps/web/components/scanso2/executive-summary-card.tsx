@@ -4,6 +4,7 @@ import { afterClickCoverageLabel } from "./after-action-summary";
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { KNOWN_CMP_REGISTRY } from "../../../../packages/shared/src/known-cmps";
 import React from "react";
+import { PrivacyPolicyScoreDeduction, type ScoreDeductions } from "../scans/privacy-policy-score-deduction";
 import {
   deriveExecutiveDisplayState,
   deriveExecutiveNarrativePresentation,
@@ -4455,6 +4456,7 @@ export function ExecutiveSummaryCard(input: {
   regulatoryRisk?: RegulatoryRiskAssessment | null;
   resolvedVendorNames: string[];
   score: number | null;
+  scoreDeductions?: ScoreDeductions;
   scoreLabel?: "Overall score" | "GDPR/ePrivacy evidence score" | "GDPR/ePrivacy posture score";
   scanDurationMs?: number | null;
   scanOutcome?: string | null;
@@ -4788,6 +4790,7 @@ export function ExecutiveSummaryCard(input: {
                       note={storageMetricInfoNote}
                     />
                   </div>
+                  {input.score !== null ? <PrivacyPolicyScoreDeduction deductions={input.scoreDeductions} /> : null}
                 </div>
               )}
             </div>

@@ -18,7 +18,7 @@ import {
   hasStrongFingerprintingEvidence
 } from "./promotion-evidence-contracts";
 
-export const REPORT_SURFACING_POLICY_VERSION = "v1";
+export const REPORT_SURFACING_POLICY_VERSION = "v2";
 
 export type SurfacingDecisionState = "confirmed" | "review" | "support_only" | "material_incomplete" | "suppressed";
 export type SurfacingReportLane = "main" | "confidence_and_coverage" | "suppressed";
@@ -2140,7 +2140,7 @@ function applyFindingSpecificRules(context: PolicyEvaluationContext) {
       overrideDecision(decision, {
         state: "confirmed",
         lane: "main",
-        tier: decision.surfaceTier,
+        tier: packet.unifiedFindingId === "privacy_policy_missing_surface" ? "headline" : decision.surfaceTier,
         reason: "A key page was strongly expected through stable discovery evidence and still not found, so this gap is strong enough to stand on its own.",
         ruleId: "evidence.coverage_gap.confirmed_key_page_surface_missing"
       });

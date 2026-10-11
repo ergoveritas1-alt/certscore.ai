@@ -993,7 +993,7 @@ test("unresolved low-confidence absence still surfaces in confidence and coverag
   assert.equal(decision?.reportable, true);
 });
 
-test("strongly evidenced key-page absence becomes a main confirmed finding", () => {
+test("strongly evidenced missing privacy policy becomes a confirmed headline finding", () => {
   const evaluation = evaluateUnifiedFindingSurfacing({
     packets: [
       makePacket("privacy_policy_missing_surface", {
@@ -1012,7 +1012,23 @@ test("strongly evidenced key-page absence becomes a main confirmed finding", () 
   const decision = evaluation.debugDecisions[0];
   assert.equal(decision?.decisionState, "confirmed");
   assert.equal(decision?.reportLane, "main");
-  assert.equal(decision?.surfaceTier, "section");
+  assert.equal(decision?.surfaceTier, "headline");
+});
+
+test("privacy-policy fetch failures and weak discovery do not receive missing-policy headline priority", () => {
+  for (const gapKind of ["fetch_failed", "surface_missing"] as const) {
+    const evaluation = evaluateUnifiedFindingSurfacing({ packets: [makePacket("privacy_policy_missing_surface", {
+      details: {
+        attemptCount: gapKind === "fetch_failed" ? 2 : 0,
+        bestDiscoverySource: gapKind === "fetch_failed" ? "footer_link" : null,
+        family: "coverage_gap", gapKind,
+        guessedOnly: gapKind === "surface_missing",
+        pageType: "privacy_policy"
+      }
+    })] });
+    assert.equal(evaluation.debugDecisions[0]?.decisionState, "review");
+    assert.equal(evaluation.debugDecisions[0]?.surfaceTier, "section");
+  }
 });
 
 test("positive-presence findings stay in confidence coverage when no stronger finding exists", () => {

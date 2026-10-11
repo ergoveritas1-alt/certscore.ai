@@ -3,8 +3,37 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildSiteAssessmentSummary, FullSiteExecutiveSummary } from "./full-site-executive-summary";
+import { deriveCanonicalOverallScoreExplanationForReport } from "../../server/scans/canonical-overall-score";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
 
 const score = {version: "test", value: 29, assessedNonEssentialStorage: 9, scoredPages: 10, limitedPages: 0, scope: "Retained evidence", priorityReview: [], sources: []};
+
+test("page and site score visibly attribute the canonical missing-policy deduction", () => {
+  for (const complete of [true, false]) {
+    const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ scanCompleted: true, coverageLimited: false,
+      runtimeArtifacts: { policyDisclosureSummary: { privacyPolicyPresent: false }, policySurfaceInspection: { coverageStatus: complete ? "complete" : "limited",
+        inspectionCompleted: complete, linkDiscoveryCoverageStatus: complete ? "complete" : "limited",
+        documentRetrievalCoverageStatus: "insufficient", limitationKeys: complete ? [] : ["inspection_incomplete"],
+        observedSurfaceTypes: [], outcome: "no_privacy_policy_observed_complete_coverage", privacyPolicyObserved: false } },
+      snapshot: { privacy_policy_present: false } });
+    const checklistRows = deriveGdprEprivacyCoverageChecklist({ scanCompleted: true, coverageLimited: false,
+      coverageOutcomes, unifiedFindings: [] }).filter(row => row.id === "privacy_notice_availability");
+    const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null },
+      checklistRows, unifiedFindings: [] });
+    assert.equal(explanation?.score ?? null, complete ? 91 : null);
+    assert.equal(explanation?.totalPolicyDeductionPoints ?? 0, complete ? 9 : 0);
+    for (const scannedPages of [1, 10]) {
+      const html = renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={scannedPages}
+        score={{ ...score, value: explanation?.score ?? null, deductions: explanation?.deductions }} />);
+      if (complete) assert.match(html, /Privacy policy not found: −9 points/);
+      else assert.doesNotMatch(html, /privacy-policy-score-deduction/);
+    }
+    const unscored = renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={10}
+      score={{ ...score, value: null, deductions: explanation?.deductions }} />);
+    assert.doesNotMatch(unscored, /privacy-policy-score-deduction/);
+  }
+});
 
 test("summary handles zero, one and a few issues without losing title casing", () => {
   assert.equal(buildSiteAssessmentSummary([], 10), "No priority issues were identified in the assessed evidence.");
