@@ -1517,6 +1517,100 @@ test("deriveGdprEprivacyCoveragePolicyOutcomes projects completed privacy-surfac
   );
 });
 
+test("missing privacy-policy deduction requires every retained negative-search proof field", () => {
+  const completeInspection = {
+    coverageStatus: "complete",
+    documentRetrievalCoverageStatus: "insufficient",
+    inspectionCompleted: true,
+    linkDiscoveryCoverageStatus: "complete",
+    limitationKeys: [] as string[],
+    observedSurfaceTypes: [] as string[],
+    outcome: "no_privacy_policy_observed_complete_coverage",
+    privacyPolicyObserved: false,
+  };
+  for (const [name, override] of [
+    ["inspection unfinished", { inspectionCompleted: false }],
+    ["link discovery limited", { linkDiscoveryCoverageStatus: "limited" }],
+    ["coverage limited", { coverageStatus: "limited" }],
+    ["retained limitation", { limitationKeys: ["policy_surface_inspection_runtime_partial"] }],
+    ["policy link observed", { privacyPolicyObserved: true, outcome: "privacy_policy_observed" }],
+  ] as const) {
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      ...completedInputBase,
+      runtimeArtifacts: {
+        policyDisclosureSummary: { privacyPolicyDiscovered: false, privacyPolicyPresent: false },
+        policySurfaceInspection: { ...completeInspection, ...override },
+      },
+      snapshot: { privacy_policy_present: false },
+    });
+    assert.notEqual(outcomes.privacy_notice_availability?.status, "Gap observed", name);
+  }
+});
+
+test("malformed or contradictory privacy inspections cannot establish a missing policy", () => {
+  const completeInspection = {
+    coverageStatus: "complete",
+    documentRetrievalCoverageStatus: "insufficient",
+    inspectionCompleted: true,
+    linkDiscoveryCoverageStatus: "complete",
+    limitationKeys: [],
+    observedSurfaceTypes: [],
+    outcome: "no_privacy_policy_observed_complete_coverage",
+    privacyPolicyObserved: false,
+  };
+  for (const [name, override] of [
+    ["malformed limitations", { limitationKeys: { partial: true } }],
+    ["malformed observed surfaces", { observedSurfaceTypes: ["unrecognized_surface"] }],
+    ["observed privacy surface", { observedSurfaceTypes: ["privacy_policy"] }],
+    ["usable privacy document", { documentRetrievalCoverageStatus: "usable" }],
+  ] as const) {
+    const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+      ...completedInputBase,
+      runtimeArtifacts: {
+        policyDisclosureSummary: { privacyPolicyDiscovered: false, privacyPolicyPresent: false },
+        policySurfaceInspection: { ...completeInspection, ...override },
+      },
+      snapshot: { privacy_policy_present: false },
+    });
+    assert.notEqual(outcomes.privacy_notice_availability?.status, "Gap observed", name);
+  }
+});
+
+test("failed non-privacy links do not conceal a completed privacy-policy absence inspection", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: { privacyPolicyPresent: false },
+      policySurfaceInspection: {
+        coverageStatus: "complete", documentRetrievalCoverageStatus: "insufficient",
+        inspectionCompleted: true, linkDiscoveryCoverageStatus: "complete", limitationKeys: [],
+        observedSurfaceTypes: ["cookie_policy"],
+        outcome: "no_privacy_policy_observed_complete_coverage", privacyPolicyObserved: false,
+        retrievalDiagnostics: { attemptedDocumentCount: 1, failedDocumentCount: 1,
+          observedLinkFailureCount: 1, failureReasons: ["timeout"] },
+      },
+    },
+    snapshot: { privacy_policy_present: false },
+  });
+  assert.equal(outcomes.privacy_notice_availability?.status, "Gap observed");
+});
+
+test("legacy complete privacy absence proof keeps its established outcome without optional retrieval metadata", () => {
+  const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
+    ...completedInputBase,
+    runtimeArtifacts: {
+      policyDisclosureSummary: { privacyPolicyPresent: false },
+      policySurfaceInspection: {
+        coverageStatus: "complete", inspectionCompleted: true,
+        linkDiscoveryCoverageStatus: "complete", limitationKeys: [], observedSurfaceTypes: [],
+        outcome: "no_privacy_policy_observed_complete_coverage", privacyPolicyObserved: false,
+      },
+    },
+    snapshot: { privacy_policy_present: false },
+  });
+  assert.equal(outcomes.privacy_notice_availability?.status, "Gap observed");
+});
+
 test("deriveGdprEprivacyCoveragePolicyOutcomes treats essential-only first-layer control as reject option observed", () => {
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     ...completedInputBase,

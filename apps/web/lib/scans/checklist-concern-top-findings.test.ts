@@ -211,6 +211,12 @@ test("completed policy absence flows through coverage policy and checklist to th
 });
 
 test("incomplete, failed, and positive policy inspection do not create a missing-policy priority", () => {
+  const completeInspection = {
+    coverageStatus: "complete", documentRetrievalCoverageStatus: "insufficient",
+    inspectionCompleted: true, linkDiscoveryCoverageStatus: "complete", limitationKeys: [],
+    observedSurfaceTypes: [], outcome: "no_privacy_policy_observed_complete_coverage",
+    privacyPolicyObserved: false,
+  };
   const variants = [
     {},
     { coverageStatus: "limited", inspectionCompleted: false, privacyPolicyObserved: false, outcome: "indeterminate" },
@@ -218,7 +224,11 @@ test("incomplete, failed, and positive policy inspection do not create a missing
       linkDiscoveryCoverageStatus: "complete", outcome: "no_privacy_policy_observed_complete_coverage",
       limitationKeys: ["privacy_policy_negative_search_coverage_not_verified"] },
     { coverageStatus: "limited", inspectionCompleted: true, privacyPolicyObserved: true,
-      outcome: "privacy_policy_observed", limitationKeys: ["privacy_policy_link_observed_document_not_retained"] }
+      outcome: "privacy_policy_observed", limitationKeys: ["privacy_policy_link_observed_document_not_retained"] },
+    { ...completeInspection, limitationKeys: { partial: true } },
+    { ...completeInspection, observedSurfaceTypes: ["unknown_surface"] },
+    { ...completeInspection, observedSurfaceTypes: ["privacy_policy"] },
+    { ...completeInspection, documentRetrievalCoverageStatus: "usable" },
   ];
   for (const policySurfaceInspection of variants) {
     const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
@@ -230,6 +240,14 @@ test("incomplete, failed, and positive policy inspection do not create a missing
     const checklist = deriveGdprEprivacyCoverageChecklist({
       scanCompleted: true, coverageLimited: false, coverageOutcomes: outcomes, unifiedFindings: []
     });
+    const privacyRow = checklist.find(item => item.id === "privacy_notice_availability");
+    assert.ok(privacyRow);
+    assert.notEqual(privacyRow.assessmentStatus, "gap_observed");
+    assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [
+      row({ id: "transport_security_https_delivery", label: "HTTPS", status: "Observed",
+        assessmentStatus: "checked", evidenceState: "observed" }),
+      privacyRow,
+    ] }).score, 100, "The privacy inspection cannot add a nine-point deduction.");
     assert.ok(!buildChecklistConcernTopFindings(checklist).some(finding =>
       finding.id === "regulatory_gap__gdpr_eprivacy__privacy_notice_availability"));
     assert.ok(!buildSitePriorityReview(checklist, []).some(finding =>

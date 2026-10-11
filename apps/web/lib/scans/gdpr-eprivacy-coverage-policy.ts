@@ -9050,13 +9050,17 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       "policySurfaceInspection",
       "policy_surface_inspection"
     ]);
+    const inspection = policySurfaceInspectionOutcomeSchema.safeParse(policySurfaceInspection);
     const completeNoPrivacyPolicyObservation =
-      getString(policySurfaceInspection, ["outcome"]) === "no_privacy_policy_observed_complete_coverage" &&
-      getString(policySurfaceInspection, ["coverageStatus", "coverage_status"]) === "complete" &&
-      getString(policySurfaceInspection, ["linkDiscoveryCoverageStatus", "link_discovery_coverage_status"]) === "complete" &&
-      getBoolean(policySurfaceInspection, ["inspectionCompleted", "inspection_completed"]) === true &&
-      getBoolean(policySurfaceInspection, ["privacyPolicyObserved", "privacy_policy_observed"]) === false &&
-      getStringArray(policySurfaceInspection, ["limitationKeys", "limitation_keys"]).length === 0;
+      inspection.success &&
+      inspection.data.outcome === "no_privacy_policy_observed_complete_coverage" &&
+      inspection.data.coverageStatus === "complete" &&
+      inspection.data.linkDiscoveryCoverageStatus === "complete" &&
+      inspection.data.documentRetrievalCoverageStatus !== "usable" &&
+      inspection.data.inspectionCompleted &&
+      !inspection.data.privacyPolicyObserved &&
+      !inspection.data.observedSurfaceTypes.includes("privacy_policy") &&
+      inspection.data.limitationKeys.length === 0;
     if (config.rowId === "privacy_notice_availability" && completeNoPrivacyPolicyObservation) {
       return makeOutcome(
         config.rowId,
@@ -9074,7 +9078,6 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       );
     }
     const discoveryLimitation = privacyPolicyDiscoveryLimitation(summary, config.label);
-    const inspection = policySurfaceInspectionOutcomeSchema.safeParse(policySurfaceInspection);
     const diagnostics = inspection.success ? inspection.data.retrievalDiagnostics : undefined;
     const retrievalExplanation = diagnostics
       ? ` Policy retrieval: ${diagnostics.failedDocumentCount} of ${diagnostics.attemptedDocumentCount} attempted documents failed; ${diagnostics.observedLinkFailureCount} failed documents came from observed links. ${inspection.success && !inspection.data.inspectionCompleted ? "Inspection did not complete. " : ""}Unsuccessful retrieval does not establish policy absence.`
