@@ -791,25 +791,37 @@
       "url": "https://zeit.de"
     },
     "https://archonph.com": {
-      "url": "https://archonph.com",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:09:08.790Z",
+      "lastContactAt": "2026-10-11T15:09:08.790Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://archonph.com"
     },
     "https://enzocustom.com": {
-      "url": "https://enzocustom.com",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:09:24.352Z",
+      "lastContactAt": "2026-10-11T15:09:24.352Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://enzocustom.com"
     },
     "https://huntington.com": {
-      "url": "https://huntington.com",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:08:30.821Z",
+      "lastContactAt": "2026-10-11T15:08:30.821Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://huntington.com"
     },
     "https://lensa.com": {
       "consecutiveNoGoCount": 0,
@@ -823,41 +835,61 @@
       "url": "https://lensa.com"
     },
     "https://sqlite.org": {
-      "url": "https://sqlite.org",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:08:54.736Z",
+      "lastContactAt": "2026-10-11T15:08:54.736Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://sqlite.org"
     },
     "https://curl.se": {
-      "url": "https://curl.se",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:09:48.290Z",
+      "lastContactAt": "2026-10-11T15:09:48.290Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://curl.se"
     },
     "https://nwnatural.com": {
-      "url": "https://nwnatural.com",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:08:43.564Z",
+      "lastContactAt": "2026-10-11T15:08:43.564Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://nwnatural.com"
     },
     "https://workmarket.com": {
-      "url": "https://workmarket.com",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:08:16.751Z",
+      "lastContactAt": "2026-10-11T15:08:16.751Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://workmarket.com"
     },
     "https://hailsentinel.com": {
-      "url": "https://hailsentinel.com",
-      "state": "eligible",
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:09:37.040Z",
+      "lastContactAt": "2026-10-11T15:09:37.040Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "note": "Novel ordinary benign GPC calibration nomination; no target contact; fresh central history required."
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign GPC calibration nomination; no target contact; fresh central history required.",
+      "state": "cooldown",
+      "url": "https://hailsentinel.com"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-11T14:16:16.343Z"
+  "updatedAt": "2026-10-11T15:09:48.473Z"
 }
