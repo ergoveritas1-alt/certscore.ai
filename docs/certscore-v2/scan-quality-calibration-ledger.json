@@ -990,6 +990,76 @@
       "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
       "state": "cooldown",
       "url": "https://fsi.gov.in"
+    },
+    "https://www.totallypromotional.com": {
+      "url": "https://www.totallypromotional.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://davidsw.com": {
+      "url": "https://davidsw.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://sarasfitness.com": {
+      "url": "https://sarasfitness.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://autowarranty.autos": {
+      "url": "https://autowarranty.autos",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://www.jarrettgordonforddavenport.com": {
+      "url": "https://www.jarrettgordonforddavenport.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://www.grossmanchevy.com": {
+      "url": "https://www.grossmanchevy.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://www.isidewith.com": {
+      "url": "https://www.isidewith.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://www.docunlock.com": {
+      "url": "https://www.docunlock.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://www.nordstrom.com": {
+      "url": "https://www.nordstrom.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
+    },
+    "https://clubagartha.cc": {
+      "url": "https://clubagartha.cc",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required."
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
