@@ -891,68 +891,107 @@
     },
     "https://bicyclestamps.de": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:18:54.362Z",
+      "lastContactAt": "2026-10-11T15:18:54.362Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://bicyclestamps.de",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://bicyclestamps.de"
     },
     "https://www.hannoveranerpzvbawue.de": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:18:16.919Z",
+      "lastContactAt": "2026-10-11T15:18:16.919Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://www.hannoveranerpzvbawue.de",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://www.hannoveranerpzvbawue.de"
     },
     "https://www.reefcheck.de": {
-      "consecutiveNoGoCount": 0,
-      "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://www.reefcheck.de",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T15:17:39.875Z",
+      "lastContactAt": "2026-10-11T15:17:39.875Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "target_unreachable_or_unsuitable",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "blocked",
+      "url": "https://www.reefcheck.de"
     },
     "https://www.schloss-stadt-huelchrath.de": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:18:29.012Z",
+      "lastContactAt": "2026-10-11T15:18:29.012Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://www.schloss-stadt-huelchrath.de",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://www.schloss-stadt-huelchrath.de"
     },
     "https://jsv.de": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:18:42.832Z",
+      "lastContactAt": "2026-10-11T15:18:42.832Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://jsv.de",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://jsv.de"
     },
     "https://schuppengaudi.ch": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:19:08.279Z",
+      "lastContactAt": "2026-10-11T15:19:08.279Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://schuppengaudi.ch",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://schuppengaudi.ch"
     },
     "https://www.pdc-uri.ch": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:19:22.375Z",
+      "lastContactAt": "2026-10-11T15:19:22.375Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://www.pdc-uri.ch",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://www.pdc-uri.ch"
     },
     "https://www.gemeinde-ascheffel.de": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:18:05.458Z",
+      "lastContactAt": "2026-10-11T15:18:05.458Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://www.gemeinde-ascheffel.de",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://www.gemeinde-ascheffel.de"
     },
     "https://fsi.gov.in": {
       "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T15:17:51.577Z",
+      "lastContactAt": "2026-10-11T15:17:51.577Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "state": "eligible",
-      "url": "https://fsi.gov.in",
-      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+      "lastOutcome": "completed",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required.",
+      "state": "cooldown",
+      "url": "https://fsi.gov.in"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-11T15:14:26.478401Z"
+  "updatedAt": "2026-10-11T15:19:22.554Z"
 }
