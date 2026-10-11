@@ -637,8 +637,18 @@
       "lastOutcome": "no_go",
       "state": "blocked",
       "url": "https://science.org"
+    },
+    "https://arstechnica.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:05:18.873Z",
+      "lastContactAt": "2026-10-11T14:05:18.873Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://arstechnica.com"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-11T14:00:40.974Z"
+  "updatedAt": "2026-10-11T14:05:19.077Z"
 }
