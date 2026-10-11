@@ -624,8 +624,21 @@
       "lastContactAt": "2026-06-14T00:00:00+00:00",
       "lastContactSource": "manual_local_artifact_filename_audit",
       "note": "Conservative historical contact date from prior local capture path; requires central merge and outcome review before admission. No successful/clean outcome inferred. Conservative nomination hold pending explicit prior-outcome review; do not automatically re-enable."
+    },
+    "https://science.org": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T13:59:14.809Z",
+      "lastContactAt": "2026-10-11T13:59:14.809Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://science.org"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-09T18:39:34.393Z"
+  "updatedAt": "2026-10-11T14:00:40.974Z"
 }
