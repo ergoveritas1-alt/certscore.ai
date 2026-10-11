@@ -1,15 +1,3 @@
-# CertScore v2 Scan Lab rotating target inventory (51 sites).
-# Select only a cooldown-eligible 8-12-site sample for routine live calibration.
-# Internal diagnostic only. This list does not define production behavior,
-# customer-facing report output, or finding eligibility.
-#
-# Selection intent:
-# - preserve the existing 30-site edge cohort
-# - add Ford and adjacent high-signal surfaces for regression checks
-# - include publisher, ecommerce, SaaS, healthcare, finance, public-sector,
-#   CMP-heavy, session-replay, and headless-sensitive cases
-
-# Heavy publisher/adtech
 https://nytimes.com
 https://washingtonpost.com
 https://forbes.com
@@ -17,8 +5,6 @@ https://theguardian.com
 https://cnn.com
 https://msnbc.com
 https://weather.com
-
-# Ecommerce and automotive with dense third-party surfaces
 https://walmart.com
 https://macys.com
 https://wayfair.com
@@ -29,8 +15,6 @@ https://homedepot.com
 https://ikea.com
 https://ford.com
 https://toyota.com
-
-# SaaS and product-led surfaces
 https://linear.app
 https://vercel.com
 https://supabase.com
@@ -39,41 +23,50 @@ https://hubspot.com
 https://salesforce.com
 https://adobe.com
 https://microsoft.com
-
-# Healthcare or sensitive-context surfaces
 https://healthline.com
 https://plannedparenthood.org
 https://nih.gov
 https://mayoclinic.org
-
-# Finance and insurance
 https://fidelity.com
 https://progressive.com
 https://geico.com
 https://chase.com
 https://capitalone.com
-
-# Government, public-sector, and education
 https://ftc.gov
 https://usa.gov
 https://consumerfinance.gov
 https://caltech.edu
 https://gatech.edu
-
-# Privacy-mature / CMP-heavy / EU-global consent variation
 https://bbc.com
 https://unilever.com
 https://spotify.com
 https://booking.com
-
-# Likely session replay or behavioral analytics
 https://segment.com
 https://hotjar.com
 https://fullstory.com
-
-# No obvious consent banner or likely headless/blocking/failure cases
 https://mozilla.org
 https://cloudflare.com
 https://openai.com
 https://att.com
 https://fandango.com
+https://service-public.fr
+https://lamoncloa.gob.es
+https://open.gov.it
+https://arstechnica.com
+https://heise.de
+https://zeit.de
+https://spiegel.de
+https://economist.com
+https://science.org
+https://decathlon.co.uk
+https://thomann.de
+https://patagonia.com
+https://rei.com
+https://zalando.de
+https://sentry.io
+https://posthog.com
+https://amplitude.com
+https://wordpress.org
+https://drupal.org
+https://joomla.org
+https://w3.org

@@ -2,8 +2,8 @@
   "entries": {
     "https://capitalone.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-09T04:01:51.360Z",
-      "lastContactAt": "2026-09-11T04:01:51.360Z",
+      "cooldownUntil": "2026-11-08T13:21:46.216Z",
+      "lastContactAt": "2026-10-11T13:21:46.216Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -62,8 +62,8 @@
     },
     "https://linear.app": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-09T04:02:15.159Z",
-      "lastContactAt": "2026-09-11T04:02:15.159Z",
+      "cooldownUntil": "2026-11-08T13:21:58.500Z",
+      "lastContactAt": "2026-10-11T13:21:58.500Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -286,7 +286,7 @@
       "url": "https://att.com"
     },
     "https://target.com": {
-      "consecutiveNoGoCount": 2,
+      "consecutiveNoGoCount": 6,
       "cooldownUntil": "2026-11-06T16:57:00.529Z",
       "lastContactAt": "2026-10-09T16:57:00.529Z",
       "lastContactSource": "calibration",
@@ -368,7 +368,7 @@
       "url": "https://mozilla.org"
     },
     "https://macys.com": {
-      "consecutiveNoGoCount": 1,
+      "consecutiveNoGoCount": 3,
       "cooldownUntil": "2026-11-06T15:01:22.428Z",
       "lastContactAt": "2026-10-09T15:01:22.428Z",
       "lastContactSource": "calibration",
@@ -377,7 +377,7 @@
         "scan_no_go_corroborated"
       ],
       "lastOutcome": "no_go",
-      "state": "blocked",
+      "state": "do_not_calibrate",
       "url": "https://macys.com"
     },
     "https://segment.com": {
@@ -449,6 +449,181 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://supabase.com"
+    },
+    "https://nytimes.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-10-20T20:20:13.96+00:00",
+      "lastContactAt": "2026-09-22T20:20:13.96+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated",
+        "consent_proof:bot_challenge:301",
+        "runtime_evidence:bot_challenge:301",
+        "policy_evidence:access_denied:301",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://nytimes.com"
+    },
+    "https://washingtonpost.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-09-13T07:56:23.776+00:00",
+      "lastContactAt": "2026-08-16T07:56:23.776+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "dom_text_empty",
+        "scan_no_go:navigation_transport_failure",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://washingtonpost.com"
+    },
+    "https://etsy.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T13:22:26.884Z",
+      "lastContactAt": "2026-10-11T13:22:26.884Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "dom_text_empty",
+        "homepage_response_403",
+        "network_datadome_challenge",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://etsy.com"
+    },
+    "https://ikea.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-20T20:25:23.73+00:00",
+      "lastContactAt": "2026-09-22T20:25:23.73+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://ikea.com"
+    },
+    "https://ford.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T13:22:11.861Z",
+      "lastContactAt": "2026-10-11T13:22:11.861Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "homepage_response_403",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://ford.com"
+    },
+    "https://toyota.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T13:22:42.646Z",
+      "lastContactAt": "2026-10-11T13:22:42.646Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://toyota.com"
+    },
+    "https://vercel.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-08-25T00:05:58.997688+00:00",
+      "lastContactAt": "2026-07-28T00:05:58.997688+00:00",
+      "lastContactSource": "pulse_api",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://vercel.com"
+    },
+    "https://fidelity.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T13:23:16.453Z",
+      "lastContactAt": "2026-10-11T13:23:16.453Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://fidelity.com"
+    },
+    "https://bbc.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-20T20:26:27.264+00:00",
+      "lastContactAt": "2026-09-22T20:26:27.264+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://bbc.com"
+    },
+    "https://unilever.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-09-13T07:55:53.871+00:00",
+      "lastContactAt": "2026-08-16T07:55:53.871+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "homepage_response_403",
+        "scan_no_go:access_denied_or_forbidden_page",
+        "scan_no_go:scan_no_go_corroborated",
+        "vendor_observations_zero"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://unilever.com"
+    },
+    "https://service-public.fr": {
+      "url": "https://service-public.fr",
+      "state": "blocked",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "lastContactAt": "2026-08-24T00:00:00+00:00",
+      "lastContactSource": "manual_local_artifact_filename_audit",
+      "note": "Conservative historical contact date from prior local capture path; requires central merge and outcome review before admission. No successful/clean outcome inferred. Conservative nomination hold pending explicit prior-outcome review; do not automatically re-enable."
+    },
+    "https://lamoncloa.gob.es": {
+      "url": "https://lamoncloa.gob.es",
+      "state": "blocked",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "lastContactAt": "2026-08-24T00:00:00+00:00",
+      "lastContactSource": "manual_local_artifact_filename_audit",
+      "note": "Conservative historical contact date from prior local capture path; requires central merge and outcome review before admission. No successful/clean outcome inferred. Conservative nomination hold pending explicit prior-outcome review; do not automatically re-enable."
+    },
+    "https://open.gov.it": {
+      "url": "https://open.gov.it",
+      "state": "blocked",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "lastContactAt": "2026-08-24T00:00:00+00:00",
+      "lastContactSource": "manual_local_artifact_filename_audit",
+      "note": "Conservative historical contact date from prior local capture path; requires central merge and outcome review before admission. No successful/clean outcome inferred. Conservative nomination hold pending explicit prior-outcome review; do not automatically re-enable."
+    },
+    "https://economist.com": {
+      "url": "https://economist.com",
+      "state": "blocked",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "lastContactAt": "2026-06-11T00:00:00+00:00",
+      "lastContactSource": "manual_local_artifact_filename_audit",
+      "note": "Conservative historical contact date from prior local capture path; requires central merge and outcome review before admission. No successful/clean outcome inferred. Conservative nomination hold pending explicit prior-outcome review; do not automatically re-enable."
+    },
+    "https://w3.org": {
+      "url": "https://w3.org",
+      "state": "blocked",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "lastContactAt": "2026-06-14T00:00:00+00:00",
+      "lastContactSource": "manual_local_artifact_filename_audit",
+      "note": "Conservative historical contact date from prior local capture path; requires central merge and outcome review before admission. No successful/clean outcome inferred. Conservative nomination hold pending explicit prior-outcome review; do not automatically re-enable."
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",

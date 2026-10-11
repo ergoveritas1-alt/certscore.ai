@@ -50,7 +50,12 @@
     "automaticRetryAfterNoGo": false,
     "crossRegionRetryAfterBlock": false,
     "retireAfterRepeatedNoGo": true,
-    "eligibilityStates": ["eligible", "cooldown", "blocked", "do_not_calibrate"]
+    "eligibilityStates": [
+      "eligible",
+      "cooldown",
+      "blocked",
+      "do_not_calibrate"
+    ]
   },
   "owners": {
     "calibrationQuality": "Luna",
@@ -74,56 +79,869 @@
     "language_inference"
   ],
   "targets": [
-    {"url": "https://nytimes.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://washingtonpost.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://forbes.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://theguardian.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://cnn.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://msnbc.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://weather.com", "role": "publisher", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://walmart.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://macys.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://wayfair.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://etsy.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://target.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://bestbuy.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://homedepot.com", "role": "ecommerce", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://ikea.com", "role": "ecommerce_global", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://ford.com", "role": "ecommerce_automotive", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://toyota.com", "role": "ecommerce_automotive", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://linear.app", "role": "saas", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://vercel.com", "role": "saas", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://supabase.com", "role": "saas", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://notion.so", "role": "saas_global", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://hubspot.com", "role": "saas", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://salesforce.com", "role": "saas", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://adobe.com", "role": "saas", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://microsoft.com", "role": "saas_global", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://healthline.com", "role": "healthcare", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://plannedparenthood.org", "role": "healthcare_sensitive", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://nih.gov", "role": "healthcare_public", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://mayoclinic.org", "role": "healthcare", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://fidelity.com", "role": "finance", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://progressive.com", "role": "finance_insurance", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://geico.com", "role": "finance_insurance", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://chase.com", "role": "finance", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://capitalone.com", "role": "finance", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://ftc.gov", "role": "government", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://usa.gov", "role": "government", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://consumerfinance.gov", "role": "government", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://caltech.edu", "role": "education", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://gatech.edu", "role": "education", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://bbc.com", "role": "publisher_global", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://unilever.com", "role": "global_cmp_heavy", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://spotify.com", "role": "global_cmp_heavy", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://booking.com", "role": "global_cmp_heavy", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://segment.com", "role": "behavioral_analytics", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://hotjar.com", "role": "behavioral_analytics", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://fullstory.com", "role": "behavioral_analytics", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://mozilla.org", "role": "headless_or_control", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://cloudflare.com", "role": "headless_or_control", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://openai.com", "role": "headless_or_control", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://att.com", "role": "headless_or_control", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]},
-    {"url": "https://fandango.com", "role": "headless_or_control", "lanes": ["consent_controls", "gdpr_transparency", "transport_evidence", "third_party_attribution", "no_go_resilience", "language_inference"]}
+    {
+      "url": "https://nytimes.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://washingtonpost.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://forbes.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://theguardian.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://cnn.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://msnbc.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://weather.com",
+      "role": "publisher",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://walmart.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://macys.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://wayfair.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://etsy.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://target.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://bestbuy.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://homedepot.com",
+      "role": "ecommerce",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://ikea.com",
+      "role": "ecommerce_global",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://ford.com",
+      "role": "ecommerce_automotive",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://toyota.com",
+      "role": "ecommerce_automotive",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://linear.app",
+      "role": "saas",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://vercel.com",
+      "role": "saas",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://supabase.com",
+      "role": "saas",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://notion.so",
+      "role": "saas_global",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://hubspot.com",
+      "role": "saas",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://salesforce.com",
+      "role": "saas",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://adobe.com",
+      "role": "saas",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://microsoft.com",
+      "role": "saas_global",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://healthline.com",
+      "role": "healthcare",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://plannedparenthood.org",
+      "role": "healthcare_sensitive",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://nih.gov",
+      "role": "healthcare_public",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://mayoclinic.org",
+      "role": "healthcare",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://fidelity.com",
+      "role": "finance",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://progressive.com",
+      "role": "finance_insurance",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://geico.com",
+      "role": "finance_insurance",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://chase.com",
+      "role": "finance",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://capitalone.com",
+      "role": "finance",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://ftc.gov",
+      "role": "government",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://usa.gov",
+      "role": "government",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://consumerfinance.gov",
+      "role": "government",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://caltech.edu",
+      "role": "education",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://gatech.edu",
+      "role": "education",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://bbc.com",
+      "role": "publisher_global",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://unilever.com",
+      "role": "global_cmp_heavy",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://spotify.com",
+      "role": "global_cmp_heavy",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://booking.com",
+      "role": "global_cmp_heavy",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://segment.com",
+      "role": "behavioral_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://hotjar.com",
+      "role": "behavioral_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://fullstory.com",
+      "role": "behavioral_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://mozilla.org",
+      "role": "headless_or_control",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://cloudflare.com",
+      "role": "headless_or_control",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://openai.com",
+      "role": "headless_or_control",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://att.com",
+      "role": "headless_or_control",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://fandango.com",
+      "role": "headless_or_control",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://service-public.fr",
+      "role": "government_neutral",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://lamoncloa.gob.es",
+      "role": "government_neutral",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://open.gov.it",
+      "role": "government_neutral",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://arstechnica.com",
+      "role": "publisher_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://heise.de",
+      "role": "publisher_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://zeit.de",
+      "role": "publisher_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://spiegel.de",
+      "role": "publisher_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://economist.com",
+      "role": "publisher_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://science.org",
+      "role": "publisher_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://decathlon.co.uk",
+      "role": "commerce_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://thomann.de",
+      "role": "commerce_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://patagonia.com",
+      "role": "commerce_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://rei.com",
+      "role": "commerce_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://zalando.de",
+      "role": "commerce_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://sentry.io",
+      "role": "saas_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://posthog.com",
+      "role": "saas_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://amplitude.com",
+      "role": "saas_analytics",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://wordpress.org",
+      "role": "cms_declaration",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://drupal.org",
+      "role": "cms_declaration",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://joomla.org",
+      "role": "cms_declaration",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://w3.org",
+      "role": "cms_declaration",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    }
   ]
 }
