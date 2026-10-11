@@ -789,6 +789,73 @@
       "lastOutcome": "no_go",
       "state": "blocked",
       "url": "https://zeit.de"
+    },
+    "https://archonph.com": {
+      "url": "https://archonph.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+    },
+    "https://enzocustom.com": {
+      "url": "https://enzocustom.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+    },
+    "https://huntington.com": {
+      "url": "https://huntington.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+    },
+    "https://lensa.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-10-26T00:31:57.697559+00:00",
+      "lastContactAt": "2026-09-28T00:31:57.697559+00:00",
+      "lastContactSource": "sdk",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen.",
+      "state": "cooldown",
+      "url": "https://lensa.com"
+    },
+    "https://sqlite.org": {
+      "url": "https://sqlite.org",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+    },
+    "https://curl.se": {
+      "url": "https://curl.se",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+    },
+    "https://nwnatural.com": {
+      "url": "https://nwnatural.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+    },
+    "https://workmarket.com": {
+      "url": "https://workmarket.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign calibration nomination; no target contact. Eligibility requires fresh central all-channel export and owner-history screen."
+    },
+    "https://hailsentinel.com": {
+      "url": "https://hailsentinel.com",
+      "state": "eligible",
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "note": "Novel ordinary benign GPC calibration nomination; no target contact; fresh central history required."
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",

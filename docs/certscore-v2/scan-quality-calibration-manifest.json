@@ -942,6 +942,114 @@
         "no_go_resilience",
         "language_inference"
       ]
+    },
+    {
+      "url": "https://archonph.com",
+      "role": "consumer_service_gpc",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://enzocustom.com",
+      "role": "commerce_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://huntington.com",
+      "role": "finance_gpc",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://lensa.com",
+      "role": "saas_job_platform_gpc",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://sqlite.org",
+      "role": "documentation_neutral",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://curl.se",
+      "role": "documentation_neutral",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://nwnatural.com",
+      "role": "utility_gpc",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://workmarket.com",
+      "role": "saas_service_cmp_runtime",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
+    },
+    {
+      "url": "https://hailsentinel.com",
+      "role": "saas_analytics_gpc",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ]
     }
   ]
 }
