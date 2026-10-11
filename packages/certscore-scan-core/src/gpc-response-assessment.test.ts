@@ -209,6 +209,66 @@ test("v2 pairs verified final documents after redirects without treating the fir
   assert.equal(result.comparison.deltas.advertisingOrMarketingActivity.sharedCount, 1);
 });
 
+function sameUrlRedirectGpcFixture(enabled: boolean) {
+  const fixture = gpcRuntimeFixture({ enabled, vendors: [{ name: "Ads" }] });
+  const initial = fixture.networkEvents[0]!;
+  const final = { ...initial, eventId: `${initial.eventId}_final`, requestId: `${initial.requestId}_final`,
+    timestampMs: 100, parentRequestId: initial.requestId, redirectChainRequestIds: [initial.requestId] };
+  fixture.networkEvents.splice(1, 0, final);
+  fixture.networkResponseEvents = [
+    { ...initial, eventType: "network_response", eventId: "resp_initial", responseUrl: initial.requestUrl, status: 307 },
+    { ...final, eventType: "network_response", eventId: "resp_final", responseUrl: final.requestUrl, status: 200 },
+  ];
+  const token = `${enabled ? "gpc" : "baseline"}_loader`;
+  fixture.gpcImpactCapture = {
+    contractVersion: "certscore.gpc-impact-capture.v1", scope: "page_http_request_attempts_after_document_commit",
+    expectedEnabled: enabled, captureStartedAtMs: 0, capturedAtMs: 1000, readbackDocumentToken: token,
+    document: { token, urlSha256: gpcDocumentHash(final.requestUrl), committedAtMs: 150, secGpc: enabled ? "1" : null },
+    requestsDropped: 0, windows: [], limitationKeys: [],
+  };
+  if (enabled) fixture.gpcSignalObservation!.prototypeCaptureBinding = {
+    captureId: "00000000-0000-4000-8000-000000000001", documentIdentitySource: "cdp_loader_id", documentToken: token,
+  };
+  return fixture;
+}
+
+test("v2 binds a same-URL 307 redirect to its unique final 200 document", () => {
+  const result = assess(sameUrlRedirectGpcFixture(false), sameUrlRedirectGpcFixture(true));
+  assert.equal(result.status, "no_observable_response");
+  assert.deepEqual(result.comparison.limitationKeys, []);
+});
+
+for (const [name, mutate] of [
+  ["independent same-URL navigation", (b: CanonicalEvidenceBundle) => {
+    b.networkEvents[1]!.parentRequestId = undefined;
+    b.networkEvents[1]!.redirectChainRequestIds = [];
+  }],
+  ["missing redirect parent", (b: CanonicalEvidenceBundle) => { b.networkEvents[1]!.parentRequestId = "missing"; }],
+  ["broken redirect chain", (b: CanonicalEvidenceBundle) => { b.networkEvents[1]!.redirectChainRequestIds = []; }],
+  ["missing parent response", (b: CanonicalEvidenceBundle) => { b.networkResponseEvents.shift(); }],
+  ["duplicate final response", (b: CanonicalEvidenceBundle) => { b.networkResponseEvents.push({ ...b.networkResponseEvents[1]!, eventId: "duplicate_response" }); }],
+  ["redirecting final response", (b: CanonicalEvidenceBundle) => { b.networkResponseEvents[1]!.status = 307; }],
+  ["invalid final response", (b: CanonicalEvidenceBundle) => { b.networkResponseEvents[1]!.status = 0; }],
+  ["wrong loader", (b: CanonicalEvidenceBundle) => { b.gpcImpactCapture!.readbackDocumentToken = "other_loader"; }],
+  ["wrong final header", (b: CanonicalEvidenceBundle) => { b.networkEvents[1]!.requestHeaders = {}; }],
+] as const) {
+  test(`v2 same-URL redirect fails closed: ${name}`, () => {
+    const baseline = sameUrlRedirectGpcFixture(false), gpc = sameUrlRedirectGpcFixture(true);
+    mutate(gpc);
+    const result = assess(baseline, gpc);
+    assert.equal(result.status, "indeterminate");
+    assert.equal(result.comparison.comparable, false);
+  });
+}
+
+test("v2 same-URL redirect remains indeterminate when passive quiet evidence is incomplete", () => {
+  const baseline = sameUrlRedirectGpcFixture(false), gpc = sameUrlRedirectGpcFixture(true);
+  for (const fixture of [baseline, gpc]) fixture.modulesRun[0]!.timingBreakdown![0]!.outcome = "timed_out";
+  const result = assess(baseline, gpc);
+  assert.equal(result.status, "indeterminate");
+  assert.deepEqual(result.comparison.limitationKeys, ["baseline_settle_not_completed", "gpc_settle_not_completed"]);
+});
+
 const invalidFinalDocuments: Array<[string, (b: CanonicalEvidenceBundle) => void]> = [
   ["missing final request", (b) => { b.networkEvents.splice(1, 1); }],
   ["final header missing", (b) => { b.networkEvents[1]!.requestHeaders = {}; }],

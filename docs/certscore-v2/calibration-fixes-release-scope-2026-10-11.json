@@ -299,6 +299,11 @@
       "sizeBytes": 21192
     },
     {
+      "path": "packages/certscore-scan-core/src/cmp-action-semantic-proof.test.ts",
+      "sha256": "bfa9b8ae908fc6794d66aa87c97e32ea8e7dd014295c7c2b8a4207259c51e58f",
+      "sizeBytes": 2663
+    },
+    {
       "path": "packages/certscore-scan-core/src/consent-ai-review-regressions.test.ts",
       "sha256": "62eaee13fefa2ec00843748effa2705cca73d388c8e466db6f882b35c121dbce",
       "sizeBytes": 10279
@@ -344,9 +349,29 @@
       "sizeBytes": 5885
     },
     {
+      "path": "packages/certscore-scan-core/src/gpc-response-assessment.test.ts",
+      "sha256": "a1adfd0043020c6fd26a8989fc10754715184fb6dc6a805f1e301b5543cee01e",
+      "sizeBytes": 26830
+    },
+    {
+      "path": "packages/certscore-scan-core/src/gpc-response-assessment.ts",
+      "sha256": "152648a8049251e14f55417d501f8f75535c74b5a94be83111a93c2f096f0a78",
+      "sizeBytes": 16337
+    },
+    {
       "path": "packages/certscore-scan-core/src/index.ts",
       "sha256": "4c71aad6d614d23441b1b5f26002ab9f8cf325e3ecaf2ccde6857f6f24d9e784",
       "sizeBytes": 180414
+    },
+    {
+      "path": "packages/certscore-scan-core/src/network-destination.test.ts",
+      "sha256": "50aaca871d799b5675f4419a34128ad31b46b1c7212187b70a3712e59b8dc1d0",
+      "sizeBytes": 11748
+    },
+    {
+      "path": "packages/certscore-scan-core/src/network-destination.ts",
+      "sha256": "db3908f8dd12c4ab5cb028b3f32c5fa6ba7376a4a35a96568f317e9aa4a4b4f1",
+      "sizeBytes": 7832
     },
     {
       "path": "packages/certscore-scan-core/src/observed-action-source-proof.test.ts",
@@ -478,5 +503,6 @@
     "scanVolumePerMonth": 100000,
     "basis": "existing retention; <=80ms visual analysis within module budget, <=64 hashed diagnostic rows per action lane; no added lane, invocation, retry, model call or capacity",
     "approval": "below-$1/month pre-approved under AGENTS.md; disclosed before proceeding"
-  }
+  },
+  "assemblyCorrection": "Include source commits since live base as well as working-tree changes; build caught omitted response-retention helpers before any deploy."
 }

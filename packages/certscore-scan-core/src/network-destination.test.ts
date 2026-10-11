@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { NetworkDestination } from "@certscore/contracts";
 import { networkDestinationSchema } from "@certscore/contracts";
-import { captureResponseDestination, createDestinationEnricher } from "./network-destination";
+import { captureResponseDestination, createDestinationEnricher, freezeAndSnapshotResponseRows, retainDirectResponseWithOptionalEnrichment } from "./network-destination";
 const now = Date.parse("2026-09-07T00:00:00Z");
 const destination: NetworkDestination = { ip: "8.8.8.8", source: "response_server_addr", locationLabel: "server location (may be CDN edge)" };
 const metadata = { buildEpoch: new Date(now - 86400000) };
@@ -50,6 +50,94 @@ test("concurrent responses and redirect hops retain their own server address reg
   finishFirst!({ ipAddress: "8.8.8.8", port: 443 });
   assert.equal(second.destination?.ip, "1.1.1.1");
   assert.equal((await first).destination?.ip, "8.8.8.8");
+});
+
+test("direct response survives stalled or rejected optional enrichment", async () => {
+  const rows: Array<{ status: number; networkDestination?: string }> = [];
+  let resolveStalled!: (value: { networkDestination: string }) => void;
+  const direct = { status: 200 };
+  const stalled = retainDirectResponseWithOptionalEnrichment({ rows, direct,
+    enrichments: [async commit => { const value = await new Promise<{ networkDestination: string }>(resolve => { resolveStalled = resolve; }); commit(value); }],
+    finalized: () => false });
+  assert.deepEqual(rows, [direct]);
+  await Promise.resolve();
+  assert.equal(rows[0]?.status, 200);
+  resolveStalled({ networkDestination: "observed" });
+  await stalled;
+  assert.equal(rows[0]?.networkDestination, "observed");
+
+  const rejected = retainDirectResponseWithOptionalEnrichment({ rows, direct: { status: 307 },
+    enrichments: [async () => { throw new Error("server address unavailable"); }], finalized: () => false });
+  await rejected;
+  assert.deepEqual(rows.map(row => row.status), [200, 307]);
+});
+
+test("optional response enrichment cannot mutate after the retained lane freezes", async () => {
+  const rows: Array<{ status: number; sizes?: number }> = [];
+  let finalized = false;
+  let resolveStalled!: (value: { sizes: number }) => void;
+  let commits = 0;
+  const pending = retainDirectResponseWithOptionalEnrichment({ rows, direct: { status: 200 },
+    enrichments: [async commit => { const value = await new Promise<{ sizes: number }>(resolve => { resolveStalled = resolve; }); commit(value, () => { commits++; }); }],
+    finalized: () => finalized });
+  await Promise.resolve();
+  finalized = true;
+  resolveStalled({ sizes: 500 });
+  await pending;
+  assert.deepEqual(rows, [{ status: 200 }]);
+  assert.equal(commits, 0);
+  await retainDirectResponseWithOptionalEnrichment({ rows, direct: { status: 204 },
+    enrichments: [async commit => { commit({ sizes: 0 }); }], finalized: () => finalized });
+  assert.equal(rows.length, 1);
+});
+
+test("a stalled size channel does not withhold independently bound connection evidence", async () => {
+  const rows: Array<{ status: number; sizes?: number; connection?: string; destination?: string }> = [];
+  let resolveSizes!: (value: number) => void;
+  let resolveGeo!: (value: string) => void;
+  let finalized = false;
+  const pending = retainDirectResponseWithOptionalEnrichment({ rows, direct: { status: 200 },
+    finalized: () => finalized,
+    enrichments: [
+      async commit => { const sizes = await new Promise<number>(resolve => { resolveSizes = resolve; }); commit({ sizes }); },
+      async commit => {
+        commit({ connection: "server_observed" });
+        const destination = await new Promise<string>(resolve => { resolveGeo = resolve; });
+        commit({ destination });
+      },
+    ],
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(rows, [{ status: 200, connection: "server_observed" }]);
+  finalized = true;
+  resolveSizes(10);
+  resolveGeo("verified_network");
+  await pending;
+  assert.deepEqual(rows, [{ status: 200, connection: "server_observed" }]);
+});
+
+test("soft-deadline response snapshot is detached from a still-unwinding non-graph scan", async () => {
+  const rows = [{ status: 200, responseHeaders: { "content-type": "text/html" } }];
+  let finalized = false;
+  let resolveLate!: (value: { status: number }) => void;
+  const pending = retainDirectResponseWithOptionalEnrichment({ rows, direct: { status: 307, responseHeaders: { location: "/final" } },
+    finalized: () => finalized,
+    enrichments: [async commit => {
+      const late = await new Promise<{ status: number }>(resolve => { resolveLate = resolve; });
+      commit(late);
+    }],
+  });
+  await Promise.resolve();
+  const snapshot = freezeAndSnapshotResponseRows(rows, () => { finalized = true; });
+  rows[0]!.responseHeaders["content-type"] = "changed-after-terminal";
+  resolveLate({ status: 500 });
+  await pending;
+  assert.deepEqual(snapshot, [
+    { status: 200, responseHeaders: { "content-type": "text/html" } },
+    { status: 307, responseHeaders: { location: "/final" } },
+  ]);
+  assert.equal(rows[1]?.status, 307);
 });
 
 test("service-worker and unavailable responses preserve missing-address reasons", async () => {

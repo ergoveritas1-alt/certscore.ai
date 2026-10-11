@@ -52,7 +52,43 @@ export function retainedFinalDocumentRequest(bundle: CanonicalEvidenceBundle | u
   // Bind the readback to this navigation, not a same-URL request from an older
   // document. Redirect hops may precede it; later or ambiguous navigations must
   // not borrow its proof. firstEffectiveUrl is first-response telemetry only.
-  const final = matching.length === 1 ? matching[0] : undefined;
+  let final = matching.length === 1 ? matching[0] : undefined;
+  if (!final && matching.length > 1) {
+    const candidate = documents.at(-1);
+    const byRequestId = new Map(documents.map((event) => [event.requestId, event]));
+    const responseFor = (requestId: string) => {
+      const responses = bundle.networkResponseEvents.filter((event) => event.requestId === requestId);
+      return responses.length === 1 ? responses[0] : undefined;
+    };
+    const finalStatus = candidate ? responseFor(candidate.requestId)?.status : undefined;
+    // A redirect to the same URL produces multiple matching request hashes.
+    // Accept only a fully retained, unique parent chain ending in a nonredirect
+    // response and bound to this final document's loader/readback. Independent
+    // same-URL navigations and missing chain/response proof stay ambiguous.
+    if (candidate && matching.includes(candidate) && byRequestId.size === documents.length &&
+      finalStatus !== undefined && finalStatus >= 200 && (finalStatus < 300 || finalStatus >= 400) &&
+      bundle.gpcImpactCapture?.document?.urlSha256 === proof.documentUrlSha256 &&
+      bundle.gpcImpactCapture.document.token === bundle.gpcImpactCapture.readbackDocumentToken &&
+      bundle.gpcImpactCapture.document.committedAtMs >= candidate.timestampMs &&
+      bundle.gpcImpactCapture.document.committedAtMs <= proof.capturedAtMs &&
+      (!proof.prototypeCaptureBinding || proof.prototypeCaptureBinding.documentToken === bundle.gpcImpactCapture.document.token) &&
+      (!bundle.gpcObservationSession?.mainDocument ||
+        bundle.gpcObservationSession.mainDocument.documentToken === bundle.gpcImpactCapture.document.token)) {
+      const ancestors = new Set<string>();
+      let cursor = candidate;
+      while (cursor.parentRequestId && !ancestors.has(cursor.parentRequestId)) {
+        const parent = byRequestId.get(cursor.parentRequestId);
+        if (!parent || parent.timestampMs >= cursor.timestampMs ||
+          !cursor.redirectChainRequestIds.includes(parent.requestId) ||
+          ![301, 302, 303, 307, 308].includes(responseFor(parent.requestId)?.status ?? -1)) break;
+        ancestors.add(parent.requestId);
+        cursor = parent;
+      }
+      if (!cursor.parentRequestId && matching.slice(0, -1).every((event) => ancestors.has(event.requestId)) &&
+        candidate.redirectChainRequestIds.length === ancestors.size &&
+        candidate.redirectChainRequestIds.every((id) => ancestors.has(id))) final = candidate;
+    }
+  }
   if (!final || final.timestampMs > proof.capturedAtMs || documents.some((event) =>
     event !== final && event.timestampMs >= final.timestampMs)) return undefined;
   return final;

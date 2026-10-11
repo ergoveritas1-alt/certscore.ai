@@ -104,3 +104,27 @@ export async function captureResponseDestination(response: Pick<Response, "serve
     return { status: "server_observed" as const, fromServiceWorker, destination };
   } catch { return { status: "unavailable" as const, fromServiceWorker }; }
 }
+
+/** Keep directly observed response facts even when optional enrichment stalls. */
+export function retainDirectResponseWithOptionalEnrichment<T extends object>(input: {
+  rows: T[];
+  direct: T;
+  enrichments: Array<(commit: (enrichment: Partial<T>, onCommit?: () => void) => boolean) => Promise<void>>;
+  finalized: () => boolean;
+}): Promise<void> {
+  if (input.finalized()) return Promise.resolve();
+  input.rows.push(input.direct);
+  const commit = (enrichment: Partial<T>, onCommit?: () => void) => {
+    if (input.finalized()) return false;
+    Object.assign(input.direct, enrichment);
+    onCommit?.();
+    return true;
+  };
+  return Promise.allSettled(input.enrichments.map(enrich => Promise.resolve().then(() => enrich(commit)))).then(() => undefined);
+}
+
+/** A deadline result owns its response objects even if the scanner later exits. */
+export function freezeAndSnapshotResponseRows<T extends object>(rows: T[], freeze: () => void): T[] {
+  freeze();
+  return structuredClone(rows);
+}
