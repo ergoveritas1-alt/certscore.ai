@@ -888,8 +888,71 @@
       "note": "Novel ordinary benign GPC calibration nomination; no target contact; fresh central history required.",
       "state": "cooldown",
       "url": "https://hailsentinel.com"
+    },
+    "https://bicyclestamps.de": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://bicyclestamps.de",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://www.hannoveranerpzvbawue.de": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://www.hannoveranerpzvbawue.de",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://www.reefcheck.de": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://www.reefcheck.de",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://www.schloss-stadt-huelchrath.de": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://www.schloss-stadt-huelchrath.de",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://jsv.de": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://jsv.de",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://schuppengaudi.ch": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://schuppengaudi.ch",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://www.pdc-uri.ch": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://www.pdc-uri.ch",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://www.gemeinde-ascheffel.de": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://www.gemeinde-ascheffel.de",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
+    },
+    "https://fsi.gov.in": {
+      "consecutiveNoGoCount": 0,
+      "lastNoGoReasons": [],
+      "state": "eligible",
+      "url": "https://fsi.gov.in",
+      "note": "Source-led ordinary CMS nomination; version claim is discovery only. No prior target contact; fresh central history admission required."
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-11T15:09:48.473Z"
+  "updatedAt": "2026-10-11T15:14:26.478401Z"
 }
