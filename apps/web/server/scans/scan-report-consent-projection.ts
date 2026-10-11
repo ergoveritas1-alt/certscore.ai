@@ -258,3 +258,33 @@ function assessmentCompatibilityEvidence(
     visibleChoiceLabels: controls.map((control) => control.label),
   };
 }
+
+/** Shared deterministic projection of the retained first-layer inventory. */
+export function buildFirstLayerRejectPathProjection(choices: Record<string, unknown>, inventoryRetained: boolean) {
+  return {
+    rejectPathDepthAndAvailability: {
+      completeRejectPathAvailable: choices.rejectControlObserved,
+      completeRejectPathDetected: choices.rejectControlObserved,
+      firstLayerCookieConsentBannerObserved: inventoryRetained,
+      firstLayerConsentChoices: choices,
+      gdprEprivacyConsentSurfaceObserved: inventoryRetained ? "confirmed" : "unconfirmed",
+      layerInspected: choices.layerInspected,
+      rejectAvailableOnFirstLayer: choices.rejectControlObserved,
+      rejectEquivalentFound: choices.rejectControlObserved,
+      rejectControlObserved: choices.rejectControlObserved,
+      visibleRejectLabels: choices.rejectLabels
+    },
+    reject_path_depth_and_availability: {
+      complete_reject_path_available: choices.rejectControlObserved,
+      complete_reject_path_detected: choices.rejectControlObserved,
+      first_layer_cookie_consent_banner_observed: inventoryRetained,
+      first_layer_consent_choices: choices,
+      gdpr_eprivacy_consent_surface_observed: inventoryRetained ? "confirmed" : "unconfirmed",
+      layer_inspected: choices.layerInspected,
+      reject_available_on_first_layer: choices.rejectControlObserved,
+      reject_equivalent_found: choices.rejectControlObserved,
+      reject_control_observed: choices.rejectControlObserved,
+      visible_reject_labels: choices.rejectLabels
+    }
+  };
+}

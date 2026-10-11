@@ -4,7 +4,7 @@ import { normalizedVendorObservationSchema, vendorRegistryIdentitySchema } from 
 import baseline from "./registry-identity-baseline.json";
 import fixtures from "../../certscore-contracts/src/test-fixtures/vendor-registry-attribution-v2.json";
 import {
-  getCanonicalVendorRegistryManifest, resolveCanonicalVendor, resolveVendorObservations,
+  CANONICAL_VENDOR_RESOLVER_VERSION, getCanonicalVendorRegistryManifest, resolveCanonicalVendor, resolveVendorObservations,
   type VendorResolverInput,
 } from "./index";
 
@@ -41,7 +41,12 @@ test("shared retained attribution contract matches resolver output without chang
   for (const fixture of fixtures) {
     const resolved = resolveCanonicalVendor(fixture.input as VendorResolverInput);
     assert.equal(resolved.status, "resolved");
-    assert.deepEqual(JSON.parse(JSON.stringify(normalizedVendorObservationSchema.parse(resolved.observation))), fixture.observation);
+    // Historical fixture bytes retain their original resolver provenance. New
+    // materializations carry the current version while preserving every identity.
+    assert.deepEqual(JSON.parse(JSON.stringify(normalizedVendorObservationSchema.parse(resolved.observation))), {
+      ...fixture.observation,
+      registryAttribution: { ...fixture.observation.registryAttribution, resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION },
+    });
   }
 });
 

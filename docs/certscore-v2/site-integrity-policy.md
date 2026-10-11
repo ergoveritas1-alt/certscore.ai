@@ -8,6 +8,15 @@ The production v2 runtime-evidence lane observes the starting page's main docume
 
 After original bundle bytes pass the existing retained-artifact verification, materialization requires matching final document URL, runtime document token and capture time within the bundle interval. It persists `certscore.site-integrity-projection.v1`, including scan identity, original bundle SHA-256, observation SHA-256 and evidence reference. The projection enters normalized concern construction, concern policy and the owner unified finding `site_integrity_hidden_outbound_links`. Customer surfaces select only that projected finding.
 
+The latest pre-consent runtime snapshot must prove that same final URL and
+document token on both starting and additional pages. An earlier matching
+snapshot cannot survive a later reload, navigation or missing document identity.
+Conflicting latest identities at the same capture offset and malformed or
+out-of-visit runtime offsets remain neutral. Later proof of the same document,
+or a fresh observation bound to a new current document, remains eligible.
+This validates retained evidence without adding capture work or rewriting
+historical projections.
+
 Malformed, unverified, missing, mismatched or insufficient evidence cannot become a review finding. Historical reports are not backfilled, reinterpreted or promoted from manual observations or loose flags.
 
 ## Bounded observation and eligibility

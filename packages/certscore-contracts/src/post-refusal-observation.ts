@@ -1,10 +1,12 @@
+import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
 import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection-diagnostics";
+import { actionOriginDomStorageObservationSchema, validateOriginDomStorageObservation } from "./action-origin-dom-storage-observation";
 import { actionStorageNameSchema, validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
-import { afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
+import { actionMainDocumentWriteCoverageSchema, afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
 import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
@@ -444,6 +446,7 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   terminalDecisionEvidence: terminalConsentDecisionSchema.optional(),
   decisionEvidence: consentDecisionEvidenceSchema.optional(),
   captureCoverage: actionCaptureCoverageSchema.optional(),
+  observedActionSourceProof: observedActionSourceProofSchema.optional(),
   artifactOnly: z.literal(true),
   productionProjectable: z.boolean(),
   scanId: z.string().min(1).max(160),
@@ -483,6 +486,8 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   }),
   storage: z.object({
     collectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
+    mainDocumentWriteCoverage: actionMainDocumentWriteCoverageSchema.optional(),
+    originDomStorageObservation: actionOriginDomStorageObservationSchema.optional(),
     preActionCapturedAtMs: z.number().int().nonnegative().optional(),
     postActionCapturedAtMs: z.number().int().nonnegative().optional(),
     preAction: z.array(postRefusalStorageItemSchema).max(96),
@@ -507,6 +512,28 @@ const postRefusalEvidencePacketBaseSchema = z.object({
     packet.timing.observationEndedAtMs < (packet.refusalRegistration.refusalRegisteredAtMs ?? packet.refusalRegistration.actionDispatchedAtMs ?? 0)
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["timing", "observationEndedAtMs"], message: "Observation end must retain the action and result clock binding." });
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
+  validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
+  const writeCoverage = packet.storage.mainDocumentWriteCoverage;
+  validateObservedActionSourceProof(packet.observedActionSourceProof, context, {
+    scanId: packet.scanId, navigationAuthorized: packet.interactionDiagnostics?.navigation.documentCommitted === true && packet.interactionDiagnostics.navigation.finalUrlAuthorized === true,
+    targetSha256: packet.actionControlProof?.authorizedTargetSha256,
+    dispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs, registeredAtMs: packet.refusalRegistration.refusalRegisteredAtMs,
+    endedAtMs: packet.timing.observationEndedAtMs, scanStartedAtMs: Date.parse(packet.startedAt),
+    configuredWindowMs: packet.observationWindowMs, exitReason: packet.timing.observationExitReason,
+    confirmed: packet.refusalRegistration.status === "confirmed", decisionConfirmed: packet.decisionEvidence?.basis === "verified_state" && packet.decisionEvidence.decision === "denied",
+    clickCompleted: packet.interactionDiagnostics?.click.outcome === "completed",
+    writeCoverage, retention: packet.captureCoverage?.postActionRetention, requests: packet.network.requests,
+  });
+  if (writeCoverage && (writeCoverage.retainedEligibleCount !== packet.storage.writesAfterRefusal.filter(write => write.nonEssential && write.evidenceSource === "instrumented_write").length ||
+    (writeCoverage.windowCompleted && packet.timing.observationExitReason !== "window_elapsed") ||
+    packet.refusalRegistration.status !== "confirmed" ||
+    (packet.actionControlProof?.authorizedTargetSha256 !== undefined && writeCoverage.targetUrlSha256 !== packet.actionControlProof.authorizedTargetSha256) ||
+    packet.refusalRegistration.refusalRegisteredAtMs === undefined || packet.timing.observationEndedAtMs === undefined ||
+    Math.abs((writeCoverage.windowEndedAtMs - writeCoverage.windowStartedAtMs) -
+      (packet.timing.observationEndedAtMs - (packet.refusalRegistration.refusalRegisteredAtMs ?? 0))) > 1)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["storage", "mainDocumentWriteCoverage"],
+      message: "Write coverage must preserve the confirmed authorized action and original observation clock." });
+  }
   validateLegacyActionStorageNames(packet, context);
   validateAfterActionCapture(packet.afterActionCapture, context, {
     action: "reject", dispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,
@@ -1196,6 +1223,11 @@ export function projectPostRefusalEvidenceForReport(input: {
     !hasSemanticConsentWitness(packet.refusalRegistration.witnesses)) {
     return projectPostRefusalEvidenceForReport({ ...input, packet: {
       ...packet, productionProjectable: false, observations: [],
+      // These derived collections require registered refusal. Withhold them
+      // from the neutral projection while preserving the original packet,
+      // raw requests and storage snapshots; do not reparse invalid anchors.
+      network: { ...packet.network, postRefusalNonEssentialRequests: [] },
+      storage: { ...packet.storage, writesAfterRefusal: [], nonEssentialItemsPersistingAfterRefusal: [] },
       limitations: [...packet.limitations.slice(0, 23), "semantic_registration_unverified_legacy_packet"],
       refusalRegistration: { ...packet.refusalRegistration, status: "unconfirmed",
         refusalExercised: false, reason: "semantic_registration_unverified_legacy_packet" },

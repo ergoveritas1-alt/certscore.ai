@@ -1534,14 +1534,14 @@ test("runtime loading stays scoped while the materializer preserves consent docu
     for (const action of ["accept", "reject", "options"] as const) {
       assert.equal(result.controls[action].state, mismatch ? "unknown" : "not_observed", action);
     }
-    assert.equal(result.provenance.projectorVersion, "2.2.2");
+    assert.equal(result.provenance.projectorVersion, "2.2.3");
     assert.deepEqual(b.runtimeCoverage!.limitationKeys, ["runtime_page_inventory_document_loading"]);
   }
 });
 
 test("new materialization preserves legacy classifier provenance rather than inventing a registry version", () => {
   const result = deriveMaterializedConsentControlAssessment({ bundle: bundle([{ actionType: "accept_all", label: "Accept", visible: true }]), noGo: false });
-  assert.equal(result.provenance.projectorVersion, "2.2.2");
+  assert.equal(result.provenance.projectorVersion, "2.2.3");
   assert.equal(result.evidence[0]?.classifier?.registryVersion, "consent-control-label-registry");
 });
 

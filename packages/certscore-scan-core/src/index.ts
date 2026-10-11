@@ -2923,12 +2923,26 @@ type ClassifiedNoGoPageState = {
   visualPageState: VisualAccessReview["page_state"];
 };
 
+// Match page-level instructions, not an article/help page mentioning a CAPTCHA
+// or refresh. The challenge shell is complete; the holding-page prefix must
+// explicitly delay entry and promise an automatic capacity-dependent return.
+const SCAN_NO_GO_CHARACTER_CHALLENGE_SHELL_PATTERN =
+  /^enter the characters seen in the image below:\s*download audio captcha\s+answer\s+submit[.!\s]*$/i;
+const SCAN_NO_GO_CAPACITY_HOLDING_PREFIX_PATTERN =
+  /^sit tight[.!]?\s+we(?:'|’)ve got our hands full[^.]{0,160}\.\s*this page will automatically refresh and bring you into the website as soon as we can handle it\./i;
+
 function classifyScanNoGoText(text: string): ClassifiedNoGoPageState | null {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) {
     return null;
   }
   const evidenceText = boundedScanNoGoText(normalized) ?? normalized;
+  if (SCAN_NO_GO_CHARACTER_CHALLENGE_SHELL_PATTERN.test(normalized)) {
+    return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "captcha_or_challenge", visualPageState: "captcha_or_challenge" };
+  }
+  if (SCAN_NO_GO_CAPACITY_HOLDING_PREFIX_PATTERN.test(normalized)) {
+    return { confidence: 0.95, evidenceText, hardTerminal: true, reasonCode: "maintenance_or_unavailable", visualPageState: "maintenance_or_unavailable" };
+  }
   if (SCAN_NO_GO_TLS_PATTERN.test(normalized)) {
     return { confidence: 0.97, evidenceText, hardTerminal: true, reasonCode: "tls_or_certificate_error", visualPageState: "visual_error_shell" };
   }

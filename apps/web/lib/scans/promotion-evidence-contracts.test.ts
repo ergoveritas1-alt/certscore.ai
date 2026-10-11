@@ -495,6 +495,7 @@ test("sensitive replay surface co-occurrence requires a replay-correlated sensit
           detectedType: "email_detected",
           evidenceSource: "sensitive_field_session_replay_correlation",
           evidenceStrength: "form_field_signal",
+          samePage: true,
           matchSnippet: "email field",
           requestUrl: "https://k.clarity.ms/collect",
           vendorHost: "k.clarity.ms"
@@ -1146,4 +1147,16 @@ test("fingerprint tiering escalates canvas and fonts with outbound identifier sy
   assert.equal(tier.entropyLinkedToIdentifier, true);
   assert.equal(tier.entropyTransmissionObserved, true);
   assert.equal(hasStrongFingerprintingEvidence(evidence), true);
+});
+
+
+test("a replay detector label cannot substitute for retained page/flow linkage", () => {
+  const row = { evidenceSource: "sensitive_field_session_replay_correlation", evidenceStrength: "form_field_signal",
+    requestUrl: "https://k.clarity.ms/collect", vendorHost: "k.clarity.ms", detectedType: "email_detected", matchSnippet: "email field" };
+  for (const link of [{}, { samePage: false }, { sameFlowLinkage: { samePageOrFlow: false } }]) {
+    assert.equal(hasSensitiveSessionReplaySurfaceCooccurrenceArtifact({ sensitivePayloadViolations: [{ ...row, ...link }] }), false);
+  }
+  for (const link of [{ samePage: true }, { sameFlow: true }, { sameFlowLinkage: { samePageOrFlow: true } }]) {
+    assert.equal(hasSensitiveSessionReplaySurfaceCooccurrenceArtifact({ sensitivePayloadViolations: [{ ...row, ...link }] }), true);
+  }
 });

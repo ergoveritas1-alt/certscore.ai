@@ -67,6 +67,21 @@ test("resource loading does not count as substantive collection evidence", () =>
   assert.equal(r.behavior.status, "activity_observed");
   assert.equal(r.substantiveEvidence.collectionActivity, false);
 });
+test("prototype does not promote cookie association or missing attribution into request purpose", () => {
+  for (const mode of ["cookie_only", "same_vendor_other_endpoint", "legacy"]) {
+    const f = fixture(), vendor = f.gpc.normalizedVendorObservations[0]!;
+    const eventId = vendor.matchedEvidenceIds[0]!;
+    vendor.matchSources = mode === "legacy" ? [] : [{ source: "request_cookie", sourceEventId: eventId, matchedField: "cookie_name", confidence: 1, resolverBasis: [] }];
+    if (mode === "same_vendor_other_endpoint") {
+      vendor.matchedEvidenceIds.push("other_endpoint");
+      vendor.matchSources.push({ source: "network_request", sourceEventId: "other_endpoint", matchedField: "hostname", confidence: 1, resolverBasis: [] });
+    }
+    const r = run(f);
+    assert.equal(r.behavior.requestCount, 0, mode);
+    assert.equal(r.substantiveEvidence.collectionActivity, false, mode);
+    assert.equal(r.registration.status, "opt_out_recorded", "retain independently verified state");
+  }
+});
 test("a purpose needs its own direct retained request anchor and ambiguous purposes remain limited", () => {
   for (const mode of ["missing", "late", "ambiguous"]) {
     const f = fixture();

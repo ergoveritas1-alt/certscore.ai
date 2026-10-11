@@ -1,0 +1,482 @@
+{
+  "contractVersion": "certscore.calibration-fixes-release-scope.v1",
+  "baseRevision": "3dcc7fcc791da9f6cb8c66172bb4c03603a9fc19",
+  "userAuthorization": "get the remaining code into a clean release, run the AWS preflight, and deploy if it passes",
+  "files": [
+    {
+      "path": "apps/web/components/scans/shared-scan-detail-view.tsx",
+      "sha256": "d35d44b160b05fdb8a4dd85a98587c7d043ff96fb94bf30d2c40ad3da97218f2",
+      "sizeBytes": 375512
+    },
+    {
+      "path": "apps/web/lib/scans/concern-policy.ts",
+      "sha256": "db58aed22c24c8550fac0cb17068fb6d1417e7942aceecc42963917d59555b8c",
+      "sizeBytes": 156313
+    },
+    {
+      "path": "apps/web/lib/scans/finding-evidence-contracts.ts",
+      "sha256": "3898fcf829aad1717a50d55d5fbe925c6994a39ea5dc46743e9cc616b4091c68",
+      "sizeBytes": 99616
+    },
+    {
+      "path": "apps/web/lib/scans/normalized-concerns.ts",
+      "sha256": "fff4ed5039b4e543b1ca4c20b6d080d4be8a4f0b21a56aa14204087833214cd7",
+      "sizeBytes": 199479
+    },
+    {
+      "path": "apps/web/lib/scans/post-accept-canonical-projection.test.ts",
+      "sha256": "d99954e95b6ba96bd3dae59e6dc67cda021bfff7f976b39fda80af5d9127e157",
+      "sizeBytes": 19126
+    },
+    {
+      "path": "apps/web/lib/scans/post-refusal-canonical-projection.test.ts",
+      "sha256": "44f931e81617072fab94b4184f7e0a874d56bb9bd8c94fc9b1476f7407da5983",
+      "sizeBytes": 40208
+    },
+    {
+      "path": "apps/web/lib/scans/promotion-evidence-contracts.test.ts",
+      "sha256": "3d0c83076460f8eb67b6e4088a0dc273fb988b9fb8784cf9be4eea6e7e842f09",
+      "sizeBytes": 43344
+    },
+    {
+      "path": "apps/web/lib/scans/promotion-evidence-contracts.ts",
+      "sha256": "70197268ddc9a17fde5e2d12f399ffdcabe12e86c5b87bf013aed3e277626f77",
+      "sizeBytes": 113398
+    },
+    {
+      "path": "apps/web/lib/scans/scan-report-unified-findings.test.ts",
+      "sha256": "2574d66489f7e0aa9eabbde59aacf4c71c9fa8558ff33ba7fd5531ffc76a751a",
+      "sizeBytes": 133347
+    },
+    {
+      "path": "apps/web/lib/scans/scan-report-unified-findings.ts",
+      "sha256": "6f66d0b44221931a0546871674c4635dcdda6f749b33170e957007aedd91e909",
+      "sizeBytes": 128921
+    },
+    {
+      "path": "apps/web/server/scans/accessibility-audit-projection.test.ts",
+      "sha256": "7d340b97dd73ba52cc2e90c967507f775931d973784490fb84e91c80112d0be2",
+      "sizeBytes": 20163
+    },
+    {
+      "path": "apps/web/server/scans/accessibility-audit-projection.ts",
+      "sha256": "ac3f4cc9369cfbc80e4d1b12fe4c92359ae1bc896a7e91dcc1ec3bc3abfe2bd3",
+      "sizeBytes": 6102
+    },
+    {
+      "path": "apps/web/server/scans/cms-security-projection.test.ts",
+      "sha256": "715b3dc435c4ad97b909e004c2be0846f0e8599e8c87db7e74356f3c3dc69313",
+      "sizeBytes": 27082
+    },
+    {
+      "path": "apps/web/server/scans/cms-security-projection.ts",
+      "sha256": "ac8fb8bee347e4321a18c815f51af73bd28af7eeac5f8df84f487d9dd8d1b3a6",
+      "sizeBytes": 4359
+    },
+    {
+      "path": "apps/web/server/scans/consent-control-assessment-projector.test.ts",
+      "sha256": "3b9aeb677c057d8b0ebc2667c4a647f92c39634d89396c65fc079f02146c9352",
+      "sizeBytes": 66373
+    },
+    {
+      "path": "apps/web/server/scans/consent-control-assessment-projector.ts",
+      "sha256": "7cc5e7159398af8e5a9076a91b9ddbd93a5024e959276ad224f26f02ce20e0a9",
+      "sizeBytes": 49040
+    },
+    {
+      "path": "apps/web/server/scans/consent-inspection-flow.test.ts",
+      "sha256": "88f99898a9d2a262d9380be9faef1b9f3282858768f03f117a8a9fabbb4310d0",
+      "sizeBytes": 13420
+    },
+    {
+      "path": "apps/web/server/scans/consent-visual-prominence-flow.test.ts",
+      "sha256": "7bdf6bad6924b300d144ebe639e0ce40d9dcf67a6a5e3243809eaed502528aa7",
+      "sizeBytes": 8340
+    },
+    {
+      "path": "apps/web/server/scans/consent-visual-provenance.test.ts",
+      "sha256": "da94f351096477ba7eba3eca12a1de9077063fb1c038fbc4a278da7fec55e9f0",
+      "sizeBytes": 1990
+    },
+    {
+      "path": "apps/web/server/scans/consent-visual-provenance.ts",
+      "sha256": "fc5a8184e3b40d202a32c668c6d476c3b98f3f4d75fd00f0e0fcfb707bdac03e",
+      "sizeBytes": 1476
+    },
+    {
+      "path": "apps/web/server/scans/local-v2-dag-report.test.ts",
+      "sha256": "53c4e84a3b5ad77a4da49a99b4313cbb446babd3400f2985d3d665a17d509ee4",
+      "sizeBytes": 410340
+    },
+    {
+      "path": "apps/web/server/scans/local-v2-dag-report.ts",
+      "sha256": "37a4a733a119e69e3a1d929612567807a4b25a3da1050754c14550bcaab43571",
+      "sizeBytes": 310231
+    },
+    {
+      "path": "apps/web/server/scans/scan-report-consent-projection.ts",
+      "sha256": "98b1c51fc5525e32e610d6a0d1471463d6e575f1b3554090bdb783dd6d9f7ade",
+      "sizeBytes": 10741
+    },
+    {
+      "path": "apps/web/server/scans/site-integrity-projection.test.ts",
+      "sha256": "5cd8f8cb08d488ee1efb2a35da105ccb03f2f0984aae99b5a60d44c1741461d5",
+      "sizeBytes": 17151
+    },
+    {
+      "path": "apps/web/server/scans/site-integrity-projection.ts",
+      "sha256": "9369113f7a2238e0cedf2587ee54ef680a33c221524c13cd4dc0068b3be45e9a",
+      "sizeBytes": 6037
+    },
+    {
+      "path": "docs/accessibility-scoring-proposal.md",
+      "sha256": "e3920998c9de982ac96ef7965ade67d26de0b5ee6e5051561b1af66c6f5be97e",
+      "sizeBytes": 8190
+    },
+    {
+      "path": "docs/certscore-v2/cms-security-mvp.md",
+      "sha256": "6cd8f7ace85e3a1ff4779a4e440f95cc5e1969da2c6915660b5ca1ea6f60be54",
+      "sizeBytes": 14074
+    },
+    {
+      "path": "docs/certscore-v2/site-integrity-policy.md",
+      "sha256": "85ea0699aa08381fc8fb3ee20b751392565abfc005079205b76be0088c2f5aa2",
+      "sizeBytes": 13856
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/.well-known/certscore-canary/manifest.json",
+      "sha256": "37452e56c5aae394caa718ddac45615226bd003b206d3cd203e938df0d2d34ff",
+      "sizeBytes": 106700
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/.well-known/certscore-canary/sentinels/broad-baseline.html",
+      "sha256": "2693e2e058d08b950c00b18e030d34f35070c433702cc139a80d69a78e83c875",
+      "sizeBytes": 7938
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/.well-known/certscore-canary/sentinels/consent-stress.html",
+      "sha256": "ede9ec52dc3521bf413fe6a73876c0ad1b9f89bc34f52227068581c8fc0c5aea",
+      "sizeBytes": 2913
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/.well-known/certscore-canary/sentinels/multilingual-rtl.html",
+      "sha256": "9199339f78bdfac5f3ba0c3a0c635e562dff8a607dc0cf72c25f737f7085194e",
+      "sizeBytes": 2738
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/.well-known/certscore-canary/sentinels/privacy-evidence.html",
+      "sha256": "7c5c82c685d8186bb75a20087dd88e119af6f4f34eecd1f17f2c82bb2c1dc249",
+      "sizeBytes": 2733
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/.well-known/certscore-canary/sentinels/runtime-transport.html",
+      "sha256": "fbd3bdbb6676b4d0ae34a47b5df5f13934aa3271243b71d7833728594b63b73d",
+      "sizeBytes": 2842
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/README.md",
+      "sha256": "186cebd2d76bcb7387308fc166b74ebf73f5cd3c43db4233dfa60205c90d2e61",
+      "sizeBytes": 5624
+    },
+    {
+      "path": "infra/aws/ergoveritas-canary/test2.html",
+      "sha256": "f16ae1fe263bfb5e844f4353afa43b39ca2ece583a95ca3f3af68ee76ea03abb",
+      "sizeBytes": 12453
+    },
+    {
+      "path": "packages/certscore-contracts/src/action-origin-dom-storage-observation.ts",
+      "sha256": "651d19f65521e7c4583d7a46de1de1cd3191a3cb7a9b8d0be0d7a006a565a288",
+      "sizeBytes": 4969
+    },
+    {
+      "path": "packages/certscore-contracts/src/after-action-capture.ts",
+      "sha256": "0c1f84f0dfecfe47d044a8ba3115891cb8d08fcc3a0f20ef88e4337061c5f77f",
+      "sizeBytes": 10010
+    },
+    {
+      "path": "packages/certscore-contracts/src/cms-security-catalog.ts",
+      "sha256": "1b3f3ec0c314e01aae3a0846190d5ae480e67eba48172ae867a36b068841055a",
+      "sizeBytes": 8123
+    },
+    {
+      "path": "packages/certscore-contracts/src/cms-security.test.ts",
+      "sha256": "a07306ff276a4601b6d87befb2fea926c7fead4bcda91de5683a829e7b87288c",
+      "sizeBytes": 4424
+    },
+    {
+      "path": "packages/certscore-contracts/src/cms-security.ts",
+      "sha256": "e9d74ec91b89db2fc15da6fe5481d702011f9d32c97dea9fcd8ff3db11cae47c",
+      "sizeBytes": 19368
+    },
+    {
+      "path": "packages/certscore-contracts/src/consent-control-assessment.ts",
+      "sha256": "d3b667249681ca4ee115f1db180ab7af15a26e68a6a9b72ae8696d47cda19c67",
+      "sizeBytes": 40765
+    },
+    {
+      "path": "packages/certscore-contracts/src/consent-control-label-classifier.test.ts",
+      "sha256": "29db8e9b774a33e55564adc8bb768cd868e4d7ab144f34b876738c5acc97ebfe",
+      "sizeBytes": 61543
+    },
+    {
+      "path": "packages/certscore-contracts/src/consent-control-label-classifier.ts",
+      "sha256": "7a0c838bdaa70137928f841d9e945e01605a103748b756eb4f8f423f693fe673",
+      "sizeBytes": 89967
+    },
+    {
+      "path": "packages/certscore-contracts/src/consent-control-visual-comparison.ts",
+      "sha256": "8d80cbfa2b19e1dea42a3d0a2d8c8de3d407a37378fd7200442cc22d1a2edefb",
+      "sizeBytes": 2809
+    },
+    {
+      "path": "packages/certscore-contracts/src/consent-paid-reject.test.ts",
+      "sha256": "92d95eb5c51f13b9ac0ebd0b9f59c8b9665eabd2db0cccbd942c50d04c0e0099",
+      "sizeBytes": 1574
+    },
+    {
+      "path": "packages/certscore-contracts/src/index.ts",
+      "sha256": "b47067c038d9b6a3cace4e50de073765c245d71a06d96de8036e16c333305268",
+      "sizeBytes": 162589
+    },
+    {
+      "path": "packages/certscore-contracts/src/observed-action-source-proof.ts",
+      "sha256": "3b3ff77eb068f5e84fe1c512528563715916b3848b15a0cd2c2eaab2afd6a6cb",
+      "sizeBytes": 8053
+    },
+    {
+      "path": "packages/certscore-contracts/src/post-accept-observation.test.ts",
+      "sha256": "e494e2e5abc6ddde3cf7dad9490fc6fac18eeef3d92f3beec23aa6f4ece329b2",
+      "sizeBytes": 27599
+    },
+    {
+      "path": "packages/certscore-contracts/src/post-accept-observation.ts",
+      "sha256": "3234d78989195632fd014490ade482ac2c02968c438439a922f8b548b5733aef",
+      "sizeBytes": 46856
+    },
+    {
+      "path": "packages/certscore-contracts/src/post-refusal-observation.test.ts",
+      "sha256": "9dcfc8e3c6bc17a2df6a51ba5f43014794de310130ebd4c06b7446b8095fe3fc",
+      "sizeBytes": 34984
+    },
+    {
+      "path": "packages/certscore-contracts/src/post-refusal-observation.ts",
+      "sha256": "db424f9a4a6d99bec191bb9cb90b1055a0f721c4276b7c4e5662607ca6685b57",
+      "sizeBytes": 62698
+    },
+    {
+      "path": "packages/certscore-scan-core/src/action-dom-storage-capture.test.ts",
+      "sha256": "ce7e478453d45a5e4fd44478e814fbeb62549fc8e4925761f5283d6b7a4a01b0",
+      "sizeBytes": 6046
+    },
+    {
+      "path": "packages/certscore-scan-core/src/action-dom-storage-capture.ts",
+      "sha256": "6bc1a26c21f72b4583553c044239422ab08376ee9f27165a8c6395bdb3364b4b",
+      "sizeBytes": 5109
+    },
+    {
+      "path": "packages/certscore-scan-core/src/action-main-document-write-coverage.test.ts",
+      "sha256": "fe18e4f0be20d01706747b0a6c5ab4bc432e9127f7ac99bac0a797563f5b1282",
+      "sizeBytes": 6545
+    },
+    {
+      "path": "packages/certscore-scan-core/src/action-main-document-write-coverage.ts",
+      "sha256": "e8625962fb7a31838e93e6e724e80377ca32bfedb06ac06118f9bcb64767d2b8",
+      "sizeBytes": 4254
+    },
+    {
+      "path": "packages/certscore-scan-core/src/action-request-retention.test.ts",
+      "sha256": "6c38d2a2493c1faf59600a69e94a546b1f06b5457484da4e7ebafcd81868d13d",
+      "sizeBytes": 7261
+    },
+    {
+      "path": "packages/certscore-scan-core/src/action-request-retention.ts",
+      "sha256": "649d057f4d7d52f90a4b599a11dffdc9f470fe56216d2744020db0322d7a0608",
+      "sizeBytes": 4990
+    },
+    {
+      "path": "packages/certscore-scan-core/src/calibration.ts",
+      "sha256": "fc6e077b5f659596786e3b77792865218ddc8e376641a393b95bb2954c880b56",
+      "sizeBytes": 21192
+    },
+    {
+      "path": "packages/certscore-scan-core/src/consent-ai-review-regressions.test.ts",
+      "sha256": "62eaee13fefa2ec00843748effa2705cca73d388c8e466db6f882b35c121dbce",
+      "sizeBytes": 10279
+    },
+    {
+      "path": "packages/certscore-scan-core/src/consent-control-geometry.ts",
+      "sha256": "a244a1af96b99ddf431b92bc4f09ab737a05625a42da6c338537ef438d5310ba",
+      "sizeBytes": 88900
+    },
+    {
+      "path": "packages/certscore-scan-core/src/consent-control-visual-comparison.test.ts",
+      "sha256": "c3bab8791635991d211ac690663e67a7acd46fcae57293386f5fcff07a9dc7b4",
+      "sizeBytes": 8925
+    },
+    {
+      "path": "packages/certscore-scan-core/src/consent-control-visual-comparison.ts",
+      "sha256": "703adfd1e9f744fb8185609f470961e8ccb9478337b4a33c061dbc466923b0cf",
+      "sizeBytes": 13078
+    },
+    {
+      "path": "packages/certscore-scan-core/src/ergoveritas-test2-canary.test.ts",
+      "sha256": "6a50ff16b300fd0a1cc1cb86f8d0f380ea16a229c6665f9c5349b018c4a1615b",
+      "sizeBytes": 12345
+    },
+    {
+      "path": "packages/certscore-scan-core/src/gpc-opt-out-assessment.test.ts",
+      "sha256": "1c5bb280e8cbed9618fc2aa76f42e63f0f9b67a315716a9a845f972d23621797",
+      "sizeBytes": 12675
+    },
+    {
+      "path": "packages/certscore-scan-core/src/gpc-opt-out-assessment.ts",
+      "sha256": "42cb3f01106ea8d11853b38e082aefb644e4bcaf833df85029450b3fd46a5386",
+      "sizeBytes": 10208
+    },
+    {
+      "path": "packages/certscore-scan-core/src/gpc-production-observation.test.ts",
+      "sha256": "7f5c91859ecce8961ca028fe1f3853804d04224604a0e68d575c151f6b08022d",
+      "sizeBytes": 2678
+    },
+    {
+      "path": "packages/certscore-scan-core/src/gpc-production-observation.ts",
+      "sha256": "a039555164ea3bdc818540ad6084935ffa28c7f86ff846f829f314e2857910ee",
+      "sizeBytes": 5885
+    },
+    {
+      "path": "packages/certscore-scan-core/src/index.ts",
+      "sha256": "4c71aad6d614d23441b1b5f26002ab9f8cf325e3ecaf2ccde6857f6f24d9e784",
+      "sizeBytes": 180414
+    },
+    {
+      "path": "packages/certscore-scan-core/src/observed-action-source-proof.test.ts",
+      "sha256": "8e27961253e796c7b46a7dc2b0de01507cd206ab34a25ec0af47b760c38c418e",
+      "sizeBytes": 7204
+    },
+    {
+      "path": "packages/certscore-scan-core/src/observed-action-source-proof.ts",
+      "sha256": "8a06577f58c7148e62bf60b73f5ddc11d48018f2951fadeaa5a5867fcb4a96a2",
+      "sizeBytes": 2641
+    },
+    {
+      "path": "packages/certscore-scan-core/src/paid-reject-action-proof.test.ts",
+      "sha256": "fc462e402622037ff7aa3f3ed5c64a54293f004003d543a9919f7425bf677315",
+      "sizeBytes": 3787
+    },
+    {
+      "path": "packages/certscore-scan-core/src/post-accept-observer.test.ts",
+      "sha256": "a8814862159a8584c6f82ac8371edd4fddbdc604bb1fcb1bfb711264faf37297",
+      "sizeBytes": 36022
+    },
+    {
+      "path": "packages/certscore-scan-core/src/post-accept-observer.ts",
+      "sha256": "e7804877d75f386857de29ed7e42455ccb00aeac715c90ecb557ca7cd281b4e7",
+      "sizeBytes": 134774
+    },
+    {
+      "path": "packages/certscore-scan-core/src/post-action-owned-canary-pages.test.ts",
+      "sha256": "2b424e7f47c21a7f458640607f72b0a11003de0cffe7c312730efeff8e7f46d3",
+      "sizeBytes": 20076
+    },
+    {
+      "path": "packages/certscore-scan-core/src/post-refusal-observer.test.ts",
+      "sha256": "0ffa7643ebca6a92f7401bdaecb6d6a23c49613a10f710c2049f6487b5e98003",
+      "sizeBytes": 82030
+    },
+    {
+      "path": "packages/certscore-scan-core/src/post-refusal-observer.ts",
+      "sha256": "f913dce6b8fd8ba590a37d3fac80f70983a754c555758f3ee25d4a82d5318518",
+      "sizeBytes": 181487
+    },
+    {
+      "path": "packages/certscore-scan-core/src/pre-consent-visual-retention.test.ts",
+      "sha256": "015a8f920b9b164588939f7cadcbe692ffc9bc1a869b73cc758ee222ce85888b",
+      "sizeBytes": 3873
+    },
+    {
+      "path": "packages/certscore-scan-core/src/runtime-collection-endpoint.test.ts",
+      "sha256": "add308e3d92913b7ae8f1bd23bbf450d6b4b78ecf2bef265a4907e7c25ddbe62",
+      "sizeBytes": 1794
+    },
+    {
+      "path": "packages/certscore-scan-core/src/scan-no-go-assessment.test.ts",
+      "sha256": "494aadf7da481d0d7de686ad420c74f257dbc8d2d6f5ae1fe3951a4e4ef7ad54",
+      "sizeBytes": 44673
+    },
+    {
+      "path": "packages/certscore-scan-core/src/scanners/pre-consent-runtime-scanner.ts",
+      "sha256": "a67489ec54163e86764437e36b4aadc12cfd9c88404cb242b5e3201a7486ab3c",
+      "sizeBytes": 622944
+    },
+    {
+      "path": "packages/certscore-scan-core/src/sentinel-accessibility-canary.test.ts",
+      "sha256": "9b5c17985d5b84305253af037ddbd62ba5f7c28a4ae0355098f86a891d6fcf93",
+      "sizeBytes": 5421
+    },
+    {
+      "path": "packages/certscore-scan-core/src/site-integrity-browser.test.ts",
+      "sha256": "340dce8305296bc235a6f324c9710f232b7c8b3064cec6f6361ef55d42752fc1",
+      "sizeBytes": 9706
+    },
+    {
+      "path": "packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison.ts",
+      "sha256": "1e43abac3dad7931e643664ab491b3eb05b04268d33936ad822c57f0ab2a0422",
+      "sizeBytes": 4430
+    },
+    {
+      "path": "packages/certscore-vendor-resolver/src/ga4-collect.test.ts",
+      "sha256": "ad773dd5a10717cca8d4287a2f26f81f8e0060545fcd91bc4e21ca0eda6cc060",
+      "sizeBytes": 2643
+    },
+    {
+      "path": "packages/certscore-vendor-resolver/src/hubspot-eu1.test.ts",
+      "sha256": "44e86d645d5b27143800c4dec3934d6e208d83c038ef15d5886833d24209670a",
+      "sizeBytes": 2059
+    },
+    {
+      "path": "packages/certscore-vendor-resolver/src/index.test.ts",
+      "sha256": "aa6b91eff326497942797c26d199be08e0ef6666a85c4713d26b26abe6d5da0a",
+      "sizeBytes": 158735
+    },
+    {
+      "path": "packages/certscore-vendor-resolver/src/index.ts",
+      "sha256": "85798196b9713316deb0c9c4d39117ed326f06cf7315f833dfa4813baabbbaec",
+      "sizeBytes": 257525
+    },
+    {
+      "path": "packages/certscore-vendor-resolver/src/instana-eum.test.ts",
+      "sha256": "3bcc18a7de1966811706f32c1a8467ac81568fca704f8ec7516d1c78044e1bb9",
+      "sizeBytes": 2319
+    },
+    {
+      "path": "packages/certscore-vendor-resolver/src/registry-attribution.test.ts",
+      "sha256": "a3afbdf8bffed7a5cb6b1f6a36846bd574aeb4321b680bf7808130755ef78919",
+      "sizeBytes": 6210
+    }
+  ],
+  "runtimeScope": [
+    "web canonical assessment/concern/projection fixes",
+    "shared typed evidence and vendor classification fixes",
+    "bounded scanner evidence capture and diagnostics",
+    "validation consumer rebuild"
+  ],
+  "excludedScope": [
+    "internal model-assisted calibration scripts, registries and artifacts",
+    "new undeployed finding-calibration CI gates",
+    "validation benchmark scripts and corpus/rendering edits",
+    "sentinel monitoring operation changes"
+  ],
+  "savedOwnerDecisionsPreserved": true,
+  "modelAssistedProductionIntegration": false,
+  "newModelCalls": false,
+  "scoringWeightsChanged": false,
+  "privacyNinePointGuardPreserved": true,
+  "removedCalibrationTasksReopened": false,
+  "ownedCanaryFiles": "fixture/test inputs only; this release does not publish the canary site or change monitor infrastructure",
+  "cost": {
+    "estimatedIncrementalMonthlyUsdUpperBound": 0.9,
+    "scanVolumePerMonth": 100000,
+    "basis": "existing retention; <=80ms visual analysis within module budget, <=64 hashed diagnostic rows per action lane; no added lane, invocation, retry, model call or capacity",
+    "approval": "below-$1/month pre-approved under AGENTS.md; disclosed before proceeding"
+  }
+}

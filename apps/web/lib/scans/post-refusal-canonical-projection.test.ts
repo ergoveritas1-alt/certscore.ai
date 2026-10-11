@@ -5,6 +5,7 @@ import { observedControlAssessment } from "./test-fixtures/observed-control-asse
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import assert from "node:assert/strict";
 import test from "node:test";
+import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import {
   postRefusalEvidencePacketSchema,
   projectPostRefusalEvidenceForReport,
@@ -20,6 +21,7 @@ import { buildPostRefusalRuntimeProjection } from "./post-refusal-runtime-projec
 import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
 import { assessRejectClickTracking } from "./reject-click-tracking-policy";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
+import { consentControlReportLabels, projectConsentControlReport } from "./consent-control-report";
 
 const VALUE_HASH = "a".repeat(64);
 const STORAGE_IDENTITY_HASH = "d".repeat(64);
@@ -142,6 +144,47 @@ function projectCanonical(inputPacket: PostRefusalEvidencePacket) {
     runtimeArtifacts,
   };
 }
+
+test("weak legacy refusal stays neutral through the canonical path while the visible Reject remains Observed", () => {
+  const base = packet();
+  const request = { requestId: "legacy-unverified-refusal", sanitizedUrl: "https://analytics.example.test/collect",
+    hostname: "analytics.example.test", resourceType: "fetch", startedAtMs: 670,
+    inFlightAtRefusalRegistration: false, msOffsetFromRefusal: 120, nonEssential: true };
+  const retained = packet({
+    refusalRegistration: { ...base.refusalRegistration, witnesses: [{ ...base.refusalRegistration.witnesses[0]!,
+      expectedState: "canonical_cmp_consent_state_changed_after_reject" }] },
+    network: { ...base.network, requests: [request], postRefusalNonEssentialRequests: [request] },
+  });
+  const original = structuredClone(retained);
+  const result = projectCanonical(retained);
+  assert.equal(result.reportProjection.registrationStatus, "unconfirmed");
+  assert.equal(result.reportProjection.productionProjectable, false);
+  assert.deepEqual(result.normalizedConcerns, []);
+  assert.deepEqual(result.candidates, []);
+  assert.notEqual(result.postRejectRow.status, "gap_observed");
+  assert.equal(consentControlReportLabels(projectConsentControlReport(observedControlAssessment)).reject, "Observed");
+  assert.deepEqual(retained, original);
+});
+
+test("a newly recognized Meta endpoint does not reclassify historical Reject evidence on read", () => {
+  const request = {
+    requestId: "historical-unclassified-meta-config",
+    sanitizedUrl: "https://connect.facebook.net/signals/config/123456789",
+    hostname: "connect.facebook.net", resourceType: "script", startedAtMs: 670,
+    inFlightAtRefusalRegistration: false, msOffsetFromRefusal: 120, nonEssential: false,
+  };
+  const historical = packet({ network: {
+    requests: [request], postRefusalNonEssentialRequests: [], activeRequestIdsAtRefusalRegistration: [],
+  } });
+  const original = structuredClone(historical);
+  const result = projectCanonical(historical);
+  assert.equal(result.reportProjection.registrationStatus, "confirmed");
+  assert.deepEqual(result.reportProjection.postRefusalActivity, []);
+  assert.deepEqual(result.normalizedConcerns, []);
+  assert.deepEqual(result.candidates, []);
+  assert.notEqual(result.postRejectRow.status, "gap_observed");
+  assert.deepEqual(historical, original);
+});
 
 test("confirmed post-refusal evidence reaches canonical concerns, findings, checklist, and score", () => {
   const activeRequest = {
@@ -296,6 +339,39 @@ test("confirmed post-refusal evidence reaches canonical concerns, findings, chec
     rows: [result.postRejectRow],
   });
   assert.equal(score.score, 85);
+});
+
+test("Instana uses existing confirmed-refusal policy without broadening unconfirmed Reject-click tracking", () => {
+  const url = "https://eum-blue-saas.instana.io/";
+  const vendor = resolveCanonicalVendor({ type: "request", url }).observation;
+  assert.equal(vendor?.purpose, "performance_monitoring");
+  const request = {
+    requestId: "instana-after-refusal", sanitizedUrl: url, hostname: "eum-blue-saas.instana.io",
+    resourceType: "fetch", startedAtMs: 670, completedAtMs: 690,
+    inFlightAtRefusalRegistration: false, msOffsetFromRefusal: 120,
+    vendor: vendor!.vendor, purpose: vendor!.purpose, nonEssential: true,
+  };
+  const confirmed = projectCanonical(packet({
+    network: { requests: [request], postRefusalNonEssentialRequests: [request], activeRequestIdsAtRefusalRegistration: [] },
+    observations: [{ observationType: "post_refusal_non_essential_activity", observedAtMs: 670,
+      requestId: request.requestId, msOffsetFromRefusal: 120, vendor: request.vendor,
+      evidenceKeys: ["network.postRefusalNonEssentialRequests"] }],
+  }));
+  assert.deepEqual(confirmed.normalizedConcerns.map(row => row.originKey), ["privacy.post_refusal_non_essential_activity"]);
+  assert.deepEqual(confirmed.candidates.map(row => row.signalKey), ["privacy.post_refusal_non_essential_activity"]);
+  assert.equal(confirmed.postRejectRow.status, "Gap observed");
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [confirmed.postRejectRow] }).score, 85);
+
+  const unconfirmedBase = unverifiedRejectClickPacket();
+  const originalRequest = unconfirmedBase.network.requests[0]!;
+  const unconfirmed = projectCanonical(packet({ ...unconfirmedBase,
+    network: { ...unconfirmedBase.network, requests: [{ ...originalRequest,
+      sanitizedUrl: url, hostname: request.hostname, vendor: request.vendor, purpose: request.purpose }] },
+  }));
+  assert.equal(unconfirmed.reportProjection.registrationStatus, "unconfirmed");
+  assert.deepEqual(unconfirmed.reportProjection.postRefusalActivity, []);
+  assert.deepEqual(unconfirmed.normalizedConcerns, []);
+  assert.deepEqual(unconfirmed.candidates, []);
 });
 
 test("confirmed TCF contradiction independently reaches a scored canonical checklist gap", () => {

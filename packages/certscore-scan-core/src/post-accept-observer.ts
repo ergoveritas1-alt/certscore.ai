@@ -1,3 +1,6 @@
+import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
+import { installActionDomStorageCapture } from "./action-dom-storage-capture.js";
+import { readActionWriteCapture, buildActionWriteCoverage } from "./action-main-document-write-coverage.js";
 import { createActionRequestRetention } from "./action-request-retention.js";
 import { LATE_FORM_CAPTURE_EXTENSION_MS, startAfterAcceptClickFormSnapshots, startRegisteredPostAcceptFormSnapshots } from "./post-accept-form-snapshots.js";
 import type { FormSnapshotReviewer } from "./collection-surface-snapshots.js";
@@ -16,6 +19,7 @@ import {
   CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT,
   POST_ACCEPT_DEFAULT_OBSERVATION_WINDOW_MS,
   postAcceptEvidencePacketSchema,
+
   type ConsentActionControlProof,
   type CustomAcceptControlBinding,
   type PostAcceptEvidencePacket,
@@ -188,6 +192,8 @@ export interface PostAcceptObserverInput {
   scanStartedAtMs?: number;
   dispatchDelayMs?: number;
   observationWindowMs?: number;
+  /** Artifact-only calibration may finish the existing configured window after a positive. */
+  requireFullConfiguredWindow?: boolean;
   confirmationTimeoutMs?: number;
   actionSearchTimeoutMs?: number;
   resultBudgetMs?: number;
@@ -371,6 +377,9 @@ export async function runPostAcceptObserver(
   const postActionRequests: CapturedRequest[] = [];
   const postActionRetention = createActionRequestRetention(postActionRequests, CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT);
   const captureCoverage = { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 };
+  let sourceDocumentChanged = false;
+  let sourcePendingAtEnd = 0;
+  let sourceHookInstalledAtMs: number | undefined;
   const requestStartedAtEpochMs = new WeakMap<Request, number>();
   const retainedRequests = () => [
     ...preActionRequests.slice(0, Math.max(0, MAX_REQUESTS - postActionRequests.length)),
@@ -401,6 +410,7 @@ export async function runPostAcceptObserver(
   let context: BrowserContext | undefined;
   let page: Page | undefined;
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
+  let originDomStorageCapture: Awaited<ReturnType<typeof installActionDomStorageCapture>> | undefined;
   let actionDiscovery: ConsentActionDiscovery | undefined;
   const storageCollectionDiagnostics: { preAction?: ActionStorageCollectionDiagnostics; postAction?: ActionStorageCollectionDiagnostics } = {};
 
@@ -428,6 +438,7 @@ export async function runPostAcceptObserver(
     requests?: PostAcceptNetworkRequest[];
     postAcceptNonEssentialRequests?: PostAcceptNetworkRequest[];
     writesAfterAccept?: PostAcceptStorageWrite[];
+    mainDocumentWriteCoverage?: import("@certscore/contracts").ActionMainDocumentWriteCoverage;
     itemsCreatedOrChangedAfterAccept?: PostRefusalStorageItem[];
     postAcceptTcfState?: PostRefusalTcfState;
     observations?: PostAcceptObservation[];
@@ -442,6 +453,7 @@ export async function runPostAcceptObserver(
     if (captureCoverage.requestsDroppedAfterAction > 0) limitations.push("post_action_network_capture_truncated");
     captureCoverage.requestsDroppedBeforeAction += Math.max(0, preActionRequests.length + postActionRequests.length - retainedRequests().length);
     formCapture ??= formCaptureHandle?.finish();
+    const originDomStorageObservation = originDomStorageCapture?.finish();
     const completedAtMs = Date.now();
     const confirmed = fields.registration.status === "confirmed" &&
       fields.registration.acceptanceExercised &&
@@ -456,6 +468,19 @@ export async function runPostAcceptObserver(
       ...(terminalDecisionEvidence ? { terminalDecisionEvidence } : {}),
       decisionEvidence,
       captureCoverage: { ...captureCoverage, postActionRetention: postActionRetention.summary() },
+      ...(fields.mainDocumentWriteCoverage && fields.registration.actionDispatchedAtMs !== undefined ? {
+        observedActionSourceProof: buildObservedActionSourceProof({
+          authorization: { kind: input.interactionAuthorization.kind, authorizationId: input.interactionAuthorization.authorizationId,
+            scanId: input.scanId, requestedTargetSha256: hashValue(normalizeTargetUrl(input.url)), authorizedBeforeAction: true },
+          scanClockOriginAtMs: parentScanStartedAtMs, writeCoverage: fields.mainDocumentWriteCoverage, hookInstalledAtMs: sourceHookInstalledAtMs,
+          actionDocumentStable: !sourceDocumentChanged, requestListenerInstalledBeforeAction: true,
+          requestWindowStartedAtMs: parentScanStartedAtMs + fields.registration.actionDispatchedAtMs,
+          configuredWindowMs: observationWindowMs, cancelled: effectiveSignal?.aborted === true,
+          semanticDecisionConfirmed: decisionEvidence?.basis === "verified_state" && decisionEvidence.decision === "granted" && diagnostics.click.outcome === "completed",
+          retention: postActionRetention.summary(), pendingCount: sourcePendingAtEnd, retainedRequestIds: postActionRequests.map(row => row.requestId),
+          rows: (fields.requests ?? []).filter(row => postActionRequests.some(source => source.requestId === row.requestId)),
+        })
+      } : {}),
       artifactOnly: true,
       productionProjectable:
         input.productionProjectable === true && confirmed && observationCoverageSufficient &&
@@ -495,6 +520,8 @@ export async function runPostAcceptObserver(
       },
       storage: {
         collectionDiagnostics: storageCollectionDiagnostics,
+        ...(originDomStorageObservation ? { originDomStorageObservation } : {}),
+        ...(fields.mainDocumentWriteCoverage ? { mainDocumentWriteCoverage: fields.mainDocumentWriteCoverage } : {}),
         ...(fields.preActionCapturedAtMs !== undefined
           ? { preActionCapturedAtMs: fields.preActionCapturedAtMs }
           : {}),
@@ -561,12 +588,14 @@ export async function runPostAcceptObserver(
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
+    originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl);
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_accept", startedAt: new Date(parentScanStartedAtMs).toISOString(),
     });
     actionDiscovery = await installConsentActionDiscovery(page);
     await installStorageWriteProbe(page);
     let mainNavigationRequestCount = 0;
+    page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
       // Optional form images may continue in this session after the action
       // window closes. They must not grow or truncate its request evidence.
@@ -1200,7 +1229,7 @@ export async function runPostAcceptObserver(
       page,
       parentScanStartedAtMs,
       acceptanceRegisteredAtEpochMs,
-      canExitEarly: () => !formSnapshotHandle || formSnapshotHandle.done(),
+      canExitEarly: () => !input.requireFullConfiguredWindow && (!formSnapshotHandle || formSnapshotHandle.done()),
       signal: effectiveSignal,
       targetUrl: observationTargetUrl,
     });
@@ -1208,17 +1237,21 @@ export async function runPostAcceptObserver(
     const observationEndedAtEpochMs = Date.now();
     timing.observationMs = Math.max(0, observationEndedAtEpochMs - observationStartedAtMs);
     timing.observationEndedAtMs = elapsed(parentScanStartedAtMs, observationEndedAtEpochMs);
+    sourcePendingAtEnd = postActionRequests.filter(row => activeRequestIds.has(row.requestId)).length;
+    originDomStorageCapture?.finish();
     // The storage read and optional masked-image completion are independent
     // same-session reads after the observation window. Overlap their browser
     // work so an image cannot spend the result's finalization allowance.
-    const [finishedSnapshot, storageRead, instrumentedWrites] = await Promise.all([
+    const [finishedSnapshot, storageRead, writeCapture] = await Promise.all([
       formSnapshotHandle?.finish() ?? Promise.resolve(undefined),
       captureStorage(context, page, observationTargetUrl, limitations, graphCapture?.cookies,
         (d) => { storageCollectionDiagnostics.postAction = d; }).then(storage => ({
           storage, capturedAtMs: elapsed(parentScanStartedAtMs),
         })),
-      readStorageWrites(page),
+      readActionWriteCapture<InstrumentedStorageWrite>(page, "__certscoreReadPostAcceptWrites"),
     ]);
+    const instrumentedWrites = writeCapture.writes;
+    sourceHookInstalledAtMs = writeCapture.metadata?.hookInstalledAtMs;
     const postActionStorage = storageRead.storage;
     formSnapshotCapture = finishedSnapshot;
     timing.observationExitReason = observationResult.reason;
@@ -1244,7 +1277,7 @@ export async function runPostAcceptObserver(
       typeof request.msOffsetFromAccept === "number" &&
       request.msOffsetFromAccept >= 0
     ).slice(0, 24);
-    const writesAfterAccept = instrumentedWrites
+    const eligibleWritesAfterAccept = instrumentedWrites
       .filter((write) => write.observedAtEpochMs > acceptanceRegisteredAtEpochMs! &&
         write.observedAtEpochMs <= observationEndedAtEpochMs)
       .map((write) => classifyStorageWrite(
@@ -1255,8 +1288,8 @@ export async function runPostAcceptObserver(
         postActionStorage,
       ))
       .filter((write): write is PostAcceptStorageWrite => Boolean(write))
-      .filter((write) => write.nonEssential)
-      .slice(0, 48);
+      .filter((write) => write.nonEssential);
+    const writesAfterAccept = eligibleWritesAfterAccept.slice(0, 48);
     const preActionByIdentity = new Map(preActionStorage.map((item) => [storageKey(item), item]));
     const itemsCreatedOrChangedAfterAccept = postActionStorage.filter((item) => {
       const before = preActionByIdentity.get(storageKey(item));
@@ -1298,6 +1331,21 @@ export async function runPostAcceptObserver(
       postActionStorage,
       requests,
       postAcceptNonEssentialRequests,
+      mainDocumentWriteCoverage: buildActionWriteCoverage({ metadata: writeCapture.metadata, targetUrl: observationTargetUrl,
+        windowStartedAtMs: acceptanceRegisteredAtEpochMs, windowEndedAtMs: observationEndedAtEpochMs,
+        windowCompleted: observationResult.completed && observationResult.reason === "window_elapsed",
+        retainedWindowCount: instrumentedWrites.filter(write => write.observedAtEpochMs > acceptanceRegisteredAtEpochMs! && write.observedAtEpochMs <= observationEndedAtEpochMs).length,
+        eligibleWindowCount: eligibleWritesAfterAccept.length, retainedEligibleCount: writesAfterAccept.length,
+        // Unclassified writes cannot establish a negative; retain an explicit limitation.
+        unresolvedWindowCount: instrumentedWrites.filter(write => {
+          if (write.observedAtEpochMs <= acceptanceRegisteredAtEpochMs! || write.observedAtEpochMs > observationEndedAtEpochMs) return false;
+          const purpose = vendorFor({ type: write.storageType === "cookie" ? "cookie" : "cmp_runtime",
+            cookieName: write.storageType === "cookie" ? write.name : undefined,
+            storageKey: write.storageType === "cookie" ? undefined : write.name,
+            hostname: new URL(observationTargetUrl).hostname })?.purpose;
+          return !purpose || purpose === "unknown";
+        }).length,
+      }),
       writesAfterAccept,
       itemsCreatedOrChangedAfterAccept,
       ...(postAcceptTcfState ? { postAcceptTcfState } : {}),
@@ -1310,6 +1358,7 @@ export async function runPostAcceptObserver(
     try { formCaptureHandle?.finish(); } catch { /* Optional form evidence cannot block browser cleanup. */ }
     if (resultBudgetTimer) clearTimeout(resultBudgetTimer);
     finishOptionalRuntimeGraph(graphCapture, "post_accept", "action_capture_closed");
+    originDomStorageCapture?.finish();
     actionDiscovery?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);
@@ -2641,7 +2690,10 @@ function vendorFor(input: {
 async function installStorageWriteProbe(page: Page) {
   await page.addInitScript({ content: `(() => {
     const records = [];
+    const hookInstalledAtMs = performance.timeOrigin + performance.now();
     let sequence = 0;
+    let installedCookieSetter;
+    let installedStorageSetter;
     const retain = (record) => {
       records.push({ ...record, sequence: ++sequence });
       if (records.length > 192) records.splice(0, records.length - 192);
@@ -2649,11 +2701,17 @@ async function installStorageWriteProbe(page: Page) {
     Object.defineProperty(window, "__certscoreReadPostAcceptWrites", {
       configurable: false,
       enumerable: false,
-      value: () => records.slice(-96).map((record) => ({ ...record })),
+      value: Object.assign(() => records.slice(-96).map((record) => ({ ...record })), { coverage: () => ({
+        observedLifetimeCount: sequence, ringEvictedCount: Math.max(0, sequence - 192),
+        readbackOmittedCount: Math.max(0, records.length - 96),
+        storageHookHealthy: Storage.prototype.setItem === installedStorageSetter,
+        cookieHookHealthy: !!installedCookieSetter && Object.getOwnPropertyDescriptor(Document.prototype, "cookie")?.set === installedCookieSetter,
+        documentUrl: location.href, documentTimeOriginMs: performance.timeOrigin, hookInstalledAtMs,
+      }) }),
       writable: false,
     });
     const originalSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function(key, value) {
+    Storage.prototype.setItem = installedStorageSetter = function(key, value) {
       let storageType = "local_storage";
       try { storageType = this === window.sessionStorage ? "session_storage" : "local_storage"; } catch (_) {}
       const result = originalSetItem.call(this, key, value);
@@ -2666,7 +2724,7 @@ async function installStorageWriteProbe(page: Page) {
         configurable: true,
         enumerable: cookieDescriptor.enumerable,
         get: cookieDescriptor.get,
-        set: function(value) {
+        set: installedCookieSetter = function(value) {
           const name = String(value).split("=", 1)[0].trim().slice(0, 180);
           const result = cookieDescriptor.set.call(this, value);
           const cookieValue = String(value).slice(String(value).indexOf("=") + 1).split(";", 1)[0];

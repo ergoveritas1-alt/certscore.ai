@@ -155,8 +155,6 @@ export function formatCalibrationSummaryMarkdown(summary: CalibrationSummary): s
   lines.push(`Completed: ${summary.successCount}`);
   lines.push(`Failed: ${summary.failureCount}`);
   lines.push("");
-  lines.push("This is internal diagnostic output only. It is not customer-facing report prose and does not state legal conclusions.");
-  lines.push("");
   lines.push("## Aggregate Signals");
   lines.push("");
   lines.push(`Runtime vendors: ${formatCounts(countStringValues(summary.results.flatMap((result) => result.runtime.resolvedVendorProducts)))}`);
@@ -197,6 +195,7 @@ export function formatCalibrationSummaryMarkdown(summary: CalibrationSummary): s
     lines.push("");
   }
 
+  lines.push("<details>", "<summary>Diagnostic scope</summary>", "", "This is internal diagnostic output only. It is not customer-facing report prose and does not state legal conclusions.", "", "</details>", "");
   return `${lines.join("\n")}\n`;
 }
 

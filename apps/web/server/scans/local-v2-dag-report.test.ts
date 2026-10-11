@@ -9491,3 +9491,51 @@ test("transferred artifacts and original S3 artifacts produce the same complete 
     assert.deepEqual(transferred, remotelyRead, "all canonical runtime, assessment, finding and report outputs must match");
   } finally { S3Client.prototype.send = send; }
 });
+
+test("materialization retains visual comparison only with the original image hash in the manifest", async () => {
+  const { consentVisualFixture, visualFixtureStartMs } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison");
+  const { measureConsentControlVisualComparison } = await import("../../../../packages/certscore-scan-core/src/consent-control-visual-comparison");
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/prominence-proof-"));
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+    const fixture = await consentVisualFixture();
+    const geometry = fixture.geometry;
+    geometry.visualComparison = await measureConsentControlVisualComparison(fixture);
+    assert.ok(geometry.visualComparison);
+    const geometryBytes = JSON.stringify(geometry);
+    const bundle = { schemaVersion: "certscore.v2.canonical-evidence-bundle.v1", scanId: "prominence-fixture", url: geometry.pageUrl,
+      normalizedUrl: geometry.pageUrl, startedAt: new Date(visualFixtureStartMs).toISOString(), completedAt: new Date(visualFixtureStartMs + 2000).toISOString(),
+      modulesRun: [], networkEvents: [], cookieEvents: [], storageEvents: [], iframeEvents: [], scriptEvents: [], formEvents: [],
+      policySurfaces: [], cmpRuntimeObservations: [], transportSecurityObservations: [], derivedRuntimeSignals: {},
+      screenshots: [{ artifactId: "proof", path: "proof.png", capturedAtMs: 1000, url: geometry.pageUrl, documentIdentity: geometry.documentIdentity,
+        consentStateAtTime: "pre_consent", pagePhase: "settled", retentionStatus: "available", displayStatus: "available" }],
+      domSnapshots: [{ artifactId: "dom", path: "dom.json", capturedAtMs: 900, url: geometry.pageUrl, documentIdentity: geometry.documentIdentity,
+        consentStateAtTime: "pre_consent", pagePhase: "settled", textExcerpt: "Optional cookies. Choose your consent preferences." }],
+      consentUiObservations: [{ observationId: "inventory", observedAtMs: 900, documentUrl: geometry.pageUrl, documentIdentity: geometry.documentIdentity,
+        likelyPresent: true, basis: ["control:accept_all:Accept all", "control:reject_all:Reject all"], confidence: 0.95, layerInspected: "first_layer", captureStatus: "observed", controls: geometry.candidates.map(c => ({ ...c, visible: true })),
+        evidenceRefs: [], captureDiagnostics: { completedChannels: ["dom_inventory"], failedChannels: [], timedOutChannels: [] } }] };
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), JSON.stringify(bundle));
+    await writeFile(path.join(outDir, "ConsentControlGeometryEvidence.json"), geometryBytes);
+    const pointers = [
+      { fileName: "ConsentControlGeometryEvidence.json", uri: "s3://test/geometry", sizeBytes: Buffer.byteLength(geometryBytes), sha256: createHash("sha256").update(geometryBytes).digest("hex") },
+      { fileName: "proof.png", uri: "s3://test/proof", sizeBytes: fixture.screenshotBytes.length, sha256: geometry.visualComparison.screenshotSha256 },
+    ];
+    const scan = makeScanRecord();
+    scan.scan.scanConfigJson = { hostname: "consent-visual.test", normalizedUrl: geometry.pageUrl, processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+      execution: { localV2Dag: { outDir }, v2DagParallel: { artifactOnly: true, localOnly: true, profile: "standard", productionFindingIntegration: false } } };
+    for (const valid of [true, false]) {
+      await writeFile(path.join(outDir, "LocalV2DagLambdaManifest.json"), JSON.stringify({ auxiliaryArtifacts: valid ? pointers : [pointers[0], { ...pointers[1], sha256: "b".repeat(64) }] }));
+      const detail = await materializeLocalV2DagScanDetail(scan);
+      const assessment = detail.runtimeArtifacts?.consentControlAssessment as { controls: { reject: { state: string } }; visualComparison?: unknown };
+      assert.equal(Boolean(assessment.visualComparison), valid);
+      assert.equal(assessment.controls.reject.state, "observed");
+      const concerns = buildNormalizedConcerns({ runtimeArtifacts: detail.runtimeArtifacts, validationFindings: [], reviewFindingCandidates: [] });
+      assert.equal(concerns.some(c => c.originKey === "consent.visual_prominence.observed" && c.promotionEligibility === "eligible"), valid);
+    }
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL; else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});

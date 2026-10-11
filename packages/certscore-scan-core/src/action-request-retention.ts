@@ -35,7 +35,7 @@ export function createActionRequestRetention<T extends { request: { url(): strin
     if (!result) { result = classifyActionRequestRetention(row.request.url(), row.request.resourceType()); cached.set(row, result); }
     return result;
   };
-  let observed = 0, replacements = 0, dropped = 0, priorityEvaluations = 0;
+  let observed = 0, replacements = 0, priorityEvaluations = 0;
   const omitted = { delivery_asset: 0, known_other: 0, unknown: 0, tracking: 0, consent: 0, document: 0, unclassified: 0 };
   return {
     offer(row: T): { retained: boolean; evicted?: T } {
@@ -44,7 +44,7 @@ export function createActionRequestRetention<T extends { request: { url(): strin
       // Bound CPU independently of hostile request volume. Unexamined overflow
       // is counted honestly; it is neither unknown attribution nor safe traffic.
       if (priorityEvaluations >= CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT) {
-        dropped++; omitted.unclassified++; return { retained: false };
+        omitted.unclassified++; return { retained: false };
       }
       priorityEvaluations++;
       const incoming = classify(row);
@@ -67,15 +67,17 @@ export function createActionRequestRetention<T extends { request: { url(): strin
           }
         }
       }
-      dropped++;
       if (selected < 0) { omitted[incoming.kind]++; return { retained: false }; }
       const evicted = rows.splice(selected, 1)[0]!;
       omitted[inventory[selected]!.kind]++; replacements++; rows.push(row);
       return { retained: true, evicted };
     },
     summary() {
-      return dropped ? { policyVersion: ACTION_REQUEST_RETENTION_POLICY, requestsObserved: observed,
-        requestsRetained: rows.length, replacements, priorityEvaluations, omitted: { ...omitted } } : undefined;
+      // Retain zero-loss accounting as well: an absent historical summary is
+      // not evidence that the listener observed no requests. This inventory
+      // accounts only for offered request events, never browser completeness.
+      return { policyVersion: ACTION_REQUEST_RETENTION_POLICY, requestsObserved: observed,
+        requestsRetained: rows.length, replacements, priorityEvaluations, omitted: { ...omitted } };
     },
   };
 }

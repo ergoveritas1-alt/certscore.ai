@@ -3570,11 +3570,15 @@
     ],
     "requireConsecutiveFailures": 2,
     "accessibility": {
-      "contractVersion": "certscore.sentinel-accessibility.v1",
+      "contractVersion": "certscore.sentinel-accessibility.v2",
       "requiredRules": [
         {
           "ruleId": "image-alt",
           "selector": "#sentinel-missing-alt"
+        },
+        {
+          "ruleId": "link-name",
+          "selector": "#sentinel-shared-image-link"
         },
         {
           "ruleId": "label",
@@ -3592,7 +3596,26 @@
           "ruleId": "nested-interactive",
           "selector": "#sentinel-nested-control"
         }
-      ]
+      ],
+      "imageLinkIdentity": {
+        "sharedImage": "#sentinel-shared-image",
+        "sharedLink": "#sentinel-shared-image-link",
+        "distinctImage": "#sentinel-missing-alt",
+        "distinctLink": "#sentinel-distinct-image-link"
+      },
+      "score": {
+        "scoreVersion": "overall-posture.v7",
+        "deductionPoints": 12,
+        "rules": {
+          "text_alternative_accessibility_issue": 3,
+          "semantic_labeling_accessibility_issue": 4,
+          "visual_contrast_accessibility_issue": 3
+        },
+        "cappedTailRules": [
+          "target_size_accessibility_issue",
+          "keyboard_navigation_accessibility_issue"
+        ]
+      }
     }
   }
 }

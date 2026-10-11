@@ -140,3 +140,25 @@ test("paid decline remains a separate score-neutral review when Reject-specific 
   assert.equal(row.criticalEvidence?.retainedEvidence?.paymentRequiredDeclinePathObserved, true);
   assert.equal(getGdprEprivacyRowDeduction(row), 0);
 });
+
+test("browser geometry and the same viewport pixels retain fill and focus-outline prominence", async () => {
+  const { measureConsentControlVisualComparison } = await import("../../../../packages/certscore-scan-core/src/consent-control-visual-comparison");
+  const { hasMaterialAcceptVisualProminence } = await import("@certscore/contracts");
+  for (const style of ["filled", "outline", "equal"] as const) {
+    const page = await browser.newPage({ viewport: { width: 640, height: 300 } });
+    try {
+      await page.route("**/*", route => route.fulfill({ contentType: "text/html", body: `<!doctype html><style>
+        body {margin:0;background:#eee} section {position:fixed;inset:30px;background:#172b4d;padding:28px;color:white}
+        button {width:140px;height:48px;margin:0 20px 0 0;background:#172b4d;color:white;border:1px solid white}
+        #accept {${style === "filled" ? "background:#00e5ff;color:#172b4d" : style === "outline" ? "outline:4px solid #00e5ff;outline-offset:2px" : ""}}
+        </style><section id="cookie-banner" role="dialog"><p>We use optional cookies for analytics. Choose your consent preferences.</p>
+        <button id="reject">Reject all</button><button id="accept">Accept all</button></section>` }));
+      await page.goto(url);
+      const geometry = await captureConsentControlGeometry(page, { documentIdentity: identity, screenshotArtifactRef: "proof.png" });
+      const screenshotBytes = await page.screenshot();
+      const measurement = await measureConsentControlVisualComparison({ geometry, screenshotBytes, screenshotCapturedAtMs: Date.now() });
+      assert.ok(measurement, `${style}: ${JSON.stringify(geometry.controlInspection)}`);
+      assert.equal(hasMaterialAcceptVisualProminence(measurement), style !== "equal", style);
+    } finally { await page.close(); }
+  }
+});

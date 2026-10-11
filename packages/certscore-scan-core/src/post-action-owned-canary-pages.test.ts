@@ -46,6 +46,13 @@ test("testar1 separates confirmed Accept activity from a clean confirmed Reject 
     ), true);
 
     assert.equal(rejected.refusalRegistration.status, "confirmed");
+    assert.equal(rejected.observedActionSourceProof?.policyVersion, "bounded_observed_action_sources.v1");
+    assert.equal(rejected.observedActionSourceProof?.semanticDecisionConfirmed, true);
+    assert.equal(rejected.observedActionSourceProof?.requests.handlerReceivedCount,
+      rejected.captureCoverage?.postActionRetention?.requestsObserved);
+    assert.equal(rejected.observedActionSourceProof?.configuredWindowCompleted, true);
+    assert.ok(rejected.observedActionSourceProof?.hookInstalledAtMs);
+    assert.equal(rejected.observedActionSourceProof?.actionDocumentStable, true);
     assert.equal(rejected.refusalRegistration.witnesses[0]?.witnessType, "tcf_user_action_complete");
     assert.equal(rejected.network.postRefusalNonEssentialRequests.length, 0);
     assert.equal(rejected.storage.writesAfterRefusal.some((write) => write.nonEssential), false);
@@ -64,6 +71,7 @@ test("testar2 retains unconfirmed Accept facts separately from confirmed Reject 
     const rejected = await observeReject(url, "testar2-reject");
 
     assert.equal(accepted.acceptanceRegistration.status, "unconfirmed");
+    assert.equal(accepted.observedActionSourceProof, undefined);
     assert.deepEqual(accepted.acceptanceRegistration.witnesses, []);
     assert.equal(accepted.acceptanceRegistration.acceptanceRegisteredAtMs, undefined);
     assert.equal(accepted.afterActionCapture?.activationStatus, "completed");
@@ -252,7 +260,7 @@ test("testar canaries document distinct production highlighting boundaries", asy
   assert.doesNotMatch(`${divergent}\n${contradictory}`, /score-neutral|scoring effect/i);
 });
 
-async function observeAccept(url: string, scanId: string) {
+async function observeAccept(url: string, scanId: string, options: { requireFullConfiguredWindow?: boolean; observationWindowMs?: number; resultBudgetMs?: number } = {}) {
   return runPostAcceptObserver({
     actionSearchTimeoutMs: 800,
     confirmationTimeoutMs: 600,
@@ -261,6 +269,7 @@ async function observeAccept(url: string, scanId: string) {
       kind: "loopback",
     },
     observationWindowMs: 350,
+    ...options,
     productionProjectable: true,
     recipe: acceptRecipe,
     scanId,
@@ -287,6 +296,26 @@ async function observeReject(url: string, scanId: string) {
 
 async function withCanaryServer(run: (origin: string) => Promise<void>) {
   const pages = new Map<string, string>();
+  pages.set("/full-window-accept.html", `<!doctype html><html><body>
+    <div id="onetrust-banner-sdk"><button id="onetrust-accept-btn-handler">Accept all</button>
+    <button id="onetrust-reject-all-handler">Reject all</button></div>
+    <script>
+      let granted = false;
+      window.__tcfapi = function(command, version, callback) {
+        if (command === 'getTCData') callback({cmpId: 28, cmpVersion: 1, gdprApplies: true,
+          tcfPolicyVersion: 2, cmpStatus: 'loaded', eventStatus: granted ? 'useractioncomplete' : 'tcloaded',
+          purpose: {consents: {1: granted, 2: granted, 3: granted, 4: granted, 7: granted, 9: granted, 10: granted}},
+          tcString: granted ? 'OWNED_GRANTED' : 'OWNED_DENIED'}, true);
+      };
+      document.getElementById('onetrust-accept-btn-handler').onclick = function() {
+        granted = true;
+        document.cookie = 'OptanonConsent=groups=C0001:1,C0002:1,C0003:1,C0004:1; Path=/; SameSite=Lax';
+        document.getElementById('onetrust-banner-sdk').remove();
+        setTimeout(function() { document.cookie = '_ga=owned-early; Path=/; SameSite=Lax'; }, 50);
+        setTimeout(function() { document.cookie = '_gid=owned-late; Path=/; SameSite=Lax'; }, 800);
+      };
+    </script></body></html>`);
+
   pages.set("/privacy-only.html", `<!doctype html><section id="truste-consent-track" role="dialog" aria-label="Cookie choices">
     <p>We use cookies and similar technologies. Choose your preferences.</p>
     <button id="truste-show-consent">&quot;Do Not Sell My Personal Information&quot;</button></section>`);
@@ -328,3 +357,27 @@ async function listen(server: Server) {
   if (!address || typeof address === "string") throw new Error("Canary fixture server did not bind.");
   return `http://127.0.0.1:${address.port}`;
 }
+
+
+test("artifact-only full-window opt-in preserves positive evidence and finishes the same configured Accept window", async () => {
+  await withCanaryServer(async origin => {
+    const url = `${origin}/full-window-accept.html`;
+    const options = { observationWindowMs: 1500, resultBudgetMs: 30000 };
+    const ordinary = await observeAccept(url, "full-window-default", options);
+    const complete = await observeAccept(url, "full-window-opt-in", { ...options, requireFullConfiguredWindow: true });
+    assert.equal(ordinary.acceptanceRegistration.status, "confirmed");
+    assert.equal(complete.acceptanceRegistration.status, "confirmed");
+    assert.equal(ordinary.timing.observationExitReason, "non_essential_storage_write_observed");
+    assert.equal(ordinary.observedActionSourceProof?.configuredWindowCompleted, false);
+    assert.equal(complete.timing.observationExitReason, "window_elapsed");
+    assert.equal(complete.observedActionSourceProof?.configuredWindowCompleted, true);
+    assert.equal(complete.observedActionSourceProof?.semanticDecisionConfirmed, true);
+    assert.equal(ordinary.observationWindowMs, complete.observationWindowMs);
+    assert.ok(ordinary.storage.writesAfterAccept.some(write => write.name === "_ga" && write.nonEssential));
+    assert.ok(complete.storage.writesAfterAccept.some(write => write.name === "_ga" && write.nonEssential));
+    assert.ok(complete.storage.writesAfterAccept.some(write => write.name === "_gid" && write.nonEssential));
+    const proof = complete.observedActionSourceProof!;
+    assert.ok(proof.windowEndedAtMs - proof.windowStartedAtMs >= complete.observationWindowMs);
+    assert.ok(ordinary.timing.observationMs < ordinary.observationWindowMs);
+  });
+});

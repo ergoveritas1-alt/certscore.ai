@@ -16,7 +16,8 @@ import type {
   NormalizedConcernRegulatoryChecklistEligibility,
   NormalizedConcernScoreEffect
 } from "./normalized-concerns";
-import { classifyConsentControlLabel, hasVerifiedConsentControlAbsence, consentControlAssessmentSchema, gpcResponseAssessmentSchema } from "@certscore/contracts";
+import { classifyConsentControlLabel, hasVerifiedConsentControlAbsence, consentControlAssessmentSchema, gpcResponseAssessmentSchema,
+  projectConsentVisualProminence, hasTypedConsentVisualProminence } from "@certscore/contracts";
 import {
   deriveCaliforniaGpcResponsePolicy
 } from "./california-gpc-response-policy";
@@ -2620,6 +2621,22 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  if (input.concern.originKey === "consent.visual_prominence.observed") {
+    const expected = projectConsentVisualProminence(input.consentControlAssessment);
+    const eligible = suggestedUnifiedFindingId === "accept_more_prominent_than_reject" &&
+      input.concern.originType === "runtime_artifact" && expected && hasTypedConsentVisualProminence(expected) &&
+      JSON.stringify(expected) === JSON.stringify(input.rawEvidence?.consentVisualProminence);
+    return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
+      promotionEligibility: eligible ? "eligible" : "blocked", regulatoryChecklistEligibility: eligible ? "review_signal" : "none",
+      negativeEvidenceFlags: eligible ? [] : ["canonical_consent_control_evidence_insufficient"], scoreEffects: [] };
+  }
+  // Visual prominence is admitted only through the verified two-control projection above.
+  // Structural path depth or a missing Reject cannot substitute for that comparison.
+  if (suggestedUnifiedFindingId === "accept_more_prominent_than_reject") {
+    return { allowedNarrativeTier: "weak", externalSurfacingEligibility: "suppress",
+      negativeEvidenceFlags: ["canonical_consent_control_evidence_insufficient"],
+      promotionEligibility: "blocked", regulatoryChecklistEligibility: "none", scoreEffects: [] };
+  }
   if (input.consentControlAssessment !== undefined &&
       (suggestedUnifiedFindingId === "reject_button_missing" || suggestedUnifiedFindingId === "accept_more_prominent_than_reject")) {
     const parsed = consentControlAssessmentSchema.safeParse(input.consentControlAssessment);
@@ -2629,10 +2646,7 @@ export function deriveConcernPolicy(input: {
     const completeAbsence = usable && hasVerifiedConsentControlAbsence(assessment, "reject");
     // A visual comparison of two observed controls remains independent of the
     // completeness required to assert that a control is absent.
-    const supported = suggestedUnifiedFindingId === "reject_button_missing"
-      ? completeAbsence
-      : usable && assessment.controls.accept.state === "observed" &&
-        (assessment.controls.reject.state === "observed" || completeAbsence);
+    const supported = completeAbsence;
     if (!supported) {
       return {
         allowedNarrativeTier: "weak", externalSurfacingEligibility: "suppress",

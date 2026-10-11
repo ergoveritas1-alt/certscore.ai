@@ -1,4 +1,6 @@
+import { buildFirstLayerRejectPathProjection } from "./scan-report-consent-projection";
 import { reportArtifactIdentityKey, verifyReportArtifactTransfer } from "../../../../packages/shared/src/report-artifact-transfer";
+import { withVerifiedConsentVisualSource } from "./consent-visual-provenance";
 import { createVerifiedPolicyTextCache } from "./verified-policy-text-cache";
 import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
@@ -1604,11 +1606,11 @@ async function readLocalV2DagManifest(
   }
 }
 
-async function readLocalV2ConsentControlGeometry(outDir: string): Promise<Record<string, unknown> | null> {
+async function readLocalV2ConsentControlGeometry(outDir: string, manifest: Record<string, unknown> | null = null): Promise<Record<string, unknown> | null> {
   try {
     const raw = await readFile(path.join(resolveLocalV2OutDir(outDir), "ConsentControlGeometryEvidence.json"), "utf8");
     const parsed: unknown = JSON.parse(raw);
-    return isRecord(parsed) ? parsed : null;
+    return withVerifiedConsentVisualSource(isRecord(parsed) ? parsed : null, manifest, createHash("sha256").update(raw).digest("hex"));
   } catch {
     return null;
   }
@@ -6244,30 +6246,7 @@ function buildMaterializedLocalV2Detail(
       consent_summary: hybridRuntimeEvidence.consentSummary,
       firstLayerConsentChoices: completeFirstLayerConsentChoices,
       first_layer_consent_choices: completeFirstLayerConsentChoices,
-      rejectPathDepthAndAvailability: {
-        completeRejectPathAvailable: completeFirstLayerConsentChoices.rejectControlObserved,
-        completeRejectPathDetected: completeFirstLayerConsentChoices.rejectControlObserved,
-        firstLayerCookieConsentBannerObserved: firstLayerConsentControlInventoryRetained,
-        firstLayerConsentChoices: completeFirstLayerConsentChoices,
-        gdprEprivacyConsentSurfaceObserved: firstLayerConsentControlInventoryRetained ? "confirmed" : "unconfirmed",
-        layerInspected: completeFirstLayerConsentChoices.layerInspected,
-        rejectAvailableOnFirstLayer: completeFirstLayerConsentChoices.rejectControlObserved,
-        rejectEquivalentFound: completeFirstLayerConsentChoices.rejectControlObserved,
-        rejectControlObserved: completeFirstLayerConsentChoices.rejectControlObserved,
-        visibleRejectLabels: completeFirstLayerConsentChoices.rejectLabels
-      },
-      reject_path_depth_and_availability: {
-        complete_reject_path_available: completeFirstLayerConsentChoices.rejectControlObserved,
-        complete_reject_path_detected: completeFirstLayerConsentChoices.rejectControlObserved,
-        first_layer_cookie_consent_banner_observed: firstLayerConsentControlInventoryRetained,
-        first_layer_consent_choices: completeFirstLayerConsentChoices,
-        gdpr_eprivacy_consent_surface_observed: firstLayerConsentControlInventoryRetained ? "confirmed" : "unconfirmed",
-        layer_inspected: completeFirstLayerConsentChoices.layerInspected,
-        reject_available_on_first_layer: completeFirstLayerConsentChoices.rejectControlObserved,
-        reject_equivalent_found: completeFirstLayerConsentChoices.rejectControlObserved,
-        reject_control_observed: completeFirstLayerConsentChoices.rejectControlObserved,
-        visible_reject_labels: completeFirstLayerConsentChoices.rejectLabels
-      }
+      ...buildFirstLayerRejectPathProjection(completeFirstLayerConsentChoices, firstLayerConsentControlInventoryRetained)
     } : {}),
     consentTimeline: hybridRuntimeEvidence.timelineMarkers,
     consent_timeline: hybridRuntimeEvidence.timelineMarkers,
@@ -6715,16 +6694,17 @@ async function materializeLocalV2DagScanDetailUncached(
     [bundle, consentControlGeometryEvidence, remoteManifest] = await timed(
       "app.scan_detail.local_v2_artifacts.local",
       async () => {
+        const localManifestPromise = readLocalV2DagManifest(input.outDir!, verifiedArtifactChainAvailable ? {
+          expectedSha256: input.manifestArtifactSha256,
+          expectedSizeBytes: input.manifestArtifactSizeBytes,
+        } : {});
         const [localBundle, localGeometryEvidence, localManifest] = await Promise.all([
           readLocalV2DagBundle(input.outDir!, verifiedArtifactChainAvailable ? {
             expectedSha256: input.scanArtifactSha256,
             expectedSizeBytes: input.scanArtifactSizeBytes,
           } : {}),
-          readLocalV2ConsentControlGeometry(input.outDir!),
-          readLocalV2DagManifest(input.outDir!, verifiedArtifactChainAvailable ? {
-            expectedSha256: input.manifestArtifactSha256,
-            expectedSizeBytes: input.manifestArtifactSizeBytes,
-          } : {}),
+          localManifestPromise.then(manifest => readLocalV2ConsentControlGeometry(input.outDir!, manifest)),
+          localManifestPromise,
         ]);
         return [localBundle, localGeometryEvidence, localManifest] as const;
       }
@@ -6761,8 +6741,8 @@ async function materializeLocalV2DagScanDetailUncached(
             "ConsentControlGeometryEvidence.json"
           );
           return geometryArtifact
-            ? timed("app.scan_detail.local_v2_artifact.geometry", () =>
-                readLocalV2ConsentControlGeometryFromS3(geometryArtifact)
+            ? timed("app.scan_detail.local_v2_artifact.geometry", async () =>
+                withVerifiedConsentVisualSource(await readLocalV2ConsentControlGeometryFromS3(geometryArtifact), manifest, geometryArtifact.sha256 ?? null)
               )
             : Promise.resolve(null);
         },

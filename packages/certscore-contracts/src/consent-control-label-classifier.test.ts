@@ -1021,6 +1021,29 @@ test("keeps privacy opt-out distinct from cookie reject", () => {
   }
 });
 
+test("a generic Opt Out beside Accept does not establish cookie refusal from banner context alone", () => {
+  // The retained AMBOSS visit labels its custom control Opt Out, alongside
+  // Accept. Neither shared cookie wording nor its visual placement establishes
+  // the choice's effect; a scoped refusal recipe needs separate evidence.
+  const contexts = [
+    "Opt OutAccept",
+    "We use cookies and similar technologies to improve your experience, understand how our website is used, and personalize content. You can manage your preferences at any time or learn more in our Privacy Policy.Opt OutAccept",
+    "We use cookies. Opt out of the sale or sharing of personal information.",
+  ];
+  for (const contextText of contexts) {
+    for (const usage of ["observation", "action"] as const) {
+      const classification = classifyConsentControlLabel({
+        label: "Opt Out", contextText, hasConsentContext: true, usage,
+      });
+      assert.notEqual(classification.intent, "reject", `${usage}: ${contextText}`);
+      assert.notEqual(classification.semanticRole, "reject");
+      assert.notEqual(classification.semanticRole, "necessary_only");
+    }
+  }
+  assert.equal(classifyConsentControlLabel({ label: "Reject all cookies" }).intent, "reject");
+  assert.equal(classifyConsentControlLabel({ label: "Accept only necessary cookies", hasConsentContext: true }).intent, "reject");
+});
+
 test("handles contextual and weak terms without turning them into reject proof", () => {
   assert.notEqual(classifyConsentControlLabel({ label: "Continue" }).intent, "reject");
   assert.equal(classifyConsentControlLabel({ label: "Continue", hasConsentContext: true }).intent, "unknown");
@@ -1250,4 +1273,19 @@ test("Macedonian vocabulary is exact, consent-scoped, and observation-only", () 
   }
   assert.equal(classifyConsentControlLabel({ label: "Зошто се согласувам", contextText }).intent, "unknown");
   assert.equal(classifyConsentControlLabel({ label: "Accept essentials only", hasConsentContext: true, usage: "action" }).intent, "unknown");
+});
+
+
+test("German consent-and-continue is exact contextual observation, separate from subscription and action authorization", () => {
+  const contextText = "Mit Werbung und Tracking. Speicherung und Verarbeitung von Daten für personalisierte Werbung. Werbefrei lesen: Nutzen Sie uns kostenpflichtig ohne Werbetracking. Jetzt abonnieren.";
+  const input = { label: "Einwilligen und weiter", contextText, hasConsentContext: true, localeHints: ["de" as const] };
+  const observed = classifyConsentControlLabel({ ...input, usage: "observation" });
+  assert.equal(observed.intent, "accept");
+  assert.equal(observed.registryVersion, CONSENT_CONTROL_LABEL_REGISTRY_VERSION);
+  assert.equal(classifyConsentControlLabel({ ...input, usage: "action" }).intent, "unknown");
+  assert.equal(classifyConsentControlLabel({ label: input.label, hasConsentContext: false, usage: "observation" }).intent, "unknown");
+  for (const label of ["Weiter", "Jetzt abonnieren", "Werbefrei lesen", "Nicht einwilligen und weiter", "Über Einwilligen und weiter informieren", "Einwilligen und weiter für 5 €"]) {
+    assert.notEqual(classifyConsentControlLabel({ ...input, label, usage: "observation" }).intent, "accept", label);
+    assert.notEqual(classifyConsentControlLabel({ ...input, label, usage: "observation" }).intent, "reject", label);
+  }
 });

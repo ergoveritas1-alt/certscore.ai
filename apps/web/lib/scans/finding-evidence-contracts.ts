@@ -3,6 +3,7 @@ import type {
   NormalizedConcernExternalSurfacingEligibility,
   NormalizedConcernPromotionEligibility
 } from "./normalized-concerns";
+import { hasTypedConsentVisualProminence } from "@certscore/contracts";
 import { evaluatePolicyBehaviorContradictionEvidence } from "./contradiction-evidence-contract";
 import {
   hasConcretePreconsentArtifact,
@@ -1069,7 +1070,13 @@ function hasRejectPathDepthEvidence(rawEvidence: Record<string, unknown> | null 
   );
 }
 
+function hasCanonicalVisualProminence(rawEvidence: Record<string, unknown> | null | undefined) {
+  return rawEvidence?.normalizedConcernPromotionEligibility === "eligible" &&
+    hasTypedConsentVisualProminence(rawEvidence.consentVisualProminence);
+}
+
 function hasMaterialChoiceAsymmetryEvidence(rawEvidence: Record<string, unknown> | null | undefined) {
+  if (hasCanonicalVisualProminence(rawEvidence)) return true;
   if (hasNonConsentOverlayWithoutIndependentConsentEvidence(rawEvidence)) {
     return false;
   }
@@ -1460,6 +1467,7 @@ function isRequirementSatisfied(type: EvidenceRequirementType, rawEvidence: Reco
     case "consentSpecificBlockingInteraction":
       return hasConsentSpecificBlockingInteraction(rawEvidence);
     case "consentSurfaceEvaluable": {
+      if (hasCanonicalVisualProminence(rawEvidence)) return true;
       const gate = evaluateConsentSurfaceGate(rawEvidence);
       return consentSurfaceGateAllowsConsentUxPromotion(gate);
     }
@@ -1707,6 +1715,8 @@ function packetToContractEvidence(packet: UnifiedFindingPacket): Record<string, 
     entities.fingerprintingRuntimeEvidence ?? entities.fingerprinting_runtime_evidence
   );
   return {
+    consentVisualProminence: parseObjectArrayValue(entities.consentVisualProminence)[0],
+    normalizedConcernPromotionEligibility: packet.concernContext?.promotionEligibilities.includes("eligible") ? "eligible" : undefined,
     accept_more_prominent_than_reject:
       packet.unifiedFindingId === "accept_more_prominent_than_reject" ||
       packet.evidence?.flags?.some((flag) => /accept_button_prominence|accept_more_prominent/i.test(flag)) ||

@@ -79,6 +79,7 @@ export * from "./policy-document-brand-relationships";
 export * from "./supported-languages";
 export * from "./model-assistance";
 export * from "./consent-control-assessment";
+export * from "./consent-control-visual-comparison";
 export * from "./consent-control-calibration";
 export * from "./lambda-result-disposition";
 export * from "./pre-consent-browser-storage-projection";
@@ -3685,3 +3686,6 @@ export * from "./cms-security";
 export * from "./form-destination-trace";
 export * from "./california-notice-passages";
 export * from "./post-accept-form-reconciliation";
+export * from "./action-origin-dom-storage-observation";
+
+export * from "./observed-action-source-proof";

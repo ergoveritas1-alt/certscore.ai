@@ -1,7 +1,10 @@
 /** Reviewed, bounded catalogue, not an exhaustive CVE feed. Never fetch on a scan. */
 export const CMS_CATALOGUE_V1 = "certscore.cms-catalogue.2026-09-17.v1";
-export const CMS_CATALOGUE_VERSION = "certscore.cms-catalogue.2026-09-17.v2";
-export const CMS_CATALOGUE_REVIEWED_AT = "2026-09-17";
+export const CMS_CATALOGUE_V2 = "certscore.cms-catalogue.2026-09-17.v2";
+export const CMS_CATALOGUE_V3 = "certscore.cms-catalogue.2026-10-11.v3";
+export const CMS_CATALOGUE_VERSION = "certscore.cms-catalogue.2026-10-11.v4";
+export const CMS_CATALOGUE_LEGACY_REVIEWED_AT = "2026-09-17";
+export const CMS_CATALOGUE_REVIEWED_AT = "2026-10-11";
 export type CmsProduct = "wordpress" | "joomla" | "drupal" | "magento" | "adobe-commerce" | "prestashop" | "typo3" | "opencart" | "shopify" | "wix" | "squarespace";
 export type CmsRange = { min: string; max: string; maxInclusive?: boolean };
 export type CmsRule = {
@@ -52,7 +55,7 @@ export const CMS_SECURITY_RULES_V1: readonly CmsRule[] = [
 ];
 
 /** v1 stays immutable so persisted assessments retain their original conclusions. */
-export const CMS_SECURITY_RULES: readonly CmsRule[] = [
+export const CMS_SECURITY_RULES_V2: readonly CmsRule[] = [
   ...CMS_SECURITY_RULES_V1,
   { id: "wordpress-4.1-4.6-security-eol", products: ["wordpress"], kind: "lifecycle",
     title: "WordPress 4.1–4.6 security updates ended",
@@ -60,3 +63,16 @@ export const CMS_SECURITY_RULES: readonly CmsRule[] = [
     ranges: [{ min: "4.1.0", max: "4.7.0" }], severity: "medium", effectiveAt: "2025-07-01",
     qualification: "The WordPress Security Team ended security updates for these branches in July 2025. The declared version is not runtime-confirmed; independently maintained patches or support were not checked." },
 ];
+
+/** Historical catalogue rules and review dates remain immutable. */
+export const CMS_SECURITY_RULES_V3: readonly CmsRule[] = [
+  ...CMS_SECURITY_RULES_V2,
+  { id: "drupal-7-community-eol", products: ["drupal"], kind: "lifecycle",
+    title: "Drupal 7 community security support ended",
+    sourceUrl: "https://www.drupal.org/psa-2023-06-07",
+    ranges: [{ min: "7.0.0", max: "8.0.0" }], severity: "medium", effectiveAt: "2025-01-05",
+    qualification: "Drupal Association and Drupal Security Team support ended. Paid or third-party extended security support and independently maintained patches are not observable." },
+];
+
+/** v4 changes lifecycle proof granularity only; source records stay unchanged. */
+export const CMS_SECURITY_RULES = CMS_SECURITY_RULES_V3;

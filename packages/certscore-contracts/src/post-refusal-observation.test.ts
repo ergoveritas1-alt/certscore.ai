@@ -879,3 +879,34 @@ test("legacy refusal UI and opaque-receipt proof remain readable but project neu
     assert.equal(legacy.refusalRegistration.status, "confirmed");
   }
 });
+
+test("legacy refusal with retained requests, writes and persistence downgrades without throwing or changing its source", () => {
+  const base = confirmedPacket();
+  const request = { requestId: "legacy-request", sanitizedUrl: "https://analytics.example.test/collect",
+    hostname: "analytics.example.test", resourceType: "fetch", startedAtMs: 25,
+    inFlightAtRefusalRegistration: false, msOffsetFromRefusal: 10, nonEssential: true };
+  const item = { storageType: "cookie" as const, name: "_ga", hostname: "example.test",
+    identityBasis: "cookie_name_domain_path_partition" as const, identityHash: "d".repeat(64),
+    valueHash: "b".repeat(64), nonEssential: true };
+  for (const expectedState of ["consent_surface_hidden", "canonical_cmp_consent_state_changed_after_reject",
+    "canonical_consent_refusal_state_written_after_action"]) {
+    const packet = postRefusalEvidencePacketSchema.parse({ ...base,
+      refusalRegistration: { ...base.refusalRegistration, witnesses: [{ ...base.refusalRegistration.witnesses[0], expectedState }] },
+      network: { ...base.network, requests: [request], postRefusalNonEssentialRequests: [request] },
+      storage: { ...base.storage, preAction: [item], postAction: [item], nonEssentialItemsPersistingAfterRefusal: [item],
+        writesAfterRefusal: [{ storageType: "cookie", name: "_ga", hostname: "example.test",
+          storageIdentityHash: item.identityHash, observedAtMs: 25, msOffsetFromRefusal: 10, nonEssential: true }] },
+    });
+    const original = structuredClone(packet);
+    const projection = projectPostRefusalEvidenceForReport({ packet, packetSha256: "c".repeat(64) });
+    assert.equal(projection.registrationStatus, "unconfirmed");
+    assert.equal(projection.refusalExercised, false);
+    assert.equal(projection.productionProjectable, false);
+    assert.equal(projection.observationCount, 0);
+    assert.deepEqual(projection.postRefusalActivity, []);
+    assert.deepEqual(projection.preConsentStorageNotCleared, []);
+    assert.ok(projection.limitations.includes("semantic_registration_unverified_legacy_packet"));
+    assert.equal(projection.packetSha256, "c".repeat(64));
+    assert.deepEqual(packet, original);
+  }
+});

@@ -4,6 +4,7 @@ import {
   GPC_OPT_OUT_PROTOTYPE_VERSION, type CanonicalEvidenceBundle, type GpcOptOutObservation,
 } from "@certscore/contracts";
 import { buildGpcResponseAssessment, retainedFinalDocumentRequest, type GpcVerifiedArtifactPointer } from "./gpc-response-assessment.js";
+import { gpcEndpointEvidence } from "./gpc-vendor-evidence.js";
 
 export type GpcPrototypeArtifact = { bytes: Uint8Array; pointer: GpcVerifiedArtifactPointer };
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
@@ -68,7 +69,9 @@ export function buildGpcOptOutPrototype(input: {
   const vendors = new Map<string, CanonicalEvidenceBundle["normalizedVendorObservations"]>();
   for (const vendor of gpc?.normalizedVendorObservations ?? []) {
     if (!purposes.has(vendor.purpose)) continue;
-    for (const id of vendor.matchedEvidenceIds) vendors.set(id, [...(vendors.get(id) ?? []), vendor]);
+    for (const id of vendor.matchedEvidenceIds) {
+      if (gpcEndpointEvidence(vendor, id) === "verified") vendors.set(id, [...(vendors.get(id) ?? []), vendor]);
+    }
   }
   const lane = gpc?.scanLaneRuns.find(r => r.laneId === "gpc_observation");
   const representative = lane?.accessOutcome === "representative_page";

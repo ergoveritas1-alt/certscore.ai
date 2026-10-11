@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v13";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v15";
 
 export type ConsentControlIntent =
   | "accept"
@@ -55,6 +55,8 @@ export type ConsentControlTerm = {
   exactLabelOnly?: boolean;
   requiredObservationRecipe?: string;
   requiresLabelBoundNecessaryOnlyContext?: boolean;
+  /** An explicit positive euro price immediately follows this phrase on the control. */
+  requiresLabelBoundPrice?: boolean;
   requiresConsentContext?: boolean;
   requiresPreferenceContext?: boolean;
   requiresContinueConsentContext?: boolean;
@@ -146,6 +148,10 @@ const nl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ lo
 const pl = (terms: TermInput[]) => terms.map((term): ConsentControlTerm => ({ locale: "pl", ...term }));
 
 export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
+  // Retained German DOM inventory: consent approval, separate from paid ad-free subscription.
+  // Observation vocabulary only; action recipes and semantic registration are unchanged.
+  { locale: "de", phrase: "einwilligen und weiter", intent: "accept", strength: "direct",
+    exactLabelOnly: true, requiresConsentContext: true, observationOnly: true },
   // Reviewed direct Portuguese refusal; keep exactness and consent context.
   { locale: "pt", phrase: "rejeitar", intent: "reject", strength: "direct",
     exactLabelOnly: true, requiresConsentContext: true },
@@ -706,6 +712,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("privacy_opt_out", "opt-out"),
   ]),
   ...es([
+    { phrase: "rechazar por", intent: "reject", strength: "direct",
+      variant: "reject_with_payment", requiresConsentContext: true, requiresLabelBoundPrice: true },
     ...direct("accept", "aceptar"),
     ...direct("accept", "acepto"),
     ...direct("accept", "aceptar todo"),
@@ -1263,6 +1271,7 @@ function classifyConsentControlLabelInternal(
     !(input.usage === "action" && term.observationOnly === true) &&
     (!term.requiredObservationRecipe || term.requiredObservationRecipe === input.observationRecipe) &&
     (!term.requiresLabelBoundNecessaryOnlyContext || hasLabelBoundNecessaryOnlyContext(input)) &&
+    (!term.requiresLabelBoundPrice || hasLabelBoundPrice(input, term.phrase)) &&
     (localeHints.size === 0 || localeHints.has(term.locale))
   );
   const matches = terms
@@ -1358,12 +1367,26 @@ function classifyConsentControlLabelInternal(
       `match_strength_${match.term.strength}`,
       match.term.variant ? `variant_${match.term.variant}` : null,
       match.term.requiresConsentContext ? "requires_consent_context" : null,
+      match.term.requiresLabelBoundPrice ? "requires_label_bound_price" : null,
       match.term.requiresPreferenceContext ? "requires_preference_context" : null,
       match.term.requiresContinueConsentContext ? "requires_continue_consent_context" : null,
       contextSatisfied ? "context_satisfied" : "context_not_satisfied",
     ]),
     contextSatisfied,
   };
+}
+
+function hasLabelBoundPrice(input: ConsentControlLabelClassifierInput, phrase: string): boolean {
+  const prefix = normalizeConsentControlText(phrase) + " ";
+  // Inspect each original label source independently: joined fields or dialog
+  // prices cannot turn a free refusal into a transactional choice.
+  return [input.label, input.ariaLabel, input.title, input.value].some(value => {
+    const label = normalizeConsentControlText(value);
+    if (!label.startsWith(prefix)) return false;
+    const price = /^(?:(\d+(?:\s+\d+)?)\s*(?:€|euros?)|(?:€|euros?)\s*(\d+(?:\s+\d+)?))(?=\s|\/|$)/u
+      .exec(label.slice(prefix.length));
+    return Boolean(price && Number((price[1] ?? price[2])!.replace(/\s/g, "")) > 0);
+  });
 }
 
 function hasLabelBoundNecessaryOnlyContext(input: ConsentControlLabelClassifierInput): boolean {

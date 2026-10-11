@@ -22,7 +22,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-09-17-maps-assets-v1";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-11-ga4-collect-v1";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -1295,6 +1295,33 @@ const rules: VendorRule[] = [
     basisLabel: "posthog_endpoint_or_cookie",
   },
   {
+    identity: {"entityId":"ent_48c384037a4a","vendorId":"ven_b4797db52098","serviceId":"svc_3f6209e529d5"},
+    entity: "IBM",
+    vendor: "Instana",
+    product: "Instana End User Monitoring",
+    purpose: "performance_monitoring",
+    servicePurpose: "Performance monitoring",
+    regulatoryRelevance: ["performance_monitoring"],
+    confidence: 0.96,
+    // Identify only the documented SaaS collector and browser agent. Neither
+    // another Instana service nor a first-party lookalike path supplies proof.
+    hostPatterns: [/^eum-blue-saas\.instana\.io$/i, /^eum\.instana\.io$/i],
+    urlPatterns: [
+      /^https:\/\/eum-blue-saas\.instana\.io\/(?:\?|$)/i,
+      /^https:\/\/eum\.instana\.io\/eum\.min\.js(?:\?|$)/i,
+    ],
+    requireUrlPatternMatch: true,
+    basisLabel: "instana_eum_documented_endpoints",
+    review: {
+      reviewedAt: "2026-10-11",
+      reviewer: "Codex and Sol primary-source review; not human calibration",
+      sourceUrls: [
+        "https://www.ibm.com/docs/en/instana-observability?topic=planning-preparing-endpoints-keys",
+        "https://www.ibm.com/docs/en/instana-observability?topic=websites-website-monitoring-faq",
+      ],
+    },
+  },
+  {
     identity: {"entityId":"ent_0de60cbe278d","vendorId":"ven_1e18c58558ef","serviceId":"svc_052d9ac72468"},
     entity: "New Relic, Inc.",
     vendor: "New Relic",
@@ -1869,9 +1896,12 @@ const rules: VendorRule[] = [
     urlPatterns: [
       /^https:\/\/(?:www|region\d+)\.google-analytics\.com\/(?:g\/collect|collect|j\/collect)\b/i,
       /^https:\/\/(?:www|ssl)\.google-analytics\.com\/analytics\.js\b/i,
+      // This shared administrative host is measurement evidence only at this exact endpoint.
+      /^https:\/\/analytics\.google\.com\/g\/collect(?:\?[^#\r\n]*)?$/,
     ],
     cookiePatterns: [/^_ga(?:_.+)?$/i, /^_gid$/i, /^_gat/i],
     storageKeyPatterns: [/^_ga(?:_.+)?$/i, /^_gid$/i, /^_gat/i],
+    allowUrlPatternWithoutHostMatch: true,
     basisLabel: "ga_endpoint_or_cookie",
   },
   {
@@ -1979,12 +2009,20 @@ const rules: VendorRule[] = [
     urlPatterns: [
       /^https:\/\/www\.facebook\.com\/tr(?:[/?#]|$)/i,
       /^https:\/\/connect\.facebook\.net\/(?:[^/?#]+\/)?fbevents\.js(?:[?#]|$)/i,
+      // Pixel configuration is advertising infrastructure, not proof of an event,
+      // personal-data transmission, profiling or successful tracking.
+      /^https:\/\/connect\.facebook\.net\/signals\/config\/[0-9]+(?:[?#]|$)/i,
     ],
     allowUrlPatternWithoutHostMatch: true,
     cookiePatterns: [/^_fbp$/i, /^_fbc$/i],
     storageKeyPatterns: [/^_fbp$/i, /^_fbc$/i],
     requireUrlPatternMatch: true,
     basisLabel: "meta_pixel_endpoint_or_cookie",
+    review: {
+      reviewedAt: "2026-10-10",
+      reviewer: "Codex source review of Meta Pixel configuration endpoint extension",
+      sourceUrls: ["https://petsymposium.org/popets/2025/popets-2025-0151.pdf"],
+    },
   },
   {
     identity: {"entityId":"ent_f2a82736f68e","vendorId":"ven_6a03b1eeab38","serviceId":"svc_ac21cb004610"},
@@ -2519,7 +2557,7 @@ const rules: VendorRule[] = [
     urlPatterns: [/\/uc\.js\b/i, /\/consentconfig\//i],
     cookiePatterns: [/^CookieConsent$/i],
     globalPatterns: [/^Cookiebot$/i],
-    storageKeyPatterns: [/^CookieConsent$/i, /^CookiebotConsent$/i],
+    storageKeyPatterns: [/^CookieConsent$/i, /^CookiebotConsent$/i, /^cookiebottest$/],
     domSelectorPatterns: [/^#CybotCookiebotDialog$/i, /^#CookiebotWidget$/i],
     basisLabel: "cookiebot_cmp_script_or_cookie",
   },
@@ -3450,8 +3488,8 @@ const rules: VendorRule[] = [
     servicePurpose: "Analytics",
     regulatoryRelevance: ["consent", "analytics", "marketing_analytics", "marketing_automation"],
     confidence: 0.96,
-    hostPatterns: [/^track\.hubspot\.com$/i],
-    urlPatterns: [/^https:\/\/track\.hubspot\.com\/(?:__ptq|ptq)\.gif(?:\?|$)/i],
+    hostPatterns: [/^track(?:-eu1)?\.hubspot\.com$/i],
+    urlPatterns: [/^https:\/\/track(?:-eu1)?\.hubspot\.com\/(?:__ptq|ptq)\.gif(?:\?|$)/i],
     requireUrlPatternMatch: true,
     basisLabel: "hubspot_ptq_tracking_pixel",
   },

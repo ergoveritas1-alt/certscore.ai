@@ -68,13 +68,22 @@ unified findings; the fixture does not change that policy or scoring. Automated
 issues on this deliberately failing page are test signals, not an ADA legal
 conclusion.
 
-The five pages under `sentinels/` also contain five concrete failures each. Their
+The five pages under `sentinels/` contain six required failing rule types each. Their
 required rules/selectors are declared in `manifest.json` and verified by
 `src/sentinel-accessibility-canary.test.ts`. The existing 20-minute rotating
 monitor checks their typed retained WCAG evidence and alerts on a detection
 failure; see `../sentinel-monitor/README.md`. Publish only these six assets with
 `scripts/deploy-ergoveritas-canary-bundle.sh --sentinels-only --apply`, and publish
 only `test2.html` with `scripts/deploy-ergoveritas-test2-canary.sh --page-only --apply`.
+
+Fixture contract v2 adds shared and distinct image-only links to verify retained
+DOM identity. Monitor check v3 also verifies the canonical 12-point accessibility
+deduction and its category caps. Publish the static bundle and matching monitor
+between scheduled slots; the old monitor does not accept the new manifest.
+These additions are local pending release. See
+`docs/certscore-v2/finding-calibration-gate.md` for rollout and calibration limits.
+Incremental fixture/check growth is estimated below $0.10/month and adds no API
+read, scan, browser lane, or model call.
 
 Estimated incremental serving, audit compute, evidence and monitor-read cost is
 below $0.50/month at up to 15,000 total canary scans and 2,160 scheduled monitor

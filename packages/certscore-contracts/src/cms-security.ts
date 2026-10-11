@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { cmsVersionEvidenceSchema, WORDPRESS_RELEASE } from "./cms-version-evidence";
-import { CMS_CATALOGUE_VERSION, CMS_CATALOGUE_V1, CMS_CATALOGUE_REVIEWED_AT, CMS_SECURITY_RULES, CMS_SECURITY_RULES_V1, type CmsProduct, type CmsRange } from "./cms-security-catalog";
+import { CMS_CATALOGUE_VERSION, CMS_CATALOGUE_V1, CMS_CATALOGUE_V2, CMS_CATALOGUE_V3, CMS_CATALOGUE_REVIEWED_AT, CMS_CATALOGUE_LEGACY_REVIEWED_AT, CMS_SECURITY_RULES, CMS_SECURITY_RULES_V1, CMS_SECURITY_RULES_V2, type CmsProduct, type CmsRange } from "./cms-security-catalog";
 export { CMS_CATALOGUE_VERSION, CMS_CATALOGUE_REVIEWED_AT, CMS_SECURITY_RULES } from "./cms-security-catalog";
 export const CMS_SECURITY_FINDING_ID = "site_integrity_cms_security";
 export const CMS_SECURITY_SIGNAL = "site_integrity.cms_security";
@@ -53,8 +53,23 @@ function identify(signal: CmsSignal) {
     return match ? [{ product, observedVersion: match[1] ?? null }] : [];
   });
 }
-export function assessCmsSignals(signals: CmsSignal[], assessedAt: string, catalogueVersion: typeof CMS_CATALOGUE_VERSION | typeof CMS_CATALOGUE_V1 = CMS_CATALOGUE_VERSION, evidencePolicy: "v1" | "v2" = "v1") {
-  const rules = catalogueVersion === CMS_CATALOGUE_V1 ? CMS_SECURITY_RULES_V1 : CMS_SECURITY_RULES;
+export function assessCmsSignals(signals: CmsSignal[], assessedAt: string, catalogueVersion: typeof CMS_CATALOGUE_VERSION | typeof CMS_CATALOGUE_V1 | typeof CMS_CATALOGUE_V2 | typeof CMS_CATALOGUE_V3 = CMS_CATALOGUE_VERSION, evidencePolicy: "v1" | "v2" = "v1") {
+  const rules = catalogueVersion === CMS_CATALOGUE_V1 ? CMS_SECURITY_RULES_V1 : catalogueVersion === CMS_CATALOGUE_V2 ? CMS_SECURITY_RULES_V2 : CMS_SECURITY_RULES;
+  const currentCatalogue = catalogueVersion === CMS_CATALOGUE_VERSION;
+  const catalogueReviewedAt = currentCatalogue || catalogueVersion === CMS_CATALOGUE_V3 ? CMS_CATALOGUE_REVIEWED_AT : CMS_CATALOGUE_LEGACY_REVIEWED_AT;
+  // Drupal 7 core uses complete two-component releases (7.98), not semver.
+  // This grammar starts at v3; historical conclusions are reproduced unchanged.
+  const drupal7Release = (product: CmsProduct, value: string) => (currentCatalogue || catalogueVersion === CMS_CATALOGUE_V3) && product === "drupal" && /^7\.(?:0|[1-9]\d{0,5})$/.test(value);
+  const comparable = (product: CmsProduct, value: string) => drupal7Release(product, value) || evidencePolicy === "v2" && product === "wordpress" && WORDPRESS_RELEASE.test(value) && value.split(".").length === 2 ? `${value}.0` : value;
+  // A complete major interval may prove community lifecycle only, never a release/CVE.
+  const branchRange = (product: CmsProduct, major: string, rule: typeof rules[number]) => {
+    if (rule.kind !== "lifecycle" || !rule.products.includes(product) || rule.effectiveAt > assessedAt.slice(0, 10)) return undefined;
+    const lower = `${major}.0.0`, upper = `${Number(major) + 1}.0.0`;
+    return rule.ranges.find(range => {
+      const low = compareCmsVersions(lower, range.min), high = compareCmsVersions(upper, range.max);
+      return low !== null && high !== null && low >= 0 && high <= 0;
+    });
+  };
   const candidates = signals.flatMap(signal => identify(signal).map(detection => ({ ...detection, signal })));
   const products = [...new Set(candidates.map(row => row.product))];
   const detections = products.map((product, index) => {
@@ -63,35 +78,39 @@ export function assessCmsSignals(signals: CmsSignal[], assessedAt: string, catal
     const versionRows = evidencePolicy === "v2" && !declarations.some(row => row.observedVersion) ? rows.filter(row => row.signal.kind === "core_asset_version") : declarations;
     const observedVersions = [...new Set(versionRows.map(row => row.observedVersion).filter((v): v is string => v !== null))];
     const candidate = observedVersions.length === 1 ? observedVersions[0]! : null;
-    const comparableVersion = candidate && evidencePolicy === "v2" && product === "wordpress" && WORDPRESS_RELEASE.test(candidate) && candidate.split(".").length === 2 ? `${candidate}.0` : candidate;
+    const comparableVersion = candidate ? comparable(product, candidate) : null;
     const exact = candidate && comparableVersion && compareCmsVersions(comparableVersion, comparableVersion) === 0 &&
       (!candidate.includes("-p") || ["magento", "adobe-commerce"].includes(product)) &&
-      (product === "opencart" ? /^\d+\.\d+\.\d+\.\d+$/.test(candidate) : product === "prestashop" ? /^\d+\.\d+\.\d+(?:\.\d+)?$/.test(candidate) : product === "wordpress" && evidencePolicy === "v2" ? WORDPRESS_RELEASE.test(candidate) : /^\d+\.\d+\.\d+(?:-p\d+)?$/.test(candidate));
+      ((currentCatalogue || catalogueVersion === CMS_CATALOGUE_V3) && product === "drupal" && /^7(?:\.|$)/.test(candidate) ? drupal7Release(product, candidate) : product === "opencart" ? /^\d+\.\d+\.\d+\.\d+$/.test(candidate) : product === "prestashop" ? /^\d+\.\d+\.\d+(?:\.\d+)?$/.test(candidate) : product === "wordpress" && evidencePolicy === "v2" ? WORDPRESS_RELEASE.test(candidate) : /^\d+\.\d+\.\d+(?:-p\d+)?$/.test(candidate));
     // A page declaring multiple CMS products is ambiguous; do not guess which owns a version.
     const version = exact && products.length === 1 && (evidencePolicy === "v2" ? declarations.filter(row => row.observedVersion !== null) : declarations).every(row => row.observedVersion === candidate) && declarations.some(row => row.observedVersion === candidate) ? candidate : null;
-    return { evidenceRef: `site_integrity:cms:${index}`, product, name: CMS_NAMES[product],
+    const branchVersion = currentCatalogue && candidate && /^(?:0|[1-9]\d{0,5})$/.test(candidate) && products.length === 1 &&
+      declarations.length > 0 && declarations.every(row => row.observedVersion === candidate &&
+        new RegExp(`^${CMS_NAMES[product]}(?:!| CMS)?[\\s/]+(?:v(?:ersion)?\\s*)?${candidate}${product === "drupal" ? "(?: \\(https?://(?:www\\.)?drupal\\.org/?\\))?" : ""}$`, "i").test(row.signal.value)) &&
+      rules.some(rule => branchRange(product, candidate, rule)) ? candidate : null;
+    return { ...(branchVersion ? { branchVersion, versionGranularity: "declared_branch" as const } : {}), evidenceRef: `site_integrity:cms:${index}`, product, name: CMS_NAMES[product],
       observedVersions, version, versionBasis: versionRows.some(row => row.signal.kind === "core_asset_version") ? "inferred" as const : declarations.length ? "declared" as const : "inferred" as const,
       confidence: versionRows.some(row => row.signal.kind === "core_asset_version") ? "medium" as const : declarations.length ? "high" as const : "medium" as const,
       runtimeVersionConfirmed: false as const, informationalOnly: hosted.has(product),
       evidenceRefs: rows.map(row => row.signal.evidenceRef),
-      versionStatus: hosted.has(product) ? "hosted_service" : version ? "declared_exact" : observedVersions.length > 1 || products.length > 1 ? "conflicting" : "unknown_or_partial",
+      versionStatus: hosted.has(product) ? "hosted_service" : version ? "declared_exact" : branchVersion ? "declared_branch" : observedVersions.length > 1 || products.length > 1 ? "conflicting" : "unknown_or_partial",
     };
   });
   let vulnIndex = 0, lifecycleIndex = 0;
   const matches = detections.flatMap(detection => {
-    if (!detection.version || detection.informationalOnly) return [];
-    const retainedVersion = detection.version;
+    if ((!detection.version && !detection.branchVersion) || detection.informationalOnly) return [];
+    const retainedVersion = detection.version ?? detection.branchVersion!;
     return rules.flatMap(rule => {
       if (!rule.products.includes(detection.product) || rule.effectiveAt > assessedAt.slice(0, 10)) return [];
-      const comparable = evidencePolicy === "v2" && detection.product === "wordpress" && retainedVersion.split(".").length === 2 ? `${retainedVersion}.0` : retainedVersion;
-      const range = rule.ranges.find(range => matchesCmsRange(comparable, range));
+      const comparableVersion = comparable(detection.product, retainedVersion);
+      const range = detection.branchVersion ? branchRange(detection.product, detection.branchVersion, rule) : rule.ranges.find(range => matchesCmsRange(comparableVersion, range));
       if (!range) return [];
       return [{ evidenceRef: `site_integrity:${rule.kind === "vulnerability" ? `vuln:${vulnIndex++}` : `lifecycle:${lifecycleIndex++}`}`,
-        detectionRef: detection.evidenceRef, observedVersion: detection.version, confidence: detection.confidence,
+        detectionRef: detection.evidenceRef, observedVersion: retainedVersion, confidence: detection.confidence,
         affectedVersionMatch: true as const, matchedRange: cmsRangeLabel(range), record: rule }];
     });
   });
-  return { catalogueVersion, catalogueReviewedAt: CMS_CATALOGUE_REVIEWED_AT, detections, matches };
+  return { catalogueVersion, catalogueReviewedAt, detections, matches };
 }
 export type CmsAssessment = ReturnType<typeof assessCmsSignals>;
 /** Informational inventory from retained declarations/paths; never core versions or advisory inputs. */
@@ -157,7 +176,7 @@ function sameAssessment(actual: unknown, expected: unknown): boolean {
 }
 export const cmsSecurityProjectionSchema = projectionBase.superRefine((value, ctx) => {
   const version = value.assessment?.catalogueVersion;
-  if (version !== CMS_CATALOGUE_VERSION && version !== CMS_CATALOGUE_V1) {
+  if (version !== CMS_CATALOGUE_VERSION && version !== CMS_CATALOGUE_V1 && version !== CMS_CATALOGUE_V2 && version !== CMS_CATALOGUE_V3) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Unknown CMS catalogue version" });
     return;
   }

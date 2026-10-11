@@ -6,6 +6,7 @@ import {
 import { gpcDocumentHash } from "./gpc-signal-capture.js";
 import { evaluateGpcObservationSession } from "./gpc-observation-completion.js";
 import type { GpcPrototypeArtifact } from "./gpc-opt-out-assessment.js";
+import { gpcEndpointEvidence } from "./gpc-vendor-evidence.js";
 
 /** Verifies the original worker bytes, including its inline producer-bound session.
  * The resulting independent observation never upgrades the paired v2 comparison. */
@@ -34,7 +35,10 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
   const vendors = new Map<string, CanonicalEvidenceBundle["normalizedVendorObservations"]>();
   for (const vendor of bundle?.normalizedVendorObservations ?? []) {
     if (!["advertising", "marketing", "analytics", "session_replay"].includes(vendor.purpose)) continue;
-    for (const id of vendor.matchedEvidenceIds) vendors.set(id, [...(vendors.get(id) ?? []), vendor]);
+    // Cookie association identifies transmitted storage, not this endpoint's purpose.
+    for (const id of vendor.matchedEvidenceIds) {
+      if (gpcEndpointEvidence(vendor, id) === "verified") vendors.set(id, [...(vendors.get(id) ?? []), vendor]);
+    }
   }
   const eventCounts = new Map<string, number>();
   for (const event of bundle?.networkEvents ?? []) eventCounts.set(event.eventId, (eventCounts.get(event.eventId) ?? 0) + 1);

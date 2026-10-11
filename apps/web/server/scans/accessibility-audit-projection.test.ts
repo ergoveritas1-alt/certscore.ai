@@ -23,7 +23,7 @@ const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
 test("existing additional-page audits require verified bytes and exact attempt, configuration and document binding", () => {
   const pageId = "10000000-0000-4000-8000-000000000001", parentScanId = "parent-scan", attemptId = "20000000-0000-4000-8000-000000000001";
   const a = accessibilityAuditFixture({ scanId: pageId });
-  const capture = { pageId, parentScanId, attemptId, configurationHash: "c".repeat(64), startedAt: a.startedAt, completedAt: a.completedAt, finalUrl: a.documentUrl };
+  const capture = { pageId, parentScanId, attemptId, configurationHash: "c".repeat(64), startedAt: "2026-10-09T12:00:00.000Z", completedAt: "2026-10-09T12:00:10.000Z", finalUrl: a.documentUrl };
   const evidence = { accessibilityAudit: a, siteIntegrityPageCapture: capture,
     moduleRun: { moduleName: "preConsentRuntimeScanner", status: "completed", startedAt: a.startedAt },
     domSnapshots: [{ artifactId: "dom", capturedAtMs: 6000, path: "dom.json", url: a.documentUrl, pagePhase: "network_idle", consentStateAtTime: "pre_consent", documentIdentity: { source: "cdp_loader_id", token: a.documentToken } }],
@@ -44,13 +44,33 @@ test("existing additional-page audits require verified bytes and exact attempt, 
   assert.equal(projectAdditionalPageAccessibilityAudit({ ...evidence, accessibilityAudit: undefined }, packet, parentScanId), null);
   for (const changed of [
     { ...evidence, accessibilityAudit: { ...a, documentToken: "stale" } },
-    { ...evidence, accessibilityAudit: { ...a, startedAt: "2026-10-09T12:00:04.000Z" } },
+    { ...evidence, accessibilityAudit: { ...a, startedAt: "2026-10-09T11:59:59.000Z" } },
     { ...evidence, domSnapshots: [...evidence.domSnapshots, { ...evidence.domSnapshots[0], capturedAtMs: 7000,
       documentIdentity: { source: "cdp_loader_id", token: "new-document" } }] },
   ]) {
     const changedPacket = { ...packet, sourceHash: createHash("sha256").update(JSON.stringify(changed)).digest("hex") };
     assert.equal(projectAdditionalPageAccessibilityAudit(changed, changedPacket, parentScanId), null, "matching bytes alone cannot replace document/timing proof");
   }
+  for (const change of [{ documentIdentity: { source: "cdp_loader_id", token: "other-loader" } },
+    { url: "https://example.com/other" }]) {
+    const matching = evidence.domSnapshots[0]!;
+    const conflicting = { ...matching, ...change };
+    for (const domSnapshots of [[matching, conflicting], [conflicting, matching]]) {
+      const changed = { ...evidence, domSnapshots };
+      const changedPacket = { ...packet, sourceHash: createHash("sha256").update(JSON.stringify(changed)).digest("hex") };
+      assert.equal(projectAdditionalPageAccessibilityAudit(changed, changedPacket, parentScanId), null,
+        "equal latest offsets with conflicting document proof cannot use array order to bind an audit");
+    }
+  }
+  for (const capturedAtMs of [0, 10000]) {
+    const changed = { ...evidence, domSnapshots: [{ ...evidence.domSnapshots[0], capturedAtMs }] };
+    const changedPacket = { ...packet, sourceHash: createHash("sha256").update(JSON.stringify(changed)).digest("hex") };
+    assert.ok(projectAdditionalPageAccessibilityAudit(changed, changedPacket, parentScanId), "visit boundaries remain eligible");
+  }
+  const stale = { ...evidence, domSnapshots: [...evidence.domSnapshots, { ...evidence.domSnapshots[0], capturedAtMs: 10001 }] };
+  const stalePacket = { ...packet, sourceHash: createHash("sha256").update(JSON.stringify(stale)).digest("hex") };
+  assert.equal(projectAdditionalPageAccessibilityAudit(stale, stalePacket, parentScanId), null,
+    "a stale latest snapshot cannot establish page binding or fall back to earlier proof");
 });
 
 async function runtimeDocumentSelector() {
@@ -186,6 +206,57 @@ test("mismatched independent document proof or timing discards findings and repo
     assert.equal(projectAccessibilityAuditSummary(projection)?.failedRuleCount, null);
     assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts: { accessibilityAudit: projection }, reviewFindingCandidates: [], validationFindings: [] }), []);
   }
+});
+
+test("accessibility document proof must fall inside the retained visit before findings or score effects project", () => {
+  for (const capturedAtMs of [-1, 10001, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const input = bundle();
+    input.runtimeMetadataSnapshots![0]!.capturedAtMs = capturedAtMs;
+    const projection = projectAccessibilityAudit(input, source, "https://example.com/");
+    assert.equal(projection?.observation.status, "limited", `capture offset ${capturedAtMs}`);
+    assert.deepEqual(projection?.observation.limitations, ["evidence_binding_invalid"]);
+    assert.equal(projectAccessibilityAuditSummary(projection)?.failedRuleCount, null);
+    const runtimeArtifacts = { accessibilityAudit: projection };
+    assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] }), []);
+    const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+    assert.equal(accessibilityDeductionBreakdown(findings.flatMap(f => f.scoreEffects ?? [])).deductionPoints, 0);
+    assert.deepEqual(findings, []);
+    assert.equal(input.accessibilityAudit!.violations.length, 4, "original observations stay unchanged");
+  }
+  for (const capturedAtMs of [0, 10000]) {
+    const input = bundle();
+    input.runtimeMetadataSnapshots![0]!.capturedAtMs = capturedAtMs;
+    assert.equal(projectAccessibilityAudit(input, source, "https://example.com/")?.observation.status, "completed");
+  }
+  const input = bundle();
+  input.runtimeMetadataSnapshots!.push({ ...input.runtimeMetadataSnapshots![0]!, capturedAtMs: 10001 });
+  assert.equal(projectAccessibilityAudit(input, source, "https://example.com/")?.observation.status, "limited",
+    "a stale latest snapshot cannot fall back to earlier proof");
+});
+
+test("equal latest runtime offsets with conflicting document proof remain limited in either array order", () => {
+  for (const change of [{ documentIdentity: { source: "cdp_loader_id" as const, token: "other-loader" } },
+    { url: "https://example.com/other" }]) {
+    for (const reverse of [false, true]) {
+      const input = bundle();
+      const matching = input.runtimeMetadataSnapshots![0]!;
+      const conflicting = { ...matching, ...change };
+      input.runtimeMetadataSnapshots = reverse ? [conflicting, matching] : [matching, conflicting];
+      const projection = projectAccessibilityAudit(input, source, "https://example.com/");
+      assert.equal(projection?.observation.status, "limited");
+      assert.deepEqual(projection?.observation.limitations, ["evidence_binding_invalid"]);
+      const runtimeArtifacts = { accessibilityAudit: projection };
+      assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] }), []);
+      const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+      assert.deepEqual(findings, []);
+      assert.equal(accessibilityDeductionBreakdown(findings.flatMap(f => f.scoreEffects ?? [])).deductionPoints, 0);
+      assert.equal(input.accessibilityAudit!.violations.length, 4, "original observations stay unchanged");
+    }
+  }
+  const input = bundle();
+  input.runtimeMetadataSnapshots!.push({ ...input.runtimeMetadataSnapshots![0]! });
+  assert.equal(projectAccessibilityAudit(input, source, "https://example.com/")?.observation.status, "completed",
+    "duplicate proof of the same latest document remains usable");
 });
 
 test("unverified, malformed or cross-scan required evidence blocks publication; historical scans stay unchanged", () => {

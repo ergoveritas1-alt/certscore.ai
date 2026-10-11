@@ -72,6 +72,7 @@ import type { ArtifactWriter } from "../artifact-writer.js";
 import { consentGeometryProofCdpBudget } from "../consent-geometry-proof-budget.js";
 import { isPairedConsentGeometryReady } from "../consent-paired-geometry-readiness.js";
 import { bindConsentGeometryScreenshot, preferredPreConsentScreenshotRef } from "../consent-geometry-screenshot-binding.js";
+import { createConsentVisualComparisonCollector } from "../consent-control-visual-comparison.js";
 import { captureDocumentBoundValue, sameDocumentCaptureBinding, type DocumentBoundCapture } from "../document-bound-capture.js";
 import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
 import {
@@ -93,7 +94,7 @@ import {
   getRegistrableDomainFromUrl,
 } from "../domain-utils.js";
 import { chromiumContextOptions, chromiumLaunchOptions } from "../playwright-runtime.js";
-import { captureResponseDestination, enrichNetworkDestination } from "../network-destination.js";
+import { captureResponseDestination, enrichNetworkDestination, freezeAndSnapshotResponseRows, retainDirectResponseWithOptionalEnrichment } from "../network-destination.js";
 import { normalizePublicIpAddress } from "../public-ip-address.js";
 import { maybeFulfillHeavyResource } from "../resource-stubbing.js";
 import { installWebBotAuthRoute } from "../web-bot-auth-routing.js";
@@ -739,7 +740,7 @@ export async function preConsentRuntimeScanner(
     ? await installRuntimeGraphCapture(page, input.runtimeGraph)
     : undefined;
   const finishGraph = (reason?: string) => {
-    if (graphCapture) responseCaptureFinalized = true;
+    responseCaptureFinalized = true;
     try { return graphCapture?.finish(reason ?? (pendingResponseCaptures.size ? "legacy_response_enrichment_incomplete" : undefined)); } catch { return undefined; }
   };
   let pageCrashObserved = false;
@@ -992,6 +993,7 @@ export async function preConsentRuntimeScanner(
   });
 
   const screenshots: ScreenshotArtifact[] = [];
+  const measureVisualComparison = createConsentVisualComparisonCollector(screenshots, input.scanStartedAtMs, remainingModuleBudgetMs);
   const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;
@@ -1138,13 +1140,20 @@ export async function preConsentRuntimeScanner(
   passiveRuntimeCheckpointTimer?.unref();
 
   const buildSoftDeadlineResult = (): PreConsentRuntimeScannerResult => {
+    // The scan promise can keep unwinding after this result is published.
+    // Freeze response commits first, then classify detached terminal rows.
+    const deadlineResponses = freezeAndSnapshotResponseRows(networkResponseEvents, () => { responseCaptureFinalized = true; });
+    const deadlineRequests = structuredClone(networkEvents);
+    const deadlineCookies = structuredClone(cookieEvents);
+    const deadlineScripts = structuredClone(scriptEvents);
+    const deadlineIframes = structuredClone(iframeEvents);
     applyFinalDocumentPartyClassification({
       finalDocumentUrl: safePageUrl(page, effectiveNavigationUrl),
-      networkEvents,
-      networkResponseEvents,
-      cookieEvents,
-      scriptEvents,
-      iframeEvents,
+      networkEvents: deadlineRequests,
+      networkResponseEvents: deadlineResponses,
+      cookieEvents: deadlineCookies,
+      scriptEvents: deadlineScripts,
+      iframeEvents: deadlineIframes,
     });
     const deadlineReason = abortReason(softDeadlineSignal);
     const errorMessage = deadlineReason instanceof Error
@@ -1192,23 +1201,23 @@ export async function preConsentRuntimeScanner(
         evidenceRefs: [],
         errors: [...runtimeErrors, errorMessage, ...screenshotErrors],
       },
-      runtimeTimeline: [...networkEvents, ...networkResponseEvents, ...cookieEvents, ...scriptEvents, ...iframeEvents, ...browserApiAccessEvents],
-      networkEvents: [...networkEvents],
-      networkResponseEvents: [...networkResponseEvents],
+      runtimeTimeline: [...deadlineRequests, ...deadlineResponses, ...deadlineCookies, ...deadlineScripts, ...deadlineIframes, ...browserApiAccessEvents],
+      networkEvents: deadlineRequests,
+      networkResponseEvents: deadlineResponses,
       automatedAccessObservation: buildAutomatedAccessObservation({
         providers: targetInfrastructureProviders,
         signalCodes: targetInfrastructureSignalCodes,
         webBotAuth: webBotAuthRoute.snapshot(),
       }),
-      cookieEvents: [...cookieEvents],
+      cookieEvents: deadlineCookies,
       cookieSnapshots: retainedCookieSnapshot ? [retainedCookieSnapshot] : [],
       storageSnapshots: retainedStorageSnapshot ? [retainedStorageSnapshot] : [],
       gpcSignalObservation: retainedGpcSignalObservation,
       ...(retainedGpcObservationSession ? { gpcObservationSession: retainedGpcObservationSession } : {}),
       ...(retainedGpcOptOutObservation ? { gpcOptOutObservation: retainedGpcOptOutObservation } : {}),
       ...(retainedImpactSemanticObservation ? { gpcImpactSemanticObservation: retainedImpactSemanticObservation } : {}),
-      scriptEvents: [...scriptEvents],
-      iframeEvents: [...iframeEvents],
+      scriptEvents: deadlineScripts,
+      iframeEvents: deadlineIframes,
       consentUiObservations: retainedConsentUiObservations,
       ...(retainedCollectionSurfaceInventory
         ? { collectionSurfaceInventory: retainedCollectionSurfaceInventory }
@@ -1700,6 +1709,8 @@ export async function preConsentRuntimeScanner(
         );
         const earlyScreenshot = screenshots.find((screenshot) => screenshot.artifactId === "screenshot_pre_consent");
         if (earlyScreenshot) bindConsentGeometryScreenshot(earlyConsentGeometry, earlyScreenshot);
+        const earlyVisualGeometry = await measureVisualComparison(earlyConsentGeometry);
+        Object.assign(earlyConsentGeometry, earlyVisualGeometry);
         const earlyGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
           "ConsentControlGeometryEvidence.json",
           {
@@ -2028,6 +2039,11 @@ export async function preConsentRuntimeScanner(
             () => null,
           );
           if (pairedGeometry) {
+            pairedGeometry.geometry = await measureVisualComparison(pairedGeometry.geometry, {
+              frameRevision: pairedGeometry.frameRevision,
+              framesStable: pairedGeometry.access.status === "loaded" && consentFrameRevision === pairedGeometry.frameRevision &&
+                page.frames().length === pairedGeometry.frames.length && pairedGeometry.frames.every(frame => page.frames().includes(frame)),
+            });
             const geometryComplete = pairedGeometry.access.status === "loaded" &&
               pairedGeometry.geometry.summary.confidence > 0 &&
               pairedGeometry.geometry.pageUrl !== "about:blank" &&
@@ -2946,6 +2962,7 @@ export async function preConsentRuntimeScanner(
                 synchronizedGeometry.geometry.viewport.height > 0,
               );
               if (synchronizedGeometry && synchronizedGeometryComplete) {
+                synchronizedGeometry.geometry = await measureVisualComparison(synchronizedGeometry.geometry);
                 const synchronizedGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
                   "ConsentControlGeometryEvidence.json",
                   {
@@ -3342,6 +3359,8 @@ export async function preConsentRuntimeScanner(
             };
           }
         }
+        const geometryCaptureFrameRevision = consentFrameRevision;
+        const geometryCaptureFrames = page.frames();
         const access = await recordTiming(
           timingBreakdown,
           "consent geometry page access",
@@ -3437,6 +3456,11 @@ export async function preConsentRuntimeScanner(
           notifyScreenshotCaptured(input, geometryProofScreenshot);
           bindConsentGeometryScreenshot(geometry, geometryProofScreenshot);
         }
+        geometry = await measureVisualComparison(geometry, {
+          frameRevision: geometryCaptureFrameRevision,
+          framesStable: access.status === "loaded" && consentFrameRevision === geometryCaptureFrameRevision &&
+            page.frames().length === geometryCaptureFrames.length && geometryCaptureFrames.every(frame => page.frames().includes(frame)),
+        });
         const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact("ConsentControlGeometryEvidence.json", {
           ...geometry,
           access,
@@ -3719,6 +3743,7 @@ export async function preConsentRuntimeScanner(
               }),
             );
             if (recoveryGeometry && recoveryGeometryComplete) {
+              recoveryGeometry.geometry = await measureVisualComparison(recoveryGeometry.geometry);
               const recoveryGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
                 "ConsentControlGeometryEvidence.json",
                 {
@@ -4086,6 +4111,9 @@ export async function preConsentRuntimeScanner(
       const retainedGeometry: unknown = await readFile(snapshot.path, "utf8").then(value => JSON.parse(value)).catch(() => null);
       retainedBlockingChallengeSnapshot = isRetainedBlockingFrameChallengeBound(snapshot, retainedGeometry) ? snapshot : undefined;
     }
+    // Freeze optional response enrichment before returning the canonical lane
+    // artifact; a late server-address/size result must not mutate published rows.
+    responseCaptureFinalized = true;
     return {
       accessibilityAudit,
       collectionSurfaceSnapshots,
@@ -4344,25 +4372,7 @@ export async function preConsentRuntimeScanner(
       .filter((metadata): metadata is SetCookieMetadata => Boolean(metadata))
       .filter((metadata) => isValidSetCookieDomainForResponse(metadata.domain, hostname));
     const safeHeaders = safeResponseHeaders(headers);
-    const sizesPromise = response.request().sizes().then(normalizeResponseSizes).catch(() => undefined);
-    // Playwright binds serverAddr to this exact response/request, including redirects.
-    // Never correlate destinations by URL: concurrent requests can have the same URL.
-    const destinationPromise = captureResponseDestination(response).then(async result => {
-      if (responseCaptureFinalized) return undefined;
-      if (requestEvent && "connectionId" in result) proxyDestinations?.track(requestEvent.requestId, result.connectionId, responseUrl);
-      if (requestEvent) requestEvent.networkConnection = {
-        source: "response_request_binding", status: result.status,
-        requestId: requestEvent.requestId,
-        redirectedFromRequestId: request.redirectedFrom() ? requestIds.get(request.redirectedFrom()!) : undefined,
-        fromServiceWorker: result.fromServiceWorker,
-      };
-      return enrichNetworkDestination(result.destination);
-    });
-    const sizes = graphCapture ? undefined : await sizesPromise;
     const timing = responseTiming(response);
-    const networkDestination = graphCapture ? requestEvent?.networkDestination : await destinationPromise;
-    if (responseCaptureFinalized) return;
-    if (requestEvent && networkDestination) requestEvent.networkDestination = networkDestination;
     const responseEvent: NetworkResponseEvent = {
       eventId: nextId("resp"),
       eventType: "network_response",
@@ -4390,7 +4400,7 @@ export async function preConsentRuntimeScanner(
       setCookieHeaders: effectiveSetCookieHeaders.map(redactSetCookieHeader),
       setCookieMetadata,
       cookieNamesSet: setCookieMetadata.map((metadata) => metadata.name),
-      networkDestination,
+      networkDestination: requestEvent?.networkDestination,
       networkConnection: requestEvent?.networkConnection,
       responseHeaders: safeHeaders,
       cacheHeaders: pickHeaders(headers, ["cache-control", "expires"]),
@@ -4401,9 +4411,39 @@ export async function preConsentRuntimeScanner(
         "access-control-expose-headers",
       ]),
       timing,
-      sizes,
     };
-    networkResponseEvents.push(responseEvent);
+    const enrichment = retainDirectResponseWithOptionalEnrichment({
+      rows: networkResponseEvents, direct: responseEvent, finalized: () => responseCaptureFinalized,
+      enrichments: [
+        async commit => {
+          const sizes = await response.request().sizes().then(normalizeResponseSizes).catch(() => undefined);
+          if (sizes) commit({ sizes });
+        },
+        async commit => {
+          // Playwright binds serverAddr to this exact response/request,
+          // including redirects. Never correlate destinations by URL.
+          const result = await captureResponseDestination(response);
+          if (requestEvent) {
+            const networkConnection = {
+              source: "response_request_binding" as const, status: result.status,
+              requestId: requestEvent.requestId,
+              redirectedFromRequestId: request.redirectedFrom() ? requestIds.get(request.redirectedFrom()!) : undefined,
+              fromServiceWorker: result.fromServiceWorker,
+            };
+            commit({ networkConnection }, () => {
+              requestEvent.networkConnection = networkConnection;
+              if ("connectionId" in result && typeof result.connectionId === "number") {
+                proxyDestinations?.track(requestEvent.requestId, result.connectionId, responseUrl);
+              }
+            });
+          }
+          const networkDestination = await enrichNetworkDestination(result.destination);
+          if (networkDestination) commit({ networkDestination }, () => {
+            if (requestEvent) requestEvent.networkDestination = networkDestination;
+          });
+        },
+      ],
+    });
 
     for (const cookieMetadata of setCookieMetadata) {
       const initiatorChain = boundedInitiatorChain([
@@ -4476,14 +4516,7 @@ export async function preConsentRuntimeScanner(
         matchSource: "set_cookie",
       });
     }
-    if (graphCapture) {
-      const [resolvedSizes, resolvedDestination] = await Promise.all([sizesPromise, destinationPromise]);
-      if (responseCaptureFinalized) return;
-      responseEvent.sizes = resolvedSizes;
-      responseEvent.networkDestination = resolvedDestination;
-      responseEvent.networkConnection = requestEvent?.networkConnection;
-      if (requestEvent && resolvedDestination) requestEvent.networkDestination = resolvedDestination;
-    }
+    await enrichment;
   }
 }
 
@@ -5806,7 +5839,20 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
           if ((style.position === "absolute" || style.position === "fixed") && (rect.right < -1000 || rect.bottom < -1000) &&
               (linkRect.right < -1000 || linkRect.bottom < -1000)) concealment ??= "offscreen_position";
           if (!positionedDescendant && rect.width <= 0 && rect.height <= 0 && ["hidden", "clip"].includes(style.overflow)) concealment ??= "zero_size_container";
-          if (depth === 0 && parseFloat(style.fontSize) === 0) concealment ??= "zero_font_size";
+          if (depth === 0 && parseFloat(style.fontSize) === 0) {
+            // Zero-sized label text can accompany a visible CSS icon. Retain
+            // independent offscreen/clipping evidence, but do not call the
+            // whole link concealed solely because its text has zero font size.
+            const hasGraphic = style.backgroundImage !== "none" || style.maskImage !== "none";
+            const hasGeneratedGraphic = ["::before", "::after"].some(pseudo => {
+              const generated = getComputedStyle(element, pseudo);
+              return generated.display !== "none" && generated.visibility === "visible" && Number(generated.opacity) > 0 &&
+                generated.content !== "none" && generated.content !== "normal" &&
+                (parseFloat(generated.fontSize) > 0 && generated.content !== '""' && generated.content !== "''" ||
+                 generated.backgroundImage !== "none" || generated.maskImage !== "none" || generated.content.startsWith("url("));
+            });
+            if (!hasGraphic && !hasGeneratedGraphic) concealment ??= "zero_font_size";
+          }
           if (!previousConcealment && concealment) proofTarget = { element: ancestor, style, rect };
           positionedDescendant ||= style.position === "absolute" || style.position === "fixed";
         }
@@ -11922,12 +11968,19 @@ function bodyFieldNames(body: string): string[] {
   }
 }
 
-function isCollectionEndpoint(
+export function isCollectionEndpoint(
   url: string,
   resourceType: string | undefined,
 ): { observed: boolean; category?: string } {
   const hostname = getHostname(url) ?? "";
   const path = pathFromUrl(url) ?? "";
+  // Vendor purpose alone does not establish collection by a code/style/font
+  // resource. Retained SDK downloads can be labeled fetch or xhr, so inspect
+  // the pathname independently of resource type. Vendor activity stays retained.
+  // Dynamic script beacons and image collectors remain eligible below.
+  if (/\.(?:m?js|css|woff2?|ttf|otf|eot)$/i.test(path)) {
+    return { observed: false };
+  }
   if (/^(?:www\.)?google\.com$/i.test(hostname)) {
     if (/^\/ccm\/collect\b/i.test(path)) {
       return { observed: true, category: "google_consent_or_tag_support" };

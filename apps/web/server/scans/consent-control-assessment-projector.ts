@@ -1,5 +1,7 @@
 import {
   deriveConsentControlAssessment,
+  classifyConsentControlLabel,
+  consentControlVisualComparisonSchema,
   verifyConsentControlInspection,
   isInitialNecessaryOnlySelection, isInitialSelectionSubmit,
   initialConsentSelectionSchema,
@@ -29,6 +31,45 @@ type ConsentSurfaceInspectionLike = {
 };
 
 const REQUIRED_CHANNELS: ConsentControlAssessmentChannel[] = ["dom_inventory", "geometry"];
+
+/** Legacy captures may omit the explicit local-context flag. A retained native
+ * decision beside a classified control still prevents a verified absence.
+ * Classification here routes uncertainty; it never manufactures observed proof. */
+function hasUnresolvedLegacyFirstLayerDecision(raw: Record<string, unknown> | null | undefined, bundle: CanonicalEvidenceBundle) {
+  if (!raw || raw.controlInspection !== undefined || !Array.isArray(raw.candidates)) return false;
+  const candidates = raw.candidates.slice(0, 160).filter((value): value is Record<string, unknown> =>
+    Boolean(value && typeof value === "object" && !Array.isArray(value)));
+  return candidates.some(candidate => {
+    if (candidate.tagName !== "button" || candidate.layer !== "first_layer" ||
+      candidate.enabled !== true || candidate.intersectsViewport !== true ||
+      typeof candidate.containerId !== "string") return false;
+    const frame = candidate.frameContext as Record<string, unknown> | undefined;
+    const localDecisionContext = candidates.some(peer => peer !== candidate &&
+      peer.containerId === candidate.containerId && peer.layer === "first_layer" &&
+      ["accept_all", "reject_all", "manage_preferences"].includes(String(peer.actionType)) &&
+      (peer.frameContext as Record<string, unknown> | undefined)?.frameUrl === frame?.frameUrl);
+    if (!localDecisionContext) return false;
+    const reasonCodes = Array.isArray(candidate.classifierReasonCodes)
+      ? candidate.classifierReasonCodes.filter((code): code is string => typeof code === "string") : [];
+    const label = typeof candidate.label === "string" ? candidate.label : undefined;
+    const classification = classifyConsentControlLabel({ label, hasConsentContext: true,
+      hasPreferenceContext: true, usage: "observation" });
+    const unclassifiedRefusal = candidate.actionType === "other" && candidate.decisionStatus === "ambiguous" &&
+      classification.intent === "reject" && classification.matchStrength === "direct";
+    const retainedDefaultSelection = bundle.consentUiObservations.some(observation =>
+      retainedDocumentToken(observation.documentIdentity) === retainedDocumentToken(raw.documentIdentity) &&
+      retainedDocumentToken(raw.documentIdentity) !== null &&
+      observation.layerInspected === "first_layer" &&
+      observation.controls.some(control => control.label === label && control.actionType === "save_preferences" && control.visible === true) &&
+      ((observation.defaultToggleStatesObserved === true && observation.nonEssentialDefaultsOff === true) ||
+        observation.necessaryPreferenceSelectionObserved === true) &&
+      (observation.precheckedOptionalPurposeCount ?? 0) === 0);
+    const unverifiedSelection = (isInitialSelectionSubmit(label, reasonCodes) ||
+      classification.variant === "save_preferences") &&
+      !isInitialNecessaryOnlySelection(candidate.initialSelection) && !retainedDefaultSelection;
+    return unclassifiedRefusal || unverifiedSelection;
+  });
+}
 
 function normalizedDocumentId(value: string | null | undefined) {
   if (!value) return null;
@@ -214,7 +255,25 @@ function geometryInput(
       ? "document_mismatch"
       : "complete";
   const verifiedInspection = verifyConsentControlInspection(raw.controlInspection, raw.candidates);
+  const visual = consentControlVisualComparisonSchema.safeParse(raw.visualComparison);
+  const visualComparison = visual.success && tokenBoundToCanonicalDocument && assessmentStatus === "complete" &&
+    verifiedInspection?.structuralCoverage === "complete" && visual.data.documentToken === documentToken &&
+    visual.data.imageWidth === (raw.viewport as Record<string, unknown> | undefined)?.width &&
+    visual.data.imageHeight === (raw.viewport as Record<string, unknown> | undefined)?.height &&
+    ["accept", "reject"].every(intent => {
+      const measurement = visual.data[intent as "accept" | "reject"];
+      const candidate = (Array.isArray(raw.candidates) ? raw.candidates : []).find((row): row is Record<string, unknown> =>
+        Boolean(row && typeof row === "object" && !Array.isArray(row) && row.candidateId === measurement.candidateId));
+      const bounds = candidate?.boundingBox as Record<string, unknown> | undefined;
+      const frame = candidate?.frameContext as Record<string, unknown> | undefined;
+      return candidate?.actionType === `${intent}_all` && candidate.layer === "first_layer" &&
+        candidate.decisionStatus === "confirmed_visible" && candidate.enabled === true && frame?.frameKind === "main_frame" &&
+        normalizedDocumentId(typeof frame.frameUrl === "string" ? frame.frameUrl : null) === pageUrl &&
+        (candidate.screenshotArtifactRef === visual.data.screenshotArtifactRef || raw.screenshotArtifactRef === visual.data.screenshotArtifactRef) &&
+        ["x", "y", "width", "height"].every((key, index) => bounds?.[key] === measurement.bounds[index]);
+    }) ? visual.data : undefined;
   return {
+    ...(visualComparison ? { visualComparison } : {}),
     ...(raw.controlInspection !== undefined && !verifiedInspection ? { inspectionInvalid: true } : {}),
     ...(assessmentStatus === "complete" && tokenBoundToCanonicalDocument && verifiedInspection
       ? { controlInspection: verifiedInspection } : {}),
@@ -262,7 +321,8 @@ export function deriveMaterializedConsentControlAssessment(input: {
   const consentLaneDocument = verifiedConsentLaneDocument(input.bundle, input.consentControlGeometryEvidence);
   const consentNoGo = input.noGo && !consentLaneDocument;
   const accessLimited = consentSessionAccessLimited(input.bundle, input.consentControlGeometryEvidence);
-  const unresolvedDecision = hasUnresolvedConsentDecision(input.consentControlGeometryEvidence);
+  const unresolvedDecision = hasUnresolvedConsentDecision(input.consentControlGeometryEvidence) ||
+    hasUnresolvedLegacyFirstLayerDecision(input.consentControlGeometryEvidence, input.bundle);
   const unverifiedAccessibility = [...(input.bundle.consentUiObservations ?? [])].sort((a, b) => b.observedAtMs - a.observedAtMs).slice(0, 1).some((observation) => (observation.controls ?? []).some((control) =>
     (control.tagName === "ax-node" || control.selectorHint?.startsWith("ax:")) &&
     (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface")
@@ -346,6 +406,12 @@ export function deriveMaterializedConsentControlAssessment(input: {
         .filter((reason): reason is NonNullable<typeof reason> => Boolean(reason)),
     ]).slice(0, 16),
   };
+  // A comparison may only use its own retained, display-safe pre-consent image.
+  if (geometry?.visualComparison && !availableRepresentativeScreenshots.some(screenshot =>
+    artifactFileName(screenshot.path) === artifactFileName(geometry.visualComparison!.screenshotArtifactRef) &&
+    Math.abs((geometry.observedAtMs ?? -Infinity) - screenshot.capturedAtMs) === geometry.visualComparison!.captureSkewMs)) {
+    delete geometry.visualComparison;
+  }
   const isCompletedTypedFirstLayerInventory = (
     observation: CanonicalEvidenceBundle["consentUiObservations"][number],
   ) => {

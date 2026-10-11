@@ -82,6 +82,89 @@ test("unverified, stale, wrong-document, malformed and fabricated matches fail c
   assert.equal(assessCmsSignals(projection.signals, "2020-01-01T00:00:00.000Z").matches.length, 0);
 });
 
+test("CMS metadata cannot survive a later runtime document change or invalid latest proof", () => {
+  for (const latest of [
+    { url, capturedAtMs: 2000, documentIdentity: { source: "cdp_loader_id" as const, token: "loader-2" } },
+    { url: `${url}other`, capturedAtMs: 2000, documentIdentity: { source: "cdp_loader_id" as const, token: "loader-1" } },
+    { url, capturedAtMs: 2000, documentIdentity: undefined },
+    { url, capturedAtMs: 10001, documentIdentity: { source: "cdp_loader_id" as const, token: "loader-1" } },
+  ]) {
+    const bundle = cmsBundle(["Drupal 10.4.2"]);
+    bundle.runtimeMetadataSnapshots!.push({ ...bundle.runtimeMetadataSnapshots![0]!, ...latest, artifactId: "runtime:dom:2", siteMetadata: undefined });
+    const projection = projectCmsSecurity(bundle, source, url);
+    assert.equal(projection, null, JSON.stringify(latest));
+    assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts: { cmsSecurity: projection }, reviewFindingCandidates: [], validationFindings: [] }), []);
+    assert.equal(projectCmsSecurityPriority(packetsFor(projection)), null);
+    assert.equal(bundle.runtimeMetadataSnapshots![0]!.siteMetadata!.generators[0], "Drupal 10.4.2", "original capture remains intact");
+  }
+});
+
+test("CMS projection uses the newest metadata bound to the current runtime document", () => {
+  const bundle = cmsBundle(["Drupal 10.4.2"]);
+  const original = bundle.runtimeMetadataSnapshots![0]!;
+  bundle.runtimeMetadataSnapshots!.push({ ...original, capturedAtMs: 2000, artifactId: "runtime:dom:2",
+    siteMetadata: { ...original.siteMetadata!, generators: ["Drupal 10.4.3"] } });
+  // A later lightweight snapshot still proves the same document without
+  // requiring another metadata capture or borrowing from the consent lane.
+  bundle.runtimeMetadataSnapshots!.push({ ...original, capturedAtMs: 3000, artifactId: "runtime:dom:3", siteMetadata: undefined });
+  const projection = projectCmsSecurity(bundle, source, url)!;
+  assert.equal(projection.evidenceRef, "runtime:dom:2");
+  assert.equal(projection.assessment.detections[0]?.version, "10.4.3");
+  assert.equal(projection.assessment.matches.length, 0);
+  assert.equal(projectCmsSecurityPriority(packetsFor(projection)), null);
+  assert.equal(projection.capturedAt, "2026-09-17T00:00:02.000Z");
+  bundle.runtimeMetadataSnapshots!.reverse();
+  assert.deepEqual(projectCmsSecurity(bundle, source, url), projection, "capture time determines metadata selection, not array ordering");
+  const legacy = { ...bundle, domSnapshots: bundle.runtimeMetadataSnapshots! };
+  delete legacy.runtimeMetadataSnapshots;
+  assert.deepEqual(projectCmsSecurity(legacy, source, url), projection, "legacy unsharded snapshots remain readable");
+  assert.equal(projectCmsSecurity({ ...legacy, runtimeMetadataSnapshots: [] }, source, url), null, "an empty runtime lane cannot borrow consent metadata");
+  const reloaded = cmsBundle(["Drupal 10.4.2"]);
+  reloaded.runtimeMetadataSnapshots!.push({ ...original, capturedAtMs: 4000, artifactId: "runtime:dom:reloaded",
+    documentIdentity: { source: "cdp_loader_id", token: "loader-2" }, siteMetadata: { ...original.siteMetadata!, generators: ["Drupal 10.4.3"] } });
+  const fresh = projectCmsSecurity(reloaded, source, url)!;
+  assert.equal(fresh.documentToken, "loader-2", "newly captured metadata can establish the new document");
+  assert.equal(fresh.assessment.detections[0]?.version, "10.4.3");
+  assert.equal(fresh.assessment.matches.length, 0);
+});
+
+test("tied legacy document or CMS declaration conflicts cannot create findings in either source order", () => {
+  const base = cmsBundle(["WordPress 4.5.33"]);
+  const original = base.runtimeMetadataSnapshots![0]!;
+  for (const competing of [
+    { ...original, artifactId: "legacy:second", documentIdentity: { source: "cdp_loader_id" as const, token: "loader-2" }, siteMetadata: undefined },
+    { ...original, artifactId: "legacy:second", url: `${url}other`, siteMetadata: undefined },
+    { ...original, artifactId: "legacy:second", siteMetadata: { ...original.siteMetadata!, generators: ["WordPress 7.1.2"] } },
+  ]) {
+    // Multiple snapshots are valid on the legacy DOM path. The current
+    // runtimeMetadataSnapshots contract remains bounded to one capture.
+    for (const domSnapshots of [[original, competing], [competing, original]]) {
+      const projection = projectCmsSecurity({ ...base, runtimeMetadataSnapshots: undefined, domSnapshots }, source, url);
+      assert.equal(projection, null, "equal offsets must not select a loader or declaration by array order");
+      assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts: { cmsSecurity: projection }, reviewFindingCandidates: [], validationFindings: [] }), []);
+      assert.equal(projectCmsSecurityPriority(packetsFor(projection)), null);
+    }
+  }
+});
+
+test("consistent duplicate legacy metadata has stable provenance while a later unambiguous declaration remains eligible", () => {
+  const base = cmsBundle(["WordPress 4.5.33"]);
+  const original = base.runtimeMetadataSnapshots![0]!;
+  const duplicate = { ...original, artifactId: "legacy:duplicate", siteMetadata: {
+    // Reordered JSON keys do not make an identical declaration contradictory.
+    cmsAssets: [...original.siteMetadata!.cmsAssets!], wordpressAssetObserved: false,
+    generators: [...original.siteMetadata!.generators], language: "en", title: "Fixture",
+    contractVersion: "certscore.site-metadata.v1" as const } };
+  const projectOrder = (domSnapshots: typeof base.domSnapshots) => projectCmsSecurity({ ...base, runtimeMetadataSnapshots: undefined, domSnapshots }, source, url);
+  const first = projectOrder([original, duplicate]);
+  assert.ok(first);
+  assert.equal(first.assessment.matches[0]?.record.id, "wordpress-4.1-4.6-security-eol");
+  assert.deepEqual(projectOrder([duplicate, original]), first);
+  const updated = { ...original, capturedAtMs: 2000, artifactId: "legacy:updated",
+    siteMetadata: { ...original.siteMetadata!, generators: ["WordPress 7.1.2"] } };
+  assert.equal(projectOrder([original, updated])!.assessment.matches.length, 0);
+});
+
 test("JSONB key ordering preserves verifiable projection; source and CVE tampering do not", () => {
   const original = project(["Drupal 10.4.2"]);
   const reverseKeys = (value: unknown): unknown => Array.isArray(value) ? value.map(reverseKeys) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).reverse().map(([key, row]) => [key, reverseKeys(row)])) : value;
@@ -242,4 +325,52 @@ test("conflicting plugin versions remain unknown and arbitrary plugin names neve
   assert.equal(projected.pluginInventory?.detections.length, 2);
   assert.equal(projected.assessment.detections[0]?.version, null);
   assert.equal(projected.assessment.matches.length, 0);
+});
+
+test("Drupal 7 complete release follows canonical lifecycle projection with original evidence and no score effect", () => {
+  const projection = project(["Drupal 7.98"]);
+  assert.equal(projection.assessment.detections[0]?.version, "7.98");
+  assert.equal(projection.signals[0]?.value, "Drupal 7.98");
+  assert.equal(projection.assessment.matches[0]?.record.id, "drupal-7-community-eol");
+  assert.ok(resolveCmsEvidence(projection, projection.assessment.matches[0]!.evidenceRef));
+  assert.equal(cmsSecurityProjectionSchema.safeParse(projection).success, true);
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { cmsSecurity: projection }, reviewFindingCandidates: [], validationFindings: [] });
+  assert.equal(concerns.length, 1);
+  assert.deepEqual(concerns[0]?.scoreEffects ?? [], []);
+  assert.equal(projectCmsSecurityPriority(packetsFor(projection))?.title, "Unsupported CMS branch");
+});
+
+test("stored v1/v2 catalogue projections validate with their original dates and conclusions", () => {
+  const current = project(["Drupal 7.98"]);
+  for (const version of ["certscore.cms-catalogue.2026-09-17.v1", "certscore.cms-catalogue.2026-09-17.v2"] as const) {
+    const assessment = assessCmsSignals(current.signals, current.capturedAt, version, "v2");
+    const historical = { ...current, assessment };
+    assert.equal(assessment.catalogueReviewedAt, "2026-09-17");
+    assert.deepEqual(assessment.matches, []);
+    assert.equal(cmsSecurityProjectionSchema.safeParse(historical).success, true);
+    assert.equal(cmsSecurityProjectionSchema.safeParse({ ...historical, assessment: { ...assessment, catalogueReviewedAt: "2026-10-11" } }).success, false);
+    assert.equal(projectCmsSecurityPriority(packetsFor(historical)), null);
+  }
+});
+
+test("v4 declared whole branch follows canonical score-neutral lifecycle path and retained reader", () => {
+  for (const declaration of ["Drupal 7 (http://drupal.org)", "Drupal 9 (https://www.drupal.org)"]) {
+    const projection = project([declaration]);
+    assert.equal(projection.assessment.detections[0]?.version, null);
+    assert.equal(projection.assessment.detections[0]?.versionStatus, "declared_branch");
+    assert.ok(projection.assessment.matches.every(row => row.record.kind === "lifecycle"));
+    assert.equal(cmsSecurityProjectionSchema.safeParse(projection).success, true);
+    assert.ok(resolveCmsEvidence(projection, projection.assessment.matches[0]!.evidenceRef));
+    const concerns = buildNormalizedConcerns({ runtimeArtifacts: { cmsSecurity: projection }, reviewFindingCandidates: [], validationFindings: [] });
+    assert.equal(concerns.length, 1);
+    assert.deepEqual(concerns[0]?.scoreEffects ?? [], []);
+    assert.equal(projectCmsSecurityPriority(packetsFor(projection))?.title, "Unsupported CMS branch");
+    const forged = structuredClone(projection);
+    forged.assessment.detections[0]!.branchVersion = "8";
+    assert.equal(cmsSecurityProjectionSchema.safeParse(forged).success, false);
+    const historical = { ...projection, assessment: assessCmsSignals(projection.signals, projection.capturedAt, "certscore.cms-catalogue.2026-10-11.v3", "v2") };
+    assert.equal(historical.assessment.catalogueReviewedAt, "2026-10-11");
+    assert.equal(cmsSecurityProjectionSchema.safeParse(historical).success, true);
+    assert.equal(projectCmsSecurityPriority(packetsFor(historical)), null);
+  }
 });

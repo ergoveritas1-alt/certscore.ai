@@ -1,3 +1,6 @@
+import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
+import { installActionDomStorageCapture } from "./action-dom-storage-capture.js";
+import { readActionWriteCapture, buildActionWriteCoverage } from "./action-main-document-write-coverage.js";
 import { createActionRequestRetention } from "./action-request-retention.js";
 import { readConsentActionLabelFields } from "./consent-action-label-fields.js";
 import { terminalConsentDecisionRead } from "./terminal-consent-decision.js";
@@ -417,6 +420,7 @@ export async function runPostRefusalObserver(
   const closeBudgetExpiredContext = () => { budgetContextClose ??= context?.close().catch(() => undefined); };
   budgetController.signal.addEventListener("abort", closeBudgetExpiredContext, { once: true });
   let graphCapture: Awaited<ReturnType<typeof installRuntimeGraphCapture>> | undefined;
+  let originDomStorageCapture: Awaited<ReturnType<typeof installActionDomStorageCapture>> | undefined;
   let actionDiscovery: ConsentActionDiscovery | undefined;
   let cancellationObservedAtMs: number | undefined;
   let actionDispatched = false;
@@ -430,6 +434,9 @@ export async function runPostRefusalObserver(
   };
   const storageCollectionDiagnostics: { preAction?: ActionStorageCollectionDiagnostics; postAction?: ActionStorageCollectionDiagnostics } = {};
   const captureCoverage = { requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 0 };
+  let sourceDocumentChanged = false;
+  let sourcePendingAtEnd = 0;
+  let sourceHookInstalledAtMs: number | undefined;
   const interactionDiagnostics: PostRefusalInteractionDiagnostics = {
     resolver: {
       snapshots: [],
@@ -467,12 +474,14 @@ export async function runPostRefusalObserver(
     preActionStorage?: PostRefusalStorageItem[];
     postActionStorage?: PostRefusalStorageItem[];
     writesAfterRefusal?: PostRefusalStorageWrite[];
+    mainDocumentWriteCoverage?: import("@certscore/contracts").ActionMainDocumentWriteCoverage;
     nonEssentialItemsPersistingAfterRefusal?: PostRefusalStorageItem[];
     requests?: PostRefusalNetworkRequest[];
     postRefusalNonEssentialRequests?: PostRefusalNetworkRequest[];
     postRefusalTcfState?: PostRefusalTcfState;
     observations?: PostRefusalObservation[];
   }): Promise<PostRefusalEvidencePacket> => {
+    const originDomStorageObservation = originDomStorageCapture?.finish();
     const completedAtMs = Date.now();
     if (budgetController.signal.aborted && !limitations.includes("observer_result_budget_exhausted")) {
       limitations.push("observer_result_budget_exhausted");
@@ -493,6 +502,19 @@ export async function runPostRefusalObserver(
       ...(terminalDecisionEvidence ? { terminalDecisionEvidence } : {}),
       decisionEvidence,
       captureCoverage: { ...captureCoverage, postActionRetention: postActionRetention.summary() },
+      ...(fields.mainDocumentWriteCoverage && fields.registration.actionDispatchedAtMs !== undefined ? {
+        observedActionSourceProof: buildObservedActionSourceProof({
+          authorization: { kind: input.interactionAuthorization.kind, authorizationId: input.interactionAuthorization.authorizationId,
+            scanId: input.scanId, requestedTargetSha256: hashValue(normalizeTargetUrl(input.url)), authorizedBeforeAction: true },
+          scanClockOriginAtMs: parentScanStartedAtMs, writeCoverage: fields.mainDocumentWriteCoverage, hookInstalledAtMs: sourceHookInstalledAtMs,
+          actionDocumentStable: !sourceDocumentChanged, requestListenerInstalledBeforeAction: true,
+          requestWindowStartedAtMs: parentScanStartedAtMs + fields.registration.actionDispatchedAtMs,
+          configuredWindowMs: observationWindowMs, cancelled: effectiveSignal?.aborted === true,
+          semanticDecisionConfirmed: decisionEvidence?.basis === "verified_state" && decisionEvidence.decision === "denied" && interactionDiagnostics.click.outcome === "completed",
+          retention: postActionRetention.summary(), pendingCount: sourcePendingAtEnd, retainedRequestIds: postRegistrationRequests.map(row => row.requestId),
+          rows: (fields.requests ?? []).filter(row => postRegistrationRequests.some(source => source.requestId === row.requestId)),
+        })
+      } : {}),
       artifactOnly: true,
       productionProjectable: productionProjectable && confirmedRefusal && Boolean(actionControlProof) && captureCoverage.requestsDroppedAfterAction === 0,
       scanId: input.scanId,
@@ -530,6 +552,8 @@ export async function runPostRefusalObserver(
       },
       storage: {
         collectionDiagnostics: storageCollectionDiagnostics,
+        ...(originDomStorageObservation ? { originDomStorageObservation } : {}),
+        ...(fields.mainDocumentWriteCoverage ? { mainDocumentWriteCoverage: fields.mainDocumentWriteCoverage } : {}),
         ...(fields.preActionCapturedAtMs !== undefined
           ? { preActionCapturedAtMs: fields.preActionCapturedAtMs }
           : {}),
@@ -592,6 +616,7 @@ export async function runPostRefusalObserver(
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
+    originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl);
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_reject", startedAt: new Date(parentScanStartedAtMs).toISOString(),
     });
@@ -636,6 +661,7 @@ export async function runPostRefusalObserver(
     }
 
     let mainNavigationRequestCount = 0;
+    page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
       if (timing.observationEndedAtMs !== undefined) return;
       if (request.isNavigationRequest() && request.frame() === page?.mainFrame()) {
@@ -1615,6 +1641,8 @@ export async function runPostRefusalObserver(
     // be presented as a configured observation window or admit later starts.
     const observationEndedAtEpochMs = Date.now();
     timing.observationEndedAtMs = elapsed(parentScanStartedAtMs, observationEndedAtEpochMs);
+    sourcePendingAtEnd = postRegistrationRequests.filter(row => activeRequestIds.has(row.requestId)).length;
+    originDomStorageCapture?.finish();
     const allRequests = classifyRequests(
       retainedRequests(),
       parentScanStartedAtMs,
@@ -1628,10 +1656,10 @@ export async function runPostRefusalObserver(
         request.msOffsetFromRefusal > 0
       )
       .slice(0, 24);
-    const instrumentedWrites = await readStorageWrites(page).catch(() => {
-      limitations.push("instrumented_storage_writes_unavailable");
-      return [];
-    });
+    const writeCapture = await readActionWriteCapture<InstrumentedStorageWrite>(page, "__certscoreReadPostRefusalWrites");
+    const instrumentedWrites = writeCapture.writes;
+    sourceHookInstalledAtMs = writeCapture.metadata?.hookInstalledAtMs;
+    if (!writeCapture.metadata) limitations.push("instrumented_storage_writes_unavailable");
     const instrumentedWritesAfterRefusal = instrumentedWrites
       .filter((write) => write.observedAtEpochMs > confirmedRefusalRegisteredAtEpochMs && write.observedAtEpochMs <= observationEndedAtEpochMs)
       .map((write) => classifyStorageWrite(
@@ -1702,6 +1730,23 @@ export async function runPostRefusalObserver(
       postActionCapturedAtMs,
       preActionStorage,
       postActionStorage,
+      mainDocumentWriteCoverage: buildActionWriteCoverage({ metadata: writeCapture.metadata, targetUrl: observationTargetUrl,
+        windowStartedAtMs: confirmedRefusalRegisteredAtEpochMs, windowEndedAtMs: observationEndedAtEpochMs,
+        windowCompleted: observationResult.reason === "window_elapsed" && !effectiveSignal?.aborted,
+        retainedWindowCount: instrumentedWrites.filter(write => write.observedAtEpochMs > confirmedRefusalRegisteredAtEpochMs && write.observedAtEpochMs <= observationEndedAtEpochMs).length,
+        eligibleWindowCount: instrumentedWritesAfterRefusal.filter(write => write.nonEssential).length,
+        deduplicatedEligibleCount: instrumentedWritesAfterRefusal.filter(write => write.nonEssential).length - dedupeStorageWrites(instrumentedWritesAfterRefusal.filter(write => write.nonEssential)).length,
+        retainedEligibleCount: writesAfterRefusal.filter(write => write.nonEssential && write.evidenceSource === "instrumented_write").length,
+        // Unclassified writes cannot establish a negative; retain an explicit limitation.
+        unresolvedWindowCount: instrumentedWrites.filter(write => {
+          if (write.observedAtEpochMs <= confirmedRefusalRegisteredAtEpochMs || write.observedAtEpochMs > observationEndedAtEpochMs) return false;
+          const purpose = vendorFor({ type: write.storageType === "cookie" ? "cookie" : "cmp_runtime",
+            cookieName: write.storageType === "cookie" ? write.name : undefined,
+            storageKey: write.storageType === "cookie" ? undefined : write.name,
+            hostname: new URL(observationTargetUrl).hostname })?.purpose;
+          return !purpose || purpose === "unknown";
+        }).length,
+      }),
       writesAfterRefusal,
       nonEssentialItemsPersistingAfterRefusal,
       requests: allRequests,
@@ -1716,6 +1761,7 @@ export async function runPostRefusalObserver(
     budgetController.signal.removeEventListener("abort", closeBudgetExpiredContext);
     await budgetContextClose;
     finishOptionalRuntimeGraph(graphCapture, "post_reject", "action_capture_closed");
+    originDomStorageCapture?.finish();
     actionDiscovery?.dispose();
     await context?.close().catch(() => undefined);
     if (ownsBrowser) await browser?.close().catch(() => undefined);
@@ -2243,7 +2289,10 @@ function vendorFor(input: {
 async function installStorageWriteProbe(page: Page): Promise<void> {
   await page.addInitScript({ content: `(() => {
     const records = [];
+    const hookInstalledAtMs = performance.timeOrigin + performance.now();
     let nextSequence = 0;
+    let installedCookieSetter;
+    let installedStorageSetter;
     const retain = (record) => {
       records.push({ ...record, sequence: ++nextSequence });
       if (records.length > 192) records.splice(0, records.length - 192);
@@ -2251,11 +2300,17 @@ async function installStorageWriteProbe(page: Page): Promise<void> {
     Object.defineProperty(window, "__certscoreReadPostRefusalWrites", {
       configurable: false,
       enumerable: false,
-      value: () => records.slice(-96).map((record) => ({ ...record })),
+      value: Object.assign(() => records.slice(-96).map((record) => ({ ...record })), { coverage: () => ({
+        observedLifetimeCount: nextSequence, ringEvictedCount: Math.max(0, nextSequence - 192),
+        readbackOmittedCount: Math.max(0, records.length - 96),
+        storageHookHealthy: Storage.prototype.setItem === installedStorageSetter,
+        cookieHookHealthy: !!installedCookieSetter && Object.getOwnPropertyDescriptor(Document.prototype, "cookie")?.set === installedCookieSetter,
+        documentUrl: location.href, documentTimeOriginMs: performance.timeOrigin, hookInstalledAtMs,
+      }) }),
       writable: false,
     });
     const originalSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function(key, value) {
+    Storage.prototype.setItem = installedStorageSetter = function(key, value) {
       let storageType = "local_storage";
       try { storageType = this === window.sessionStorage ? "session_storage" : "local_storage"; } catch (_) {}
       const result = originalSetItem.call(this, key, value);
@@ -2268,7 +2323,7 @@ async function installStorageWriteProbe(page: Page): Promise<void> {
         configurable: true,
         enumerable: cookieDescriptor.enumerable,
         get: cookieDescriptor.get,
-        set: function(value) {
+        set: installedCookieSetter = function(value) {
           const name = String(value).split("=", 1)[0].trim().slice(0, 180);
           const result = cookieDescriptor.set.call(this, value);
           const cookieValue = String(value).slice(String(value).indexOf("=") + 1).split(";", 1)[0];

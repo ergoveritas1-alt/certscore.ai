@@ -53,11 +53,28 @@ test("new unknown host gets a sample before repeated known tracker traffic", () 
   assert.deepEqual(rows.map(x => x.id), ["first", "https://unknown.test/event"]);
 });
 
-test("without overflow selection and metadata remain unchanged", () => {
+test("without overflow selection is unchanged and exact zero-loss accounting is retained", () => {
   const rows: ReturnType<typeof row>[] = [], capture = createActionRequestRetention(rows, 192);
   const first = row("https://unknown.test/a"); capture.offer(first);
-  assert.equal(rows[0], first); assert.equal(capture.summary(), undefined);
+  assert.equal(rows[0], first);
+  assert.deepEqual(capture.summary(), { policyVersion: "priority_bounded_action_requests.v1", requestsObserved: 1,
+    requestsRetained: 1, replacements: 0, priorityEvaluations: 0,
+    omitted: { delivery_asset: 0, known_other: 0, unknown: 0, tracking: 0, consent: 0, document: 0, unclassified: 0 } });
+  assert.ok(actionCaptureCoverageSchema.safeParse({ requestsDroppedBeforeAction: 0,
+    requestsDroppedAfterAction: 0, postActionRetention: capture.summary() }).success);
   assert.ok(actionCaptureCoverageSchema.safeParse({ requestsDroppedBeforeAction: 1, requestsDroppedAfterAction: 0 }).success);
+});
+
+test("an empty offered-event inventory is explicit and its returned snapshot stays frozen", () => {
+  const rows: ReturnType<typeof row>[] = [], capture = createActionRequestRetention(rows, 1);
+  const empty = capture.summary();
+  assert.equal(empty.requestsObserved, 0);
+  assert.equal(empty.requestsRetained, 0);
+  capture.offer(row("https://unknown.test/a")); capture.offer(row("https://unknown.test/b"));
+  assert.equal(empty.requestsObserved, 0);
+  assert.equal(empty.omitted.unknown, 0);
+  assert.ok(actionCaptureCoverageSchema.safeParse({ requestsDroppedBeforeAction: 0,
+    requestsDroppedAfterAction: 0, postActionRetention: empty }).success);
 });
 
 test("summary cannot conceal loss, inflate observed count or exceed the existing cap", () => {

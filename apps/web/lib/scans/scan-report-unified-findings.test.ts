@@ -2873,7 +2873,7 @@ test("runtime reject path depth promotes concrete dark-pattern reject-missing ev
 
   assert.equal(packet?.presentationDecision.status, "surface");
   assert.ok(projection.findings.some((finding) => finding.id === "reject_option_missing_or_hidden"));
-  assert.ok(projection.findings.some((finding) => finding.id === "asymmetric_consent_ui"));
+  assert.ok(!projection.findings.some((finding) => finding.id === "asymmetric_consent_ui"));
   assert.ok(!projection.findings.some((finding) => finding.id === "forced_consent_interaction"));
   assert.equal(projection.findings.some((finding) => finding.id === "consent_dark_patterns_detected"), false);
   assert.ok(!weakState.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "reject_button_missing"));
@@ -3098,7 +3098,7 @@ test("runtime reject path uses retained consent UI path when derived reject arti
   });
 
   assert.ok(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "reject_button_missing"));
-  assert.ok(state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "accept_more_prominent_than_reject"));
+  assert.ok(!state.globalUnifiedFindings.some((finding) => finding.unifiedFindingId === "accept_more_prominent_than_reject"));
 });
 
 test("runtime policy alignment bridges create canonical policy/runtime review candidates", () => {

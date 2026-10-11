@@ -6699,7 +6699,7 @@ function getScanReportRenderProjection(scanRecord: ScanDetailResponse): ScanRepo
   return projection;
 }
 
-export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse): ScanReportUnifiedFindingState {
+export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailResponse, strict = false): ScanReportUnifiedFindingState {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
     return {
@@ -6732,6 +6732,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
       filterContradictoryPositiveSurfaceFindings
     });
   } catch (error) {
+    if (strict) throw error;
     console.error("Failed to build scan report unified finding state", error);
     return {
       allReviewFindingCandidates: [] as CanonicalReviewFinding[],
@@ -6752,7 +6753,7 @@ export function debugBuildScanReportUnifiedFindingState(scanRecord: ScanDetailRe
   }
 }
 
-export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
+export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse, strict = false) {
   const snapshot = scanRecord.snapshot;
   if (!snapshot) {
     return [] as UnifiedFindingDisplayPacket[];
@@ -6765,13 +6766,14 @@ export function buildScanReportUnifiedFindings(scanRecord: ScanDetailResponse) {
         (finding) => finding.unifiedFindingId !== "consent_dark_patterns_detected"
       );
     }
-    const state = debugBuildScanReportUnifiedFindingState(scanRecord);
+    const state = debugBuildScanReportUnifiedFindingState(scanRecord, strict);
     const ownerFindings = buildScanReportUnifiedFindingsFromState(state);
 
     return filterContradictoryPositiveSurfaceFindings(ownerFindings).filter(
       (finding) => finding.unifiedFindingId !== "consent_dark_patterns_detected"
     );
   } catch (error) {
+    if (strict) throw error;
     console.error("Failed to build scan report unified findings", error);
     return [] as UnifiedFindingDisplayPacket[];
   }

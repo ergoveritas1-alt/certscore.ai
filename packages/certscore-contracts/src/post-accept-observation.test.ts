@@ -410,3 +410,83 @@ test("legacy accept UI and opaque-receipt proof remain readable but project neut
     assert.equal(legacy.acceptanceRegistration.status, "confirmed");
   }
 });
+
+test("legacy acceptance with retained activity stays neutral and preserves original evidence", () => {
+  const base = confirmedPacket();
+  const request = { requestId: "legacy-accept-request", sanitizedUrl: "https://analytics.example.test/collect",
+    hostname: "analytics.example.test", resourceType: "fetch", startedAtMs: 140,
+    inFlightAtAcceptanceRegistration: false, msOffsetFromAccept: 20, nonEssential: true };
+  const packet = postAcceptEvidencePacketSchema.parse({ ...base,
+    acceptanceRegistration: { ...base.acceptanceRegistration, witnesses: [{ ...base.acceptanceRegistration.witnesses[0],
+      expectedState: "canonical_cmp_consent_state_changed_after_accept" }] },
+    network: { ...base.network, requests: [request], postAcceptNonEssentialRequests: [request] },
+    storage: { ...base.storage, writesAfterAccept: [{ storageType: "local_storage", name: "analytics-consent",
+      hostname: "example.test", observedAtMs: 170, msOffsetFromAccept: 50, nonEssential: true }] },
+  });
+  const original = structuredClone(packet);
+  const projection = projectPostAcceptEvidenceForReport({ packet, packetSha256: "c".repeat(64) });
+  assert.equal(projection.registrationStatus, "unconfirmed");
+  assert.equal(projection.acceptanceExercised, false);
+  assert.equal(projection.productionProjectable, false);
+  assert.deepEqual(projection.postAcceptActivity, []);
+  assert.equal(projection.packetSha256, "c".repeat(64));
+  assert.deepEqual(packet, original);
+});
+
+function retainedActivityPacket() {
+  const base = confirmedPacket();
+  const request = { requestId: "bound-request", sanitizedUrl: "https://analytics.example.test/collect",
+    hostname: "analytics.example.test", resourceType: "fetch", startedAtMs: 140,
+    inFlightAtAcceptanceRegistration: false, msOffsetFromAccept: 20, nonEssential: true };
+  const write = { storageType: "local_storage" as const, name: "analytics-key", hostname: "example.test",
+    observedAtMs: 170, msOffsetFromAccept: 50, identityHash: "b".repeat(64), nonEssential: true };
+  return { ...base, network: { ...base.network, requests: [request], postAcceptNonEssentialRequests: [request] },
+    storage: { ...base.storage, writesAfterAccept: [write] }, observations: [
+      { observationType: "post_accept_non_essential_activity" as const, observedAtMs: 140, requestId: request.requestId,
+        msOffsetFromAccept: 20, evidenceKeys: ["network.postAcceptNonEssentialRequests"] },
+      { observationType: "post_accept_non_essential_activity" as const, observedAtMs: 170, storageType: write.storageType,
+        storageName: write.name, hostname: write.hostname, storageIdentityHash: write.identityHash,
+        msOffsetFromAccept: 50, evidenceKeys: ["storage.writesAfterAccept"] },
+    ] };
+}
+
+test("Accept activity requires unique retained request rows and exact registration clocks", () => {
+  const valid = retainedActivityPacket();
+  assert.equal(postAcceptEvidencePacketSchema.safeParse(valid).success, true);
+  const changes: Array<(packet: ReturnType<typeof retainedActivityPacket>) => void> = [
+    p => { p.network.requests = []; },
+    p => { p.network.requests.push({ ...p.network.requests[0]! }); },
+    p => { p.network.postAcceptNonEssentialRequests[0] = { ...p.network.postAcceptNonEssentialRequests[0]!, sanitizedUrl: "https://unretained.example/" }; },
+    p => { p.network.postAcceptNonEssentialRequests[0]!.msOffsetFromAccept = 99; },
+    p => { p.network.postAcceptNonEssentialRequests[0]!.startedAtMs = 110; },
+    p => { p.storage.writesAfterAccept[0]!.observedAtMs = 110; },
+    p => { p.storage.writesAfterAccept[0]!.msOffsetFromAccept = 99; },
+    p => { p.observations[0]!.observedAtMs = 110; },
+    p => { p.observations[0]!.msOffsetFromAccept = 99; },
+    p => { p.observations[0]!.requestId = "unretained-request"; },
+    p => { p.observations[1]!.storageName = "unretained-key"; },
+    p => { p.observations[1]!.storageIdentityHash = "c".repeat(64); },
+    p => { p.observations[0]!.storageName = "ambiguous-mixed-reference"; },
+  ];
+  for (const [index, change] of changes.entries()) {
+    const packet = structuredClone(valid); change(packet);
+    assert.equal(postAcceptEvidencePacketSchema.safeParse(packet).success, false, `mutation ${index}`);
+  }
+});
+
+test("Accept storage identity retains either supported field and rejects contradictory hashes", () => {
+  for (const identity of [
+    { identityHash: "b".repeat(64) },
+    { storageIdentityHash: "b".repeat(64) },
+    { identityHash: "b".repeat(64), storageIdentityHash: "b".repeat(64) },
+  ]) {
+    const raw = retainedActivityPacket(), { identityHash: _omitted, ...write } = raw.storage.writesAfterAccept[0]!;
+    const packet = postAcceptEvidencePacketSchema.parse({ ...raw,
+      storage: { ...raw.storage, writesAfterAccept: [{ ...write, ...identity }] } });
+    const projection = projectPostAcceptEvidenceForReport({ packet, packetSha256: "c".repeat(64) });
+    assert.equal(projection.postAcceptActivity.find(row => row.activityType === "storage_write")?.storageIdentityHash, "b".repeat(64));
+  }
+  const raw = retainedActivityPacket();
+  assert.equal(postAcceptEvidencePacketSchema.safeParse({ ...raw, storage: { ...raw.storage,
+    writesAfterAccept: [{ ...raw.storage.writesAfterAccept[0], storageIdentityHash: "c".repeat(64) }] } }).success, false);
+});

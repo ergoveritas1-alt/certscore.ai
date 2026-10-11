@@ -21,6 +21,11 @@ test("graph action capture preserves a single confirmed Accept and its registrat
     });
     assert.equal(actionCount(), 1);
     assert.equal(packet.acceptanceRegistration.status, "confirmed");
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.policyVersion, "action_main_document_write_coverage.v1");
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.scope, "main_document_setter_hooks");
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.probeAvailable, true);
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.status, "limited"); // Early exit does not prove a full window.
+
     assert.equal(packet.runtimeEvidenceGraph?.scanId, "graph-parent");
     assert.equal(packet.runtimeEvidenceGraph?.scenario, "post_accept");
     assert.equal(packet.runtimeEvidenceGraph?.action?.status, "confirmed");
@@ -79,6 +84,48 @@ test("post-Accept observer confirms one deterministic action and retains bounded
     const serialized = JSON.stringify(packet);
     assert.equal(serialized.includes("GA1.1.CERTSCORE_ACCEPT_RAW"), false);
   });
+});
+
+test("terminal storage readback cannot admit a request after the frozen Accept window", async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  const originalNewContext = browser.newContext.bind(browser);
+  const lateUrl = "https://www.google-analytics.com/late-terminal-readback";
+  let injected = false;
+  t.mock.method(browser, "newContext", async (...args: Parameters<typeof browser.newContext>) => {
+    const context = await originalNewContext(...args);
+    await context.route(lateUrl, route => route.fulfill({ status: 204 }));
+    const originalNewPage = context.newPage.bind(context);
+    t.mock.method(context, "newPage", async () => {
+      const page = await originalNewPage();
+      const originalEvaluate = page.evaluate.bind(page);
+      let storageReads = 0;
+      t.mock.method(page, "evaluate", async (fn: any, arg: any) => {
+        if (String(fn).includes("Object.entries(window.localStorage)") && ++storageReads === 2) {
+          // This call is the existing final snapshot, after observationEndedAt.
+          // The route fulfills locally; this regression makes no public contact.
+          await originalEvaluate(async url => { await fetch(url, { mode: "no-cors" }); }, lateUrl);
+          injected = true;
+        }
+        return originalEvaluate(fn, arg);
+      });
+      return page;
+    });
+    return context;
+  });
+  try {
+    await withFixture({ ambiguous: false }, async ({ url }) => {
+      const packet = await runPostAcceptObserver({ browser,
+        actionSearchTimeoutMs: 500, confirmationTimeoutMs: 500, observationWindowMs: 500,
+        interactionAuthorization: { authorizationId: "loopback_local_lab", kind: "loopback" },
+        productionProjectable: true, recipe: CERTSCORE_OWNED_ANALYTICS_ACCEPT_RECIPE,
+        scanId: "accept-terminal-request-bound", url });
+      assert.equal(injected, true);
+      assert.ok(!packet.network.requests.some(row => row.sanitizedUrl === lateUrl),
+        "the terminal listener freeze excludes later starts from retained action evidence");
+      assert.ok(!packet.network.postAcceptNonEssentialRequests.some(row => row.sanitizedUrl === lateUrl));
+      assert.equal(packet.acceptanceRegistration.status, "confirmed");
+    });
+  } finally { await browser.close(); }
 });
 
 test("optional graph primary and fallback failure preserves Accept evidence and browser cleanup", async (t) => {

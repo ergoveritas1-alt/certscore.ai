@@ -16,6 +16,7 @@ import { scanEvidenceLaneAssessmentSchema } from "@certscore/contracts";
 import {
   buildScanEvidenceLaneAssessment,
   buildScanNoGoAssessment,
+  classifyScanNoGoTextForCalibration,
   hasCompleteRetainedConsentProofPacket,
   shouldAttemptIncompleteConsentVisualFallback,
   shouldAttemptScreenshotOnlyFallback,
@@ -912,3 +913,36 @@ function usablePolicySurface(): PolicySurfaceObservation {
     evidenceRefs: [{ refId: "policy-excerpt", url: "https://example.test/privacy" }],
   } as PolicySurfaceObservation;
 }
+
+// Exact retained starting-document text; no artifact read or browser run in these tests.
+const retainedCharacterChallengeText = "Enter the characters seen in the image below:\n\nDownload audio CAPTCHA\nAnswer\nSubmit";
+const retainedCapacityHoldingText = "Sit tight\n\nWe’ve got our hands full at the moment but we should be up and moving shortly.\nThis page will automatically refresh and bring you into the website as soon as we can handle it.\n\n \t\nU.S. & CANADA\n\t \n\nIf you live in the United States or Canada and need to contact us immediately, please call 1.800.638.6464 or email customer_service@patagonia.com.\n\n \t\nEUROPE\n\t \n\nEuropean customers can email directsales.europe@patagonia.com or reach us by phone.\n\nAustria : (+43) 512 219 532\nDenmark : 804 04 938\nFrance : (+33) 450 88 44 92\nGermany : (+49) 89 2620 79666\nIreland : (+353) 766 705 887\nItaly : (+39) 047 48 61 000\nSwitzerland : (+41) 215 60 61 10\nNetherlands : (+31) 202 990 787\nUnited Kingdom : (+44) 203 636 9222\nSpain : (+34) 518 89 92 53\n \t\nJAPAN\n\t \n\nご迷惑をお掛けしておりますが、現在ウェブサイトがご利用いただけません。\n恐れ入りますがしばらくのあいだご静観願います。準備でき次第、ページが自動的に更新されてサイトが表示されます。\n\nお急ぎの場合は、電話またはメールにてお問い合わせください。\n電話 ： 受付時間 9：00-17：00（日・祝日も営業）\n0800-8887-447（フリーコール・通話料無料）\n045-435-6100（IP電話/携帯電話専用・通話料有料）\nメール： customerservice.japan@patagonia.com\n\nPHOTO: Sonnie Trotter";
+
+test("explicit character-entry challenge and capacity-holding pages remain no-go with successful HTTP", () => {
+  for (const [text, reason] of [
+    [retainedCharacterChallengeText, "captcha_or_challenge"],
+    [retainedCapacityHoldingText, "maintenance_or_unavailable"],
+  ] as const) {
+    assert.equal(classifyScanNoGoTextForCalibration(text)?.reasonCode, reason);
+    const assessment = buildScanNoGoAssessment(scanEvidence({ text, screenshots: [], firstPartySuccesses: 4 }));
+    assert.equal(assessment?.scanNoGoAssessment.decision, "no_go");
+    assert.equal(assessment?.primaryReasonCode, reason);
+  }
+});
+
+test("CAPTCHA help, quoted access shells and ordinary capacity/refresh content remain usable", () => {
+  const ordinaryPages = [
+    "Support: CAPTCHA accessibility. Enter the characters seen in the image below: Download audio CAPTCHA Answer Submit. These labels describe the sample form in our guide. Contact support if the audio cannot be played.",
+    `Accessibility guide: the example challenge reads “${retainedCharacterChallengeText}”. Our documentation explains accessible alternatives and provides keyboard instructions.`,
+    `Capacity planning article: the example holding screen says “${retainedCapacityHoldingText}”. This is an illustration of a queue rather than the current page state.`,
+    "Capacity dashboard. We have our hands full with orders today. This page will automatically refresh its capacity metrics every minute. Browse products and choose a delivery date to continue.",
+    "Sit tight. We have plenty of capacity for your booking. Refresh the page to see updated availability, or continue browsing the timetable below.",
+    "Enter the characters seen in the image below: Download audio CAPTCHA Answer Submit Products Pricing Documentation Support Contact. This demonstration appears alongside our normal public product content.",
+    `“${retainedCharacterChallengeText}”`,
+    `“${retainedCapacityHoldingText}”`,
+  ];
+  for (const text of ordinaryPages) {
+    assert.equal(classifyScanNoGoTextForCalibration(text), null, text);
+    assert.equal(buildScanNoGoAssessment(scanEvidence({ text, screenshots: [], firstPartySuccesses: 8 })), null, text);
+  }
+});

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import test from "node:test";
-import { runtimeGraphDispatchSchema } from "@certscore/contracts";
+import { projectPostRefusalEvidenceForReport, runtimeGraphDispatchSchema } from "@certscore/contracts";
 import { RuntimeEvidenceGraphBuilder } from "./runtime-evidence-graph.js";
 import {
   decodeTcfV2PurposeConsents,
@@ -43,6 +43,96 @@ const recipe: PostRefusalActionRecipe = {
     expectedValue: "rejected",
   },
 };
+
+test("documented Instana monitoring after registered Reject enters the existing typed activity projection", async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><html><body>
+      <div id="certscore-fixture-consent-banner">
+        <p>Choose optional cookies</p>
+        <button data-certscore-consent-action="reject">Reject all</button>
+        <button>Accept all</button>
+      </div>
+      <script>
+        document.querySelector('[data-certscore-consent-action="reject"]').onclick = () => {
+          localStorage.setItem('certscore_fixture_consent', 'rejected');
+          document.querySelector('#certscore-fixture-consent-banner').hidden = true;
+          setTimeout(() => fetch('https://eum-blue-saas.instana.io/').catch(() => {}), 80);
+        };
+      </script></body></html>`);
+  });
+  const url = await listenHttpServer(server);
+  try {
+    const packet = await observe(url, { observationWindowMs: 350 });
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.policyVersion, "action_main_document_write_coverage.v1");
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.scope, "main_document_setter_hooks");
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.probeAvailable, true);
+    assert.equal(packet.storage.mainDocumentWriteCoverage?.status, "limited"); // Early exit does not prove a full window.
+
+    const request = packet.network.postRefusalNonEssentialRequests.find(row =>
+      row.sanitizedUrl === "https://eum-blue-saas.instana.io/");
+    assert.ok(request);
+    assert.equal(request.vendor, "Instana");
+    assert.equal(request.purpose, "performance_monitoring");
+    assert.equal(request.inFlightAtRefusalRegistration, false);
+    assert.ok(request.msOffsetFromRefusal! >= 0);
+    assert.ok(packet.observations.some(row => row.requestId === request.requestId));
+    const projection = projectPostRefusalEvidenceForReport({
+      packet, packetSha256: createHash("sha256").update(JSON.stringify(packet)).digest("hex"),
+    });
+    assert.equal(projection.registrationStatus, "confirmed");
+    assert.ok(projection.postRefusalActivity.some(row =>
+      row.activityType === "network_request" && row.requestId === request.requestId));
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test("new Meta Pixel configuration after registered Reject is retained as advertising activity", async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><html><body>
+      <div id="certscore-fixture-consent-banner">
+        <p>Choose optional cookies</p>
+        <button data-certscore-consent-action="reject">Reject all</button>
+        <button>Accept all</button>
+      </div>
+      <script>
+        document.querySelector('[data-certscore-consent-action="reject"]').onclick = () => {
+          localStorage.setItem('certscore_fixture_consent', 'rejected');
+          document.querySelector('#certscore-fixture-consent-banner').hidden = true;
+          setTimeout(() => {
+            const script = document.createElement('script');
+            script.src = 'https://connect.facebook.net/signals/config/123456789';
+            document.head.appendChild(script);
+          }, 80);
+        };
+      </script></body></html>`);
+  });
+  const url = await listenHttpServer(server);
+  try {
+    const packet = await observe(url, { observationWindowMs: 350 });
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    const request = packet.network.postRefusalNonEssentialRequests.find(row =>
+      row.sanitizedUrl === "https://connect.facebook.net/signals/config/123456789");
+    assert.ok(request);
+    assert.equal(request.vendor, "Meta");
+    assert.equal(request.purpose, "advertising");
+    assert.equal(request.inFlightAtRefusalRegistration, false);
+    assert.ok(request.msOffsetFromRefusal! >= 0);
+    assert.ok(packet.observations.some(row => row.requestId === request.requestId));
+    // Loopback fixture evidence stays non-production while exercising typed projection.
+    const projection = projectPostRefusalEvidenceForReport({
+      packet, packetSha256: createHash("sha256").update(JSON.stringify(packet)).digest("hex"),
+    });
+    assert.equal(projection.registrationStatus, "confirmed");
+    assert.ok(projection.postRefusalActivity.some(row =>
+      row.activityType === "network_request" && row.requestId === request.requestId));
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
 
 test("graph action capture preserves a single confirmed Reject and its registration anchor", async () => {
   await withFixture("post-refusal-reject-honored", async (url) => {

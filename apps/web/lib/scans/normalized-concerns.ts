@@ -13,6 +13,8 @@ import {
   classifyGdprTransparencyTopics,
   collectionSurfaceAssessmentSchema,
   consentControlAssessmentSchema,
+  projectConsentVisualProminence,
+  hasTypedConsentVisualProminence,
   hasVerifiedConsentControlAbsence,
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
@@ -871,6 +873,9 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
 
   const counts: Record<string, number> = {};
   const entities: Record<string, string[]> = {};
+  if (hasTypedConsentVisualProminence(rawEvidence.consentVisualProminence)) {
+    addEntity(entities, "consentVisualProminence", [JSON.stringify(rawEvidence.consentVisualProminence)]);
+  }
   const flags = new Set<string>();
   const pageUrls = new Set<string>();
   const sourceUrls = new Set<string>();
@@ -3544,6 +3549,27 @@ function buildConsentNoSurfaceConcerns(
   return concerns;
 }
 
+function buildConsentVisualProminenceConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined,
+  domainContext?: ScanDomainContext) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  const projection = projectConsentVisualProminence(assessment);
+  if (!projection || !hasTypedConsentVisualProminence(projection)) return [];
+  const comparison = projection.comparison;
+  const refs = ["scan_runtime_artifacts.consent_control_assessment", "ConsentControlGeometryEvidence.json",
+    `sha256:${comparison.screenshotSha256}`];
+  return [buildConcernFromSharedInput({
+    consentControlAssessment: assessment,
+    categoryId: "privacy", domainContext,
+    description: "The retained first-layer visual comparison shows materially stronger fill contrast or surrounding emphasis on Accept than Reject.",
+    evidence: refs, observedValue: "accept_more_prominent", originKey: "consent.visual_prominence.observed",
+    originType: "runtime_artifact", severity: "medium", signalKey: "privacy.dark_pattern_accept_button_prominence",
+    signalLabel: "Accept action more prominent than reject", signalSource: "runtime_artifact_signal", sourceType: "signal",
+    title: "Accept action more prominent than reject",
+    rawEvidence: { unifiedFindingId: "accept_more_prominent_than_reject", consentVisualProminence: projection, runtimeEvidenceArtifacts: refs,
+      pageUrl: assessment!.document.canonicalDocumentId },
+  })];
+}
+
 function buildConsentOptionsControlProminenceConcerns(
   runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext
@@ -4233,6 +4259,13 @@ function buildPostAcceptObservationConcerns(
     const identity = postActionActivityIdentity(row);
     return identity !== null && rejectIdentities.has(identity);
   });
+  const sharedRequestUrls = uniqueStrings(sharedActivityRows.map((row) => getStringValue(row.url)));
+  const rejectPacketSha256 = getRuntimeString(rejectProjection, ["packetSha256"]);
+  const sharedEvidenceArtifacts = [
+    ...(packetSha256 ? [`post-accept-packet:sha256:${packetSha256}`] : []),
+    ...(rejectPacketSha256 ? [`post-refusal-packet:sha256:${rejectPacketSha256}`] : []),
+    ...sharedRequestUrls,
+  ];
 
   return [
     ...(activityRows.length > 0
@@ -4264,12 +4297,15 @@ function buildPostAcceptObservationConcerns(
           description:
             "Some sanitized request identities or exact storage identities appeared after both confirmed choices. This is partial overlap, not equivalent outcomes: observation windows can differ and request query values are redacted. It corroborates review without adding a second score effect.",
           domainContext,
-          evidence: requestUrls,
+          evidence: sharedEvidenceArtifacts,
           observedValue: `${sharedActivityRows.length} shared retained activity identity match(es)`,
           originKey: "privacy.accept_reject_outcomes_indistinguishable",
           originType: "runtime_artifact",
           rawEvidence: {
             ...commonEvidence,
+            postRefusalPacketSha256: rejectPacketSha256,
+            runtimeEvidenceArtifacts: sharedEvidenceArtifacts,
+            runtimeRequestUrls: sharedRequestUrls,
             acceptRejectOutcomeMatches: sharedActivityRows,
             accept_reject_shared_observed_activity: true,
             corroboratesPostRefusalFinding: true,
@@ -4536,6 +4572,7 @@ export function buildNormalizedConcerns(input: {
     ...buildGpcResponseConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildConsentVisualProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPostRefusalObservationConcerns(input.runtimeArtifacts, input.domainContext),

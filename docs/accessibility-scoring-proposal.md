@@ -1,6 +1,9 @@
 # Accessibility scoring — October 10, 2026
 
-Status: owner-approved and implemented locally. Deployment remains separate.
+Status: owner-approved scoring and image/link identity capture released in
+`d4d7ff9629a925274865310acac7cb95f540bb9a`. The follow-up calibration gate and
+shared/distinct canary checks are local pending release; see
+`certscore-v2/finding-calibration-gate.md`.
 The central registry is `apps/web/lib/scans/scoring-policy.ts`; `/scoring-review`
 renders it directly. Existing historical reports retain their stored score.
 
@@ -90,7 +93,7 @@ The missing-alt selector is `a[target]:nth-child(2) > img`; the unnamed link is
 identity remains unresolved. The conservative overlap policy avoids charging
 both without asserting a verified relationship. Independently proven distinct
 barriers would reach the 12-point cap and produce 40.
-The new capture closes this evidence gap for future scans after release; it
+The released capture closes this evidence gap for future scans; it
 cannot establish a past DOM relationship or retroactively change this replay.
 
 The retained target is 18 × 18 CSS pixels with 18 pixels of safe clickable
@@ -135,5 +138,5 @@ with no new evaluation round trip, scan, interaction, model call or timeout.
 Incremental processing and compressed evidence/projection storage are estimated
 under $0.50/month at 100,000 scans/month and three months of retention, allowing
 5 KB of additional stored data per scan. This separate planning estimate was
-disclosed before implementation. Release the compatible web contract/consumer
-before or together with the AWS Lambda producer; no release was performed here.
+disclosed before implementation. The compatible web consumer and AWS Lambda
+producer were released together; historical evidence remains unchanged.

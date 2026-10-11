@@ -1,7 +1,24 @@
 import { z } from "zod";
 import { crawlDisplayUrl, type CrawlObservation } from "@website-signal-risk-scanner/shared";
 import { createHash } from "node:crypto";
-import { siteIntegrityObservationSchema, siteIntegrityProjectionSchema, domSnapshotArtifactSchema, scanModuleRunSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { siteIntegrityObservationSchema, siteIntegrityProjectionSchema, domSnapshotArtifactSchema, scanModuleRunSchema, type CanonicalEvidenceBundle, type DomSnapshotArtifact } from "@certscore/contracts";
+
+function latestRuntimeDocumentMatches(snapshots: readonly DomSnapshotArtifact[], documentUrl: string, documentToken: string, durationMs: number) {
+  let latest: DomSnapshotArtifact | undefined;
+  let conflictingLatest = false;
+  for (const snapshot of snapshots) {
+    if (snapshot.consentStateAtTime !== "pre_consent") continue;
+    if (!Number.isFinite(snapshot.capturedAtMs) || snapshot.capturedAtMs < 0 || snapshot.capturedAtMs > durationMs) return false;
+    if (!latest || snapshot.capturedAtMs > latest.capturedAtMs) {
+      latest = snapshot;
+      conflictingLatest = false;
+    } else if (snapshot.capturedAtMs === latest.capturedAtMs &&
+        (snapshot.url !== latest.url || snapshot.documentIdentity?.token !== latest.documentIdentity?.token)) {
+      conflictingLatest = true;
+    }
+  }
+  return !conflictingLatest && latest?.url === documentUrl && latest.documentIdentity?.token === documentToken;
+}
 
 /** Called only after the retained canonical bundle's original bytes have been verified. */
 export function projectSiteIntegrity(bundle: CanonicalEvidenceBundle, source: { sha256?: string; verificationStatus?: string } | undefined, documentUrl: string | null) {
@@ -14,10 +31,10 @@ export function projectSiteIntegrity(bundle: CanonicalEvidenceBundle, source: { 
   if (observation.documentUrl !== document.href ||
       Date.parse(observation.capturedAt) < Date.parse(bundle.startedAt) ||
       Date.parse(observation.capturedAt) > Date.parse(bundle.completedAt)) return null;
-  // Independent retained runtime document binding, never consent-lane substitution.
-  const matchingDocument = (bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots).some(snapshot =>
-    snapshot.documentIdentity?.token === observation.documentToken &&
-    snapshot.url === documentUrl && snapshot.consentStateAtTime === "pre_consent");
+  // Earlier matching proof must not survive a later reload or navigation.
+  // Runtime evidence remains independent of the consent lane.
+  const matchingDocument = latestRuntimeDocumentMatches(bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots,
+    documentUrl, observation.documentToken, Date.parse(bundle.completedAt) - Date.parse(bundle.startedAt));
   if (!matchingDocument) return null;
   const projection = siteIntegrityProjectionSchema.safeParse({
     contractVersion: "certscore.site-integrity-projection.v1", scanId: bundle.scanId,
@@ -50,8 +67,8 @@ export function projectAdditionalPageSiteIntegrity(evidence: Record<string, unkn
   document.search = ""; document.hash = ""; document.username = ""; document.password = "";
   if (observation.scope !== "additional_page_main_document" || observation.documentUrl !== document.href || crawlDisplayUrl(capture.data.finalUrl) !== packet.finalUrl ||
       Date.parse(observation.capturedAt) < Date.parse(packet.startedAt) || Date.parse(observation.capturedAt) > Date.parse(packet.completedAt) ||
-      !snapshots.data.some(snapshot => snapshot.documentIdentity?.token === observation.documentToken &&
-        snapshot.url === capture.data.finalUrl && snapshot.consentStateAtTime === "pre_consent")) return null;
+      !latestRuntimeDocumentMatches(snapshots.data, capture.data.finalUrl, observation.documentToken,
+        Date.parse(packet.completedAt) - Date.parse(packet.startedAt))) return null;
   const projection = siteIntegrityProjectionSchema.safeParse({
     contractVersion: "certscore.site-integrity-projection.v2", scanId: parentScanId,
     pageId: packet.pageJobId, attemptId: packet.attemptId, configurationHash: packet.configurationHash,

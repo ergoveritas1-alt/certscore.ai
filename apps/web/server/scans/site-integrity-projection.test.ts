@@ -8,7 +8,7 @@ import { projectSiteIntegrity } from "./site-integrity-projection";
 export const siteIntegrityBundleFixture = {
   scanId: "fixture", startedAt: "2026-09-17T07:22:36.000Z", completedAt: "2026-09-17T07:23:00.000Z",
   siteIntegrityObservation: observation, domSnapshots: [],
-  runtimeMetadataSnapshots: [{ url: observation.documentUrl, documentIdentity: { token: observation.documentToken }, consentStateAtTime: "pre_consent" }],
+  runtimeMetadataSnapshots: [{ url: observation.documentUrl, documentIdentity: { token: observation.documentToken }, capturedAtMs: 9000, consentStateAtTime: "pre_consent" }],
 } as unknown as CanonicalEvidenceBundle;
 const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
 test("only verified, same-document, in-window retained integrity evidence is materialized", () => {
@@ -26,6 +26,24 @@ test("only verified, same-document, in-window retained integrity evidence is mat
     [{ ...siteIntegrityBundleFixture, siteIntegrityObservation: undefined }, source, observation.documentUrl],
     [{ ...siteIntegrityBundleFixture, siteIntegrityObservation: { ...observation, documentToken: "different" } }, source, observation.documentUrl],
   ] as const) assert.equal(projectSiteIntegrity(bundle as CanonicalEvidenceBundle, suppliedSource, url), null);
+});
+
+test("starting-page document binding rejects an out-of-window runtime snapshot without a finding or score effect", () => {
+  for (const capturedAtMs of [-1, undefined, NaN, Infinity, 24001]) {
+    const bundle = { ...siteIntegrityBundleFixture, runtimeMetadataSnapshots: [
+      { ...siteIntegrityBundleFixture.runtimeMetadataSnapshots![0]!, capturedAtMs },
+    ] } as CanonicalEvidenceBundle;
+    const projection = projectSiteIntegrity(bundle, source, observation.documentUrl);
+    assert.equal(projection, null, String(capturedAtMs));
+    const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+    assert.equal(selectSiteIntegrityFinding(findings), null);
+    assert.equal(findings.some(finding => (finding.scoreEffects ?? []).length > 0), false);
+  }
+  for (const capturedAtMs of [0, 24000]) {
+    assert.ok(projectSiteIntegrity({ ...siteIntegrityBundleFixture, runtimeMetadataSnapshots: [
+      { ...siteIntegrityBundleFixture.runtimeMetadataSnapshots![0]!, capturedAtMs },
+    ] }, source, observation.documentUrl));
+  }
 });
 
 import { createHash } from "node:crypto";
@@ -79,6 +97,21 @@ test("additional-page capture fails closed on hash, attempt, parent, configurati
   ]) assert.equal(projectAdditionalPageSiteIntegrity(evidence, { ...packet, sourceHash: hash(evidence) }, scanId), null);
 });
 
+test("additional-page document binding rejects an out-of-window snapshot even with a matching evidence hash", () => {
+  for (const capturedAtMs of [24001, 600000]) {
+    const evidence = { ...pageEvidence, domSnapshots: [{ ...pageEvidence.domSnapshots[0]!, capturedAtMs }] };
+    const projection = projectAdditionalPageSiteIntegrity(evidence, { ...packet, sourceHash: hash(evidence) }, scanId);
+    assert.equal(projection, null);
+    const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+    assert.equal(selectSiteIntegrityFinding(findings), null);
+    assert.equal(findings.some(finding => (finding.scoreEffects ?? []).length > 0), false);
+  }
+  for (const capturedAtMs of [0, 24000]) {
+    const evidence = { ...pageEvidence, domSnapshots: [{ ...pageEvidence.domSnapshots[0]!, capturedAtMs }] };
+    assert.ok(projectAdditionalPageSiteIntegrity(evidence, { ...packet, sourceHash: hash(evidence) }, scanId));
+  }
+});
+
 test("limited samples score retained verified links, while empty samples stay neutral", () => {
   for (const [links, expected] of [[observation.links, true], [observation.links.slice(0, 1), true], [[], false]] as const) {
     const evidence = { ...pageEvidence, siteIntegrityObservation: { ...pageEvidence.siteIntegrityObservation, links, truncated: true } };
@@ -91,6 +124,59 @@ test("limited samples score retained verified links, while empty samples stay ne
 
 
 import { siteIntegrityCodeProofFixture, siteIntegrityCodeProofObservationFixture } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
+test("starting-page integrity cannot borrow an earlier document after runtime navigation or reload", () => {
+  const original = siteIntegrityBundleFixture.runtimeMetadataSnapshots![0]!;
+  for (const changed of [
+    { ...original, capturedAtMs: 10000, documentIdentity: { ...original.documentIdentity!, token: "new-loader" } },
+    { ...original, capturedAtMs: 10000, url: "https://clinic.example/elsewhere" },
+    { ...original, capturedAtMs: 10000, documentIdentity: undefined },
+    { ...original, capturedAtMs: 24001 },
+    { ...original, documentIdentity: { ...original.documentIdentity!, token: "ambiguous-same-offset-loader" } },
+  ]) {
+    for (const snapshots of [[original, changed], [changed, original]]) {
+      const projection = projectSiteIntegrity({ ...siteIntegrityBundleFixture, runtimeMetadataSnapshots: snapshots }, source, observation.documentUrl);
+      assert.equal(projection, null);
+      const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+      assert.equal(selectSiteIntegrityFinding(findings), null);
+      assert.equal(findings.some(finding => (finding.scoreEffects ?? []).length > 0), false);
+    }
+  }
+  assert.ok(projectSiteIntegrity({ ...siteIntegrityBundleFixture, runtimeMetadataSnapshots: [
+    original, { ...original, capturedAtMs: 10000 },
+  ] }, source, observation.documentUrl), "later proof from the same document remains eligible");
+  assert.ok(projectSiteIntegrity({ ...siteIntegrityBundleFixture,
+    siteIntegrityObservation: { ...observation, documentToken: "new-loader", capturedAt: "2026-09-17T07:22:46.000Z" },
+    runtimeMetadataSnapshots: [original, { ...original, capturedAtMs: 10000, documentIdentity: { ...original.documentIdentity!, token: "new-loader" } }],
+  }, source, observation.documentUrl), "fresh observation on the current loader remains eligible");
+});
+
+test("additional-page integrity cannot borrow an earlier document after runtime navigation or reload", () => {
+  const original = pageEvidence.domSnapshots[0]!;
+  for (const changed of [
+    { ...original, capturedAtMs: 10000, documentIdentity: { ...original.documentIdentity, token: "new-loader" } },
+    { ...original, capturedAtMs: 10000, url: "https://clinic.example/elsewhere" },
+    { ...original, capturedAtMs: 10000, documentIdentity: undefined },
+    { ...original, capturedAtMs: 24001 },
+    { ...original, documentIdentity: { ...original.documentIdentity, token: "ambiguous-same-offset-loader" } },
+  ]) {
+    for (const domSnapshots of [[original, changed], [changed, original]]) {
+      const evidence = { ...pageEvidence, domSnapshots };
+      const projection = projectAdditionalPageSiteIntegrity(evidence, { ...packet, sourceHash: hash(evidence) }, scanId);
+      assert.equal(projection, null);
+      const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: projection }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+      assert.equal(selectSiteIntegrityFinding(findings), null);
+      assert.equal(findings.some(finding => (finding.scoreEffects ?? []).length > 0), false);
+    }
+  }
+  const evidence = { ...pageEvidence, domSnapshots: [original, { ...original, capturedAtMs: 10000 }] };
+  assert.ok(projectAdditionalPageSiteIntegrity(evidence, { ...packet, sourceHash: hash(evidence) }, scanId));
+  const fresh = { ...pageEvidence,
+    siteIntegrityObservation: { ...pageEvidence.siteIntegrityObservation, documentToken: "new-loader", capturedAt: "2026-09-17T07:22:46.000Z" },
+    domSnapshots: [original, { ...original, capturedAtMs: 10000, documentIdentity: { ...original.documentIdentity, token: "new-loader" } }],
+  };
+  assert.ok(projectAdditionalPageSiteIntegrity(fresh, { ...packet, sourceHash: hash(fresh) }, scanId));
+});
+
 test("code proof survives verified persistence and canonical finding projection without changing score", () => {
   const bundle = {...siteIntegrityBundleFixture, siteIntegrityObservation: {...observation, links: observation.links.map((link, index) => index === 0 ? {...link, codeProof: siteIntegrityCodeProofFixture} : link)}};
   const projection = projectSiteIntegrity(bundle, source, observation.documentUrl);

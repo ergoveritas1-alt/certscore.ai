@@ -75,6 +75,15 @@ test("owned test2 canary separates partial GPC reduction from complete manual Do
       assert.ok(violation, `test2 must retain the intentional ${ruleId} failure; observed=${accessibility.violations.map(row => row.ruleId).join(",")}; review=${accessibility.reviewItems.map(row => row.ruleId).join(",")}`);
       assert.ok(violation.representativeNodes.some(node => node.selectors.includes(selector)), `${ruleId} must identify ${selector}`);
     }
+    const identity = (rule: string, selector: string) => accessibility.violations.find(row => row.ruleId === rule)?.representativeNodes.find(node => node.selectors.includes(selector))?.imageLinkIdentity;
+    const sharedImage = identity("image-alt", "#wcag-shared-image"), sharedLink = identity("link-name", "#wcag-shared-image-link");
+    const separateImage = identity("image-alt", "#wcag-missing-alt"), separateLink = identity("link-name", "#wcag-distinct-image-link");
+    assert.ok(sharedImage && sharedLink && separateImage && separateLink);
+    assert.equal(sharedImage.imageOnlyLinkId, sharedLink.nodeId);
+    assert.equal(sharedLink.imageOnlyLinkId, sharedLink.nodeId);
+    assert.equal(separateImage.imageOnlyLinkId, null);
+    assert.equal(separateLink.imageOnlyLinkId, separateLink.nodeId);
+    assert.equal(new Set([sharedImage.nodeId, sharedLink.nodeId, separateImage.nodeId, separateLink.nodeId]).size, 4);
     assert.equal(accessibility.engineVersion, "4.11.3");
     assert.equal(baseline.requests.length, 6, "inline accessibility fixtures must add no asset requests");
     for (const [path, kind] of [

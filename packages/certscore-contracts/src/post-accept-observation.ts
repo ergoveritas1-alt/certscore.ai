@@ -1,3 +1,4 @@
+import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { postAcceptFormSnapshotCaptureSchema, postAcceptFormSnapshotProjectionSchema, postAcceptFormSnapshotDeadline } from "./post-accept-form-snapshots";
 import { postAcceptFormCaptureSchema } from "./post-accept-form-capture";
@@ -5,8 +6,9 @@ import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
 import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection-diagnostics";
+import { actionOriginDomStorageObservationSchema, validateOriginDomStorageObservation } from "./action-origin-dom-storage-observation";
 import { validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
-import { afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
+import { actionMainDocumentWriteCoverageSchema, afterActionCaptureSchema, validateAfterActionCapture, validateAfterActionProjection } from "./after-action-capture";
 import { CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT, actionCaptureCoverageSchema, consentDecisionEvidenceSchema, hasSemanticConsentWitness } from "./consent-action-evidence-policy";
 import { runtimeEvidenceGraphSchema, runtimeGraphVerificationDiagnosticSchema, withRuntimeGraphCompatibility, type RuntimeEvidenceGraph } from "./runtime-evidence-graph";
 const packetRuntimeGraphSchema: z.ZodType<RuntimeEvidenceGraph> = runtimeEvidenceGraphSchema;
@@ -146,7 +148,13 @@ export const postAcceptStorageWriteSchema = postRefusalStorageWriteBaseSchema.om
 }).extend({
   identityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   msOffsetFromAccept: z.number().int().nonnegative(),
-}).superRefine(validateActionStorageName);
+}).superRefine((write, context) => {
+  validateActionStorageName(write, context);
+  if (write.identityHash !== undefined && write.storageIdentityHash !== undefined && write.identityHash !== write.storageIdentityHash) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["storageIdentityHash"],
+      message: "Retained Accept storage identity fields must agree." });
+  }
+});
 
 const postAcceptEvidencePacketBaseSchema = z.object({
   formSnapshotCapture: postAcceptFormSnapshotCaptureSchema.optional(),
@@ -158,6 +166,7 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   terminalDecisionEvidence: terminalConsentDecisionSchema.optional(),
   decisionEvidence: consentDecisionEvidenceSchema.optional(),
   captureCoverage: actionCaptureCoverageSchema.optional(),
+  observedActionSourceProof: observedActionSourceProofSchema.optional(),
   artifactOnly: z.literal(true),
   productionProjectable: z.boolean(),
   scanId: z.string().min(1).max(160),
@@ -197,6 +206,8 @@ const postAcceptEvidencePacketBaseSchema = z.object({
   }),
   storage: z.object({
     collectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
+    mainDocumentWriteCoverage: actionMainDocumentWriteCoverageSchema.optional(),
+    originDomStorageObservation: actionOriginDomStorageObservationSchema.optional(),
     preActionCapturedAtMs: z.number().int().nonnegative().optional(),
     postActionCapturedAtMs: z.number().int().nonnegative().optional(),
     preAction: z.array(postRefusalStorageItemSchema).max(96),
@@ -260,6 +271,28 @@ const postAcceptEvidencePacketBaseSchema = z.object({
     context.addIssue({code: z.ZodIssueCode.custom, path:["formCapture"], message:"Form capture requires the same completed authorized action and bounded timestamps"});
   }
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "accept", context);
+  validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
+  const writeCoverage = packet.storage.mainDocumentWriteCoverage;
+  validateObservedActionSourceProof(packet.observedActionSourceProof, context, {
+    scanId: packet.scanId, navigationAuthorized: packet.interactionDiagnostics?.navigation.documentCommitted === true && packet.interactionDiagnostics.navigation.finalUrlAuthorized === true,
+    targetSha256: packet.actionControlProof?.authorizedTargetSha256,
+    dispatchedAtMs: packet.acceptanceRegistration.actionDispatchedAtMs, registeredAtMs: packet.acceptanceRegistration.acceptanceRegisteredAtMs,
+    endedAtMs: packet.timing.observationEndedAtMs, scanStartedAtMs: Date.parse(packet.startedAt),
+    configuredWindowMs: packet.observationWindowMs, exitReason: packet.timing.observationExitReason,
+    confirmed: packet.acceptanceRegistration.status === "confirmed", decisionConfirmed: packet.decisionEvidence?.basis === "verified_state" && packet.decisionEvidence.decision === "granted",
+    clickCompleted: packet.interactionDiagnostics?.click.outcome === "completed",
+    writeCoverage, retention: packet.captureCoverage?.postActionRetention, requests: packet.network.requests,
+  });
+  if (writeCoverage && (writeCoverage.retainedEligibleCount !== packet.storage.writesAfterAccept.filter(write => write.nonEssential && write.evidenceSource === "instrumented_write").length ||
+    (writeCoverage.windowCompleted && packet.timing.observationExitReason !== "window_elapsed") ||
+    packet.acceptanceRegistration.status !== "confirmed" ||
+    (packet.actionControlProof?.authorizedTargetSha256 !== undefined && writeCoverage.targetUrlSha256 !== packet.actionControlProof.authorizedTargetSha256) ||
+    packet.acceptanceRegistration.acceptanceRegisteredAtMs === undefined || packet.timing.observationEndedAtMs === undefined ||
+    Math.abs((writeCoverage.windowEndedAtMs - writeCoverage.windowStartedAtMs) -
+      (packet.timing.observationEndedAtMs - (packet.acceptanceRegistration.acceptanceRegisteredAtMs ?? 0))) > 1)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["storage", "mainDocumentWriteCoverage"],
+      message: "Write coverage must preserve the confirmed authorized action and original observation clock." });
+  }
   validateLegacyActionStorageNames(packet, context);
   validateAfterActionCapture(packet.afterActionCapture, context, {
     action: "accept", dispatchedAtMs: packet.acceptanceRegistration.actionDispatchedAtMs,
@@ -331,6 +364,15 @@ const postAcceptEvidencePacketBaseSchema = z.object({
       path: ["observations"],
     });
   }
+  if (!confirmed && (packet.network.postAcceptNonEssentialRequests.length > 0 || packet.storage.writesAfterAccept.length > 0)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["acceptanceRegistration"],
+      message: "Post-Accept activity requires confirmed acceptance registration." });
+  }
+  const retainedRequests = new Map(packet.network.requests.map(request => [request.requestId, request]));
+  if (retainedRequests.size !== packet.network.requests.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["network", "requests"],
+      message: "Retained post-Accept request IDs must be unique." });
+  }
   for (const request of packet.network.postAcceptNonEssentialRequests) {
     if (
       !request.nonEssential ||
@@ -345,13 +387,50 @@ const postAcceptEvidencePacketBaseSchema = z.object({
       });
       break;
     }
+    const retained = retainedRequests.get(request.requestId);
+    if (!retained || JSON.stringify(retained) !== JSON.stringify(request)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["network", "postAcceptNonEssentialRequests"],
+        message: "Post-Accept request evidence must exactly reference a retained request row." });
+      break;
+    }
+    if (acceptedAtMs === undefined || request.startedAtMs < acceptedAtMs ||
+        request.msOffsetFromAccept !== request.startedAtMs - acceptedAtMs) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["network", "postAcceptNonEssentialRequests"],
+        message: "Post-Accept request timing must be anchored to acceptance registration." });
+      break;
+    }
   }
-  if (packet.storage.writesAfterAccept.some((write) => !write.nonEssential || write.msOffsetFromAccept < 0)) {
+  if (packet.storage.writesAfterAccept.some(write => !write.nonEssential || acceptedAtMs === undefined ||
+      write.observedAtMs < acceptedAtMs || write.msOffsetFromAccept !== write.observedAtMs - acceptedAtMs)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: "Post-Accept storage writes must be non-essential and acceptance-anchored.",
       path: ["storage", "writesAfterAccept"],
     });
+  }
+  for (const observation of packet.observations) {
+    if (acceptedAtMs === undefined || observation.observedAtMs < acceptedAtMs ||
+        (observation.msOffsetFromAccept !== undefined && observation.msOffsetFromAccept !== observation.observedAtMs - acceptedAtMs)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["observations"],
+        message: "Post-Accept observations must be anchored to acceptance registration." });
+    }
+    if (observation.observationType !== "post_accept_non_essential_activity") continue;
+    const requestMatch = observation.requestId !== undefined && observation.storageName === undefined &&
+      observation.storageType === undefined && observation.storageIdentityHash === undefined &&
+      packet.network.postAcceptNonEssentialRequests.some(request => request.requestId === observation.requestId &&
+        request.startedAtMs === observation.observedAtMs &&
+        (observation.hostname === undefined || request.hostname === observation.hostname) &&
+        (observation.vendor === undefined || request.vendor === observation.vendor));
+    const writeMatch = observation.requestId === undefined && observation.storageName !== undefined &&
+      observation.storageType !== undefined && packet.storage.writesAfterAccept.some(write =>
+        write.name === observation.storageName && write.storageType === observation.storageType &&
+        write.hostname === observation.hostname && write.observedAtMs === observation.observedAtMs &&
+        (observation.storageIdentityHash === undefined || (write.identityHash ?? write.storageIdentityHash) === observation.storageIdentityHash) &&
+        (observation.vendor === undefined || write.vendor === observation.vendor));
+    if (!requestMatch && !writeMatch) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["observations"],
+        message: "Post-Accept activity observations must reference retained request or storage-write evidence." });
+    }
   }
 });
 
@@ -629,6 +708,8 @@ export function projectPostAcceptEvidenceForReport(input: {
     // Do not reinterpret or mutate stored legacy artifacts; project them neutrally.
     return projectPostAcceptEvidenceForReport({ ...input, packet: {
       ...packet, formSnapshotCapture: undefined, productionProjectable: false, observations: [],
+      network: { ...packet.network, postAcceptNonEssentialRequests: [] },
+      storage: { ...packet.storage, writesAfterAccept: [] },
       limitations: [...packet.limitations.slice(0, 23), "semantic_registration_unverified_legacy_packet"],
       acceptanceRegistration: { ...packet.acceptanceRegistration, status: "unconfirmed",
         acceptanceExercised: false, reason: "semantic_registration_unverified_legacy_packet" },
@@ -677,7 +758,7 @@ export function projectPostAcceptEvidenceForReport(input: {
             msAfterAccept: write.msOffsetFromAccept,
             nonEssential: true as const,
             storageName: write.name,
-            ...(write.identityHash ? { storageIdentityHash: write.identityHash } : {}),
+            ...((write.identityHash ?? write.storageIdentityHash) ? { storageIdentityHash: write.identityHash ?? write.storageIdentityHash } : {}),
             storageType: write.storageType,
             ...(write.vendor ? { vendor: write.vendor } : {}),
           })),

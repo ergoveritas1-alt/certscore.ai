@@ -1334,7 +1334,7 @@ function hasCredibleRejectInteractionAttribution(
   return /^(reject_all|opt_out|essential_only|save_preferences)$/i.test(actionType ?? "");
 }
 
-function buildRuntimeDerivedReviewFindingCandidates(input: {
+export function buildRuntimeDerivedReviewFindingCandidates(input: {
   hybridEvidenceCache?: HybridRuntimeEvidenceProjectionCache;
   preconsentViolations: PreconsentViolationRow[];
   runtimeArtifacts: Record<string, unknown> | null;
@@ -2175,39 +2175,7 @@ function buildRuntimeDerivedReviewFindingCandidates(input: {
       title: "Reject button missing"
     });
 
-    candidates.push({
-      categoryId: "choice_symmetry_dark_pattern_indicators",
-      description: "The retained consent interaction structure shows accept was materially easier than reject.",
-      fallbackEvidence: {
-        accept_more_prominent_than_reject: true,
-        asymmetric_consent_ui: true,
-        consentActionableChoiceObserved,
-        consentSurfaceDecisionStates: consentSurfaceGate.states,
-        consentSurfaceDiagnostics,
-        consentSurfaceObserved,
-        rejectPathDepthAndAvailability: rejectPath,
-        firstLayerConsentChoices,
-        runtimeEvidenceArtifacts: ["scan_runtime_artifacts.reject_path_depth_and_availability"],
-        signalKey: "privacy.dark_pattern_accept_button_prominence",
-        signalLabel: "Accept action more prominent than reject",
-        signalValue: true,
-        snippets: [
-          rejectClickDepth !== null && acceptClickDepth !== null
-            ? `Accept required ${acceptClickDepth} interaction step(s), while reject required ${rejectClickDepth}.`
-            : "Accept was available before an equivalent reject action in the retained consent interaction structure."
-        ],
-        unifiedFindingId: "accept_more_prominent_than_reject"
-      },
-      id: "runtime-derived-signal-privacy.dark_pattern_accept_button_prominence.evidence_quality",
-      linkedValidationFinding: null,
-      observedValue: choiceAsymmetry,
-      severity: choiceAsymmetry === "material" ? "high" : "medium",
-      signalKey: "privacy.dark_pattern_accept_button_prominence",
-      signalLabel: "Accept action more prominent than reject",
-      signalSource: "runtime_artifact_signal",
-      sourceType: "signal",
-      title: "Accept action more prominent than reject"
-    });
+    // Structural refusal asymmetry supports Reject-missing, not a visual comparison.
 
     if (
       consentSpecificBlockingInteraction &&

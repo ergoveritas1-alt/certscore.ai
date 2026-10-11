@@ -20,6 +20,7 @@ import {
   type BrowserDocumentIdentity,
   type ConsentControlLabelClassification,
   type ConsentControlLabelClassifierInput,
+  type ConsentControlVisualComparison,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
 import {
@@ -191,6 +192,7 @@ export interface ConsentControlCmpEvidence {
 }
 
 export interface ConsentControlGeometryArtifact {
+  visualComparison?: ConsentControlVisualComparison;
   artifactVersion: "consent_control_geometry.v1";
   sourceScanner: "consent_control_geometry_diagnostic";
   pageUrl: string;

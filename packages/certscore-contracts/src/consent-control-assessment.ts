@@ -1,5 +1,6 @@
 import { CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
 import { z } from "zod";
+import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
 import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "./consent-control-label-classifier";
 import { CONSENT_CONTROL_CAPTURE_POLICY_VERSION } from "./consent-control-evidence-policy";
 import type {
@@ -89,6 +90,7 @@ export const consentControlAssessmentSchema = z.object({
   artifactVersion: consentControlAssessmentVersionSchema,
   evidencePolicy: z.literal(CONSENT_CONTROL_EVIDENCE_POLICY).optional(),
   visualEvidence: consentControlVisualEvidenceSchema.optional(),
+  visualComparison: consentControlVisualComparisonSchema.optional(),
   assessmentStatus: consentControlAssessmentStatusSchema,
   scan: z.object({
     scanId: z.string().max(240),
@@ -141,6 +143,16 @@ export const consentControlAssessmentSchema = z.object({
     computedAt: z.string().datetime(),
   }),
 }).superRefine((assessment, context) => {
+  const visual = assessment.visualComparison;
+  if (visual && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
+      assessment.document.identityStatus !== "matched" || assessment.surface.status !== "observed_actionable" ||
+      assessment.visualEvidence?.status !== "available" || visual.documentToken !== assessment.document.canonicalDocumentToken ||
+      ["accept", "reject"].some(intent => assessment.controls[intent as "accept" | "reject"].state !== "observed" ||
+        !assessment.evidence.some(row => row.evidenceId === visual[intent as "accept" | "reject"].candidateId &&
+          row.intent === intent && row.layer === "first_layer" && row.visible && row.actionable &&
+          row.documentToken === visual.documentToken && row.channels.includes("geometry"))))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Visual comparison requires available, document-bound evidence for both observed first-layer controls." });
+  }
   if (assessment.artifactVersion !== assessment.provenance.contractVersion) {
     context.addIssue({ code: z.ZodIssueCode.custom, message: "Assessment and provenance contract versions must match." });
   }
@@ -168,6 +180,14 @@ export const consentControlAssessmentSchema = z.object({
 export type ConsentControlAssessment = z.infer<typeof consentControlAssessmentSchema>;
 export type ConsentControlAssessmentControlResult = z.infer<typeof consentControlAssessmentControlResultSchema>;
 export type ConsentControlAssessmentEvidence = z.infer<typeof consentControlAssessmentEvidenceSchema>;
+
+/** Bounded persisted-assessment projection; no screenshot/DOM inference on read. */
+export function projectConsentVisualProminence(value: unknown) {
+  const parsed = consentControlAssessmentSchema.safeParse(value);
+  if (!parsed.success || !parsed.data.visualComparison) return undefined;
+  return { version: "consent_visual_prominence_projection.v1" as const,
+    assessmentSourceHash: parsed.data.provenance.sourceHash, comparison: parsed.data.visualComparison };
+}
 
 export type ConsentControlAssessmentObservation = {
   observationId: string;
@@ -212,6 +232,7 @@ export type ConsentControlAssessmentCandidate = {
 export type ConsentControlAssessmentChannel = z.infer<typeof assessmentChannelSchema>;
 
 export type ConsentControlAssessmentGeometry = {
+  visualComparison?: ConsentControlVisualComparison;
   controlInspection?: ConsentControlInspection;
   /** Retained typed inspection was present but could not be verified. */
   inspectionInvalid?: boolean;
@@ -266,7 +287,7 @@ export type ConsentControlAssessmentInput = {
   };
 };
 
-const PROJECTOR_VERSION = "2.2.2";
+const PROJECTOR_VERSION = "2.2.3";
 const DEFAULT_REQUIRED_CHANNELS: ConsentControlAssessmentChannel[] = ["dom_inventory", "geometry"];
 
 function unique<T>(values: T[]) {
@@ -675,11 +696,21 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     surface: input.surface,
     coverage: input.coverage,
   };
+  const visual = input.geometry?.visualComparison;
+  const visualComparison = visual && input.visualEvidence?.status === "available" && !assessmentBlocked &&
+    documentStatus === "matched" && surfaceStatus === "observed_actionable" && inspectionDocumentBound &&
+    inspectionCurrent && input.geometry?.assessmentStatus === "complete" &&
+    visual.documentToken === canonicalDocumentToken && ["accept", "reject"].every(intent =>
+      firstLayerResults[intent as "accept" | "reject"].state === "observed" && evidence.some(row =>
+        row.evidenceId === visual[intent as "accept" | "reject"].candidateId && row.intent === intent &&
+        row.documentToken === canonicalDocumentToken && row.channels.includes("geometry")))
+      ? visual : undefined;
   return consentControlAssessmentSchema.parse({
     artifactType: "consent_control_assessment",
     artifactVersion: CONSENT_CONTROL_ASSESSMENT_VERSION,
     evidencePolicy: CONSENT_CONTROL_EVIDENCE_POLICY,
     visualEvidence: input.visualEvidence ?? { status: "unavailable", artifactRefs: [], reasonCodes: ["visual_evidence_not_provided"] },
+    ...(visualComparison ? { visualComparison } : {}),
     assessmentStatus: assessmentComplete ? "complete" : "limited",
     scan: {
       scanId: input.scan.scanId,

@@ -2368,11 +2368,8 @@ function hasSensitiveReplaySamePageOrFlowLinkage(rawEvidence: Record<string, unk
     if (!hasConcreteSensitiveSessionReplayArtifact({ sensitivePayloadViolations: [row] })) {
       return false;
     }
-    return (
-      getSamePageOrFlowReplayLinkage(row) ||
-      row.evidenceSource === "sensitive_field_session_replay_correlation" ||
-      row.evidence_source === "sensitive_field_session_replay_correlation"
-    );
+    // The source label identifies the detector, not a retained page/flow link.
+    return getSamePageOrFlowReplayLinkage(row);
   });
 }
 

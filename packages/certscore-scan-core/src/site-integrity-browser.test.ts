@@ -26,6 +26,16 @@ test("runtime capture retains concealed outbound links, excludes ordinary hidden
       <span class="sr-only" style="position:absolute;left:-9999px"><a href="https://accessible.example/">Screen reader help</a></span>
       <div hidden><a href="https://collapsed.example/" style="font-size:0">Collapsed link</a></div>
       <a href="https://icon.example/" style="font-size:0">Icon link<svg width="10" height="10"></svg></a>
+      <style>
+        .before-icon, .after-icon { font-size:0 }
+        .before-icon::before, .after-icon::after { content:"★"; font-size:24px }
+        .hidden-generated::before { content:"Hidden too"; font-size:0 }
+      </style>
+      <a class="before-icon" href="https://before-icon.example/">Social icon label</a>
+      <a class="after-icon" href="https://after-icon.example/">Social icon label</a>
+      <a href="https://background-icon.example/" style="font-size:0;display:inline-block;width:24px;height:24px;background-image:linear-gradient(blue,blue)">Social icon label</a>
+      <a class="hidden-generated" href="https://generated-hidden.example/" style="font-size:0">Concealed text</a>
+      <div style="width:0;height:0;overflow:hidden"><a class="before-icon" href="https://clipped-icon.example/">Clipped icon label</a></div>
       <div style="position:absolute;left:-9999px;clip:rect(0,0,0,0)"><a href="https://clip.example/">Clipped accessibility label</a></div>
     </body></html>`);
   });
@@ -40,8 +50,8 @@ test("runtime capture retains concealed outbound links, excludes ordinary hidden
     const result = await run(false);
     const observation = result.siteIntegrityObservation;
     assert.ok(observation, JSON.stringify(result.moduleRun));
-    assert.deepEqual(observation.links.map(link => link.destinationDomain), ["pharmacy.example", "promotion.example", "third.example"]);
-    assert.deepEqual(observation.links.map(link => link.concealment), ["zero_size_container", "offscreen_position", "zero_font_size"]);
+    assert.deepEqual(observation.links.map(link => link.destinationDomain), ["pharmacy.example", "promotion.example", "third.example", "generated-hidden.example", "clipped-icon.example"]);
+    assert.deepEqual(observation.links.map(link => link.concealment), ["zero_size_container", "offscreen_position", "zero_font_size", "zero_font_size", "zero_size_container"]);
     for (const link of observation.links) {
       if (!link.codeProof) { assert.equal(link.codeProofUnavailableReason, "capture_limit"); continue; }
       assert.ok(new TextEncoder().encode(JSON.stringify(link.codeProof)).length <= SITE_INTEGRITY_LIMITS.codeProofBytes);

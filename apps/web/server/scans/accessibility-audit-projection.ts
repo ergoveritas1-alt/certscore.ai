@@ -1,11 +1,21 @@
 import {
   accessibilityAuditObservationSchema, accessibilityAuditProjectionSchema,
-  type AccessibilityAuditObservation, type CanonicalEvidenceBundle,
+  type AccessibilityAuditObservation, type CanonicalEvidenceBundle, type DomSnapshotArtifact,
 } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { domSnapshotArtifactSchema, scanModuleRunSchema } from "@certscore/contracts";
 import type { CrawlObservation } from "@website-signal-risk-scanner/shared";
 import { z } from "zod";
+
+/** Equal capture offsets cannot establish which document loader was latest. */
+function latestUnambiguousRuntimeSnapshot(snapshots: readonly DomSnapshotArtifact[]) {
+  const ordered = snapshots.filter(row => row.consentStateAtTime === "pre_consent")
+    .sort((left, right) => right.capturedAtMs - left.capturedAtMs);
+  const latest = ordered[0];
+  if (!latest || ordered.some(row => row.capturedAtMs === latest.capturedAtMs &&
+      (row.url !== latest.url || row.documentIdentity?.token !== latest.documentIdentity?.token))) return undefined;
+  return latest;
+}
 
 /** Materialization consumes the original checksum-verified canonical bundle only. */
 export function projectAccessibilityAudit(bundle: CanonicalEvidenceBundle, source: {
@@ -21,12 +31,13 @@ export function projectAccessibilityAudit(bundle: CanonicalEvidenceBundle, sourc
   }
   let observation = result.data;
   const start = Date.parse(bundle.startedAt), end = Date.parse(bundle.completedAt);
-  const snapshot = [...(bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots ?? [])]
-    .filter(row => row.consentStateAtTime === "pre_consent")
-    .sort((left, right) => right.capturedAtMs - left.capturedAtMs)[0];
+  const snapshot = latestUnambiguousRuntimeSnapshot(bundle.runtimeMetadataSnapshots ?? bundle.domSnapshots ?? []);
+  // Snapshot offsets use the capture's start clock. Matching URL/loader proof
+  // outside that visit cannot bind an audit; do not select an older fallback.
   const bound = observation.documentUrl === documentUrl && snapshot?.url === observation.documentUrl &&
     snapshot.documentIdentity?.token === observation.documentToken && Boolean(observation.documentToken) &&
     Number.isFinite(start) && Number.isFinite(end) &&
+    Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs >= 0 && snapshot.capturedAtMs <= end - start &&
     Date.parse(observation.startedAt) >= start && Date.parse(observation.completedAt) <= end;
   // Failed/not-testable observations contain no evaluable results. Preserve
   // their actual coverage reason rather than inventing a binding failure.
@@ -57,11 +68,11 @@ export function projectAdditionalPageAccessibilityAudit(evidence: Record<string,
     capture.data.configurationHash !== packet.configurationHash || capture.data.startedAt !== packet.startedAt || capture.data.completedAt !== packet.completedAt ||
     capture.data.finalUrl !== packet.finalUrl || createHash("sha256").update(JSON.stringify(evidence)).digest("hex") !== packet.sourceHash) return null;
   const a = audit.data;
-  const latest = snapshots.data.filter(snapshot => snapshot.consentStateAtTime === "pre_consent")
-    .sort((left, right) => right.capturedAtMs - left.capturedAtMs)[0];
+  const latest = latestUnambiguousRuntimeSnapshot(snapshots.data);
   if (a.scanId !== packet.pageJobId || a.documentUrl !== packet.finalUrl ||
     Date.parse(a.startedAt) < Date.parse(packet.startedAt) || Date.parse(a.completedAt) > Date.parse(packet.completedAt) ||
-    !a.documentToken || latest?.url !== a.documentUrl || latest.documentIdentity?.token !== a.documentToken) return null;
+    !a.documentToken || latest?.url !== a.documentUrl || latest.documentIdentity?.token !== a.documentToken ||
+    latest.capturedAtMs > Date.parse(packet.completedAt) - Date.parse(packet.startedAt)) return null;
   const projection = accessibilityAuditProjectionSchema.safeParse({
     contractVersion: "certscore.accessibility-audit-projection.v2", verificationStatus: "verified", sourceHash: packet.sourceHash,
     parentScanId, pageId: packet.pageJobId, attemptId: packet.attemptId, configurationHash: packet.configurationHash,

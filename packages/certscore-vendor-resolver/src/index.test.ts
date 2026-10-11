@@ -15,6 +15,35 @@ import {
   type VendorResolverEvidenceType,
 } from "./index.js";
 
+test("Meta Pixel numeric configuration requests resolve without broad Facebook host attribution", () => {
+  for (const url of [
+    "https://connect.facebook.net/signals/config/123456789",
+    "https://connect.facebook.net/signals/config/123456789?v=2.9.180&domain=example.test",
+  ]) {
+    const result = resolveCanonicalVendor({ type: "request", url });
+    assert.equal(result.status, "resolved", url);
+    if (result.status !== "resolved") continue;
+    assert.equal(result.observation.product, "Meta Pixel");
+    assert.equal(result.observation.purpose, "advertising");
+    assert.equal(result.observation.registryAttribution?.matchKind, "endpoint");
+    assert.deepEqual(result.observation.registryAttribution?.ruleIds, ["meta_pixel_endpoint_or_cookie"]);
+  }
+  for (const url of [
+    "https://connect.facebook.net/signals/config/",
+    "https://connect.facebook.net/signals/config/not-a-pixel",
+    "https://connect.facebook.net/signals/config/123/extra",
+    "https://connect.facebook.net/signals/config/123.js",
+    "https://connect.facebook.net/signals/configuration/123",
+    "https://connect.facebook.net/en_US/sdk.js",
+    "https://connect.facebook.net.evil.test/signals/config/123",
+    "https://connect.facebook.net@evil.test/signals/config/123",
+    "https://example.test/?url=https://connect.facebook.net/signals/config/123",
+    "https://sst.example.test/g/collect",
+  ]) {
+    assert.notEqual(resolveCanonicalVendor({ type: "request", url, hostname: "connect.facebook.net" }).observation?.product, "Meta Pixel", url);
+  }
+});
+
 test("shared runtime fixtures retain consistent service purposes for requests and iframe evidence", () => {
   for (const { url, resourceTypes, observation } of fixtures) {
     for (const type of resourceTypes as VendorResolverEvidenceType[]) {

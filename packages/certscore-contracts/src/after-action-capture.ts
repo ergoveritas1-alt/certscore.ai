@@ -103,3 +103,46 @@ export function validateAfterActionCapture(capture: AfterActionCapture | undefin
       message: "After-action capture must be bound to retained control, dispatch, request and snapshot evidence." });
   }
 }
+
+/** Completeness of retained records emitted by existing main-document setter hooks.
+ * Terminal hook readback is not proof of continuous instrumentation, other APIs,
+ * server cookies, child frames or workers; this field cannot establish a whole-finding negative.
+ */
+export type ActionMainDocumentWriteCoverage = {
+  policyVersion: "action_main_document_write_coverage.v1"; scope: "main_document_setter_hooks";
+  status: "complete_within_scope" | "limited"; targetUrlSha256: string; documentTimeOriginMs: number | null;
+  windowStartedAtMs: number; windowEndedAtMs: number; probeAvailable: boolean; cookieHookHealthy: boolean;
+  storageHookHealthy: boolean; documentMatches: boolean; windowCompleted: boolean;
+  observedLifetimeCount: number; ringEvictedCount: number; readbackOmittedCount: number;
+  retainedWindowCount: number; eligibleWindowCount: number; retainedEligibleCount: number;
+  finalCapOmittedCount: number; deduplicatedEligibleCount: number; unresolvedWindowCount: number;
+};
+export const actionMainDocumentWriteCoverageSchema: z.ZodType<ActionMainDocumentWriteCoverage> = z.object({
+  policyVersion: z.literal("action_main_document_write_coverage.v1"),
+  scope: z.literal("main_document_setter_hooks"),
+  status: z.enum(["complete_within_scope", "limited"]),
+  targetUrlSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  documentTimeOriginMs: z.number().nonnegative().nullable(),
+  // Epoch milliseconds: confirmed registration (exclusive) through observation end (inclusive).
+  windowStartedAtMs: z.number().nonnegative(), windowEndedAtMs: z.number().nonnegative(),
+  probeAvailable: z.boolean(), cookieHookHealthy: z.boolean(), storageHookHealthy: z.boolean(),
+  documentMatches: z.boolean(), windowCompleted: z.boolean(),
+  observedLifetimeCount: z.number().int().nonnegative(),
+  ringEvictedCount: z.number().int().nonnegative(), readbackOmittedCount: z.number().int().nonnegative(),
+  retainedWindowCount: z.number().int().nonnegative(), eligibleWindowCount: z.number().int().nonnegative(),
+  retainedEligibleCount: z.number().int().nonnegative(), finalCapOmittedCount: z.number().int().nonnegative(),
+  deduplicatedEligibleCount: z.number().int().nonnegative(),
+  unresolvedWindowCount: z.number().int().nonnegative(),
+}).strict().superRefine((v, ctx) => {
+  const complete = v.probeAvailable && v.cookieHookHealthy && v.storageHookHealthy && v.documentMatches &&
+    v.windowCompleted && v.ringEvictedCount === 0 && v.readbackOmittedCount === 0 &&
+    v.finalCapOmittedCount === 0 && v.deduplicatedEligibleCount === 0 && v.unresolvedWindowCount === 0;
+  if (v.windowEndedAtMs < v.windowStartedAtMs || v.eligibleWindowCount > v.retainedWindowCount ||
+    v.retainedEligibleCount + v.finalCapOmittedCount + v.deduplicatedEligibleCount !== v.eligibleWindowCount ||
+    (v.probeAvailable && v.retainedWindowCount + v.ringEvictedCount + v.readbackOmittedCount > v.observedLifetimeCount) ||
+    v.ringEvictedCount + v.readbackOmittedCount > v.observedLifetimeCount ||
+    v.unresolvedWindowCount > v.retainedWindowCount ||
+    (v.status === "complete_within_scope" && (!complete || v.documentTimeOriginMs === null || v.documentTimeOriginMs > v.windowStartedAtMs))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Main-document write coverage requires bound, loss-free counters and healthy completed capture." });
+  }
+});

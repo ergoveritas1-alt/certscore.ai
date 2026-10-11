@@ -12,6 +12,7 @@ const banner = (content: string) => `<section role="dialog" aria-label="Cookie c
 for (const [name, html, accept, reject] of [
   ["necessary-only label", banner('<button>Use necessary cookies</button><button>Customize</button><button>Allow all cookies</button>'), true, true],
   ["Cookiebot tabs", banner('<a role="tab">Consent</a><a role="tab">Details</a>'), false, false],
+  ["German consent approval with separate paid alternative", banner('<p>Mit Werbung und Tracking. Speicherung und Verarbeitung von Daten für personalisierte Werbung. Werbefrei lesen: kostenpflichtig ohne Werbetracking.</p><button>Einwilligen und weiter</button><button>Jetzt abonnieren</button><button>Einstellungen</button>'), true, false],
   ["vendor-specific refusal", banner('<p>Ihre Einwilligung für Utiq können Sie <a href="#utiq">jetzt ablehnen</a>.</p><button>Akzeptieren und weiter</button>'), true, false],
   ["separate notification dialog", `<div id="app"><section role="dialog" style="position:fixed;top:0"><p>Receive notifications about offers</p><button>Accept</button><button aria-label="Deny">Deny all</button></section>${banner('<button>Accept all</button><button>Settings</button>')}</div>`, true, false],
 ] as const) {

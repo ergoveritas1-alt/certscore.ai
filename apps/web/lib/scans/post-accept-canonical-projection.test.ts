@@ -274,21 +274,26 @@ test("exact activity after both Accept and Reject creates one corroborating revi
     purpose: "analytics" as const,
     nonEssential: true,
   };
+  const acceptOnlyRequest = {
+    ...request,
+    requestId: "post-accept-only-request",
+    sanitizedUrl: "https://analytics.example.test/accept-only",
+  };
   const accepted = canonicalProjection(packet({
     network: {
-      requests: [request],
-      postAcceptNonEssentialRequests: [request],
+      requests: [request, acceptOnlyRequest],
+      postAcceptNonEssentialRequests: [request, acceptOnlyRequest],
       activeRequestIdsAtAcceptanceRegistration: [],
     },
-    observations: [{
-      observationType: "post_accept_non_essential_activity",
+    observations: [request, acceptOnlyRequest].map((row) => ({
+      observationType: "post_accept_non_essential_activity" as const,
       observedAtMs: 670,
-      requestId: request.requestId,
+      requestId: row.requestId,
       msOffsetFromAccept: 120,
       vendor: request.vendor,
       hostname: request.hostname,
       evidenceKeys: ["network.postAcceptNonEssentialRequests"],
-    }],
+    })),
   }));
   const runtimeArtifacts = {
     ...accepted.runtimeArtifacts,
@@ -296,6 +301,7 @@ test("exact activity after both Accept and Reject creates one corroborating revi
       productionProjectable: true,
       refusalExercised: true,
       registrationStatus: "confirmed",
+      packetSha256: "c".repeat(64),
       postRefusalActivity: [{
         activityType: "network_request",
         category: "analytics",
@@ -325,6 +331,57 @@ test("exact activity after both Accept and Reject creates one corroborating revi
   assert.equal(corroborating?.title, "Shared observed activity after Accept and Reject");
   assert.equal(corroborating?.evidenceBundle.rawEvidence?.accept_reject_shared_observed_activity, true);
   assert.equal(corroborating?.evidenceBundle.rawEvidence?.accept_reject_outcomes_indistinguishable, undefined);
+  assert.deepEqual(corroborating?.evidenceBundle.rawEvidence?.runtimeEvidenceArtifacts, [
+    `post-accept-packet:sha256:${"b".repeat(64)}`,
+    `post-refusal-packet:sha256:${"c".repeat(64)}`,
+    request.sanitizedUrl,
+  ]);
+  assert.equal(corroborating?.evidenceBundle.rawEvidence?.postRefusalPacketSha256, "c".repeat(64));
+  assert.deepEqual(corroborating?.evidenceBundle.rawEvidence?.runtimeRequestUrls, [request.sanitizedUrl]);
+  assert.equal((corroborating?.evidenceBundle.rawEvidence?.acceptRejectOutcomeMatches as unknown[])?.length, 1);
+  const baseline = concerns.find((concern) => concern.originKey === "privacy.post_accept_consent_dependent_activity");
+  assert.deepEqual(baseline?.evidenceBundle.rawEvidence?.runtimeRequestUrls, [request.sanitizedUrl, acceptOnlyRequest.sanitizedUrl]);
+  for (const override of [
+    { registrationStatus: "unconfirmed" },
+    { productionProjectable: false },
+    { refusalExercised: false },
+  ]) {
+    const limited = buildNormalizedConcerns({
+      reviewFindingCandidates: [],
+      validationFindings: [],
+      runtimeArtifacts: {
+        ...runtimeArtifacts,
+        postRefusalEvidenceProjection: { ...runtimeArtifacts.postRefusalEvidenceProjection, ...override },
+      },
+    });
+    assert.equal(limited.some((concern) => concern.originKey === "privacy.accept_reject_outcomes_indistinguishable"), false);
+    assert.equal(limited.some((concern) => concern.originKey === "privacy.post_accept_consent_dependent_activity"), true);
+  }
+});
+
+test("Accept storage identity survives the typed boundary and matches Reject only by exact identity", () => {
+  for (const identity of [{ identityHash: "d".repeat(64) }, { storageIdentityHash: "d".repeat(64) }]) {
+    const accepted = canonicalProjection(packet({ storage: {
+      preAction: [], postAction: [], itemsCreatedOrChangedAfterAccept: [],
+      writesAfterAccept: [{ storageType: "local_storage", name: "analytics-key", hostname: "example.test",
+        observedAtMs: 670, msOffsetFromAccept: 120, nonEssential: true, purpose: "analytics", ...identity }],
+    }, observations: [{ observationType: "post_accept_non_essential_activity", observedAtMs: 670,
+      storageType: "local_storage", storageName: "analytics-key", hostname: "example.test",
+      storageIdentityHash: "d".repeat(64), msOffsetFromAccept: 120, evidenceKeys: ["storage.writesAfterAccept"] }] }));
+    assert.equal(accepted.projection.postAcceptActivity[0]?.storageIdentityHash, "d".repeat(64));
+    for (const rejectIdentity of ["d".repeat(64), "e".repeat(64)]) {
+      const concerns = buildNormalizedConcerns({ reviewFindingCandidates: [], validationFindings: [], runtimeArtifacts: {
+        ...accepted.runtimeArtifacts, postRefusalEvidenceProjection: {
+          productionProjectable: true, refusalExercised: true, registrationStatus: "confirmed", packetSha256: "c".repeat(64),
+          postRefusalActivity: [{ activityType: "storage_write", storageType: "local_storage", storageIdentityHash: rejectIdentity,
+            storageName: "analytics-key", hostname: "example.test", category: "analytics" }],
+        },
+      } });
+      const shared = concerns.find(row => row.originKey === "privacy.accept_reject_outcomes_indistinguishable");
+      assert.equal(!!shared, rejectIdentity === "d".repeat(64));
+      if (shared) assert.equal(shared.evidenceBundle.rawEvidence?.scoreEffect, "none");
+    }
+  }
 });
 
 test("a confirmed contradictory acceptance signal remains a score-neutral review signal", () => {
