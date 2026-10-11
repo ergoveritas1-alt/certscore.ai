@@ -647,8 +647,94 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://arstechnica.com"
+    },
+    "https://decathlon.co.uk": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T14:09:15.943Z",
+      "lastContactAt": "2026-10-11T14:09:15.943Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "access_denied_or_forbidden_page",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://decathlon.co.uk"
+    },
+    "https://patagonia.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:09:27.876Z",
+      "lastContactAt": "2026-10-11T14:09:27.876Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://patagonia.com"
+    },
+    "https://amplitude.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:09:45.584Z",
+      "lastContactAt": "2026-10-11T14:09:45.584Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://amplitude.com"
+    },
+    "https://sentry.io": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:09:58.794Z",
+      "lastContactAt": "2026-10-11T14:09:58.794Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://sentry.io"
+    },
+    "https://joomla.org": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:10:10.866Z",
+      "lastContactAt": "2026-10-11T14:10:10.866Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://joomla.org"
+    },
+    "https://drupal.org": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:10:23.782Z",
+      "lastContactAt": "2026-10-11T14:10:23.782Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://drupal.org"
+    },
+    "https://rei.com": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-08T14:10:46.890Z",
+      "lastContactAt": "2026-10-11T14:10:46.890Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "navigation_transport_failure",
+        "scan_no_go_corroborated"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://rei.com"
+    },
+    "https://spiegel.de": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-08T14:11:00.620Z",
+      "lastContactAt": "2026-10-11T14:11:00.620Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://spiegel.de"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-11T14:05:19.077Z"
+  "updatedAt": "2026-10-11T14:11:00.808Z"
 }
