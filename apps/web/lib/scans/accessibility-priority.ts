@@ -1,12 +1,11 @@
 import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 import { evaluateTopFindingEligibility } from "./top-finding-eligibility";
-import { isExecutiveSummaryTopFindingId } from "./rank-findings";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
 /** Select already policy-projected findings only. Raw audit counts cannot create a priority. */
 export function projectAccessibilityPriorities(packets: UnifiedFindingDisplayPacket[]) {
   return projectExecutiveFindingsFromUnifiedPackets(packets.filter(packet => packet.details?.family === "accessibility")).findings.filter(finding => {
-    if (!isExecutiveSummaryTopFindingId(finding.id) || finding.section !== "Accessibility" || !["critical", "high"].includes(finding.severity)
+    if (finding.section !== "Accessibility" || !["critical", "high"].includes(finding.severity)
       || !["strong", "good"].includes(finding.confidence) || finding.directVsInferred === "inferred") return false;
     const decision = evaluateTopFindingEligibility(finding);
     if (decision.eligibility !== "top_candidate" || decision.missingCorroborators.length) return false;
