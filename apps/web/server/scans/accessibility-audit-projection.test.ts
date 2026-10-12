@@ -248,8 +248,8 @@ test("equal latest runtime offsets with conflicting document proof remain limite
       const runtimeArtifacts = { accessibilityAudit: projection };
       assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] }), []);
       const findings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
-      assert.deepEqual(findings, []);
       assert.equal(accessibilityDeductionBreakdown(findings.flatMap(f => f.scoreEffects ?? [])).deductionPoints, 0);
+      assert.deepEqual(findings, []);
       assert.equal(input.accessibilityAudit!.violations.length, 4, "original observations stay unchanged");
     }
   }
