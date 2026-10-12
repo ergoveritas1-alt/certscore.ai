@@ -61,6 +61,7 @@ import {
   getIndustryBenchmark,
 } from "./industry-benchmark-data";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
+import { evidenceRowAnchor } from "../../../lib/scans/report-evidence-navigation";
 import { gpcCardActivity, gpcCardResponse, gpcSummaryLabel } from "./gpc-report-projection";
 import { getConsentControlSummaryLabel } from "./timeline-report-model";
 import {
@@ -683,7 +684,7 @@ function EvidenceIndexRows({ rows, stackedTools = false }: { rows: readonly Shad
   return (
     <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
       {rows.map((row) => (
-        <details className="group/evidence-row py-3" key={row.id}>
+        <details id={evidenceRowAnchor(row.id)} className="group/evidence-row scroll-mt-6 py-3 target:rounded target:bg-sky-50/50 target:ring-2 target:ring-sky-300" key={row.id}>
           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-zinc-950">{row.title}</span>
@@ -1226,8 +1227,8 @@ function BriefingVariant({ report }: { report: ShadowReportData }) {
       <section className="mx-auto max-w-[86rem] px-5 py-12 lg:px-10">
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase text-rose-700">Review order</p>
-            <h2 className="mt-2 text-2xl font-semibold text-zinc-950">Four high-priority findings</h2>
+            <p className="text-xs font-semibold uppercase text-zinc-500">Review order</p>
+            <h2 className="mt-2 text-2xl font-semibold text-zinc-950">{report.findings.length} findings to review</h2>
           </div>
           <p className="text-sm text-zinc-500">Open any row for retained evidence context.</p>
         </div>
@@ -1267,12 +1268,12 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
           <div className="border-b border-zinc-950 pb-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase text-rose-700">Action queue</p>
+                <p className="text-xs font-semibold uppercase text-zinc-500">Action queue</p>
                 <h2 className="mt-1 text-2xl font-semibold text-zinc-950">Review these findings first</h2>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`${monoClass} rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700 xl:hidden`}>{report.score.value}/100</span>
-                <span className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-800">{report.findings.length} open {report.findings.length === 1 ? "concern" : "concerns"}</span>
+                <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs font-semibold text-zinc-600">{report.findings.length} {report.findings.length === 1 ? "finding" : "findings"} to review</span>
               </div>
             </div>
             <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-600">{report.verdict}</p>
@@ -1285,7 +1286,7 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
                 {Object.entries(report.controls).filter(([, value]) => value === "Observed" || value === "Not observed").map(([label, value]) => (
                   <div className="border-l-2 border-zinc-200 pl-3" key={label}>
                     <p className="text-xs capitalize text-zinc-500">{label}</p>
-                    <p className={`mt-1 text-xs font-semibold ${value === "Observed" ? "text-emerald-700" : "text-rose-700"}`}>{value}</p>
+                    <p className={`mt-1 text-xs font-semibold ${value === "Observed" ? "text-emerald-700" : "text-zinc-600"}`}>{value}</p>
                   </div>
                 ))}
               </div>
@@ -1375,7 +1376,7 @@ function HomepageTimelineVariant({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            <span className={`${monoClass} shrink-0 rounded-md border border-rose-200 bg-white px-2 py-1 text-xs font-semibold text-rose-700`}>{report.findings.length} issues</span>
+            <span className={`${monoClass} shrink-0 rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs font-semibold text-zinc-600`}>{report.findings.length} issues</span>
             <p className="hidden text-xs text-zinc-500 md:block">Open for evidence, JSON, and correction steps.</p>
           </div>
         </div>
@@ -1482,7 +1483,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
       <div className="mt-16 grid gap-8 sm:grid-cols-[10rem_minmax(0,1fr)]">
         <ScoreScale compact report={report} />
         <div>
-          <p className="text-xs font-semibold uppercase text-rose-700">Review recommended</p>
+          <p className="text-xs font-semibold uppercase text-amber-900">Review recommended</p>
           <h2 className="mt-3 text-3xl font-semibold leading-tight text-zinc-950">Consent controls and pre-consent third-party activity need review.</h2>
           <p className="mt-5 text-base leading-7 text-zinc-600">{report.verdict}</p>
           <p className="mt-5 text-sm font-medium leading-6 text-zinc-950">{report.nextStep}</p>
@@ -1491,7 +1492,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
       <div className="mt-16 divide-y divide-zinc-200 border-y border-zinc-200">
         <details className="group/minimal py-6" open>
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-            <div><p className="text-xs font-semibold uppercase text-rose-700">01</p><h2 className="mt-2 text-xl font-semibold text-zinc-950">What needs attention?</h2></div>
+            <div><p className="text-xs font-semibold uppercase text-zinc-500">01</p><h2 className="mt-2 text-xl font-semibold text-zinc-950">What needs attention?</h2></div>
             <DisclosureChevron className="text-zinc-400 group-open/minimal:rotate-180" />
           </summary>
           <div className="mt-5"><FindingsList dense report={report} /></div>
@@ -1582,7 +1583,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
   const trackingExternalReviewCount = countRowsRequiringReview(report.trackingExternalRows);
   const preConsentRuntimeReviewCount = countRowsRequiringReview(report.preConsentRuntimeRows);
   return (
-    <section className={`border-t border-zinc-200 bg-white ${compact ? "[&_.p-5]:!px-3 [&_.p-5]:!py-2 [&_.mt-5]:!mt-2.5 [&_.py-3]:!py-1.5 [&_h3]:!text-sm [&_summary]:min-h-8" : ""}`} id="evidence">
+    <section className={`scroll-mt-6 border-t border-zinc-200 bg-white target:ring-2 target:ring-sky-300 [&_:target]:scroll-mt-6 [&_:target]:ring-2 [&_:target]:ring-sky-300 data-[evidence-target]:ring-2 data-[evidence-target]:ring-sky-300 [&_[data-evidence-target]]:scroll-mt-6 [&_[data-evidence-target]]:ring-2 [&_[data-evidence-target]]:ring-sky-300 ${compact ? "[&_.p-5]:!px-3 [&_.p-5]:!py-2 [&_.mt-5]:!mt-2.5 [&_.py-3]:!py-1.5 [&_h3]:!text-sm [&_summary]:min-h-8" : ""}`} id="evidence">
       <div className={compact ? "py-4" : "mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-10"}>
         <div className="grid gap-4 lg:grid-cols-[minmax(18rem,0.8fr)_minmax(32rem,1.2fr)] lg:items-center">
           <div>
@@ -1627,7 +1628,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {report.gdprTransparencyRows.map((row) => (
-                  <details className="group/policy-row py-3" key={row.id}>
+                  <details id={evidenceRowAnchor(row.id)} className="group/policy-row scroll-mt-6 py-3 target:rounded target:bg-sky-50/50 target:ring-2 target:ring-sky-300" key={row.id}>
                     <summary className={`${row.id === "privacy-notice-surface" ? "grid sm:flex" : "flex"} cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden`}>
                       <span className="min-w-0">
                         <span className="block text-sm font-semibold text-zinc-950">{row.title}</span>
@@ -1649,6 +1650,8 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
                 ))}
               </div>
             </details>
+          </div>
+          <div className="evidence-directory-column min-w-0 border-l border-t border-zinc-200">
             {report.accessibilityAudit ? <AccessibilityEvidence audit={report.accessibilityAudit} observation={report.accessibilityEvidence} /> : null}
             {!compact ? <details aria-label="Site metadata" className="group/metadata border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
@@ -1659,8 +1662,6 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
                 {metadataFields.map(([label, value]) => <div key={label}><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-0.5 break-words font-medium">{value}</dd></div>)}
               </dl>
             </details> : null}
-          </div>
-          <div className="evidence-directory-column min-w-0 border-l border-t border-zinc-200">
             {compact && report.fullSite ? <SitewideEvidenceCard group="runtime"><EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools /></SitewideEvidenceCard> : <details className="group/runtime border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Storage &amp; tracking{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{preConsentRuntimeReviewCount} need review · {report.preConsentRuntimeRows.length} checks</h3></div>
@@ -1676,7 +1677,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               </summary>
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {report.transportRows.map((row) => (
-                  <details className="group/transport-row py-3" key={row.id}>
+                  <details id={evidenceRowAnchor(row.id)} className="group/transport-row scroll-mt-6 py-3 target:rounded target:bg-sky-50/50 target:ring-2 target:ring-sky-300" key={row.id}>
                     <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
                       <span className="flex min-w-0 gap-3"><span aria-hidden="true" className={row.status === "Observed" ? "text-emerald-700" : "text-zinc-400"}>{row.status === "Observed" ? "✓" : "—"}</span><span><span className="block text-sm font-semibold text-zinc-950">{row.title}</span><span className="mt-1 overflow-hidden text-xs leading-5 text-zinc-600 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open/transport-row:[display:block] group-open/transport-row:[-webkit-line-clamp:unset]">{row.summary}</span></span></span>
                       <span className="flex shrink-0 items-center gap-2"><StatusBadge status={row.status} /><DisclosureChevron className="text-zinc-400 group-open/transport-row:rotate-180" /></span>

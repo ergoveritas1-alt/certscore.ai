@@ -14,7 +14,7 @@ import {
   type ExecutiveDisplayState,
   type ExecutivePosture
 } from "../../lib/scans/calibration-summary";
-import { formatRepresentativeAccessibilityCoverage } from "../../lib/scans/accessibility-evidence";
+import { ACCESSIBILITY_EVIDENCE_FINDING_IDS, formatRepresentativeAccessibilityCoverage } from "../../lib/scans/accessibility-evidence";
 import { compactEvidenceJsonForDisplay } from "../../lib/scans/compact-evidence-json";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 import type { FindingCriticalityBadge } from "../../lib/scans/finding-criticality-badges";
@@ -378,49 +378,10 @@ function isAccessibilityFinding(finding: CertScoreFinding) {
 }
 
 function buildAccessibilityCardCopy(finding: CertScoreFinding): ExecutiveFindingCardCopy {
-  const counts = finding.evidenceDetails?.counts ?? {};
-  const accessibilityEvidence = finding.evidenceDetails?.accessibilityEvidence ?? {};
-  const examples = getAccessibilityExampleRows(finding);
-  const primaryExample = examples[0] ?? null;
-  const primaryRule = primaryExample ? getFirstStringValue(primaryExample, ["ruleCode", "rule_code", "ruleId", "rule_id", "axeRuleId", "help"]) : null;
-  const primarySelector = primaryExample
-    ? getFirstStringArrayValue(primaryExample, ["representativeSelectors", "representative_selectors", "selectors", "target", "targets"])[0] ?? null
-    : null;
-  const primaryPage = primaryExample ? getFirstStringValue(primaryExample, ["pageUrl", "page_url", "url"]) : null;
-  const affectedNodes =
-    typeof counts.representativeAxeExampleCount === "number" && counts.representativeAxeExampleCount > 0
-      ? counts.representativeAxeExampleCount
-      : typeof counts.wcagErrorCountTotal === "number" && counts.wcagErrorCountTotal > 0
-        ? counts.wcagErrorCountTotal
-        : typeof accessibilityEvidence.affectedNodes === "number" && accessibilityEvidence.affectedNodes > 0
-          ? accessibilityEvidence.affectedNodes
-          : null;
-  const pageCount =
-    typeof counts.representativeAxePageCount === "number" && counts.representativeAxePageCount > 0
-      ? counts.representativeAxePageCount
-      : typeof accessibilityEvidence.pageCount === "number" && accessibilityEvidence.pageCount > 0
-        ? accessibilityEvidence.pageCount
-        : null;
-  const maxImpact =
-    typeof accessibilityEvidence.impact === "string"
-      ? accessibilityEvidence.impact
-      : null;
-  const impactedSurface = affectedNodes
-    ? `${affectedNodes} affected ${affectedNodes === 1 ? "element" : "elements"}${pageCount ? ` across ${pageCount} ${pageCount === 1 ? "page" : "pages"}` : ""}`
-    : "affected elements";
-  const impactText = maxImpact ? ` The highest retained impact was ${maxImpact}.` : "";
-  const sourceContext = primaryRule
-    ? ` Retained axe evidence points to ${primaryRule}${primarySelector ? ` on selector ${primarySelector}` : ""}${primaryPage ? ` at ${primaryPage}` : ""}.`
-    : "";
-  const summary = `${finding.label} was retained for manual accessibility review, with ${impactedSurface}.${impactText}${sourceContext}`;
-  const reviewTarget = primaryRule || primarySelector
-    ? `Start with ${primaryRule ? `the ${primaryRule} rule` : "the retained rule"}${primarySelector ? ` on ${primarySelector}` : ""}; then verify nearby labels, instructions, focus order, accessible names, and error states in the actual page flow.`
-    : "Review the affected elements with keyboard navigation and screen-reader checks. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow, then validate fixes against the relevant WCAG rule.";
-
   return {
-    evidenceBasis: `${summary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
-    reviewFocus: reviewTarget,
-    summary
+    evidenceBasis: `${finding.shortSummary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
+    reviewFocus: finding.remediation,
+    summary: finding.shortSummary
   };
 }
 
@@ -667,23 +628,12 @@ function buildExecutiveFindingCardCopy(finding: CertScoreFinding): ExecutiveFind
     return buildAccessibilityCardCopy(finding);
   }
 
-  const vendors = getRepresentativeVendorNames(finding);
-  const domains = getRepresentativeDomainNames(finding);
-  const countEntries = Object.entries(finding.evidenceDetails?.counts ?? {})
-    .filter(([, value]) => typeof value === "number" && value > 0)
-    .slice(0, 2)
-    .map(([key, value]) => `${value} ${key.replaceAll("_", " ")}`);
-  const observedEvidence = [
-    vendors.length > 0 ? `Representative vendors: ${formatInlineList(vendors)}.` : null,
-    domains.length > 0 ? `Representative domains: ${formatInlineList(domains)}.` : null,
-    countEntries.length > 0 ? `Retained counts: ${countEntries.join("; ")}.` : null
-  ].filter(Boolean).join(" ");
   const fallbackSummary = finding.shortSummary || `${finding.label} surfaced from retained scan evidence.`;
 
   return {
-    evidenceBasis: `${observedEvidence || fallbackSummary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
+    evidenceBasis: `${fallbackSummary} ${CERTSCORE_REVIEW_DISCLAIMER}`,
     reviewFocus: sentenceCase(getRecommendedNextStep(finding).replace(/^Next step:\s*/i, "")),
-    summary: `${observedEvidence || fallbackSummary} ${finding.whyItMatters ? finding.whyItMatters.split(/(?<=[.!?])\s+/)[0] : ""}`.trim()
+    summary: fallbackSummary
   };
 }
 
@@ -1001,6 +951,8 @@ function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?:
       cookieEvidence: compactEvidenceRecord(details.cookieEvidence, [
         "observed",
         "cookieCount",
+        "cookieCountBasis",
+        "representativeCookieRowsRetained",
         "thirdPartyCookieCount",
         "preConsentCookieCount",
         "trackingCookieWritesBeforeConsent",
@@ -1024,6 +976,9 @@ function buildRegulatoryLensEvidencePayload(finding: CertScoreFinding, context?:
       accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, [
         "observed",
         "affectedNodes",
+        "nodeCountBasis",
+        "representativeExamplesRetained",
+        "representativeNodesRetained",
         "axeRuleId",
         "impact",
         "issueCount",
@@ -2794,13 +2749,6 @@ function hasStringValues(value: unknown): value is string[] {
   return Array.isArray(value) && value.some((entry) => typeof entry === "string" && entry.trim().length > 0);
 }
 
-const ACCESSIBILITY_FINDING_IDS = new Set([
-  "semantic_labeling_accessibility_issue",
-  "visual_contrast_accessibility_issue",
-  "keyboard_navigation_accessibility_issue",
-  "text_alternative_accessibility_issue"
-]);
-
 function formatEvidenceCount(value: unknown, fallback = "Not retained") {
   return typeof value === "number" && Number.isFinite(value) ? String(value) : fallback;
 }
@@ -2841,7 +2789,7 @@ function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: stri
   const preConsentCookieCount =
     typeof details.counts?.preConsentTrackingCookies === "number" ? details.counts.preConsentTrackingCookies : 0;
 
-  if (ACCESSIBILITY_FINDING_IDS.has(finding.id)) {
+  if (ACCESSIBILITY_EVIDENCE_FINDING_IDS.has(finding.id)) {
     const axeRule =
       details.accessibilityEvidence?.wcagRule ??
       details.accessibilityEvidence?.axeRuleId ??
@@ -2851,8 +2799,7 @@ function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: stri
       details.accessibilityEvidence?.affectedNodes ??
       details.accessibilityEvidence?.nodeCount ??
       details.accessibilityEvidence?.issueCount ??
-      details.counts?.representativeAxeExampleCount ??
-      details.counts?.wcagErrorCountTotal;
+      details.counts?.accessibilityExampleNodeCount;
     const pageCoverage =
       details.accessibilityEvidence?.pageCoverage ??
       details.accessibilityEvidence?.pageCount ??
@@ -2861,7 +2808,7 @@ function buildEvidenceBasisItems(finding: CertScoreFinding): Array<{ label: stri
 
     return [
       { label: "Axe rule retained", status: typeof axeRule === "string" && axeRule.trim().length > 0 ? "Strong" : "Partial" },
-      { label: "Affected nodes", status: formatEvidenceCount(affectedNodes, "Partial") },
+      { label: "Element failures", status: formatEvidenceCount(affectedNodes, "Partial") },
       { label: "Page coverage", status: formatPageCoverage(pageCoverage) },
       { label: "Impact/severity", status: getAccessibilityImpact(finding) },
       { label: "Manual verification", status: "Recommended" }
@@ -2976,8 +2923,8 @@ function getFindingCardTone(
   if (criticalityBadge === "critical" || isFirst) {
     return {
       card: "border-slate-200 bg-[linear-gradient(180deg,rgba(252,252,252,0.94),rgba(255,255,255,1))]",
-      band: "bg-rose-200",
-      severityBadge: "border-rose-200 bg-rose-50 text-rose-800",
+      band: "bg-amber-200",
+      severityBadge: "border-amber-200 bg-amber-50 text-amber-900",
       summary: "border-slate-200 bg-white text-slate-900"
     };
   }
@@ -4221,6 +4168,8 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         rejectInteraction: compactEvidenceRecord(details.rejectInteraction, ["action_type", "selector", "label", "timestamp_ms"]) ?? undefined,
         postRejectEvidence: compactEvidenceRecord(details.postRejectEvidence, [
           "trackingPersistedAfterReject",
+          "postRejectNonEssentialRequestCount",
+          "representativePostRejectRequestsRetained",
           "baselineRequestCount",
           "postRejectRequestCount",
           "basis"
@@ -4240,10 +4189,12 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "basis",
           "sensitivePayloadViolations"
         ]) ?? undefined,
-        syncEvidence: compactEvidenceRecord(details.syncEvidence, ["observed", "syncRequestCount", "destinationCount", "basis"]) ?? undefined,
+        syncEvidence: compactEvidenceRecord(details.syncEvidence, ["observed", "syncRequestCount", "destinationCount", "basis", "subtypes", "examples"]) ?? undefined,
         cookieEvidence: compactEvidenceRecord(details.cookieEvidence, [
           "observed",
           "cookieCount",
+          "cookieCountBasis",
+          "representativeCookieRowsRetained",
           "thirdPartyCookieCount",
           "preConsentCookieCount",
           "trackingCookieWritesBeforeConsent",
@@ -4274,21 +4225,38 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "thirdPartyTrackingObserved"
         ]) ?? undefined,
         trackingEvidence: compactEvidenceRecord(details.trackingEvidence, [
+          "observed",
+          "runtimeRequestCount",
+          "runtimeVendorCount",
+          "requestCountBasis",
+          "representativeRequestsRetained",
           "identifierLikeRequestCount",
           "destinationDomainCount",
           "basis"
         ]) ?? undefined,
         consentUiEvidence: compactEvidenceRecord(details.consentUiEvidence, [
           "observed",
+          "pattern",
           "result",
           "subtype",
           "rejectOptionSubtype",
           "userChoiceImpact",
           "runtimePath",
+          "firstLayerControls",
+          "lifecycleReview",
           "basis"
         ]) ?? undefined,
         sensitiveDataEvidence: compactEvidenceRecord(details.sensitiveDataEvidence, [
           "observed",
+          "evidenceBasisType",
+          "dataTypes",
+          "fieldTypes",
+          "fieldContexts",
+          "thirdPartyDomains",
+          "samePageOrFlowLinked",
+          "sameFlowBasis",
+          "payloadExposureObserved",
+          "runtimeRequestEvidence",
           "sensitiveFieldCount",
           "sensitiveDataTypes",
           "basis"
@@ -4297,6 +4265,8 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "basis",
           "confidenceExplanation",
           "identifierLikeRequestCount",
+          "deviceDataLikeRequestCount",
+          "requestCountBasis",
           "fingerprintPurposeFraming",
           "fingerprintPromotionAnnotation",
           "fingerprintClusterSummary",
@@ -4305,6 +4275,14 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         ]) ?? undefined,
         accessibilityEvidence: compactEvidenceRecord(details.accessibilityEvidence, [
           "observed",
+          "affectedNodes",
+          "nodeCountBasis",
+          "representativeExamplesRetained",
+          "representativeNodesRetained",
+          "pageCount",
+          "axeRuleId",
+          "ruleCodes",
+          "axeEvidence",
           "issueCount",
           "impact",
           "wcagRule",
@@ -4314,6 +4292,11 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         policyEvidenceDetails: compactEvidenceRecord(details.policyEvidenceDetails, ["observed", "evaluated", "basis", "clarityRiskObserved"]) ?? undefined,
         financialClaimsEvidence: compactEvidenceRecord(details.financialClaimsEvidence, ["observed", "offerCount", "basis"]) ?? undefined,
         disclosureEvidence: compactEvidenceRecord(details.disclosureEvidence, ["observed", "missingDisclosureCount", "basis"]) ?? undefined,
+        offerSnippets: details.offerSnippets,
+        disclosureFindings: details.disclosureFindings,
+        policyRuntimeConflict: details.policyRuntimeConflict,
+        runtimeVendorDisclosure: details.runtimeVendorDisclosure,
+        cmpLoadOrder: details.cmpLoadOrder,
         counts: details.counts ?? {},
         requestSelectionNote: details.requestSelectionNote ?? undefined,
         vendors: (details.vendors ?? []).slice(0, 5).map((vendor) =>
@@ -4329,6 +4312,7 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
           "addressingOrSignalingTransmittedByRequest",
           "identifierLikeRequestCount",
           "deviceDataLikeRequestCount",
+          "requestCountBasis",
           "interpretation"
         ]) ?? undefined,
         policyEvidence: details.policyEvidence ?? { evaluated: false },
@@ -4359,6 +4343,11 @@ function compactCanonicalEvidenceJsonPayload(finding: CertScoreFinding) {
         "policyEvidenceDetails",
         "financialClaimsEvidence",
         "disclosureEvidence",
+        "offerSnippets",
+        "disclosureFindings",
+        "policyRuntimeConflict",
+        "runtimeVendorDisclosure",
+        "cmpLoadOrder",
         "counts",
         "requestSelectionNote",
         "vendors",

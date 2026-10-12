@@ -1,4 +1,5 @@
 import { projectAccessibilityPriorities } from "../../../lib/scans/accessibility-priority";
+import { groupAccessibilityPriorityEntries } from "../../../lib/scans/accessibility-priority-group";
 import { comparePriorityReviewFindings } from "../../../lib/scans/priority-review-order";
 import { accessibilityOverviewCopy } from "../../../lib/scans/accessibility-report";
 import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
@@ -676,7 +677,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
       (finding) => finding.unifiedFindingId === "acceptance_signal_contradicts_action",
     ),
   ).topFindings;
-  const findings = selectCanonicalHighPriorityFindings([
+  let findings = selectCanonicalHighPriorityFindings([
     ...buildChecklistConcernTopFindings(reportableChecklistRows),
     ...executiveUnifiedFindings,
     ...projectAccessibilityPriorities(canonical.ownerUnifiedFindings),
@@ -688,6 +689,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const integrityPriority = projectSiteIntegrityPriority(canonical.ownerUnifiedFindings);
   if (integrityPriority) findings.push({ ...integrityPriority, rank: findings.length + 1, focus: "Site integrity", vendors: [] });
   findings.sort(comparePriorityReviewFindings);
+  findings = groupAccessibilityPriorityEntries(findings);
   findings.forEach((finding, index) => { finding.rank = index + 1; });
   const inventoryProjection = buildRuntimeInventoryProjectionFromScan(scanRecord);
   const retainedRequests = buildRetainedRequestInventory(getHybridRuntimeEvidence(scanRecord.runtimeArtifacts));
@@ -805,7 +807,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
   const verdict = buildExecutiveOverview({
     acceptPath,
-    accessibility: accessibilityOverviewCopy(accessibilityAudit, accessibilityEvidence),
+    accessibility: accessibilityOverviewCopy(accessibilityAudit),
     controls,
     findings,
     limitedCount: summaryCounts.technical_limitation,

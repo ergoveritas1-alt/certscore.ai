@@ -12,7 +12,7 @@ import { ScanReportDisclosureIcon } from "./scan-report-disclosure-icon";
 function getSeverityClasses(severity: CertScoreFinding["severity"]) {
   switch (severity) {
     case "critical":
-      return "border-rose-200 bg-rose-50/80 text-rose-900";
+      return "border-amber-200 bg-amber-50/80 text-amber-900";
     case "high":
       return "border-amber-200 bg-amber-50/80 text-amber-900";
     case "medium":
@@ -80,7 +80,7 @@ export function FindingCard({ finding }: { finding: CertScoreFinding }) {
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2.5">
             <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${getSeverityClasses(display.criticality)}`}>
-              {display.criticality}
+              Reference priority: {display.criticality}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-700">
               {badgeCopy.confidence}

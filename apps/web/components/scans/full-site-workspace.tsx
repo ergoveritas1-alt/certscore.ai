@@ -11,6 +11,8 @@ import { isCompletedFullSiteReport, readFullSiteReportSessionCache, writeFullSit
 import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice";
 import { describeSiteTechnology, type SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
+import { TableScrollHint } from "./compact-scroll-hint";
+import { InventorySearchControls } from "./inventory-search-controls";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
 import type { ExecutiveRuntimeCard } from "../../lib/scans/executive-runtime-cards";
 import { ReportInventorySummary } from "./report-inventory-summary";
@@ -580,14 +582,20 @@ export function FullSiteWorkspace({
           {homepageTimeline}
           </> : null}
           <section id="site-resource-inventory" className="my-5 min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div>{tab !== "pages" ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Pre-consent supporting evidence</p> : null}<h2 className="text-xl font-semibold tracking-tight text-zinc-950">{tab === "pages" ? "Page observations and coverage" : "Services & Resources"}</h2></div>{tab !== "pages" ? <div className="flex shrink-0 gap-1" role="group" aria-label="Inventory view">{(["services", "resources"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${inventoryView === view ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`} onClick={() => { setInventoryView(view); setFilters(initialFilters); setOffset(0); }}>{view}</button>)}</div> : null}</div>
-            {activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all resources</button> : null}
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div>{tab !== "pages" ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">Pre-consent supporting evidence</p> : null}<h2 className="text-xl font-semibold tracking-tight text-zinc-950">{tab === "pages" ? "Page observations and coverage" : "Services & Resources"}</h2></div>{tab !== "pages" ? <div className="flex shrink-0 gap-1" role="group" aria-label="Inventory view">{(["services", "resources"] as const).map(view => <button key={view} type="button" aria-pressed={inventoryView === view} className={`rounded-md px-2.5 py-1 text-xs font-medium capitalize transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 ${inventoryView === view ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`} onClick={() => { setInventoryView(view); setOffset(0); }}>{view}</button>)}</div> : null}</div>
 
-            <div className="my-3 flex flex-wrap items-start justify-between gap-3 text-xs text-slate-500">
-              {tab === "pages" || inventoryView !== "services" ? <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="shrink-0"><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${tab === "pages" ? data.pages.total : data.resources.total} ${tab === "pages" ? "pages" : "resources"}` : "Loading inventory…"} /></span>{tab === "pages" ? <span className="text-slate-500">· Starting page audit and additional-page capture outcomes.</span> : null}</div> : null}
-              {data && tab === "resources" ? <details className="min-w-0 flex-1"><summary className="w-fit cursor-pointer rounded px-1 py-1 font-medium text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">Resource breakdowns</summary><div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 [&>section]:my-0 [&>section]:border-0"><SitewideInventorySummary mix={data.inventoryMix} updating={valuesUpdating} /></div></details> : null}
-              <div className={tab === "pages" ? "hidden" : "ml-auto flex flex-wrap items-center gap-3"}><button type="button" onClick={() => setCollapseVersion(value => value + 1)} className="rounded-md px-2 py-1.5 text-sky-700 hover:bg-sky-50">Collapse all</button>{data ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50" label="Copy entire inventory table with all service and resource details as JSON" payload={JSON.stringify({ services: data.services, pages: data.pageChoices }, null, 2)} /> : null}</div>
+
+            <div className="my-2 flex items-start justify-between gap-3 text-xs text-slate-500">
+              {tab === "pages" || inventoryView !== "services" ? <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-1.5 leading-5"><span className="shrink-0"><ScanLiveValue key={inventoryView} active={valuesUpdating} value={data ? `${tab === "pages" ? data.pages.total : data.resources.total} ${tab === "pages" ? "pages" : "resources"}` : "Loading inventory…"} /></span>{tab === "pages" ? <span className="text-slate-500">· Starting page audit and additional-page capture outcomes.</span> : null}</div> : null}
+              {data && tab === "resources" ? <details className="min-w-0 flex-1"><summary className="w-fit cursor-pointer rounded px-1 py-1.5 text-xs font-medium leading-5 text-zinc-600 hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">Resource breakdowns</summary><div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 [&>section]:my-0 [&>section]:border-0"><SitewideInventorySummary mix={data.inventoryMix} updating={valuesUpdating} /></div></details> : null}
+              <div className={tab === "pages" ? "hidden" : "ml-auto flex shrink-0 items-center gap-2"}><button type="button" onClick={() => setCollapseVersion(value => value + 1)} className="h-8 rounded px-2 text-xs text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">Collapse all</button>{data ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded border border-zinc-200 text-sky-700" label="Copy entire inventory table with all service and resource details as JSON" payload={JSON.stringify({ services: data.services, pages: data.pageChoices }, null, 2)} /> : null}</div>
             </div>
+            {tab !== "pages" ? <InventorySearchControls value={{ query: filters.q, purpose: filters.purpose, kind: filters.kind }} purposes={data?.facets.purposes ?? []}
+              result={isFetching ? "Updating results…" : data ? `${data.resources.total} matching resources` : "Loading inventory…"}
+              onChange={patch => { setFilters(current => ({ ...current, ...(patch.query !== undefined ? { q: patch.query } : {}), ...(patch.purpose !== undefined ? { purpose: patch.purpose } : {}), ...(patch.kind !== undefined ? { kind: patch.kind } : {}) })); setOffset(0); }}
+              onClear={() => { setFilters(initialFilters); setOffset(0); }}/>
+              : activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all resources</button> : null}
+            <div className="group/scroll">
             <div id="site-resource-table" ref={inventoryRowLimit.ref} style={inventoryRowLimit.style} className="max-h-[376px] overflow-auto rounded-lg border border-zinc-200" tabIndex={0} aria-busy={isFetching} aria-label={tab === "pages" ? "Scrollable page observations" : `Scrollable ${inventoryView}`}
               onScroll={event => {
                 const el = event.currentTarget;
@@ -679,6 +687,7 @@ export function FullSiteWorkspace({
                       </tr>
                     </thead>
                     <tbody>
+                      {data?.resources.total === 0 ? <tr><td colSpan={12} className="px-4 py-6 text-center text-slate-500">No resources match these filters. Clear filters to see the full inventory.</td></tr> : null}
                       {data?.resources.rows.map((row) => (
                         <CrawlResourceScope key={row.key} source={data.pageChoices.find(page => page.id === row.pageIds[0])?.graphSource} homepage={data.pageChoices.find(page => page.id === row.pageIds[0])?.source === "homepage"}>
                         <ServiceResourceRows row={{ ...row, name: row.occurrence.label, kind: row.occurrence.kind }} resourceContext={row} pageName={pageName} scenario="pre_consent" collapseVersion={collapseVersion}/>
@@ -690,9 +699,12 @@ export function FullSiteWorkspace({
                 )}
               </table></InventoryResourceProvider></div>
             </div>
-            {<p className="mt-2 text-xs text-zinc-500">{!data ? partialSupporting ? "Verifying resource relationships…" : "Loading inventory…" : isFetching ? "Updating inventory…" : tab !== "pages" && inventoryView === "services"
+            <div className="flex flex-wrap items-center justify-between gap-x-3">{tab !== "pages" ? <TableScrollHint scrollRef={inventoryRowLimit.ref} noun={inventoryView} /> : null}
+            {<p className={tab === "pages" ? "mt-2 text-xs text-zinc-500" : "mt-0.5 text-[11px] leading-4 text-zinc-500"}>{!data ? partialSupporting ? "Verifying resource relationships…" : "Loading inventory…" : isFetching ? "Updating inventory…" : tab !== "pages" && inventoryView === "services"
                 ? `${data.networkOverview.identifiedServices} services`
-                : `${tab === "pages" ? data.pages.total : data.resources.total} rows${(tab === "pages" ? data.pages.total : data.resources.total) > 6 ? " · Up to 6 visible. Scroll for more." : ""}`}</p>}
+                : `${tab === "pages" ? data.pages.total : data.resources.total} rows${tab === "pages" && data.pages.total > 6 ? " · Up to 6 visible. Scroll for more." : ""}`}</p>}
+            </div>
+            </div>
           </section>
           {tab === "resources" ? <CollectionSurfacesTable afterAcceptLimited={afterAcceptFormsLimited} rows={[...(data?.collectionSurfaces?.rows ?? partialSupporting?.collectionSurfaces.rows ?? []), ...afterAcceptForms]} loading={!data && !partialSupporting} scanning={valuesUpdating} pagesWithoutInventory={data?.collectionSurfaces?.pagesWithoutInventory ?? partialSupporting?.collectionSurfaces.pagesWithoutInventory} limitedPages={data?.collectionSurfaces?.limitedPages ?? partialSupporting?.collectionSurfaces.limitedPages} /> : null}
           {tab === "resources" ? formDestinationEvidence : null}

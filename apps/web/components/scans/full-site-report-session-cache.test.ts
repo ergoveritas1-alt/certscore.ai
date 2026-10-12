@@ -44,3 +44,13 @@ test("a report larger than the old cutoff can be restored after refresh", () => 
   assert.equal(writeFullSiteReportSessionCache(storage, "scan-a", "scope", report, 1000), true);
   assert.deepEqual(readFullSiteReportSessionCache(storage, "scan-a", "scope", 2000), report);
 });
+
+
+test("reports cached before accessibility grouping are not restored", () => {
+  const storage = memoryStorage();
+  const legacy = JSON.stringify({ version: 1, scanId: "scan-a", scope: "scope", savedAt: 1000, data: fixture() });
+  storage.setItem("certscore:full-site-report:v1", legacy);
+  assert.equal(readFullSiteReportSessionCache(storage, "scan-a", "scope", 2000), null);
+  assert.equal(writeFullSiteReportSessionCache(storage, "scan-a", "scope", fixture(), 2000), true);
+  assert.deepEqual(readFullSiteReportSessionCache(storage, "scan-a", "scope", 3000), fixture());
+});

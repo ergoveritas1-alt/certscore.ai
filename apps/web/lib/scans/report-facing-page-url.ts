@@ -8,6 +8,18 @@ export function stripReportUrlAnnotation(value: string) {
   return value.replace(/\s+\[(?:query_redacted|redacted|query_keys)=[^\]]+\]$/i, "").trim();
 }
 
+export function getReportUrlQueryKeys(value: string) {
+  const retainedKeys = /\bquery_keys=([^\]\s]+)/i.exec(value)?.[1]?.split(",") ?? [];
+  let urlKeys: string[] = [];
+  try {
+    urlKeys = [...new URL(stripReportUrlAnnotation(value)).searchParams.keys()];
+  } catch {
+    // A retained redaction annotation may still carry parameter names.
+  }
+  return uniqueStrings([...urlKeys, ...retainedKeys].map(key => key.trim()))
+    .filter(key => key.length <= 80).slice(0, 8);
+}
+
 export function isRuntimeRequestEvidenceUrl(value: string | null | undefined) {
   if (!value || !/^https?:\/\//i.test(value)) {
     return false;

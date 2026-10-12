@@ -67,7 +67,7 @@ test("overview owns the only inventory summary while the table and breakdowns re
   assert.equal((html.match(/aria-label="Inventory summary"/g) ?? []).length, 1);
   assert.ok(html.indexOf('aria-label="Inventory summary"') < html.indexOf('id="report-resource-inventory"'));
   assert.doesNotMatch(html, /Pre-consent privacy evidence/);
-  assert.match(html, /Resource counts &amp; classifications/);
+  assert.match(html, /Pre-consent resource counts &amp; classifications/);
   assert.match(html, /Resource breakdowns/);
   assert.match(html, /Services and their member resources/);
   for (const action of ["View services", "Explore requests", "Explore cookies and storage", "Explore embedded frames"]) assert.ok(!html.includes(`aria-label="${action}"`), `${action} shortcut remains removed`);

@@ -4,6 +4,7 @@ import { createContext, useContext, type ReactNode } from "react";
 import { sitewideEvidenceGroups, type SitewideEvidencePage } from "../../lib/scans/sitewide-evidence-index";
 import { CopyJsonButton } from "./copy-json-button";
 import { DisclosureChevron } from "./report-finding-row";
+import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
 
 export const SitewideEvidenceContext = createContext<{pages: SitewideEvidencePage[]; limitedPages: number} | null>(null);
 export function SitewideEvidenceCard({group, children}: {group: keyof typeof sitewideEvidenceGroups; children?: ReactNode}) {
@@ -34,7 +35,7 @@ export function SitewideEvidenceCard({group, children}: {group: keyof typeof sit
     </summary>
     {evidence ? <div className="mt-3 divide-y border-t">
       {evidence.limitedPages ? <p className="py-2 text-xs text-amber-800">{evidence.limitedPages} page(s) have unavailable or limited coverage.</p> : null}
-      {checks.map(check => <details key={check.id} className="group/check py-3">
+      {checks.map(check => <details id={evidenceRowAnchor(check.id)} key={check.id} className="group/check scroll-mt-6 py-3 target:rounded target:bg-sky-50/50 target:ring-2 target:ring-sky-300">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
           <span><span className="block text-sm font-semibold">{check.title}</span>
           <span className="mt-1 block text-xs text-zinc-500">{check.statuses.map(([status, count]) => `${status}: ${count} ${count === 1 ? "page" : "pages"}`).join(" · ")}</span></span>

@@ -24,6 +24,26 @@ function assertBounded(copy: string) {
   assert.ok(copy.length <= EXECUTIVE_OVERVIEW_MAX_LENGTH, `${copy.length} exceeds the maximum`);
 }
 
+test("missing privacy policy remains in highlights ahead of long CMS and action context", () => {
+  const copy = buildExecutiveOverview({ ...baseInput,
+    findings: [
+      { id: "cms_security", title: "CMS security review", summary: "Verify the installed version." },
+      { id: "regulatory_gap__gdpr_eprivacy__privacy_notice_availability", title: "Privacy policy not found", summary: "Completed discovery did not identify a policy." },
+    ],
+    priorityIntroduction: { title: "CMS security review", summary: "Retained version details. ".repeat(30) },
+    acceptPath: { state: "incomplete", observationWindowMs: 3000, note: "Action context. ".repeat(30) },
+  });
+  assert.ok(copy.length <= EXECUTIVE_OVERVIEW_MAX_LENGTH);
+  assert.match(copy, /^Privacy policy not found within the scanned scope\./);
+});
+
+test("a retrieval or inspection limitation cannot become a missing-policy highlight", () => {
+  for (const findings of [[], [{ id: "privacy_policy_unavailable", title: "Privacy policy not retrievable", summary: "Retrieval failed." }]]) {
+    const copy = buildExecutiveOverview({ ...baseInput, findings, limitedItems: ["Privacy notice availability"] });
+    assert.doesNotMatch(copy, /Privacy policy not found/);
+  }
+});
+
 test("executive overview remains bounded and sensible when no priority findings are projected", () => {
   const copy = buildExecutiveOverview({ ...baseInput, findings: [] });
   assertBounded(copy);

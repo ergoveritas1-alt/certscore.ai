@@ -35,6 +35,18 @@ test("page and site score retain the canonical missing-policy deduction without 
   }
 });
 
+test("site highlights retain the missing-policy priority beyond the three-title preview without changing ranks", () => {
+  const priorities = Object.freeze([
+    ...Array.from({ length: 4 }, (_, index) => Object.freeze({ id: `issue_${index}`, title: `Issue ${index + 1}` })),
+    Object.freeze({ id: "regulatory_gap__gdpr_eprivacy__privacy_notice_availability", title: "Privacy policy not found" }),
+  ]);
+  const summary = buildSiteAssessmentSummary(priorities, 10);
+  assert.match(summary, /5 priority issues across 10 pages/);
+  assert.match(summary, /A highlighted finding is “Privacy policy not found”/);
+  assert.match(summary, /Regulatory Risk Review for the full list/);
+  assert.equal(priorities[0]?.id, "issue_0");
+});
+
 test("summary handles zero, one and a few issues without losing title casing", () => {
   assert.equal(buildSiteAssessmentSummary([], 10), "No priority issues were identified in the assessed evidence.");
   const one = buildSiteAssessmentSummary([{ title: "GPC response review" }], 1);
@@ -114,7 +126,8 @@ test("one scanned page shows only the single page assessment", () => {
   assert.match(html,/Page score 29 out of 100/);
   assert.match(html,/>Page score</);
   assert.match(html,/Assessment highlights/);
-  assert.match(html,/1 page assessed/);
+  assert.match(html,/1 page scanned/);
+  assert.doesNotMatch(html,/1 page assessed/);
   assert.match(html,/Retained single-page verdict/);
   assert.doesNotMatch(html,/>Site score</);
   assert.doesNotMatch(html,/<h3[^>]*>Site assessment/);

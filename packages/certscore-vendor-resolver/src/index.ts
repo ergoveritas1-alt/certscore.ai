@@ -783,6 +783,7 @@ const rules: VendorRule[] = [
     entity: "Magnite, Inc.",
     vendor: "Magnite",
     product: "Magnite / Rubicon",
+    aliases: ["Rubicon Project"],
     purpose: "advertising",
     servicePurpose: "Advertising",
     regulatoryRelevance: ["consent", "advertising", "programmatic_ads"],

@@ -4,6 +4,7 @@ import test from "node:test";
 import { buildRegulatoryLensesFromUnifiedPackets } from "../../components/scans/executive-summary-card";
 import { normalizePersistedAccessibilityRuleExamples, type PersistedAccessibilityRuleExampleRow } from "./accessibility-evidence";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 import type { ScanValidationFinding } from "./validation-review-linking";
 
 function makeValidationFinding(evidence: Record<string, unknown>): ScanValidationFinding {
@@ -99,6 +100,19 @@ test("accessibility flow keeps persisted WS axe examples out of non-GDPR regulat
   assert.equal(packet?.evidence?.counts?.representativeAxePageCount, 2);
   assert.equal(packet?.evidence?.counts?.representativeAxeRuleCount, 2);
   assert.deepEqual(packet?.evidence?.entities?.maxAxeImpact, ["critical"]);
+
+  const reportFinding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings[0]!;
+  assert.equal(reportFinding.evidenceDetails?.accessibilityEvidence?.affectedNodes, 1,
+    "the semantic finding must not count an unrelated image-alt failure from the historical aggregate audit");
+  assert.equal(reportFinding.evidenceDetails?.counts?.accessibilityExampleNodeCount, 1);
+  assert.equal(reportFinding.evidenceDetails?.counts?.representativeAxeExampleCount, 1);
+  assert.equal(reportFinding.evidenceDetails?.accessibilityEvidence?.pageCount, 1);
+  assert.deepEqual(reportFinding.evidenceDetails?.accessibilityEvidence?.ruleCodes, ["button-name"]);
+  assert.deepEqual(reportFinding.evidenceDetails?.pageUrls, ["https://example.com/"]);
+  assert.match(reportFinding.shortSummary, /Buttons lacked discernible accessible names/);
+  assert.doesNotMatch(reportFinding.shortSummary, /Images|2 element failures/);
+  assert.ok(!(reportFinding.evidenceDetails?.evidenceSnippets ?? []).some(snippet => /Axe example: image-alt|Representative axe examples:/.test(snippet)));
+  assert.ok(!reportFinding.evidencePreview.some(snippet => /image-alt|2 element failures/.test(snippet)));
 
   const lenses = buildRegulatoryLensesFromUnifiedPackets([packet], {
     beforeConsentCookieCount: 0,

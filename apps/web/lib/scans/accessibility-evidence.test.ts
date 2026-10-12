@@ -1,73 +1,68 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { describeAccessibilityEvidence, describeVisualContrastEvidence, getAccessibilityEvidenceScope } from "./accessibility-evidence";
 
-import {
-  formatRepresentativeAccessibilityCoverage,
-  getRepresentativeAccessibilityExampleCoverage,
-  normalizePersistedAccessibilityRuleExamples,
-  type PersistedAccessibilityRuleExampleRow
-} from "./accessibility-evidence";
+test("semantic summaries explain each retained rule and count failures without claiming unique elements", () => {
+  const examples = ["aria-required-children", "button-name", "link-name"].map(ruleId => ({
+    ruleId, nodeCount: 2, pageUrl: "https://example.com/", representativeNodes: [{ selectors: ["#same-node"] }]
+  }));
+  assert.equal(describeAccessibilityEvidence("semantic_labeling_accessibility_issue", examples),
+    "Automated accessibility checks found failures on 1 tested page (6 element failures). ARIA elements were missing required child roles; Buttons lacked discernible accessible names; Links lacked discernible accessible names.");
+});
 
-test("normalizes persisted WS axe examples into WC accessibilityRuleExamples contract", () => {
-  const persistedRows = [
-    {
-      description: "Buttons must have discernible text",
-      help: "Buttons must have discernible text",
-      help_url: "https://dequeuniversity.com/rules/axe/4.10/button-name",
-      impact: "serious",
-      node_count: 2,
-      page_url: "https://example.com/",
-      representative_selectors: ["button[aria-label='']"],
-      rule_code: "button-name",
-      rule_group: "wcag2a",
-      severity: "serious"
-    },
-    {
-      description: "Images must have alternate text",
-      help: "Images must have alternate text",
-      help_url: "https://dequeuniversity.com/rules/axe/4.10/image-alt",
-      impact: "moderate",
-      node_count: 1,
-      page_url: "https://example.com/products",
-      representative_selectors: ["img.product-photo"],
-      rule_code: "image-alt",
-      rule_group: "wcag2a",
-      severity: "moderate"
-    }
-  ] satisfies PersistedAccessibilityRuleExampleRow[];
+test("summaries cover text alternatives, keyboard access, viewport declarations and pointer targets", () => {
+  for (const [findingId, ruleId, issue] of [
+    ["text_alternative_accessibility_issue", "image-alt", "Images lacked required text alternatives"],
+    ["text_alternative_accessibility_issue", "image-redundant-alt", "Image alternative text repeated nearby text"],
+    ["keyboard_navigation_accessibility_issue", "scrollable-region-focusable", "Scrollable regions lacked keyboard access"],
+    ["zoom_restriction_accessibility_issue", "meta-viewport", "The page viewport declared a restriction on zoom or text scaling"],
+    ["target_size_accessibility_issue", "target-size", "Pointer targets failed the size or spacing check"],
+  ] as const) {
+    assert.equal(describeAccessibilityEvidence(findingId, [{ ruleId, nodeCount: 1 }]),
+      `Automated accessibility checks found failures (1 element failure). ${issue}.`);
+  }
+});
 
-  const examples = normalizePersistedAccessibilityRuleExamples(persistedRows);
-  const coverage = getRepresentativeAccessibilityExampleCoverage({ accessibilityRuleExamples: examples });
+test("a finding summary excludes failures belonging to other accessibility families", () => {
+  const examples = [
+    { ruleId: "button-name", nodeCount: 2, pageUrl: "https://example.com/" },
+    { ruleId: "image-alt", nodeCount: 50, pageUrl: "https://example.com/about" },
+    { ruleId: "color-contrast", nodeCount: 13, pageUrl: "https://example.com/" }
+  ];
+  assert.equal(describeAccessibilityEvidence("semantic_labeling_accessibility_issue", examples),
+    "Automated accessibility checks found failures on 1 tested page (2 element failures). Buttons lacked discernible accessible names.");
+  assert.equal(describeAccessibilityEvidence("visual_contrast_accessibility_issue", examples),
+    "Low-contrast text was detected on 1 tested page (13 element failures).");
+  assert.equal(describeAccessibilityEvidence("keyboard_navigation_accessibility_issue", examples), null);
+});
 
-  assert.deepEqual(examples, [
-    {
-      description: "Buttons must have discernible text",
-      help: "Buttons must have discernible text",
-      helpUrl: "https://dequeuniversity.com/rules/axe/4.10/button-name",
-      impact: "serious",
-      nodeCount: 2,
-      pageUrl: "https://example.com/",
-      representativeSelectors: ["button[aria-label='']"],
-      ruleCode: "button-name",
-      ruleGroup: "wcag2a",
-      severity: "serious"
-    },
-    {
-      description: "Images must have alternate text",
-      help: "Images must have alternate text",
-      helpUrl: "https://dequeuniversity.com/rules/axe/4.10/image-alt",
-      impact: "moderate",
-      nodeCount: 1,
-      pageUrl: "https://example.com/products",
-      representativeSelectors: ["img.product-photo"],
-      ruleCode: "image-alt",
-      ruleGroup: "wcag2a",
-      severity: "moderate"
-    }
-  ]);
-  assert.equal(coverage.representativeExampleCount, 2);
-  assert.equal(coverage.distinctPageCount, 2);
-  assert.equal(coverage.distinctRuleCount, 2);
-  assert.equal(coverage.maxImpact, "serious");
-  assert.equal(formatRepresentativeAccessibilityCoverage(coverage), "Representative axe examples: 2 rules across 2 pages; max impact: serious.");
+test("contrast scope distinguishes rule/node occurrences from retained samples across pages", () => {
+  const examples = [
+    { ruleCode: "color-contrast", pageUrl: "https://example.com/", nodeCount: 13, representativeNodes: [{}, {}, {}] },
+    { ruleCode: "color-contrast", pageUrl: "https://example.com/about", nodeCount: 4, representativeNodes: [{}] }
+  ];
+  assert.deepEqual(getAccessibilityEvidenceScope(examples), {
+    affectedNodes: 17, pageCount: 2, representativeExamplesRetained: 2, representativeNodesRetained: 4
+  });
+  assert.equal(describeVisualContrastEvidence(examples), "Low-contrast text was detected on 2 tested pages (17 element failures).");
+});
+
+test("missing node totals and measurements do not become counts or invented WCAG thresholds", () => {
+  const examples = [{ ruleId: "color-contrast", pageUrl: "https://example.com/", representativeNodes: [{}] }];
+  assert.equal(getAccessibilityEvidenceScope(examples).affectedNodes, null);
+  assert.equal(describeVisualContrastEvidence(examples), "Low-contrast text was detected on 1 tested page.");
+  assert.equal(describeVisualContrastEvidence([]), null);
+});
+
+test("link distinctions and enhanced contrast keep their recorded rule and threshold scope", () => {
+  assert.equal(describeVisualContrastEvidence([{ ruleId: "link-in-text-block", nodeCount: 1 }]),
+    "Links were not distinguishable from surrounding text without relying on color (1 element failure).");
+  assert.equal(describeVisualContrastEvidence([
+    { ruleId: "link-in-text-block", nodeCount: 1 },
+    { ruleId: "color-contrast", nodeCount: 2 }
+  ]), "Text or links failed visual-contrast checks (3 element failures). Retained checks found both low-contrast text and links that were not distinguishable from surrounding text without relying on color.");
+  assert.equal(describeVisualContrastEvidence([{ ruleId: "color-contrast-enhanced", representativeNodes: [
+    { colorContrast: { contrastRatio: 5, requiredContrastRatio: 7 } },
+    { colorContrast: { contrastRatio: 8, requiredContrastRatio: 7 } },
+  ] }]), "Low-contrast text was detected. Retained examples measured 5:1 (required 7:1).");
 });

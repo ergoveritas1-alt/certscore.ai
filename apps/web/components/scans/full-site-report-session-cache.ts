@@ -1,5 +1,7 @@
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 
+// Keep the key stable so a refreshed report replaces the old payload without
+// consuming a second report-sized entry in session storage.
 const CACHE_KEY = "certscore:full-site-report:v1";
 // A completed site report can exceed the previous 1.5M-character cutoff.
 // Storage quota errors remain caught below; this only allows a larger report
@@ -8,7 +10,7 @@ const MAX_CHARS = 4_000_000;
 const MAX_AGE_MS = 60 * 60 * 1000;
 
 type CachedReport = {
-  version: 1;
+  version: 2;
   scanId: string;
   scope: string;
   savedAt: number;
@@ -26,7 +28,8 @@ export function readFullSiteReportSessionCache(storage: Pick<Storage, "getItem">
     const raw = storage.getItem(CACHE_KEY);
     if (!raw || raw.length > MAX_CHARS) return null;
     const cached = JSON.parse(raw) as CachedReport;
-    if (cached.version !== 1 || cached.scanId !== scanId || cached.scope !== scope ||
+    // Version 2 invalidates priorities cached before accessibility grouping.
+    if (cached.version !== 2 || cached.scanId !== scanId || cached.scope !== scope ||
       !Number.isFinite(cached.savedAt) || cached.savedAt > now || now - cached.savedAt > MAX_AGE_MS ||
       !cached.data || !isCompletedFullSiteReport(cached.data)) return null;
     return cached.data;
@@ -38,7 +41,7 @@ export function readFullSiteReportSessionCache(storage: Pick<Storage, "getItem">
 export function writeFullSiteReportSessionCache(storage: Pick<Storage, "setItem">, scanId: string, scope: string, data: FullSiteReportResponse, now = Date.now()) {
   if (!isCompletedFullSiteReport(data)) return false;
   try {
-    const serialized = JSON.stringify({ version: 1, scanId, scope, savedAt: now, data } satisfies CachedReport);
+    const serialized = JSON.stringify({ version: 2, scanId, scope, savedAt: now, data } satisfies CachedReport);
     if (serialized.length > MAX_CHARS) return false;
     storage.setItem(CACHE_KEY, serialized);
     return true;

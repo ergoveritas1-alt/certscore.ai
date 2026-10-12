@@ -18,7 +18,7 @@ export type PreConsentTrackingEvidenceDetails = {
   scanContext: {
     pageUrl: string | null;
     scanMode: "initial_page_load";
-    interactionBeforeFinding: boolean;
+    interactionBeforeFinding?: boolean;
   };
   consentState: {
     cmpDetected: boolean | null;
@@ -135,6 +135,7 @@ export type PreConsentTrackingEvidenceDetails = {
     interpretation: string;
     identifierLikeRequestCount: number;
     deviceDataLikeRequestCount: number;
+    requestCountBasis?: string;
   };
   policyEvidence:
     | {
@@ -788,7 +789,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters:
       "Missing text alternatives can prevent non-text content from being understood by screen reader users and other assistive technologies.",
     remediation:
-      "Add appropriate alt text, captions, or equivalent alternatives for the retained media and object examples, then rerun the accessibility scan."
+      'For flagged images, add concise alt text describing their purpose; use alt="" for purely decorative images. Provide captions or equivalent text alternatives for other flagged media, then rerun the affected checks.'
   },
   visual_contrast_accessibility_issue: {
     id: "visual_contrast_accessibility_issue",
@@ -798,7 +799,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters:
       "Insufficient contrast or links distinguished only by color can make content difficult to perceive, especially for users with low vision or color-vision differences.",
     remediation:
-      "Review each retained rule's WCAG guidance: adjust foreground, background, and state contrast, and add a non-color distinction for links where required."
+      "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
   },
   zoom_restriction_accessibility_issue: {
     id: "zoom_restriction_accessibility_issue", label: "Author-declared zoom restriction", section: "Accessibility", defaultSurfacePriority: 40,

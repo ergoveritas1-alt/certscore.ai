@@ -1,3 +1,5 @@
+import { findMissingPrivacyPolicyHighlight } from "../../../lib/scans/missing-privacy-policy-highlight";
+
 export const EXECUTIVE_OVERVIEW_MIN_LENGTH = 340;
 // Cap the complete assessment, including any projected priority introduction.
 export const EXECUTIVE_OVERVIEW_MAX_LENGTH = 450;
@@ -16,6 +18,7 @@ type ExecutiveOverviewInput = {
     reject: string;
   };
   findings: Array<{
+    id?: string;
     summary: string;
     title: string;
   }>;
@@ -70,6 +73,7 @@ function fitExecutiveOverview(sentences: string[]) {
 
 export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
   const findingCount = input.findings.length;
+  const missingPrivacyPolicy = findMissingPrivacyPolicyHighlight(input.findings);
   const evidenceText = input.findings.map((finding) => `${finding.title} ${finding.summary}`).join(" ");
   const hasConsentConcern = /consent|decline|reject|options/i.test(evidenceText);
   const hasTrackingConcern = input.preConsentConcerns?.tracking === true;
@@ -160,5 +164,6 @@ export function buildExecutiveOverview(input: ExecutiveOverviewInput) {
   const introduction = input.priorityIntroduction
     ? `${input.priorityIntroduction.title}: ${input.priorityIntroduction.summary}`
     : "";
-  return fitExecutiveOverview([introduction, opening, focus, acceptOutcome ?? "", rejectOutcome ?? "", limitation, activity ?? "", input.accessibility ?? "", positive ?? ""]);
+  const privacyHighlight = missingPrivacyPolicy ? `${missingPrivacyPolicy.title} within the scanned scope.` : "";
+  return fitExecutiveOverview([privacyHighlight, introduction, opening, focus, acceptOutcome ?? "", rejectOutcome ?? "", limitation, activity ?? "", input.accessibility ?? "", positive ?? ""]);
 }

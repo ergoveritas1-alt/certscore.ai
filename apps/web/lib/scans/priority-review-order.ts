@@ -1,4 +1,5 @@
 import { CERT_SCORE_FINDING_REGISTRY } from "./finding-registry";
+import { ACCESSIBILITY_PRIORITY_GROUP_ID } from "./accessibility-priority-group";
 
 /** Rank already-projected findings; never change their severity, status or eligibility. */
 export function comparePriorityReviewFindings(
@@ -7,8 +8,8 @@ export function comparePriorityReviewFindings(
 ) {
   // Privacy, consent and security concerns lead this regulatory review. An axe
   // impact rating alone does not establish a task-blocking accessibility barrier.
-  const leftAccessibility = CERT_SCORE_FINDING_REGISTRY[left.id]?.section === "Accessibility";
-  const rightAccessibility = CERT_SCORE_FINDING_REGISTRY[right.id]?.section === "Accessibility";
+  const leftAccessibility = left.id === ACCESSIBILITY_PRIORITY_GROUP_ID || CERT_SCORE_FINDING_REGISTRY[left.id]?.section === "Accessibility";
+  const rightAccessibility = right.id === ACCESSIBILITY_PRIORITY_GROUP_ID || CERT_SCORE_FINDING_REGISTRY[right.id]?.section === "Accessibility";
   return Number(leftAccessibility) - Number(rightAccessibility)
     || Number(right.priority === "high") - Number(left.priority === "high");
 }

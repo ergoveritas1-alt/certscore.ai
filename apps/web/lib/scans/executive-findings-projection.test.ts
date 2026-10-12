@@ -9,6 +9,249 @@ import { ADA_ACCESSIBILITY_FIXTURES } from "./ada-accessibility.fixtures";
 import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 
+function reportingEvidence(overrides: Partial<NonNullable<UnifiedFindingDisplayPacket["evidence"]>> = {}) {
+  return {
+    counts: {}, entities: {}, fetchQuality: null, flags: [],
+    pageUrls: ["https://example.com/"], snippets: [], sourceUrls: [], ...overrides
+  } satisfies NonNullable<UnifiedFindingDisplayPacket["evidence"]>;
+}
+
+test("non-ADA provenance URLs never become runtime requests or identifier evidence", () => {
+  const sources = ["https://example.com/", "https://example.com/privacy", "https://provider.test/policy"];
+  for (const id of ["guaranteed_or_high_return_claims_present", "performance_claims_without_context",
+    "asymmetric_consent_ui", "multi_vendor_tracking_detected", "telemetry_rich_identification_observed",
+    "session_recording_services_detected"]) {
+    const packet = makePacket(id, {
+      evidence: reportingEvidence({ sourceUrls: sources, entities: {
+        policyEvidenceUrls: [sources[2]!], policyVendor: ["Policy Provider"], cmpVendorName: ["Consent Provider"]
+      } }),
+      summary: "The retained finding describes its specific observed issue."
+    });
+    const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === id);
+    assert.ok(finding, id);
+    assert.deepEqual(finding.evidenceDetails?.runtimeRequestUrls ?? [], [], id);
+    assert.deepEqual(finding.evidenceDetails?.representativeRequests ?? [], [], id);
+    assert.deepEqual(finding.evidenceDetails?.runtimeVendors ?? [], [], id);
+    assert.equal(finding.evidenceDetails?.identifierEvidence?.addressingOrSignalingTransmittedByRequest ?? false, false, id);
+    assert.equal(finding.evidenceDetails?.scanContext?.interactionBeforeFinding ?? false, false, id);
+    if (id !== "session_recording_services_detected") {
+      assert.deepEqual(finding.evidenceDetails?.sourceUrls, sources, "provenance remains retained");
+    }
+  }
+});
+
+test("retained request counts include rows beyond the eight displayed examples", () => {
+  const urls = Array.from({ length: 13 }, (_, i) => `https://metrics.example.test/collect/${i}?client_id=redacted`);
+  for (const id of ["telemetry_rich_identification_observed", "multi_vendor_tracking_detected"]) {
+    const packet = makePacket(id, {
+      evidence: reportingEvidence({
+        entities: { runtimeRequestUrls: urls, runtimeVendors: ["Example Metrics"] },
+        sourceUrls: ["https://example.com/privacy"]
+      })
+    });
+    const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === id)!;
+    assert.ok(finding);
+    assert.equal(finding.evidenceDetails?.runtimeRequestUrls?.length, 13);
+    assert.equal(finding.evidenceDetails?.representativeRequests?.length, 8);
+    assert.equal(finding.evidenceDetails?.identifierEvidence?.identifierLikeRequestCount, 13);
+    assert.equal(finding.evidenceDetails?.identifierEvidence?.requestCountBasis, "retained_distinct_request_urls");
+    if (id === "multi_vendor_tracking_detected") {
+      assert.equal(finding.evidenceDetails?.trackingEvidence?.runtimeRequestCount, 13);
+      assert.equal(finding.evidenceDetails?.trackingEvidence?.representativeRequestsRetained, 8);
+    } else {
+      assert.equal(finding.evidenceDetails?.telemetryEvidence?.identifierLikeRequestCount, 13);
+    }
+  }
+});
+
+test("cookie finding counts stay scoped and inventory snapshots never become cookie writes", () => {
+  const cookies = [
+    ...Array.from({ length: 13 }, (_, i) => ({
+      cookieName: `_ga_${i}`, domain: "example.com", category: "analytics",
+      vendor: "Example Analytics", party: "first_party", timingEvidence: "initial_cookie_snapshot_with_visible_cmp"
+    })),
+    ...Array.from({ length: 2 }, (_, i) => ({
+      cookieName: `advertising_${i}`, domain: "ads.example.test", category: "advertising",
+      vendor: "Example Ads", party: "third_party", timingEvidence: "before_consent_cookie_write"
+    }))
+  ];
+  const packet = makePacket("analytics_cookie_pre_consent", {
+    evidence: reportingEvidence({
+      counts: { preConsentTrackingCookies: 15 },
+      entities: { preconsent_cookie_evidence: cookies.map(row => JSON.stringify(row)) }
+    })
+  });
+  const findings = projectExecutiveFindingsFromUnifiedPackets([packet]).findings;
+  const analytics = findings.find(row => row.id === "analytics_cookie_pre_consent")!;
+  const thirdParty = findings.find(row => row.id === "third_party_cookie_pre_consent")!;
+  assert.ok(analytics);
+  assert.ok(thirdParty);
+  assert.equal(analytics.evidenceDetails?.cookieEvidence?.cookieCount, 13);
+  assert.equal(analytics.evidenceDetails?.cookieEvidence?.representativeCookieRowsRetained, 12);
+  assert.equal(analytics.evidenceDetails?.cookieEvidence?.trackingCookieWritesBeforeConsent, 0);
+  assert.equal(thirdParty.evidenceDetails?.cookieEvidence?.cookieCount, 2);
+  assert.equal(thirdParty.evidenceDetails?.cookieEvidence?.trackingCookieWritesBeforeConsent, 2);
+  assert.deepEqual(thirdParty.evidenceDetails?.cookieEvidence?.cookieNames, ["advertising_0", "advertising_1"]);
+});
+
+test("typed first-party request metadata and first-seen times survive reporting", () => {
+  const url = "https://example.com/metrics?client_id=redacted";
+  const packet = makePacket("telemetry_rich_identification_observed", {
+    evidence: reportingEvidence({ entities: {
+      requestPurposeClassificationConfidence: [JSON.stringify({
+        requestUrl: url, firstPartyOrThirdParty: "first_party", firstSeenMs: 240,
+        vendorName: "Example Metrics", category: "analytics"
+      })]
+    } })
+  });
+  const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings[0]!;
+  assert.ok(finding);
+  assert.deepEqual(finding.evidenceDetails?.runtimeRequestUrls, [url]);
+  assert.equal(finding.evidenceDetails?.representativeRequests?.[0]?.thirdParty, false);
+  assert.equal(finding.evidenceDetails?.representativeRequests?.[0]?.firstSeenMs, 240);
+  assert.deepEqual(finding.evidenceDetails?.identifierEvidence?.basis, ["first_party_http_requests"]);
+  assert.doesNotMatch(finding.evidenceDetails?.identifierEvidence?.interpretation ?? "", /third-party/);
+});
+
+test("sensitive-field reporting does not invent same-page or same-flow linkage", () => {
+  const packet = makePacket("sensitive_data_collection_with_third_party_tracking_present", {
+    details: { family: "sensitive_data", kind: "sensitive_data_collection_with_third_party_tracking_present", dataTypes: ["email"] },
+    evidence: reportingEvidence({ entities: {
+      sensitivePayloadViolations: [JSON.stringify({
+        detectedType: "email", sourceField: "email", pageUrl: "https://example.com/contact",
+        requestUrl: "https://metrics.example.test/collect", vendorHost: "metrics.example.test",
+        sameFlowLinkage: { samePageOrFlow: false, fieldPageUrl: "https://example.com/contact", requestPageUrl: "https://example.com/" }
+      })]
+    } })
+  });
+  const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings[0]!;
+  assert.ok(finding);
+  const evidence = finding.evidenceDetails?.sensitiveDataEvidence;
+  assert.equal(evidence?.samePageOrFlowLinked, false);
+  assert.equal(evidence?.sameFlowBasis, "scan_level_only");
+  assert.equal(evidence?.basis, "Retained sensitive input metadata and runtime request evidence were observed in the same scan.");
+  assert.doesNotMatch(evidence?.basis as string, /linked.*same page|same page or flow/);
+});
+
+test("pre-consent timing copy describes before, simultaneous, and after banner visibility accurately", () => {
+  for (const [time, relation] of [[350, "before the CMP became visible"], [1000, "at the recorded CMP visibility time"], [1500, "after the CMP became visible"]] as const) {
+    const packet = makePacket("preconsent_tracking", {
+      confidenceBand: "high", details: { family: "consent_tracking", kind: "preconsent_tracking" },
+      evidence: reportingEvidence({
+        counts: { cmpVisibleMs: 1000, firstThirdPartyRequestMs: time, preconsentViolationCount: 2 },
+        entities: { runtimeRequestUrls: ["https://analytics.example/collect"], runtimeVendors: ["Example Analytics"] },
+        flags: ["privacy.preconsent_tracking_detected"]
+      }),
+      severity: "high"
+    });
+    const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === "pre_consent_tracking_detected");
+    assert.ok(finding);
+    assert.ok(String(finding.evidenceDetails?.timingAnalysis?.basis).includes(relation));
+  }
+});
+
+test("pre-consent evidence distinguishes retained requests from an unavailable overall total", () => {
+  const urls = Array.from({ length: 13 }, (_, i) => `https://analytics.example/collect/${i}`);
+  const packet = makePacket("preconsent_tracking", {
+    confidenceBand: "high", details: { family: "consent_tracking", kind: "preconsent_tracking" },
+    evidence: reportingEvidence({
+      counts: { cmpVisibleMs: 0, firstThirdPartyRequestMs: 1500 },
+      entities: { runtimeRequestUrls: urls, runtimeVendors: ["Example Analytics"] },
+      flags: ["privacy.preconsent_tracking_detected"]
+    })
+  });
+  const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === "pre_consent_tracking_detected")!;
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.representativeRequests?.length, 8);
+  assert.equal(finding.evidenceDetails?.counts?.retainedPreConsentTrackingRequests, 13);
+  assert.equal(finding.evidenceDetails?.counts?.representativePreConsentTrackingRequests, 8);
+  assert.equal(finding.evidenceDetails?.counts?.totalPreConsentThirdPartyTrackingRequests, null);
+  assert.equal(finding.evidenceDetails?.vendorEvidenceCompleteness?.representativeRequestsCapped, true);
+});
+
+test("specialized runtime summaries exclude policy and CMP vendors", () => {
+  const unrelated = { policyVendor: ["FullStory"], cmpVendorName: ["Consent Provider"] };
+  const packets = [
+    makePacket("session_replay_observed", {
+      details: { family: "consent_tracking", kind: "session_replay_observed", vendors: ["Microsoft Clarity"] },
+      evidence: reportingEvidence({ entities: { ...unrelated, runtimeVendors: ["Microsoft Clarity"] },
+        snippets: ["The privacy policy mentions FullStory."] })
+    }),
+    makePacket("rtb_cookie_sync_observed", {
+      details: { family: "consent_tracking", kind: "rtb_cookie_sync_observed", vendors: ["LiveRamp"],
+        requestUrls: ["https://api.liveramp.com/pixel"] },
+      evidence: reportingEvidence({ entities: { ...unrelated, runtimeVendors: ["LiveRamp"],
+        rtbCookieSyncEvidence: [JSON.stringify({ hostname: "api.liveramp.com", path_sample: "/pixel",
+          query_keys_sample: ["partnerid"], reason: "identifier_query", runtimePhase: "pre_consent",
+          url_sample: "https://api.liveramp.com/pixel" })] } })
+    }),
+    makePacket("sensitive_data_collection_with_third_party_tracking_present", {
+      details: { family: "sensitive_data", kind: "sensitive_data_collection_with_third_party_tracking_present", dataTypes: ["email"] },
+      evidence: reportingEvidence({ entities: { ...unrelated, runtimeVendors: ["Example Metrics"],
+        request_domains: ["metrics.example.test"] } })
+    })
+  ];
+  const findings = projectExecutiveFindingsFromUnifiedPackets(packets).findings;
+  for (const id of ["session_recording_services_detected", "rtb_cookie_sync_observed",
+    "sensitive_data_collection_with_third_party_tracking_present"]) {
+    const finding = findings.find(row => row.id === id);
+    assert.ok(finding, id);
+    assert.doesNotMatch(finding.shortSummary ?? "", /FullStory|Consent Provider|requests to Example Metrics/, id);
+    assert.ok(!finding.evidenceDetails?.vendors?.some(vendor => vendor.name === "FullStory" || vendor.name === "Consent Provider"), id);
+  }
+  assert.match(findings.find(row => row.id === "session_recording_services_detected")!.shortSummary!, /Microsoft Clarity/);
+  assert.match(findings.find(row => row.id === "sensitive_data_collection_with_third_party_tracking_present")!.shortSummary!, /requests to metrics.example.test/);
+});
+
+test("essential CMP request rows cannot become legacy pre-consent tracking examples", () => {
+  const tracking = "https://www.google-analytics.com/g/collect";
+  const cmp = "https://cdn.cookielaw.org/scripttemplates/otSDKStub.js";
+  const packet = makePacket("preconsent_tracking", {
+    evidence: reportingEvidence({ entities: {
+      runtimeRequestUrls: [tracking, cmp], runtimeVendors: ["Google Analytics", "OneTrust CMP"],
+      requestPurposeClassificationConfidence: [JSON.stringify({ requestUrl: cmp, vendor: "OneTrust CMP",
+        essentiality: "necessary", classification: "service_classified", category: "cmp" })]
+    } })
+  });
+  const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === "pre_consent_tracking_detected")!;
+  assert.ok(finding);
+  assert.deepEqual(finding.evidenceDetails?.representativeRequests?.map(row => row.url), [tracking]);
+  assert.doesNotMatch(finding.shortSummary!, /OneTrust|cookielaw/);
+});
+
+test("unbound first-party request URLs cannot serve as the scanned page", () => {
+  const url = "https://example.test/opaque-endpoint";
+  const packet = makePacket("preconsent_tracking", { primaryPageUrl: url, sourceUrl: url,
+    evidence: reportingEvidence({ pageUrls: [], sourceUrls: [url], entities: { runtimeRequestUrls: [url] } }) });
+  const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === "pre_consent_tracking_detected")!;
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.scanContext?.pageUrl, null);
+});
+
+test("a document explicitly retained as a scanned page may also have a network request", () => {
+  const pageUrl = "https://example.test/";
+  const packet = makePacket("preconsent_tracking", { primaryPageUrl: pageUrl,
+    evidence: reportingEvidence({ pageUrls: [pageUrl], entities: { runtimeRequestUrls: [pageUrl] } }) });
+  const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === "pre_consent_tracking_detected")!;
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.scanContext?.pageUrl, pageUrl);
+});
+
+test("direct vendors beyond the sample cap do not become inferred vendors", () => {
+  const rows = Array.from({ length: 13 }, (_, i) => ({ requestUrl: `https://metrics-${i}.example.test/collect`,
+    vendor: `Example Metrics ${i}`, category: "analytics", essentiality: "non_essential", collectionEndpointObserved: true,
+    runtimePhase: "pre_consent", firstSeenMs: i, confidence: 0.95 }));
+  const packet = makePacket("preconsent_tracking", { evidence: reportingEvidence({ entities: {
+    runtimeVendors: rows.map(row => row.vendor), requestPurposeClassificationConfidence: rows.map(row => JSON.stringify(row))
+  } }) });
+  const finding = projectExecutiveFindingsFromUnifiedPackets([packet]).findings.find(row => row.id === "pre_consent_tracking_detected")!;
+  assert.ok(finding);
+  assert.equal(finding.evidenceDetails?.counts?.uniquePreConsentTrackingVendorsObserved, 13);
+  assert.equal(finding.evidenceDetails?.representativeRequests?.length, 8);
+  assert.deepEqual(finding.evidenceDetails?.relatedOrInferredVendors ?? [], []);
+  assert.equal(finding.evidenceDetails?.vendorEvidenceCompleteness?.directVendorAnchorsOmittedFromPublicPacket, true);
+});
+
 function makePacket(
   unifiedFindingId: string,
   overrides: Partial<UnifiedFindingDisplayPacket> = {}
@@ -403,8 +646,9 @@ test("projects surfaced unified findings into executive findings and regulatory 
   assert.deepEqual(preconsentFinding?.evidenceDetails?.counts, {
     totalPreConsentThirdPartyTrackingRequests: 2,
     representativePreConsentTrackingRequests: 1,
+    retainedPreConsentTrackingRequests: 1,
     uniquePreConsentTrackingVendorsObserved: 1,
-    preConsentTrackingCookies: 0,
+    preConsentTrackingCookies: null,
     identifierLikeRequests: 0
   });
   assert.equal(preconsentFinding?.evidenceVersion, "1.1");
@@ -435,7 +679,7 @@ test("projects surfaced unified findings into executive findings and regulatory 
   );
   assert.deepEqual(preconsentFinding?.evidenceDetails?.timingAnalysis, {
     trackingBeforeConsentWindow: true,
-    basis: "First third-party tracking request (1500ms) occurred after CMP became visible (0ms) and before any recorded consent interaction."
+    basis: "First classified non-essential tracking request (1500ms) occurred after the CMP became visible (0ms) and before any recorded consent interaction."
   });
   assert.equal(
     preconsentFinding?.evidenceDetails?.requestSelectionNote,
@@ -447,9 +691,9 @@ test("projects surfaced unified findings into executive findings and regulatory 
       entry.startsWith("Representative pre-consent tracking request:")
     )
   );
-  assert.match(preconsentFinding?.shortSummary ?? "", /before any recorded consent choice/);
+  assert.match(preconsentFinding?.shortSummary ?? "", /before any recorded affirmative consent choice/);
   assert.equal(preconsentFinding?.id, "pre_consent_tracking_detected");
-  assert.equal(preconsentFinding?.label, "Third-party tracking observed before recorded consent");
+  assert.equal(preconsentFinding?.label, "Non-essential analytics initiated before a recorded affirmative choice");
   assert.match(preconsentFinding?.shortSummary ?? "", /Meta Pixel/);
   assert.match(preconsentFinding?.shortSummary ?? "", /1500ms/);
   assert.doesNotMatch(
@@ -3400,7 +3644,7 @@ test("projects blocking overlay context without violation framing", () => {
   assert.equal(projection.findings.some((entry) => entry.id === "blocking_overlay_observed"), false);
   assert.equal(projection.topFindings.some((entry) => entry.id === "blocking_overlay_observed"), false);
   assert.ok(projection.findings.some((entry) => entry.id === "forced_consent_interaction"));
-  assert.ok(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"));
+  assert.equal(projection.findings.some((entry) => entry.id === "consent_dark_patterns_detected"), false);
   assert.ok(projection.findings.some((entry) => entry.id === "reject_option_missing_or_hidden"));
   const forcedConsent = projection.findings.find((entry) => entry.id === "forced_consent_interaction");
   assert.equal(forcedConsent?.section, "Consent Experience");
@@ -3881,7 +4125,7 @@ test("projects surfaced visual contrast findings with representative axe evidenc
               description: "Elements must meet minimum color contrast ratio thresholds",
               helpUrl: "https://dequeuniversity.com/rules/axe/4.10/color-contrast",
               impact: "serious",
-              nodeCount: 1,
+              nodeCount: 13,
               pageUrl: "https://example.com/",
               representativeNodes: [
                 {
@@ -3932,6 +4176,10 @@ test("projects surfaced visual contrast findings with representative axe evidenc
   assert.ok(finding);
   assert.equal(finding?.section, "Accessibility");
   assert.equal(finding?.severity, "high");
+  assert.equal(finding?.evidenceDetails?.accessibilityEvidence?.affectedNodes, 13);
+  assert.equal(finding?.evidenceDetails?.accessibilityEvidence?.representativeExamplesRetained, 1);
+  assert.equal(finding?.evidenceDetails?.accessibilityEvidence?.representativeNodesRetained, 1);
+  assert.match(finding!.shortSummary, /13 element failures/);
   assert.deepEqual(projection.trace.unmappedSurfacedPacketIds, []);
   assert.ok(finding?.evidencePreview.some((snippet) => /color-contrast\/wcag2aa/i.test(snippet)));
   assert.ok(finding?.evidenceDetails?.evidenceFlags?.includes("representative_accessibility_examples_retained"));
@@ -4450,6 +4698,7 @@ test("keeps scanned page URL separate from representative third-party request UR
             JSON.stringify({
               confidence: "high",
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               requestUrl: "https://www.clarity.ms/tag/abc123",
               vendor: "Microsoft Clarity",
               category: "session_replay",
@@ -4570,6 +4819,7 @@ test("uses promotion-grade request classifications for pre-consent representativ
               vendorCategory: "analytics",
               classification: "non_essential",
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               confidence: 0.94,
               runtimePhase: "pre_consent",
               firstObservedMs: 229,
@@ -4582,6 +4832,7 @@ test("uses promotion-grade request classifications for pre-consent representativ
               vendorCategory: "advertising",
               classification: "non_essential",
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               confidence: 0.92,
               runtimePhase: "pre_consent",
               firstObservedMs: 1167,
@@ -4604,7 +4855,7 @@ test("uses promotion-grade request classifications for pre-consent representativ
 
   const finding = projection.findings.find((candidate) => candidate.id === "pre_consent_tracking_detected");
   assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.fandango.com/");
-  assert.match(finding?.shortSummary ?? "", /LiveRamp and Adobe Analytics/);
+  assert.match(finding?.shortSummary ?? "", /Adobe Audience Manager \/ Experience Cloud and LiveRamp/);
   assert.doesNotMatch(finding?.shortSummary ?? "", /DoubleVerify|Google Ads|Magnite/);
   assert.deepEqual(
     finding?.evidenceDetails?.representativeRequests?.map((request) => ({
@@ -4615,16 +4866,16 @@ test("uses promotion-grade request classifications for pre-consent representativ
     })),
     [
       {
+        url: "https://dpm.demdex.net/id?redacted=1",
+        vendor: "Adobe Audience Manager / Experience Cloud",
+        category: "advertising",
+        firstSeenMs: 229
+      },
+      {
         url: "https://idsync.rlcdn.com/123.gif",
         vendor: "LiveRamp",
         category: "advertising",
         firstSeenMs: 1167
-      },
-      {
-        url: "https://dpm.demdex.net/id?d_visid_ver=5",
-        vendor: "Adobe Analytics",
-        category: "analytics",
-        firstSeenMs: 229
       }
     ]
   );
@@ -4660,6 +4911,7 @@ test("labels Bing sync endpoints by endpoint vendor while preserving initiating 
               vendorCategory: "session_replay",
               classification: "non_essential",
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               confidence: 0.95,
               runtimePhase: "pre_consent",
               firstObservedMs: 3831,
@@ -4680,10 +4932,10 @@ test("labels Bing sync endpoints by endpoint vendor while preserving initiating 
   ]);
 
   const request = projection.findings.find((finding) => finding.id === "pre_consent_tracking_detected")?.evidenceDetails?.representativeRequests?.[0];
-  assert.equal(request?.vendor, "Microsoft Advertising / Bing UET");
-  assert.equal(request?.endpointVendor, "Microsoft Advertising / Bing UET");
+  assert.equal(request?.vendor, "Microsoft Identity Synchronization");
+  assert.equal(request?.endpointVendor, "Microsoft Identity Synchronization");
   assert.equal(request?.initiatingVendor, "Microsoft Clarity");
-  assert.equal(request?.category, "advertising_measurement");
+  assert.equal(request?.category, "advertising");
   assert.equal(request?.scannedPageUrl, "https://www.kbdlab.io/");
 });
 
@@ -4725,6 +4977,7 @@ test("keeps direct pre-consent request attribution on hostname-supported vendors
               collectionEndpointType: "direct_third_party",
               confidence: 0.95,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "third_party",
               hostname: "gum.criteo.com",
               pageUrl: "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345",
@@ -4740,6 +4993,7 @@ test("keeps direct pre-consent request attribution on hostname-supported vendors
               collectionEndpointType: "direct_third_party",
               confidence: 0.94,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "third_party",
               hostname: "aax-eu.amazon-adsystem.com",
               pageUrl: "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345",
@@ -4755,6 +5009,7 @@ test("keeps direct pre-consent request attribution on hostname-supported vendors
               collectionEndpointType: "direct_third_party",
               confidence: 0.93,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "third_party",
               hostname: "eus.rubiconproject.com",
               pageUrl: "https://aamt.nbcnews.com/b/ss/nbcnewsprod/1/JS-2.27.0/s12345",
@@ -4792,7 +5047,7 @@ test("keeps direct pre-consent request attribution on hostname-supported vendors
   assert.deepEqual(representativeRequests.map((request) => request.vendor), [
     "Criteo",
     "Amazon Ads",
-    "Rubicon Project"
+    "Magnite / Rubicon"
   ]);
   assert.deepEqual(representativeRequests.map((request) => request.runtimePhase), [
     "pre_consent",
@@ -4801,7 +5056,7 @@ test("keeps direct pre-consent request attribution on hostname-supported vendors
   ]);
   assert.deepEqual(
     finding?.evidenceDetails?.directlyObservedPreConsentVendors?.map((vendor) => vendor.name),
-    ["Criteo", "Amazon Ads", "Rubicon Project"]
+    ["Criteo", "Amazon Ads", "Magnite / Rubicon"]
   );
   assert.deepEqual(
     finding?.evidenceDetails?.relatedOrInferredVendors?.map((vendor) => vendor.name),
@@ -4980,6 +5235,11 @@ test("labels Bing and Clarity sync-style related runtime requests with endpoint 
           ],
           requestPurposeClassificationConfidence: [
             JSON.stringify({
+              requestUrl: "https://c.bing.com/c.gif?ctsa=mr&CtsSyncId=abc",
+              vendor: "Microsoft Clarity", vendorAttributionBasis: "initiator_chain",
+              runtimePhase: "pre_consent", firstObservedMs: 3831
+            }),
+            JSON.stringify({
               requestUrl: "https://c.clarity.ms/c.gif",
               hostname: "c.clarity.ms",
               vendor: "Microsoft Clarity",
@@ -5007,7 +5267,7 @@ test("labels Bing and Clarity sync-style related runtime requests with endpoint 
   const bingRequest = relatedRequests?.find((request) => `${request.url}`.includes("c.bing.com"));
   const clarityRequest = relatedRequests?.find((request) => `${request.url}`.includes("c.clarity.ms"));
 
-  assert.equal(bingRequest?.endpointVendor, "Microsoft Advertising / Bing UET");
+  assert.equal(bingRequest?.endpointVendor, "Microsoft Identity Synchronization");
   assert.equal(bingRequest?.initiatingVendor, "Microsoft Clarity");
   assert.equal(bingRequest?.category, "advertising_measurement");
   assert.equal(bingRequest?.evidenceRole, "related_vendor_request");
@@ -5496,6 +5756,7 @@ test("projects first-party proxy pre-consent tracker evidence without using requ
               collectionEndpointType: "first_party_collection_proxy",
               confidence: 0.9,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "first_party",
               matchedSignatureId: "tiktok_pixel",
               pageUrl: "https://www.sony.com/en/",
@@ -5561,6 +5822,7 @@ test("orders direct adtech anchors before first-party proxy anchors and reads re
               collectionEndpointType: "first_party_collection_proxy",
               confidence: 0.9,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "first_party",
               matchedSignatureId: "meta_pixel",
               pageUrl: "https://www.latimes.com/",
@@ -5575,10 +5837,11 @@ test("orders direct adtech anchors before first-party proxy anchors and reads re
               collectionEndpointType: "direct_third_party",
               confidence: 0.9,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "third_party",
               matchedSignatureId: "google_ads",
               pageUrl: "https://www.latimes.com/",
-              requestUrl: "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+              requestUrl: "https://googleads.g.doubleclick.net/pagead/id",
               runtimePhase: "pre_consent",
               timestampMs: 1342,
               vendor: "Google Ads",
@@ -5589,6 +5852,7 @@ test("orders direct adtech anchors before first-party proxy anchors and reads re
               collectionEndpointType: "first_party_collection_proxy",
               confidence: 0.9,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "first_party",
               matchedSignatureId: "segment",
               pageUrl: "https://www.latimes.com/",
@@ -5603,6 +5867,7 @@ test("orders direct adtech anchors before first-party proxy anchors and reads re
               collectionEndpointType: "direct_third_party",
               confidence: 0.9,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "third_party",
               matchedSignatureId: "xandr",
               pageUrl: "https://www.latimes.com/",
@@ -5617,6 +5882,7 @@ test("orders direct adtech anchors before first-party proxy anchors and reads re
               collectionEndpointType: "direct_third_party",
               confidence: 0.9,
               essentiality: "non_essential",
+              collectionEndpointObserved: true,
               firstPartyOrThirdParty: "third_party",
               matchedSignatureId: "the_trade_desk",
               pageUrl: "https://www.latimes.com/",
@@ -5629,7 +5895,7 @@ test("orders direct adtech anchors before first-party proxy anchors and reads re
           ],
           runtimeRequestUrls: [
             "https://libs.platform.latimes.com/reg/tribune/latspot.min.js",
-            "https://securepubads.g.doubleclick.net/tag/js/gpt.js",
+            "https://googleads.g.doubleclick.net/pagead/id",
             "https://edge.platform.latimes.com/v1/personalize [query_redacted=true query_keys=meterKey,productCode,contentType,paywallTier,pxlId,exp]",
             "https://ib.adnxs.com/getuidj [query_redacted=true query_keys=gdpr]",
             "https://match.adsrvr.org/track/cmf/generic [query_redacted=true query_keys=ttd_pid,ttd_tpi,ttd_puid,gdpr]"
@@ -5651,12 +5917,12 @@ test("orders direct adtech anchors before first-party proxy anchors and reads re
 
   assert.equal(finding?.evidenceDetails?.scanContext?.pageUrl, "https://www.latimes.com/");
   assert.deepEqual(representativeRequests.slice(0, 3).map((request) => request.vendor), [
-    "Google Ads",
-    "AppNexus / Xandr",
+    "Google Ads / DoubleClick",
+    "Xandr / AppNexus",
     "The Trade Desk"
   ]);
   assert.deepEqual(representativeRequests[2]?.queryKeysSample, ["ttd_pid", "ttd_tpi", "ttd_puid", "gdpr"]);
   assert.equal(representativeRequests[2]?.identifierLike, true);
   assert.equal(finding?.evidenceDetails?.counts?.identifierLikeRequests, 2);
-  assert.ok((finding?.shortSummary ?? "").includes("Google Ads, AppNexus / Xandr, and The Trade Desk"));
+  assert.ok((finding?.shortSummary ?? "").includes("Google Ads / DoubleClick, Xandr / AppNexus, and The Trade Desk"));
 });
