@@ -41,3 +41,9 @@ export function groupAccessibilityPriorityEntries<T extends PriorityEntry>(entri
     return [group];
   }).map((entry, index) => ({ ...entry, rank: index + 1 }));
 }
+
+
+/** Apply current grouping to stored projections without recalculating scores or findings. */
+export function groupStoredReportScorePriorities<T extends { priorityReview: PriorityEntry[] }>(score: T): T {
+  return { ...score, priorityReview: groupAccessibilityPriorityEntries(score.priorityReview) };
+}

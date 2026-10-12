@@ -205,6 +205,10 @@ export function FullSiteWorkspace({
     if (!initialPending && filters === initialFilters && !offset && !detailPage && !refreshVersion &&
       retainedReport?.scanId === scanId && retainedReport.data && isCompletedFullSiteReport(retainedReport.data)) {
       terminal.current = true;
+      // Clearing filters must restore the baseline, not leave filtered rows on screen.
+      setData(retainedReport.data);
+      setIsFetching(false);
+      setError(null);
       return;
     }
     // This controller cancels report reads only; the background worker owns the crawl.

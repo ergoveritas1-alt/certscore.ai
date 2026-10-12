@@ -1,3 +1,4 @@
+import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-priority-group";
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 
 // Keep the key stable so a refreshed report replaces the old payload without
@@ -32,7 +33,7 @@ export function readFullSiteReportSessionCache(storage: Pick<Storage, "getItem">
     if (cached.version !== 2 || cached.scanId !== scanId || cached.scope !== scope ||
       !Number.isFinite(cached.savedAt) || cached.savedAt > now || now - cached.savedAt > MAX_AGE_MS ||
       !cached.data || !isCompletedFullSiteReport(cached.data)) return null;
-    return cached.data;
+    return { ...cached.data, score: groupStoredReportScorePriorities(cached.data.score!) };
   } catch {
     return null;
   }

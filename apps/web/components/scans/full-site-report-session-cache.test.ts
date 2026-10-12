@@ -4,7 +4,7 @@ import type { FullSiteReportResponse } from "../../server/scans/full-site-report
 import { readFullSiteReportSessionCache, writeFullSiteReportSessionCache } from "./full-site-report-session-cache";
 
 function fixture(status = "completed", score: number | null = 78) {
-  return { score: score === null ? null : { value: score }, summary: { state: { status }, counts: { active: 0 } } } as FullSiteReportResponse;
+  return { score: score === null ? null : { value: score, priorityReview: [] }, summary: { state: { status }, counts: { active: 0 } } } as FullSiteReportResponse;
 }
 
 function memoryStorage() {
@@ -53,4 +53,23 @@ test("reports cached before accessibility grouping are not restored", () => {
   assert.equal(readFullSiteReportSessionCache(storage, "scan-a", "scope", 2000), null);
   assert.equal(writeFullSiteReportSessionCache(storage, "scan-a", "scope", fixture(), 2000), true);
   assert.deepEqual(readFullSiteReportSessionCache(storage, "scan-a", "scope", 3000), fixture());
+});
+
+
+test("cached split accessibility priorities use current grouping without changing the score", () => {
+  const storage = memoryStorage();
+  const report = fixture();
+  const priorities = ["semantic_labeling_accessibility_issue", "visual_contrast_accessibility_issue"].map((id, index) => ({
+    id, rank: index + 1, title: id, summary: "Retained issue", status: "Observed" as const, priority: "high" as const,
+    evidence: ["Retained evidence"], evidenceJson: { findingId: id }, correctionSteps: ["Fix the affected elements"],
+    pages: [{ id: "home", url: "https://example.test/", homepage: true }],
+  }));
+  report.score!.priorityReview = priorities;
+  assert.equal(writeFullSiteReportSessionCache(storage, "scan-a", "scope", report, 1000), true);
+  const restored = readFullSiteReportSessionCache(storage, "scan-a", "scope", 2000)!;
+  assert.equal(restored.score!.value, 78);
+  assert.equal(restored.score!.priorityReview.length, 1);
+  assert.equal(restored.score!.priorityReview[0]!.id, "accessibility_priority_group");
+  assert.deepEqual(restored.score!.priorityReview[0]!.evidenceJson.findings, priorities);
+  assert.equal(report.score!.priorityReview.length, 2, "the stored source is not mutated");
 });
