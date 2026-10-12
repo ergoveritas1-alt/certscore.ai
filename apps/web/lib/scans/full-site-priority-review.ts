@@ -13,6 +13,7 @@ import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage
 
 export const sitePriorityFindingSchema = z.object({
   priority: z.literal("high").optional(),
+  severity: z.enum(["critical", "high", "medium", "low"]).optional(),
   id: z.string(), rank: z.number(), title: z.string(), summary: z.string(),
   status: z.enum(["Potential gap", "Partial concern", "Not confirmed", "Observed"]),
   evidence: z.array(z.string()), evidenceJson: z.record(z.unknown()),

@@ -187,26 +187,26 @@ test("privacy concerns lead accessibility without changing canonical statuses or
   }
 });
 
-test("executive overview mentions accessibility briefly after the privacy concerns", () => {
-  const { audit, observation } = fixture();
-  const copy = buildExecutiveOverview({ controls: { accept: "Not observed", reject: "Not observed", options: "Not observed" },
-    findings: [{ title: "Classified non-essential pre-consent storage", summary: "Storage was retained before consent." },
-      { title: "Decline consent control", summary: "No refusal control was retained." }],
-    preConsentConcerns: { tracking: true, storage: true }, accessibility: accessibilityOverviewCopy(audit),
-    limitedCount: 0, limitedItems: [], positiveCount: 5, transportPositiveCount: 5, timeline: [] });
-  assert.ok(copy.indexOf("pre-consent storage") < copy.indexOf("WCAG"), copy);
-  assert.ok(copy.indexOf("Tracking activity and cookies/storage") < copy.indexOf("WCAG"), copy);
-  assert.match(copy, /4 accessibility issues/);
-  assert.doesNotMatch(copy, /element instances|manual review/);
+test("executive overview uses projected accessibility after privacy without promoting audit context", () => {
+  const { audit } = fixture();
+  const copy = buildExecutiveOverview({
+    findings: [
+      { id: "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage", title: "Classified non-essential pre-consent storage", status: "Potential gap", summary: "Storage was retained before consent." },
+      { id: "accessibility_priority_group", title: "Accessibility issues", status: "Observed", priority: "high", summary: "Automated accessibility findings need review." },
+    ],
+    accessibility: accessibilityOverviewCopy(audit),
+  });
+  assert.ok(copy.indexOf("Storage was retained before consent") < copy.indexOf("Accessibility issues"), copy);
+  assert.doesNotMatch(copy, /4 accessibility issues|element instances|Transport security checks/);
 });
 
-test("executive copy retains accessibility counts without suggesting site-wide conclusions", () => {
-  const { audit, observation } = fixture();
-  const copy = buildExecutiveOverview({ controls: { accept: "Not observed", reject: "Not observed", options: "Not observed" },
-    findings: [{ title: "Text alternative accessibility issue", summary: "Missing alternative text." }],
-    accessibility: accessibilityOverviewCopy(audit), limitedCount: 0, limitedItems: [], positiveCount: 0, transportPositiveCount: 0, timeline: [] });
-  assert.match(copy, /1 priority issue for review/);
-  assert.match(copy, /4 accessibility issues on the starting page/);
-  assert.doesNotMatch(copy, /critical|high-impact/i);
-  assert.doesNotMatch(copy, /site-wide breakdown|narrow review|No checklist items|visitor choice/);
+test("projected accessibility is identified without inventing audit counts or sitewide conclusions", () => {
+  const { audit } = fixture();
+  const copy = buildExecutiveOverview({
+    findings: [{ id: "accessibility_priority_group", title: "Accessibility issues", status: "Observed", priority: "high", summary: "Missing alternative text was found." }],
+    accessibility: accessibilityOverviewCopy(audit),
+  });
+  assert.match(copy, /^Accessibility needs attention/);
+  assert.match(copy, /Missing alternative text was found/);
+  assert.doesNotMatch(copy, /4 accessibility issues|critical|high-impact|site-wide breakdown|visitor choice/);
 });

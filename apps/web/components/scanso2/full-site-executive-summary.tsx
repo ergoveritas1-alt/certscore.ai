@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import { ScanLiveValue } from "./scan-live-value";
+import { buildAssessmentHighlights } from "../../lib/scans/assessment-highlights";
 
 export function FullSiteExecutiveSummary({ score, pending, scannedPages, statusLabel, actions, snapshot, homepageVerdict, inventorySummary }: {
   score?: FullSiteReportResponse["score"];
@@ -84,7 +85,7 @@ export function FullSiteExecutiveSummary({ score, pending, scannedPages, statusL
         <div data-overview-block>
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{singlePage ? "Single page assessment" : "Site assessment"}</p>
         {singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600">{homepageVerdict ?? "The single page assessment will appear when ready."}</p>
-          : priorities ? <p className="mt-2 text-sm leading-6 text-zinc-700">{priorities.length ? `Across ${scannedPages ?? score?.scoredPages ?? 0} scanned pages, the assessment identifies ${priorities.length} priority issues. Review centers on ${priorities.slice(0, 3).map(finding => finding.title.toLowerCase()).join("; ")}. These findings combine the starting-page audit with eligible evidence from additional pages; repeated evidence is counted once. Consent controls, policy transparency, and action-path checks reflect the starting-page audit, while the wider scan captures resources and collection surfaces across the site.` : "No priority issues were identified in the assessed evidence."}</p>
+          : priorities ? <p className="mt-2 text-sm leading-6 text-zinc-700">{buildAssessmentHighlights(priorities, { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } })}</p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}
         </div>
         <div data-overview-block className="mt-auto">

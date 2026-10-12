@@ -270,7 +270,7 @@ test("accessibility presentation preserves the versioned historical score withou
   assert.ok((accessibilityGroup.evidenceJson.groupedFindingIds as string[]).includes("visual_contrast_accessibility_issue"));
   assert.ok((accessibilityGroup.evidenceJson.groupedFindingIds as string[]).includes("text_alternative_accessibility_issue"));
   assert.ok(!report.findings.some(finding => finding.id === "visual_contrast_accessibility_issue"));
-  assert.match(report.verdict, /4 accessibility issues on the starting page/);
+  assert.match(report.verdict, /Accessibility issues/);
   assert.doesNotMatch(report.verdict, /critical|high-impact/i);
   assert.equal(report.accessibilityAudit?.failedRuleCount, 4);
   assert.equal(report.score.value, 85);

@@ -749,10 +749,15 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
     checklistRows,
     unifiedFindings: canonical.ownerUnifiedFindings,
   });
-  const score = Math.max(0, Math.min(100, recordNumber(snapshot, ["certscore_overall"]) ?? canonicalScore ?? 0));
+  const assessedScore = recordNumber(snapshot, ["certscore_overall"]) ?? canonicalScore;
+  const score = Math.max(0, Math.min(100, assessedScore ?? 0));
   const forms = canonical.collectionSurfaceAssessment?.forms ?? [];
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id));
   const verdict = buildExecutiveOverview({
+    context: { score: assessedScore, coverage: {
+      state: summaryCounts.technical_limitation > 0 ? "limited" : evidenceRows.length ? "complete" : "unknown",
+      limitedCount: summaryCounts.technical_limitation,
+    } },
     acceptPath,
     controls,
     findings,
