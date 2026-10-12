@@ -449,6 +449,11 @@
       "sizeBytes": 4430
     },
     {
+      "path": "packages/certscore-vendor-resolver/src/cookiebot-storage-probe.test.ts",
+      "sha256": "f84d92b4b2dfca4c4e5fa375abe528dc02d0985280a44ef744dd641017a4074d",
+      "sizeBytes": 1881
+    },
+    {
       "path": "packages/certscore-vendor-resolver/src/ga4-collect.test.ts",
       "sha256": "ad773dd5a10717cca8d4287a2f26f81f8e0060545fcd91bc4e21ca0eda6cc060",
       "sizeBytes": 2643
