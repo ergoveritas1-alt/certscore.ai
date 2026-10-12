@@ -1,0 +1,30 @@
+{
+  "verifiedAt": "2026-10-12T22:17:21.471548+00:00",
+  "server": "ai.certscore/mcp-light",
+  "version": "0.2.26",
+  "endpoint": "https://mcp.certscore.ai/mcp/light",
+  "transport": "streamable-http",
+  "authenticationRequiredForClients": false,
+  "publisherAuthentication": "HTTP domain verification using existing local Ed25519 key and existing certscore.ai well-known proof",
+  "publisherPermission": {
+    "action": "publish",
+    "resource": "ai.certscore/*"
+  },
+  "registryStatus": "active",
+  "isLatest": true,
+  "registryPublishedAt": "2026-10-12T22:16:18.550352Z",
+  "verification": {
+    "manifestValidation": "mcp-publisher validate packages/certscore-mcp/server-light.json: passed",
+    "publication": "mcp-publisher publish packages/certscore-mcp/server-light.json: succeeded",
+    "latestRecord": "https://registry.modelcontextprotocol.io/v0.1/servers/ai.certscore%2Fmcp-light/versions/latest",
+    "exactVersionRecord": "https://registry.modelcontextprotocol.io/v0.1/servers/ai.certscore%2Fmcp-light/versions/0.2.26",
+    "hostedVersion": "0.2.26",
+    "npmLatestVersion": "0.2.26",
+    "rawResponses": "artifacts/mcp-registry-publication-20261012/"
+  },
+  "dnsChanges": false,
+  "runtimeDeployment": false,
+  "newScans": 0,
+  "estimatedRecurringIncrementalUsdPerMonth": 0,
+  "credentialHandling": "Existing private key and registry token remain outside repository; neither included in receipt"
+}
