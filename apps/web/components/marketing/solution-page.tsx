@@ -1,6 +1,6 @@
 import { EditorialByline } from "./editorial-byline";
 import type { Metadata } from "next";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { DomainScanForm } from "./domain-scan-form";
 import Link from "next/link";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
@@ -33,6 +33,9 @@ type SolutionLink = {
 export type SolutionPageConfig = {
   aiSummary: string[];
   inlineScan?: boolean;
+  evidence?: ReactNode;
+  showReportWalkthrough?: boolean;
+  scanHeading?: string;
   metadataTitle?: string;
   badge: string;
   description: string;
@@ -141,14 +144,16 @@ export function SolutionPage({ config }: { config: SolutionPageConfig }) {
 
       {config.inlineScan ? (
         <section id="scan" aria-labelledby="solution-scan-heading" className="mt-10 scroll-mt-24 rounded-2xl border border-sky-200 bg-sky-50 p-6">
-          <h2 id="solution-scan-heading" className="mb-4 text-2xl font-semibold text-slate-950">Scan a public website</h2>
+          <h2 id="solution-scan-heading" className="mb-4 text-2xl font-semibold text-slate-950">{config.scanHeading ?? "Scan a public website"}</h2>
           <Suspense fallback={<p>Loading scan form…</p>}>
             <DomainScanForm mode="preview" scanSource="unknown" buttonLabel="Run free scan" inputLabel="Website URL" />
           </Suspense>
         </section>
       ) : <div className="mt-10"><WebsiteBehaviorScanCta /></div>}
 
-      {config.inlineScan && (
+      {config.evidence ? <div className="mt-10">{config.evidence}</div> : null}
+
+      {config.inlineScan && config.showReportWalkthrough !== false && (
         <section aria-labelledby="report-walkthrough-heading" className="mt-10 rounded-2xl border border-slate-200 bg-white p-6">
           <h2 id="report-walkthrough-heading" className="text-2xl font-semibold text-slate-950">From a scan to a reviewable decision</h2>
           <ol className="mt-5 list-decimal space-y-4 pl-6 text-slate-700">

@@ -35,7 +35,7 @@ type BaseDataLayerEvent =
   | { event: "second_distinct_domain_scanned"; scan_source: Exclude<ScanSource, "header"> }
   | { event: "mcp_light_action"; action: McpLightAction; target: string };
 
-export type CertScoreDataLayerEvent = BaseDataLayerEvent & { page_type?: GuidePageType | "release" | "study"; content_id?: string; cta_location?: CtaLocation | "inline_scan" };
+export type CertScoreDataLayerEvent = BaseDataLayerEvent & { page_type?: GuidePageType | "release" | "study" | "solution"; content_id?: string; cta_location?: CtaLocation | "inline_scan" };
 
 export type CampaignAttributedDataLayerEvent = CertScoreDataLayerEvent & {
   campaign_attribution?: CampaignAttribution;

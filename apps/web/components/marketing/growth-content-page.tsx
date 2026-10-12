@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { SiteFooter } from "../layout/site-footer";
 import { SiteHeader } from "../layout/site-header";
 import { AiVisibilityContent } from "./ai-visibility-content";
@@ -23,6 +24,7 @@ type GrowthLink = {
 
 export type GrowthContentPageConfig = {
   scanPrompt?: GuideScanPrompt;
+  evidence?: ReactNode;
   badge: string;
   description: string;
   intro: string;
@@ -71,6 +73,7 @@ export function GrowthContentPage({ config }: { config: GrowthContentPageConfig 
   const content = (
     <AiVisibilityContent
       scanPrompt={config.scanPrompt}
+      evidence={config.evidence}
       badge={config.badge}
       intro={config.intro}
       path={config.path}

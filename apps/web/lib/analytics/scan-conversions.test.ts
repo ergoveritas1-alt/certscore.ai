@@ -155,3 +155,30 @@ test("full-site completion requires the matching terminal crawl with no active p
     assert.equal(completed[0].cta_location, "inline_scan");
   });
 });
+
+for (const [path, type, contentId] of [
+  ["/solutions/privacy-policy-risk-scanner", "solution", "privacy-policy-risk-scanner"],
+  ["/guides/third-party-cookie-checker", "guide", "third-party-cookie-checker"],
+] as const) {
+  test(`${type} origin survives report navigation without counting sample or repeated views`, async () => {
+    await browser("granted", async ({ location, ga }) => {
+      location.pathname = path;
+      await trackAcceptedScan({ scanId: a, reusedExistingScan: false, source: "unknown", targetType: "url" });
+      location.pathname = `/scan/${a}`;
+      trackCompletedScan(a); trackCompletedScan(a);
+      const completed = ga.filter(event => (event as any).event === "scan_completed") as any[];
+      assert.equal(completed.length, 1);
+      assert.equal(completed[0].content_id, contentId);
+      assert.equal(completed[0].page_type, type);
+    });
+  });
+  test(`${type} attribution is not retained without analytics consent`, async () => {
+    await browser(null, async ({ location, ga, session }) => {
+      location.pathname = path;
+      await trackAcceptedScan({ scanId: a, reusedExistingScan: false, source: "unknown", targetType: "url" });
+      assert.doesNotMatch(session.getItem(SCAN_CONVERSION_STORAGE_KEY) ?? "", new RegExp(contentId));
+      location.pathname = `/scan/${a}`; trackCompletedScan(a);
+      assert.deepEqual(ga, []);
+    });
+  });
+}

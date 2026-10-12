@@ -1,0 +1,54 @@
+{
+  "capturedAt": "2026-10-12",
+  "exclusiveEnd": "2026-10-11 00:00 America/Los_Angeles",
+  "rows": [
+    {
+      "period": "current",
+      "starts_at": "2026-09-13 07:00:00+00",
+      "ends_at": "2026-10-11 07:00:00+00",
+      "path": "/guides/third-party-cookie-checker",
+      "views": 9,
+      "starts": 0,
+      "completed": 0,
+      "browser_completed": 0,
+      "external_starts": 0,
+      "unknown_starts": 0
+    },
+    {
+      "period": "current",
+      "starts_at": "2026-09-13 07:00:00+00",
+      "ends_at": "2026-10-11 07:00:00+00",
+      "path": "/solutions/privacy-policy-risk-scanner",
+      "views": 9,
+      "starts": 0,
+      "completed": 0,
+      "browser_completed": 0,
+      "external_starts": 0,
+      "unknown_starts": 0
+    },
+    {
+      "period": "previous",
+      "starts_at": "2026-08-16 07:00:00+00",
+      "ends_at": "2026-09-13 07:00:00+00",
+      "path": "/guides/third-party-cookie-checker",
+      "views": 3,
+      "starts": 0,
+      "completed": 0,
+      "browser_completed": 0,
+      "external_starts": 0,
+      "unknown_starts": 0
+    },
+    {
+      "period": "previous",
+      "starts_at": "2026-08-16 07:00:00+00",
+      "ends_at": "2026-09-13 07:00:00+00",
+      "path": "/solutions/privacy-policy-risk-scanner",
+      "views": 11,
+      "starts": 0,
+      "completed": 0,
+      "browser_completed": 0,
+      "external_starts": 0,
+      "unknown_starts": 0
+    }
+  ]
+}
