@@ -4,7 +4,7 @@ import { afterClickCoverageLabel } from "./after-action-summary";
 import type { AgencyMapping, RegulatoryRiskAssessment } from "@website-signal-risk-scanner/shared";
 import { KNOWN_CMP_REGISTRY } from "../../../../packages/shared/src/known-cmps";
 import React from "react";
-import { PrivacyPolicyScoreDeduction, type ScoreDeductions } from "./privacy-policy-score-deduction";
+import type { ScoreDeductions } from "./score-deductions";
 import {
   deriveExecutiveDisplayState,
   deriveExecutiveNarrativePresentation,
@@ -4794,7 +4794,6 @@ export function ExecutiveSummaryCard(input: {
                       note={storageMetricInfoNote}
                     />
                   </div>
-                  {input.score !== null ? <PrivacyPolicyScoreDeduction deductions={input.scoreDeductions} /> : null}
                 </div>
               )}
             </div>

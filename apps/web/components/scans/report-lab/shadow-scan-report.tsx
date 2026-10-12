@@ -17,7 +17,6 @@ import { SinglePageResourceInventory } from "../single-page-resource-inventory";
 import { SitewideEvidenceCard } from "../sitewide-evidence-card";
 import { FullSiteIdentity } from "../full-site-identity";
 import { FullSiteExecutiveSummary } from "../full-site-executive-summary";
-import { PrivacyPolicyScoreDeduction } from "../privacy-policy-score-deduction";
 import { ReportInventoryNavigation } from "../report-inventory-navigation";
 import { ReportInventorySummary } from "../report-inventory-summary";
 import { ReportPageEventTimeline } from "../report-page-event-timeline";
@@ -303,7 +302,6 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
         <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{report.fullSite ? "Diagnostic score" : "Overall score"}</p>
         <p className="mt-1 text-lg font-semibold leading-tight text-zinc-950">{assessment}</p>
         <p className="mt-2 text-xs leading-5 text-zinc-500">{focus}</p>
-        {report.scoreExplanation?.score === score ? <PrivacyPolicyScoreDeduction deductions={report.scoreExplanation.deductions} /> : null}
       </div>
     </div>
   );

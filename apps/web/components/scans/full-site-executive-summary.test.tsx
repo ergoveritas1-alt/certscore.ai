@@ -9,7 +9,7 @@ import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-epriva
 
 const score = {version: "test", value: 29, assessedNonEssentialStorage: 9, scoredPages: 10, limitedPages: 0, scope: "Retained evidence", priorityReview: [], sources: []};
 
-test("page and site score visibly attribute the canonical missing-policy deduction", () => {
+test("page and site score retain the canonical missing-policy deduction without an inline callout", () => {
   for (const complete of [true, false]) {
     const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ scanCompleted: true, coverageLimited: false,
       runtimeArtifacts: { policyDisclosureSummary: { privacyPolicyPresent: false }, policySurfaceInspection: { coverageStatus: complete ? "complete" : "limited",
@@ -26,8 +26,8 @@ test("page and site score visibly attribute the canonical missing-policy deducti
     for (const scannedPages of [1, 10]) {
       const html = renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={scannedPages}
         score={{ ...score, value: explanation?.score ?? null, deductions: explanation?.deductions }} />);
-      if (complete) assert.match(html, /Privacy policy not found: −9 points/);
-      else assert.doesNotMatch(html, /privacy-policy-score-deduction/);
+      assert.doesNotMatch(html, /Privacy policy not found: −9 points|privacy-policy-score-deduction/);
+      if (complete) assert.match(html, /(?:Page|Site) score 91 out of 100/);
     }
     const unscored = renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={10}
       score={{ ...score, value: null, deductions: explanation?.deductions }} />);
