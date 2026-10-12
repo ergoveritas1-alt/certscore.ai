@@ -35,6 +35,22 @@ test("generic source boilerplate yields to the specific projected finding title"
   assert.doesNotMatch(copy, /Potential issue based on scan evidence/);
 });
 
+test("partial evidence wording stays qualified without repeating a generic action", () => {
+  const summary = "Partial support from scan evidence; An obsolete EU-US Privacy Shield reference was observed. The current transfer basis was not established by this scan. Review the policy wording and the safeguards actually in use.";
+  const generic = "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.";
+  const copy = buildAssessmentHighlights([{ id: "regulatory_gap__gdpr_eprivacy__outdated_transfer_framework_reference", title: "Outdated transfer framework referenced", status: "Partial concern", summary, correctionSteps: [generic] }], { kind: "site", scannedPages: 12 }, { score: 90 });
+  assert.match(copy, /The scan provides partial support for this finding\. An obsolete EU-US Privacy Shield reference was observed/);
+  assert.match(copy, /current transfer basis was not established/);
+  assert.match(copy, /Review the policy wording/);
+  assert.doesNotMatch(copy, /Review the retained checklist evidence/);
+});
+
+test("the generic action remains when the summary has no next step", () => {
+  const generic = "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.";
+  const copy = buildAssessmentHighlights([{ title: "Disclosure review", summary: "A disclosure reference needs review.", correctionSteps: [generic] }], page);
+  assert.match(copy, /Review the retained checklist evidence/);
+});
+
 test("oversized prose cannot crowd out the action or secondary findings", () => {
   const copy = buildAssessmentHighlights([
     { title: "CMS security review", summary: "Retained version context. ".repeat(50), correctionSteps: ["Verify the declared release."] },

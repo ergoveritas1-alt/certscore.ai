@@ -43,6 +43,23 @@ test("known maintenance warnings do not displace a canonical gap", () => {
   assert.equal(input[0], low);
 });
 
+test("a secondary accessibility priority does not upgrade a partial privacy lead", () => {
+  const partial = { id: "regulatory_gap__gdpr_eprivacy__outdated_transfer_framework_reference", title: "Outdated transfer framework referenced", status: "Partial concern", summary: "An obsolete transfer framework reference was observed; the current transfer basis was not established." };
+  const accessibility = { id: "accessibility_priority_group", title: "Accessibility issues", priority: "high" as const, status: "Observed" };
+  const brief = buildAssessmentBrief([partial, accessibility], { kind: "site", scannedPages: 12 }, { score: 90 });
+  assert.equal(brief.attention, "review");
+  assert.equal(brief.primary?.id, partial.id);
+  assert.match(buildAssessmentHighlights([partial, accessibility], brief.scope, { score: 90 }), /^The assessment calls for focused review of privacy disclosures/);
+});
+
+test("a projected gap may lead before a partial review without changing the input", () => {
+  const partial = Object.freeze({ id: "partial", title: "Policy wording review", status: "Partial concern" });
+  const input = Object.freeze([partial, reject]);
+  const brief = buildAssessmentBrief(input, page);
+  assert.equal(brief.primary?.id, reject.id);
+  assert.equal(input[0], partial);
+});
+
 test("importance and coverage remain independent", () => {
   const context = { score: 85, coverage: { state: "limited" as const, limitedCount: 2 } };
   const brief = buildAssessmentBrief([reject], page, context);

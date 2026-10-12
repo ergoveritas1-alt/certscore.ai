@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildSiteAssessmentSummary, FullSiteExecutiveSummary } from "./full-site-executive-summary";
+import { FullSiteExecutiveSummary as LegacyFullSiteExecutiveSummary } from "../scanso2/full-site-executive-summary";
 import { deriveCanonicalOverallScoreExplanationForReport } from "../../server/scans/canonical-overall-score";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -56,6 +57,17 @@ test("site paragraphs prioritize meaning and action while preserving the lead's 
   assert.match(summary, /Review the classified storage and its consent requirements/);
   assert.match(summary, /Also review “Decline consent control”/);
   assert.doesNotMatch(summary, /all 10 pages|priority issues across/);
+});
+
+test("site overview carries starting-page checklist limits into its first paragraph", () => {
+  const siteScore = { ...score, value: 90, scoredPages: 12, priorityReview: [
+    { id: "regulatory_gap__gdpr_eprivacy__outdated_transfer_framework_reference", title: "Outdated transfer framework referenced", status: "Partial concern" as const, summary: "The current transfer basis was not established by this scan.", correctionSteps: [], pages: [], evidence: [], evidenceJson: {}, rank: 1 },
+  ] };
+  for (const Summary of [FullSiteExecutiveSummary, LegacyFullSiteExecutiveSummary]) {
+    const html = renderToStaticMarkup(<Summary pending={false} scannedPages={12} homepageLimitedCount={1} score={siteScore} />);
+    assert.match(html, /1 checklist item remains technically limited and should be verified manually/);
+    assert.match(html, /focused review of privacy disclosures/);
+  }
 });
 
 test("site score and coverage influence significance without inventing a finding", () => {

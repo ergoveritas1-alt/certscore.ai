@@ -11,7 +11,7 @@ export function buildSiteAssessmentSummary(priorities: ReadonlyArray<AssessmentH
   return buildAssessmentHighlights(priorities, { kind: "site", scannedPages }, context);
 }
 
-export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, inventorySummary }: {
+export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageLimitedCount, inventorySummary }: {
   score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
   pending: boolean;
   loadingSavedResult?: boolean;
@@ -21,6 +21,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
   snapshot?: ReactNode;
   inventorySummary?: ReactNode;
   homepageVerdict?: string;
+  homepageLimitedCount?: number;
 }) {
   const panesRef = useRef<HTMLDivElement>(null);
   const [collapsedHeight, setCollapsedHeight] = useState(0);
@@ -80,7 +81,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
         <div data-overview-block>
         <h3 className="text-sm font-bold tracking-tight text-zinc-900">Assessment highlights</h3>
         {singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600">{homepageVerdict ?? "The single page assessment will appear when ready."}</p>
-          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700">{buildSiteAssessmentSummary(priorities, scannedPages ?? score?.scoredPages ?? null, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } })}</p>
+          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700">{buildSiteAssessmentSummary(priorities, scannedPages ?? score?.scoredPages ?? null, { score: value, coverage: { state: score?.limitedPages || homepageLimitedCount ? "limited" : "unknown", limitedCount: homepageLimitedCount } })}</p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{loadingSavedResult ? "Loading the saved site assessment." : pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}
         </div>
         {inventorySummary ? <div>{inventorySummary}</div> : null}

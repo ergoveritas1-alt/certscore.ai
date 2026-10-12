@@ -126,6 +126,7 @@ export function FullSiteWorkspace({
   homepageTimeline,
   evidenceDirectory,
   homepageVerdict,
+  homepageLimitedCount,
   homepageFindings = [],
   homepageRuntimeCards,
   homepageUrl,
@@ -150,6 +151,7 @@ export function FullSiteWorkspace({
   homepageTimeline?: ReactNode;
   evidenceDirectory?: ReactNode;
   homepageVerdict?: string;
+  homepageLimitedCount?: number;
   homepageFindings?: ShadowFinding[];
   homepageRuntimeCards?: ExecutiveRuntimeCard[];
   homepageUrl?: string;
@@ -581,7 +583,7 @@ export function FullSiteWorkspace({
       {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
-          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={overview?.score} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} />
+          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={overview?.score} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageLimitedCount={homepageLimitedCount} />
           {!(initialPending && !overview?.score) ? <SitePriorityReview scannedPages={scannedPages} findings={overview?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
           {homepageTimeline}
           </> : null}

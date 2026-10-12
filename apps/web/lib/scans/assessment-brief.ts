@@ -52,8 +52,11 @@ export function buildAssessmentBrief(
 ) {
   const privacy = findMissingPrivacyPolicyHighlight(findings);
   const highlighted = privacy ? [privacy, ...findings.filter(finding => finding !== privacy)] : findings;
-  // A known low-severity maintenance item must not precede a canonical gap.
-  const ordered = [...highlighted.filter(finding => finding.severity !== "low"), ...highlighted.filter(finding => finding.severity === "low")];
+  // Rank only already-projected findings. A supported gap should not hide
+  // behind a review row, and a low-severity maintenance item belongs last.
+  const rank = (finding: AssessmentHighlightFinding) => finding.severity === "low" ? 2
+    : finding.status === "Potential gap" || finding.severity === "critical" || finding.severity === "high" ? 0 : 1;
+  const ordered = [...highlighted].sort((left, right) => rank(left) - rank(right));
   const sources = ordered.map(finding => ({
     sourceRef: finding.id ?? `projected-finding:${findings.indexOf(finding) + 1}`,
     id: finding.id ?? null,
@@ -72,9 +75,11 @@ export function buildAssessmentBrief(
   const coverage = context.coverage ?? { state: "unknown" as const };
   const score = typeof context.score === "number" && Number.isFinite(context.score) && context.score >= 0 && context.score <= 100 ? context.score : null;
   const scoreBand = score === null ? null : getGdprEprivacyPostureTone(score).ratingLabel;
-  const explicitHigh = sources.some(finding => finding.severity === "critical" || finding.severity === "high" || finding.priority === "high");
+  // The lead names the primary finding's domain, so a secondary finding must
+  // not lend its priority to that lead (for example, accessibility -> privacy).
+  const explicitHigh = primary?.severity === "critical" || primary?.severity === "high" || primary?.priority === "high";
   const allExplicitLow = sources.length > 0 && sources.every(finding => finding.severity === "low" && finding.priority !== "high");
-  const hasGap = sources.some(finding => finding.status === "Potential gap");
+  const hasGap = primary?.status === "Potential gap";
   let attention: AssessmentAttention;
   let basis: string;
   if (scoreBand === "High-priority remediation") {
