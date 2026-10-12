@@ -1,4 +1,4 @@
-import type { AccessibilityAuditObservation, AccessibilityRuleObservation } from "@certscore/contracts";
+import type { AccessibilityRuleObservation } from "@certscore/contracts";
 import type { ApiAccessibilityAuditSummary } from "@certscore/api-contracts";
 
 export const ACCESSIBILITY_REPORT_LABEL = "Accessibility (WCAG)";
@@ -21,8 +21,8 @@ export function accessibilityRuleTitle(rule: AccessibilityRuleObservation) {
 
 /** Rule impact describes the retained automated check, not a legal or scoring severity. */
 export function accessibilityImpactLabel(impact: AccessibilityRuleObservation["impact"]) {
-  return impact === "critical" ? "Critical impact" : impact === "serious" ? "High impact"
-    : impact === "moderate" ? "Moderate impact" : impact === "minor" ? "Low impact" : "Impact not rated";
+  return impact === "critical" ? "Critical" : impact === "serious" ? "Serious"
+    : impact === "moderate" ? "Moderate" : impact === "minor" ? "Minor" : "Not rated";
 }
 
 export function accessibilityIssueCountLabel(audit: ApiAccessibilityAuditSummary) {
@@ -30,14 +30,11 @@ export function accessibilityIssueCountLabel(audit: ApiAccessibilityAuditSummary
     : `${audit.failedRuleCount} ${audit.failedRuleCount === 1 ? "issue" : "issues"}`;
 }
 
-export function accessibilityOverviewCopy(audit?: ApiAccessibilityAuditSummary | null, observation?: AccessibilityAuditObservation | null) {
+export function accessibilityOverviewCopy(audit?: ApiAccessibilityAuditSummary | null) {
   if (!audit) return null;
   if (audit.failedRuleCount === null) return "Automated accessibility results were unavailable.";
-  const critical = observation?.violations.filter(rule => rule.impact === "critical").length ?? 0;
-  const high = observation?.violations.filter(rule => rule.impact === "serious").length ?? 0;
-  const impacts = [critical ? `${critical} critical` : null, high ? `${high} high-impact` : null].filter(Boolean);
   const result = audit.failedRuleCount > 0
-    ? `Automated WCAG checks also found ${audit.failedRuleCount} accessibility ${audit.failedRuleCount === 1 ? "issue" : "issues"}${impacts.length ? ` (${impacts.join(" and ")} ${critical + high === 1 ? "check" : "checks"})` : ""}.`
+    ? `Automated WCAG checks also found ${audit.failedRuleCount} accessibility ${audit.failedRuleCount === 1 ? "issue" : "issues"} on the starting page.`
     : "No failures were detected in the evaluated WCAG checks.";
   return `${result}${audit.failedRuleCount === 0 && audit.reviewRuleCount ? ` ${audit.reviewRuleCount} further ${audit.reviewRuleCount === 1 ? "check needs" : "checks need"} manual review.` : ""}`;
 }

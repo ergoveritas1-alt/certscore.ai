@@ -18,12 +18,21 @@ export const siteIntegritySiteReportSchema = z.object({
 });
 export type SiteIntegritySiteReport = z.infer<typeof siteIntegritySiteReportSchema>;
 
+export function getSiteIntegrityPageFindings(findings: SiteIntegrityReportFinding[]) {
+  return [...new Map(findings.map(finding => [finding.evidence.contractVersion === "certscore.site-integrity-projection.v2"
+    ? finding.evidence.pageId : `${finding.evidence.scanId}:homepage`, finding])).values()];
+}
+
+export function getSiteIntegrityLinkOccurrences(finding: SiteIntegrityReportFinding) {
+  return [...new Map(finding.evidence.observation.links.map(link => [link.evidenceRef, link])).values()];
+}
+
 /** Count retained link occurrences once per page; destination identity is not retained. */
 export function summarizeSiteIntegrityLinks(report: SiteIntegritySiteReport) {
-  const findings = [...new Map(report.findings.map(finding => [finding.evidence.contractVersion === "certscore.site-integrity-projection.v2" ? finding.evidence.pageId : `${finding.evidence.scanId}:homepage`, finding])).values()];
+  const findings = getSiteIntegrityPageFindings(report.findings);
   const verifiedZero = report.coverage.length > 0 && report.coverage.every(page => page.status === "captured" && page.retainedLinkCount === 0);
   return {
-    count: findings.length ? findings.reduce((sum, finding) => sum + new Set(finding.evidence.observation.links.map(link => link.evidenceRef)).size, 0) : verifiedZero ? 0 : null,
+    count: findings.length ? findings.reduce((sum, finding) => sum + getSiteIntegrityLinkOccurrences(finding).length, 0) : verifiedZero ? 0 : null,
     pages: verifiedZero ? report.coverage.length : findings.length,
     lowerBound: findings.some(finding => finding.evidence.observation.truncated) || report.coverage.some(page => page.status !== "captured"),
   };
@@ -31,7 +40,7 @@ export function summarizeSiteIntegrityLinks(report: SiteIntegritySiteReport) {
 
 /** Group only already policy-eligible findings; preserve separate page provenance. */
 export function projectSiteIntegritySitePriority(report: SiteIntegritySiteReport) {
-  const findings = [...new Map(report.findings.map(finding => [finding.evidence.contractVersion === "certscore.site-integrity-projection.v2" ? finding.evidence.pageId : `${finding.evidence.scanId}:homepage`, finding])).values()];
+  const findings = getSiteIntegrityPageFindings(report.findings);
   const first = findings[0];
   if (!first) return null;
   const pages = findings.flatMap(finding => {
@@ -77,7 +86,7 @@ export function projectSiteIntegrityPriority(findings: UnifiedFindingDisplayPack
 }
 
 function siteIntegrityEvidenceDescription(findings: SiteIntegrityReportFinding[]) {
-  const links = findings.flatMap(finding => finding.evidence.observation.links);
+  const links = getSiteIntegrityPageFindings(findings).flatMap(getSiteIntegrityLinkOccurrences);
   const domains = new Map<string, number>();
   for (const link of links) domains.set(link.destinationDomain, (domains.get(link.destinationDomain) ?? 0) + 1);
   const leading = [...domains].sort((a, b) => b[1] - a[1])[0];

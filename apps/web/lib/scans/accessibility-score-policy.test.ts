@@ -33,7 +33,8 @@ test("verified WCAG evidence enters concern policy and the canonical overall sco
   assert.equal(points(packets), 12);
   assert.equal(packets.find(packet => packet.unifiedFindingId === "semantic_labeling_accessibility_issue")?.presentationDecision.status, "audit_only");
   assert.equal(projectAccessibilityPriorities(packets).some(finding => finding.id === "semantic_labeling_accessibility_issue"), false);
-  assert.equal(projectAccessibilityPriorities(packets).some(finding => /zoom|target_size/.test(finding.id)), false);
+  assert.equal(projectAccessibilityPriorities(packets).some(finding => finding.id === "zoom_restriction_accessibility_issue"), false);
+  assert.equal(projectAccessibilityPriorities(packets).some(finding => finding.id === "target_size_accessibility_issue"), true);
   const result = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null }, checklistRows: [...checked], unifiedFindings: packets })!;
   assert.equal(result.score, 88);
   assert.equal(result.deductions.find(row => row.family === "accessibility")?.deductionPoints, 12);

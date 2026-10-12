@@ -108,6 +108,7 @@ export function FullSiteWorkspace({
   homepageTimeline,
   evidenceDirectory,
   homepageVerdict,
+  homepageLimitedCount,
   homepageFindings = [],
   homepageUrl,
   siteMetadata,
@@ -127,6 +128,7 @@ export function FullSiteWorkspace({
   homepageTimeline?: ReactNode;
   evidenceDirectory?: ReactNode;
   homepageVerdict?: string;
+  homepageLimitedCount?: number;
   homepageFindings?: ShadowFinding[];
   homepageUrl?: string;
   siteMetadata?: SiteMetadataProjection | null;
@@ -572,7 +574,7 @@ export function FullSiteWorkspace({
       {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
-          <FullSiteExecutiveSummary actions={completed ? executiveActions : null} statusLabel={reportStatus} inventorySummary={inventorySummary} score={data?.score} pending={!data || valuesUpdating} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} />
+          <FullSiteExecutiveSummary actions={completed ? executiveActions : null} statusLabel={reportStatus} inventorySummary={inventorySummary} score={data?.score} pending={!data || valuesUpdating} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageLimitedCount={homepageLimitedCount} />
           <SitePriorityReview findings={data?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!data || valuesUpdating} sitewideAvailable={Boolean(data?.score)} />
           {homepageTimeline ? <section aria-label="Starting-page event timeline" className="my-3 border-y border-zinc-200 bg-white py-2">
             <h2 className="text-xl font-semibold">Starting-page event timeline</h2>

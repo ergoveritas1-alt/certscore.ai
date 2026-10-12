@@ -1,4 +1,5 @@
 import { projectAccessibilityPriorities } from "./accessibility-priority";
+import { groupAccessibilityPriorityEntries } from "./accessibility-priority-group";
 import { comparePriorityReviewFindings } from "./priority-review-order";
 import { projectFormDestinationPriority } from "./form-destination-report";
 import { projectCmsSecurityPriority } from "./cms-security-report";
@@ -12,6 +13,7 @@ import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage
 
 export const sitePriorityFindingSchema = z.object({
   priority: z.literal("high").optional(),
+  severity: z.enum(["critical", "high", "medium", "low"]).optional(),
   id: z.string(), rank: z.number(), title: z.string(), summary: z.string(),
   status: z.enum(["Potential gap", "Partial concern", "Not confirmed", "Observed"]),
   evidence: z.array(z.string()), evidenceJson: z.record(z.unknown()),
@@ -71,5 +73,5 @@ export function buildSitePriorityReview(rows: GdprEprivacyCoverageChecklistItem[
     ...integrity, rank: priorities.length + 1,
     pages: "pages" in integrity ? integrity.pages : pages.filter(page => page.homepage).map(({ id, url, homepage }) => ({ id, url, homepage })),
   });
-  return priorities.sort(comparePriorityReviewFindings).map((finding, index) => ({ ...finding, rank: index + 1 }));
+  return groupAccessibilityPriorityEntries(priorities.sort(comparePriorityReviewFindings)).map((finding, index) => ({ ...finding, rank: index + 1 }));
 }

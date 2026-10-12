@@ -31,11 +31,7 @@ export function StatusBadge({ status }: { status: ShadowEvidenceStatus }) {
 
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.68rem] font-semibold uppercase ${statusClasses(status)}`}>
-      {status === "Potential gap" ? (
-        <svg aria-hidden="true" className="h-3 w-3 shrink-0 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 3 2 21h20ZM12 9v5m0 3v1" />
-        </svg>
-      ) : <span aria-hidden="true">{symbol}</span>}
+      {status !== "Potential gap" ? <span aria-hidden="true">{symbol}</span> : null}
       {status}
     </span>
   );

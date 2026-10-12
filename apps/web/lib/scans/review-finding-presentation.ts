@@ -105,7 +105,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
           suggestedFix:
             "Configure the site's Tag Manager or header scripts to remain in a denied or decoupled state until a positive consent signal is received from the UI. Ensure that non-essential vendor SDKs are initialized only after the consent management platform (CMP) confirms an affirmative choice.",
           whyThisMatters:
-            "The automated scan detected third-party network requests initiating before a consent choice could be recorded. This zero-delay execution indicates that tracking, analytics, or measurement scripts are firing by default upon page load. This sequence results in the transmission of device identifiers or metadata to external vendors before the user has exercised their right to opt-in or out, a core requirement of the ePrivacy Directive and GDPR.",
+            "The scan retained third-party requests before a recorded consent choice. Review their timing, purpose, and request fields to understand which integrations initialized before the visitor made a choice.",
           confidenceScore: "0.85"
         }
       },
@@ -118,9 +118,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
             url: "https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/"
           },
           suggestedFix:
-            "Check the site's Tag Manager configuration to ensure that the Reddit Pixel is correctly mapped to the Reject trigger. The tag should be set to Denied or Blocked when the visitor declines consent, ensuring it stops all data transmission immediately after the user interacts with the banner.",
+            "Review the retained post-refusal requests and the corresponding vendor tags. Check that the Reject choice is applied to non-essential tags and verify their behavior after refusal.",
           whyThisMatters:
-            "The scan indicated that even after selecting the reject option on the consent banner, certain tracking tools remained active. While most trackers were successfully disabled, at least one advertising pixel continued to transmit data. This is important because privacy regulations require that all non-essential tracking stops immediately once a visitor expresses their preference to opt out.",
+            "The scan retained tracking activity after the Reject choice. Review the requests and consent-state evidence to identify which integrations continued and whether they reflect the visitor's choice.",
           confidenceScore: "0.83"
         }
       }
@@ -173,36 +173,36 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/dpv/"
       },
       suggestedFix:
-        "Perform a manual technical review of the identified policy URL to map the missing critical fields. Ensure that the Data Controller and rights-fulfillment contact points are clearly defined in the HTML structure so future scans can index them consistently.",
+        "Review the identified policy URL and locate the disclosure fields that extraction could not resolve. Check that the relevant sections are readable and reachable in the rendered page.",
       whyThisMatters:
-        "The automated parser could not extract critical disclosure fields with high confidence. That usually points to non-standard document structure, heavy legal jargon, or weak technical mapping between the policy text and the expected disclosure fields."
+        "Automated extraction could not resolve the expected disclosure fields with high confidence. Review the policy text and retained excerpts to determine what the document discloses."
     },
     evidenceAwareOverrides: [
       {
         match: /terms_of_service|tos/i,
         override: {
           suggestedFix:
-            "Perform a manual technical review of the terms page to map missing contractual disclosures. To resolve this for future scans, refactor the rendered HTML to use semantic section or article tags with explicit IDs for Governing Law, Arbitration, Termination, and Notice/Contact language, ensuring they are not buried in unstructured containers.",
+            "Review the terms page for Governing Law, Arbitration, Termination, and Notice/Contact language. Check that these sections are readable and accessible in the rendered page.",
           whyThisMatters:
-            "The automated scan confirmed a complete semantic obstruction regarding the Terms of Service. With a Policy Ambiguity Score of 90 and zero extractable snippets, the contractual terms are technically dark to automated auditing. This structural gap prevents the verification of core legal protections, including Governing Law, Dispute Resolution, and Termination rights."
+            "Automated extraction did not resolve the expected terms disclosures. Review the terms page directly for governing law, dispute resolution, termination, and contact information."
         }
       },
       {
         match: /cookie policy|low-confidence cookie policy extraction|extraction cookie policy/i,
         override: {
           suggestedFix:
-            "Immediate manual verification is required to identify and categorize active tracking technologies. To resolve this for future scans, refactor the rendered HTML to use a flattened table structure or semantic section tags with explicit IDs for Cookie Name, Provider, Purpose, and Duration, ensuring these fields are not buried in unstructured dynamic containers.",
+            "Review the cookie policy for Cookie Name, Provider, Purpose, and Duration. Check that any disclosure table or sections are readable in the rendered page, then compare them with the retained cookie inventory.",
           whyThisMatters:
-            "The automated scan confirmed a complete semantic obstruction regarding cookie disclosures. With a Policy Ambiguity Score of 90 and zero extractable snippets, the tracking disclosures are technically dark to automated auditing. This structural gap prevents the verification of mandatory metadata, including cookie categories such as Essential, Performance, and Targeting, and specific retention periods."
+            "Automated extraction did not resolve the expected cookie disclosures. Review the policy directly for cookie categories, providers, purposes, and retention periods."
         }
       },
       {
         match: /privacy policy|extraction privacy policy/i,
         override: {
           suggestedFix:
-            "Immediate manual verification is required to extract the following missing metadata: (1) Data Retention periods, (2) Third-party recipient categories, and (3) Legal basis for processing. To resolve this for future scans, refactor the rendered HTML to replace unstructured div containers with semantic section or article tags that use explicit IDs for mandatory disclosures.",
+            "Review the privacy policy for Data Retention periods, Third-party recipient categories, and Legal basis for processing. Check the controller identity and privacy-request contact details, and ensure the relevant sections are readable in the rendered page.",
           whyThisMatters:
-            "The automated scan confirmed a complete semantic obstruction regarding the privacy policy. With a Policy Ambiguity Score of 90 and zero extractable snippets, the document is technically dark to automated auditing. This structural gap prevents the verification of mandatory disclosures, including Data Controller identity and DSAR endpoints."
+            "Automated extraction did not resolve the expected privacy-policy disclosures. Review the policy directly for controller identity, privacy-request contacts, retention, recipients, and processing purposes."
         }
       }
     ],
@@ -230,9 +230,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://cppa.ca.gov/regulations/pdf/20230329_final_approved_regs.pdf"
       },
       suggestedFix:
-        "Perform a technical audit to achieve Functional Symmetry between the opt-in and opt-out paths. Refactor the privacy-request workflow to ensure that revoking consent or requesting data deletion is accessible in the same number of clicks as the initial consent, without requiring secondary authentication or account-creation hurdles not mentioned in the policy.",
+        "Compare the retained policy promise with the observed privacy-request workflow. Review additional redirects, authentication steps, or account requirements and correct any mismatch with the stated process.",
       whyThisMatters:
-        "The automated scan confirmed a definitive functional misalignment where the live rights-fulfillment workflow contradicts the site's stated privacy promises. This discrepancy indicates an asymmetric user experience, a technical dark pattern, where the friction required to exercise privacy rights is significantly higher than the initial data-ingestion path, creating direct CCPA and GDPR exposure."
+        "The finding identifies a mismatch between the stated privacy-rights process and the observed workflow. Review the retained policy passage and workflow evidence together to understand the extra steps and their effect on visitors."
     },
     matches: [/policy_runtime\.functional_misalignment/i, /high-confidence functional misalignment/i, /functional misalignment/i]
   },
@@ -246,7 +246,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       suggestedFix:
         "Perform a technical audit to map active tracking scripts (for example, session replay, fingerprinters, or third-party pixels) against the current privacy policy. Update the Technical Disclosures section to explicitly name these technologies, their purpose, and their data retention periods. Ensure the new text is formatted with semantic HTML tags to allow for automated indexing.",
       whyThisMatters:
-        "The automated scan confirmed a definitive Missing Technical Disclosure where observed runtime behavior, such as tracking or session replay, is active but entirely absent from the policy materials. This gap between technical reality and legal disclosure creates significant GDPR and CCPA exposure, as it constitutes processing personal data without the required notice or transparency."
+        "The retained policy materials did not contain a matching disclosure for the observed runtime behavior, such as tracking or session replay. Review the relevant activity and policy passages together, then update the disclosure or integration where needed."
     },
     matches: [/policy_runtime\.missing_technical_disclosure/i, /missing technical disclosure/i]
   },
@@ -258,9 +258,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/dpv/"
       },
       suggestedFix:
-        "Perform a technical audit of the policy DOM to expose all hidden or dynamic text blocks. To resolve this, refactor the page to use a flattened HTML structure with semantic section tags and explicit IDs for all mandatory disclosures, ensuring content is not gated behind JavaScript-only interactions or display:none CSS properties.",
+        "Inspect the policy page's rendered text, dynamic sections, and navigation. Check whether visitors can reach and read the relevant disclosures, and address any confirmed access or extraction problem.",
       whyThisMatters:
-        "The automated scan confirmed a definitive obstruction signal, indicating that the site's architecture prevents reliable data mapping. This technical barrier, often caused by content nested in non-semantic, dynamic, or collapsible containers, obstructs both automated auditing and user visibility into critical privacy practices."
+        "The retained evidence indicates difficulty accessing or extracting disclosure text. Review the affected policy sections to establish whether this also affects visitors' access to the information."
     },
     matches: [/policy_runtime\.disclosure_likely_obstructed/i, /disclosure likely obstructed/i]
   },
@@ -334,7 +334,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       suggestedFix:
         "Refactor the cookie policy into a more structured format that exposes cookie name, provider, purpose, and duration in rendered HTML. Avoid relying on weakly structured or dynamically hidden containers for the primary disclosure table.",
       whyThisMatters:
-        "The cookie policy did not expose enough structured disclosure metadata to reconcile runtime cookies with confidence. That usually points to a technically obstructed disclosure surface rather than a simple wording issue."
+        "The retained cookie-policy metadata was insufficient to reconcile the runtime cookies with confidence. Review the policy text and disclosure table alongside the retained cookie inventory."
     },
     matches: [/cookie_runtime\.cookie_policy_obstructed/i, /cookie policy structurally obstructed/i]
   },
@@ -421,9 +421,9 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://www.w3.org/TR/tpa/"
       },
       suggestedFix:
-        "Perform a network stack audit to identify the specific third-party scripts, such as Meta, Reddit, or LinkedIn, firing the pixel. Reconfigure the Tag Manager to gate these scripts behind an explicit Marketing consent event, ensuring the tag only initializes after the Consent Management Platform broadcasts a positive signal. Verify that the pixel respects Do Not Track headers and Global Privacy Control signals.",
+        "Identify the integration from the retained network or script evidence. Review its request fields, disclosures, and marketing-consent configuration, then verify its behavior when visitors use the relevant privacy controls.",
       whyThisMatters:
-        "The automated scan confirmed the presence of an active retargeting pixel, which establishes a persistent technical link between the local user session and third-party advertising networks. This enables cross-site tracking by syncing behavioral data, such as page views or specific product interactions, with a broader advertising profile. The technical risk involves data exfiltration to ad platforms before or despite user consent preferences."
+        "The scan retained runtime evidence associated with an advertising or retargeting pixel. Review the vendor, request contents, and timing alongside the site's disclosures and consent choices."
     },
     matches: [/retargeting_pixel/i, /retargeting pixel detected/i]
   },
@@ -488,27 +488,27 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
         url: "https://cppa.ca.gov/regulations/pdf/20230329_final_approved_regs.pdf"
       },
       suggestedFix:
-        "Refactor the privacy UI to ensure functional symmetry. The technical implementation for opting out should be as streamlined as the opt-in flow, removing barriers such as forced account creation, multi-step authentication, or hidden navigation paths for basic data requests.",
+        "Review the privacy-choice workflow and simplify unnecessary steps. Check the purpose of any account, authentication, or navigation requirements before changing them.",
       whyThisMatters:
-        "The workflow for revoking data permissions returned a maximum friction score of 100. This indicates an asymmetric UX or broken path where the technical effort to exercise privacy rights is significantly higher than the initial data-ingestion path, often characterized as a technical dark pattern."
+        "The automated friction indicator calls for review of the privacy-choice workflow. Use the retained steps and any redirects or authentication requirements to identify barriers visitors may encounter."
     },
     evidenceAwareOverrides: [
       {
         match: /high user-rights fulfillment friction/i,
         override: {
           suggestedFix:
-            "Perform a technical audit to achieve Functional Symmetry between opt-in and opt-out workflows. Refactor the privacy UI to ensure that revoking consent or requesting data deletion is accessible in the same number of clicks as the initial consent, removing secondary barriers such as forced account creation or hidden navigation paths.",
+            "Compare the retained opt-in and opt-out steps. Make the privacy controls easy to find and reduce unnecessary steps in the refusal or withdrawal path.",
           whyThisMatters:
-            "The automated scan confirmed a high friction score of 90, signaling an objective technical barrier in the user-rights fulfillment path. This indicates a Functional Asymmetry where the effort required to revoke data permissions or exercise privacy rights is significantly higher than the initial data-ingestion path, which is classified as a technical dark pattern under modern privacy regulations."
+            "The automated friction indicator suggests the privacy-rights workflow needs review. Check the retained steps and compare the effort needed to grant and withdraw permissions."
         }
       },
       {
         match: /critical user-rights fulfillment friction/i,
         override: {
           suggestedFix:
-            "Establish technical parity between opt-in and opt-out workflows. Refactor the interface to ensure that the revocation path is accessible in the same number of click-events as the initial consent. Remove secondary technical hurdles such as mandatory account creation or circular redirect logic that were not part of the primary data-collection sequence.",
+            "Inspect the retained refusal or withdrawal path for extra account requirements, redirects, or repeated steps. Simplify confirmed barriers while preserving any necessary identity checks.",
           whyThisMatters:
-            "The automated scan confirmed a friction score of 100, signaling a technical obstruction in the rights-fulfillment path. This indicates a lack of functional parity where the technical workflow to revoke permissions is materially more complex than the initial ingestion path. From an architectural standpoint, this represents a non-linear user journey that prevents automated verification of compliance controls."
+            "The automated friction indicator prioritizes review of the rights-fulfillment path. Inspect the retained workflow for additional steps, redirects, or authentication barriers when withdrawing permissions."
         }
       }
     ],
@@ -524,7 +524,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       suggestedFix:
         "Perform a technical audit of the DOM to implement missing ARIA landmarks. Ensure the page uses semantic HTML5 tags or role attributes to define the header, nav, main, and footer regions. Specifically, verify that there is exactly one main landmark and that multiple nav regions have unique aria-labels to distinguish their purpose.",
       whyThisMatters:
-        "The automated detector confirmed distinct ARIA landmark violations, signaling a failure in the page's semantic architecture. Landmarks, such as main, nav, and header regions, are critical for screen reader users to navigate efficiently; their absence or improper nesting prevents users from skipping repetitive content or jumping directly to primary sections."
+        "The automated check identified ARIA landmark issues on the tested page. Review the affected regions: missing or incorrectly nested landmarks can make screen-reader navigation less efficient."
     },
     matches: [/landmark issues/i, /aria landmark/i, /landmark/i]
   },
@@ -553,7 +553,7 @@ const REVIEW_FINDING_PRESENTATION_RULES: ReviewFindingPresentationConfig[] = [
       suggestedFix:
         "Inspect the CSS for global styles that may be suppressing the focus ring, such as outline: none or outline: 0 without providing a suitable high-contrast alternative. Ensure that all interactive elements, including buttons, links, and form fields, receive a clear visual highlight when they gain focus. Verify that this highlight meets WCAG 2.1 contrast requirements against the background color.",
       whyThisMatters:
-        "The scan confirmed an instance where a visible focus indicator is missing or obscured. In technical auditing, this is a significant accessibility gap because users who navigate via keyboard, using the Tab key, rely on a visible outline to know which element is currently active. If the indicator is suppressed via CSS, the site becomes functionally unusable for anyone not using a mouse.",
+        "The scan identified a missing or obscured focus indicator on an affected element. A visible indicator helps keyboard users track the active control; verify the element and its role in the page's tasks.",
       confidenceScore: "0.9"
     },
     matches: [/focus indicator issues/i, /wcag_focus_indicator_issue_count/i]
@@ -1669,9 +1669,9 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
 
     if (/mcw\.edu|medical institution domain|clinical|health/i.test(evidenceText) && hasConcreteRuntimeArtifact) {
       presentation.whyThisMatters =
-        "The automated scan confirmed the presence of an active retargeting pixel, which establishes a persistent technical link between the local user session and third-party advertising networks. On a medical institution domain, this signal is particularly critical as it indicates that visitor behavior, such as viewing specific clinical or educational pages, is being synced with broader advertising profiles, potentially creating significant HIPAA and privacy exposure.";
+        "The scan retained advertising or retargeting-related runtime evidence on a page with health-related context. Review the actual request fields and destination to determine what page or visitor information was transmitted.";
       presentation.suggestedFix =
-        "Perform a network stack audit to identify the specific third-party script, such as Meta, Google, or Criteo, firing the pixel. Reconfigure the Tag Manager to gate this script behind an explicit Marketing consent event, ensuring the tag only initializes after the Consent Management Platform broadcasts a positive signal. Verify that no health-related page metadata is being passed in the pixel's payload.";
+        "Identify the vendor from the retained request evidence, inspect any health-related page metadata in the payload, and review disclosure and consent gating for that integration.";
       presentation.confidenceScore = "0.9";
     } else if (maxAssertionLevel === "weak" || negativeEvidenceFlags.has("no_direct_runtime_retargeting_artifact_observed")) {
       presentation.whyThisMatters =
@@ -1759,7 +1759,7 @@ function buildPresentationFromConfig(config: ReviewFindingPresentationConfig, in
       signalValue >= 75
     ) {
       presentation.whyThisMatters =
-        `The automated scan confirmed a high friction score of ${signalValue}, signaling an objective technical barrier in the user-rights fulfillment path. This indicates a Functional Asymmetry where the effort required to revoke data permissions or exercise privacy rights is significantly higher than the initial data-ingestion path, which is classified as a technical dark pattern under modern privacy regulations.`;
+        `The automated friction indicator returned ${signalValue}. Review the retained privacy-rights workflow to identify any additional steps or barriers and compare the effort needed to grant and withdraw permissions.`;
       if (signalValue === 75) {
         presentation.confidenceScore = "0.7";
       }

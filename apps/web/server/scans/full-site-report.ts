@@ -7,6 +7,7 @@ import { serviceIntegrationGroup, serviceIntegrationPurposes, groupedOrigin } fr
 import { summarizeDiscoveredCoverage } from "../../lib/scans/full-site-coverage";
 import "server-only";
 import { inventoryPurposeGroups } from "../../lib/scans/inventory-purpose-presentation";
+import { matchesInventoryPurpose } from "../../lib/scans/inventory-search";
 import { identifyCrawlService, describeCrawlService } from "../../lib/scans/full-site-resource-context";
 import { loadFullSiteReviewedPolicies } from "./full-site-reviewed-policies";
 import { loadFullSiteRelationshipCounts } from "./full-site-relationship-counts";
@@ -206,7 +207,7 @@ async function buildFullSiteReport(
       (kind === "all" ? ["cookie", "storage", "request", "embed"].includes(row.occurrence.kind) : kind === "cookie" ? ["cookie", "storage"].includes(row.occurrence.kind) : row.occurrence.kind === kind) &&
       row.pageIds.some((id) => allowedPages.has(id)) &&
       (!additional || row.homepage === "not_observed") &&
-      matchesCategory(inventoryPurposeGroups(row.purposes, row.relationships), params.get("purpose") ? inventoryPurposeGroups([params.get("purpose")!], [])[0]! : null) &&
+      matchesInventoryPurpose(row.purposes, row.relationships, params.get("purpose") ?? "") &&
       matchesCategory(row.relationships, params.get("relationship")) &&
       (!params.get("assessment") ||
         inventoryClassification(row) === params.get("assessment")!) &&

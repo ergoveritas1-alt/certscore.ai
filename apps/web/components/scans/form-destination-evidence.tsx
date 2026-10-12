@@ -3,7 +3,7 @@ import type { FormDestinationProjection } from "@certscore/contracts";
 export function FormDestinationEvidence({ projection, warning = false }: { projection?: FormDestinationProjection | null; warning?: boolean }) {
   if (!projection?.trace.events.length) return null;
   const { trace } = projection;
-  return <section aria-label="Form-data destinations" className="my-3 rounded-lg border border-zinc-200 p-4 text-sm">
+  return <section id="form-destination-evidence" aria-label="Form-data destinations" className="my-3 scroll-mt-6 rounded-lg border border-zinc-200 p-4 text-sm target:ring-2 target:ring-sky-300">
     <details><summary className="cursor-pointer font-semibold">Form-data destinations {warning ? <span className="ml-2 text-amber-800">⚠ Unexpected recipient — review</span> : null}</summary>
       <p className="mt-2 text-xs text-zinc-500">Passive observation only. No forms were submitted by the scanner. Requests listed after an event are timing associations unless an exact field-value match is recorded. This does not establish data exfiltration.</p>
       {trace.events.map(event => <details key={event.evidenceRef} id={event.evidenceRef} className="mt-3 border-t pt-3">

@@ -26,11 +26,12 @@ function RuleEvidence({ rule, review = false }: { rule: AccessibilityRuleObserva
     <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 [&::-webkit-details-marker]:hidden">
       <span className="min-w-0 text-sm font-semibold text-zinc-950">{accessibilityRuleTitle(rule)}</span>
       <span className="col-span-2 row-start-2 text-xs leading-5 text-zinc-600">{rule.nodeCount} {rule.nodeCount === 1 ? "element instance" : "element instances"} · {rule.ruleId}</span>
-      <span className="col-start-2 row-start-1 flex shrink-0 items-center gap-2"><EvidenceStatusBadge label={review ? "Needs review" : accessibilityImpactLabel(rule.impact)} tone={review ? "review" : rule.impact === "critical" || rule.impact === "serious" ? "concern" : "review"} /><DisclosureChevron className="text-zinc-400 group-open/accessibility-rule:rotate-180" /></span>
+      <span className="col-start-2 row-start-1 flex shrink-0 items-center gap-2">{review ? <EvidenceStatusBadge label="Needs review" tone="review" showIcon={false} /> : null}<DisclosureChevron className="text-zinc-400 group-open/accessibility-rule:rotate-180" /></span>
     </summary>
     <div className="mt-3 space-y-3 text-xs leading-5 text-zinc-600">
       <p>{rule.description}</p>
       <p>{rule.help}</p>
+      <p>Scanner rule impact: {accessibilityImpactLabel(rule.impact)}</p>
       <p className="break-words">WCAG references: {rule.tags.filter(tag => /^wcag\d{3,4}$/.test(tag)).map(tag => `${tag[4]}.${tag[5]}.${tag.slice(6)}`).join(", ") || rule.tags.filter(tag => tag.startsWith("wcag")).join(", ")}</p>
       <a className="font-semibold text-sky-700 underline" href={rule.helpUrl} target="_blank" rel="noreferrer">WCAG guidance &amp; remediation ↗</a>
       <p className="font-semibold text-zinc-800">Retained examples ({rule.representativeNodes.length} of {rule.nodeCount})</p>
@@ -51,7 +52,7 @@ export function AccessibilityEvidence({ audit, observation }: Props) {
       <div className="min-w-0"><p className="text-xs font-semibold uppercase text-zinc-500">{ACCESSIBILITY_REPORT_LABEL} · Starting page</p>
         <h3 className={`mt-1 ${reportCardTitle}`}>{accessibilityIssueCountLabel(audit)}{audit.affectedNodeCount !== null ? ` · ${audit.affectedNodeCount} element instances` : ""}</h3></div>
       <span className="flex shrink-0 items-center gap-2">
-        {audit.failedRuleCount !== null && audit.failedRuleCount > 0 ? <EvidenceStatusBadge label="Flagged" tone="concern" />
+        {audit.failedRuleCount !== null && audit.failedRuleCount > 0 ? <EvidenceStatusBadge label="Issues found" tone="review" />
           : audit.reviewRuleCount ? <EvidenceStatusBadge label="Review" tone="review" /> : null}
         <DisclosureChevron className="text-zinc-400 group-open/accessibility:rotate-180" />
       </span>

@@ -8,6 +8,24 @@ import { selectSiteIntegrityFinding } from "../../lib/scans/site-integrity-repor
 import { SiteIntegrityCallout, SiteIntegrityEvidence, SiteIntegritySiteContext } from "./site-integrity-evidence";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
 
+test("site-integrity totals and destination counts use the same per-page occurrence identity", () => {
+  const finding = selectSiteIntegrityFinding(buildUnifiedFindingDisplayPackets({
+    runtimeArtifacts: { siteIntegrity: siteIntegrityProjectionFixture },
+    reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map()
+  }))!;
+  const duplicate = structuredClone(finding);
+  duplicate.evidence.observation.links.push(duplicate.evidence.observation.links[0]!);
+  const html = renderToStaticMarkup(<SiteIntegritySiteContext.Provider value={{
+    findings: [duplicate, duplicate],
+    coverage: [{ pageId: "home", url: finding.evidence.observation.documentUrl, homepage: true, status: "captured" }]
+  }}><SiteIntegrityEvidence /></SiteIntegritySiteContext.Provider>);
+  assert.match(html, />3<\/p><p[^>]*>Link occurrences/);
+  assert.match(html, />1 link<\/span>/);
+  assert.match(html, />2 links<\/span>/);
+  assert.doesNotMatch(html, />4 links<\/span>/);
+  assert.match(html, /Affected pages \(1\)/);
+});
+
 test("only projected integrity findings render a separate review callout and detailed evidence", () => {
   assert.equal(renderToStaticMarkup(<><SiteIntegrityCallout /><SiteIntegrityEvidence /></>), "");
   const packets = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { siteIntegrity: siteIntegrityProjectionFixture },
@@ -15,7 +33,8 @@ test("only projected integrity findings render a separate review callout and det
   const finding = selectSiteIntegrityFinding(packets);
   assert.ok(finding);
   const html = renderToStaticMarkup(<><SiteIntegrityCallout finding={finding} /><SiteIntegrityEvidence finding={finding} /></>);
-  assert.match(html, /Site integrity · High priority/);
+  assert.match(html, /Site integrity · Review recommended/);
+  assert.doesNotMatch(html, /High priority|Flagged|rose-/);
   assert.match(html, /href="#site-integrity-evidence"/);
   assert.match(html, /id="site-integrity-evidence"/);
   assert.match(html, /pharmacy.example/);

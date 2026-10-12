@@ -11,7 +11,7 @@ export function projectCmsSecurityPriority(findings: UnifiedFindingDisplayPacket
   if (!parsed.success || !parsed.data.assessment.matches.length) return null;
   const projection = parsed.data, copy = cmsSecurityCopy(projection);
   return { id: CMS_SECURITY_FINDING_ID, title: copy.title, summary: copy.description,
-    status: "Partial concern" as const, ...(copy.severity === "high" ? { priority: "high" as const } : {}),
+    severity: copy.severity, status: "Partial concern" as const, ...(copy.severity === "high" ? { priority: "high" as const } : {}),
     evidence: projection.assessment.matches.map(row => `${row.record.id}: ${row.record.title}. ${row.record.qualification} Source: ${row.record.sourceUrl}`),
     evidenceJson: { cmsSecurity: projection }, correctionSteps: [copy.action],
   };

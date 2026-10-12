@@ -73,6 +73,7 @@ export function isShadowReportVariant(value: string): value is ShadowReportVaria
 }
 
 export type ShadowFinding = {
+  severity?: "critical" | "high" | "medium" | "low";
   priority?: "high";
   correctionSteps: string[];
   evidenceJson: Record<string, unknown>;

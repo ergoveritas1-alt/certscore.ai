@@ -5,30 +5,13 @@ import type { FullSiteReportResponse } from "../../server/scans/full-site-report
 import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import { ScanLiveValue } from "./scan-live-value";
 import type { ScoreDeductions } from "./score-deductions";
+import { buildAssessmentHighlights, type AssessmentHighlightFinding, type AssessmentContext } from "../../lib/scans/assessment-highlights";
 
-export function buildSiteAssessmentSummary(priorities: ReadonlyArray<{ title: string; summary?: string }>, scannedPages: number | null) {
-  if (!priorities.length) return "No priority issues were identified in the assessed evidence.";
-
-  const count = priorities.length.toLocaleString("en-US");
-  const pageScope = scannedPages !== null && scannedPages > 0
-    ? ` across ${scannedPages.toLocaleString("en-US")} ${scannedPages === 1 ? "page" : "pages"}` : "";
-  const lead = `The scan identified ${count} priority ${priorities.length === 1 ? "issue" : "issues"}${pageScope}.`;
-  const first = priorities[0]!;
-  const title = first.title.trim().replace(/[.!?]$/, "");
-  const topFinding = title && title.length <= 120
-    ? ` ${priorities.length === 1 ? "The finding" : "The leading finding"} is “${title}”.` : "";
-  const summary = first.summary?.trim().split(/(?<=[.!?])\s+(?=[A-Z])/)[0]?.trim();
-  const detail = summary && summary.length <= 200 && summary.toLowerCase() !== title.toLowerCase()
-    ? ` ${summary}${/[.!?]$/.test(summary) ? "" : "."}` : "";
-  const otherTitles = priorities.slice(1, 3).map(finding => finding.title.trim().replace(/[.!?]$/, ""));
-  const otherIssues = topFinding && otherTitles.length && otherTitles.every(value => value && value.length <= 80) && otherTitles.join("; ").length <= 140
-    ? ` Other issues include ${otherTitles.map(value => `“${value}”`).join(" and ")}.` : "";
-  const more = priorities.length > 3 || !topFinding || (priorities.length > 1 && !otherIssues)
-    ? " See Regulatory Risk Review for the full list." : "";
-  return `${lead}${topFinding}${detail}${otherIssues}${more}`;
+export function buildSiteAssessmentSummary(priorities: ReadonlyArray<AssessmentHighlightFinding>, scannedPages: number | null, context: AssessmentContext = {}) {
+  return buildAssessmentHighlights(priorities, { kind: "site", scannedPages }, context);
 }
 
-export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, inventorySummary }: {
+export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageLimitedCount, inventorySummary }: {
   score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
   pending: boolean;
   loadingSavedResult?: boolean;
@@ -38,6 +21,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
   snapshot?: ReactNode;
   inventorySummary?: ReactNode;
   homepageVerdict?: string;
+  homepageLimitedCount?: number;
 }) {
   const panesRef = useRef<HTMLDivElement>(null);
   const [collapsedHeight, setCollapsedHeight] = useState(0);
@@ -70,7 +54,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
   return <section aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
       <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold tracking-tight text-zinc-950">Executive overview</h2>{actions}</div>
-      <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{pending ? statusLabel ?? "Scan in progress" : statusLabel ? `Site assessment · ${statusLabel}` : scannedPages !== null ? `${scannedPages} ${singlePage ? "page" : "pages"} assessed` : "Site assessment"}</span>
+      {pending || statusLabel ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{pending ? statusLabel ?? "Scan in progress" : `Site assessment · ${statusLabel}`}</span> : null}
     </div>
     <div ref={panesRef} style={{ "--overview-height": `${collapsedHeight}px` } as CSSProperties} className="grid items-start gap-6 p-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)] lg:p-5 lg:gap-8">
       <div className="flex min-w-0 flex-col justify-between gap-5 md:min-h-[var(--overview-height)]">
@@ -97,7 +81,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
         <div data-overview-block>
         <h3 className="text-sm font-bold tracking-tight text-zinc-900">Assessment highlights</h3>
         {singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600">{homepageVerdict ?? "The single page assessment will appear when ready."}</p>
-          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700">{buildSiteAssessmentSummary(priorities, scannedPages ?? score?.scoredPages ?? null)}</p>
+          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700">{buildSiteAssessmentSummary(priorities, scannedPages ?? score?.scoredPages ?? null, { score: value, coverage: { state: score?.limitedPages || homepageLimitedCount ? "limited" : "unknown", limitedCount: homepageLimitedCount } })}</p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{loadingSavedResult ? "Loading the saved site assessment." : pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}
         </div>
         {inventorySummary ? <div>{inventorySummary}</div> : null}

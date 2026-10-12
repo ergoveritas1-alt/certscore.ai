@@ -2013,24 +2013,29 @@ test("GdprEprivacyCoverageChecklistCard omits deferred consent-control accessibi
 });
 
 test("GdprEprivacyCoverageChecklistCard renders projected post-reject reduction rows", () => {
+  const item = makeChecklistItem({
+    assessmentStatus: "gap_observed",
+    evidenceState: "observed",
+    id: "post_reject_tracking_reduction",
+    label: "Post-reject tracking reduction",
+    status: "Gap observed",
+    tone: "warning"
+  });
+  item.criticalEvidence.retainedEvidence.reportControlObserved = true;
   const html = renderToStaticMarkup(
     createElement(GdprEprivacyCoverageChecklistCard, {
       defaultOpen: true,
-      items: [
-        makeChecklistItem({
-          assessmentStatus: "gap_observed",
-          evidenceState: "observed",
-          id: "post_reject_tracking_reduction",
-          label: "Post-reject tracking reduction",
-          status: "Gap observed",
-          tone: "warning"
-        })
-      ]
+      items: [item]
     })
   );
 
   assert.match(html, /Post-reject tracking reduction/i);
   assert.match(html, /Potential gap/i);
+  item.criticalEvidence.retainedEvidence.reportControlObserved = false;
+  const withoutObservedControl = renderToStaticMarkup(createElement(GdprEprivacyCoverageChecklistCard, {
+    defaultOpen: true, items: [item]
+  }));
+  assert.doesNotMatch(withoutObservedControl, /Post-reject tracking reduction/i);
 });
 
 test("GdprEprivacyCoverageChecklistCard names social media providers and timing", () => {

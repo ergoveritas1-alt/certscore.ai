@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState } from "react";
 import { siteIntegrityScoreDescription } from "../../lib/scans/site-integrity-score-policy";
-import { summarizeSiteIntegrityLinks, type SiteIntegrityReportFinding, type SiteIntegritySiteReport } from "../../lib/scans/site-integrity-report";
+import { getSiteIntegrityPageFindings, getSiteIntegrityLinkOccurrences, summarizeSiteIntegrityLinks, type SiteIntegrityReportFinding, type SiteIntegritySiteReport } from "../../lib/scans/site-integrity-report";
 import { EvidenceHeaderStatus } from "./evidence-header-status";
 import { DisclosureChevron } from "./report-finding-row";
 import { reportCardTitle } from "./report-typography";
@@ -9,7 +9,7 @@ import { reportCardTitle } from "./report-typography";
 export function SiteIntegrityCallout({ finding }: { finding?: SiteIntegrityReportFinding | null }) {
   if (!finding) return null;
   return <aside aria-label="Site integrity review" className="my-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-    <p className="text-xs font-semibold uppercase text-amber-900">Site integrity · High priority</p>
+    <p className="text-xs font-semibold uppercase text-amber-900">Site integrity · Review recommended</p>
     <p className="mt-1 font-semibold text-zinc-900">{finding.title}</p>
     <p className="mt-1 text-sm text-zinc-700">{finding.summary}</p>
     <a className="mt-2 inline-block text-sm font-medium text-sky-800 underline" href="#site-integrity-evidence">Review retained evidence</a>
@@ -35,7 +35,7 @@ function groupDestinations(findings: SiteIntegrityReportFinding[]) {
   const groups = new Map<string, DestinationGroup>();
   for (const finding of findings) {
     const observation = finding.evidence.observation;
-    for (const link of observation.links) {
+    for (const link of getSiteIntegrityLinkOccurrences(finding)) {
       const group = groups.get(link.destinationDomain) ?? { domain: link.destinationDomain, count: 0, methods: new Set(), pages: new Map() };
       group.count++;
       group.methods.add(link.concealment);
@@ -54,7 +54,7 @@ export function SiteIntegrityEvidence({ finding, sampleNotice }: { finding?: Sit
   if (!site && !finding) return null;
   const report: SiteIntegritySiteReport = site ?? { findings: [finding!], coverage: [{ pageId: "homepage", url: finding!.evidence.observation.documentUrl, homepage: true, status: finding!.evidence.observation.truncated ? "limited" : "captured" }] };
   if (!report.findings.length) return null;
-  const findings = [...new Map(report.findings.map(item => [item.evidence.observation.documentUrl, item])).values()];
+  const findings = getSiteIntegrityPageFindings(report.findings);
   const destinations = groupDestinations(findings);
   const totals = summarizeSiteIntegrityLinks(report);
   const captured = report.coverage.filter(page => page.status !== "unavailable").length;

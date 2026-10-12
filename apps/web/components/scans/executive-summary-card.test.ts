@@ -11,6 +11,7 @@ import {
   CompactRejectPathCard,
   ExecutiveSummaryCard
 } from "./executive-summary-card";
+import { ExecutiveSummaryCard as Scanso2ExecutiveSummaryCard } from "../scanso2/executive-summary-card";
 import { ADA_ACCESSIBILITY_FIXTURES } from "../../lib/scans/ada-accessibility.fixtures";
 import type { CertScoreFinding } from "../../lib/scans/finding-registry";
 import { buildRegulatoryGapTopFindings } from "../../lib/scans/regulatory-gap-top-findings";
@@ -268,6 +269,77 @@ function makeRegulatoryRisk(overrides: Partial<RegulatoryRiskAssessment> = {}): 
     dataExposureRiskScore: 24,
     ...overrides
   };
+}
+
+for (const Card of [ExecutiveSummaryCard, Scanso2ExecutiveSummaryCard]) {
+  for (const [id, summary] of [
+    ["asymmetric_consent_ui", "Accept was more prominent than Reject on the retained first consent layer."],
+    ["rtb_cookie_sync_observed", "Identifier-sync request evidence was retained for the scanned page."],
+    ["identifier_transmission_detected", "Identifier-like parameters appeared in retained request evidence."],
+    ["telemetry_rich_identification_observed", "Browser and device parameters appeared in retained request evidence."],
+    ["performance_claims_without_context", "A retained performance claim lacked adjacent context."],
+    ["policy_behavior_contradiction_detected", "Retained runtime behavior conflicted with a specific policy claim."],
+    ["sensitive_data_collection_with_third_party_tracking_present", "Sensitive input metadata and tracking requests were observed in the same scan."],
+    ["third_party_cookie_pre_consent", "Two classified third-party cookies were observed before consent."],
+  ] as const) {
+    test(`${Card === ExecutiveSummaryCard ? "scans" : "scanso2"} preserves the specific non-ADA ${id} description and evidence scope`, () => {
+      const finding = makeFinding(id, "Retained finding", {
+        shortSummary: summary,
+        evidenceDetails: {
+          counts: { firstRequestMs: 1500, totalRequestCount: 900 },
+          runtimeRequestUrls: ["https://metrics.example.test/collect"],
+          trackingEvidence: {
+            observed: true, runtimeRequestCount: 13, runtimeVendorCount: 1,
+            representativeRequestsRetained: 8, requestCountBasis: "retained_distinct_request_urls"
+          },
+          ...(id === "sensitive_data_collection_with_third_party_tracking_present" ? { sensitiveDataEvidence: {
+            samePageOrFlowLinked: false, sameFlowBasis: "scan_level_only", payloadExposureObserved: false
+          } } : {}),
+          ...(id === "performance_claims_without_context" ? { offerSnippets: ["Retained performance claim"] } : {}),
+          ...(id === "rtb_cookie_sync_observed" ? { syncEvidence: {
+            subtypes: { identifier_query_sync: 1 }, examples: [{ queryKeysSample: ["client_id"] }]
+          } } : {}),
+          ...(id === "asymmetric_consent_ui" ? { consentUiEvidence: {
+            firstLayerControls: [{ label: "Accept all", role: "accept" }]
+          } } : {}),
+          ...(id === "policy_behavior_contradiction_detected" ? { policyRuntimeConflict: {
+            policyAnchor: { claimType: "consent_gated_tracking", sourceUrl: "https://example.com/privacy", snippet: "Optional analytics starts only after consent." },
+            runtimeAnchor: { observationType: "tracking_request", phase: "pre_consent", requestUrls: ["https://metrics.example.test/collect"], vendors: ["Example Metrics"] },
+            conflictBridge: { conflictType: "consent_timing", reasoning: "A classified analytics request preceded consent.", supportsPromotion: true },
+            evidenceSufficiency: { reviewStatus: "observed", promotionEligible: true },
+            references: { policySourceUrls: ["https://example.com/privacy"], runtimeRequestUrls: ["https://metrics.example.test/collect"], validationRuleKeys: [] }
+          } } : {})
+        }
+      });
+      const html = renderToStaticMarkup(createElement(Card, {
+        accessLimitationNotice: null, allFindings: [finding], topFindings: [finding],
+        beforeConsentCookieCount: 0, domainBenchmark: null, finalHost: "example.com",
+        fingerprintReasons: [], fingerprintLabel: "None detected", fingerprintNarrative: "",
+        landedOnDifferentHost: false, lastScannedAt: "2026-10-11T00:00:00.000Z",
+        posture: "Watch", preConsentVendorNames: [], requestedHost: "example.com",
+        resolvedVendorNames: [], score: 90, sessionReplayVendorNames: [],
+        thirdPartyRequestCount: 0, thirdPartyDomains: [], topObservedEntities: [],
+        trackerSummary: "", unresolvedVendorHosts: [], vendorCategoryCounts: {}
+      }));
+      assert.ok(html.includes(summary));
+      assert.doesNotMatch(html, /Retained counts:|1500 firstRequestMs|900 totalRequestCount/);
+      const json = html.replaceAll("&quot;", '"');
+      assert.match(json, /"runtimeRequestCount": 13/);
+      assert.match(json, /"representativeRequestsRetained": 8/);
+      assert.match(json, /"requestCountBasis": "retained_distinct_request_urls"/);
+      if (id === "sensitive_data_collection_with_third_party_tracking_present") {
+        assert.match(json, /"samePageOrFlowLinked": false/);
+        assert.match(json, /"payloadExposureObserved": false/);
+      }
+      if (id === "performance_claims_without_context") assert.match(json, /Retained performance claim/);
+      if (id === "rtb_cookie_sync_observed") assert.match(json, /"queryKeysSample":/);
+      if (id === "asymmetric_consent_ui") assert.match(json, /"firstLayerControls":/);
+      if (id === "policy_behavior_contradiction_detected") {
+        assert.match(json, /Optional analytics starts only after consent/);
+        assert.match(json, /A classified analytics request preceded consent/);
+      }
+    });
+  }
 }
 
 function makeAgencyMapping(overrides: Partial<AgencyMapping> = {}): AgencyMapping {
@@ -2942,75 +3014,120 @@ test("ExecutiveSummaryCard explains executive and finding cookie count differenc
   assert.match(html, /Executive metric includes classified non-essential storage identities observed in the pre-consent runtime; this finding shows the narrower subset with direct write-level timing\./);
   assert.match(html, /trackingCookieWritesBeforeConsent/);
   assert.match(html, /totalUniqueCookiesObserved/);
-  assert.match(html, /Retained counts: 13 preConsentTrackingCookies; 10 total cookie count\./);
+  assert.ok(html.includes(cookieFinding.shortSummary));
+  assert.doesNotMatch(html, /Retained counts: 13 preConsentTrackingCookies; 10 total cookie count\./);
   assert.doesNotMatch(html, /Partial means some timing evidence was retained directly/);
 });
 
-test("ExecutiveSummaryCard uses accessibility-specific evidence basis rows", () => {
-  const finding = makeFinding("visual_contrast_accessibility_issue", "Visual contrast accessibility issue", {
-    section: "Accessibility",
-    confidence: "good",
-    evidenceDetails: {
-      accessibilityEvidence: {
-        observed: true,
-        affectedNodes: 11,
-        axeRuleId: "color-contrast",
-        impact: "critical",
-        pageCount: 1
-      },
-      pageUrls: ["https://certscore.ai/"]
-    },
-    severity: "critical",
-    shortSummary: "Automated contrast issue retained from axe evidence."
-  });
-  const html = renderToStaticMarkup(
-    createElement(ExecutiveSummaryCard, {
-      accessLimitationNotice: null,
-      allFindings: [finding],
-      beforeConsentCookieCount: 0,
-      domainBenchmark: null,
-      finalHost: "certscore.ai",
-      fingerprintReasons: [],
-      fingerprintLabel: "None detected",
-      fingerprintNarrative: "No strong fingerprinting signal surfaced.",
-      landedOnDifferentHost: false,
-      lastScannedAt: "2026-05-17T20:00:00.000Z",
-      posture: "Watch",
-      preConsentVendorNames: [],
-      requestedHost: "certscore.ai",
-      resolvedVendorNames: [],
-      score: 91,
-      sessionReplayVendorNames: [],
-      thirdPartyRequestCount: 0,
-      thirdPartyDomains: [],
-      topFindings: [finding],
-      topObservedEntities: [],
-      trackerSummary: "No meaningful third-party footprint observed",
-      unresolvedVendorHosts: [],
-      vendorCategoryCounts: {}
-    })
-  );
+for (const Card of [ExecutiveSummaryCard, Scanso2ExecutiveSummaryCard]) {
+  for (const [id, ruleId, count, shortSummary, remediation] of [
+    ["visual_contrast_accessibility_issue", "color-contrast", 13,
+      "Low-contrast text was detected on 1 tested page (13 element failures). Retained examples measured 1.85:1 (required 4.5:1).",
+      "Adjust text and background colors to meet the recorded contrast thresholds."],
+    ["semantic_labeling_accessibility_issue", "button-name", 9,
+      "Automated accessibility checks found failures on 1 tested page (9 element failures). Buttons lacked discernible accessible names.",
+      "Repair accessible names and ARIA structure for the retained examples."],
+    ["text_alternative_accessibility_issue", "image-alt", 5,
+      "Automated accessibility checks found failures on 1 tested page (5 element failures). Images lacked required text alternatives.",
+      "Provide appropriate text alternatives for the retained images."],
+    ["keyboard_navigation_accessibility_issue", "nested-interactive", 6,
+      "Automated accessibility checks found failures on 1 tested page (6 element failures). Interactive controls were nested inside other interactive controls.",
+      "Repair the retained keyboard-navigation failures and verify control operation."],
+    ["zoom_restriction_accessibility_issue", "meta-viewport", 1,
+      "Automated accessibility checks found failures on 1 tested page (1 element failure). The page viewport declared a restriction on zoom or text scaling.",
+      "Remove the retained viewport zoom restriction."],
+    ["target_size_accessibility_issue", "target-size", 2,
+      "Automated accessibility checks found failures on 1 tested page (2 element failures). Pointer targets failed the size or spacing check.",
+      "Increase the size or spacing of the retained pointer targets."],
+  ] as const) {
+    test(`${Card === ExecutiveSummaryCard ? "scans" : "scanso2"} uses the projected ${id} summary and remediation`, () => {
+      const finding = makeFinding(id, "Accessibility issue", {
+        section: "Accessibility",
+        confidence: "good",
+        evidenceDetails: {
+          counts: { representativeAxeExampleCount: 1, accessibilityExampleNodeCount: count },
+          accessibilityEvidence: {
+            observed: true,
+            affectedNodes: count,
+            nodeCountBasis: "rule_node_occurrences",
+            representativeExamplesRetained: 1,
+            representativeNodesRetained: 1,
+            axeRuleId: ruleId,
+            impact: "critical",
+            pageCount: 1,
+            ruleCodes: [ruleId],
+            axeEvidence: [{
+              ruleId, nodeCount: count, pageUrl: "https://certscore.ai/",
+              representativeNodes: [{
+                selectors: ["#retained-accessibility-node"],
+                failureSummary: "Retained accessibility failure",
+                ...(ruleId === "color-contrast" ? {
+                  colorContrast: { contrastRatio: 1.85, requiredContrastRatio: 4.5 }
+                } : {})
+              }]
+            }]
+          },
+          pageUrls: ["https://certscore.ai/"]
+        },
+        severity: "critical",
+        shortSummary,
+        remediation
+      });
+      const html = renderToStaticMarkup(
+        createElement(Card, {
+          accessLimitationNotice: null,
+          allFindings: [finding],
+          beforeConsentCookieCount: 0,
+          domainBenchmark: null,
+          finalHost: "certscore.ai",
+          fingerprintReasons: [],
+          fingerprintLabel: "None detected",
+          fingerprintNarrative: "No strong fingerprinting signal surfaced.",
+          landedOnDifferentHost: false,
+          lastScannedAt: "2026-05-17T20:00:00.000Z",
+          posture: "Watch",
+          preConsentVendorNames: [],
+          requestedHost: "certscore.ai",
+          resolvedVendorNames: [],
+          score: 91,
+          sessionReplayVendorNames: [],
+          thirdPartyRequestCount: 0,
+          thirdPartyDomains: [],
+          topFindings: [finding],
+          topObservedEntities: [],
+          trackerSummary: "No meaningful third-party footprint observed",
+          unresolvedVendorHosts: [],
+          vendorCategoryCounts: {}
+        })
+      );
 
-  assert.doesNotMatch(html, /title="Axe rule retained: Strong"/);
-  assert.doesNotMatch(html, /title="Affected nodes: 11"/);
-  assert.doesNotMatch(html, /title="Page coverage: 1 page"/);
-  assert.doesNotMatch(html, /title="Impact\/severity: Critical"/);
-  assert.doesNotMatch(html, /title="Manual verification: Recommended"/);
-  assert.doesNotMatch(html, /title="Runtime requests:/);
-  assert.doesNotMatch(html, /title="Vendor attribution:/);
-  assert.doesNotMatch(html, /title="Cookie timing:/);
-  assert.doesNotMatch(html, /title="Consent state:/);
-  assert.match(
-    html,
-    /Visual contrast accessibility issue was retained for manual accessibility review, with 11 affected elements across 1 page\. The highest retained impact was critical\./
-  );
-  assert.match(
-    html,
-    /Review the affected elements with keyboard navigation and screen-reader checks\. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow/
-  );
-  assert.doesNotMatch(html, /Retained counts:/);
-  assert.doesNotMatch(html, /representativeAxeExampleCount/);
-});
+      assert.doesNotMatch(html, /title="Axe rule retained: Strong"/);
+      assert.doesNotMatch(html, /title="Affected nodes: 11"/);
+      assert.doesNotMatch(html, /title="Page coverage: 1 page"/);
+      assert.doesNotMatch(html, /title="Impact\/severity: Critical"/);
+      assert.doesNotMatch(html, /title="Manual verification: Recommended"/);
+      assert.doesNotMatch(html, /title="Runtime requests:/);
+      assert.doesNotMatch(html, /title="Vendor attribution:/);
+      assert.doesNotMatch(html, /title="Cookie timing:/);
+      assert.doesNotMatch(html, /title="Consent state:/);
+      assert.ok(html.includes(shortSummary), "the report must preserve the canonical finding summary");
+      assert.ok(html.includes(remediation), "the report must use the finding-specific remediation");
+      assert.doesNotMatch(html, /Retained counts:/);
+      assert.doesNotMatch(html, /with 1 affected element/);
+      const jsonText = html.replaceAll("&quot;", '"');
+      assert.match(jsonText, new RegExp('"affectedNodes": ' + count));
+      assert.match(jsonText, /"nodeCountBasis": "rule_node_occurrences"/);
+      assert.match(jsonText, /"representativeExamplesRetained": 1/);
+      assert.match(jsonText, /"representativeNodesRetained": 1/);
+      assert.match(jsonText, /"axeEvidence":/);
+      assert.match(jsonText, /#retained-accessibility-node/);
+      if (ruleId === "color-contrast") {
+        assert.match(jsonText, /"contrastRatio": 1.85/);
+        assert.match(jsonText, /"requiredContrastRatio": 4.5/);
+      }
+    });
+  }
+}
 
 test("ExecutiveSummaryCard hides evidence detail toggle when retained JSON would be metadata-only", () => {
   const html = renderToStaticMarkup(
@@ -3529,7 +3646,8 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
       allFindings: [
         makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue", {
           section: "Accessibility",
-          severity: "medium"
+          severity: "medium",
+          remediation: "Adjust text and background colors to meet the retained contrast thresholds."
         })
       ],
       beforeConsentCookieCount: 0,
@@ -3558,7 +3676,8 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
       topFindings: [
         makeFinding("wcag_color_contrast_issue", "Visual contrast accessibility issue", {
           section: "Accessibility",
-          severity: "medium"
+          severity: "medium",
+          remediation: "Adjust text and background colors to meet the retained contrast thresholds."
         })
       ],
       topObservedEntities: [],
@@ -3575,7 +3694,7 @@ test("ExecutiveSummaryCard renders accessibility-only self-scan copy without pri
   assert.doesNotMatch(html, /Primary concerns:/);
   assert.match(
     html,
-    /Review the affected elements with keyboard navigation and screen-reader checks\. Confirm that labels, focus order, accessible names, instructions, and error states match the intended user flow/
+    /Adjust text and background colors to meet the retained contrast thresholds/
   );
   assert.doesNotMatch(html, /Next step: review affected text\/background color pairs/);
   assert.doesNotMatch(html, /Automated accessibility signals are the main review area\./);

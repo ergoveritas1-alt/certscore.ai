@@ -3008,9 +3008,9 @@ function getFindingBadgeClasses(finding: UnifiedFindingDisplayPacket, criticalit
 
   switch (criticality) {
     case "critical":
-      return "bg-rose-100 text-rose-900";
+      return "bg-amber-100 text-amber-900";
     case "high":
-      return "bg-rose-100 text-rose-900";
+      return "bg-amber-100 text-amber-900";
     case "medium":
       return "bg-amber-100 text-amber-900";
     default:
@@ -3112,7 +3112,7 @@ function ReviewFindingCard(input: { finding: UnifiedFindingDisplayPacket }) {
           {display.title}
         </p>
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding, display.criticality)}`}>
-          {positiveSurfaceFinding ? "Positive surface" : display.criticality}
+          {positiveSurfaceFinding ? "Positive surface" : `Reference priority: ${display.criticality}`}
         </span>
         <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] ${getPresentationStatusBadgeClasses(input.finding.presentationDecision.status)}`}>
           {input.finding.presentationDecision.status === "surface"
@@ -6409,7 +6409,7 @@ function CategoryFindingSummaryCard(input: { finding: UnifiedFindingDisplayPacke
           <p className="mt-1 line-clamp-2 text-xs text-slate-600">{summary}</p>
         </div>
         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] ${getFindingBadgeClasses(input.finding, display.criticality)}`}>
-          {positiveSurfaceFinding ? "positive surface" : display.criticality}
+          {positiveSurfaceFinding ? "positive surface" : `Reference priority: ${display.criticality}`}
         </span>
       </div>
       <a

@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildSiteAssessmentSummary, FullSiteExecutiveSummary } from "./full-site-executive-summary";
+import { FullSiteExecutiveSummary as LegacyFullSiteExecutiveSummary } from "../scanso2/full-site-executive-summary";
 import { deriveCanonicalOverallScoreExplanationForReport } from "../../server/scans/canonical-overall-score";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -35,47 +36,47 @@ test("page and site score retain the canonical missing-policy deduction without 
   }
 });
 
-test("summary handles zero, one and a few issues without losing title casing", () => {
-  assert.equal(buildSiteAssessmentSummary([], 10), "No priority issues were identified in the assessed evidence.");
-  const one = buildSiteAssessmentSummary([{ title: "GPC response review" }], 1);
-  assert.match(one, /1 priority issue across 1 page\. The finding is “GPC response review”\./);
-  for (const count of [2, 3]) {
-    const summary = buildSiteAssessmentSummary(Array.from({ length: count }, (_, i) => ({ title: `Issue ${i + 1}` })), 10);
-    assert.match(summary, new RegExp(`${count} priority issues across 10 pages\\.`));
-    assert.ok(summary.includes(`“Issue ${count}”`));
-    assert.doesNotMatch(summary, /full list/);
-  }
+test("site highlights preserve the missing-policy finding without changing ranks", () => {
+  const priorities = Object.freeze([
+    ...Array.from({ length: 4 }, (_, index) => Object.freeze({ id: `issue_${index}`, title: `Issue ${index + 1}` })),
+    Object.freeze({ id: "regulatory_gap__gdpr_eprivacy__privacy_notice_availability", title: "Privacy policy not found" }),
+  ]);
+  const summary = buildSiteAssessmentSummary(priorities, 10);
+  assert.match(summary, /Privacy policy not found/);
+  assert.match(summary, /privacy disclosures/);
+  assert.equal(priorities[0]?.id, "issue_0");
 });
 
-test("large issue lists retain the total but preview at most three projected titles", () => {
-  for (const count of [4, 1000]) {
-    const summary = buildSiteAssessmentSummary(Array.from({ length: count }, (_, i) => ({ title: `Issue ${i + 1}` })), 10);
-    assert.ok(summary.includes(`${count.toLocaleString("en-US")} priority issues`));
-    assert.match(summary, /The leading finding is “Issue 1”\. Other issues include “Issue 2” and “Issue 3”\./);
-    assert.doesNotMatch(summary, /Issue 4/);
-    assert.match(summary, /Regulatory Risk Review for the full list/);
-    assert.ok(summary.length < 400);
-  }
-});
-
-test("site summary uses only the leading finding's first retained sentence", () => {
+test("site paragraphs prioritize meaning and action while preserving the lead's qualifications", () => {
   const summary = buildSiteAssessmentSummary([
-    { title: "Classified non-essential pre-consent storage", summary: "5 storage items were observed before consent. Direct write-level timing was captured for 2." },
+    { title: "Classified non-essential pre-consent storage", summary: "5 storage items were observed before consent. Direct write-level timing was captured for 2.", correctionSteps: ["Review the classified storage and its consent requirements."] },
     { title: "Decline consent control", summary: "No observable refusal path was retained." },
   ], 10);
-  assert.match(summary, /5 storage items were observed before consent\./);
-  assert.match(summary, /Other issues include “Decline consent control”\./);
-  assert.doesNotMatch(summary, /Direct write-level timing|No observable refusal path/);
+  assert.match(summary, /5 storage items were observed before consent/);
+  assert.match(summary, /Direct write-level timing was captured for 2/);
+  assert.match(summary, /Review the classified storage and its consent requirements/);
+  assert.match(summary, /Also review “Decline consent control”/);
+  assert.doesNotMatch(summary, /all 10 pages|priority issues across/);
 });
 
-test("long titles cannot overwhelm the summary or cause lower-ranked titles to jump ahead", () => {
-  const oversized = "Long title ".repeat(1000);
-  for (const titles of [[oversized], ["GPC review", oversized, "Later issue"], [oversized, "Later issue"]]) {
-    const summary = buildSiteAssessmentSummary(titles.map(title => ({ title })), null);
-    assert.ok(summary.length < 400);
-    assert.doesNotMatch(summary, /Long title|Later issue|across 0 pages/);
-    assert.match(summary, /Regulatory Risk Review for the full list/);
+test("site overview carries starting-page checklist limits into its first paragraph", () => {
+  const siteScore = { ...score, value: 90, scoredPages: 12, priorityReview: [
+    { id: "regulatory_gap__gdpr_eprivacy__outdated_transfer_framework_reference", title: "Outdated transfer framework referenced", status: "Partial concern" as const, summary: "The current transfer basis was not established by this scan.", correctionSteps: [], pages: [], evidence: [], evidenceJson: {}, rank: 1 },
+  ] };
+  for (const Summary of [FullSiteExecutiveSummary, LegacyFullSiteExecutiveSummary]) {
+    const html = renderToStaticMarkup(<Summary pending={false} scannedPages={12} homepageLimitedCount={1} score={siteScore} />);
+    assert.match(html, /1 checklist item remains technically limited and should be verified manually/);
+    assert.match(html, /focused review of privacy disclosures/);
   }
+});
+
+test("site score and coverage influence significance without inventing a finding", () => {
+  assert.equal(buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "complete" } }), "No priority issues were identified in the assessed evidence.");
+  const limited = buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "limited" } });
+  assert.match(limited, /Coverage/);
+  assert.doesNotMatch(limited, /all clear|compliant|safe/);
+  const poor = buildSiteAssessmentSummary([{ title: "Projected issue", status: "Potential gap" }], 10, { score: 35 });
+  assert.match(poor, /high-priority remediation/);
 });
 
 test("executive score uses the full-site projection while homepage context remains scoped", () => {
@@ -114,7 +115,8 @@ test("one scanned page shows only the single page assessment", () => {
   assert.match(html,/Page score 29 out of 100/);
   assert.match(html,/>Page score</);
   assert.match(html,/Assessment highlights/);
-  assert.match(html,/1 page assessed/);
+  assert.match(html,/1 page scanned/);
+  assert.doesNotMatch(html,/1 page assessed/);
   assert.match(html,/Retained single-page verdict/);
   assert.doesNotMatch(html,/>Site score</);
   assert.doesNotMatch(html,/<h3[^>]*>Site assessment/);

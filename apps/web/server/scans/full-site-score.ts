@@ -28,6 +28,7 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import { FULL_SITE_SCORING_POLICY_VERSION, SCORING_RULE_BY_ID } from "../../lib/scans/scoring-policy";
 import { buildSitePriorityReview, sitePriorityFindingSchema, type SitePriorityFinding } from "../../lib/scans/full-site-priority-review";
 import { buildChecklistConcernTopFindings } from "../../lib/scans/checklist-concern-top-findings";
+import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-priority-group";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
@@ -162,7 +163,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
     if (parsed.success && saved.data.fullSiteScore.sourceHash === (parsed.data.version === VERSION ? key : previousKey)) {
       // Preserve the source-bound historical amount when a scoring weight changes.
-      if (parsed.data.version === PREVIOUS_VERSION) return parsed.data;
+      if (parsed.data.version === PREVIOUS_VERSION) return groupStoredReportScorePriorities(parsed.data);
       const homeScore = deriveCanonicalOverallScoreForReport({
         scanRecord: home,
         checklistRows: canonical.checklistRows,
@@ -171,7 +172,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       // Older cached site results may have a null value solely because the
       // report suppressed scores for incomplete consent inspection. Reassess
       // those results from retained page evidence so site-wide effects remain intact.
-      if (parsed.data.value !== null || homeScore === null) return parsed.data;
+      if (parsed.data.value !== null || homeScore === null) return groupStoredReportScorePriorities(parsed.data);
     }
   }
   const existing = cache.get(key);

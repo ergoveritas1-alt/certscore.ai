@@ -41,4 +41,6 @@ test("FindingCard renders display-only privacy applicability chips from projecte
   assert.match(html, /aria-label="Jurisdiction unverified"/);
   assert.match(html, /CCPA\/CPRA can depend on revenue, California volume, or selling\/sharing activity/);
   assert.match(html, /GDPR\/ePrivacy can depend on EU\/EEA presence, targeting, or monitoring/);
+  assert.match(html, /Reference priority:/);
+  assert.doesNotMatch(html, /border-rose-|bg-rose-/);
 });

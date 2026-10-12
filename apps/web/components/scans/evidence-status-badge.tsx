@@ -11,12 +11,12 @@ const tones: Record<EvidenceBadgeTone, string> = {
 };
 
 /** Shared visual treatment for header and expanded evidence status badges. */
-export function EvidenceStatusBadge({ label, tone, description }: { label: string; tone: EvidenceBadgeTone; description?: string }) {
+export function EvidenceStatusBadge({ label, tone, description, showIcon = true }: { label: string; tone: EvidenceBadgeTone; description?: string; showIcon?: boolean }) {
   const warning = tone === "concern" || tone === "review";
   return <span title={description} aria-label={description} className={`inline-flex h-[22px] shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-1.5 text-[10px] font-semibold leading-4 ${tones[tone]}`}>
-    <svg aria-hidden="true" className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {showIcon ? <svg aria-hidden="true" className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       {warning ? <path d="M12 3 2 21h20ZM12 9v5m0 3v1" /> : tone === "positive" ? <path d="m5 12 4 4L19 6" /> : tone === "neutral" ? <path d="M5 12h14" /> : <><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10v.01" /></>}
-    </svg>
+    </svg> : null}
     {label}
   </span>;
 }
