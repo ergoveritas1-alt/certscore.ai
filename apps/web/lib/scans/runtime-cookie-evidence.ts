@@ -662,6 +662,10 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       row.sourceRequestUrl ?? row.source_request_url ?? row.responseUrl ?? row.response_url
     ),
   });
+  // Historical producers could classify this generic name as Google advertising
+  // without a matching cookie host or direct setter. Do not carry that stale
+  // name-only purpose into canonical WC01 concerns.
+  const unattributedTestCookie = /^test_cookie$/i.test(cookieName) && knowledge.category === "unknown";
   const explicitCategory = getString(row.category ?? row.cookieCategory ?? row.cookie_category);
   const retainedEssentiality = getString(row.essentiality ?? row.cookieEssentiality ?? row.cookie_essentiality);
   const typedRetainedEssentiality = retainedEssentiality === "essential" || retainedEssentiality === "non_essential"
@@ -677,7 +681,9 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     /^_sp_(?:id|ses)\./i.test(cookieName);
   const retainedCategoryIsUnsupportedEssentialClaim =
     /^(?:security|necessary|functional|consent_management|infrastructure|cdn|service)$/i.test(explicitCategory ?? "");
-  const category = knowledge.category !== "unknown"
+  const category = unattributedTestCookie
+    ? "unknown"
+    : knowledge.category !== "unknown"
     ? knowledge.category
     : /^unknown$/i.test(explicitCategory ?? "") && typedRetainedEssentiality === "unknown"
       ? "unknown"
@@ -705,7 +711,9 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const firstObservedAtMs = rawFirstObservedAtMs !== null && rawFirstObservedAtMs >= 0 ? rawFirstObservedAtMs : setAtMs;
   const retainedNonEssential = getBoolean(row.nonEssential ?? row.non_essential);
   const canonicalNonEssentialIdentifier = canonicalNamedCategory;
-  const inferredNonEssential = knowledge.essentiality !== "unknown"
+  const inferredNonEssential = unattributedTestCookie
+    ? false
+    : knowledge.essentiality !== "unknown"
     ? knowledge.essentiality === "non_essential"
     : inferredSecurityOrNecessary
       ? false
@@ -714,7 +722,9 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
     : retainedNonEssential !== null
       ? retainedNonEssential
       : isNonEssentialCookieCategory(category);
-  const essentiality = knowledge.essentiality !== "unknown"
+  const essentiality = unattributedTestCookie
+    ? "unknown" as const
+    : knowledge.essentiality !== "unknown"
     ? knowledge.essentiality
     : typedRetainedEssentiality !== null
       ? typedRetainedEssentiality
@@ -724,7 +734,9 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       ? "non_essential" as const
       : "unknown" as const;
   const nonEssential = essentiality === "non_essential";
-  const essentialitySource = knowledge.essentiality !== "unknown"
+  const essentialitySource = unattributedTestCookie
+    ? "unknown" as const
+    : knowledge.essentiality !== "unknown"
     ? "canonical_registry" as const
     : typedRetainedEssentiality === "essential" || typedRetainedEssentiality === "non_essential"
       ? "retained_explicit_classification" as const
@@ -781,10 +793,14 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       ...getStringArray(row.evidenceRefs ?? row.evidence_refs),
       getString(row.eventId ?? row.event_id ?? row.evidenceId ?? row.evidence_id)
     ]),
-    dataTypes: getStringArray(row.dataTypes ?? row.data_types).length > 0
+    dataTypes: unattributedTestCookie
+      ? []
+      : getStringArray(row.dataTypes ?? row.data_types).length > 0
       ? getStringArray(row.dataTypes ?? row.data_types)
       : knowledge.dataTypes,
-    description: getString(row.description ?? row.cookieDescription ?? row.cookie_description) ?? knowledge.description,
+    description: unattributedTestCookie
+      ? knowledge.description
+      : getString(row.description ?? row.cookieDescription ?? row.cookie_description) ?? knowledge.description,
     domain,
     expiresAt,
     firstObservedAtMs,
@@ -804,8 +820,12 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       row.before_consent === true ||
       getString(row.consentStateAtTime ?? row.consent_state_at_time) === "pre_consent",
     essentiality,
-    essentialityConfidence: getNumber(row.essentialityConfidence ?? row.cookieEssentialityConfidence ?? row.cookie_essentiality_confidence),
-    essentialityReasonCodes: getStringArray(row.essentialityReasonCodes ?? row.cookieEssentialityReasonCodes ?? row.cookie_essentiality_reason_codes),
+    essentialityConfidence: unattributedTestCookie
+      ? null
+      : getNumber(row.essentialityConfidence ?? row.cookieEssentialityConfidence ?? row.cookie_essentiality_confidence),
+    essentialityReasonCodes: unattributedTestCookie
+      ? ["canonical_cookie_context_missing"]
+      : getStringArray(row.essentialityReasonCodes ?? row.cookieEssentialityReasonCodes ?? row.cookie_essentiality_reason_codes),
     essentialitySource,
     explicitPreconsentEvidence: false,
     party: getCookiePartyType(row, domain, hybrid),

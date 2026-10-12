@@ -14,6 +14,7 @@ import {
 import { buildPostAcceptRuntimeProjection } from "./post-accept-runtime-projection";
 import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
 import { buildUnifiedFindingDisplayPackets } from "./unified-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 
 function packet(overrides: Partial<PostAcceptEvidencePacket> = {}) {
   return postAcceptEvidencePacketSchema.parse({
@@ -399,6 +400,9 @@ test("a confirmed contradictory acceptance signal remains a score-neutral review
   ]);
   assert.equal(result.concerns[0]?.regulatoryChecklistEligibility, "review_signal");
   assert.equal(result.concerns[0]?.evidenceBundle.rawEvidence?.scoreEffect, "none");
+  const topFinding = projectExecutiveFindingsFromUnifiedPackets(result.displayPackets).topFindings.find((finding) =>
+    finding.id === "acceptance_signal_contradicts_action");
+  assert.match(topFinding?.shortSummary ?? "", /clicked Accept.*optional purposes as denied/i);
 });
 test("legacy opaque accept confirmation cannot survive canonical projection as a finding", () => {
   const legacy = packet();

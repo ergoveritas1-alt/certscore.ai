@@ -81,7 +81,7 @@ test("selectTopFindings forces cross-domain identifier sharing into top findings
   assert.ok(selected.some((finding) => finding.id === "cross_domain_identifier_sharing_observed"));
 });
 
-test("selectTopFindings forces CPRA CBA opt-out missing into top findings", () => {
+test("selectTopFindings keeps CPRA CBA opt-out review in its report section", () => {
   const selected = selectTopFindings(
     [
       makePrivacyFinding("pre_consent_tracking_detected", 100),
@@ -93,7 +93,7 @@ test("selectTopFindings forces CPRA CBA opt-out missing into top findings", () =
     3
   );
 
-  assert.ok(selected.some((finding) => finding.id === "cpra_cba_opt_out_missing"));
+  assert.equal(selected.some((finding) => finding.id === "cpra_cba_opt_out_missing"), false);
 });
 
 test("selectTopFindings only selects curated executive summary top findings", () => {

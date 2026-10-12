@@ -22,7 +22,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-11-ga4-collect-v1";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-12-test-cookie-context-v1";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -783,6 +783,7 @@ const rules: VendorRule[] = [
     entity: "Magnite, Inc.",
     vendor: "Magnite",
     product: "Magnite / Rubicon",
+    aliases: ["Rubicon Project"],
     purpose: "advertising",
     servicePurpose: "Advertising",
     regulatoryRelevance: ["consent", "advertising", "programmatic_ads"],
@@ -1970,7 +1971,7 @@ const rules: VendorRule[] = [
     confidence: 0.96,
     // pagead2.googlesyndication.com is owned by the canonical AdSense rule above.
     // Keeping it here produces two product identities for the same endpoint.
-    hostPatterns: [/\.doubleclick\.net$/i, /^googleads\.g\.doubleclick\.net$/i],
+    hostPatterns: [/(?:^|\.)doubleclick\.net$/i],
     urlPatterns: [
       /\/pagead\//i,
       /\/gampad\//i,
@@ -1978,6 +1979,7 @@ const rules: VendorRule[] = [
       /\/pcs\/activeview\b/i,
     ],
     cookiePatterns: [/^IDE$/i, /^test_cookie$/i],
+    requireHostPatternForCookieMatch: true,
     storageKeyPatterns: [/^_gcl_/i],
     basisLabel: "doubleclick_ad_endpoint_or_cookie",
   },

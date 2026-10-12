@@ -4,6 +4,7 @@ import {
   buildScanReportUnifiedFindingState,
   buildScanReportUnifiedFindings,
   debugBuildScanReportUnifiedFindingStateForScan,
+  deriveConsentGatingPolicyAnchorFromRows,
   selectOwnerUnifiedFindingsForSection,
   type ScanReportUnifiedFindingState
 } from "./scan-report-unified-findings";
@@ -23,6 +24,175 @@ import {
 import { projectExecutiveFindingsFromUnifiedPackets } from "./executive-findings-projection";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
 import { getHybridDerivedSignalValue, getHybridSignalFallbackEvidence } from "./hybrid-runtime-evidence";
+import { evaluateFindingEvidenceContractForPacket } from "./finding-evidence-contracts";
+
+test("consent-gating policy anchors require an explicit, complete choice condition", () => {
+  const row = (snippet: string) => ({
+    pageType: "privacy_policy", pageUrl: "https://example.com/privacy",
+    policyExtractionStatus: "fetched", policySnippetCount: 1,
+    policyEvidenceSnippets: { cookies: snippet }
+  });
+  assert.equal(
+    deriveConsentGatingPolicyAnchorFromRows([row("We process service-request data under contract, security telemetry for a legitimate-interest purpose, and optional analytics only on the basis of consent.")])?.claimType,
+    "no_optional_analytics_before_consent"
+  );
+  for (const snippet of [
+    "We use optional analytics and advertising cookies only after you set cookie preferences or consent.",
+    "You can manage cookie preferences and choose whether analytics and marketing cookies are enabled."
+  ]) {
+    assert.equal(deriveConsentGatingPolicyAnchorFromRows([row(snippet)])?.claimType, "no_marketing_tracking_before_consent", snippet);
+  }
+  for (const snippet of [
+    "in cases where Processing is based upon our Legitimate Interests or where Processing is for direct marketing purposes, in accordance with Article 21 of the EU GDPR. the right to withdraw consent to our Processing of your Personal Data, in...",
+    "To change your consent settings for our use of cookies and other technologies, please click on Do Not Sell or Share My Personal Information in the footer...",
+    "You can reject marketing cookies in your browser settings.",
+    "We discuss marketing and consent choices in our privacy policy.",
+    "We use analytics for measurement. Optional cookies only after consent."
+  ]) {
+    assert.equal(deriveConsentGatingPolicyAnchorFromRows([row(snippet)]), null);
+  }
+});
+
+test("fresh scan projection requires a complete consent gate before policy conflict eligibility", () => {
+  const project = (snippet: string, category: "advertising" | "analytics" = "advertising", alsoAdvertising = false) => {
+    const analytics = category === "analytics";
+    const vendor = analytics ? "Example Analytics" : "Example Ads";
+    const host = analytics ? "analytics.example.test" : "ads.example.test";
+    const requestUrl = `https://${host}/collect`;
+    const state = debugBuildScanReportUnifiedFindingStateForScan({
+      accessibilityRuleCounts: [],
+      accessibilityRuleExamples: [],
+      events: [],
+      macroEnrichment: null,
+      mergedSignals: [],
+      pageEvidence: [],
+      policyEnrichment: [{
+        pageType: "privacy_policy",
+        pageUrl: "https://example.com/privacy",
+        policyExtractionStatus: "fetched",
+        policySnippetCount: 1,
+        policyEvidenceSnippets: { cookies: snippet }
+      }],
+      policyReviewQueue: [],
+      preconsentViolations: [{
+        collection_endpoint_type: "direct_third_party",
+        confidence: 0.95,
+        detection_source: "hybrid_runtime_signature",
+        evidence_urls: [requestUrl],
+        first_party_or_third_party: "third_party",
+        matched_signature_id: analytics ? "example_analytics_collect" : "example_marketing_collect",
+        script_host: host,
+        vendor_category: category,
+        vendor_name: vendor
+      }, ...(alsoAdvertising ? [{
+        collection_endpoint_type: "direct_third_party",
+        confidence: 0.95,
+        detection_source: "hybrid_runtime_signature",
+        evidence_urls: ["https://ads.example.test/collect"],
+        first_party_or_third_party: "third_party",
+        matched_signature_id: "example_marketing_collect",
+        script_host: "ads.example.test",
+        vendor_category: "advertising",
+        vendor_name: "Example Ads"
+      }] : [])],
+      runtimeArtifacts: {
+        consent_actionable_choice_observed: true,
+        consent_surface_observed: true,
+        consent_timeline: {
+          firstCmpVisibleMs: 1000,
+          firstConsentActionMs: null,
+          firstNonEssentialRequestMs: 250,
+          timelineConfidence: "high"
+        },
+        hybrid_runtime_evidence: {
+          requestPurposeClassificationConfidence: [{
+            category,
+            classificationBasis: "tracker_signature",
+            confidence: 0.95,
+            essentiality: "non_essential",
+            hostname: host,
+            requestUrl,
+            runtimePhase: "pre_consent",
+            tsMs: 250,
+            vendor
+          }, ...(alsoAdvertising ? [{
+            category: "advertising",
+            classificationBasis: "tracker_signature",
+            confidence: 0.95,
+            essentiality: "non_essential",
+            hostname: "ads.example.test",
+            requestUrl: "https://ads.example.test/collect",
+            runtimePhase: "pre_consent",
+            tsMs: 260,
+            vendor: "Example Ads"
+          }] : [])],
+          timelineMarkers: { consentBannerDetectedMs: 1000, firstRequestMs: 250, firstThirdPartyRequestMs: 250 }
+        }
+      },
+      scan: {},
+      signalHits: [],
+      signals: [],
+      snapshot: { final_url: "https://example.com/", registered_domain: "example.com" },
+      trackerVendors: [],
+      validationFindings: []
+    });
+    const rawPacket = buildUnifiedFindingDisplayPackets({
+      reviewFindingCandidates: state.allReviewFindingCandidates ?? [],
+      validationFindings: [],
+      validationFindingLookup: new Map()
+    }).find((item) => item.unifiedFindingId === "consent_gated_tracking_claim_conflict");
+    return {
+      contradiction: state.derivedContext.policyBehaviorContradictions.find((item) => item.title === "Consent-gated tracking claim conflicts with runtime behavior"),
+      concern: state.normalizedConcerns?.find((item) => item.suggestedUnifiedFindingId === "consent_gated_tracking_claim_conflict"),
+      top: projectExecutiveFindingsFromUnifiedPackets(state.globalUnifiedFindings).topFindings
+        .find((item) => item.id === "policy_behavior_contradiction_detected"),
+      contract: rawPacket ? evaluateFindingEvidenceContractForPacket(rawPacket) : null
+    };
+  };
+
+  const explicit = project("Optional marketing only on the basis of consent.");
+  assert.equal(explicit.contract?.status, "pass_strong");
+  assert.equal(explicit.contradiction?.conflictSupportsPromotion, true);
+  assert.equal(explicit.concern?.promotionEligibility, "eligible");
+  assert.ok(explicit.top);
+  assert.match(explicit.top.shortSummary, /Example Ads/);
+  assert.match(explicit.top.shortSummary, /Optional marketing only on the basis of consent/);
+
+  const analyticsOnly = project("Optional analytics only on the basis of consent.", "analytics");
+  assert.equal(analyticsOnly.contradiction?.policyClaimType, "no_optional_analytics_before_consent");
+  assert.equal(analyticsOnly.contradiction?.conflictType, "declared_no_analytics_before_consent_but_analytics_vendor_fired_pre_consent");
+  assert.equal(analyticsOnly.contract?.status, "pass_strong");
+  assert.equal(analyticsOnly.concern?.promotionEligibility, "eligible");
+  assert.match(analyticsOnly.top?.shortSummary ?? "", /Example Analytics/);
+  assert.match(analyticsOnly.top?.shortSummary ?? "", /Optional analytics only on the basis of consent/);
+
+  const mixedRuntime = project("Optional analytics only on the basis of consent.", "analytics", true);
+  assert.equal(mixedRuntime.concern?.promotionEligibility, "eligible");
+  assert.match(mixedRuntime.top?.shortSummary ?? "", /Example Analytics/);
+  assert.doesNotMatch(mixedRuntime.top?.shortSummary ?? "", /Example Ads/);
+
+  for (const [snippet, category] of [
+    ["Optional analytics only on the basis of consent.", "advertising"],
+    ["Optional marketing only on the basis of consent.", "analytics"],
+    ["Our policy discusses analytics and consent choices.", "analytics"],
+    ["We use analytics for measurement. Optional cookies only after consent.", "analytics"],
+    ["Optional analytics only on the basis of consent...", "analytics"]
+  ] as const) {
+    const mismatch = project(snippet, category);
+    assert.notEqual(mismatch.concern?.promotionEligibility, "eligible", `${snippet} / ${category}`);
+    assert.equal(mismatch.top, undefined, `${snippet} / ${category}`);
+  }
+
+  for (const snippet of [
+    "Our policy discusses marketing and consent choices.",
+    "Optional marketing only on the basis of consent..."
+  ]) {
+    const limited = project(snippet);
+    assert.equal(limited.contradiction?.conflictSupportsPromotion, false, snippet);
+    assert.notEqual(limited.concern?.promotionEligibility, "eligible", snippet);
+    assert.equal(limited.top, undefined, snippet);
+  }
+});
 
 function packet(id: string, categoryId: string, relation: "owner" | "mirror" | "overlay") {
   return {
@@ -1428,6 +1598,7 @@ test("WS01 scan-level no-go assessment enters canonical concern pipeline", () =>
   assert.match(packet?.title ?? "", /maintenance/i);
   assert.match(packet?.summary ?? "", /maintenance or unavailable page/i);
   assert.doesNotMatch(`${packet?.title ?? ""} ${packet?.summary ?? ""}`, /maintenance_recharging_page/);
+  assert.doesNotMatch(packet?.summary ?? "", /Classification:|Corroborators:/);
 });
 
 test("placeholder no-go assessment remains a coverage diagnostic and does not create normal tracking findings", () => {
@@ -1511,7 +1682,9 @@ test("normalized no-go concern retains the exact site-not-ready reason and custo
 
   assert.equal(concern?.title, "The site is not ready for scanning");
   assert.match(concern?.description ?? "", /prelaunch/i);
+  assert.doesNotMatch(concern?.description ?? "", /Classification:|Corroborators:|origin_not_reached/);
   assert.equal(concern?.evidenceBundle.rawEvidence?.scanNoGoPrimaryReasonCode, "site_not_ready");
+  assert.deepEqual(concern?.evidenceBundle.rawEvidence?.scanNoGoCorroboratorCodes, ["origin_not_reached"]);
   assert.equal(concern?.evidenceBundle.rawEvidence?.scanNoGoCustomerTitle, "The site is not ready for scanning");
   assert.match(String(concern?.evidenceBundle.rawEvidence?.scanNoGoRecommendedNextAction ?? ""), /public website launches/i);
 });

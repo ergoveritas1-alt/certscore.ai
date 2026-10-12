@@ -264,9 +264,6 @@ export function selectTopFindings(findings: CertScoreFinding[], limit = 5) {
   if (ranked.some((finding) => finding.id === "cross_domain_identifier_sharing_observed")) {
     forcedIds.add("cross_domain_identifier_sharing_observed");
   }
-  if (ranked.some((finding) => finding.id === "cpra_cba_opt_out_missing")) {
-    forcedIds.add("cpra_cba_opt_out_missing");
-  }
   for (const finding of ranked) {
     if (suppressedIds.has(finding.id)) {
       continue;

@@ -65,6 +65,17 @@ test("preserves scanned page URL and tsMs while excluding library-only loads", (
   assert.equal(requests[0]?.firstSeenMs, 4321);
 });
 
+test("sanitizes annotated request URLs while preserving bounded parameter names separately", () => {
+  const observed = row({ hostname: "api.segment.io", vendorName: "Segment", vendorCategory: "analytics",
+    url: "https://api.segment.io/v1/p?email=secret@example.test [query_redacted=true query_keys=email,client_id]" });
+  const requests = buildPromotionGradePreconsentRequests({ rows: [observed] });
+  assert.equal(requests[0]?.requestUrl, "https://api.segment.io/v1/p?redacted=1");
+  assert.deepEqual(requests[0]?.queryKeysSample, ["email", "client_id"]);
+  assert.doesNotMatch(JSON.stringify(requests), /secret@example|%20%5B|query_redacted/);
+  assert.deepEqual(buildPromotionGradePreconsentRequests({ rows: [{ ...observed, collectionEndpointObserved: false }] }), [],
+    "parameter names alone do not establish the required collection evidence");
+});
+
 test("Amazon CDN timing cannot become Amazon Ads tracking timing", () => {
   const requests = buildPromotionGradePreconsentRequests({
     scannedPageUrl: "https://www.amazon.de/",

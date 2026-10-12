@@ -849,7 +849,7 @@ test("policy behavior conflict remains blocked when only a hashed artifact shell
   assert.ok(decision?.negativeEvidenceFlags.includes("runtime_tracking_review_incomplete"));
 });
 
-test("consent-gated tracking conflict contract accepts complete policy, runtime URL, and bridge evidence", () => {
+test("analytics-only consent clause cannot support an only-necessary-cookies bridge", () => {
   const decision = evaluateConsentGatedTrackingConflictContract({
     contradictionEvidence: {
       claim: "Optional analytics cookies only run after consent.",
@@ -906,12 +906,8 @@ test("consent-gated tracking conflict contract accepts complete policy, runtime 
     }
   });
 
-  assert.deepEqual(decision, {
-    allowedNarrativeTier: "strong",
-    promotionEligibility: "eligible",
-    externalSurfacingEligibility: "eligible",
-    negativeEvidenceFlags: []
-  });
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.ok(decision?.negativeEvidenceFlags.includes("producer_claim_failed_revalidation"));
 });
 
 test("consent-gated tracking conflict contract accepts cookie-choice policy anchors", () => {

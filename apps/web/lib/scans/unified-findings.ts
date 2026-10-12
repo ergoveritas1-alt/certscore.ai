@@ -1598,6 +1598,23 @@ function isDistinctExplicitPolicySnippet(
   return !normalizedClaim || normalizedCandidate !== normalizedClaim;
 }
 
+function hasVerifiedPolicyAnchorSnippet(
+  candidate: string | null | undefined,
+  contradictionEvidence: ReturnType<typeof getContradictionEvidenceBundle>
+) {
+  const anchor = contradictionEvidence?.policyAnchor;
+  return Boolean(
+    candidate &&
+      anchor?.sourceUrl &&
+      anchor.extractionStatus === "fetched" &&
+      typeof anchor.confidence === "number" &&
+      anchor.confidence >= 0.55 &&
+      anchor.snippet &&
+      !/(?:\.\.\.|…)$/.test(anchor.snippet) &&
+      normalizePolicySnippet(candidate) === normalizePolicySnippet(anchor.snippet)
+  );
+}
+
 function getExplicitPolicySnippetCandidate(record: Record<string, unknown> | null | undefined) {
   const normalizedRecord = normalizeUnifiedFindingEvidenceRecord(record);
   return (
@@ -1624,6 +1641,13 @@ function getBestExplicitPolicySnippet(
   const bundleCandidate = contradictionEvidence?.explicitPolicySnippet ?? null;
   if (isDistinctExplicitPolicySnippet(bundleCandidate, claim)) {
     return bundleCandidate;
+  }
+
+  // A normalized claim may quote the retained policy passage verbatim. Keep
+  // that passage when its fetched policy anchor independently binds it to a
+  // source; equality with the claim does not make it synthetic.
+  if (hasVerifiedPolicyAnchorSnippet(contradictionEvidence?.policyAnchor.snippet, contradictionEvidence)) {
+    return contradictionEvidence?.policyAnchor.snippet ?? null;
   }
 
   return null;
@@ -2133,7 +2157,8 @@ function extractEvidenceFromFallback(fallbackEvidence?: Record<string, unknown> 
       CONTRADICTION_FINDING_IDS.has(normalizedFallbackEvidence.familyPacketFindingId));
   const hasExplicitPolicySnippet =
     isContradictionEvidenceContext &&
-    isDistinctExplicitPolicySnippet(explicitPolicySnippetCandidate, contradictionEvidence?.claim);
+    (isDistinctExplicitPolicySnippet(explicitPolicySnippetCandidate, contradictionEvidence?.claim) ||
+      hasVerifiedPolicyAnchorSnippet(explicitPolicySnippetCandidate, contradictionEvidence));
   const hasExplicitRuntimeArtifact =
     isContradictionEvidenceContext &&
     ((Array.isArray(normalizedFallbackEvidence.runtimeEvidenceArtifacts) &&
@@ -3440,7 +3465,8 @@ function extractEvidenceFromValidationFinding(finding?: ScanValidationFinding | 
     (typeof evidence.unifiedFindingId === "string" && CONTRADICTION_FINDING_IDS.has(evidence.unifiedFindingId));
   const hasExplicitPolicySnippet =
     isContradictionEvidenceContext &&
-    isDistinctExplicitPolicySnippet(explicitPolicySnippetCandidate, contradictionEvidence?.claim);
+    (isDistinctExplicitPolicySnippet(explicitPolicySnippetCandidate, contradictionEvidence?.claim) ||
+      hasVerifiedPolicyAnchorSnippet(explicitPolicySnippetCandidate, contradictionEvidence));
   const hasExplicitRuntimeArtifact =
     isContradictionEvidenceContext &&
     ((Array.isArray(evidence.runtimeEvidenceArtifacts) &&

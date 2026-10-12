@@ -161,6 +161,7 @@ export type PolicyBehaviorConflictClaimType =
   | "privacy_choice_or_opt_out_disclosure"
   | "no_sale_share_without_opt_out_or_consent"
   | "no_marketing_tracking_before_consent"
+  | "no_optional_analytics_before_consent"
   | "only_necessary_cookies_before_choice"
   | "tracking_disabled_after_reject"
   | "no_third_party_advertising_tracking"
@@ -179,6 +180,7 @@ export type PolicyBehaviorConflictType =
   | "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice"
   | "declared_opt_out_honored_but_tracking_persisted_under_opt_out"
   | "declared_no_marketing_before_consent_but_marketing_vendor_fired_pre_consent"
+  | "declared_no_analytics_before_consent_but_analytics_vendor_fired_pre_consent"
   | "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired"
   | "declared_no_sale_share_but_sale_share_like_behavior_observed"
   | "declared_tracking_disabled_after_reject_but_tracking_persisted_after_reject"
@@ -338,6 +340,9 @@ const POLICY_BEHAVIOR_CONFLICT_MAP: Record<
   no_marketing_tracking_before_consent: {
     marketing_vendor_fired_pre_consent: "declared_no_marketing_before_consent_but_marketing_vendor_fired_pre_consent"
   },
+  no_optional_analytics_before_consent: {
+    analytics_vendor_fired_pre_consent: "declared_no_analytics_before_consent_but_analytics_vendor_fired_pre_consent"
+  },
   only_necessary_cookies_before_choice: {
     marketing_vendor_fired_pre_consent: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
     analytics_vendor_fired_pre_consent: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired",
@@ -364,6 +369,7 @@ function normalizeClaimType(value: string | null): PolicyBehaviorConflictClaimTy
     case "privacy_choice_or_opt_out_disclosure":
     case "no_sale_share_without_opt_out_or_consent":
     case "no_marketing_tracking_before_consent":
+    case "no_optional_analytics_before_consent":
     case "only_necessary_cookies_before_choice":
     case "tracking_disabled_after_reject":
     case "no_third_party_advertising_tracking":
@@ -394,6 +400,7 @@ function normalizeConflictType(value: string | null): PolicyBehaviorConflictType
     case "declared_cookie_choices_available_but_non_essential_tracking_fired_pre_choice":
     case "declared_opt_out_honored_but_tracking_persisted_under_opt_out":
     case "declared_no_marketing_before_consent_but_marketing_vendor_fired_pre_consent":
+    case "declared_no_analytics_before_consent_but_analytics_vendor_fired_pre_consent":
     case "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired":
     case "declared_no_sale_share_but_sale_share_like_behavior_observed":
     case "declared_tracking_disabled_after_reject_but_tracking_persisted_after_reject":
@@ -452,6 +459,9 @@ export function isSpecificPolicyBehaviorPolicySnippet(
   if (snippet.length < 32) {
     return false;
   }
+  if (/(?:\.\.\.|…)\s*$/.test(snippet)) {
+    return false;
+  }
   if (/insufficient policy content fetched|semantic review|error page|page not found/i.test(snippet)) {
     return false;
   }
@@ -482,8 +492,10 @@ export function isSpecificPolicyBehaviorPolicySnippet(
   switch (claimType) {
     case "cookie_preferences_available":
     case "privacy_choice_or_opt_out_disclosure":
-    case "only_necessary_cookies_before_choice":
       return /\b(?:consent|choice|choose|settings?|preferences?|control|manage|reject|decline|opt[- ]?in|opt[- ]?out|disable|strictly necessary|essential cookies?)\b/i.test(lower);
+    case "only_necessary_cookies_before_choice":
+      return /\b(?:necessary|required|essential)\s+cookies?\b|\b(?:only|solely|strictly)\s+(?:necessary|required|essential)\b/i.test(lower) &&
+        /\b(?:before|until|without|unless)\b.{0,75}\b(?:consent|choice|choose|preferences?|permission|opt[- ]?in)\b/i.test(lower);
     case "targeted_advertising_disclosure":
       return /\b(?:targeted|personalized|interest[- ]?based|cross[- ]context behavioral)\b/i.test(lower) && /\b(?:advertis(?:e|ing)|ads?|marketing|tracking|cookies?)\b/i.test(lower);
     case "third_party_advertising_disclosure":
@@ -492,6 +504,8 @@ export function isSpecificPolicyBehaviorPolicySnippet(
       return /\b(?:cookies?|pixels?|tags?|web beacons?|sdk|tracking technolog(?:y|ies)|similar technolog(?:y|ies))\b/i.test(lower) && /\b(?:advertis(?:e|ing)|analytics|measurement|tracking|personaliz|target)\b/i.test(lower);
     case "no_marketing_tracking_before_consent":
       return /\b(?:marketing|advertis(?:e|ing)|tracking)\b/i.test(lower) && /\b(?:consent|permission|opt[- ]?in|before|until|without)\b/i.test(lower);
+    case "no_optional_analytics_before_consent":
+      return /\b(?:analytics|measurement)\b[^.!?]{0,65}\b(?:only|solely|exclusively)\s+(?:after|with|on\s+(?:the\s+)?basis\s+of)\s+[^.!?]{0,55}\b(?:consent|choice|permission|opt[- ]?in)\b|\b(?:analytics|measurement)\b[^.!?]{0,55}\b(?:requires?|subject to)\s+(?:prior\s+|affirmative\s+|your\s+)?consent\b|\b(?:choose|decide)\s+whether[^.!?]{0,90}\b(?:analytics|measurement)\b[^.!?]{0,45}\b(?:enabled|used|activated)\b|\b(?:analytics|measurement)\b[^.!?]{0,55}consent[- ]?based\b/i.test(lower);
     case "tracking_disabled_after_reject":
       return /\b(?:reject|decline|refuse|opt[- ]?out)\b/i.test(lower) && /\b(?:disable(?:d)?|stop|block|turn off|necessary cookies?)\b/i.test(lower);
     case "no_sale_share_without_opt_out_or_consent":
@@ -540,6 +554,12 @@ function inferClaimType(source: Record<string, unknown> | null | undefined): Pol
   }
   if (/only necessary|strictly necessary|essential cookies? only/.test(haystack) && /before consent|before choice|until consent/.test(haystack)) {
     return "only_necessary_cookies_before_choice";
+  }
+  if (
+    !/\b(?:marketing|advertis(?:e|ing)|tracking|targeting)\b/.test(haystack) &&
+    isSpecificPolicyBehaviorPolicySnippet(haystack, "no_optional_analytics_before_consent")
+  ) {
+    return "no_optional_analytics_before_consent";
   }
   if (/(?:non-?essential|optional|analytics|advertising|marketing).{0,80}(?:consent|choice|permission|opt-?in)|(?:consent|choice|permission|opt-?in).{0,80}(?:non-?essential|optional|analytics|advertising|marketing)|(?:reject|decline|disable).{0,80}(?:analytics|advertising|marketing|non-?essential cookies?)/.test(haystack)) {
     return "only_necessary_cookies_before_choice";

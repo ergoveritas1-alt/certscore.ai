@@ -18,7 +18,7 @@ export type PreConsentTrackingEvidenceDetails = {
   scanContext: {
     pageUrl: string | null;
     scanMode: "initial_page_load";
-    interactionBeforeFinding: boolean;
+    interactionBeforeFinding?: boolean;
   };
   consentState: {
     cmpDetected: boolean | null;
@@ -135,6 +135,7 @@ export type PreConsentTrackingEvidenceDetails = {
     interpretation: string;
     identifierLikeRequestCount: number;
     deviceDataLikeRequestCount: number;
+    requestCountBasis?: string;
   };
   policyEvidence:
     | {
@@ -306,7 +307,7 @@ export type CertScoreFinding = CertScoreFindingDefinition & {
 export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinition> = {
   pre_consent_tracking_detected: {
     id: "pre_consent_tracking_detected",
-    label: "Non-essential analytics initiated before a recorded affirmative choice",
+    label: "Non-essential tracking observed before a recorded affirmative choice",
     section: "Privacy & Tracking",
     defaultSurfacePriority: 100,
     whyItMatters: "Analytics-classified or other promotion-grade non-essential activity was observed before any recorded affirmative consent action, which is a high-priority implementation review signal.",
@@ -381,7 +382,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     label: "Adtech identity sync-like request observed",
     section: "Vendors & Requests",
     defaultSurfacePriority: 94,
-    whyItMatters: "Adtech sync-like and identity-like requests may transmit advertising identifiers across multiple third parties during the initial page load.",
+    whyItMatters: "An adtech identity-sync endpoint pattern warrants review of the request and consent timing; the pattern alone does not establish identifier transmission.",
     remediation: "Inventory the sync-like endpoints, suppress non-essential RTB or identity-sync calls until consent permits them, and verify the request path after deployment."
   },
   cpra_cba_opt_out_missing: {
@@ -788,7 +789,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters:
       "Missing text alternatives can prevent non-text content from being understood by screen reader users and other assistive technologies.",
     remediation:
-      "Add appropriate alt text, captions, or equivalent alternatives for the retained media and object examples, then rerun the accessibility scan."
+      'For flagged images, add concise alt text describing their purpose; use alt="" for purely decorative images. Provide captions or equivalent text alternatives for other flagged media, then rerun the affected checks.'
   },
   visual_contrast_accessibility_issue: {
     id: "visual_contrast_accessibility_issue",
@@ -798,7 +799,7 @@ export const CERT_SCORE_FINDING_REGISTRY: Record<string, CertScoreFindingDefinit
     whyItMatters:
       "Insufficient contrast or links distinguished only by color can make content difficult to perceive, especially for users with low vision or color-vision differences.",
     remediation:
-      "Review each retained rule's WCAG guidance: adjust foreground, background, and state contrast, and add a non-color distinction for links where required."
+      "Adjust the flagged text and background colors to meet the required contrast ratio shown in the evidence. For links flagged as distinguishable only by color, add a persistent non-color cue such as an underline. Rerun the affected checks after updating the styles."
   },
   zoom_restriction_accessibility_issue: {
     id: "zoom_restriction_accessibility_issue", label: "Author-declared zoom restriction", section: "Accessibility", defaultSurfacePriority: 40,

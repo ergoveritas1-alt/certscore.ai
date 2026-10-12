@@ -986,6 +986,29 @@ test("keeps DoubleClick and Google Analytics cookie names as representative stor
   assert.deepEqual(analytics?.cookieNames, ["_ga", "_gid", "_gat"]);
 });
 
+test("unattributed test_cookie does not inherit stale Google advertising classification", () => {
+  const inventory = buildRuntimeCookieInventory({
+    hybridRuntimeEvidence: {
+      navigationSummary: { requestedUrl: "https://www.atspace.com/" },
+      cookieWriteObservations: [{
+        beforeConsent: true, category: "advertising", cookieName: "test_cookie",
+        domain: "secure.runhosting.com", essentiality: "non_essential",
+        essentialityReasonCodes: ["canonical_cookie_kb:advertising"],
+        initiatorVendor: "Google Ads / DoubleClick",
+        firstObservedAtMs: 3091, setAtMs: 3091, setMethod: "set_cookie_header",
+        timingEvidence: "before_consent_cookie_write",
+      }]
+    }
+  });
+  const row = inventory.rows.find((candidate) => candidate.cookieName === "test_cookie");
+  assert.equal(row?.category, "unknown");
+  assert.equal(row?.essentiality, "unknown");
+  assert.deepEqual(row?.essentialityReasonCodes, ["canonical_cookie_context_missing"]);
+  assert.equal(row?.initiatorVendor, null);
+  assert.equal(inventory.beforeConsentRows.length, 1, "retain observed timing as review evidence");
+  assert.equal(buildRuntimeCookiePriorityGroups(inventory.rows).some((group) => group.purpose === "Advertising"), false);
+});
+
 test("filters consent security and infrastructure cookies from tracking evidence", () => {
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonConsent", ".webmd.com"), true);
   assert.equal(isFunctionalCookieExcludedFromTrackingEvidence("OptanonAlertBoxClosed", ".webmd.com"), true);

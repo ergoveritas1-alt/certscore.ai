@@ -1,6 +1,6 @@
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { readAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
-import { getAccessibilityFindingIdForRuleCode } from "./accessibility-evidence";
+import { describeAccessibilityEvidence, getAccessibilityFindingIdForRuleCode } from "./accessibility-evidence";
 import { formDestinationProjectionSchema, formDestinationCopy, qualifiesFormDestinationReview, FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
 import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL } from "@certscore/contracts";
 import { projectConsentControlBehavior } from "./consent-control-behavior";
@@ -29,7 +29,6 @@ import {
   getReportUnifiedFindingForSignal,
   getReportUnifiedFindingForValidationRule,
   getKnownCmpVendorName,
-  getScanNoGoLimitationKindLabel,
   resolveScanNoGoPresentation,
   type ReportSignalSource
 } from "@website-signal-risk-scanner/shared";
@@ -3213,11 +3212,7 @@ function buildScanNoGoAssessmentConcerns(
     reasonCodes.find((code) => code !== "scan_no_go_corroborated") ??
     getRuntimeString(visualAccessReview, ["reasonCode", "reason_code"]);
   const presentation = resolveScanNoGoPresentation(primaryReasonCode, visualPageState);
-  const description = [
-    presentation.reportSummary,
-    `Classification: ${getScanNoGoLimitationKindLabel(presentation.limitationKind)}.`,
-    corroboratorCodes.length > 0 ? `Corroborators: ${corroboratorCodes.join(", ")}.` : null
-  ].filter((part): part is string => Boolean(part)).join(" ");
+  const description = presentation.reportSummary;
 
   return [
     buildConcernFromSharedInput({
@@ -4473,7 +4468,7 @@ function buildAccessibilityAuditConcerns(runtimeArtifacts: Record<string, unknow
   }
   return [...grouped].map(([id, examples]) => {
     const title = getReportUnifiedFinding(id)?.label ?? "Automated accessibility issue";
-    const description = `${examples.map(example => example.ruleCode).join(", ")} failed on the tested page.`;
+    const description = describeAccessibilityEvidence(id, examples) ?? "Automated accessibility checks found failures on the tested page.";
     return buildConcernFromSharedInput({
       categoryId: "accessibility", originType: "runtime_artifact", originKey: `accessibility.audit.${id}`,
       title, description, observedValue: description, severity: examples.some(example => example.severity === "high") ? "high" : "medium",

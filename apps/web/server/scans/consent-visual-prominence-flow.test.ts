@@ -7,6 +7,7 @@ import { deriveMaterializedConsentControlAssessment } from "./consent-control-as
 import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildUnifiedFindingPackets, buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
+import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 
 async function source(style: Parameters<typeof consentVisualFixture>[0] = "filled") {
   const fixture = await consentVisualFixture(style);
@@ -52,6 +53,10 @@ test("typed visual evidence -> assessment -> persistence -> concern policy -> un
     const finding = projection.display.find(f => f.unifiedFindingId === "accept_more_prominent_than_reject");
     assert.equal(finding?.presentationDecision.status === "surface", expected);
     if (finding) assert.equal(finding.confidenceBand, "moderate");
+    const executiveProjection = projectExecutiveFindingsFromUnifiedPackets(projection.display);
+    const executive = executiveProjection.topFindings.find(row => row.id === "asymmetric_consent_ui");
+    assert.equal(Boolean(executive), expected, `unexpected executive visual prominence for ${style}`);
+    if (executive) assert.match(executive.shortSummary, /stronger fill contrast or surrounding emphasis on Accept than Reject/i);
     assert.equal(projection.packets.some(p => p.unifiedFindingId === "reject_button_missing"), false);
   }
 });

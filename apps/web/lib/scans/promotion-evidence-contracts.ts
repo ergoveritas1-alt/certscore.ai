@@ -2775,7 +2775,8 @@ export function evaluateConsentGatedTrackingConflictContract(rawEvidence: Record
   const consentGatingClaim =
     policyAnchor.claimType === "cookie_preferences_available" ||
     policyAnchor.claimType === "only_necessary_cookies_before_choice" ||
-    policyAnchor.claimType === "no_marketing_tracking_before_consent";
+    policyAnchor.claimType === "no_marketing_tracking_before_consent" ||
+    policyAnchor.claimType === "no_optional_analytics_before_consent";
   const preconsentRuntime =
     runtimeAnchor.phase === "pre_consent" &&
     (runtimeAnchor.observationType === "marketing_vendor_fired_pre_consent" ||

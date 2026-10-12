@@ -1,5 +1,5 @@
 import type { CertScoreFinding, CertScoreFindingDirectness } from "./finding-registry";
-import { classifyConsentControlLabel } from "@certscore/contracts";
+import { classifyConsentControlLabel, hasTypedConsentVisualProminence } from "@certscore/contracts";
 
 export type RuntimeTopFindingEligibility =
   | "top_candidate"
@@ -861,12 +861,14 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       const preferenceLayers = getNumber(runtimePath, "observedPreferenceLayerCount");
       const visualHierarchyScore = getNumber(runtimePath, "visualHierarchyScore");
       const hasChoicePathEvidence = hasConsentChoicePathEvidence(runtimePath);
+      const hasVerifiedVisualProminence = finding.id === "asymmetric_consent_ui" &&
+        hasTypedConsentVisualProminence(details.consentUiEvidence?.visualProminence);
 
       if (overlayClassifier && /paywall|bot_challenge|age_gate|login_wall/.test(overlayClassifier)) {
         forceEligibility = "suppress";
         demotionReasons.push(`unrelated_overlay_${overlayClassifier}`);
       }
-      if (!hasChoicePathEvidence && forceEligibility !== "suppress") {
+      if (!hasChoicePathEvidence && !hasVerifiedVisualProminence && forceEligibility !== "suppress") {
         forceEligibility = "audit_only";
         pushUnique(missingCorroborators, "consent_path_depth_or_choice_structure_evidence");
         pushUnique(demotionReasons, "overlay_only_without_consent_path_evidence");
@@ -879,6 +881,10 @@ export function evaluateTopFindingEligibility(finding: CertScoreFinding): TopFin
       }
       if ((visualHierarchyScore ?? 0) > 0) {
         pushUnique(matchedCriteria, "accept_reject_visual_hierarchy_imbalance");
+      }
+      if (hasVerifiedVisualProminence && forceEligibility !== "suppress") {
+        forceEligibility = "top_candidate";
+        pushUnique(matchedCriteria, "verified_accept_reject_visual_comparison");
       }
       if (
         finding.id === "asymmetric_consent_ui" &&

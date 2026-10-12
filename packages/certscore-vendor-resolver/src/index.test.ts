@@ -669,6 +669,10 @@ test("rejects Wave 11 lookalikes and unrelated paths on the same service hosts",
 });
 
 test("resolves canonical product labels and apex vendor host labels conservatively", () => {
+  const legacyRubicon = resolveCanonicalVendorLabel("Rubicon Project");
+  const currentRubicon = resolveCanonicalVendorLabel("Magnite / Rubicon");
+  assert.deepEqual(legacyRubicon, currentRubicon);
+  assert.equal(legacyRubicon?.product, "Magnite / Rubicon");
   assert.deepEqual(
     [
       resolveCanonicalVendorLabel("Adobe Audience Manager / Experience Cloud"),

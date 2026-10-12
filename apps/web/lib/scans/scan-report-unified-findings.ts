@@ -31,6 +31,7 @@ import {
   evaluatePolicyRuntimeAlignmentReviewEvidence,
   getAllowedConflictType,
   getContradictionEvidenceBundle,
+  isSpecificPolicyBehaviorPolicySnippet,
   type PolicyBehaviorConflictClaimType,
   type PolicyBehaviorConflictType,
   type PolicyBehaviorRuntimeObservationType
@@ -427,32 +428,37 @@ function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
 
   for (const snippet of snippets) {
     const lowerSnippet = snippet.toLowerCase();
+    // A clipped excerpt or mere co-occurrence of tracking and consent words
+    // cannot support a policy/runtime contradiction.
+    if (/(?:\.\.\.|…)$/.test(snippet)) {
+      continue;
+    }
     const mentionsNonEssential =
-      /optional|non[-\s]?essential|analytics|advertis(?:e|ing)|marketing|tracking|targeting|performance/.test(lowerSnippet);
-    const mentionsConsent = /consent|choice|permission|opt[-\s]?in|accept|agree/.test(lowerSnippet);
+      /optional|non[-\s]?essential|analytics|measurement|advertis(?:e|ing)|marketing|tracking|targeting|performance/.test(lowerSnippet);
+    const mentionsConsent = /consent|choice|choose|preferences|permission|opt[-\s]?in|accept|agree/.test(lowerSnippet);
     const necessaryOnly =
       /(only|solely|strictly)\s+(necessary|required|essential)/.test(lowerSnippet) ||
       /necessary cookies? (?:only|until|before)/.test(lowerSnippet);
-    const marketingBeforeConsent =
-      /(advertis(?:e|ing)|marketing|tracking|targeting|analytics).{0,80}(consent|choice|permission|opt[-\s]?in)/.test(lowerSnippet) ||
-      /(consent|choice|permission|opt[-\s]?in).{0,80}(advertis(?:e|ing)|marketing|tracking|targeting|analytics)/.test(lowerSnippet);
-    const rejectDisablesTracking =
-      /(reject|decline|disable|turn off).{0,80}(analytics|advertis(?:e|ing)|marketing|tracking|targeting|non[-\s]?essential)/.test(lowerSnippet);
-    const vagueConsentReference =
-      /(?:we value your privacy|may use cookies|use cookies to improve|cookies and similar technologies)/.test(lowerSnippet) &&
-      !necessaryOnly &&
-      !marketingBeforeConsent &&
-      !rejectDisablesTracking;
-
-    if (vagueConsentReference) {
-      continue;
-    }
-
+    const necessaryUntilChoice =
+      necessaryOnly && /(?:until|before|without|unless).{0,55}(?:consent|choice|permission|opt[-\s]?in)/.test(lowerSnippet);
+    const optionalConsentGate =
+      /\b(?:only|solely|exclusively)\s+(?:after|with|on\s+(?:the\s+)?basis\s+of)\s+.{0,55}(?:consent|choice|permission|opt[-\s]?in)/.test(lowerSnippet) ||
+      /\b(?:analytics|measurement|advertis(?:e|ing)|marketing|tracking|non[-\s]?essential).{0,55}\b(?:requires?|subject to)\s+(?:prior\s+|affirmative\s+|your\s+)?consent/.test(lowerSnippet) ||
+      /\b(?:choose|decide)\s+whether.{0,90}(?:analytics|measurement|advertis(?:e|ing)|marketing|tracking|optional).{0,45}(?:enabled|used|activated)/.test(lowerSnippet) ||
+      /\b(?:analytics|measurement|advertis(?:e|ing)|marketing|tracking|optional).{0,55}consent[-\s]?based/.test(lowerSnippet);
     let claimType: PolicyBehaviorConflictClaimType | null = null;
-    if (necessaryOnly && mentionsConsent) {
+    if (necessaryUntilChoice && mentionsConsent) {
       claimType = "only_necessary_cookies_before_choice";
-    } else if ((mentionsNonEssential && mentionsConsent) || marketingBeforeConsent || rejectDisablesTracking) {
-      claimType = "no_marketing_tracking_before_consent";
+    } else if (mentionsNonEssential && mentionsConsent && optionalConsentGate) {
+      const analyticsOnly = /\b(?:analytics|measurement)\b/.test(lowerSnippet) &&
+        !/\b(?:marketing|advertis(?:e|ing)|tracking|targeting)\b/.test(lowerSnippet);
+      if (analyticsOnly) {
+        claimType = isSpecificPolicyBehaviorPolicySnippet(snippet, "no_optional_analytics_before_consent")
+          ? "no_optional_analytics_before_consent"
+          : null;
+      } else {
+        claimType = "no_marketing_tracking_before_consent";
+      }
     }
 
     if (!claimType) {
@@ -472,7 +478,7 @@ function deriveConsentGatingPolicyAnchor(row: Record<string, unknown> | null) {
   return null;
 }
 
-function deriveConsentGatingPolicyAnchorFromRows(rows: Array<Record<string, unknown>>) {
+export function deriveConsentGatingPolicyAnchorFromRows(rows: Array<Record<string, unknown>>) {
   const privacyPolicyAnchor = rows
     .filter((row) => getPolicyPageType(row) === "privacy_policy" || getPolicyPageType(row) === "cookie_policy")
     .map((row) => deriveConsentGatingPolicyAnchor(row))
@@ -502,7 +508,7 @@ function derivePreconsentObservationType(
     return "analytics_vendor_fired_pre_consent";
   }
 
-  return preconsentRows.length > 0 ? "analytics_vendor_fired_pre_consent" : null;
+  return null;
 }
 
 function derivePolicyBehaviorContradictions(input: {
@@ -555,24 +561,31 @@ function derivePolicyBehaviorContradictions(input: {
   const consentGatingAnchor = deriveConsentGatingPolicyAnchorFromRows(input.policyEnrichments);
 
   if (preconsentVendors.length > 0) {
-    const runtimeObservationType = derivePreconsentObservationType(input.preconsentViolations);
+    const conflictRows = consentGatingAnchor?.claimType === "no_optional_analytics_before_consent"
+      ? input.preconsentViolations.filter((row) => derivePreconsentObservationType([row]) === "analytics_vendor_fired_pre_consent")
+      : input.preconsentViolations;
+    const conflictVendors = conflictRows.map((row) => row.vendorName);
+    const conflictEvidence = [...new Set(conflictRows.flatMap((row) => row.evidenceUrls))];
+    const runtimeObservationType = derivePreconsentObservationType(conflictRows);
     const conflictType = consentGatingAnchor
       ? getAllowedConflictType(consentGatingAnchor.claimType, runtimeObservationType)
       : null;
-    const hasConcreteRuntimeRequest = preconsentEvidence.some((url) => /^https?:\/\//i.test(url));
-    const preconsentScriptHosts = uniqueStrings(input.preconsentViolations.map((row) => row.scriptHost));
+    const hasConcreteRuntimeRequest = conflictEvidence.some((url) => /^https?:\/\//i.test(url));
+    const preconsentScriptHosts = uniqueStrings(conflictRows.map((row) => row.scriptHost));
     const conflictSupportsPromotion = Boolean(
       consentGatingAnchor?.sourceUrl &&
         consentGatingAnchor.snippet &&
         runtimeObservationType &&
         conflictType &&
         hasConcreteRuntimeRequest &&
-        preconsentVendors.length > 0
+        conflictVendors.length > 0
     );
     const policyClaim =
       consentGatingAnchor?.normalizedClaim ??
       "The policy and consent surface imply tracking should begin only after a valid consent interaction.";
-    const runtimeSummary = `Trackers fired on first render before consent interaction: ${preconsentVendors.join(", ")}.`;
+    const runtimeSummary = conflictVendors.length > 0
+      ? `Trackers fired on first render before consent interaction: ${conflictVendors.join(", ")}.`
+      : "No classified runtime request matched the retained policy claim.";
 
     contradictions.push({
       title: "Consent-gated tracking claim conflicts with runtime behavior",
@@ -580,20 +593,20 @@ function derivePolicyBehaviorContradictions(input: {
       severity: "high",
       claim: policyClaim,
       observedBehavior: runtimeSummary,
-      evidence: preconsentEvidence.slice(0, 3),
+      evidence: conflictEvidence.slice(0, 3),
       policyPageUrl: consentGatingAnchor?.sourceUrl ?? policyPageUrl,
       policyClaimType: consentGatingAnchor?.claimType ?? null,
       policyConfidence: consentGatingAnchor?.confidence ?? null,
       policyExtractionStatus: consentGatingAnchor?.extractionStatus ?? null,
       policySnippet: consentGatingAnchor?.snippet ?? null,
       policySummary,
-      relatedVendors: preconsentVendors,
+      relatedVendors: conflictVendors,
       runtimeConfidence: hasConcreteRuntimeRequest ? 0.82 : 0.5,
       runtimeObservationType,
       runtimePhase: "pre_consent",
       runtimeScriptHosts: preconsentScriptHosts,
       runtimeSummary,
-      runtimeVendors: preconsentVendors,
+      runtimeVendors: conflictVendors,
       conflictReasoning:
         consentGatingAnchor && runtimeObservationType
           ? "The policy anchor describes consent-gated non-essential tracking, while runtime evidence shows tracker requests before consent."

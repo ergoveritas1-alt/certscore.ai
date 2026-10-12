@@ -554,6 +554,7 @@ const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
   },
   {
     pattern: /^test_cookie$/i,
+    contextHostPatterns: [/(?:^|\.)doubleclick\.net$/i],
     category: "advertising",
     dataTypes: ["cookie capability signal"],
     description: "Used by Google advertising services to test whether the browser accepts cookies.",

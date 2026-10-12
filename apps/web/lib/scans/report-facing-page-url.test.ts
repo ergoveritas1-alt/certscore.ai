@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   getReportFacingScannedPageUrl,
   getReportFacingScannedPageUrls,
+  getReportUrlQueryKeys,
   isRuntimeRequestEvidenceUrl,
   stripReportUrlAnnotation
 } from "./report-facing-page-url";
@@ -12,6 +13,13 @@ test("report-facing scanned page URL helpers strip redaction annotations", () =>
     stripReportUrlAnnotation("https://dpm.demdex.net/id [query_redacted=true query_keys=d_orgid,ts]"),
     "https://dpm.demdex.net/id"
   );
+});
+
+test("report query keys are distinct, bounded names without values", () => {
+  assert.deepEqual(getReportUrlQueryKeys("https://example.test/collect?client_id=secret [query_redacted=true query_keys=client_id,email]"),
+    ["client_id", "email"]);
+  assert.equal(getReportUrlQueryKeys(`https://example.test/?${Array.from({ length: 12 }, (_, i) => `key${i}=secret`).join("&")}`).length, 8);
+  assert.deepEqual(getReportUrlQueryKeys(`https://example.test/ [query_redacted=true query_keys=${"x".repeat(81)},email]`), ["email"]);
 });
 
 test("report-facing scanned page URL helpers reject runtime request evidence URLs", () => {

@@ -204,6 +204,15 @@ test("canonical cookie context requires direct setter or host evidence, not an a
   assert.equal(resolveCanonicalCookieKnowledge("g_state", { cookieDomain: "example.com" }).category, "unknown");
 });
 
+test("generic test_cookie needs direct DoubleClick host or setter context", () => {
+  assert.equal(resolveCanonicalCookieKnowledge("test_cookie", { cookieDomain: "doubleclick.net" }).vendor, "Google");
+  assert.equal(resolveCanonicalCookieKnowledge("test_cookie", { cookieDomain: "secure.runhosting.com" }).essentiality, "unknown");
+  assert.equal(resolveCanonicalCookieKnowledge("test_cookie", {
+    cookieDomain: "secure.runhosting.com",
+    setterScriptUrl: "https://securepubads.g.doubleclick.net/pagead/managed.js",
+  }).vendor, "Google");
+});
+
 test("generic Microsoft cookie names cannot bypass the resolver's host guard", () => {
   for (const name of ["MUID", "MR", "SM", "ANONCHK"]) {
     for (const context of [{}, { cookieDomain: "example.com" }, {

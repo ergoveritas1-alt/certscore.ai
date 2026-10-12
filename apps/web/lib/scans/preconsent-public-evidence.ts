@@ -1,8 +1,10 @@
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import { getReportUrlQueryKeys, stripReportUrlAnnotation } from "./report-facing-page-url";
 
 export type PromotionGradePreconsentRequest = {
   scannedPageUrl?: string | null;
   requestUrl: string;
+  queryKeysSample: string[];
   hostname: string;
   registrableDomain: string;
   vendorName: string;
@@ -203,7 +205,7 @@ function hostMatches(hostname: string, domain: string) {
 
 function safeEvidenceUrl(value: string) {
   try {
-    const url = new URL(value);
+    const url = new URL(stripReportUrlAnnotation(value));
     url.username = "";
     url.password = "";
     if (url.search) {
@@ -212,7 +214,7 @@ function safeEvidenceUrl(value: string) {
     url.hash = "";
     return url.toString();
   } catch {
-    return value.replace(/[?#].*$/, "").slice(0, 500);
+    return stripReportUrlAnnotation(value).replace(/[?#].*$/, "").slice(0, 500);
   }
 }
 
@@ -474,6 +476,7 @@ export function buildPromotionGradePreconsentRequests(input: {
     requests.push({
       scannedPageUrl: scannedPageUrl ? safeEvidenceUrl(scannedPageUrl) : null,
       requestUrl: safeEvidenceUrl(requestUrl),
+      queryKeysSample: getReportUrlQueryKeys(requestUrl),
       hostname,
       registrableDomain: getUrlRegistrableDomain(hostname) ?? hostname,
       vendorName,

@@ -285,6 +285,16 @@ test("policy behavior contradiction contract rejects boilerplate or fallback pol
   }
 });
 
+test("policy behavior contradiction contract rejects a clipped policy passage", () => {
+  const evidence = makePolicyBehaviorContradictionEvidence();
+  (evidence.contradictionEvidence.policyAnchor as Record<string, unknown>).snippet =
+    "We use optional analytics and advertising cookies only after you set cookie preferences or consent...";
+  const decision = evaluateFindingEvidenceContractForRawEvidence("policy_behavior_contradiction_detected", evidence);
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.ok(decision?.negativeEvidenceFlags.includes("weak_policy_anchor"));
+  assert.ok(decision?.negativeEvidenceFlags.includes("producer_claim_failed_revalidation"));
+});
+
 test("policy behavior contradiction contract passes a specific policy claim with runtime anchor and bridge provenance", () => {
   const decision = evaluateFindingEvidenceContractForRawEvidence(
     "consent_gated_tracking_claim_conflict",
@@ -293,6 +303,32 @@ test("policy behavior contradiction contract passes a specific policy claim with
 
   assert.equal(decision?.status, "pass_strong");
   assert.equal(decision?.promotionEligibility, "eligible");
+});
+
+test("only-necessary policy claim cannot be backed by an analytics-only consent clause", () => {
+  const base = makePolicyBehaviorContradictionEvidence().contradictionEvidence;
+  const evidence = makePolicyBehaviorContradictionEvidence({
+    contradictionEvidence: {
+      ...base,
+      claim: "Optional analytics cookies only run after consent.",
+      policyAnchor: {
+        ...base.policyAnchor,
+        claimType: "only_necessary_cookies_before_choice",
+        normalizedClaim: "Optional analytics cookies only run after consent.",
+        snippet: "Optional analytics cookies only run after consent."
+      },
+      runtimeAnchor: { ...base.runtimeAnchor, observationType: "analytics_vendor_fired_pre_consent" },
+      conflictBridge: {
+        ...base.conflictBridge,
+        conflictType: "declared_only_necessary_cookies_before_choice_but_non_essential_tracking_fired"
+      }
+    }
+  });
+
+  const decision = evaluateFindingEvidenceContractForRawEvidence("consent_gated_tracking_claim_conflict", evidence);
+  assert.equal(decision?.promotionEligibility, "internal_only");
+  assert.ok(decision?.negativeEvidenceFlags.includes("weak_policy_anchor"));
+  assert.ok(decision?.negativeEvidenceFlags.includes("producer_claim_failed_revalidation"));
 });
 
 test("policy behavior contradiction contract accepts multiple contradiction-grade positive fixtures", () => {
