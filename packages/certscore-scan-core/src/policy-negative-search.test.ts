@@ -21,7 +21,7 @@ const nanoAssistProvider: PolicyNanoAssistProvider = {
 };
 const body = `<main><h1>Riverside Restaurant</h1><p>${"Visit our family restaurant for lunch and dinner. Explore our seasonal menu, opening hours, reservations and local catering services. ".repeat(12)}</p></main>`;
 
-for (const scenario of ["missing", "observed_but_unfetchable", "blocked", "enumeration_overflow", "uninspected_frame", "uninspected_shadow", "loading_document"] as const) {
+for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "blocked", "enumeration_overflow", "uninspected_frame", "uninspected_shadow", "loading_document"] as const) {
   test(`policy negative search: ${scenario}`, { timeout: 25_000 }, async () => {
     const server = createServer((request, response) => {
       response.setHeader("content-type", "text/html");
@@ -32,7 +32,7 @@ for (const scenario of ["missing", "observed_but_unfetchable", "blocked", "enume
       if (scenario === "blocked") {
         response.statusCode = 403; response.end("Access denied"); return;
       }
-      const extra = scenario === "observed_but_unfetchable" ? '<footer><a href="/privacy-policy">Privacy policy</a></footer>'
+      const extra = (scenario === "observed_but_unfetchable" || scenario === "seeded_observed_but_unfetchable") ? '<footer><a href="/privacy-policy">Privacy policy</a></footer>'
         : scenario === "enumeration_overflow" ? Array.from({ length: 1001 }, (_, i) => `<button>Menu item ${i}</button>`).join("")
         : scenario === "uninspected_frame" ? '<iframe src="about:blank"></iframe>'
         : scenario === "uninspected_shadow" ? '<div id="custom-footer"></div><script>document.querySelector("#custom-footer").attachShadow({mode:"open"}).innerHTML="<span>Footer</span>"</script>'
@@ -46,16 +46,18 @@ for (const scenario of ["missing", "observed_but_unfetchable", "blocked", "enume
     try {
       const result = await policySurfaceScanner({ url: normalizedUrl, normalizedUrl,
         scanStartedAtMs: Date.now(), internalBudgetMs: 12_000, discoveryMode: "fast",
-        artifactWriter: await createArtifactWriter(root), nanoAssistProvider });
+        artifactWriter: await createArtifactWriter(root), nanoAssistProvider,
+        ...(scenario.startsWith("seeded_") ? { policySurfaceSeeds: [{ hintType: "privacy_policy",
+          source: "canonical_legal_surface_hint" as const, url: new URL("/privacy-policy", normalizedUrl).href }] } : {}) });
       const inspection = derivePolicySurfaceInspectionOutcome({ modulesRun: [result.moduleRun], normalizedUrl,
         negativeSearchEvidence: result.negativeSearchEvidence, policySurfaceObservations: result.policySurfaceObservations });
-      if (scenario === "missing") {
+      if (scenario === "missing" || scenario === "seeded_missing") {
         assert.equal(result.moduleRun.status, "completed", JSON.stringify(result.moduleRun));
         assert.ok(result.policySurfaceObservations.filter(row => row.status === "failed").length > 0,
           "Guessed URL 404s do not negate the independently completed observed-link search.");
         assert.equal(inspection.outcome, "no_privacy_policy_observed_complete_coverage", JSON.stringify(result));
         assert.ok(inspection.negativeSearchEvidence?.renderedInspectionHash);
-      } else if (scenario === "observed_but_unfetchable") {
+      } else if (scenario === "observed_but_unfetchable" || scenario === "seeded_observed_but_unfetchable") {
         assert.equal(inspection.outcome, "privacy_policy_observed");
         assert.equal(inspection.documentRetrievalCoverageStatus, "insufficient");
         assert.equal(result.negativeSearchEvidence, undefined);

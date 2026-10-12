@@ -1332,7 +1332,8 @@ export async function policySurfaceScanner(
       terminalAccess === "representative_page" && homepage.bodyTruncated === false &&
       renderedInspection && staticDocumentUrl === renderedInspection.documentUrl &&
       !renderedDiscoveryDeadlineReached &&
-      !linkCandidates.some((candidate) => candidate.deterministicSurfaceType === "privacy_policy")
+      !linkCandidates.some((candidate) => candidate.discoveryMethod !== "guessed_common_path" &&
+        candidate.deterministicSurfaceType === "privacy_policy")
         ? {
           contractVersion: "certscore.policy-negative-search.v1",
           requestedUrl: requestedPolicyUrl,
@@ -10818,10 +10819,12 @@ export function dedupeCandidates(candidates: PolicySurfaceCandidate[]): PolicySu
       ? `${candidate.normalizedUrl}#${candidate.selector}`
       : candidate.normalizedUrl;
     const existing = byUrl.get(key);
-    const cmpRelevant = Boolean(candidate.cmpDiscovery?.length || existing?.cmpDiscovery?.length);
+    // Seed hints must not outrank an observed link to the same URL.
+    const provenanceRelevant = Boolean(candidate.cmpDiscovery?.length || existing?.cmpDiscovery?.length ||
+      candidate.seedSource || existing?.seedSource);
     const preferCandidate = !existing || (candidate.fetchable && !existing.fetchable) ||
-      (!cmpRelevant && candidate.deterministicScore > existing.deterministicScore) ||
-      (cmpRelevant && candidate.fetchable === existing.fetchable && (
+      (!provenanceRelevant && candidate.deterministicScore > existing.deterministicScore) ||
+      (provenanceRelevant && candidate.fetchable === existing.fetchable && (
         policyCandidateDiscoveryPriority(candidate) < policyCandidateDiscoveryPriority(existing) ||
         (policyCandidateDiscoveryPriority(candidate) === policyCandidateDiscoveryPriority(existing) && candidate.deterministicScore > existing.deterministicScore)
       ));

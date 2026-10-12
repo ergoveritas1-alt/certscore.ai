@@ -31,3 +31,13 @@ covered by the full policy suite.
 Incremental recurring cost: less than $0.10/month at 100,000 scans for bounded
 proof metadata and processing. No additional lane, request, model call, browser
 run, wait, retention duration or provisioned capacity.
+
+Production verification of scan `7685bc7c-49e6-4856-9d89-178797dc350f`
+identified an additional seed-provenance defect: production injects canonical
+common-path hints into discovery candidates. Those guessed URLs were incorrectly
+counted as observed privacy links by the negative-proof gate, and a stronger seed
+could also mask an observed link to the same URL during deduplication.
+The gate now excludes guessed paths from observed-link inventory, and deduplication
+prefers observed link provenance over seed hints. Two real-browser regressions
+reproduce both defects before the fix and pass afterward. The same evidence,
+coverage, scoring and cost requirements remain in force.
