@@ -4,7 +4,7 @@ import { readFileSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import test from "node:test";
+import test, { before } from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { CANONICAL_VENDOR_RESOLVER_VERSION } from "@certscore/vendor-resolver";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
@@ -18,6 +18,9 @@ import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 
 const require = createRequire(import.meta.url);
+before(async () => {
+  await mkdir(path.join(process.cwd(), "artifacts/local-v2-dag-scans"), { recursive: true });
+});
 const serverOnlyPath = require.resolve("server-only");
 (require.cache as Record<string, unknown>)[serverOnlyPath] = {
   exports: {},

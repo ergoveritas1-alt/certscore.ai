@@ -105,8 +105,8 @@
     },
     {
       "path": "apps/web/server/scans/local-v2-dag-report.test.ts",
-      "sha256": "53c4e84a3b5ad77a4da49a99b4313cbb446babd3400f2985d3d665a17d509ee4",
-      "sizeBytes": 410340
+      "sha256": "c6c9a26959234d30b40935e6a843c7bec4266092a62c23a435bc7f20a01be280",
+      "sizeBytes": 410471
     },
     {
       "path": "apps/web/server/scans/local-v2-dag-report.ts",
