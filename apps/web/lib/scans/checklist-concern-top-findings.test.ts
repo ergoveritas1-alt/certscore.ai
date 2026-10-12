@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { derivePolicySurfaceInspectionOutcome } from "@certscore/contracts";
 
 import {
   buildChecklistConcernTopFindings,
@@ -13,6 +14,7 @@ import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-ch
 import { getAssessmentDirection, getEvidenceLabel } from "./gdpr-eprivacy-assessment-direction";
 import { buildGdprEprivacyChecklistPresentation, isGdprEprivacyChecklistPresentation } from "./gdpr-eprivacy-checklist-presentation";
 import { deriveRegulatoryCoverageScore } from "./regulatory-coverage-score";
+import { deriveCanonicalOverallScoreExplanationForReport } from "../../server/scans/canonical-overall-score";
 import { buildSitePriorityReview } from "./full-site-priority-review";
 
 const pipeline = {
@@ -160,12 +162,19 @@ test("unconfirmed grouped inventory cannot produce an executive finding", () => 
 test("completed policy absence flows through coverage policy and checklist to the leading priority", () => {
   const runtimeArtifacts = {
     policyDisclosureSummary: { privacyPolicyPresent: false },
-    policySurfaceInspection: {
-      coverageStatus: "complete", documentRetrievalCoverageStatus: "insufficient",
-      inspectionCompleted: true, linkDiscoveryCoverageStatus: "complete", limitationKeys: [],
-      observedSurfaceTypes: [], outcome: "no_privacy_policy_observed_complete_coverage",
-      privacyPolicyObserved: false
-    }
+    policySurfaceInspection: derivePolicySurfaceInspectionOutcome({
+      normalizedUrl: "https://example.test/",
+      modulesRun: [{ moduleName: "policySurfaceScanner", status: "completed", evidenceRefs: [],
+        startedAt: "2026-10-11T00:00:00Z", durationMs: 1000, errors: [] }],
+      negativeSearchEvidence: {
+        contractVersion: "certscore.policy-negative-search.v1", requestedUrl: "https://example.test/",
+        staticDocumentUrl: "https://example.test/", renderedDocumentUrl: "https://example.test/",
+        staticDocumentHash: "a".repeat(64), renderedInspectionHash: "b".repeat(64),
+        staticInspectionComplete: true, renderedInspectionComplete: true, representativeDocuments: true,
+        observedPrivacyCandidateCount: 0, uninspectedFrameCount: 0, uninspectedShadowRootCount: 0,
+        candidateEnumerationTruncated: false,
+      },
+    })
   };
   const outcomes = deriveGdprEprivacyCoveragePolicyOutcomes({
     scanCompleted: true, coverageLimited: false, runtimeArtifacts,
@@ -187,6 +196,11 @@ test("completed policy absence flows through coverage policy and checklist to th
   assert.equal(isGdprEprivacyChecklistPresentation({ ...privacyPresentation,
     rows: privacyPresentation.rows.map(item => ({ ...item, id: "controller_contact_disclosure" }))
   }), false, "The availability exception must not allow topic absence findings.");
+  const overall = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null },
+    checklistRows: [privacyRow], unifiedFindings: [] });
+  assert.equal(overall?.score, 91, "The shared page score applies the nine-point deduction in either regulatory view.");
+  assert.equal(overall?.deductions.flatMap(family => family.rules).find(rule =>
+    rule.ruleId === "privacy_notice_availability")?.policyDeductionPoints, 9);
   assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [privacyRow] }).score, 91,
     "The confirmed gap uses the owner-approved nine-point missing-policy deduction.");
   const otherGaps = ["transport_security_https_delivery", "transport_security_form_transport", "cookie_notice_policy_availability"]

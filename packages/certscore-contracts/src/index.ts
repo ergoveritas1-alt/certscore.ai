@@ -2535,6 +2535,38 @@ export const verifiedPreConsentRuntimePreviewPacketSchema = z.object({
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
+/** Completed bounded policy discovery, retained by the policy lane itself. */
+export interface PolicyNegativeSearchEvidence {
+  contractVersion: "certscore.policy-negative-search.v1";
+  requestedUrl: string;
+  staticDocumentUrl: string;
+  renderedDocumentUrl: string;
+  staticDocumentHash: string;
+  renderedInspectionHash: string;
+  staticInspectionComplete: true;
+  renderedInspectionComplete: true;
+  representativeDocuments: true;
+  observedPrivacyCandidateCount: 0;
+  uninspectedFrameCount: 0;
+  uninspectedShadowRootCount: 0;
+  candidateEnumerationTruncated: false;
+}
+export const policyNegativeSearchEvidenceSchema: z.ZodType<PolicyNegativeSearchEvidence> = z.object({
+  contractVersion: z.literal("certscore.policy-negative-search.v1"),
+  requestedUrl: z.string().url(),
+  staticDocumentUrl: z.string().url(),
+  renderedDocumentUrl: z.string().url(),
+  staticDocumentHash: z.string().regex(/^[a-f0-9]{64}$/),
+  renderedInspectionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  staticInspectionComplete: z.literal(true),
+  renderedInspectionComplete: z.literal(true),
+  representativeDocuments: z.literal(true),
+  observedPrivacyCandidateCount: z.literal(0),
+  uninspectedFrameCount: z.literal(0),
+  uninspectedShadowRootCount: z.literal(0),
+  candidateEnumerationTruncated: z.literal(false),
+});
+
 export const policySurfaceInspectionOutcomeSchema = z.object({
   outcome: z.enum([
     "privacy_policy_observed",
@@ -2544,6 +2576,7 @@ export const policySurfaceInspectionOutcomeSchema = z.object({
   coverageStatus: z.enum(["complete", "limited"]),
   linkDiscoveryCoverageStatus: z.enum(["complete", "limited"]).default("limited"),
   documentRetrievalCoverageStatus: z.enum(["usable", "insufficient", "limited"]).default("limited"),
+  negativeSearchEvidence: policyNegativeSearchEvidenceSchema.optional(),
   // Diagnostics describe attempted retrieval, never policy absence or eligibility.
   retrievalDiagnostics: z.object({
     attemptedDocumentCount: z.number().int().nonnegative(),
@@ -2586,7 +2619,8 @@ export const verifiedPolicyEvidencePacketSchema = z.object({
 
 export function derivePolicySurfaceInspectionOutcome(input: {
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
-  negativeSearchCoverageVerified?: boolean;
+  normalizedUrl?: string;
+  negativeSearchEvidence?: PolicyNegativeSearchEvidence;
   policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
 }) {
   const observations = input.policySurfaceObservations ?? [];
@@ -2612,7 +2646,14 @@ export function derivePolicySurfaceInspectionOutcome(input: {
     )
   );
   const inspectionCompleted = policyRun?.status === "completed";
-  const negativeSearchCoverageVerified = inspectionCompleted && input.negativeSearchCoverageVerified === true;
+  const parsedNegativeSearch = policyNegativeSearchEvidenceSchema.safeParse(input.negativeSearchEvidence);
+  const negativeSearchEvidence = parsedNegativeSearch.success ? parsedNegativeSearch.data : undefined;
+  const negativeSearchCoverageVerified = inspectionCompleted && Boolean(
+    negativeSearchEvidence && input.normalizedUrl === negativeSearchEvidence.requestedUrl &&
+    negativeSearchEvidence.staticDocumentUrl === negativeSearchEvidence.renderedDocumentUrl &&
+    !observations.some((observation) => observation.surfaceType === "privacy_policy" &&
+      observation.discoveryMethod !== "guessed_common_path")
+  );
   const limitationKeys = [
     !policyRun ? "policy_surface_inspection_runtime_not_run" : null,
     policyRun && policyRun.status !== "completed"
@@ -2655,6 +2696,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
 
   return policySurfaceInspectionOutcomeSchema.parse({
     outcome,
+    ...(negativeSearchCoverageVerified ? { negativeSearchEvidence } : {}),
     coverageStatus,
     linkDiscoveryCoverageStatus,
     documentRetrievalCoverageStatus,
@@ -3355,6 +3397,7 @@ export const displaySafeEvidenceExcerptSchema = z.object({
 const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceObservationSchema>, z.ZodTypeDef, unknown> = policySurfaceObservationSchema;
 const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
 const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiObservationSchema>, z.ZodTypeDef, z.input<typeof consentUiObservationSchema>> = consentUiObservationSchema;
+const canonicalPolicyInspectionSchema: z.ZodType<z.output<typeof policySurfaceInspectionOutcomeSchema>, z.ZodTypeDef, z.input<typeof policySurfaceInspectionOutcomeSchema>> = policySurfaceInspectionOutcomeSchema;
 const canonicalEvidenceBundleBaseSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
@@ -3414,7 +3457,7 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   derivedRuntimeSignals: derivedRuntimeSignalsSchema,
   runtimeCoverage: runtimeCoverageSummarySchema.optional(),
   consentSurfaceInspection: consentSurfaceInspectionOutcomeSchema.optional(),
-  policySurfaceInspection: policySurfaceInspectionOutcomeSchema.optional(),
+  policySurfaceInspection: canonicalPolicyInspectionSchema.optional(),
   visualCapture: visualCaptureSummarySchema.optional(),
   scanNoGoAssessment: scanNoGoAssessmentSchema.optional(),
   scan_no_go_assessment: scanNoGoAssessmentSchema.optional(),

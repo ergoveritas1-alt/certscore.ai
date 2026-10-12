@@ -5469,6 +5469,8 @@ export function buildVerifiedPolicyEvidencePacket(input: {
     normalizedUrl: input.payload.targetUrl,
     policyContentHash,
     policySurfaceInspection: derivePolicySurfaceInspectionOutcome({
+      normalizedUrl: new URL(input.payload.targetUrl).toString(),
+      negativeSearchEvidence: input.result.negativeSearchEvidence,
       modulesRun: [input.result.moduleRun],
       policySurfaceObservations,
     }),

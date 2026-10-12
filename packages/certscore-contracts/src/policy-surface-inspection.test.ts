@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { derivePolicySurfaceInspectionOutcome } from "./index";
+import { derivePolicySurfaceInspectionOutcome, type PolicyNegativeSearchEvidence } from "./index";
+
+const negativeSearchEvidence: PolicyNegativeSearchEvidence = {
+  contractVersion: "certscore.policy-negative-search.v1",
+  requestedUrl: "https://example.test/", staticDocumentUrl: "https://example.test/",
+  renderedDocumentUrl: "https://example.test/", staticDocumentHash: "a".repeat(64),
+  renderedInspectionHash: "b".repeat(64), staticInspectionComplete: true,
+  renderedInspectionComplete: true, representativeDocuments: true,
+  observedPrivacyCandidateCount: 0, uninspectedFrameCount: 0,
+  uninspectedShadowRootCount: 0, candidateEnumerationTruncated: false,
+};
 
 function moduleRun(status: "completed" | "partial" | "failed" | "skipped_budget") {
   return {
@@ -33,7 +43,8 @@ test("policy inspection requires verified negative-search coverage before projec
 
   const completed = derivePolicySurfaceInspectionOutcome({
     modulesRun: [moduleRun("completed")],
-    negativeSearchCoverageVerified: true,
+    normalizedUrl: "https://example.test/",
+    negativeSearchEvidence,
     policySurfaceObservations: [],
   });
   assert.equal(completed.outcome, "no_privacy_policy_observed_complete_coverage");
@@ -294,4 +305,29 @@ test("a directly observed privacy link remains observed when document retrieval 
   assert.deepEqual(outcome.limitationKeys, [
     "privacy_policy_link_observed_document_not_retained",
   ]);
+});
+
+
+test("negative discovery proof is target-bound, complete and retained without promoting legacy completion", () => {
+  for (const change of [
+    { requestedUrl: "https://other.test/" }, { renderedDocumentUrl: "https://example.test/other" },
+    { renderedInspectionComplete: false }, { staticInspectionComplete: false },
+    { uninspectedFrameCount: 1 }, { uninspectedShadowRootCount: 1 },
+    { candidateEnumerationTruncated: true }, { representativeDocuments: false },
+    { observedPrivacyCandidateCount: 1 }, { staticDocumentHash: "invalid" },
+  ]) {
+    const result = derivePolicySurfaceInspectionOutcome({
+      modulesRun: [moduleRun("completed")], normalizedUrl: "https://example.test/",
+      negativeSearchEvidence: { ...negativeSearchEvidence, ...change } as PolicyNegativeSearchEvidence,
+    });
+    assert.equal(result.outcome, "indeterminate_limited_coverage", JSON.stringify(change));
+    assert.equal(result.negativeSearchEvidence, undefined);
+  }
+  const valid = derivePolicySurfaceInspectionOutcome({ modulesRun: [moduleRun("completed")],
+    normalizedUrl: "https://example.test/", negativeSearchEvidence });
+  assert.deepEqual(valid.negativeSearchEvidence, negativeSearchEvidence);
+  for (const status of ["partial", "failed", "skipped_budget"] as const) {
+    assert.equal(derivePolicySurfaceInspectionOutcome({ modulesRun: [moduleRun(status)],
+      normalizedUrl: "https://example.test/", negativeSearchEvidence }).outcome, "indeterminate_limited_coverage");
+  }
 });

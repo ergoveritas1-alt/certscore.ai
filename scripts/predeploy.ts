@@ -369,6 +369,14 @@ const TARGETS: Target[] = [
         command: ["pnpm", "--filter", "@certscore/scan-core", "test:policy:full"]
       },
       {
+        key: "policy-negative-search",
+        label: "policy discovery proof, missing-policy priority and nine-point deduction",
+        command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test",
+          "packages/certscore-contracts/src/policy-surface-inspection.test.ts",
+          "packages/certscore-scan-core/src/policy-negative-search.test.ts",
+          "apps/web/lib/scans/checklist-concern-top-findings.test.ts"]
+      },
+      {
         key: "lambda-typecheck",
         label: "v2 DAG Lambda typecheck",
         command: ["pnpm", "--filter", "@website-signal-risk-scanner/v2-dag-lambda", "typecheck"]

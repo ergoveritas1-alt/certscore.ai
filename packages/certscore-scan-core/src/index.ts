@@ -1356,6 +1356,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     visualCapture: preConsentResult.visualCapture,
   });
   const policySurfaceInspection = derivePolicySurfaceInspectionOutcome({
+    normalizedUrl,
+    negativeSearchEvidence: policySurfaceResult?.negativeSearchEvidence,
     modulesRun: boundedModulesRun,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });

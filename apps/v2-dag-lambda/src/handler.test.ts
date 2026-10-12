@@ -4895,3 +4895,27 @@ test("GPC coordinator publishes bounded comparison from the original verified wo
     if (artifactRoot) await rm(artifactRoot, { recursive: true, force: true });
   }
 });
+
+
+test("policy-lane negative-search proof survives the hash-bound early handoff", () => {
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload());
+  const requestedUrl = new URL(payload.targetUrl).toString();
+  const packet = buildVerifiedPolicyEvidencePacket({ payload, result: {
+    artifactRefs: [], policySurfaceObservations: [],
+    moduleRun: { moduleName: "policySurfaceScanner", status: "completed", evidenceRefs: [],
+      startedAt: "2026-10-11T00:00:00Z", durationMs: 1000, errors: [] },
+    negativeSearchEvidence: {
+      contractVersion: "certscore.policy-negative-search.v1", requestedUrl,
+      staticDocumentUrl: requestedUrl, renderedDocumentUrl: requestedUrl,
+      staticDocumentHash: "a".repeat(64), renderedInspectionHash: "b".repeat(64),
+      staticInspectionComplete: true, renderedInspectionComplete: true, representativeDocuments: true,
+      observedPrivacyCandidateCount: 0, uninspectedFrameCount: 0, uninspectedShadowRootCount: 0,
+      candidateEnumerationTruncated: false,
+    },
+  } });
+  assert.equal(packet.policySurfaceInspection.outcome, "no_privacy_policy_observed_complete_coverage");
+  assert.ok(packet.policySurfaceInspection.negativeSearchEvidence);
+  const { sourceHash, ...unsigned } = packet;
+  assert.equal(sourceHash, createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"));
+  assert.equal(packet.productionFindingIntegration, false);
+});

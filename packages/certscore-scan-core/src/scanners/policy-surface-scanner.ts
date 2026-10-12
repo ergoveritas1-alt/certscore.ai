@@ -19,6 +19,7 @@ import {
   isSupportedPrivacyEvidenceLocale,
   type PolicyCookieDisclosureObservation,
   type PolicySurfaceObservation,
+  type PolicyNegativeSearchEvidence,
   type PrivacySurfaceClassification,
   type PrivacySurfaceMatchStrength,
   PRIVACY_EVIDENCE_LOCALE_REGISTRY,
@@ -166,6 +167,7 @@ export interface PolicySurfaceScannerInput {
 }
 
 export interface PolicySurfaceScannerResult {
+  negativeSearchEvidence?: PolicyNegativeSearchEvidence;
   moduleRun: ScanModuleRun;
   policySurfaceObservations: PolicySurfaceObservation[];
   artifactRefs: ArtifactRef[];
@@ -508,6 +510,7 @@ interface PolicyBrowserRuntime {
 export async function policySurfaceScanner(
   input: PolicySurfaceScannerInput,
 ): Promise<PolicySurfaceScannerResult> {
+  const requestedPolicyUrl = input.normalizedUrl;
   const parentSignal = input.signal;
   throwIfAborted(parentSignal);
   const moduleStartedAtMs = Date.now();
@@ -1098,6 +1101,7 @@ export async function policySurfaceScanner(
     void speculativeCommonPathNanoRankingPromise?.catch(() => undefined);
     let renderedCandidates: PolicySurfaceCandidate[];
     let renderedDiscoveryDeadlineReached = false;
+    let renderedInspection: RenderedPolicyDiscoveryResult["inspection"];
     try {
       if (fastStaticCoverage) {
         renderedCandidates = await recordPolicyTiming(
@@ -1114,6 +1118,7 @@ export async function policySurfaceScanner(
           () => extractRenderedCandidatesBeforeSoftDeadline(input, moduleStartedAtMs, policyBrowserRuntime, timingBreakdown),
         );
         renderedCandidates = renderedDiscovery.candidates;
+        renderedInspection = renderedDiscovery.inspection;
         renderedDiscoveryDeadlineReached = renderedDiscovery.deadlineReached;
       }
     } catch (error) {
@@ -1322,8 +1327,30 @@ export async function policySurfaceScanner(
       policyFetchDiagnostics,
     }));
 
+    const staticDocumentUrl = successfulPolicyFetchFinalUrl(homepage, input.normalizedUrl);
+    const negativeSearchEvidence: PolicyNegativeSearchEvidence | undefined =
+      terminalAccess === "representative_page" && homepage.bodyTruncated === false &&
+      renderedInspection && staticDocumentUrl === renderedInspection.documentUrl &&
+      !renderedDiscoveryDeadlineReached &&
+      !linkCandidates.some((candidate) => candidate.deterministicSurfaceType === "privacy_policy")
+        ? {
+          contractVersion: "certscore.policy-negative-search.v1",
+          requestedUrl: requestedPolicyUrl,
+          staticDocumentUrl,
+          renderedDocumentUrl: renderedInspection.documentUrl,
+          staticDocumentHash: createHash("sha256").update(homepage.text).digest("hex"),
+          renderedInspectionHash: renderedInspection.sourceHash,
+          staticInspectionComplete: true,
+          renderedInspectionComplete: true,
+          representativeDocuments: true,
+          observedPrivacyCandidateCount: 0,
+          uninspectedFrameCount: 0,
+          uninspectedShadowRootCount: 0,
+          candidateEnumerationTruncated: false,
+        } : undefined;
     return {
       moduleRun: completedPolicyModuleRun(),
+      negativeSearchEvidence,
       policySurfaceObservations: observations,
       artifactRefs,
     };
@@ -4152,9 +4179,9 @@ async function extractRenderedCandidates(
   browserRuntime: PolicyBrowserRuntime,
   timingBreakdown?: ScanModuleRun["timingBreakdown"],
   progress?: { stage: string; startedAtMs: number },
-): Promise<PolicySurfaceCandidate[]> {
+): Promise<RenderedPolicyDiscoveryResult> {
   if (remainingMs(input, moduleStartedAtMs) < 1_500) {
-    return [];
+    return { candidates: [], deadlineReached: false };
   }
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
   let releaseAbortContext: (() => void) | undefined;
@@ -4178,7 +4205,7 @@ async function extractRenderedCandidates(
     const page = await context.newPage();
     nextStage("navigation");
     const navigationTimeoutMs = input.discoveryMode === "fast" ? 4_000 : 8_000;
-    await page.goto(input.normalizedUrl, {
+    const navigationResponse = await page.goto(input.normalizedUrl, {
       // Retain the committed document promptly, then let the bounded waits
       // below look for policy controls. Large publisher pages can keep
       // DOMContentLoaded blocked on non-policy resources even after their
@@ -4206,12 +4233,14 @@ async function extractRenderedCandidates(
     await page.waitForTimeout(Math.min(300, Math.max(150, remainingMs(input, moduleStartedAtMs))));
     nextStage("visible text");
     const renderedBaseUrl = /^https?:\/\//i.test(page.url()) ? page.url() : input.normalizedUrl;
-    const visibleText = await page.evaluate((maxChars) => {
+    const textInspection = await page.evaluate((maxChars) => {
       const text = document.body?.innerText ?? "";
-      if (text.length <= maxChars) return text;
       const headChars = Math.floor(maxChars * 0.65);
-      return `${text.slice(0, headChars)}\n\n[CertScore retained tail of oversized rendered text.]\n\n${text.slice(-(maxChars - headChars))}`;
-    }, MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS).catch(() => "");
+      return { documentUrl: document.URL, timeOrigin: performance.timeOrigin,
+        text: text.length <= maxChars ? text
+          : `${text.slice(0, headChars)}\n\n[CertScore retained tail of oversized rendered text.]\n\n${text.slice(-(maxChars - headChars))}` };
+    }, MAX_RENDERED_POLICY_DISCOVERY_TEXT_CHARS).catch(() => undefined);
+    const visibleText = textInspection?.text ?? "";
     nextStage("DOM policy links");
     const collectPolicyCandidates = ({ maxCandidates, cmpScopes, vendorPattern, priorityPhrases }: {
       maxCandidates: number;
@@ -4281,9 +4310,11 @@ async function extractRenderedCandidates(
         return /(?:location\.href|window\.location|document\.location)\s*=\s*['"]([^'"]+)['"]/i.exec(onclick)?.[1];
       }
 
+      let candidateEnumerationTruncated = false;
       const seenRoots = new Set<ParentNode>();
       function collect(root: ParentNode, output: RawCandidate[]): void {
-        if (output.length >= maxCandidates || seenRoots.has(root)) return;
+        if (seenRoots.has(root)) return;
+        if (output.length >= maxCandidates) { candidateEnumerationTruncated = true; return; }
         seenRoots.add(root);
         const allElements = [
           ...root.querySelectorAll("a[href], button, [role='button'], [role='link'], [aria-label], [title]"),
@@ -4291,6 +4322,7 @@ async function extractRenderedCandidates(
         const remaining = maxCandidates - output.length;
         let elements = allElements;
         if (allElements.length > remaining) {
+          candidateEnumerationTruncated = true;
           // Preserve bounded first/last discovery, but reserve a few slots for
           // registered privacy-choice labels buried in a large middle section.
           // Classification and visible proof still happen below; this only
@@ -4394,7 +4426,25 @@ async function extractRenderedCandidates(
         }
       }
       collect(document, output);
-      return output;
+      // Inspect coverage in the same DOM read; never treat swallowed read failures
+      // or sampled candidates as a completed negative search.
+      let uninspectedShadowRootCount = 0;
+      let uninspectedFrameCount = 0;
+      let inspectedElementCount = 0;
+      const inspectCoverage = (root: ParentNode): void => {
+        for (const element of root.querySelectorAll("*")) {
+          if (++inspectedElementCount > 20_000) { candidateEnumerationTruncated = true; return; }
+          if (element.matches("iframe, frame")) uninspectedFrameCount++;
+          if (element.shadowRoot) {
+            if (!seenRoots.has(element.shadowRoot)) uninspectedShadowRootCount++;
+            inspectCoverage(element.shadowRoot);
+          }
+        }
+      };
+      inspectCoverage(document);
+      return { candidates: output, documentUrl: document.URL, timeOrigin: performance.timeOrigin,
+        documentReady: document.readyState === "complete" && Boolean(document.body),
+        candidateEnumerationTruncated, uninspectedShadowRootCount, uninspectedFrameCount };
     };
     // tsx/esbuild can emit a module-scoped function-name helper. Bind it only
     // within this serialized read, without installing anything on the target.
@@ -4406,10 +4456,12 @@ async function extractRenderedCandidates(
         .filter((phrase) => ["do_not_sell_or_share", "your_privacy_choices"].includes(phrase.surfaceType) && ["direct", "equivalent"].includes(phrase.strength))
         .map((phrase) => phrase.phrase.normalize("NFKC").toLowerCase()),
     });
-    const rawCandidates = await page.evaluate<ReturnType<typeof collectPolicyCandidates>>(
+    const domInspection = await page.evaluate<ReturnType<typeof collectPolicyCandidates>>(
       `(() => { const __name = (fn) => fn; return (${collectPolicyCandidates.toString()})(${discoveryArgs}); })()`,
-    ).catch(() => []);
-    const didomiPublisherUrl = await page.evaluate(readDidomiPublisherPolicy, undefined).catch(() => undefined);
+    ).catch(() => undefined);
+    const rawCandidates = domInspection?.candidates ?? [];
+    let auxiliaryReadsComplete = true;
+    const didomiPublisherUrl = await page.evaluate(readDidomiPublisherPolicy, undefined).catch(() => { auxiliaryReadsComplete = false; return undefined; });
 
     const renderedPolicyRegionHtml = await page.evaluate((maxChars) => {
       const regionHtml = [
@@ -4419,7 +4471,7 @@ async function extractRenderedCandidates(
       if (regionHtml.length <= maxChars) return regionHtml;
       const headChars = Math.floor(maxChars * 0.5);
       return `${regionHtml.slice(0, headChars)}\n${regionHtml.slice(-(maxChars - headChars))}`;
-    }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => "");
+    }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => { auxiliaryReadsComplete = false; return ""; });
     nextStage("candidate classification");
     const renderedHtmlCandidates = renderedPolicyRegionHtml
       ? extractCandidates(
@@ -4435,7 +4487,7 @@ async function extractRenderedCandidates(
     ];
     const visibleTextLower = visibleText.toLowerCase();
 
-    return dedupeCandidates([
+    const candidates = dedupeCandidates([
       ...renderedHtmlCandidates,
       ...cmpConfigCandidates(didomiPolicyReference(didomiPublisherUrl, renderedBaseUrl), renderedBaseUrl),
       ...retainedRawCandidates.flatMap((candidate, index): PolicySurfaceCandidate[] => {
@@ -4509,8 +4561,18 @@ async function extractRenderedCandidates(
       }];
       }),
     ]);
+    const inspectionComplete = auxiliaryReadsComplete && domInspection?.documentReady &&
+      !domInspection.candidateEnumerationTruncated &&
+      domInspection.uninspectedFrameCount === 0 && domInspection.uninspectedShadowRootCount === 0 &&
+      domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
+      textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin &&
+      assessPolicyHomepageAccess({ ok: navigationResponse?.ok() ?? false,
+        status: navigationResponse?.status(), text: visibleText }) === "representative_page";
+    return { candidates, deadlineReached: false,
+      ...(inspectionComplete ? { inspection: { documentUrl: renderedBaseUrl,
+        sourceHash: createHash("sha256").update(JSON.stringify({ domInspection, textInspection })).digest("hex") } } : {}) };
   } catch {
-    return [];
+    return { candidates: [], deadlineReached: false };
   } finally {
     nextStage("cleanup");
     releaseAbortContext?.();
@@ -4533,6 +4595,7 @@ function bindAbortSignalToBrowserContext(
 }
 
 interface RenderedPolicyDiscoveryResult {
+  inspection?: { documentUrl: string; sourceHash: string };
   candidates: PolicySurfaceCandidate[];
   deadlineReached: boolean;
 }
@@ -4565,7 +4628,7 @@ async function extractRenderedCandidatesBeforeSoftDeadline(
 
   try {
     return await Promise.race([
-      discoveryPromise.then((candidates) => ({ candidates, deadlineReached: false })),
+      discoveryPromise,
       deadlinePromise,
     ]);
   } finally {
@@ -7763,6 +7826,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 type FetchTextResult = {
+  bodyTruncated?: boolean;
   attempts?: PolicyFetchAttemptDiagnostic[];
   documentFormat?: "pdf" | "text";
   html?: string;
@@ -8036,6 +8100,7 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
     }
     return {
       attempts: [{ ...attemptBase, ...decodingAttempt, outcome: "fetched" }],
+      bodyTruncated: truncated || decodeFetchedPolicyText(decodedBody.body, contentType).length > MAX_FETCHED_TEXT_CHARS,
       documentFormat: "text",
       ok: true,
       status: response.status,
