@@ -290,3 +290,36 @@ Current local incremental infrastructure cost is $0. If shipped, the extra
 bounded rectangle metadata is estimated below $0.05/month at 100,000 scans with
 30-day retention; image-view traffic remains subject to the rollout cost review
 documented above. The changes remain local and unpushed.
+
+## Fresh SITS service-name verification
+
+The owner explicitly approved one fresh local SITS scan as a one-time exception
+to the existing diagnostic-contact hold. Run `sits-services-local-20261014`
+targeted `https://sits.com/en/` in one existing sharded local-parity run,
+including one authorized Options inspection and no Accept or Reject
+actions. The global hold remains unchanged; the contact and 28-day cooldown are
+recorded in the manual calibration ledger. No retry was made.
+
+The CMP inspection completed in about 6.5 seconds and retained all 11 names:
+Borlabs Cookie, Google Analytics, Google Fonts, Google reCAPTCHA, Google Tag
+Manager, Hotjar, HubSpot, LeadFeeder, LinkedIn - Insight Tag, Matomo and WPML.
+The original preference bytes match their producer metadata hash and size.
+An internal-only projection candidate verifies that the names survive typed
+assessment, normalized concern and shared CMP export unchanged. Five scanner
+fixtures and 39 projection/UI/export tests pass, including navigation
+invalidation and rejection of altered retained names. The capture fix was
+already in the local scanner source; this confirms it against fresh SITS data.
+
+The full local scan failed because the policy lane requires an OpenAI API key
+that is absent from this dev environment. It must not be presented as a completed
+scan or published. Its terminal failure and original lane artifacts remain intact.
+The local `/services.html` page is explicitly a CMP inspection preview, showing
+the actual shared table component with all 11 names, existing local logos, copy
+control and an eight-row scrolling window. It has no score or finding badge.
+The earlier saved report stays at `/` with its original missing-name limitation;
+fresh names are not backfilled into its historical evidence. Screenshots and
+verification receipts are under `artifacts/sits-service-list-review-20261014/`.
+
+There was no deployment, production write, new scanner wait or recurring-cost
+change. No model call ran. The one retained-DOM artifact read cost less than
+$0.01; the fresh capture ran locally. The disclosed one-time ceiling was $0.10.

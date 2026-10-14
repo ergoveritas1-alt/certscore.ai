@@ -1106,8 +1106,19 @@
       "note": "Source-led ordinary GPC nomination. Policy claims are hypotheses only; no public contact at registration; fresh central selection required.",
       "state": "cooldown",
       "url": "https://clubagartha.cc"
+    },
+    "https://sits.com/en/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-11T16:09:54.096Z",
+      "lastContactAt": "2026-10-14T16:09:54.096Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "failed",
+      "note": "One owner-authorized local diagnostic exception to capture missing CMP service names. CMP inspection completed with 11 names; full local scan failed before policy contact because OPENAI_API_KEY was missing. No retry. Global SITS hold unchanged; not a release calibration cohort.",
+      "state": "cooldown",
+      "url": "https://sits.com/en/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-11T15:33:58.108Z"
+  "updatedAt": "2026-10-14T16:09:54.096Z"
 }
