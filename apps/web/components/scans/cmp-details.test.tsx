@@ -87,7 +87,10 @@ test("inline CMP evidence renders comparison, both requests, every cookie name a
     const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" compact={compact} />);
     assert.match(html, /9\.462:1/); assert.match(html, /1\.000:1/);
     assert.match(html, /528 × 45/); assert.match(html, /528 × 49/);
-    assert.equal((html.match(/754 ms after confirmed refusal/g) ?? []).length, 2);
+    assert.equal((html.match(/\+754 ms/g) ?? []).length, 2);
+    assert.match(html, /Requests after confirmed Reject · 2/);
+    for (const column of ["Service", "Category", "After Reject", "Request"]) assert.ok(html.includes(`>${column}</th>`));
+    assert.match(html, /js-eu1.hs-analytics.net/); assert.match(html, /\/analytics\/example.js/);
     for (const name of names) assert.ok(html.includes(`>${name}</span>`));
     assert.match(html, /not text readability/);
     assert.match(html, /data sent by them was not assessed/);

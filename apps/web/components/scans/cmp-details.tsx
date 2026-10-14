@@ -89,11 +89,13 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       <p>Button sizes and screenshot were captured {comparison.captureSkewMs} ms apart on the starting page. Fill contrast compares button backgrounds, not text readability.</p>
     </> : null}
     {evidence.requests?.length ? <>
-      <p className="font-semibold text-zinc-900">Requests after confirmed Reject · {evidence.requests.length}</p>
-      <ul className="divide-y divide-zinc-200">{evidence.requests.map((request, index) => <li key={`${request.hostname}${request.path}-${index}`} className="py-2 first:pt-0 last:pb-0">
-        <p className="font-medium">{request.vendor} · {request.category} · +{request.msAfterReject} ms after confirmed refusal</p>
-        <p className="break-all font-mono text-[11px]">{request.hostname}{request.path}</p>
-      </li>)}</ul>
+      <CmpInventoryTable label={`Requests after confirmed Reject · ${evidence.requests.length}`}
+        columns={["Service", "Category", "After Reject", "Request"]}
+        columnClasses={["w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[55%] sm:w-auto"]}
+        rows={evidence.requests.map(request => [request.vendor, request.category, <span className="whitespace-nowrap">+{request.msAfterReject} ms</span>,
+          <span className="block max-w-[18rem] whitespace-normal break-all font-mono text-[11px] leading-4">
+            <span className="block">{request.hostname}</span><span className="block text-zinc-500">{request.path}</span>
+          </span>])} />
       <p>These requests were recorded during the post-Reject check. The data sent by them was not assessed.</p>
     </> : null}
     {cookies ? <>

@@ -63,3 +63,14 @@ retained bundles through canonical materialization; do not add per-read artifact
 fetches, use current site configuration to backfill old scans, or overwrite old
 assessment conclusions. A fresh authorized scan after scanner deployment is
 needed to obtain names that the original SITS packet did not retain.
+
+## Post-Reject request table follow-up
+
+The existing `supportingEvidence.requests` list uses the same compact table,
+with Service, Category, After Reject (milliseconds), and Request (hostname and
+path). The original five SITS requests, timestamps, Review assessment and data
+scope note remain unchanged. All five rows fit without vertical scrolling at
+1280px and 390px. On mobile the first three columns are visible together, with
+a sideways-scroll hint for the request address. This is presentation only;
+no scanner, persistence, export contract, cost or latency change. Existing UI
+tests and web typecheck pass. Nothing has been deployed.
