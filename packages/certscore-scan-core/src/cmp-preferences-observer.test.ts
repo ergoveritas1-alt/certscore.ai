@@ -47,15 +47,15 @@ test("ambiguous Options, unidentified CMPs, hidden sections and explicit service
     const scope = mode === "unknown" ? "custom-cookie-panel" : "onetrust-banner-sdk";
     const toggle = mode === "services" ? '<fieldset><legend>Individual services</legend><label><input type="checkbox">Google Analytics</label></fieldset>' : '<label><input type="checkbox">Analytics</label>';
     res.setHeader("Content-Type", "text/html");
-    res.end(`<section id="${scope}"><button id="options" type="button" aria-controls="prefs">Manage options</button>${mode === "ambiguous" ? '<button type="button" aria-controls="prefs">Cookie settings</button>' : ''}<div id="prefs" hidden>${toggle}${mode === "hidden" ? '<button aria-expanded="false">Vendors</button>' : ''}</div></section>${mode === "cross-vendor" ? '<section id="CybotCookiebotDialog"><button aria-controls="prefs">Cookie settings</button></section>' : ''}${mode === "scope-overflow" ? '<div class="brlbs-cmpnt-dialog-box-entrance"></div>'.repeat(1001) : ''}<script>options.onclick=()=>{fetch('/clicked');prefs.hidden=false;};</script>`);
+    res.end(`<section id="${scope}"><button id="options" type="button" aria-controls="prefs">Manage options</button>${mode === "ambiguous" ? '<button type="button" aria-controls="prefs">Cookie settings</button>' : ''}<div id="prefs" hidden>${toggle}${mode === "hidden" ? '<button aria-expanded="false">Vendors</button>' : ''}</div></section>${["cross-vendor", "cross-vendor-one-options"].includes(mode) ? `<section id="CybotCookiebotDialog">${mode === "cross-vendor" ? '<button aria-controls="prefs">Cookie settings</button>' : '<span>Cookie banner</span>'}</section>` : ''}${mode === "scope-overflow" ? '<div class="brlbs-cmpnt-dialog-box-entrance"></div>'.repeat(1001) : ''}<script>options.onclick=()=>{fetch('/clicked');prefs.hidden=false;};</script>`);
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address !== "string");
   try {
-    for (mode of ["ambiguous", "cross-vendor", "scope-overflow", "unknown", "hidden", "services"]) {
+    for (mode of ["ambiguous", "cross-vendor", "cross-vendor-one-options", "scope-overflow", "unknown", "hidden", "services"]) {
       clicks = 0;
       const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
-      if (["ambiguous", "cross-vendor", "scope-overflow", "unknown"].includes(mode)) { assert.equal(clicks, 0); assert.equal(packet.action.count, 0); assert.equal(packet.controlInventoryComplete, false); }
+      if (["ambiguous", "cross-vendor", "cross-vendor-one-options", "scope-overflow", "unknown"].includes(mode)) { assert.equal(clicks, 0); assert.equal(packet.action.count, 0); assert.equal(packet.controlInventoryComplete, false); }
       if (mode === "unknown") assert.equal(packet.support.state, "unknown");
       if (mode === "hidden") { assert.equal(clicks, 1); assert.equal(packet.controlInventoryComplete, false); }
       if (mode === "services") { assert.equal(clicks, 1); assert.equal(packet.controls[0]?.kind, "service"); }
@@ -400,4 +400,62 @@ test("a missing ready CMP cannot consume the basic-evidence reserve", { timeout:
     if (memory === undefined) delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = memory;
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
+});
+
+test("registered HubSpot, Didomi and Osano panels bind one Options action and reject replacements and ambiguity", { timeout: 45_000 }, async () => {
+  const variants = [
+    { provider: "HubSpot Consent Banner", root: "hs-banner-parent", banner: 'id="hs-eu-cookie-confirmation"', button: 'id="hs-eu-cookie-settings-button"', panel: 'id="hs-modal-content" role="alertdialog" aria-label="Cookie settings"', deferred: true },
+    { provider: "Didomi", root: "didomi-host", banner: 'id="didomi-notice"', button: 'id="didomi-notice-learn-more-button"', panel: 'id="didomi-consent-popup" role="dialog" aria-label="Cookie settings"', deferred: true },
+    { provider: "Osano", root: "osano-root", banner: 'class="osano-cm-dialog"', button: 'class="osano-cm-button--type_manage"', panel: 'class="osano-cm-info-dialog" role="dialog" aria-label="Cookie settings"', deferred: false },
+  ];
+  let variant = variants[0]!, mode = "valid", clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    const panel = `<section ${variant.panel} data-panel><label><input type="checkbox">Analytics</label><button onclick="fetch('/unexpected-save')">Save preferences</button></section>`;
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<div id="${variant.root}" ${variant.provider === "Osano" ? 'class="osano-cm-window"' : ''}><div ${variant.banner}><${mode === "anchor" ? 'a href="#"' : 'button'} ${variant.button} data-options>${mode === "informational-label" ? "Learn more" : "Manage cookies"}</${mode === "anchor" ? 'a' : 'button'}></div>${variant.deferred ? "" : panel.replace('data-panel', 'data-panel hidden')}${mode === "duplicate" ? panel + panel : ""}</div><footer><button>Manage cookies</button></footer><script>
+      document.querySelector('#${variant.root} [data-options]').onclick=(event)=>{event.preventDefault();fetch('/clicked');const root=document.getElementById('${variant.root}');
+        ${mode === "navigate" ? "location.reload();" : mode === "wrong-panel" ? "root.insertAdjacentHTML('beforeend','<section role=dialog>Other panel</section>');" : variant.deferred ? `${mode === "replace-root" ? "root.outerHTML=root.outerHTML;" : ""}document.getElementById('${variant.root}').insertAdjacentHTML('beforeend', ${JSON.stringify(panel)});` : mode === "replace-root" ? "root.querySelector('[data-panel]').outerHTML=root.querySelector('[data-panel]').outerHTML.replace(' hidden','');" : "root.querySelector('[data-panel]').hidden=false;"}
+      };
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const memory = process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "10240";
+  try {
+    for (variant of variants) for (mode of ["valid", "anchor", "duplicate", "replace-root", "navigate", "wrong-panel", "informational-label"]) {
+      clicks = 0;
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: `${variant.provider}-${mode}`, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.equal(packet.support.provider, variant.provider, JSON.stringify(packet));
+      assert.ok(packet.action.count <= 1); assert.ok(clicks <= 1);
+      if (mode === "informational-label") assert.equal(clicks, 0, "A panel selector alone never authorizes an informational link");
+      if (["valid", "anchor"].includes(mode)) {
+        assert.equal(packet.status, "completed", JSON.stringify(packet)); assert.equal(packet.action.opened, true); assert.equal(clicks, 1);
+        assert.equal(packet.controls[0]?.kind, "category");
+      } else { assert.equal(packet.action.opened, false, `${variant.provider}-${mode}`); }
+    }
+  } finally {
+    if (memory === undefined) delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = memory;
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test("configured Drupal cookie identity is bounded, own-data-only and document-bound", { timeout: 20_000 }, async () => {
+  let mode = "valid";
+  const server = createServer((_req, res) => {
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<div id="sliding-popup"><button>Accept cookies</button></div>${mode === "ambiguous" ? '<div id="onetrust-banner-sdk"><button>Accept all</button></div>' : ''}<script>
+      window.drupalSettings={eu_cookie_compliance:{cookie_name:${JSON.stringify(mode === "invalid" ? "private=value" : "cookie_compliance")}}};
+      ${mode === "getter" ? "Object.defineProperty(window.drupalSettings.eu_cookie_compliance,'cookie_name',{get(){throw new Error('Getter must never run');}});" : ""}
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (mode of ["valid", "getter", "invalid", "ambiguous"]) {
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.equal(packet.action.count, 0);
+      assert.deepEqual(packet.configuredConsentCookies, mode === "valid" ? [{ version: "cmp_configured_cookie_identity.v1", configurationPath: "drupalSettings.eu_cookie_compliance.cookie_name", name: "cookie_compliance" }] : []);
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });

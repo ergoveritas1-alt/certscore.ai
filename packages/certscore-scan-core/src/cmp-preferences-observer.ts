@@ -9,6 +9,7 @@ import { dispatchLocatorClickWithVerifiedGeometry, locatorHasViewportHitTarget }
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
 import { cookieDisclosureColumn } from "@certscore/contracts";
 import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
+import { readCmpScopeInventory } from "./cmp-scope-inventory.js";
 import { EVIDENCE_WORK_POLICY } from "./evidence-work-budget.js";
 
 /** A single isolated Options action. No preference changes, save, second click,
@@ -78,7 +79,7 @@ export async function runCmpPreferencesObserver(input: {
     await session.send("Page.enable");
     session.on("Page.frameNavigated", ({ frame }) => {
       if (!frame.parentId && frame.loaderId !== packet.documentToken) {
-        packet.checkpoints = undefined; packet.controls = []; packet.privacyLinks = [];
+        packet.checkpoints = undefined; packet.configuredConsentCookies = undefined; packet.controls = []; packet.privacyLinks = [];
         packet.declarations = []; packet.serviceNames = undefined; packet.serviceDisclosures = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
         packet.controlInventoryComplete = false; packet.action.opened = false;
         packet.documentToken = null; packet.limitations.push("preference_document_changed");
@@ -98,7 +99,8 @@ export async function runCmpPreferencesObserver(input: {
     await binding();
     const readySelectors = definitions.flatMap(definition => definition.preferenceInspection
       ? [`${definition.preferenceInspection.entranceSelector} ${definition.preferenceInspection.controlSelector}`]
-      : definition.domSelectors!.flatMap(selector => [`${selector} button`, `${selector} [role="button"]`, `${selector} input[type="button"]`]));
+      : [...definition.domSelectors!.flatMap(selector => [`${selector} button`, `${selector} [role="button"]`, `${selector} input[type="button"]`]),
+          ...(definition.preferenceDialogBinding ? [definition.preferenceDialogBinding.controlSelector] : [])]);
     // Playwright's CSS locator traverses open shadow roots (Borlabs v3).
     const readyControl = page.locator(readySelectors.map(selector => `${selector}:visible`).join(",")).first();
     let revealed = false;
@@ -144,14 +146,18 @@ export async function runCmpPreferencesObserver(input: {
     // Serial full-document selector round trips used most of the remaining
     // budget on busy pages, before we could retain their already-visible CMP.
     const scopeSelectors = definitions.map(definition => definition.preferenceInspection?.entranceSelector ?? definition.domSelectors!.join(","));
-    const scopeInventory = await page.locator(scopeSelectors.join(",")).evaluateAll((nodes, selectors) => {
-      if (nodes.length > 1000) return { overflow: true, indices: [] as number[], revealed: false };
-      return { overflow: false, revealed: (window as unknown as { __certscoreBorlabsPassiveReveal?: boolean }).__certscoreBorlabsPassiveReveal === true, indices: selectors.flatMap((selector, index) => nodes.some(node => node.matches(selector)) ? [index] : []) };
-    }, scopeSelectors);
+    const scopeInventory = await readCmpScopeInventory(page, definitions);
     packet.inspectionDiagnostic!.passiveDialogReveal = revealed || scopeInventory.revealed;
     if (scopeInventory.overflow) { packet.limitations.push("control_inventory_overflow"); return finish(); }
     for (const index of scopeInventory.indices) detected.add(definitions[index]!.canonicalName);
     if (detected.size === 1) packet.support = { state: "partial", provider: [...detected][0]!, recipeVersion: CMP_PREFERENCE_POLICY_VERSION, reason: "inspection_incomplete" };
+    await binding();
+    packet.configuredConsentCookies = scopeInventory.configuredConsentCookies;
+    if (detected.size > 1) {
+      packet.support = { state: "partial", provider: null, recipeVersion: CMP_PREFERENCE_POLICY_VERSION, reason: "cmp_identity_ambiguous" };
+      packet.limitations.push("cmp_identity_ambiguous");
+      return finish();
+    }
     // Preserve a bounded read of this document's already-loaded configuration
     // before panel binding/opening can consume the remaining inspection budget.
     // Ambiguous vendor identity never authorizes an API read or a click.
@@ -201,7 +207,7 @@ export async function runCmpPreferencesObserver(input: {
       const definition = definitions[definitionIndex]!;
       const recipe = definition.preferenceInspection;
       const scope = page.locator(scopeSelectors[definitionIndex]!);
-      const controls = scope.locator(recipe?.controlSelector ?? 'button, [role="button"], input[type="button"]');
+      const controls = scope.locator(recipe?.controlSelector ?? ['button, [role="button"], input[type="button"]', definition.preferenceDialogBinding?.controlSelector].filter(Boolean).join(","));
       const inventory = await controls.evaluateAll(nodes => ({ overflow: nodes.length > 100,
         fields: nodes.slice(0, 100).map(element => ({ label: (element.textContent ?? "").trim().slice(0, 240), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value })) }));
       if (inventory.overflow) { packet.limitations.push("control_inventory_overflow"); continue; }
@@ -282,9 +288,9 @@ export async function runCmpPreferencesObserver(input: {
     if (surfaceBinding.mode === "registered_deferred") {
       if (!deferredRoot || !deferredRootHandle || await deferredRoot.count() !== 1 ||
           !await deferredRoot.evaluate((element, previous) => element === previous && element.isConnected, deferredRootHandle) ||
-          !await controlled.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element) &&
-            ["dialog", "region"].includes(element.getAttribute("role") ?? "") &&
-            (element.getAttribute("aria-label")?.trim() || element.getAttribute("aria-labelledby")?.trim())), deferredRootHandle)) throw new Error("preference_surface_changed");
+          !await controlled.evaluate((element, expected) => Boolean(expected.root?.isConnected && expected.root.contains(element) &&
+            expected.roles.includes(element.getAttribute("role") ?? "") &&
+            (element.getAttribute("aria-label")?.trim() || element.getAttribute("aria-labelledby")?.trim())), { root: deferredRootHandle, roles: registeredDialog?.dialogRoles ?? ["dialog", "region"] })) throw new Error("preference_surface_changed");
     } else if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
     await binding();
     surfaceBinding.outcome = "opened";

@@ -1,3 +1,4 @@
+import { readCmpScopeInventory } from "./cmp-scope-inventory.js";
 import { cmpBasicEvidenceSchema, classifyPrivacySurface, type CmpBasicEvidence } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { Page } from "playwright";
@@ -19,8 +20,8 @@ export async function captureCmpBasicEvidence(input: {
   if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   const definitions = KNOWN_CMP_REGISTRY.filter(d => d.domSelectors?.length);
   const scopes = definitions.map(d => d.preferenceInspection?.entranceSelector ?? d.domSelectors!.join(","));
-  const indices = await page.locator(scopes.join(",")).evaluateAll((nodes, selectors) =>
-    nodes.length > 1000 ? [] : selectors.flatMap((selector, index) => nodes.some(node => node.matches(selector)) ? [index] : []), scopes);
+  const scopeInventory = await readCmpScopeInventory(page, definitions);
+  const indices = scopeInventory.indices;
   if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   if (indices.length !== 1) { input.onOutcome?.(indices.length ? "ambiguous_registry_scopes" : "registered_scope_unavailable"); return undefined; }
   const index = indices[0]!, definition = definitions[index]!;
@@ -64,6 +65,7 @@ export async function captureCmpBasicEvidence(input: {
     contractVersion: "certscore.cmp-basic-evidence.v1", sourceLane: "consent_proof", scanId: input.scanId,
     targetUrl: input.targetUrl, documentUrl: before.url, documentToken: before.token,
     capturedAtMs: Date.now() - input.scanStartedAtMs, provider: definition.canonicalName,
+    configuredConsentCookies: scopeInventory.configuredConsentCookies,
     controls: classifyControls(rawControls.controls, inventory), privacyLinks,
     declarations: inventory?.declarations ?? [], serviceNames: (inventory?.services ?? []).filter(Boolean),
     serviceDisclosures: inventory && "serviceDisclosures" in inventory ? inventory.serviceDisclosures : undefined,

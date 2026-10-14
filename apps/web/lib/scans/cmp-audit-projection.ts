@@ -209,12 +209,14 @@ export function projectCmpAudit(input: {
     const inventory = audit.version === "cmp_audit_assessment.v6" && row.inventory ? {
       ...row.inventory,
       ...(row.inventory.choiceActivity ? { choiceActivity: row.inventory.choiceActivity.filter(activity => controlReport?.controls[activity.action] === "observed") } : {}),
+      ...(row.inventory.expiries ? { expiries: row.inventory.expiries.filter(cookie => cookie.visit === "Before choice" || controlReport?.controls[cookie.visit === "Accept" ? "accept" : "reject"] === "observed") } : {}),
       ...(row.inventory.consentStorage ? { consentStorage: row.inventory.consentStorage.filter(record => controlReport?.controls[record.visit === "Accept" ? "accept" : "reject"] === "observed") } : {}),
       ...(row.inventory.declarations && controlReport?.controls.accept !== "observed" ? { declarations: row.inventory.declarations.map(({ observedExpiry, ...declaration }) => declaration) } : {}),
       ...(row.inventory.cookies && controlReport?.controls.accept !== "observed" ? { cookies: row.inventory.cookies.filter(cookie => cookie.observedIn.includes("before_choice"))
         .map(({ observedExpiry, ...cookie }) => ({ ...cookie, observedIn: ["before_choice" as const] })) } : {}),
     } : row.inventory;
     const restrictedCookieScope = Boolean(row.inventory?.cookies?.some(cookie => cookie.observedIn.includes("after_accept")) && controlReport?.controls.accept !== "observed");
+    const restrictedDurationScope = inventory?.expiries?.length !== row.inventory?.expiries?.length;
     const restrictedExpiryScope = Boolean(row.inventory?.declarations?.some(cookie => cookie.observedExpiry) && controlReport?.controls.accept !== "observed");
     const restrictedChoiceScope = inventory?.choiceActivity?.length !== row.inventory?.choiceActivity?.length || inventory?.consentStorage?.length !== row.inventory?.consentStorage?.length;
     // Policy-evaluated review findings take precedence over coverage results.
@@ -230,6 +232,7 @@ export function projectCmpAudit(input: {
     if (row.id === "implementation" && row.status === "not_assessed" && rejectCoverage?.assessmentStatus === "coverage_limitation") continue;
     if (concern) set(row.id, { status: labels[row.status], limitation: row.limitation,
       detail: restrictedCookieScope ? "Cookie names were compared with the captured CMP list; see retained evidence."
+        : restrictedDurationScope ? "CMP cookie expiry was captured; see retained evidence."
         : restrictedExpiryScope ? "CMP cookie descriptions were captured; see retained evidence."
         : restrictedChoiceScope ? row.id === "consent_record" ? "Browser consent records were captured; see retained evidence." : "Activity checks completed; see retained evidence."
         : ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version) && row.id === "duration" && row.inventory?.expiries?.length

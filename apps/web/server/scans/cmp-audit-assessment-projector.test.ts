@@ -121,7 +121,8 @@ test("complete configured declarations compare bounded globs to observed cookies
 test("v2 narrow facts stay informational, source-bound and neutral when proof is missing", () => {
   const b = bundle();
   b.runtimeCoverage = { coverageStatus: "usable" } as any;
-  b.cookieSnapshots = [{ consentStateAtTime: "pre_consent", cookies: [{ name: "_ga" }] }] as any;
+  b.startedAt = "2026-10-14T00:00:00.000Z";
+  b.cookieSnapshots = [{ capturedAtMs: 1000, consentStateAtTime: "pre_consent", cookies: [{ name: "_ga" }, { name: "borlabs-cookie", domain: "example.com", path: "/", expires: Date.parse(b.startedAt) / 1000 + 1 + 5184000 }] }] as any;
   b.postRefusalEvidence = { parentScanId: b.scanId, normalizedUrl: b.url, productionProjectable: true,
     refusalRegistration: { status: "confirmed" }, decisionEvidence: { basis: "verified_state", decision: "denied", observedAtMs: 1000, observedStateSha256: "a".repeat(64) },
     storage: { postAction: [{ storageType: "cookie", name: "borlabs-cookie", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 5184100, capturedAtEpochSeconds: 100 }] } } as any;
@@ -136,7 +137,7 @@ test("v2 narrow facts stay informational, source-bound and neutral when proof is
   const projection = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment, normalizedConcerns: concerns });
   assert.equal(projection.rows.find(row => row.id === "duration")!.label, "CMP cookie expiry");
   assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
-  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v1" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence").map(row => ({ ...row, inventory: row.inventory?.declarations ? { declarations: row.inventory.declarations.map(({ inferredPurpose, ...declaration }) => declaration) } : row.inventory })) } };
+  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v1" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence").map(row => ({ ...row, inventory: row.inventory?.declarations ? { declarations: row.inventory.declarations.map(({ inferredPurpose, ...declaration }) => declaration) } : undefined })) } };
   assert.equal(projectCmpAudit({ scanId: "scan-1", consentControlAssessment: legacy }).rows.find(row => row.id === "duration")!.label, "Duration of consent or rejection is appropriate");
   b.postRefusalEvidence!.decisionEvidence!.decision = "unknown";
   assert.equal(deriveCmpAuditAssessment(b)!.rows.find(row => row.id === "consent_record")!.status, "not_assessed");
@@ -191,7 +192,7 @@ test("v3 identifies configured services through retained source accounting, pers
   assert.equal(projected.detail, row.detail);
   assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
   assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment }).rows.find(row => row.id === "services")!.status, "Not assessed");
-  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v2" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence").map(row => ({ ...row, inventory: row.inventory?.declarations ? { declarations: row.inventory.declarations.map(({ inferredPurpose, ...declaration }) => declaration) } : row.inventory })) } };
+  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v2" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence").map(row => ({ ...row, inventory: row.inventory?.declarations ? { declarations: row.inventory.declarations.map(({ inferredPurpose, ...declaration }) => declaration) } : undefined })) } };
   assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: legacy }).rows.find(row => row.id === "services")!.label, "Individual service checkboxes or toggles observed");
   assert.equal(legacy.cmpAudit.version, "cmp_audit_assessment.v2");
 });
@@ -401,9 +402,8 @@ test("category table retains selectable controls and captured settings through c
 
 test("expiry tables preserve timestamp precision through policy without claiming original storage life", () => {
   const input = bundle();
-  input.postRefusalEvidence = { parentScanId: input.scanId, normalizedUrl: input.url, productionProjectable: true,
-    refusalRegistration: { status: "confirmed" }, decisionEvidence: { basis: "verified_state", decision: "denied", observedAtMs: 1000, observedStateSha256: "a".repeat(64) },
-    storage: { postAction: [{ storageType: "cookie", name: "borlabs-cookie", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 1797130216, capturedAtEpochSeconds: 1791946219.865 }] } } as any;
+  input.postRefusalEvidence = completedUnconfirmedPacket("reject") as any;
+  input.postRefusalEvidence!.storage.postAction = [{ storageType: "cookie", name: "borlabs-cookie", hostname: "example.com", nonEssential: false, identityBasis: "cookie_name_domain_path_partition", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 1797130216, capturedAtEpochSeconds: 1791946219.865 }];
   const before = structuredClone(input);
   const audit = deriveCmpAuditAssessment(input)!;
   const expected = { visit: "Reject", name: "borlabs-cookie", capturedAtEpochSeconds: 1791946219.865, expiresAtEpochSeconds: 1797130216, remainingSeconds: 1797130216 - 1791946219.865 };
@@ -426,7 +426,7 @@ test("expiry tables preserve timestamp precision through policy without claiming
   assert.deepEqual(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "duration")!.inventory!.expiries, [expected], "independent expiry survives preference failure");
   for (const mutate of [
     () => { input.postRefusalEvidence!.parentScanId = "foreign"; },
-    () => { input.postRefusalEvidence!.productionProjectable = false; },
+    () => { input.postRefusalEvidence!.afterActionCapture!.stopReason = "aborted"; },
     () => { Reflect.deleteProperty(input.postRefusalEvidence!.storage.postAction[0]!, "valueHash"); },
     () => { delete input.postRefusalEvidence!.storage.postAction[0]!.capturedAtEpochSeconds; },
     () => { input.postRefusalEvidence!.storage.postAction[0]!.expiresAtEpochSeconds = -1; },
@@ -891,4 +891,81 @@ test("unnamed and overlong action cookies retain source identity and explicit co
   assert.equal(row.cookieComparison!.omittedAfterAcceptCookieCount, 2);
   assert.match(row.detail, /2 after-click cookie entries had no comparable saved name/);
   assert.deepEqual(input, before, "The original unnamed/long snapshot evidence is not filtered or renamed");
+});
+
+
+test("completed storage snapshots survive network overflow without claiming complete activity or registered consent", () => {
+  for (const action of ["accept", "reject"] as const) {
+    const input = bundle(), packet = completedUnconfirmedPacket(action);
+    packet.storage.postAction = [{ storageType: "cookie", name: "osano_consentmanager", hostname: "example.com", nonEssential: false, identityBasis: "cookie_name_domain_path_partition", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 5184100, capturedAtEpochSeconds: 100 }];
+    packet.afterActionCapture!.requestsDropped = 149;
+    packet.captureCoverage!.requestsDroppedAfterAction = 149;
+    if (action === "accept") input.postAcceptEvidence = packet as any; else input.postRefusalEvidence = packet as any;
+    const before = structuredClone(input), audit = deriveCmpAuditAssessment(input)!;
+    assert.equal(audit.rows.find(row => row.id === "consent_record")!.status, "observed");
+    assert.equal(audit.rows.find(row => row.id === "duration")!.status, "observed");
+    assert.equal(audit.rows.find(row => row.id === "implementation")!.status, "not_assessed");
+    assert.equal(packet.productionProjectable, false);
+    assert.deepEqual(input, before);
+    for (const mutate of [
+      (p: any) => { p.afterActionCapture.storageSnapshotRetained = false; },
+      (p: any) => { p.afterActionCapture.stopReason = "aborted"; },
+      (p: any) => { p.afterActionCapture.captureEndedAtMs = 200; },
+      (p: any) => { p.interactionDiagnostics.click.outcome = "failed"; },
+      (p: any) => { p.parentScanId = "foreign"; },
+      (p: any) => { p.normalizedUrl = "https://foreign.test/"; },
+      (p: any) => { p.cancellation = { requested: true, reason: "coordinator_terminal" }; },
+    ]) {
+      const altered = structuredClone(input), changed = action === "accept" ? altered.postAcceptEvidence! : altered.postRefusalEvidence!;
+      mutate(changed);
+      const rows = deriveCmpAuditAssessment(altered)!.rows;
+      assert.equal(rows.find(row => row.id === "consent_record")!.status, "not_assessed");
+      assert.equal(rows.find(row => row.id === "duration")!.status, "not_assessed");
+    }
+  }
+});
+
+test("configured consent-cookie identities require typed provider/document binding and do not become global aliases", () => {
+  const input = bundle();
+  const packet = completedUnconfirmedPacket("reject");
+  packet.storage.postAction = [{ storageType: "cookie", name: "cookie_compliance", hostname: "example.com", nonEssential: false, identityBasis: "cookie_name_domain_path_partition", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 5184100, capturedAtEpochSeconds: 100 }];
+  input.postRefusalEvidence = packet as any;
+  const evidence = input.cmpPreferencesEvidence!;
+  evidence.support.provider = "Drupal EU Cookie Compliance module, non-TCF";
+  assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "consent_record")!.status, "not_assessed");
+  evidence.checkpoints = { version: "cmp_partial_capture.v1", documentToken: "loader-1", privacyLinks: true, declarations: true, controls: true, controlsSurface: "preferences" };
+  evidence.configuredConsentCookies = [{ version: "cmp_configured_cookie_identity.v1", configurationPath: "drupalSettings.eu_cookie_compliance.cookie_name", name: "cookie_compliance" }];
+  const before = structuredClone(input), audit = deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row => row.id === "consent_record")!.status, "observed");
+  assert.equal(audit.rows.find(row => row.id === "duration")!.status, "observed");
+  assert.equal(packet.productionProjectable, false); assert.deepEqual(input, before);
+  for (const change of [
+    (p: typeof evidence) => { p.support.provider = "OneTrust"; },
+    (p: typeof evidence) => { p.configuredConsentCookies![0]!.configurationPath = "other.cookie_name"; },
+    (p: typeof evidence) => { p.documentToken = "foreign-loader"; },
+    (p: typeof evidence) => { p.finalUrl = "https://foreign.test/"; },
+    (p: typeof evidence) => { delete p.checkpoints; },
+  ]) {
+    input.cmpPreferencesEvidence = structuredClone(before.cmpPreferencesEvidence); change(input.cmpPreferencesEvidence!);
+    const result = deriveCmpAuditAssessment(input);
+    assert.ok(!result || result.rows.find(row => row.id === "consent_record")!.status !== "observed");
+  }
+});
+
+test("shared action reportability filters expiry visits while preserving baseline expiry and retained proof", () => {
+  const input = bundle();
+  input.postRefusalEvidence = completedUnconfirmedPacket("reject") as any;
+  input.postRefusalEvidence!.storage.postAction = [{ storageType: "cookie", name: "borlabs-cookie", hostname: "example.com", nonEssential: false, identityBasis: "cookie_name_domain_path_partition", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 5184100, capturedAtEpochSeconds: 100 }];
+  input.cookieSnapshots = [{ capturedAtMs: 1000, consentStateAtTime: "pre_consent", cookies: [{ name: "borlabs-cookie", domain: "example.com", path: "/", expires: Date.parse(input.startedAt) / 1000 + 1 + 5184000 }] }] as any;
+  const audit = deriveCmpAuditAssessment(input)!;
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  assessment.controls.reject.state = "not_observed";
+  const before = structuredClone(assessment);
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const projected = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  const row = projected.rows.find(row => row.id === "duration")!;
+  assert.deepEqual(row.supportingEvidence!.inventory!.expiries!.map(expiry => expiry.visit), ["Before choice"]);
+  assert.equal(row.status, "Observed"); assert.doesNotMatch(row.detail!, /Reject/);
+  assert.equal(audit.rows.find(row => row.id === "duration")!.inventory!.expiries!.length, 2);
+  assert.deepEqual(assessment, before);
 });

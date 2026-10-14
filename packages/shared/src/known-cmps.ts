@@ -70,7 +70,10 @@ export type KnownCmpDefinition = {
   /** Named-CMP Options binding when aria-controls is absent. An on-demand
    * panel must appear under the same pre-existing registered vendor root.
    * Never opens via a vendor API or accepts an arbitrary new modal. */
-  preferenceDialogBinding?: { version: string; controlSelector: string; dialogSelector: string; deferredRootSelector?: string };
+  preferenceDialogBinding?: { version: string; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[] };
+  /** Factual cookie identity from an already-loaded, own-data configuration.
+   * Never a semantic consent witness or a global cookie-name alias. */
+  configuredConsentCookiePath?: string;
   /** Content-specific opt-in controls are not first-layer visitor consent choices. */
   nonFirstLayerSurfaceSelectors?: string[];
   /** Exclude actual consent dialogs from collection inventory, not blocked content. */
@@ -250,6 +253,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "eu_cookie_compliance",
     ],
     canonicalName: "Drupal EU Cookie Compliance module, non-TCF",
+    configuredConsentCookiePath: "drupalSettings.eu_cookie_compliance.cookie_name",
     recipeVersion: "v2",
     acceptControlSelectors: ["#sliding-popup .agree-button"],
     rejectControlSelectors: ["#sliding-popup .decline-button", "#sliding-popup .eu-cookie-compliance-reject-button"],
@@ -668,6 +672,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#didomi-notice-agree-button"],
     canonicalName: "Didomi",
+    preferenceDialogBinding: { version: "didomi_preferences.v1", controlSelector: "#didomi-notice-learn-more-button", dialogSelector: "#didomi-consent-popup", deferredRootSelector: "#didomi-host" },
     cookieNames: ["didomi_token", "euconsent-v2"],
     domains: ["didomi.io", "sdk.privacy-center.org", "privacy-center.org"],
     domSelectors: ["#didomi-host", "[id*='didomi' i]"],
@@ -787,6 +792,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#hs-eu-confirmation-button"],
     canonicalName: "HubSpot Consent Banner",
+    preferenceDialogBinding: { version: "hubspot_preferences.v1", controlSelector: "#hs-eu-cookie-settings-button", dialogSelector: "#hs-modal-content", deferredRootSelector: "#hs-banner-parent", dialogRoles: ["alertdialog"] },
     cookieNames: ["__hs_cookie_cat_pref", "__hs_opt_out", "__hs_do_not_track"],
     domains: ["js.hs-banner.com"],
     domSelectors: ["#hs-eu-cookie-confirmation"],
@@ -843,6 +849,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: ["Osano CMP"],
     canonicalName: "Osano",
+    preferenceDialogBinding: { version: "osano_preferences.v1", controlSelector: ".osano-cm-dialog .osano-cm-button--type_manage", dialogSelector: ".osano-cm-info-dialog" },
     acceptConfirmation: {
       kind: "cmp_api_consent_state_changed",
       provider: "osano",

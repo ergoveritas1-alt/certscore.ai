@@ -54,3 +54,18 @@ test("required consent lane retains passive basics when the CMP appears after it
     assert.equal(result.moduleRun.timingBreakdown?.filter(row=>row.label==='passive CMP basics').length,1);
   } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
+
+test("passive Drupal identity uses the existing scope read and rejects getters and loader drift", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<div id="sliding-popup"><button>Accept cookies</button></div><script>window.drupalSettings={eu_cookie_compliance:{cookie_name:'cookie_compliance'}};</script>`);
+    const input = { page, scanId: "fixture", targetUrl: "https://example.test/", scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
+    const packet = await captureCmpBasicEvidence(input);
+    assert.equal(packet?.configuredConsentCookies?.[0]?.name, "cookie_compliance");
+    await page.evaluate(() => { Object.defineProperty((window as any).drupalSettings.eu_cookie_compliance, "cookie_name", { get() { throw Error("No getter allowed"); } }); });
+    assert.deepEqual((await captureCmpBasicEvidence(input))?.configuredConsentCookies, []);
+    let reads = 0;
+    assert.equal(await captureCmpBasicEvidence({ ...input, readBinding: () => ({ url: page.url(), token: ++reads === 1 ? "loader-1" : "loader-2" }) }), undefined);
+  } finally { await browser.close(); }
+});

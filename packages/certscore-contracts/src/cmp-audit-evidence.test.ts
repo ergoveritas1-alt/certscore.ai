@@ -96,3 +96,17 @@ test("cookie template candidates and expiry evidence cannot become verified matc
     assert.equal(cmpInventoryTablesSchema.safeParse({ cookies: [{ ...cookie, ...patch }] }).success, false);
   assert.equal(cmpInventoryTablesSchema.safeParse({ declarations: [{ name: "_ga_xxxxxxxxxx", purpose: "", duration: "", source: "cmp_api_inventory", observedExpiry: cookie.observedExpiry }] }).success, false);
 });
+
+test("configured cookie identities require a bounded provider-bound checkpoint without upgrading historical packets", () => {
+  const base: any = packet();
+  const witness = { version: "cmp_configured_cookie_identity.v1", configurationPath: "drupalSettings.eu_cookie_compliance.cookie_name", name: "cookie_compliance" };
+  base.configuredConsentCookies = [witness];
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(base).success, false);
+  base.checkpoints = { version: "cmp_partial_capture.v1", documentToken: "loader", privacyLinks: false, declarations: false, controls: false, controlsSurface: "first_layer" };
+  assert.deepEqual(cmpPreferencesEvidenceSchema.parse(base).configuredConsentCookies, [witness]);
+  for (const change of [{ name: "value=private" }, { name: "" }, { name: "a".repeat(161) }, { version: "guessed_cookie" }, { rawValue: "private" }]) {
+    assert.equal(cmpPreferencesEvidenceSchema.safeParse({ ...base, configuredConsentCookies: [{ ...witness, ...change }] }).success, false);
+  }
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse({ ...base, configuredConsentCookies: Array(5).fill(witness) }).success, false);
+  assert.equal(cmpPreferencesEvidenceSchema.parse(packet()).configuredConsentCookies, undefined);
+});

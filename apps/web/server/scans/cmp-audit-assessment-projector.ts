@@ -1,23 +1,23 @@
 import { createHash } from "node:crypto";
 import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
 import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
-import { isKnownCmpCookieName } from "@website-signal-risk-scanner/shared";
+import { KNOWN_CMP_REGISTRY, isKnownCmpCookieName } from "@website-signal-risk-scanner/shared";
 
 /** Materialize only from the coordinator's verified canonical bundle. Browser
  * observations stay distinct from product capability and legal adequacy. */
-function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geometry: Record<string, unknown> | null | undefined, observations: ReturnType<typeof completedChoiceObservations>): CmpAuditAssessment | undefined {
+function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geometry: Record<string, unknown> | null | undefined, observations: ReturnType<typeof retainedChoiceCaptures>): CmpAuditAssessment | undefined {
   const parsed = cmpPreferencesEvidenceSchema.safeParse(bundle.cmpPreferencesEvidence);
   if (!parsed.success) {
     const outcome = bundle.cmpPreferenceLaneOutcome;
     if (!outcome || outcome.status !== "limited" || !outcome.limitationCode) return undefined;
     // Coordinator outcomes are coverage telemetry, never substituted browser evidence.
     const fallback = cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v7", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
+      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v8", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: outcome.limitationCode },
       rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? "Preference evidence was not retained; this criterion could not be assessed.", evidenceRefs: [] })) });
     const expiries = applyClientFacts(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs }), fallback.rows, observations);
     if (expiries.length) fallback.rows.find(row => row.id === "duration")!.inventory = { expiries };
-    applyChoiceActivity(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail, evidenceRefs: refs }), fallback.rows, observations);
+    applyChoiceActivity(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail, evidenceRefs: refs }), fallback.rows, observations.filter(capture => capture.networkCompleted));
     for (const row of fallback.rows) if (["categories", "services", "privacy_access", "declared_not_found", "found_not_declared", "cookie_information"].includes(row.id) && row.status === "not_assessed")
       Object.assign(row, { status: "incomplete", detail: "This check depends on the incomplete preference inspection.", evidenceRefs: ["CanonicalEvidenceBundle.json"], limitation: { group: "preferences", code: outcome.limitationCode } });
     applyActionLimitations(bundle, fallback.rows);
@@ -52,9 +52,9 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   const reject = bundle.postRefusalEvidence;
   const accepted = accept?.parentScanId === bundle.scanId && accept.normalizedUrl === evidence.targetUrl && accept.productionProjectable && accept.acceptanceRegistration.status === "confirmed";
   for (const [id, detail] of Object.entries(independentAuditDetails(bundle))) set(id as ExtendedCmpCriterion, "not_assessed", detail, ["CanonicalEvidenceBundle.json"]);
-  const expiries = applyClientFacts(bundle, set, rows, observations);
+  const expiries = applyClientFacts(bundle, set, rows, observations, bound ? configuredCookieNames(evidence.support.provider, evidence.configuredConsentCookies) : []);
   if (expiries.length) rows.find(row => row.id === "duration")!.inventory = { expiries };
-  applyChoiceActivity(bundle, set, rows, observations);
+  applyChoiceActivity(bundle, set, rows, observations.filter(capture => capture.networkCompleted));
   applyInventoryFacts(bundle, evidence, { controlsUsable, declarationsUsable, privacyUsable, usable }, rows, set, observations);
   applyActionLimitations(bundle, rows);
   applyVisualLimitations(bundle, rows, geometry);
@@ -67,7 +67,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v7", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v8", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -116,13 +116,16 @@ function independentAuditDetails(bundle: CanonicalEvidenceBundle): Partial<Recor
 
 /** Verified browser facts only. These observed rows make no audit-adequacy,
  * enforcement, future persistence or duration-appropriateness claim. */
-function applyClientFacts(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: CmpAuditAssessment["rows"], observations: ReturnType<typeof completedChoiceObservations>) {
-  const actions = [
-    { label: "Accept", expected: "granted", packet: bundle.postAcceptEvidence, confirmed: bundle.postAcceptEvidence?.acceptanceRegistration.status === "confirmed" },
-    { label: "Reject", expected: "denied", packet: bundle.postRefusalEvidence, confirmed: bundle.postRefusalEvidence?.refusalRegistration.status === "confirmed" },
-  ].filter(item => item.packet?.parentScanId === bundle.scanId && item.packet.normalizedUrl === bundle.url && item.packet.productionProjectable);
+function configuredCookieNames(provider: string | null, cookies?: CmpPreferencesEvidence["configuredConsentCookies"]): string[] {
+  const definition = KNOWN_CMP_REGISTRY.find(entry => entry.canonicalName === provider);
+  return (cookies ?? []).filter(cookie => cookie.version === "cmp_configured_cookie_identity.v1" &&
+    definition?.configuredConsentCookiePath === cookie.configurationPath).map(cookie => cookie.name);
+}
+
+function applyClientFacts(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: CmpAuditAssessment["rows"], observations: ReturnType<typeof retainedChoiceCaptures>, configuredNames: string[] = []) {
+  const knownCookie = (name: string) => isKnownCmpCookieName(name) || configuredNames.includes(name);
   const records = observations.flatMap(({ action, packet }) => packet.storage.postAction.filter(item => item.storageType === "cookie" &&
-    isKnownCmpCookieName(item.name) && item.identityHash && item.valueHash).slice(0, 4).map(item => ({
+    knownCookie(item.name) && item.identityHash && item.valueHash).slice(0, 4).map(item => ({
       visit: action === "accept" ? "Accept" as const : "Reject" as const, name: item.name,
       change: packet.storage.preAction.some(before => before.storageType === item.storageType && before.identityHash === item.identityHash && before.name === item.name && before.valueHash && before.valueHash !== item.valueHash) ? "updated" as const : "stored" as const,
     })));
@@ -131,15 +134,15 @@ function applyClientFacts(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: 
     set("consent_record", "observed", `Browser consent records were stored or updated after ${visits.join(" and ")}.`, ["CanonicalEvidenceBundle.json"]);
     rows.find(row => row.id === "consent_record")!.inventory = { consentStorage: records };
   }
-  const expiryCookies = actions.flatMap(({ label, packet }) => packet!.storage.postAction.filter(item => item.storageType === "cookie" &&
-    isKnownCmpCookieName(item.name) && item.identityHash && item.valueHash && Number.isFinite(item.expiresAtEpochSeconds) && item.expiresAtEpochSeconds! > 0 && Number.isFinite(item.capturedAtEpochSeconds))
-    .slice(0, 2).map(item => ({ visit: label, item })));
+  const expiryCookies = observations.flatMap(({ action, packet }) => packet.storage.postAction.filter(item => item.storageType === "cookie" &&
+    knownCookie(item.name) && item.identityHash && item.valueHash && Number.isFinite(item.expiresAtEpochSeconds) && item.expiresAtEpochSeconds! > 0 && Number.isFinite(item.capturedAtEpochSeconds))
+    .slice(0, 2).map(item => ({ visit: action === "accept" ? "Accept" as const : "Reject" as const, item })));
   const baseline = bundle.runtimeCoverage?.coverageStatus === "usable" && Number.isFinite(Date.parse(bundle.startedAt))
     ? bundle.cookieSnapshots?.filter(snapshot => snapshot.consentStateAtTime === "pre_consent" && Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs >= 0)
       .reduce<NonNullable<CanonicalEvidenceBundle["cookieSnapshots"]>[number] | undefined>((latest, snapshot) => !latest || snapshot.capturedAtMs > latest.capturedAtMs ? snapshot : latest, undefined) : undefined;
   const host = (() => { try { return new URL(bundle.url).hostname.toLowerCase(); } catch { return ""; } })();
   const baselineExpiries = (baseline?.cookies ?? []).flatMap(cookie => {
-    if (!isKnownCmpCookieName(cookie.name) || typeof cookie.domain !== "string" || typeof cookie.path !== "string" || typeof cookie.expires !== "number" || !Number.isFinite(cookie.expires)) return [];
+    if (!knownCookie(cookie.name) || typeof cookie.domain !== "string" || typeof cookie.path !== "string" || typeof cookie.expires !== "number" || !Number.isFinite(cookie.expires)) return [];
     const domain = cookie.domain.replace(/^\./, "").toLowerCase();
     if (!domain || !host || !(host === domain || host.endsWith(`.${domain}`)) || !cookie.path.startsWith("/")) return [];
     const capturedAtEpochSeconds = (Date.parse(bundle.startedAt) + baseline!.capturedAtMs) / 1000;
@@ -162,7 +165,7 @@ function applyClientFacts(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: 
 
 /** Validated, source-bound path completion is independent of registration.
  * Legacy v1 after-click capture supports facts, never v2 Reject scoring. */
-function completedChoiceObservations(bundle: CanonicalEvidenceBundle) {
+function retainedChoiceCaptures(bundle: CanonicalEvidenceBundle) {
   return (["accept", "reject"] as const).flatMap(action => {
     const packet = action === "accept" ? bundle.postAcceptEvidence : bundle.postRefusalEvidence;
     if (!packet || packet.parentScanId !== bundle.scanId || packet.normalizedUrl !== bundle.url || packet.cancellation?.requested) return [];
@@ -170,21 +173,25 @@ function completedChoiceObservations(bundle: CanonicalEvidenceBundle) {
       const packetSha256 = createHash("sha256").update(JSON.stringify(packet)).digest("hex");
       const projection = action === "accept" ? projectPostAcceptEvidenceForReport({ packet: bundle.postAcceptEvidence!, packetSha256 })
         : projectPostRefusalEvidenceForReport({ packet: bundle.postRefusalEvidence!, packetSha256 });
-      if (!projection.execution?.observationCompleted || !projection.execution.clickCompleted) return [];
+      if (!projection.execution?.clickCompleted) return [];
       const after = projection.afterActionCapture, registered = projection.registeredObservationCompletion;
       const start = after?.actionDispatchedAtMs ?? registered?.startedAtMs;
       const end = after?.captureEndedAtMs ?? registered?.completedAtMs;
       const windowMs = after?.requestedWindowMs ?? (registered ? Math.min(registered.requiredWindowMs, registered.completedAtMs - registered.startedAtMs) : undefined);
       if (start === undefined || end === undefined || windowMs === undefined) return [];
       const requests = after ? projection.afterActionRequests ?? [] : packet.network.requests.filter(row => row.startedAtMs >= start && row.startedAtMs <= end);
-      return [{ action, packet, windowMs, requests, start }];
+      // A verified terminal snapshot is independent of network retention loss.
+      // The validated projection binds dispatch, document, snapshot and end time.
+      const storageCompleted = after ? after.activationStatus === "completed" && after.stopReason === "window_elapsed" && after.storageSnapshotRetained
+        : projection.execution.observationCompleted;
+      return [{ action, packet, windowMs, requests, start, storageCompleted, networkCompleted: projection.execution.observationCompleted }];
     } catch { return []; }
   });
 }
 
 /** These rows describe capture and classified requests within its window;
  * they do not assert effective refusal or complete storage instrumentation. */
-function applyChoiceActivity(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: CmpAuditAssessment["rows"], observations: ReturnType<typeof completedChoiceObservations>) {
+function applyChoiceActivity(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: CmpAuditAssessment["rows"], observations: ReturnType<typeof retainedChoiceCaptures>) {
   const count = observations.length;
   const reject = observations.find(item => item.action === "reject");
   const rejectRequests = reject?.requests.filter(item => item.nonEssential).length ?? 0;
@@ -245,7 +252,7 @@ type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][nu
 type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints">;
 function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: InventoryFacts,
   { controlsUsable, declarationsUsable, privacyUsable, usable }: { controlsUsable: boolean; declarationsUsable: boolean; privacyUsable: boolean; usable: boolean },
-  rows: CmpAuditAssessment["rows"], set: AuditSet, observations: ReturnType<typeof completedChoiceObservations>) {
+  rows: CmpAuditAssessment["rows"], set: AuditSet, observations: ReturnType<typeof retainedChoiceCaptures>) {
   const accept = bundle.postAcceptEvidence;
   const accepted = accept?.parentScanId === bundle.scanId && accept.normalizedUrl === bundle.url && accept.productionProjectable && accept.acceptanceRegistration.status === "confirmed";
   const acceptCapture = observations.find(observation => observation.action === "accept");
@@ -370,7 +377,8 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
  * manufacture completeness from an optional worker outcome. */
 export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geometry?: Record<string, unknown> | null): CmpAuditAssessment | undefined {
   // Validate action completion once and reuse it across both retained CMP sources.
-  const observations = completedChoiceObservations(bundle);
+  const captures = retainedChoiceCaptures(bundle);
+  const observations = captures.filter(capture => capture.storageCompleted);
   const original = derivePreferenceAuditAssessment(bundle, geometry, observations);
   const parsed = cmpBasicEvidenceSchema.safeParse(bundle.cmpBasicEvidence);
   if (!parsed.success || parsed.data.scanId !== bundle.scanId || parsed.data.targetUrl !== bundle.url) return original;
@@ -393,6 +401,8 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     status, detail: detail.slice(0, 500), evidenceRefs: refs.map(ref => ref === "CmpPreferencesEvidencePacket.json" ? "CanonicalEvidenceBundle.json#cmpBasicEvidence" : ref),
   });
   applyInventoryFacts(bundle, { ...basic, controlInventoryComplete: false, declarationInventoryComplete: false }, { controlsUsable: true, declarationsUsable: true, privacyUsable: true, usable: false }, candidates, set, observations);
+  const basicExpiries = applyClientFacts(bundle, set, candidates, observations, configuredCookieNames(basic.provider, basic.configuredConsentCookies));
+  if (basicExpiries.length) candidates.find(row => row.id === "duration")!.inventory = { expiries: basicExpiries };
   if (basic.serviceNames.length) {
     const services = [...new Set(basic.serviceNames)].map(name => ({ name, source: "cmp_api_inventory" as const })) as NonNullable<NonNullable<CmpAuditAssessment["rows"][number]["inventory"]>["services"]>;
     for (const service of candidates.find(row => row.id === "services")!.inventory?.services ?? [])
@@ -407,10 +417,10 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   }
   if (!original) {
     const assign: AuditSet = (id, status, detail, evidenceRefs = []) => Object.assign(assessment.rows.find(row => row.id === id)!, { status, detail, evidenceRefs });
-    const expiries = applyClientFacts(bundle, assign, assessment.rows, observations);
+    const expiries = applyClientFacts(bundle, assign, assessment.rows, observations, configuredCookieNames(basic.provider, basic.configuredConsentCookies));
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
-    applyChoiceActivity(bundle, assign, assessment.rows, observations); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
+    applyChoiceActivity(bundle, assign, assessment.rows, observations.filter(capture => capture.networkCompleted)); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v3", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v4", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

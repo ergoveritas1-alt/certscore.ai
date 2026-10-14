@@ -41,6 +41,12 @@ export const cmpPreferenceDispatchSchema = z.object({
 });
 export type CmpPreferenceDispatch = z.infer<typeof cmpPreferenceDispatchSchema>;
 
+const configuredConsentCookiesSchema = z.array(z.object({
+  version: z.literal("cmp_configured_cookie_identity.v1"),
+  configurationPath: z.string().min(1).max(160),
+  name: z.string().regex(/^[A-Za-z0-9_-]{1,160}$/),
+}).strict()).max(4);
+
 export const cmpCookieExpiryEvidenceSchema = z.object({
   visit: z.enum(["Accept", "Reject", "Before choice"]), domain: z.string().min(1).max(255).optional(), path: z.string().min(1).max(1024).optional(), name: z.string().min(1).max(160),
   capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(),
@@ -93,6 +99,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) })).max(100),
   declarationInventoryComplete: z.boolean(),
   serviceNames: z.array(z.string().min(1).max(240)).max(100).optional(),
+  configuredConsentCookies: configuredConsentCookiesSchema.optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   limitations: z.array(z.string().max(120)).max(24),
   // Completed, document-bound sub-observations survive unrelated later timeouts.
@@ -129,6 +136,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });
   if ((packet.controls.length || packet.controlInventoryComplete) && !packet.action.opened && !(packet.checkpoints?.controls && packet.checkpoints.controlsSurface === "first_layer")) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Preference controls require a verified opened surface." });
   if (packet.checkpoints && (!packet.documentToken || packet.checkpoints.documentToken !== packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Partial checkpoints require exact document binding." });
+  if (packet.configuredConsentCookies?.length && (!packet.checkpoints || !packet.support.provider)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Configured cookie identity requires a provider-bound document checkpoint." });
   if (packet.declarationCoverage && packet.declarationInventoryComplete && (packet.declarationCoverage.truncated || packet.declarationCoverage.unresolved || packet.declarationCoverage.configured !== packet.declarationCoverage.resolved || !packet.checkpoints?.declarations)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Complete configured inventory requires verified source accounting." });
   if (Date.parse(packet.completedAt) < Date.parse(packet.startedAt)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid preference observation window." });
 });
@@ -147,6 +155,7 @@ export const cmpBasicEvidenceSchema = z.object({
   privacyLinks: cmpPreferencesEvidenceSchema.innerType().shape.privacyLinks,
   declarations: cmpPreferencesEvidenceSchema.innerType().shape.declarations,
   serviceNames: z.array(z.string().min(1).max(240)).max(100),
+  configuredConsentCookies: configuredConsentCookiesSchema.optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   limitations: z.array(z.string().min(1).max(120)).max(8),
 }).strict();
