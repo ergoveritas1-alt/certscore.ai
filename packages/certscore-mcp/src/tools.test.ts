@@ -2164,3 +2164,37 @@ test("privacy workpaper stays factual, source-bound and available in compact and
   assert.equal(bounded.score, 72);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bounded));
 });
+
+test("full bundles preserve typed evidence arrays and nested fields; byte limits omit whole reports", () => {
+  const delta = { baselineCount: 0, gpcCount: 0, countDelta: 0, baselineOnly: [], gpcOnly: [], shared: [] };
+  const gpcResponse = {
+    status: "no_observable_response", findingTitle: "No observable GPC response",
+    summary: "No observable baseline delta was retained.", scoreEffect: "none", legalInterpretation: "not_assessed",
+    comparison: { comparable: true, protocol: "passive_baseline_with_sec_gpc",
+      baselineArtifact: { lane: "runtime_evidence", sha256: "a".repeat(64), sizeBytes: 100 },
+      gpcArtifact: { lane: "gpc_observation", sha256: "b".repeat(64), sizeBytes: 110 },
+      enabledProof: { secGpcHeaderValue: "1", requestsWithSecGpc: 80,
+        requestEventIds: Array.from({ length: 80 }, (_, index) => `gpc-request-${index}`), navigatorGlobalPrivacyControl: true },
+      deltas: { cookies: delta, trackers: delta, advertisingOrMeasurementActivity: delta, consentOrCmpBehavior: delta }, limitationKeys: [] },
+    californiaPolicy: { applied: false, deductionPoints: 0 }, evidenceUrl: "https://certscore.ai/evidence",
+  };
+  const source = { ...report, gpcResponse, request: { nested: { a: { b: { c: { d: { e: { f: { g: ["retained"] } } } } } } } } };
+  const before = structuredClone(source);
+  const input = { detail: "full" as const, maxBytes: 100_000, report: source,
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+    scan: { type: "certscore_scan", scanId: "scan_123", domain: "example.com", status: "completed", score: 100, gpcResponse } } as any;
+  const bundle = buildScanBundle(input);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+  assert.deepEqual(bundle.fullReport.gpcResponse, gpcResponse);
+  assert.deepEqual(bundle.fullReport.request, source.request);
+  assert.equal(bundle.fullReport.gpcResponse.comparison.enabledProof.requestEventIds.length, 80);
+  assert.deepEqual(source, before);
+  const bounded = buildScanBundle({ ...input, maxBytes: 25_000, responseCeilingBytes: 25_000,
+    report: { ...source, request: { retainedPayload: "x".repeat(100_000) } } });
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bounded));
+  assert.equal(bounded.fullReport, undefined);
+  assert.ok(bounded.mcpMetadata.omittedSections.includes("fullReport"));
+  assert.ok(bounded.mcpMetadata.actualBytes <= 25_000);
+  assert.deepEqual(bounded.gpcResponse, gpcResponse);
+  assert.equal(bounded.score, 100);
+});

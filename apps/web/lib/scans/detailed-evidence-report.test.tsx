@@ -98,3 +98,59 @@ test("scanner integration support remains independent of a CMP feature assessmen
   assert.equal(output.cmpAudit.rows.find(row => row.id === "services")!.status, "Not assessed");
   assert.equal(output.detailedEvidence.sections[0]!.counts.unsupported, 0);
 });
+
+test("California privacy choices share website/export headers and retain verified controls, candidates and passages", async () => {
+  const { CaliforniaPrivacyWorkpaper } = await import("../../components/scans/regulatory-review-focus");
+  const report = fixture(); report.reviewFocus = "ccpa_cpra";
+  report.privacyAuditEvidence = {
+    contractVersion: "certscore.privacy-audit-evidence.v2", scanId: report.scan.id, documentUrl: "https://example.com/",
+    capturedAt: "2026-10-07T00:00:00.000Z", sourceHash: "c".repeat(64), verificationStatus: "verified", scoreEffect: "none",
+    passagePolicy: "california_notice_passages.v1", negativeControlCoverage: "not_verified", collectionPointNoticeAssessment: "not_assessed", truncated: false,
+    controls: [{ kind: "your_privacy_choices", label: "Your privacy choices", sourceUrl: "https://example.com/", destinationUrl: "https://example.com/choices",
+      placement: "footer", evidenceRef: "privacy:control:1", retrieval: "not_attempted", interaction: "not_tested" }],
+    controlCandidates: [{ kind: "cookie_settings", label: "Cookie settings", sourceUrl: "https://example.com/", destinationUrl: "https://example.com/settings",
+      placement: "footer", evidenceRef: "privacy:candidate:1", verification: "visibility_unverified" }],
+    notices: [{ kind: "california_notice", url: "https://example.com/privacy", evidenceRef: "privacy:notice:1", directlyLinkedFromScannedPage: true,
+      coverage: "partial", passages: [{ topic: "privacy_rights", excerpt: "You can request access to or deletion of personal information." }] }],
+  };
+  const before = structuredClone(report);
+  const projected = { ...report, ...buildDetailedEvidenceExport(report) };
+  const selection = selectReportEvidenceSection(projected, "policy");
+  const exported = buildReportDisplayExport(selection.report, { scanId: report.scan.id });
+  const pages = []; let cursor: string | null = null;
+  do { const page = buildReportEvidencePage({ scanId: report.scan.id, report: exported, section: "policy", cursor }); pages.push(page); cursor = page.pagination.nextCursor; } while (cursor);
+  const rebuilt = reconstructReportEvidencePages(pages.map(page => ({ ...page, entries: page.entries.map(entry => ({ ...entry, value: entry.value })) })));
+  assert.deepEqual(rebuilt.privacyAuditEvidence, report.privacyAuditEvidence);
+  const section = rebuilt.detailedEvidence!.sections.find(section => section.id === "privacy")!;
+  assert.equal(section.displayStatus, "Review");
+  assert.deepEqual(section.rows.map(row => row.status), ["Observed", "Needs review", "Retained"]);
+  assert.equal(section.rows[1]!.displayStatus, "Review");
+  assert.equal(section.rows[0]!.source.field, "privacyAuditEvidence.controls");
+  assert.equal(section.rows[2]!.source.field, "privacyAuditEvidence.notices");
+  const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} focus="ccpa_cpra" />);
+  assert.ok(html.includes(section.title)); assert.ok(html.includes(section.recap));
+  assert.ok(html.includes(report.privacyAuditEvidence.notices[0]!.passages[0]!.excerpt));
+  assert.match(section.rows[1]!.summary!, /visibility not verified/);
+  assert.ok(selection.selection.fields.includes("privacyAuditEvidence"));
+  assert.deepEqual(report, before);
+  report.reviewFocus = "gdpr_eprivacy";
+  assert.ok(!buildDetailedEvidenceExport(report).detailedEvidence.sections.some(section => section.id === "privacy"));
+  report.privacyAuditEvidence.scanId = "other-scan";
+  assert.equal(buildDetailedEvidenceExport(report).privacyAuditEvidence, null);
+  assert.equal((buildReportDisplayExport({ scan: report.scan, privacyAuditEvidence: report.privacyAuditEvidence }) as any).privacyAuditEvidence, undefined);
+});
+
+test("California export is limited on missing, malformed or cross-scan evidence, without findings or absence claims", () => {
+  const report = fixture(); report.reviewFocus = "ccpa_cpra";
+  const before = structuredClone(report.findings);
+  for (const evidence of [undefined, { scanId: report.scan.id }, { scanId: "other-scan" }]) {
+    report.privacyAuditEvidence = evidence as any;
+    const output = buildDetailedEvidenceExport(report);
+    assert.equal(output.privacyAuditEvidence, null);
+    const section = output.detailedEvidence.sections.find(section => section.id === "privacy")!;
+    assert.equal(section.recap, "Evidence unavailable"); assert.equal(section.displayStatus, "Limited"); assert.deepEqual(section.rows, []);
+    const exported = buildReportDisplayExport({ scan: report.scan, privacyAuditEvidence: evidence }, { scanId: report.scan.id }) as any;
+    assert.equal(exported.privacyAuditEvidence, undefined);
+  }
+  assert.deepEqual(report.findings, before);
+});

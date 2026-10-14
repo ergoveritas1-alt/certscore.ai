@@ -19,8 +19,7 @@ test("review selector is compact and exposes both focus choices", () => {
 test("California evidence is scoped to CCPA and remains compact when unavailable", () => {
   assert.equal(renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="gdpr_eprivacy" />), "");
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" />);
-  assert.match(html, /CCPA\/CPRA · Starting page/);
-  assert.match(html, /Privacy choices &amp; notices/);
+  assert.match(html, /California privacy choices/);
   assert.match(html, /Evidence unavailable/);
   assert.match(html, /does not establish that these items are absent/);
   assert.doesNotMatch(html, /<details[^>]+open=|0 retained choices/);
@@ -74,4 +73,15 @@ test("share and download links preserve focus, with tracking exports explicitly 
   assert.match(markup, /workpaper=tracking[^"<]*reviewFocus=ccpa_cpra/);
   assert.match(markup, /https%3A%2F%2Fcertscore.ai%2Fscan%2Ffixture%3FreviewFocus%3Dccpa_cpra/);
   assert.doesNotMatch(markup, /format=csv[^"<]*scope=full-site/);
+});
+
+
+test("privacy workpaper rejects evidence bound to another report", () => {
+  const evidence = { contractVersion: "certscore.privacy-audit-evidence.v1", scanId: "other", documentUrl: "https://example.test/",
+    capturedAt: "2026-09-25T12:00:00.000Z", sourceHash: "a".repeat(64), verificationStatus: "verified",
+    scoreEffect: "none", passagePolicy: "california_notice_passages.v1", negativeControlCoverage: "not_verified",
+    collectionPointNoticeAssessment: "not_assessed", truncated: false, controls: [], notices: [] } as const;
+  const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" scanId="current" evidence={{ ...evidence, controls: [], notices: [] }} />);
+  assert.match(html, /Evidence unavailable/);
+  assert.doesNotMatch(html, /Source SHA-256/);
 });

@@ -4,6 +4,8 @@ import {
 } from "@certscore/api-contracts";
 import { cmsSecurityProjectionSchema } from "@certscore/contracts";
 import type { ShadowEvidenceRow, ShadowReportData } from "../../components/scans/report-lab/shadow-report-data";
+import { californiaPrivacyEvidence } from "./california-privacy-evidence";
+import { resolveReportReviewFocus } from "./report-review-focus";
 import { detailedEvidenceCopy, policyFindingSummary } from "./detailed-evidence-copy";
 import { accessibilityFindingCopy } from "./accessibility-finding-copy";
 import { accessibilityRuleTitle } from "./accessibility-report";
@@ -21,6 +23,7 @@ import {
 /** Read-only presentation over the same report model as the website. Never creates findings or changes assessments. */
 export function buildDetailedEvidenceExport(report: ShadowReportData) {
   const layout = detailedEvidenceLayout(report);
+  const privacy = californiaPrivacyEvidence(report.privacyAuditEvidence, report.scan.id);
   const sourceRows = [...report.consentRows, ...report.gdprTransparencyRows, ...report.preConsentRuntimeRows, ...report.trackingExternalRows];
   const audit = report.cmpAudit?.scanId === report.scan.id ? report.cmpAudit : undefined;
   const cmpAudit = publicCmpAuditSchema.parse({
@@ -96,6 +99,7 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
     section("policy", layout.policyRows, "gdprTransparencyRows", {}, true),
     section("runtime", report.preConsentRuntimeRows, "preConsentRuntimeRows"),
     section("transport", report.transportRows, "transportRows"));
+  if (resolveReportReviewFocus(report.reviewFocus, report.scan.originCode) === "ccpa_cpra") sections.push(privacy.section);
   // Cookie disclosures are displayed in Policies but retain their canonical consent-row identity.
   const policy = sections.find(item => item.id === "policy")!;
   for (const row of policy.rows) if (layout.cookieRows.some(cookie => cookie.id === row.id)) row.source.field = "consentRows";
@@ -136,5 +140,5 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
     version: "certscore.detailed-evidence.v1", scanId: report.scan.id, sections: sections.sort((a, b) => EVIDENCE_SECTION_ORDER.indexOf(a.id) - EVIDENCE_SECTION_ORDER.indexOf(b.id)),
     interpretation: "Section recaps and display labels describe existing report assessments. Audit rows are not additional findings. Source fields retain evidence and provenance; findings and score remain authoritative. Missing evidence does not establish absence.",
   });
-  return { detailedEvidence, cmpAudit, cmsSecurity };
+  return { detailedEvidence, cmpAudit, cmsSecurity, privacyAuditEvidence: privacy.evidence };
 }

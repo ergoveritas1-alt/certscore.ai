@@ -1,4 +1,4 @@
-import { privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, scanFormsSummarySchema, scanScoreExplanationSchema, apiAccessibilityAuditSummarySchema, describeGpcActivityComparison } from "@certscore/api-contracts";
+import { pulseResponseSchema, privacyAuditEvidenceSchema, privacyAuditSummarySchema, apiV2GpcResponseSchema, apiV2ChoicePathExecutionSchema, scanFormsSummarySchema, scanScoreExplanationSchema, apiAccessibilityAuditSummarySchema, describeGpcActivityComparison } from "@certscore/api-contracts";
 
 import { bundleReviewNavigation } from "./review-navigation.js";
 
@@ -1872,12 +1872,15 @@ export function buildScanBundle(input: {
       ? { evidenceSummary: bundleEvidenceSummary(evidence, allFindings, links, detail === "full") }
       : {}),
     ...(detail === "full" && Object.keys(report).length > 0 ? {
-      fullReport: compactEvidenceValue(deduplicatedReport.residual, {
-        arrayItems: 50,
-        depth: 8,
-        objectKeys: 100,
-        stringChars: 4_000
-      })
+      // Typed Pulse fields are indivisible evidence. Generic truncation markers
+      // can invalidate arrays, URLs and nested contracts or disguise incomplete proof.
+      // Only untyped extension data uses compaction; the envelope budget still
+      // explicitly omits fullReport if the valid report does not fit.
+      fullReport: Object.fromEntries(Object.entries(deduplicatedReport.residual).map(([key, value]) => [key,
+        Object.hasOwn(pulseResponseSchema.shape, key) ? value : compactEvidenceValue(value, {
+          arrayItems: 50, depth: 8, objectKeys: 100, stringChars: 4_000,
+        }),
+      ]))
     } : {}),
     ...(preConsentCookiesTrackers ? { preConsentCookiesTrackers } : {}),
     links,

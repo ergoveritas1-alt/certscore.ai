@@ -163,7 +163,8 @@ export const detailedEvidenceOpenApiSchemas = {
           "transport",
           "accessibility",
           "cms",
-          "gpc"
+          "gpc",
+          "privacy"
         ]
       },
       "title": {
@@ -376,7 +377,8 @@ export const detailedEvidenceOpenApiSchemas = {
                 "transport",
                 "accessibility",
                 "cms",
-                "gpc"
+                "gpc",
+                "privacy"
               ]
             },
             "title": {
@@ -547,7 +549,7 @@ export const detailedEvidenceOpenApiSchemas = {
             }
           }
         },
-        "maxItems": 9
+        "maxItems": 10
       },
       "interpretation": {
         "type": "string"

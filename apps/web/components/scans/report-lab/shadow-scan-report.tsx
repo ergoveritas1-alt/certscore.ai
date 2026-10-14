@@ -1616,7 +1616,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.runtime} recap={evidenceSectionRecap(report.preConsentRuntimeRows)} badge={<EvidenceHeaderStatus rows={report.preConsentRuntimeRows} />} />
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>}
-            {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} focus="ccpa_cpra" /> : null}
+            {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} focus="ccpa_cpra" scanId={report.scan.id} /> : null}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.transport} recap={evidenceSectionRecap(report.transportRows)} badge={<EvidenceHeaderStatus rows={report.transportRows} />} />
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">

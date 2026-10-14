@@ -8,6 +8,7 @@ export interface ReportEvidenceDocument {
   detailedEvidence?: DetailedEvidenceReport;
   cmpAudit?: PublicCmpAudit;
   cmsSecurity?: PublicCmsSecurity | null;
+  privacyAuditEvidence?: import("./privacy-audit.js").PrivacyAuditEvidence | null;
   [key: string]: unknown;
 }
 

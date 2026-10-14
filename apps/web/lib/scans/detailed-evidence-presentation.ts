@@ -2,9 +2,9 @@ export type EvidenceSummaryRow = { status: string; priority?: "high" };
 export const EVIDENCE_SECTION_TITLES = {
   cmp: "CMP details", consent: "Consent choices", tracking: "Tracking & embeds", policy: "Policies & disclosures",
   runtime: "Cookies & tracking", transport: "Connection security", accessibility: "Accessibility (WCAG)",
-  cms: "CMS & version", gpc: "Global Privacy Control",
+  cms: "CMS & version", gpc: "Global Privacy Control", privacy: "California privacy choices",
 } as const;
-export const EVIDENCE_SECTION_ORDER = ["cmp", "consent", "tracking", "policy", "accessibility", "runtime", "transport", "gpc", "cms"] as const;
+export const EVIDENCE_SECTION_ORDER = ["cmp", "consent", "tracking", "policy", "accessibility", "runtime", "privacy", "transport", "gpc", "cms"] as const;
 /** Summarize existing row statuses only; never promote missing evidence to a concern. */
 export function evidenceHeaderStatus(rows: readonly EvidenceSummaryRow[]): { label: "Review" | "Limited"; description: string; concern: boolean } | null {
   if (rows.some(row => row.status === "Gap observed")) return { label: "Review", description: "Observed gap in this section", concern: true };

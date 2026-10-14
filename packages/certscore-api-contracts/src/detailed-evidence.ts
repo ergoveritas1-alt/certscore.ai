@@ -15,13 +15,13 @@ export const detailedEvidenceRowSchema = z.object({
   sharedEvidence: z.object({ targetId: ref, label: text, showLink: z.boolean().optional() }).strict().optional(),
 }).strict();
 export const detailedEvidenceSectionSchema = z.object({
-  id: z.enum(["cmp", "consent", "tracking", "policy", "runtime", "transport", "accessibility", "cms", "gpc"]),
+  id: z.enum(["cmp", "consent", "tracking", "policy", "runtime", "transport", "accessibility", "cms", "gpc", "privacy"]),
   title: text, recap: text, displayStatus: z.enum(["Review", "Limited"]).nullable(),
   counts: detailedEvidenceCountsSchema, rows: z.array(detailedEvidenceRowSchema).max(200),
 }).strict();
 export const detailedEvidenceReportSchema = z.object({
   version: z.literal("certscore.detailed-evidence.v1"), scanId: z.string(),
-  sections: z.array(detailedEvidenceSectionSchema).max(9),
+  sections: z.array(detailedEvidenceSectionSchema).max(10),
   interpretation: z.string(),
 }).strict();
 

@@ -72,3 +72,18 @@ test("expiry copy combines identical choices but preserves different durations",
   const different = "After Accept: consent, approximately 60 days; After Reject: consent, approximately 30 days.";
   assert.equal(detailedEvidenceCopy({ ...base, summary: different }).summary, different);
 });
+
+test("legacy policy and post-choice wording describes the saved scan without changing status or evidence", () => {
+  const policy = { id: "legal_basis_disclosure_observed", status: "Not confirmed", hasSupportingEvidence: true,
+    summary: "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent." };
+  assert.equal(policyFindingSummary(policy), "This disclosure could not be confirmed from the saved policy evidence.");
+  assert.equal(policyFindingSummary({ ...policy, summary: "A retained policy candidate has conflicting ownership." }), "A retained policy candidate has conflicting ownership.");
+  const summary = "Could not be fully evaluated using scan evidence; Post-choice consent-flow automation is deferred from the current production core scanner. Retained reject-path or post-reject evidence may remain available for analyst review, but CertScore.ai does not currently report a production gap or success conclusion for...";
+  for (const [id, status] of [["evidence-row-post_reject_tracking_reduction", "Limited"], ["cmp-criterion-implementation", "Not assessed"]]) {
+    const input = { id, status, title: "Tracking after consent choices", summary };
+    const before = structuredClone(input);
+    assert.equal(detailedEvidenceCopy(input).summary, "Post-choice tracking was not assessed in this saved scan.");
+    assert.deepEqual(input, before);
+    assert.equal(detailedEvidenceCopy({ ...input, summary: "Inspection incomplete — timed out" }).summary, "Inspection incomplete — timed out");
+  }
+});

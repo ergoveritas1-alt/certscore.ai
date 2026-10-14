@@ -23,6 +23,7 @@ test('review navigation preserves retained identity and describes delivery witho
   assert.equal(byKey.get('tracking')?.delivery, 'included');
   assert.equal(byKey.get('tracking')?.returned, 0);
   assert.equal(byKey.get('privacy')?.delivery, 'omitted');
+  assert.deepEqual(byKey.get('privacy')?.retrieval?.arguments, { scanId, section: 'policy' });
   assert.equal(byKey.get('accept')?.delivery, 'not_returned');
   assert.equal(byKey.get('transport')?.delivery, 'included');
   assert.equal(bundle.transportSecurity.evidenceRetained, false);

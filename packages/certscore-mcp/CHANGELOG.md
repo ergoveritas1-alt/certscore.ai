@@ -26,6 +26,9 @@
 
 ## Unreleased
 
+- Preserve typed full-report evidence during compaction to prevent output-schema errors; keep existing byte ceilings and explicit whole-section omissions.
+- Link privacy-choice navigation to focused policy evidence, including the shared California privacy section and retained workpaper.
+
 
 - Prepare Cursor integration `1.0.4` with query-first cookie, tracker, consent, GDPR, CCPA, ePrivacy, privacy-risk, and website-scanner discovery metadata while preserving the `CertScore.ai` no-auth Light endpoint.
 

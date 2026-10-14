@@ -1,8 +1,13 @@
-/** Short topic descriptions for already-observed policy disclosures. Full passages stay in evidence. */
+/** Concise policy presentation. Source assessment and full passages stay in evidence. */
 export function policyFindingSummary(input: {
   id: string; status: string; summary?: string; hasSupportingEvidence: boolean;
 }) {
   const { id, status, summary, hasSupportingEvidence } = input;
+  if (status === "Not confirmed" && [
+    "Not confirmed by scan evidence; No production-approved topic match was established. This neutral result does not establish that the disclosure is absent.",
+    "Not confirmed by scan evidence; No production-approved topic match was established. A retained candidate was rejected by the canonical projection and remains available for audit; this result does not establish that the disclosure is absent.",
+  ].includes(summary ?? ""))
+    return "This disclosure could not be confirmed from the saved policy evidence.";
   if (status !== "Observed" || !hasSupportingEvidence || !summary) return summary;
   // Only replace the standard excerpt preview, never a specific warning or limitation.
   if (/^Policy text included matching (?:international-transfer )?disclosure evidence:/.test(summary)) {
@@ -33,6 +38,10 @@ export function policyFindingSummary(input: {
 export function detailedEvidenceCopy(input: { id?: string; status?: string; title: string; summary?: string }) {
   let { title, summary } = input;
   const id = input.id?.replace(/^evidence-row-/, "");
+  if (["post_reject_tracking_reduction", "cmp-criterion-implementation"].includes(id ?? "") &&
+      ["Limited", "Not assessed"].includes(input.status ?? "") && summary &&
+      /^(?:Could not be fully evaluated using scan evidence; )?Post-choice consent-flow automation is deferred from the current production core scanner\./.test(summary))
+    summary = "Post-choice tracking was not assessed in this saved scan.";
   const negative: Record<string, string> = {
     pre_consent_third_party_tracking: "No non-essential tracking requests were detected before a consent choice.",
     pre_consent_cookies_storage: "No non-essential cookie or storage writes were detected before a consent choice.",

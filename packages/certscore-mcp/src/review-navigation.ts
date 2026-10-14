@@ -1,7 +1,7 @@
 /** Navigation over returned canonical projections only; never observation or finding eligibility. */
 export const LIGHT_TOOL_NAMES = ["certscore_scan_site", "certscore_get_scan_status", "certscore_get_scan_bundle", "certscore_get_report_evidence_page"] as const;
 export const REVIEW_PROMPT_NAMES = ["certscore_launch_review", "certscore_compare_scans", "certscore_remediation_checklist"] as const;
-const SECTION_BY_KEY: Record<string, "tracking" | "gpc" | "consent" | "forms" | "transport" | "accessibility" | "cmp" | "cms"> = { tracking: "tracking", gpc: "gpc", accept: "consent", reject: "consent", transport: "transport", forms: "forms", accessibility: "accessibility", cmp: "cmp", cms: "cms" };
+const SECTION_BY_KEY: Record<string, "tracking" | "gpc" | "consent" | "forms" | "transport" | "accessibility" | "cmp" | "cms" | "policy"> = { tracking: "tracking", gpc: "gpc", accept: "consent", reject: "consent", transport: "transport", forms: "forms", accessibility: "accessibility", cmp: "cmp", cms: "cms", privacy: "policy" };
 
 export function bundleReviewNavigation(bundle: Record<string, any>) {
   if (!['completed', 'completed_limited'].includes(bundle.status) || bundle.resultDisposition === 'no_go') return null;

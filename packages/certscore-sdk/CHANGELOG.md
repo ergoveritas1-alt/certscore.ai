@@ -1,5 +1,9 @@
 # @certscore/sdk
 
+## Unreleased
+
+- Include typed California privacy-choice evidence in shared report exports and focused policy results. Preserve verified controls, unverified candidates, notice passages and provenance.
+
 ## 0.2.16
 
 - Type the shared Detailed Evidence presentation, all 13 CMP audit criteria and safe CMS/version evidence.
