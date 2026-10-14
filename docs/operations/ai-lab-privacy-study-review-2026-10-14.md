@@ -9,6 +9,9 @@ https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026
 - Add the four supplied Key findings bullets immediately below the introduction.
 - Add five FAQ answers, each 40 to 60 words, after Run your own. Visible answers
   and FAQPage JSON-LD share one source; Article JSON-LD is also included.
+  The owner subsequently requested clarification that readers can run the same
+  type of scan manually in their browser at certscore.ai; the MCP Light answer
+  now makes that distinction without promising identical results across visits.
 - Add the supplied scanner CTA and the MCP Light documentation link. Preserve
   the existing scanner, report and contact links.
 - Place Perplexity's not-scored status before its unchanged coverage explanation.

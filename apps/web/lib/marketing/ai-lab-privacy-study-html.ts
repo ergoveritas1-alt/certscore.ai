@@ -20,7 +20,7 @@ export const AI_LAB_PRIVACY_STUDY_FAQ = [
   },
   {
     "question": "What is CertScore.ai MCP Light?",
-    "answer": "CertScore.ai MCP Light is a free, no-auth MCP endpoint that lets AI agents request the same public-site scan from a compatible MCP client. No OAuth flow is required. Agents can use the scan results and retained evidence to explain observed signals, while preserving the report's coverage limits and distinction from legal conclusions."
+    "answer": "CertScore.ai MCP Light is a free, no-auth MCP endpoint that lets AI agents run public website privacy scans from a compatible MCP client, with no OAuth required. You can also run the same type of scan manually in your browser at certscore.ai. Each report shows the observed signals, evidence and coverage limits."
   }
 ] as const;
 
