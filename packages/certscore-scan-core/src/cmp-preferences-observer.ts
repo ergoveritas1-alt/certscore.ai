@@ -79,7 +79,7 @@ export async function runCmpPreferencesObserver(input: {
     session.on("Page.frameNavigated", ({ frame }) => {
       if (!frame.parentId && frame.loaderId !== packet.documentToken) {
         packet.checkpoints = undefined; packet.controls = []; packet.privacyLinks = [];
-        packet.declarations = []; packet.serviceNames = undefined; packet.declarationInventoryComplete = false;
+        packet.declarations = []; packet.serviceNames = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
         packet.controlInventoryComplete = false; packet.action.opened = false;
         packet.documentToken = null; packet.limitations.push("preference_document_changed");
       }
@@ -158,15 +158,17 @@ export async function runCmpPreferencesObserver(input: {
     const oneTrust = detected.size === 1 && detected.has("OneTrust") && remaining() > 250
       ? await readOneTrustPreferenceInventory(page) : undefined;
     if (detected.size === 1 && detected.has("OneTrust")) packet.inspectionDiagnostic!.configuration = {
-      version: "onetrust_loaded_configuration.v1", status: oneTrust ? "available" : "unavailable",
+      version: "onetrust_loaded_configuration.v2", status: oneTrust ? "available" : "unavailable",
       ...(oneTrust ? { groupCount: oneTrust.groupCount, retainedCookieCount: oneTrust.declarations.length, truncated: oneTrust.truncated } : {}),
     };
     if (oneTrust) {
       await binding();
       packet.declarations = oneTrust.declarations;
+      packet.serviceNames = oneTrust.services;
+      packet.declarationCoverage = oneTrust.coverage;
       packet.declarationInventoryComplete = false;
       packet.checkpoints!.declarations = true;
-      if (oneTrust.truncated) packet.limitations.push("cookie_inventory_overflow");
+      if (oneTrust.truncated) packet.limitations.push("cmp_inventory_bounded");
     }
     const detectedIndex = detected.size === 1 ? scopeInventory.indices.find(index => definitions[index]?.canonicalName === [...detected][0]) : undefined;
     const borlabs = detectedIndex !== undefined && definitions[detectedIndex]?.preferenceInspection?.kind === "borlabs_v3" && remaining() > 250

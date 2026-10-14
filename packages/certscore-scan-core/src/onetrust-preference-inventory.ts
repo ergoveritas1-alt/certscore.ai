@@ -1,55 +1,131 @@
 import type { Page } from "playwright";
 
 /** Documented read-only getter: https://developer.onetrust.com/onetrust/docs/javascript-api
- * Capture declared cookies, never infer services from hostnames or completeness
- * from a tenant configuration. No fetch, opening API, consent mutation or retry. */
+ * Named fields follow OneTrust's own SDK (202507.1.0): VendorServices.ServiceName,
+ * linked GeneralVendors.Name, and Hosts.DisplayName. A bare host is not a service.
+ * No fetch, opening API, consent mutation, retry or second browser evaluation. */
 export function readOneTrustPreferenceInventory(page: Page) {
-  return page.evaluate(readOneTrustInventoryInDocument);
+  // tsx names nested helpers; keep its helper local to this serialized read.
+  return page.evaluate<ReturnType<typeof readOneTrustInventoryInDocument>>(`(() => { const __name = (fn) => fn; return (${readOneTrustInventoryInDocument.toString()})(); })()`);
 }
 
-/** Self-contained for browser serialization. Bound work before returning values. */
+/** Self-contained for browser serialization. One shared 100-record allowance
+ * replaces the previous per-group host loops; nested groups share a 64-node cap. */
 export function readOneTrustInventoryInDocument() {
   const api = (window as unknown as { OneTrust?: { GetDomainData?: () => unknown } }).OneTrust;
   if (typeof api?.GetDomainData !== "function") return undefined;
   let data: unknown;
   try { data = api.GetDomainData(); } catch { return undefined; }
   if (!data || typeof data !== "object" || !Array.isArray((data as { Groups?: unknown }).Groups)) return undefined;
-  const groups = (data as { Groups: unknown[] }).Groups;
-  const categories: string[] = [], services: string[] = [];
+  type Row = Record<string, unknown>;
+  const root = data as { Groups: unknown[]; GeneralVendors?: unknown };
+  const categories: string[] = [];
   const declarations: Array<{ name: string; purpose: string; duration: string; source: "cmp_api_inventory" }> = [];
-  let truncated = groups.length > 64, visited = 0;
-  for (const value of groups.slice(0, 64)) {
-    if (visited >= 100) { truncated = true; break; }
-    if (!value || typeof value !== "object") continue;
-    const group = value as { CustomGroupId?: unknown; GroupName?: unknown; FirstPartyCookies?: unknown; Hosts?: unknown };
-    if (typeof group.CustomGroupId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(group.CustomGroupId)) continue;
-    const rawLabel = typeof group.GroupName === "string" && group.GroupName.length <= 4096 ? group.GroupName : "";
-    const label = (rawLabel.includes("<") ? new DOMParser().parseFromString(rawLabel, "text/html").body.textContent ?? "" : rawLabel).trim().slice(0, 240);
+  const groups: Row[] = [], seenGroups = new Set<object>();
+  const queue = root.Groups.slice(0, 64);
+  let truncated = root.Groups.length > 64, visited = 0, serviceRecords = 0;
+  const text = (raw: unknown) => {
+    if (typeof raw !== "string" || raw.length > 4096) return "";
+    if (raw.includes("<")) {
+      const doc = new DOMParser().parseFromString(raw, "text/html");
+      doc.querySelectorAll("script,style,template").forEach(node => node.remove());
+      raw = doc.body.textContent ?? "";
+    }
+    return (raw as string).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240);
+  };
+  const id = (raw: unknown) => typeof raw === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(raw) ? raw : "";
+  // Preserve cookie breadth on vendor-heavy tenants, without enlarging the
+  // shared allowance. Small service lists leave the rest available to cookies.
+  const take = (service: boolean) => {
+    if (visited >= 100 || (service && serviceRecords >= 80)) { truncated = true; return false; }
+    visited++; if (service) serviceRecords++; return true;
+  };
+  // Iterative traversal tolerates cycles without a recursive/unbounded walk.
+  for (let index = 0; index < queue.length && index < 64; index++) {
+    const value = queue[index];
+    if (!value || typeof value !== "object" || seenGroups.has(value)) continue;
+    seenGroups.add(value);
+    const group = value as Row;
+    if (!id(group.CustomGroupId)) continue;
+    groups.push(group);
+    if (Array.isArray(group.SubGroups)) {
+      const room = 64 - queue.length;
+      if (group.SubGroups.length > room) truncated = true;
+      queue.push(...group.SubGroups.slice(0, room));
+    }
+  }
+  // Only linked general vendors belong to these inspected groups. Never read
+  // an IAB/global vendor list or turn every available vendor into a declaration.
+  const vendors = new Map<string, Row | null>();
+  if (Array.isArray(root.GeneralVendors)) {
+    if (root.GeneralVendors.length > 100) truncated = true;
+    for (const value of root.GeneralVendors.slice(0, 100)) {
+      if (!value || typeof value !== "object") continue;
+      const row = value as Row, key = id(row.VendorCustomId);
+      if (key) vendors.set(key, vendors.has(key) ? null : row);
+    }
+  }
+  const names = new Map<string, string>();
+  const remember = (key: string, name: string) => {
+    if (names.has(key) && names.get(key) !== name) names.set(key, "");
+    else if (!names.has(key)) names.set(key, name);
+  };
+  for (let index = 0; index < groups.length; index++) {
+    const group = groups[index]!;
+    const label = text(group.GroupName);
     if (label && !categories.includes(label)) categories.push(label);
+    if (Array.isArray(group.VendorServices)) {
+      if (group.VendorServices.length > 100) truncated = true;
+      for (const [position, value] of group.VendorServices.slice(0, 100).entries()) {
+        if (!take(true)) break;
+        const row = value && typeof value === "object" ? value as Row : {};
+        const key = id(row.CustomVendorServiceId);
+        remember(`service:${key || `unresolved-${index}-${position}`}`, key ? text(row.ServiceName) : "");
+      }
+    }
+    if (Array.isArray(group.GeneralVendorsIds)) {
+      if (group.GeneralVendorsIds.length > 100) truncated = true;
+      for (const [position, value] of group.GeneralVendorsIds.slice(0, 100).entries()) {
+        if (!take(true)) break;
+        const key = id(value), row = vendors.get(key);
+        remember(`vendor:${key || `unresolved-${index}-${position}`}`, row ? text(row.Name) : "");
+      }
+    }
     const lists: unknown[] = [group.FirstPartyCookies];
     if (Array.isArray(group.Hosts)) {
       if (group.Hosts.length > 100) truncated = true;
-      for (const host of group.Hosts.slice(0, 100)) if (host && typeof host === "object") lists.push((host as { Cookies?: unknown }).Cookies);
+      for (const [position, value] of group.Hosts.slice(0, 100).entries()) {
+        if (!take(true)) break;
+        if (!value || typeof value !== "object") continue;
+        const row = value as Row, key = id(row.HostId), name = text(row.DisplayName);
+        // Explicit display labels only. Domains, URLs, cookie names, synthetic
+        // first-party group headings and registry guesses cannot name a service.
+        const named = key && name &&
+          !/^(?:https?:\/\/|[*.]*[\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)+(?:[/:?#]|$)|localhost(?:[/:?#]|$))/iu.test(name.replace(/\.$/, "")) &&
+          !/[@/\\:?#]/.test(name);
+        if (key) remember(`host:${key}`, named ? name : "");
+        else if (name) remember(`host:unresolved-${index}-${position}`, "");
+        lists.push(row.Cookies);
+      }
     }
     for (const items of lists) {
-      if (visited >= 100) { truncated = true; break; }
       if (!Array.isArray(items)) continue;
+      if (items.length && visited >= 100) { truncated = true; break; }
       if (items.length > 100) truncated = true;
       for (const cookie of items.slice(0, 100)) {
-        if (++visited > 100 || declarations.length >= 100) { truncated = true; break; }
+        if (!take(false)) break;
         if (!cookie || typeof cookie !== "object") continue;
-        const row = cookie as { Name?: unknown; Description?: unknown; Lifespan?: unknown; IsSession?: unknown };
+        const row = cookie as Row;
         if (typeof row.Name !== "string" || !/^[A-Za-z0-9_.$:#*+\-\[\]]{1,160}$/.test(row.Name)) continue;
-        const [purpose, rawDuration] = [row.Description, row.Lifespan].map(field => {
-          if (typeof field !== "string" || field.length > 4096) return "";
-          return (field.includes("<") ? new DOMParser().parseFromString(field, "text/html").body.textContent ?? "" : field).trim().slice(0, 240);
-        });
-        // A bare number has no verified unit. Preserve no invented duration.
-        const duration = row.IsSession === true ? "Session" : /\p{L}/u.test(rawDuration!) ? rawDuration! : "";
-        const declaration = { name: row.Name, purpose: purpose!, duration, source: "cmp_api_inventory" as const };
+        const purpose = text(row.Description), rawDuration = text(row.Lifespan);
+        const duration = row.IsSession === true ? "Session" : /\p{L}/u.test(rawDuration) ? rawDuration : "";
+        const declaration = { name: row.Name, purpose, duration, source: "cmp_api_inventory" as const };
         if (!declarations.some(previous => previous.name === declaration.name && previous.purpose === declaration.purpose && previous.duration === declaration.duration)) declarations.push(declaration);
       }
     }
   }
-  return { categories, services, declarations, truncated, groupCount: Math.min(groups.length, 10000) };
+  const resolved = [...names.values()].filter(Boolean).length;
+  return { categories, services: [...new Set([...names.values()].filter(Boolean))], declarations, truncated,
+    groupCount: Math.min(root.Groups.length + Math.max(0, groups.length - root.Groups.length), 10000),
+    coverage: { scope: "configured_services" as const, configured: names.size, resolved, unresolved: names.size - resolved, truncated } };
 }

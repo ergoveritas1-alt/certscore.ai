@@ -735,3 +735,41 @@ test("v6 CMP tables preserve shared first-layer reportability for an independent
   assert.deepEqual(result.rows.find(row=>row.id==="implementation")!.supportingEvidence!.inventory!.choiceActivity,[]);
   assert.equal(assessment.controls.accept.state,"unknown");
 });
+
+test("OneTrust service names reach the canonical assessment and report from one bounded local Options visit", {timeout:15000}, async () => {
+  const {createServer}=await import("node:http");
+  const {runCmpPreferencesObserver}=await import("../../../../packages/certscore-scan-core/src/cmp-preferences-observer");
+  const actions:string[]=[];
+  const server=createServer((req,res)=>{
+    if(req.url?.startsWith('/action/')){actions.push(req.url);res.end();return;}
+    res.setHeader('content-type','text/html');
+    res.end(`<section id="onetrust-banner-sdk"><button aria-controls="prefs" onclick="fetch('/action/options');document.getElementById('prefs').hidden=false">Cookie settings</button><button onclick="fetch('/action/accept')">Accept all</button><button onclick="fetch('/action/reject')">Reject all</button></section><section id="prefs" hidden><label><input type="checkbox">Analytics</label><button onclick="fetch('/action/save')">Save</button></section><script>
+      window.OneTrust={GetDomainData:()=>({GeneralVendors:[{VendorCustomId:'V1',Name:'Named Media'}],Groups:[{CustomGroupId:'C2',GroupName:'Analytics',GeneralVendorsIds:['V1'],VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],Hosts:[{HostId:'H1',DisplayName:'metrics.example.test',HostName:'metrics.example.test'}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]})};
+    </script>`);
+  });
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const address=server.address();assert.ok(address&&typeof address!=='string');
+  try{
+    const input=bundle(); input.url=`http://127.0.0.1:${address.port}/`;
+    const packet=await runCmpPreferencesObserver({parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',enabled:true,scanId:input.scanId,exactTargetUrl:input.url}});
+    assert.equal(packet.status,'completed',JSON.stringify(packet));
+    assert.deepEqual(packet.serviceNames,['Named Analytics','Named Media']);
+    assert.equal(packet.declarationInventoryComplete,false);
+    assert.equal(packet.declarationCoverage!.unresolved,1,'A bare host stays unresolved rather than becoming a named service');
+    input.cmpPreferencesEvidence=packet;
+    const audit=deriveCmpAuditAssessment(input)!;
+    const service=audit.rows.find(row=>row.id==='services')!;
+    assert.equal(service.status,'observed');
+    assert.deepEqual(service.inventory!.services!.map(row=>row.name),['Named Analytics','Named Media']);
+    const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+    const artifacts=withPersistedFirstLayerConsentEvidence({consentControlAssessment:assessment},{consent_control_assessment:assessment})!;
+    const concerns=buildNormalizedConcerns({runtimeArtifacts:artifacts,reviewFindingCandidates:[],validationFindings:[]});
+    const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+    assert.equal(report.rows.find(row=>row.id==='services')!.status,'Observed');
+    assert.deepEqual(report.rows.find(row=>row.id==='services')!.supportingEvidence!.inventory!.services,service.inventory!.services);
+    assert.ok(concerns.filter(row=>row.originKey.startsWith('consent.cmp_audit.')).every(row=>!row.scoreEffects?.length));
+    assert.deepEqual(actions,['/action/options']);
+    const foreign=structuredClone(input);foreign.cmpPreferencesEvidence!.finalUrl='https://foreign.test/';
+    assert.equal(deriveCmpAuditAssessment(foreign),undefined,"A foreign document cannot supply service evidence");
+  }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});

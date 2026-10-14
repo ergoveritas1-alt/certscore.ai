@@ -8,7 +8,7 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
   try {
     const page = await browser.newPage();
     await page.setContent(`<div id="onetrust-banner-sdk"><a href="https://example.test/privacy">Privacy policy</a><label><input type="checkbox">Analytics</label><button onclick="window.actions++">Manage options</button><section hidden><label><input type="checkbox">Marketing</label></section></div><script>
-      window.actions=0;window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]}}};
+      window.actions=0;window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'<strong>Named Analytics</strong>'}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]}}};
     </script>`);
     let token = "loader-1";
     const input = {page,scanId:"fixture",targetUrl:"https://example.test/",scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token}),isCurrent:()=>true};
@@ -16,9 +16,11 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
     const packet = await captureCmpBasicEvidence(input);
     assert.ok(packet); assert.deepEqual(packet.controls.map(row=>row.label),["Analytics"]);
     assert.deepEqual(packet.declarations.map(row=>row.name),["_ga"]);
+    assert.deepEqual(packet.serviceNames,["Named Analytics"]);
     assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction,true);
     assert.ok(packet.limitations.includes("declaration_inventory_not_complete"));
     assert.equal(await page.evaluate(()=>(window as any).actions),0);
+    assert.equal(await page.evaluate(()=>(window as any).reads),1,"One already-loaded configuration read; no additional getter call");
     assert.ok(Date.now()-started < 350,"basic read remains inside opportunistic slice");
     assert.equal(await captureCmpBasicEvidence({...input,isCurrent:()=>false}),undefined);
     let reads=0;

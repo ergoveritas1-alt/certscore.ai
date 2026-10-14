@@ -3,7 +3,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import { readOneTrustInventoryInDocument } from "./onetrust-preference-inventory.js";
 
-const read = (value: unknown) => JSON.parse(JSON.stringify(runInNewContext(`(${readOneTrustInventoryInDocument.toString()})()`, {
+const read = (value: unknown) => JSON.parse(JSON.stringify(runInNewContext(`(() => { const __name = (fn) => fn; return (${readOneTrustInventoryInDocument.toString()})(); })()`, {
   window: { OneTrust: { GetDomainData: () => value } },
 }) ?? null));
 
@@ -27,4 +27,63 @@ test("configuration parsing is bounded and missing or malformed API data supplie
   const result = read({ Groups: Array.from({ length: 65 }, (_, i) => ({ CustomGroupId: `C${i}`, GroupName: `Category ${i}`, FirstPartyCookies: Array.from({ length: 101 }, (_, j) => ({ Name: `cookie_${i}_${j}` })) })) });
   assert.equal(result.declarations.length, 100); assert.equal(result.truncated, true);
   assert.ok(result.categories.length <= 64);
+});
+
+test("named OneTrust services, linked general vendors and explicit host labels survive nested groups", () => {
+  const input = { GeneralVendors: [{VendorCustomId:"V1",Name:"Named Analytics"},{VendorCustomId:"V2",Name:"Not linked"}], Groups:[{
+    CustomGroupId:"C1",GroupName:"Necessary",FirstPartyCookies:[{Name:"OptanonConsent"}],Hosts:[
+      {HostId:"H1",HostName:"media.example.test",DisplayName:"Named Media",Cookies:[{Name:"media_id"}]},
+      {HostId:"H2",HostName:"tracking.example.test",DisplayName:"tracking.example.test",Cookies:[]},
+      {HostName:"other.example.test",Cookies:[]},
+    ], SubGroups:[{CustomGroupId:"C2",GroupName:"Analytics",GeneralVendorsIds:["V1"],VendorServices:[{CustomVendorServiceId:"S1",ServiceName:"Named Metrics"}]}],
+  }] };
+  const original=structuredClone(input), result=read(input);
+  assert.deepEqual(new Set(result.services),new Set(["Named Media","Named Metrics","Named Analytics"]));
+  assert.deepEqual(result.categories,["Necessary","Analytics"]);
+  assert.deepEqual(result.declarations.map((row:any)=>row.name),["OptanonConsent","media_id"]);
+  assert.deepEqual(result.coverage,{scope:"configured_services",configured:4,resolved:3,unresolved:1,truncated:false});
+  assert.deepEqual(input,original);
+  assert.ok(!result.services.includes("Not linked"));
+});
+
+test("hostnames, cookies and unlinked vendors never become service identities", () => {
+  const result=read({GeneralVendors:[{VendorCustomId:"V1",Name:"Unused vendor"}],Groups:[{
+    CustomGroupId:"C1",GroupName:"Analytics",FirstPartyCookies:[{Name:"_ga"}],Hosts:[
+      {HostId:"H1",HostName:"google-analytics.com",DisplayName:"google-analytics.com"},
+      {HostId:"H2",DisplayName:"https://example.test/vendor"},
+      {HostId:"H3",DisplayName:"*.example.test"},
+      {HostId:"H4",DisplayName:"localhost"},
+      {DisplayName:"First-party cookies",Cookies:[]},
+      {HostId:"H5",DisplayName:"[::1]"},{HostId:"H6",DisplayName:"例子.公司"},{HostId:"H7",DisplayName:"example.test."},
+      {HostId:"H8",DisplayName:"example.test?token=not-a-service"},
+    ],
+  }]});
+  assert.deepEqual(result.services,[]);
+  assert.deepEqual(result.declarations.map((row:any)=>row.name),["_ga"]);
+  assert.equal(result.coverage.resolved,0);
+  assert.equal(result.coverage.unresolved,9);
+});
+
+test("conflicting vendor identities and absent linked entries stay unresolved", () => {
+  const result=read({GeneralVendors:[{VendorCustomId:"V1",Name:"One"},{VendorCustomId:"V1",Name:"Different"}],Groups:[{
+    CustomGroupId:"C1",GeneralVendorsIds:["V1","missing"],VendorServices:[
+      {CustomVendorServiceId:"S1",ServiceName:"One"},{CustomVendorServiceId:"S1",ServiceName:"Different"},
+      {CustomVendorServiceId:"S2",ServiceName:"Stable"},{CustomVendorServiceId:"S2",ServiceName:"Stable"},
+    ],
+  }]});
+  assert.deepEqual(result.services,["Stable"]);
+  assert.deepEqual(result.coverage,{scope:"configured_services",configured:4,resolved:1,unresolved:3,truncated:false});
+});
+
+test("cookie and service payloads share a bounded allowance and cyclic subgroups terminate", () => {
+  const group:any={CustomGroupId:"C1",VendorServices:Array.from({length:101},(_,i)=>({CustomVendorServiceId:`S${i}`,ServiceName:`Service ${i}`})),FirstPartyCookies:[{Name:"_ga"}]};
+  group.SubGroups=[group];
+  const result=read({Groups:[group]});
+  assert.equal(result.services.length,80);
+  assert.equal(result.declarations.length,1,"Cookie headroom survives a prolific service list");
+  assert.equal(result.coverage.truncated,true);
+  assert.equal(result.truncated,true);
+  const malformed=read({Groups:[{CustomGroupId:"C1",VendorServices:[{CustomVendorServiceId:"S1",ServiceName:"x".repeat(4097)},{CustomVendorServiceId:"S2",ServiceName:{Name:"fake"}}]}]});
+  assert.deepEqual(malformed.services,[]);
+  assert.equal(malformed.coverage.unresolved,2);
 });

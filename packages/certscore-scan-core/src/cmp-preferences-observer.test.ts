@@ -318,7 +318,7 @@ test("early OneTrust declarations and visible native label targets survive bound
     res.setHeader("content-type", "text/html");
     res.end(`<section id="onetrust-banner-sdk"><button aria-controls="prefs" onclick="fetch('/options');document.getElementById('prefs').hidden=false">Cookie settings</button><a href="/privacy-cookies/" aria-label="Privacy and cookie statement">Read notice</a></section>
       ${mode === "open" ? '<section id="prefs" hidden><label><input style="display:none" type="checkbox">Analytics</label><label><input style="opacity:0;width:0;height:0" type="checkbox">Marketing</label><fieldset disabled><label><input style="display:none" type="checkbox">Disabled category</label></fieldset><div hidden><label><input type="checkbox">Hidden category</label></div><details><summary>More cookies</summary><table><tr><td>not_opened</td></tr></table></details></section>' : ''}
-      <script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C2',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]})};</script>`);
+      <script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C2',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],Hosts:[{HostId:'H1',HostName:'media.example.test',DisplayName:'Named Media',Cookies:[]}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]})};</script>`);
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address !== "string");
@@ -327,6 +327,9 @@ test("early OneTrust declarations and visible native label targets survive bound
       clicks = 0;
       const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
       assert.deepEqual(packet.declarations.map(cookie => cookie.name), ["_ga"]);
+      assert.deepEqual(packet.serviceNames, ["Named Analytics", "Named Media"]);
+      assert.deepEqual(packet.declarationCoverage, {scope:"configured_services",configured:2,resolved:2,unresolved:0,truncated:false});
+      assert.equal(packet.inspectionDiagnostic?.configuration?.version,"onetrust_loaded_configuration.v2");
       assert.equal(packet.declarationInventoryComplete, false); assert.equal(packet.checkpoints?.declarations, true);
       assert.ok(packet.privacyLinks.some(link => link.hitTargetBeforeAction), JSON.stringify(packet.privacyLinks));
       assert.equal(clicks, mode === "open" ? 1 : 0);
