@@ -11,7 +11,7 @@ import { cookieDisclosureColumn } from "@certscore/contracts";
 import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
 import { readCmpScopeInventory } from "./cmp-scope-inventory.js";
 import { verifyDeferredPreferencePanel } from "./cmp-preference-panel-binding.js";
-import { EVIDENCE_WORK_POLICY } from "./evidence-work-budget.js";
+import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "./evidence-work-budget.js";
 
 /** A single isolated Options action. No preference changes, save, second click,
  * page retry, policy navigation, model call, or interaction in another lane. */
@@ -270,8 +270,21 @@ export async function runCmpPreferencesObserver(input: {
     }), { selector: registeredDialog?.controlSelector, root: deferredRootHandle });
     const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe ? "observation" : "action" });
     if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound) throw new Error("preference_control_changed");
+    // Opening is optional depth, not permission to consume the entire lane.
+    // Share one cap across dispatch, visibility and accessible-name hydration,
+    // leaving room to inspect a verified panel and retain earlier checkpoints.
+    const openingAllowance = optionalEvidenceAllowance({ remainingMs: remaining(),
+      maximumMs: EVIDENCE_WORK_POLICY.preferences.panelOpeningBudgetMs,
+      requiredReserveMs: EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs });
+    if (!openingAllowance) return stopBinding("timed_out", "preference_budget_exhausted");
+    const openingDeadline = Date.now() + openingAllowance;
+    const openingRemaining = () => {
+      remaining();
+      if (Date.now() >= openingDeadline) throw new Error("preference_opening_budget_exhausted");
+      return Math.max(1, openingDeadline - Date.now());
+    };
     packet.inspectionDiagnostic!.phase = "opening";
-    await dispatchLocatorClickWithVerifiedGeometry(match.control, Math.min(500, remaining()), () => {
+    await dispatchLocatorClickWithVerifiedGeometry(match.control, Math.min(500, openingRemaining()), () => {
       remaining();
       if (page.url() !== config.exactTargetUrl || packet.action.count !== 0) throw new Error("preference_action_not_authorized");
       packet.action.count = 1; packet.action.label = match.label.slice(0, 160);
@@ -279,23 +292,25 @@ export async function runCmpPreferencesObserver(input: {
     if (match.recipe) {
       // Borlabs replaces the entrance inside the same dialog. No second click,
       // API opening call or arbitrary newly visible modal can establish binding.
-      await match.scope.waitFor({ state: "hidden", timeout: remaining() });
+      await match.scope.waitFor({ state: "hidden", timeout: openingRemaining() });
       if (!beforeVisible || !dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
     }
     // Waiting on presence does not select a panel for inspection. Recheck exact
     // uniqueness before accepting any opening or reading preference evidence.
-    await controlled.first().waitFor({ state: "visible", timeout: remaining() });
+    await controlled.first().waitFor({ state: "visible", timeout: openingRemaining() });
     if (await controlled.count() !== 1) throw new Error("preference_surface_ambiguous");
     if (surfaceBinding.mode === "registered_deferred") {
       if (!deferredRoot || !deferredRootHandle) throw new Error("preference_surface_changed");
       surfaceBinding.verification = await verifyDeferredPreferencePanel({ panel: controlled, parent: deferredRootHandle,
-        roles: registeredDialog?.dialogRoles ?? ["dialog", "region"], remainingMs: Math.max(0, remaining() - 25) });
+        roles: registeredDialog?.dialogRoles ?? ["dialog", "region"], remainingMs: Math.max(0, openingRemaining() - 25) });
       if (surfaceBinding.verification.result === "verified") {
         if (await deferredRoot.count() !== 1) surfaceBinding.verification.result = "parent_ambiguous";
         else if (await controlled.count() !== 1) surfaceBinding.verification.result = "panel_ambiguous";
         else if (!await deferredRoot.evaluate((element, previous) => element === previous && element.isConnected, deferredRootHandle)) surfaceBinding.verification.result = "parent_missing_or_replaced";
       }
-      if (surfaceBinding.verification.result !== "verified") throw new Error("preference_surface_changed");
+      if (surfaceBinding.verification.result !== "verified") throw new Error(
+        ["role_not_ready", "name_not_ready"].includes(surfaceBinding.verification.result)
+          ? "preference_opening_budget_exhausted" : "preference_surface_changed");
     } else if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
     await binding();
     surfaceBinding.outcome = "opened";
@@ -343,10 +358,11 @@ export async function runCmpPreferencesObserver(input: {
     packet.controlInventoryComplete = false;
     const budgetExhausted = expired || Date.now() >= deadline || (error instanceof Error && error.message === "preference_budget_exhausted");
     const operationTimedOut = error instanceof Error && error.name === "TimeoutError";
-    const timedOut = budgetExhausted || operationTimedOut;
+    const openingTimedOut = error instanceof Error && error.message === "preference_opening_budget_exhausted";
+    const timedOut = budgetExhausted || operationTimedOut || openingTimedOut;
     const bindingFailure = error instanceof Error && ["preference_surface_changed", "preference_surface_ambiguous", "preference_document_changed", "preference_control_changed"].includes(error.message) ? error.message : null;
     const reason = input.signal?.aborted ? "preference_inspection_cancelled" : budgetExhausted ? "preference_budget_exhausted"
-      : operationTimedOut ? "preference_operation_timed_out" : bindingFailure ?? "preference_inspection_incomplete";
+      : operationTimedOut || openingTimedOut ? "preference_operation_timed_out" : bindingFailure ?? "preference_inspection_incomplete";
     if (packet.inspectionDiagnostic?.surfaceBinding && !packet.action.opened) {
       packet.inspectionDiagnostic.surfaceBinding.outcome = timedOut ? "timed_out" : reason === "preference_surface_ambiguous" ? "ambiguous" : "changed";
     }

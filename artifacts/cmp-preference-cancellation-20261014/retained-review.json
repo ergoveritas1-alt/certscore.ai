@@ -1,0 +1,19 @@
+{
+  "scanId": "92533fe5-31f7-41d6-88b4-a300899a3399",
+  "verifiedOriginalHashes": {
+    "scanArtifactUri": "57039079f256f45c75e30737d79f4d7e28427731fa50df7e18554b34bbde9c4a",
+    "manifestUri": "c9e439470cfaeecc9ad2e3521c1e0a8a54886ec32c83d5703287e2e10f7407e6"
+  },
+  "retainedPreferenceOutcome": {
+    "status": "limited",
+    "startedAt": "2026-10-14T23:06:39.429Z",
+    "completedAt": "2026-10-14T23:06:55.062Z",
+    "limitationCode": "preference_inspection_cancelled"
+  },
+  "preferencePacketRetained": false,
+  "historicalPanelFailurePredicate": "unavailable; no preference packet was retained",
+  "observationElapsedMs": 15633,
+  "newPublicScans": 0,
+  "deployments": 0,
+  "existingReportsRewritten": false
+}

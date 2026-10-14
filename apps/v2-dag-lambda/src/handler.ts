@@ -2386,17 +2386,30 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
 }
 
 export async function runCmpPreferencesArtifactChain(payload: LocalV2DagLambdaDispatchPayload,
-  options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal }): Promise<ArtifactChainResult> {
+  options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal; artifactSignal?: AbortSignal;
+    onScanCoreComplete?: () => void }): Promise<ArtifactChainResult> {
   if (payload.workerLane !== "cmp_preferences" || !payload.cmpPreferenceInspection ||
     process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED !== "1" || !payload.parentDispatchSha256) throw new Error("CMP preference inspection is not authorized.");
   const { runCmpPreferencesObserver } = await import("@certscore/scan-core/cmp-preferences-observer");
   const packet = await runCmpPreferencesObserver({ config: payload.cmpPreferenceInspection, parentDispatchSha256: payload.parentDispatchSha256, signal: options.signal });
-  const body = Buffer.from(JSON.stringify(cmpPreferencesEvidenceSchema.parse(packet)));
+  options.onScanCoreComplete?.();
+  return retainCmpPreferencesPacket(payload, packet, options);
+}
+
+/** A stopped observation may still retain verified partial checkpoints during
+ * the existing artifact reserve. Overall artifact cancellation always wins. */
+export async function retainCmpPreferencesPacket(payload: LocalV2DagLambdaDispatchPayload,
+  packet: unknown, options: { artifactRoot: string; s3Client?: S3PutClient; artifactSignal?: AbortSignal }): Promise<ArtifactChainResult> {
+  options.artifactSignal?.throwIfAborted();
+  const parsed = cmpPreferencesEvidenceSchema.parse(packet);
+  if (parsed.scanId !== payload.scanId || parsed.targetUrl !== payload.targetUrl || parsed.parentDispatchSha256 !== payload.parentDispatchSha256)
+    throw new Error("cmp_packet_binding_mismatch");
+  const body = Buffer.from(JSON.stringify(parsed));
   const sha256 = createHash("sha256").update(body).digest("hex");
   const bucket = requireArtifactBucket(), key = `${artifactKeyPrefix(payload)}/CmpPreferencesEvidencePacket.json`;
   await mkdir(options.artifactRoot, { recursive: true });
   await writeFile(path.join(options.artifactRoot, "CmpPreferencesEvidencePacket.json"), body);
-  await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: "application/json", Metadata: { sha256 } }), { abortSignal: AbortSignal.any([AbortSignal.timeout(500), ...(options.signal ? [options.signal] : [])]) });
+  await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: "application/json", Metadata: { sha256 } }), { abortSignal: AbortSignal.any([AbortSignal.timeout(500), ...(options.artifactSignal ? [options.artifactSignal] : [])]) });
   return { artifactPointers: { cmpPreferencesPacketUri: s3Uri(bucket, key) }, artifactMetadata: { cmpPreferencesPacketUri: { sha256, sizeBytes: body.byteLength } } };
 }
 
@@ -5907,7 +5920,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       : baseArtifactRoot;
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
       dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "cmp_preferences"
-        ? runCmpPreferencesArtifactChain(dispatchPayload, { artifactRoot: runOptions.artifactRoot, s3Client: options.s3Client, signal: runOptions.signal })
+        ? runCmpPreferencesArtifactChain(dispatchPayload, { artifactRoot: runOptions.artifactRoot, s3Client: options.s3Client,
+            signal: runOptions.signal, artifactSignal: runOptions.artifactSignal, onScanCoreComplete: runOptions.onScanCoreComplete })
         : dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "reject_observation"
         ? runLocalV2DagLambdaPostRefusalArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,

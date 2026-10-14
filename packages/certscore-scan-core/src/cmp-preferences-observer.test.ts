@@ -98,7 +98,7 @@ test("Borlabs delayed entrance opens once without ARIA controls; choices and API
         assert.deepEqual(packet.declarationCoverage, { scope: "configured_services", configured: 1, resolved: 1, unresolved: 0, truncated: false });
       } else if (mode === "no-transition") {
         assert.equal(clicks, 1); assert.equal(packet.action.opened, false);
-        assert.equal(packet.support.reason, "preference_budget_exhausted"); assert.equal(packet.controls[0]?.kind, "category");
+        assert.equal(packet.support.reason, "preference_operation_timed_out"); assert.equal(packet.controls[0]?.kind, "category");
         assert.equal(packet.checkpoints?.controlsSurface, "first_layer");
         assert.equal(packet.checkpoints?.privacyLinks, true);
         assert.equal(packet.checkpoints?.declarations, true);
@@ -482,3 +482,29 @@ test("HubSpot deferred alertdialog finishes accessible-name hydration before ins
     assert.equal(packet.controls.length, 2); assert.equal(clicks, 1); assert.equal(saves, 0);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+for (const variant of ["missing_panel", "missing_role", "missing_name"] as const) {
+  test(`HubSpot opening cap retains privacy checkpoint before a slow report barrier: ${variant}`, { timeout: 6000 }, async () => {
+    let clicks = 0;
+    const server = createServer((req, res) => {
+      if (req.url === "/clicked") { clicks++; res.end(); return; }
+      res.setHeader("Content-Type", "text/html");
+      const panel = variant === "missing_panel" ? "" : `<div id="hs-modal-content" ${variant === "missing_name" ? 'role="alertdialog"' : 'aria-label="Preferences"'}><label><input type="checkbox">Analytics</label></div>`;
+      res.end(`<a href="/privacy-policy">Privacy policy</a><div id="hs-banner-parent"><div id="hs-eu-cookie-confirmation"><button id="hs-eu-cookie-settings-button">Manage Cookies</button></div></div><script>document.getElementById('hs-eu-cookie-settings-button').onclick=()=>{fetch('/clicked');document.getElementById('hs-banner-parent').insertAdjacentHTML('beforeend',${JSON.stringify(panel)});};</script>`);
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address(); assert.ok(address && typeof address !== "string");
+    const started = Date.now();
+    try {
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: variant, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.ok(Date.now() - started < 3000, "Optional opening must leave time to retain the packet; it cannot use the 17-second lane allowance");
+      assert.equal(clicks, 1); assert.equal(packet.action.count, 1); assert.equal(packet.action.opened, false);
+      assert.equal(packet.status, "limited"); assert.equal(packet.support.reason, "preference_operation_timed_out");
+      assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.outcome, "timed_out");
+      if (variant !== "missing_panel") assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.verification?.result, variant === "missing_role" ? "role_not_ready" : "name_not_ready");
+      assert.equal(packet.checkpoints?.privacyLinks, true); assert.equal(packet.privacyLinks.length, 1);
+      assert.equal(packet.checkpoints?.controls, false); assert.deepEqual(packet.controls, []);
+      assert.equal(packet.controlInventoryComplete, false); assert.equal(packet.declarationInventoryComplete, false);
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
+}

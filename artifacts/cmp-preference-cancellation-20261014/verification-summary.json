@@ -1,0 +1,25 @@
+{
+  "verificationMode": "retained evidence and loopback/local tests only",
+  "publicScans": 0,
+  "deployments": 0,
+  "savedReportsRewritten": 0,
+  "checks": {
+    "coordinatorAndRetentionTests": 8,
+    "preferencePanelAndEvidenceBudgetTests": 27,
+    "cmpAssessmentTests": 41,
+    "scanCoreBuild": "passed",
+    "lambdaTypecheck": "passed",
+    "originalHubSpotAndFullStoryCanonicalReplay": "passed",
+    "quotaLimit": 20
+  },
+  "note": "The Borlabs no-transition case was rerun after updating its expected reason from full-lane exhaustion to the new bounded operation timeout. All 27 selected observer/panel/budget cases passed across those runs.",
+  "budgetChanges": {
+    "newBrowserVisits": 0,
+    "newModelCalls": 0,
+    "newArtifactUploadsPerInspection": 0,
+    "additionalTailWaitMs": 0,
+    "maximumObservationMs": 17000,
+    "existingUploadCapMs": 500,
+    "incrementalCapacityCostUsdPerMonth": 0
+  }
+}

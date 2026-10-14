@@ -86,6 +86,8 @@ import {
   runLocalV2DagLambdaPostAcceptArtifactChain,
   runLocalV2DagLambdaArtifactChain,
   runLocalV2DagLambdaShardedArtifactChain,
+  runCmpPreferencesArtifactChain,
+  retainCmpPreferencesPacket,
   sendLocalV2DagLambdaResultMessage,
   serializeCanonicalEvidenceBundle,
   unwrapLocalV2DagLambdaDispatchEvent,
@@ -2150,7 +2152,7 @@ async function runCoordinatorFixture(input: {
   dispatchDelayMs: number;
   actionLane?: "accept" | "reject";
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
-  preferences?: "complete" | "hang" | "wrong_hash" | "wrong_target";
+  preferences?: "complete" | "partial" | "hang" | "wrong_hash" | "wrong_target";
 }) {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
@@ -2228,6 +2230,9 @@ async function runCoordinatorFixture(input: {
           status: "limited", support: { state: "partial", provider: "Borlabs Cookie", recipeVersion: "borlabs_preferences.v1", reason: "bounded_visible_preference_inspection" },
           action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
           privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
+          ...(input.preferences === "partial" ? { privacyLinks: [{ url: "https://example.com/privacy", hitTargetBeforeAction: true }],
+            checkpoints: { version: "cmp_partial_capture.v1", documentToken: "fixture-loader", privacyLinks: true, declarations: false, controls: false, controlsSurface: "first_layer" },
+            limitations: ["preference_operation_timed_out"] } : {}),
         };
         const body = Buffer.from(JSON.stringify(packet));
         const uri = `s3://test-bucket/workers/${input.scanId}/cmp_preferences/CmpPreferencesEvidencePacket.json`;
@@ -4984,7 +4989,7 @@ test("CMP preference authorization stays exact and has its own worker packet", a
   assert.equal(result.artifactPointers?.cmpPreferencesPacketUri, "s3://test-bucket/CmpPreferencesEvidencePacket.json");
 });
 
-for (const preferences of ["complete", "hang", "wrong_hash", "wrong_target"] as const) {
+for (const preferences of ["complete", "partial", "hang", "wrong_hash", "wrong_target"] as const) {
   test(`CMP coordinator joins only verified evidence without a tail wait: ${preferences}`, async () => {
     const saved = { preference: process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED,
       accept: process.env[POST_ACCEPT_WORKER_FEATURE_FLAG], bucket: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET };
@@ -4999,8 +5004,15 @@ for (const preferences of ["complete", "hang", "wrong_hash", "wrong_target"] as 
         consentBundle: coordinatorConsentBundle(scanId, { inspectionCompleted: true, acceptControlObserved: false }) });
       artifactRoot = result.artifactRoot;
       assert.ok(Date.now() - start < 1500, "CMP worker must not wait its 19-second budget at report publication");
-      assert.equal(result.bundle.cmpPreferenceLaneOutcome.status, preferences === "complete" ? "joined" : "limited");
-      assert.equal(Boolean(result.bundle.cmpPreferencesEvidence), preferences === "complete");
+      const joined = preferences === "complete" || preferences === "partial";
+      assert.equal(result.bundle.cmpPreferenceLaneOutcome.status, joined ? "joined" : "limited");
+      assert.equal(Boolean(result.bundle.cmpPreferencesEvidence), joined);
+      if (preferences === "partial") {
+        assert.equal(result.bundle.cmpPreferencesEvidence.status, "limited");
+        assert.equal(result.bundle.cmpPreferencesEvidence.checkpoints.privacyLinks, true);
+        assert.equal(result.bundle.cmpPreferencesEvidence.controlInventoryComplete, false);
+        assert.equal(result.bundle.cmpPreferencesEvidence.action.opened, false);
+      }
       assert.equal(result.bundle.scanId, scanId);
       assert.equal(result.bundle.runtimeCoverage.coverageStatus, "usable", "verified passive evidence is preserved");
       assert.ok(result.bundle.scanLaneRuns.some((lane: { laneId: string }) => lane.laneId === "policy_evidence"));
@@ -5044,4 +5056,46 @@ test("passive CMP basics belong exclusively to the consent-proof lane", () => {
   assert.deepEqual(mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:"lane-fixture",artifactRoot:"/tmp/lane-fixture",consentProof:consent,runtimeEvidence:runtime,policyEvidence:policy}).cmpBasicEvidence,basic);
   delete consent.cmpBasicEvidence;
   assert.equal(mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:"lane-fixture",artifactRoot:"/tmp/lane-fixture",consentProof:consent,runtimeEvidence:runtime,policyEvidence:policy}).cmpBasicEvidence,undefined);
+});
+
+
+test("CMP observation cancellation retains its bounded packet with the independent artifact signal", async () => {
+  const saved = { flag: process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, bucket: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET };
+  process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "cmp-cancel-retention-"));
+  const observation = new AbortController(), artifacts = new AbortController();
+  observation.abort();
+  let uploads = 0, coreCompleted = false;
+  const payload = parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "worker", workerLane: "cmp_preferences", parentDispatchSha256: "a".repeat(64),
+    cmpPreferenceInspection: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "scan-local-1", exactTargetUrl: "https://example.com/" } }));
+  const s3Client = { async send(command: PutObjectCommand, options?: { abortSignal?: AbortSignal }) {
+    assert.equal(options?.abortSignal?.aborted, false); assert.equal(coreCompleted, true);
+    uploads++; const bytes = Buffer.from(command.input.Body as Uint8Array);
+    assert.equal(command.input.Metadata?.sha256, createHash("sha256").update(bytes).digest("hex"));
+    return { $metadata: {} };
+  } };
+  try {
+    const result = await runCmpPreferencesArtifactChain(payload, { artifactRoot, s3Client, signal: observation.signal, artifactSignal: artifacts.signal,
+      onScanCoreComplete: () => { coreCompleted = true; } });
+    assert.equal(uploads, 1); assert.ok(result.artifactPointers.cmpPreferencesPacketUri);
+    const packet = JSON.parse(await readFile(path.join(artifactRoot, "CmpPreferencesEvidencePacket.json"), "utf8"));
+    assert.equal(packet.support.reason, "preference_inspection_cancelled"); assert.equal(packet.status, "limited");
+    assert.equal(packet.documentToken, null); assert.deepEqual(packet.controls, []);
+    packet.finalUrl = payload.targetUrl; packet.documentToken = "bound-loader";
+    packet.privacyLinks = [{url: "https://example.com/privacy", hitTargetBeforeAction: true}];
+    packet.checkpoints = {version: "cmp_partial_capture.v1", documentToken: "bound-loader", privacyLinks: true, declarations: false, controls: false, controlsSurface: "first_layer"};
+    await retainCmpPreferencesPacket(payload, packet, { artifactRoot, s3Client, artifactSignal: artifacts.signal });
+    assert.equal(uploads, 2);
+    const retained = JSON.parse(await readFile(path.join(artifactRoot, "CmpPreferencesEvidencePacket.json"), "utf8"));
+    assert.equal(retained.checkpoints.privacyLinks, true); assert.equal(retained.controlInventoryComplete, false);
+    await assert.rejects(retainCmpPreferencesPacket(payload, {...packet, targetUrl: "https://other.example/", finalUrl: "https://other.example/"}, {artifactRoot, s3Client, artifactSignal: artifacts.signal}), /cmp_packet_binding_mismatch/);
+    artifacts.abort();
+    await assert.rejects(retainCmpPreferencesPacket(payload, packet, {artifactRoot, s3Client, artifactSignal: artifacts.signal}), /abort/i);
+    assert.equal(uploads, 2, "Overall cancellation and invalid binding cannot upload a packet");
+  } finally {
+    await rm(artifactRoot, { recursive: true, force: true });
+    if (saved.flag === undefined) delete process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED; else process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED = saved.flag;
+    if (saved.bucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = saved.bucket;
+  }
 });

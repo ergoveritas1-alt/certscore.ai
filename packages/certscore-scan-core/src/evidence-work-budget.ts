@@ -5,7 +5,7 @@ import { MAX_COLLECTION_SURFACE_CONTROL_INDEX } from "@certscore/contracts";
 export const EVIDENCE_WORK_POLICY = {
   version: "breadth_before_detail.v1",
   finalizationReserveMs: 250,
-  preferences: { basicCaptureReserveMs: 1_000 },
+  preferences: { basicCaptureReserveMs: 1_000, panelOpeningBudgetMs: 1_000 },
   runtimeSnapshot: {
     storageBudgetMs: 100,
     storageKeysPerArea: 10_000,

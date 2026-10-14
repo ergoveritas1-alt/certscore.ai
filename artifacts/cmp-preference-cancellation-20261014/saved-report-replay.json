@@ -1,0 +1,87 @@
+{
+  "newScans": 2,
+  "extraRescans": 0,
+  "deployments": 0,
+  "quotaRestoredTo": 20,
+  "receipts": [
+    {
+      "url": "https://hubspot.com",
+      "scanId": "92533fe5-31f7-41d6-88b4-a300899a3399",
+      "elapsedMs": 15673,
+      "originalBundleAndManifestVerified": true,
+      "geometryVerified": true,
+      "canonicalCmpReplayMatchesPersisted": true,
+      "reportExportParity": true,
+      "quotaRestored": true,
+      "counts": {
+        "Observed": 3,
+        "Incomplete": 7,
+        "Not assessed": 3
+      },
+      "actions": [
+        {
+          "action": "postAcceptEvidence",
+          "click": "failed_before_dispatch",
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "deterministic_accept_control_not_actionable"
+          ]
+        },
+        {
+          "action": "postRefusalEvidence",
+          "click": "not_attempted",
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:0",
+            "label_unverifiable",
+            "transparent_consent_scope_not_ready"
+          ]
+        }
+      ],
+      "reportUrl": "http://localhost:3000/scan/92533fe5-31f7-41d6-88b4-a300899a3399#cmp-details"
+    },
+    {
+      "url": "https://fullstory.com",
+      "scanId": "f7b36da6-7043-4789-8ca7-093de4d0377f",
+      "elapsedMs": 19747,
+      "originalBundleAndManifestVerified": true,
+      "geometryVerified": true,
+      "canonicalCmpReplayMatchesPersisted": true,
+      "reportExportParity": true,
+      "quotaRestored": true,
+      "counts": {
+        "Observed": 5,
+        "Not assessed": 2,
+        "Incomplete": 5,
+        "Review recommended": 1
+      },
+      "preference": {
+        "state": "partial",
+        "provider": "Osano",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "unique_actionable_options_not_resolved"
+      },
+      "actions": [
+        {
+          "action": "postAcceptEvidence",
+          "click": "completed",
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed",
+            "post_action_network_capture_truncated"
+          ]
+        },
+        {
+          "action": "postRefusalEvidence",
+          "click": "completed",
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:0",
+            "refusal_registration_not_confirmed"
+          ]
+        }
+      ],
+      "reportUrl": "http://localhost:3000/scan/f7b36da6-7043-4789-8ca7-093de4d0377f#cmp-details"
+    }
+  ]
+}

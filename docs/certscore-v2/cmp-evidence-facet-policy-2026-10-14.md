@@ -181,3 +181,44 @@ in-app browser with CMP Details expanded and visually checked. Screenshots and
 receipts are in `artifacts/cmp-targeted-repairs-20261014/`. The one-time scan spend
 remains within the approved below-$0.20 estimate. The central-history export and
 updated calibration registry check passed; both contacts received new cooldowns.
+
+## Preference opening and retention cancellation repair
+
+Review of the original HubSpot bundle and manifest verifies that preference work
+was cancelled at the existing report barrier after 15,633 ms, before its 17-second
+observation ceiling. No preference packet was retained. The exact browser phase
+and failed panel predicate cannot be recovered from that historical scan.
+
+The opening path previously allowed panel visibility and accessible-role/name
+hydration to consume the entire remaining lane budget. It now shares one
+1,000-ms optional opening cap across click dispatch, panel visibility and deferred
+role/name verification. The existing allowance helper also protects 1,000 ms for
+inventory and 250 ms for finalization. Insufficient remaining time prevents the
+optional click. Missing/unready panels end as limited/timed out and preserve
+earlier independently document-bound checkpoints. Replacement, ambiguity and
+navigation still invalidate the affected proof; no panel controls are inferred.
+This favors returning useful partial evidence over a long speculative opening
+wait. Panels taking longer than this cap remain incomplete.
+
+Preference artifact retention now uses the independent artifact-cancellation
+signal, with its existing 500-ms upload cap. Observation completion activates the
+existing artifact reserve and clears the browser-work timer through the existing
+scan-core completion callback. A stopped browser observation can therefore save
+its limited packet; overall artifact cancellation still prevents retention. The
+worker verifies packet scan/target/dispatch binding before upload, and the
+coordinator keeps its checksum/binding verification, zero tail wait and one-result
+publication. Late worker output cannot reopen a report.
+
+Local regression cases cover valid delayed hydration, absent panels, missing
+role/name, partial checkpoint retention, cancelled observations with a live
+artifact reserve, cancelled artifacts, wrong binding/hash, and stalled workers.
+The original HubSpot/FullStory bundles still reproduce their persisted CMP
+assessments without rewriting either report. In particular, this cannot fill the
+missing historical HubSpot packet or claim that its live panel now succeeds.
+
+No new lane, visit, click, retry, timeout increase, model call, artifact copy or
+upload is added. The same single bounded packet upload uses the already-approved
+artifact reserve; maximum compute and storage budgets remain unchanged. Incremental
+recurring capacity/request cost estimate: $0 beyond the existing approved budgets.
+No public scan or deployment was performed. Retained-source review receipt:
+`artifacts/cmp-preference-cancellation-20261014/retained-review.json`.
