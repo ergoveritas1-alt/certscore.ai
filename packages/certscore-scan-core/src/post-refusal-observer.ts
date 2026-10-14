@@ -1109,17 +1109,22 @@ export async function runPostRefusalObserver(
     } catch (error) {
       actionabilityError = error;
     }
+    // Reuse the existing 500 ms named + 500 ms canonical + 1 s geometry
+    // recovery allowance as one deadline. A transient interceptor must not
+    // discard the geometry slice merely because re-resolution found nothing.
+    const actionabilityRecoveryDeadline = Date.now() + (input.allowCanonicalRejectDiscovery ? 2_000 : 1_500);
+    const actionabilityRecoveryRemaining = () => Math.max(0, actionabilityRecoveryDeadline - Date.now());
     if (actionabilityError) {
-      let reResolution = await waitForDeterministicRecipe(
+      let reResolution: DeterministicRecipeResolution = actionabilityRecoveryRemaining() > 0 ? await waitForDeterministicRecipe(
         page,
         [selectedRecipe],
-        500,
+        Math.min(500, actionabilityRecoveryRemaining()),
         effectiveSignal,
-      );
-      if (reResolution.status === "not_found" && input.allowCanonicalRejectDiscovery) {
+      ) : { status: "not_found" };
+      if (reResolution.status === "not_found" && input.allowCanonicalRejectDiscovery && actionabilityRecoveryRemaining() > 0) {
         reResolution = await waitForCanonicalRejectControlRecipe(
           page,
-          500,
+          Math.min(500, actionabilityRecoveryRemaining()),
           effectiveSignal,
           [selectedRecipe],
         );
@@ -1133,7 +1138,7 @@ export async function runPostRefusalObserver(
             await trialRejectControl(page, control, selectedRecipe);
             actionabilityError = undefined;
           } else {
-            const actionability = await waitForLocatorVerifiedGeometry(control, 1_000);
+            const actionability = await waitForLocatorVerifiedGeometry(control, Math.min(1_000, actionabilityRecoveryRemaining()), effectiveSignal);
             if (!actionability) throw new Error("Verified Reject geometry actionability timeout.");
             actionabilityError = undefined;
             useVerifiedGeometryDispatch = true;
@@ -1147,10 +1152,11 @@ export async function runPostRefusalObserver(
     }
     if (
       actionabilityError &&
-      classifyClickFailure(actionabilityError) === "actionability_timeout"
+      !selectedRecipe.accessibleControl &&
+      ["actionability_timeout", "intercepted"].includes(classifyClickFailure(actionabilityError))
     ) {
-      const actionability = await inspectLocatorActionability(control);
-      if (locatorActionabilitySupportsVerifiedDispatch(actionability)) {
+      const actionability = await waitForLocatorVerifiedGeometry(control, actionabilityRecoveryRemaining(), effectiveSignal);
+      if (actionability && locatorActionabilitySupportsVerifiedDispatch(actionability)) {
         actionabilityError = undefined;
         useVerifiedGeometryDispatch = true;
         interactionDiagnostics.click.actionability = actionability;

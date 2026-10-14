@@ -129,6 +129,10 @@ export const cmpPreferencesEvidenceSchema = z.object({
       mode: z.enum(["aria_controls", "registered_existing", "registered_deferred", "borlabs"]),
       priorMatches: z.number().int().min(0).max(1000), priorVisible: z.boolean().optional(),
       outcome: z.enum(["checking", "ready", "opened", "missing", "ambiguous", "already_visible", "parent_unbound", "changed", "timed_out"]),
+      verification: z.object({ version: z.literal("cmp_panel_verification.v1"),
+        result: z.enum(["verified", "parent_missing_or_replaced", "parent_ambiguous", "panel_ambiguous", "panel_replaced", "outside_parent", "role_not_ready", "name_not_ready"]),
+        role: z.string().max(32).nullable(),
+      }).strict().optional(),
     }).strict().optional(),
   }).optional(),
 }).superRefine((packet, ctx) => {

@@ -110,3 +110,13 @@ test("configured cookie identities require a bounded provider-bound checkpoint w
   assert.equal(cmpPreferencesEvidenceSchema.safeParse({ ...base, configuredConsentCookies: Array(5).fill(witness) }).success, false);
   assert.equal(cmpPreferencesEvidenceSchema.parse(packet()).configuredConsentCookies, undefined);
 });
+
+test("deferred-panel verification diagnostics remain bounded and do not create opening proof", () => {
+  const input: any = packet();
+  input.inspectionDiagnostic.surfaceBinding.verification = { version: "cmp_panel_verification.v1", result: "role_not_ready", role: "article" };
+  const result = cmpPreferencesEvidenceSchema.parse(input);
+  assert.equal(result.action.opened, false); assert.equal(result.status, "limited");
+  assert.deepEqual(result.inspectionDiagnostic!.surfaceBinding!.verification, input.inspectionDiagnostic.surfaceBinding.verification);
+  for (const patch of [{ result: "assumed_ready" }, { role: "x".repeat(33) }, { html: "private" }, { version: "unknown" }])
+    assert.equal(cmpPreferencesEvidenceSchema.safeParse({ ...input, inspectionDiagnostic: { ...input.inspectionDiagnostic, surfaceBinding: { ...input.inspectionDiagnostic.surfaceBinding, verification: { ...input.inspectionDiagnostic.surfaceBinding.verification, ...patch } } } }).success, false);
+});

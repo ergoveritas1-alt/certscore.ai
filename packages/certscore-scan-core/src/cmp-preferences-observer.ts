@@ -10,6 +10,7 @@ import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from 
 import { cookieDisclosureColumn } from "@certscore/contracts";
 import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
 import { readCmpScopeInventory } from "./cmp-scope-inventory.js";
+import { verifyDeferredPreferencePanel } from "./cmp-preference-panel-binding.js";
 import { EVIDENCE_WORK_POLICY } from "./evidence-work-budget.js";
 
 /** A single isolated Options action. No preference changes, save, second click,
@@ -286,11 +287,15 @@ export async function runCmpPreferencesObserver(input: {
     await controlled.first().waitFor({ state: "visible", timeout: remaining() });
     if (await controlled.count() !== 1) throw new Error("preference_surface_ambiguous");
     if (surfaceBinding.mode === "registered_deferred") {
-      if (!deferredRoot || !deferredRootHandle || await deferredRoot.count() !== 1 ||
-          !await deferredRoot.evaluate((element, previous) => element === previous && element.isConnected, deferredRootHandle) ||
-          !await controlled.evaluate((element, expected) => Boolean(expected.root?.isConnected && expected.root.contains(element) &&
-            expected.roles.includes(element.getAttribute("role") ?? "") &&
-            (element.getAttribute("aria-label")?.trim() || element.getAttribute("aria-labelledby")?.trim())), { root: deferredRootHandle, roles: registeredDialog?.dialogRoles ?? ["dialog", "region"] })) throw new Error("preference_surface_changed");
+      if (!deferredRoot || !deferredRootHandle) throw new Error("preference_surface_changed");
+      surfaceBinding.verification = await verifyDeferredPreferencePanel({ panel: controlled, parent: deferredRootHandle,
+        roles: registeredDialog?.dialogRoles ?? ["dialog", "region"], remainingMs: Math.max(0, remaining() - 25) });
+      if (surfaceBinding.verification.result === "verified") {
+        if (await deferredRoot.count() !== 1) surfaceBinding.verification.result = "parent_ambiguous";
+        else if (await controlled.count() !== 1) surfaceBinding.verification.result = "panel_ambiguous";
+        else if (!await deferredRoot.evaluate((element, previous) => element === previous && element.isConnected, deferredRootHandle)) surfaceBinding.verification.result = "parent_missing_or_replaced";
+      }
+      if (surfaceBinding.verification.result !== "verified") throw new Error("preference_surface_changed");
     } else if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
     await binding();
     surfaceBinding.outcome = "opened";

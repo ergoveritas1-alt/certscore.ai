@@ -130,3 +130,13 @@ test("open-shadow controls retain real hit-target geometry and respect the final
     assert.equal(await page.evaluate(() => document.body.dataset.clicked), "yes");
   } finally { await browser.close(); }
 });
+
+test("cancelled geometry recovery cannot consume its remaining slice or dispatch", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage(); await page.setContent('<button id="reject">Reject all</button>');
+    const controller = new AbortController(); controller.abort(); const started = Date.now();
+    assert.equal(await waitForLocatorVerifiedGeometry(page.locator('#reject'), 1000, controller.signal), undefined);
+    assert.ok(Date.now() - started < 100);
+  } finally { await browser.close(); }
+});

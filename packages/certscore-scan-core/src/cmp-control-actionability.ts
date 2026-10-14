@@ -117,10 +117,13 @@ export function locatorActionabilitySupportsVerifiedDispatch(
 export async function waitForLocatorVerifiedGeometry(
   control: Locator,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<LocatorActionability | undefined> {
   const deadlineAtMs = Date.now() + Math.max(0, timeoutMs);
   do {
+    if (signal?.aborted) return undefined;
     const actionability = await inspectLocatorActionability(control);
+    if (signal?.aborted) return undefined;
     if (locatorActionabilitySupportsVerifiedDispatch(actionability)) return actionability;
     if (Date.now() >= deadlineAtMs) return undefined;
     await new Promise((resolve) => setTimeout(

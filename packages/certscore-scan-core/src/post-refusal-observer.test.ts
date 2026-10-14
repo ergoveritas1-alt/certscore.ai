@@ -1088,6 +1088,7 @@ test("canonical reject recipe set selects the one actionable deterministic contr
       "certscore_owned_analytics_consent",
       "OpenAI first-party consent controls",
       "Amazon Privacy Preferences",
+      "Drupal EU Cookie Compliance module, non-TCF",
       "OneTrust",
       "Fides",
       "TrustArc",
@@ -1913,4 +1914,46 @@ test("Reject storage diagnostics distinguish a denied session-storage read from 
       }
     });
   } finally { await browser.close(); }
+});
+
+test("Osano Reject reuses the unspent geometry slice after a transient interception without a second click", { timeout: 15_000 }, async () => {
+  let mode = "transient", clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<!doctype html><style>
+      @keyframes move {from{transform:translateX(0)}to{transform:translateX(2px)}}
+      #reject{position:fixed;left:20px;top:20px;width:240px;height:34px;animation:move 40ms linear infinite alternate}
+      #overlay{display:none;position:fixed;inset:0;z-index:100;background:transparent}
+    </style><div class="osano-cm-window"><div class="osano-cm-dialog">Choose optional cookies<button id="reject">Deny non-essential</button></div></div><div id="overlay"></div><script>
+      setTimeout(()=>document.getElementById('overlay').style.display='block',350);
+      ${mode === "transient" ? "setTimeout(()=>document.getElementById('overlay').remove(),2200);" : ""}
+      document.getElementById('reject').onclick=()=>{fetch('/clicked');localStorage.setItem('certscore_fixture_consent','rejected');document.querySelector('.osano-cm-dialog').hidden=true;};
+    </script>`);
+  });
+  const url = await listenHttpServer(server);
+  try {
+    for (mode of ["transient", "persistent", "cancelled"]) {
+      clicks = 0; const started = Date.now();
+      const controller = new AbortController();
+      const cancelTimer = mode === "cancelled" ? setTimeout(() => controller.abort(), 1200) : undefined;
+      const packet = await observe(url, { signal: controller.signal, actionSearchTimeoutMs: 1000, resultBudgetMs: 6000, observationWindowMs: 50,
+        recipe: { ...recipe, cmpId: "Osano", controlSelector: "#reject", bannerSelector: ".osano-cm-dialog" } });
+      clearTimeout(cancelTimer);
+      assert.ok(Date.now() - started < (mode === "cancelled" ? 2500 : 6000));
+      assert.ok(packet.timing.resolverMs < 350, "Resolve before the interceptor appears so this exercises last-mile recovery");
+      if (mode === "transient") {
+        assert.equal(packet.refusalRegistration.status, "confirmed", JSON.stringify(packet));
+        assert.equal(packet.interactionDiagnostics.click.outcome, "completed");
+        assert.equal(packet.interactionDiagnostics.click.reResolvedBeforeDispatch, false);
+        assert.ok(packet.limitations.includes("action_dispatch_verified_geometry_fallback")); assert.equal(clicks, 1);
+      } else if (mode === "cancelled") {
+        assert.equal(clicks, 0); assert.equal(packet.refusalRegistration.refusalExercised, false);
+      } else {
+        assert.equal(packet.interactionDiagnostics.click.outcome, "failed_before_dispatch");
+        assert.equal(packet.interactionDiagnostics.click.failureClass, "intercepted");
+        assert.equal(packet.refusalRegistration.refusalExercised, false); assert.equal(clicks, 0);
+      }
+    }
+  } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 });

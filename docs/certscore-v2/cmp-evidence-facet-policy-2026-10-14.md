@@ -109,3 +109,44 @@ HTTP 200 and rendered CMP Details expanded in a local browser check. End-to-end
 local scan durations were 15.520, 16.403 and 20.247 seconds respectively; no worker
 budget was extended. One-time scan spend remains within the approved below-$0.30
 estimate. Detailed receipts are in `artifacts/cmp-facet-fixes-20261014/`.
+
+## Local recovery repairs after retained verification
+
+The owner requested retained-evidence/local-test repairs for HubSpot preference
+verification and FullStory's intercepted Reject, with no new scan or deployment.
+
+Deferred preference panels now finish accessible-role/name hydration within the
+existing absolute opening deadline, holding the exact panel and pre-existing
+registered parent nodes. Names must resolve inside that parent. Replacement,
+ambiguous roots/panels and navigation remain ineligible. The optional bounded
+`cmp_panel_verification.v1` diagnostic distinguishes role/name readiness from
+parent/panel identity failures. This repairs premature verification of a visible
+but incompletely initialized panel. The historical HubSpot packet lacks the
+failed predicate, so delayed hydration is a tested failure mode, not an established
+explanation of that historical visit. Its original assessment remains unchanged.
+
+Reject actionability recovery now shares its existing named-resolution (500 ms),
+optional canonical-resolution (500 ms) and geometry (1,000 ms) allowances under one
+deadline. A failed re-resolution no longer skips the remaining geometry slice.
+Only a safely hit-testable, visible, enabled control may proceed through the
+unchanged canonical label/control proof, baseline freshness, exact-target,
+semantic-registration and final dispatch guards. No second click, center-hit bypass,
+new lane, retry visit or larger allowance is introduced. Cancellation terminates
+geometry recovery. A persistent obstruction still prevents dispatch. FullStory's
+retained packet proves interception but does not identify whether it was temporary;
+the new recovery therefore needs a future authorized live verification.
+
+Local tests cover delayed HubSpot role/name initialization after one Options click;
+wrong roles, unresolved names, labels outside the parent, parent/panel replacement
+and out-of-parent panels; and an animated Osano-style Reject with a temporary
+interceptor, persistent interceptor and cancellation. The temporary case dispatches
+once and confirms its local refusal record; the latter two dispatch zero times.
+The vendor's previously downloaded HubSpot renderer was also inspected locally,
+with all external requests blocked. Original coordinator bundle/manifest/geometry
+hashes and saved CMP assessments still pass canonical retained replay.
+
+Existing 17-second / 56 GB-second preference and action/lane/publication ceilings
+remain unchanged, as do model calls, scoring and saved reports. Additional bounded
+panel diagnostic storage is estimated below $0.01/month at 100,000 scans with one
+year retention, within the repository's pre-approved threshold and existing budget.
+No new public scan, deployment or contact-ledger admission occurred for these repairs.

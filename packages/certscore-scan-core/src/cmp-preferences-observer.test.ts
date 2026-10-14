@@ -459,3 +459,26 @@ test("configured Drupal cookie identity is bounded, own-data-only and document-b
     }
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test("HubSpot deferred alertdialog finishes accessible-name hydration before inspection without a second click", { timeout: 15_000 }, async () => {
+  let clicks = 0, saves = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    if (req.url === "/save") { saves++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<div id="hs-banner-parent"><div id="hs-eu-cookie-confirmation"><button id="hs-eu-cookie-settings-button">Manage Cookies</button></div></div><script>
+      document.getElementById('hs-eu-cookie-settings-button').onclick=()=>{
+        fetch('/clicked');document.getElementById('hs-banner-parent').insertAdjacentHTML('beforeend',${JSON.stringify('<div id="hs-modal-content"><h2 id="hs-modal-introduction">Manage cookies</h2><label><input type="checkbox">Analytics</label><label><input type="checkbox">Marketing</label><button id="save">Save settings</button></div>')});document.getElementById('save').onclick=()=>fetch('/save');
+        setTimeout(()=>{const panel=document.getElementById('hs-modal-content');panel.setAttribute('role','alertdialog');panel.setAttribute('aria-labelledby','hs-modal-introduction');},150);
+      };
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "hubspot-hydration", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.equal(packet.status, "completed", JSON.stringify(packet)); assert.equal(packet.action.count, 1); assert.equal(packet.action.opened, true);
+    assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.verification?.result, "verified");
+    assert.equal(packet.controls.length, 2); assert.equal(clicks, 1); assert.equal(saves, 0);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
