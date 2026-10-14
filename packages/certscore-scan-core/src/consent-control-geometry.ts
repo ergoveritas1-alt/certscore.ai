@@ -1488,7 +1488,10 @@ function collectConsentGeometryInPage(input: {
         candidate.layer === "first_layer" && candidate.intersectsViewport && candidate.enabled &&
         candidate.boundingBox.width > 0 && candidate.boundingBox.height > 0 &&
         candidate.computedStyle.display !== "none" && candidate.computedStyle.visibility !== "hidden") ||
-      allContainerElements.slice(input.containerLimit).some(potentiallyVisibleFirstLayer) ||
+      // Nested vendor wrappers are covered by their retained ancestor's
+      // inventory. Actual control/candidate overflow remains independently limited.
+      allContainerElements.slice(input.containerLimit).some(element => potentiallyVisibleFirstLayer(element) &&
+        !containers.some(container => container.element.contains(element))) ||
       documentControls.length >= 800 || containerControlInventories.some(controls => controls.slice(80).some(potentiallyVisibleFirstLayer)),
     documentReadyState: document.readyState,
     pageUrl: window.location.href,

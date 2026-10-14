@@ -2146,10 +2146,11 @@ function coordinatorPostRefusalPacket(scanId: string) {
 async function runCoordinatorFixture(input: {
   scanId: string;
   consentBundle: CanonicalEvidenceBundle;
-  action: "none" | "hang" | "late" | "completed";
+  action: "none" | "hang" | "late" | "completed" | "validation_failed";
   dispatchDelayMs: number;
   actionLane?: "accept" | "reject";
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
+  preferences?: "complete" | "hang" | "wrong_hash" | "wrong_target";
 }) {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
@@ -2214,9 +2215,32 @@ async function runCoordinatorFixture(input: {
     async send(command: any, options?: { abortSignal?: AbortSignal }) {
       const workerPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8")) as Record<string, any>;
       const lane = String(workerPayload.workerLane);
+      if (lane === "cmp_preferences") {
+        if (input.preferences === "hang") return new Promise<never>((_resolve, reject) => {
+          options?.abortSignal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
+        });
+        if (!input.preferences) throw new Error("unexpected preferences worker");
+        const packet = {
+          contractVersion: "certscore.cmp-preferences-evidence.v1", policyVersion: "bounded_cmp_preferences.v1",
+          scanId: input.scanId, parentDispatchSha256: postRefusalParentDispatchSha256(payload),
+          targetUrl: input.preferences === "wrong_target" ? "https://other.example/" : payload.targetUrl,
+          finalUrl: payload.targetUrl, documentToken: "fixture-loader", startedAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+          status: "limited", support: { state: "partial", provider: "Borlabs Cookie", recipeVersion: "borlabs_preferences.v1", reason: "bounded_visible_preference_inspection" },
+          action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
+          privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
+        };
+        const body = Buffer.from(JSON.stringify(packet));
+        const uri = `s3://test-bucket/workers/${input.scanId}/cmp_preferences/CmpPreferencesEvidencePacket.json`;
+        const entry = { uri, body, sizeBytes: body.byteLength, sha256: createHash("sha256").update(body).digest("hex") };
+        pointers.set(uri, entry);
+        return { StatusCode: 200, Payload: Buffer.from(JSON.stringify({ scanId: input.scanId, workerLane: lane, status: "completed",
+          parentDispatchSha256: postRefusalParentDispatchSha256(payload), artifactPointers: { cmpPreferencesPacketUri: uri },
+          artifactMetadata: { cmpPreferencesPacketUri: { sizeBytes: entry.sizeBytes, sha256: input.preferences === "wrong_hash" ? "0".repeat(64) : entry.sha256 } } })) };
+      }
       const actionWorkerLane = actionLane === "accept" ? "accept_observation" : "reject_observation";
       if (lane === actionWorkerLane) {
         actionCalls.push(lane);
+        if (input.action === "validation_failed") throw new Error("Evidence validation failed: [field].resolver.[field].[7].[field].[0] (too_big)");
         if (input.action === "hang") {
           return await new Promise<never>((_resolve, reject) => {
             options?.abortSignal?.addEventListener("abort", () => reject(options.abortSignal?.reason ?? new Error("aborted")), { once: true });
@@ -2472,6 +2496,30 @@ test("ARO coordinator: a completed verified Reject remains joined through final 
     assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "joined");
     assert.equal(outcome.bundle.postRefusalEvidence?.refusalRegistration?.status, "confirmed");
     assert.equal(outcome.result.artifactPointers.postRefusalPacketUri?.endsWith("PostRefusalEvidencePacket.json"), true);
+  } finally {
+    if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
+    if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
+  }
+});
+
+test("ARO coordinator: Reject validation failure retains typed coverage without publishing action evidence", async () => {
+  const priorFlag = process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG];
+  const priorBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+  try {
+    const outcome = await runCoordinatorFixture({
+      scanId: "aro-coordinator-reject-invalid",
+      consentBundle: coordinatorConsentBundle("aro-coordinator-reject-invalid", { inspectionCompleted: true, rejectControlObserved: true }),
+      action: "validation_failed",
+      dispatchDelayMs: 0,
+      actionLane: "reject",
+    });
+    assert.equal(outcome.actionCalls.length, 1);
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.status, "failed");
+    assert.equal(outcome.bundle.postRefusalLaneOutcome?.failureReason, "evidence_validation_failed");
+    assert.equal(outcome.bundle.postRefusalEvidence, undefined);
+    assert.equal(outcome.result.artifactPointers.postRefusalPacketUri, undefined);
   } finally {
     if (priorFlag === undefined) delete process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG]; else process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = priorFlag;
     if (priorBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = priorBucket;
@@ -4919,3 +4967,48 @@ test("policy-lane negative-search proof survives the hash-bound early handoff", 
   assert.equal(sourceHash, createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"));
   assert.equal(packet.productionFindingIntegration, false);
 });
+
+test("CMP preference authorization stays exact and has its own worker packet", async () => {
+  const config = { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "scan-local-1", exactTargetUrl: "https://example.com/" };
+  assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded", cmpPreferenceInspection: { ...config, scanId: "other-scan" } })));
+  assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded", cmpPreferenceInspection: { ...config, exactTargetUrl: "https://example.com/other" } })));
+  assert.throws(() => parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "single", cmpPreferenceInspection: config })));
+  const parent = parseLocalV2DagLambdaDispatchPayload(validPayload({ orchestrationMode: "sharded", cmpPreferenceInspection: config }));
+  let sent: Record<string, unknown> | undefined;
+  const result = await invokeLocalV2DagLambdaWorker({ parentPayload: parent, parentScanId: parent.scanId, workerLane: "cmp_preferences", lambdaClient: { async send(command) {
+    sent = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8"));
+    return { StatusCode: 200, Payload: Buffer.from(JSON.stringify({ scanId: parent.scanId, workerLane: "cmp_preferences", status: "completed", parentDispatchSha256: postRefusalParentDispatchSha256(parent), artifactPointers: { cmpPreferencesPacketUri: "s3://test-bucket/CmpPreferencesEvidencePacket.json" }, artifactMetadata: { cmpPreferencesPacketUri: { sha256: "a".repeat(64), sizeBytes: 123 } } })) };
+  } } });
+  assert.equal(sent?.parentDispatchSha256, postRefusalParentDispatchSha256(parent));
+  assert.deepEqual(sent?.cmpPreferenceInspection, config);
+  assert.equal(result.artifactPointers?.cmpPreferencesPacketUri, "s3://test-bucket/CmpPreferencesEvidencePacket.json");
+});
+
+for (const preferences of ["complete", "hang", "wrong_hash", "wrong_target"] as const) {
+  test(`CMP coordinator joins only verified evidence without a tail wait: ${preferences}`, async () => {
+    const saved = { preference: process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED,
+      accept: process.env[POST_ACCEPT_WORKER_FEATURE_FLAG], bucket: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET };
+    process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED = "1";
+    process.env[POST_ACCEPT_WORKER_FEATURE_FLAG] = "1";
+    process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+    let artifactRoot: string | undefined;
+    try {
+      const scanId = `cmp-coordinator-${preferences}`;
+      const start = Date.now();
+      const result = await runCoordinatorFixture({ scanId, preferences, action: "none", dispatchDelayMs: 1000,
+        consentBundle: coordinatorConsentBundle(scanId, { inspectionCompleted: true, acceptControlObserved: false }) });
+      artifactRoot = result.artifactRoot;
+      assert.ok(Date.now() - start < 1500, "CMP worker must not wait its 19-second budget at report publication");
+      assert.equal(result.bundle.cmpPreferenceLaneOutcome.status, preferences === "complete" ? "joined" : "limited");
+      assert.equal(Boolean(result.bundle.cmpPreferencesEvidence), preferences === "complete");
+      assert.equal(result.bundle.scanId, scanId);
+      assert.equal(result.bundle.runtimeCoverage.coverageStatus, "usable", "verified passive evidence is preserved");
+      assert.ok(result.bundle.scanLaneRuns.some((lane: { laneId: string }) => lane.laneId === "policy_evidence"));
+    } finally {
+      for (const [key, value] of [["CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED", saved.preference], [POST_ACCEPT_WORKER_FEATURE_FLAG, saved.accept], ["CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET", saved.bucket]]) {
+        if (value === undefined) delete process.env[key!]; else process.env[key!] = value;
+      }
+      if (artifactRoot) await rm(artifactRoot, { recursive: true, force: true });
+    }
+  });
+}

@@ -1,3 +1,4 @@
+import { cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
@@ -146,6 +147,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   }>;
   /** Exact digest of the coordinator dispatch, propagated only to workers. */
   parentDispatchSha256?: string;
+  cmpPreferenceInspection?: CmpPreferenceDispatch;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
   gpcObservation?: GpcObservationDispatchConfig;
@@ -192,6 +194,7 @@ export type LocalV2DagLambdaResultMessage = {
       sha256: string;
       sizeBytes: number;
     };
+    cmpPreferencesPacketUri?: { sha256: string; sizeBytes: number };
     postAcceptPacketUri?: {
       sha256: string;
       sizeBytes: number;
@@ -203,6 +206,7 @@ export type LocalV2DagLambdaResultMessage = {
     reportAdapterArtifactUri?: string;
     reviewArtifactUri?: string;
     scanArtifactUri?: string;
+    cmpPreferencesPacketUri?: string;
     postAcceptPacketUri?: string;
     postRefusalPacketUri?: string;
   };
@@ -370,6 +374,7 @@ export type LocalV2DagLambdaLaneTiming = {
 };
 export type LocalV2DagLambdaLaneTimingSummary = {
   contractVersion: typeof LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION;
+  cmpPreferenceInspection?: { status: "joined" | "limited"; startedAt: string; completedAt: string; durationMs: number; workerDurationMs: number | null; terminalOutcomeDeltaFromPassiveBarrierMs: number };
   coordinatorStartedAt: string;
   generatedAt: string;
   lanes: LocalV2DagLambdaLaneTiming[];
@@ -386,6 +391,7 @@ export type LocalV2DagLambdaLaneTimingSummary = {
   rejectTailDeltaMs: number | null;
 };
 type LocalV2DagLambdaWorkerLane =
+  | "cmp_preferences"
   | "coordinator"
   | "consent_proof"
   | "runtime_evidence"
@@ -758,6 +764,11 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
   const policySurfaceSeeds = parsePolicySurfaceSeeds(record.policySurfaceSeeds);
+  const cmpPreferenceInspection = record.cmpPreferenceInspection !== undefined
+    ? cmpPreferenceDispatchSchema.parse(record.cmpPreferenceInspection)
+    : record.orchestrationMode === "sharded" && process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED === "1"
+      ? cmpPreferenceDispatchSchema.parse({ policyVersion: CMP_PREFERENCE_POLICY_VERSION, enabled: true, scanId, exactTargetUrl: requireString(record, "targetUrl") }) : undefined;
+  if (cmpPreferenceInspection && (cmpPreferenceInspection.scanId !== scanId || cmpPreferenceInspection.exactTargetUrl !== record.targetUrl || !["sharded", "worker"].includes(String(record.orchestrationMode)))) throw new Error("CMP inspection authorization must bind the exact sharded scan target.");
   const postAcceptObservation = record.postAcceptObservation === undefined
     ? undefined
     : postAcceptLambdaDispatchConfigSchema.parse(record.postAcceptObservation);
@@ -792,6 +803,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...(parentDispatchSha256 ? { parentDispatchSha256 } : {}),
+    ...(cmpPreferenceInspection ? { cmpPreferenceInspection } : {}),
     ...(postAcceptObservation ? { postAcceptObservation } : {}),
     ...(postRefusalObservation ? { postRefusalObservation } : {}),
     ...(gpcObservation ? { gpcObservation } : {}),
@@ -912,7 +924,7 @@ function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDi
 }
 
 function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
-  return value === "coordinator" ||
+  return value === "cmp_preferences" || value === "coordinator" ||
     value === "consent_proof" ||
     value === "runtime_evidence" ||
     value === "policy_evidence" ||
@@ -1942,6 +1954,7 @@ export function postRefusalParentDispatchSha256(
     localCallbackUrl: payload.localCallbackUrl,
     orchestrationMode: payload.orchestrationMode ?? "single",
     ...(payload.policySurfaceSeeds ? { policySurfaceSeeds: payload.policySurfaceSeeds } : {}),
+    ...(payload.cmpPreferenceInspection ? { cmpPreferenceInspection: payload.cmpPreferenceInspection } : {}),
     ...(payload.postRefusalObservation
       ? { postRefusalObservation: payload.postRefusalObservation }
       : {}),
@@ -2367,6 +2380,21 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   };
 }
 
+export async function runCmpPreferencesArtifactChain(payload: LocalV2DagLambdaDispatchPayload,
+  options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal }): Promise<ArtifactChainResult> {
+  if (payload.workerLane !== "cmp_preferences" || !payload.cmpPreferenceInspection ||
+    process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED !== "1" || !payload.parentDispatchSha256) throw new Error("CMP preference inspection is not authorized.");
+  const { runCmpPreferencesObserver } = await import("@certscore/scan-core/cmp-preferences-observer");
+  const packet = await runCmpPreferencesObserver({ config: payload.cmpPreferenceInspection, parentDispatchSha256: payload.parentDispatchSha256, signal: options.signal });
+  const body = Buffer.from(JSON.stringify(cmpPreferencesEvidenceSchema.parse(packet)));
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  const bucket = requireArtifactBucket(), key = `${artifactKeyPrefix(payload)}/CmpPreferencesEvidencePacket.json`;
+  await mkdir(options.artifactRoot, { recursive: true });
+  await writeFile(path.join(options.artifactRoot, "CmpPreferencesEvidencePacket.json"), body);
+  await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: "application/json", Metadata: { sha256 } }), { abortSignal: AbortSignal.any([AbortSignal.timeout(500), ...(options.signal ? [options.signal] : [])]) });
+  return { artifactPointers: { cmpPreferencesPacketUri: s3Uri(bucket, key) }, artifactMetadata: { cmpPreferencesPacketUri: { sha256, sizeBytes: body.byteLength } } };
+}
+
 export async function runLocalV2DagLambdaShardedArtifactChain(
   payload: LocalV2DagLambdaDispatchPayload,
   options: {
@@ -2394,6 +2422,30 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
     ...LOCAL_V2_DAG_LAMBDA_EVIDENCE_WORKER_LANES,
     ...(payload.gpcObservation?.enabled === true ? ["gpc_observation" as const] : []),
   ];
+  // Independent action lane: join exactly once before canonical publication.
+  // Its failure limits CMP coverage and cannot poison verified passive lanes.
+  const preferenceStartedAt = Date.now();
+  const preferenceController = new AbortController();
+  const preferenceOutcome = payload.cmpPreferenceInspection && process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED === "1"
+    ? (async () => {
+      const signal = AbortSignal.any([preferenceController.signal, AbortSignal.timeout(CMP_PREFERENCE_JOIN_MS), ...(options.signal ? [options.signal] : [])]);
+      try {
+        const result = await withHandlerSafetyTimeout(invokeLocalV2DagLambdaWorker({ parentPayload: payload, parentScanId: payload.scanId, workerLane: "cmp_preferences", lambdaClient: options.lambdaClient, signal }), CMP_PREFERENCE_JOIN_MS);
+        const uri = result.artifactPointers?.cmpPreferencesPacketUri, metadata = result.artifactMetadata?.cmpPreferencesPacketUri;
+        if (!uri || !metadata || metadata.sizeBytes > 100_000) throw new Error("cmp_packet_metadata_invalid");
+        const { bucket, key } = parseS3Uri(uri);
+        const response = await (options.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new GetObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: signal });
+        const body = await streamToBuffer(response.Body);
+        if (body.byteLength !== metadata.sizeBytes || createHash("sha256").update(body).digest("hex") !== metadata.sha256) throw new Error("cmp_packet_checksum_mismatch");
+        const packet = cmpPreferencesEvidenceSchema.parse(JSON.parse(body.toString("utf8")));
+        if (packet.scanId !== payload.scanId || packet.targetUrl !== payload.targetUrl || packet.parentDispatchSha256 !== postRefusalParentDispatchSha256(payload)) throw new Error("cmp_packet_binding_mismatch");
+        await writeFile(path.join(artifactRoot, "CmpPreferencesEvidencePacket.json"), body);
+        return { status: "joined" as const, packet, startedAt: new Date(preferenceStartedAt).toISOString(), completedAt: new Date().toISOString() };
+      } catch { return { status: "limited" as const,
+        limitationCode: options.signal?.aborted ? "preference_inspection_cancelled" as const
+          : signal.aborted || Date.now() - preferenceStartedAt >= CMP_PREFERENCE_JOIN_MS ? "preference_budget_exhausted" as const : "preference_worker_failed" as const,
+        startedAt: new Date(preferenceStartedAt).toISOString(), completedAt: new Date().toISOString() }; }
+    })() : undefined;
   const postRefusalState: {
     passiveAbsence: boolean;
     passiveCoverageLimited?: boolean;
@@ -2866,6 +2918,8 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
         evidenceJoined: postRefusalJoin === "joined",
         maxTailWaitMs: POST_REFUSAL_REJECT_WORKER_MAX_TAIL_WAIT_MS,
         status: postRefusalJoin,
+        ...(postRefusalJoin === "failed" && postRefusalState.error?.includes("Evidence validation failed:")
+          ? { failureReason: "evidence_validation_failed" } : {}),
         ...(postRefusalJoin === "timed_out"
           ? { limitationCode: "reject_path_timeout" }
           : postRefusalJoin === "not_applicable"
@@ -2907,6 +2961,19 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       },
     });
   }
+  // The preference lane gets no tail wait beyond the existing report barrier.
+  // Late workers remain bounded but cannot reopen or republish this result.
+  const joinedPreferences = preferenceOutcome ? await Promise.race([
+    preferenceOutcome,
+    Promise.resolve({ status: "limited" as const, limitationCode: "preference_inspection_cancelled" as const,
+      startedAt: new Date(preferenceStartedAt).toISOString(), completedAt: new Date().toISOString() }),
+  ]) : undefined;
+  preferenceController.abort();
+  if (joinedPreferences) bundle = canonicalEvidenceBundleSchema.parse({ ...bundle,
+    ...(joinedPreferences.status === "joined" ? { cmpPreferencesEvidence: joinedPreferences.packet } : {}),
+    cmpPreferenceLaneOutcome: { status: joinedPreferences.status, startedAt: joinedPreferences.startedAt, completedAt: joinedPreferences.completedAt, ...(joinedPreferences.status === "limited" ? { limitationCode: joinedPreferences.limitationCode } : {}) },
+    completedAt: latestIsoTimestamp(bundle.completedAt, joinedPreferences.completedAt),
+  });
   const allWorkerResults = [
     ...workerResults,
     ...(postRefusalState.result ? [postRefusalState.result] : []),
@@ -2931,12 +2998,19 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       result: postAcceptState.result,
     },
   });
+  if (joinedPreferences) laneTimingSummary.cmpPreferenceInspection = {
+    status: joinedPreferences.status, startedAt: joinedPreferences.startedAt, completedAt: joinedPreferences.completedAt,
+    durationMs: Date.parse(joinedPreferences.completedAt) - Date.parse(joinedPreferences.startedAt),
+    workerDurationMs: joinedPreferences.status === "joined" ? Date.parse(joinedPreferences.packet.completedAt) - Date.parse(joinedPreferences.packet.startedAt) : null,
+    terminalOutcomeDeltaFromPassiveBarrierMs: Date.parse(joinedPreferences.completedAt) - passiveLaneBarrierCompletedAtMs,
+  };
   await writeJson(path.join(artifactRoot, "LocalV2DagLambdaShardSummary.json"), {
     artifactOnly: true,
     artifactVersion: "certscore.v2.lambda.evidence-lane-summary.v1",
     generatedAt: new Date().toISOString(),
     productionFindingIntegration: false,
     laneTimingSummary,
+    cmpPreferenceInspection: joinedPreferences ? { status: joinedPreferences.status, startedAt: joinedPreferences.startedAt, completedAt: joinedPreferences.completedAt } : null,
     postRefusalObservation: {
       addedInitialBarrierWaitMs: laneTimingSummary.rejectLaneAddedWaitMs,
       featureEnabled: postRefusalState.started,
@@ -3241,6 +3315,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
     ...parentPayloadWithoutGpcObservation,
+    ...(workerLane === "cmp_preferences" ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
     callbackCorrelationId: input.parentScanId,
     ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
     ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
@@ -3594,6 +3669,7 @@ function parseLocalV2DagLambdaShardResult(
     throw new Error("Local v2 DAG Lambda accept_observation worker did not return a post-accept packet URI.");
   }
   if (
+    expectedWorkerLane !== "cmp_preferences" &&
     expectedWorkerLane !== "reject_observation" &&
     expectedWorkerLane !== "accept_observation" &&
     !artifactPointers.scanArtifactUri
@@ -3656,6 +3732,7 @@ function parseArtifactPointersRecord(value: unknown): LocalV2DagLambdaArtifactPo
     reportAdapterArtifactUri: compactString(record.reportAdapterArtifactUri) ?? undefined,
     reviewArtifactUri: compactString(record.reviewArtifactUri) ?? undefined,
     scanArtifactUri: compactString(record.scanArtifactUri) ?? undefined,
+    cmpPreferencesPacketUri: compactString(record.cmpPreferencesPacketUri) ?? undefined,
     postAcceptPacketUri: compactString(record.postAcceptPacketUri) ?? undefined,
     postRefusalPacketUri: compactString(record.postRefusalPacketUri) ?? undefined,
   };
@@ -3669,6 +3746,7 @@ function parseArtifactMetadataRecord(value: unknown): LocalV2DagLambdaArtifactMe
     reportAdapterArtifactUri: parseArtifactMetadataEntry(record.reportAdapterArtifactUri),
     reviewArtifactUri: parseArtifactMetadataEntry(record.reviewArtifactUri),
     scanArtifactUri: parseArtifactMetadataEntry(record.scanArtifactUri),
+    cmpPreferencesPacketUri: parseArtifactMetadataEntry(record.cmpPreferencesPacketUri),
     postAcceptPacketUri: parseArtifactMetadataEntry(record.postAcceptPacketUri),
     postRefusalPacketUri: parseArtifactMetadataEntry(record.postRefusalPacketUri),
   };
@@ -5818,7 +5896,9 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       ? path.join(baseArtifactRoot, "lanes", payload.workerLane)
       : baseArtifactRoot;
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
-      dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "reject_observation"
+      dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "cmp_preferences"
+        ? runCmpPreferencesArtifactChain(dispatchPayload, { artifactRoot: runOptions.artifactRoot, s3Client: options.s3Client, signal: runOptions.signal })
+        : dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "reject_observation"
         ? runLocalV2DagLambdaPostRefusalArtifactChain(dispatchPayload, {
             artifactRoot: runOptions.artifactRoot,
             s3Client: options.s3Client,
@@ -5848,6 +5928,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     artifactChainStartedAt = now();
     const evidenceCoordinator = payload.orchestrationMode === "sharded";
     const evidenceWorker = payload.orchestrationMode === "worker" && (
+      payload.workerLane === "cmp_preferences" ||
       payload.workerLane === "consent_proof" ||
       payload.workerLane === "runtime_evidence" ||
       payload.workerLane === "policy_evidence" ||
@@ -6233,6 +6314,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
 
 function consentScenariosForWorkerLane(workerLane: LocalV2DagLambdaWorkerLane): ConsentFlowScenario[] {
   switch (workerLane) {
+    case "cmp_preferences":
     case "coordinator":
     case "consent_proof":
     case "runtime_evidence":

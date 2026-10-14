@@ -1,3 +1,4 @@
+import { deriveCmpAuditAssessment } from "./cmp-audit-assessment-projector";
 import {
   deriveConsentControlAssessment,
   classifyConsentControlLabel,
@@ -774,6 +775,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           : "unknown";
 
   return deriveConsentControlAssessment({
+    cmpAudit: deriveCmpAuditAssessment(input.bundle),
     visualEvidence,
     scan: {
       scanId: input.scanId ?? input.bundle.scanId,

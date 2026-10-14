@@ -144,6 +144,18 @@ export function buildPersistedFirstLayerConsentEvidence(
   };
 }
 
+/** Keep the serialized snapshot aligned with the already-validated assessment
+ * chosen by canonical materialization, including when replacing an older one. */
+export function withCanonicalConsentAssessmentSnapshot(
+  snapshot: Record<string, unknown> | null,
+  assessment: ConsentControlAssessment | null,
+) {
+  return { ...(snapshot ?? {}), ...(assessment ? {
+    consentControlAssessment: assessment,
+    consent_control_assessment: assessment,
+  } : {}) };
+}
+
 export function withPersistedFirstLayerConsentEvidence(
   runtimeArtifacts: Record<string, unknown> | null,
   snapshot: Record<string, unknown> | null

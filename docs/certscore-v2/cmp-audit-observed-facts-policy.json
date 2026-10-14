@@ -1,0 +1,22 @@
+{
+  "version": "cmp_audit_assessment.v2",
+  "ownerApprovalDate": "2026-10-13",
+  "scope": {
+    "services": "Individual service checkboxes or toggles observed in existing inspected views. No extra Services-tab navigation; unavailable controls remain Not assessed.",
+    "consent_record": "Timestamped verified client-side semantic decision with state hash; no server-side audit adequacy claim.",
+    "duration": "Captured known CMP-cookie expiry with identity/value hash and timestamps; no future persistence or appropriateness claim.",
+    "declared_not_found": "Retained declaration-pattern overlap with usable pre-consent cookie snapshots; no stale-declaration or post-Accept absence claim."
+  },
+  "historical": "Stored v1 assessments retain their original labels and conclusions. New v2 materializations are source-hashed and persist through normalized concerns and concern policy.",
+  "cost": {
+    "estimatedIncrementalMonthlyUsd": 0,
+    "browserChanges": false,
+    "additionalClicks": 0,
+    "additionalWaits": 0,
+    "additionalModelCalls": 0,
+    "explanation": "Downstream deterministic interpretation of existing retained evidence only; no scanner or capture budget change."
+  },
+  "scoring": "Informational checklist-only; no new score effects.",
+  "serviceTabInspection": "Deferred after owner raised contention concerns; implementation removed before live verification.",
+  "deployment": "local development; not deployed"
+}

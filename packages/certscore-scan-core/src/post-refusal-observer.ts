@@ -1,3 +1,6 @@
+import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
+import { waitForConsentDocumentReady } from "./consent-document-readiness.js";
+import { retainResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
 import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
 import { installActionDomStorageCapture } from "./action-dom-storage-capture.js";
 import { readActionWriteCapture, buildActionWriteCoverage } from "./action-main-document-write-coverage.js";
@@ -616,6 +619,7 @@ export async function runPostRefusalObserver(
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
+    await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
     originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl);
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_reject", startedAt: new Date(parentScanStartedAtMs).toISOString(),
@@ -941,14 +945,9 @@ export async function runPostRefusalObserver(
       if (signature === previousResolverSnapshotSignature) return;
       previousResolverSnapshotSignature = signature;
       resolverSnapshotAttempt += 1;
-      const retained = {
-        ...snapshot,
-        attempt: resolverSnapshotAttempt,
-        // Diagnostics are deliberately bounded by contract. A suspended or
-        // resource-starved browser process can resume after the resolver's
-        // deadline; that must not make neutral packet finalization throw.
-        elapsedMs: Math.min(30_000, Math.max(0, Date.now() - resolverStartedAtMs)),
-      };
+      const bounded = retainResolverDiagnostic(snapshot, resolverSnapshotAttempt, Date.now() - resolverStartedAtMs);
+      const retained = bounded.snapshot;
+      resolverDiagnostics.truncated ||= bounded.truncated;
       if (resolverDiagnostics.snapshots.length < 12) {
         resolverDiagnostics.snapshots.push(retained);
       } else {
@@ -960,11 +959,17 @@ export async function runPostRefusalObserver(
       ? Math.min(2_000, actionSearchTimeoutMs - 8_000)
       : 0;
     const initialActionSearchTimeoutMs = actionSearchTimeoutMs - adaptiveExtensionMs;
-    let resolution = input.allowCanonicalRejectDiscovery
+    const initialSearchDeadline = resolverStartedAtMs + initialActionSearchTimeoutMs;
+    const documentReady = initialActionSearchTimeoutMs === 0 || await waitForConsentDocumentReady(page, initialSearchDeadline, effectiveSignal);
+    if (!documentReady) recordResolverSnapshot(emptyResolverSnapshot("named_recipe", "document_loading"));
+    const searchRemaining = () => initialActionSearchTimeoutMs === 0 ? 0 : Math.max(1, initialSearchDeadline - Date.now());
+    let resolution: DeterministicRecipeResolution = !documentReady
+      ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
+      : input.allowCanonicalRejectDiscovery
       ? await waitForDeterministicOrCanonicalRecipe(
           page,
           actionRecipes,
-          initialActionSearchTimeoutMs,
+          searchRemaining(),
           effectiveSignal,
           recordResolverSnapshot,
           actionDiscovery,
@@ -972,7 +977,7 @@ export async function runPostRefusalObserver(
       : await waitForDeterministicRecipe(
           page,
           actionRecipes,
-          initialActionSearchTimeoutMs,
+          searchRemaining(),
           effectiveSignal,
           recordResolverSnapshot,
           actionDiscovery,
@@ -1898,6 +1903,8 @@ async function captureStorage(
 
   for (const cookie of normalized.cookies.slice(0, MAX_STORAGE_ITEMS * 4)) {
     items.push(classifyStorageItem({
+      expiresAtEpochSeconds: cookie.expires,
+      capturedAtEpochSeconds: Date.now() / 1000,
       storageType: "cookie",
       name: cookie.name,
       value: cookie.value,
@@ -1961,6 +1968,8 @@ async function captureStorage(
 }
 
 function classifyStorageItem(input: {
+  expiresAtEpochSeconds?: number;
+  capturedAtEpochSeconds?: number;
   storageType: PostRefusalStorageItem["storageType"];
   name: string;
   value: string;
@@ -1972,6 +1981,7 @@ function classifyStorageItem(input: {
     ? vendorFor({ type: "cookie", cookieName: input.name, hostname: input.hostname })
     : vendorFor({ type: "cmp_runtime", storageKey: input.name, hostname: input.hostname });
   return {
+    ...(input.expiresAtEpochSeconds !== undefined ? { expiresAtEpochSeconds: input.expiresAtEpochSeconds, capturedAtEpochSeconds: input.capturedAtEpochSeconds } : {}),
     storageType: input.storageType,
     name: input.name.slice(0, 180),
     hostname: input.hostname.slice(0, 255),

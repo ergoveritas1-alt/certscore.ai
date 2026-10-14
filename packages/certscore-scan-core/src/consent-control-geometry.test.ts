@@ -1617,3 +1617,12 @@ test("retains reviewed necessary-only and role-button settings controls from the
   assert.equal(findCandidate(artifact, "Cookie Settings")?.linkDestination, "unverified");
   assert.equal(findCandidate(artifact, "Cookie Settings")?.decisionStatus, "confirmed_visible");
 });
+
+test("nested Borlabs wrappers do not imply lost inventory; separate omitted surfaces still do", async () => {
+  const controls = '<button>Accept all</button><button>Reject all</button><button>Cookie settings</button>';
+  const nested = '<div class="brlbs-wrapper">We use cookies'.repeat(20) + controls + '</div>'.repeat(20);
+  const covered = await captureFixture(nested);
+  assert.equal(covered.controlInspection?.captureCoverage.inventoryTruncated, false);
+  const separate = await captureFixture(Array.from({ length: 20 }, () => `<div class="brlbs-wrapper">We use cookies${controls}</div>`).join(""));
+  assert.equal(separate.controlInspection?.captureCoverage.inventoryTruncated, true);
+});

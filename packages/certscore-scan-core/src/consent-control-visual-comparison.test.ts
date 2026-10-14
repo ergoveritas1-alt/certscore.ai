@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
 import { hasMaterialAcceptVisualProminence, consentControlVisualComparisonSchema } from "@certscore/contracts";
-import { measureConsentControlVisualComparison, retainPairedConsentVisualCapture } from "./consent-control-visual-comparison.js";
-import { consentVisualFixture, visualFixtureStartMs } from "./test-fixtures/consent-visual-comparison.js";
+import { comparisonPair, measureConsentControlVisualComparison, retainPairedConsentVisualCapture } from "./consent-control-visual-comparison.js";
+import { consentVisualFixture, separatedConsentVisualFixture, visualFixtureStartMs } from "./test-fixtures/consent-visual-comparison.js";
 
 async function retentionFixture() {
   const fixture = await consentVisualFixture();
@@ -121,4 +121,57 @@ test("producer file binding rejects stale, withheld and document-mismatched imag
     const noBudget = createConsentVisualComparisonCollector([screenshot], visualFixtureStartMs, () => 0);
     assert.equal(await noBudget(geometry), geometry);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+test("stacked Accept/Reject controls retain measured prominence with the same ambiguity and coverage gates", async () => {
+  for (const style of ["filled", "outline", "equal", "reject_filled"] as const) {
+    const fixture = await consentVisualFixture(style, true);
+    const comparison = await measureConsentControlVisualComparison(fixture);
+    assert.ok(comparison, style);
+    assert.equal(hasMaterialAcceptVisualProminence(comparison), style === "filled" || style === "outline");
+    fixture.geometry.candidates.push({ ...fixture.geometry.candidates[1]!, candidateId: "duplicate-reject" });
+    assert.equal(await measureConsentControlVisualComparison(fixture), undefined);
+  }
+});
+
+
+test("separated Streamable, Witt and Qobuz layouts pair without weakening image/inspection gates", async () => {
+  for (const layout of ["streamable", "witt", "qobuz"] as const) {
+    const fixture = await separatedConsentVisualFixture(layout);
+    assert.ok(comparisonPair(fixture.geometry), layout);
+    assert.ok(await measureConsentControlVisualComparison(fixture), layout);
+    const incomplete = structuredClone(fixture.geometry); delete incomplete.controlInspection;
+    assert.equal(await measureConsentControlVisualComparison({ ...fixture, geometry: incomplete }), undefined);
+    assert.equal(await measureConsentControlVisualComparison({ ...fixture, screenshotCapturedAtMs: fixture.screenshotCapturedAtMs - 501 }), undefined);
+    assert.equal(await measureConsentControlVisualComparison({ ...fixture, deadlineAtMs: Date.now() - 1 }), undefined);
+  }
+});
+
+test("separated pairing excludes scoped, ambiguous, cross-surface, dismiss and container candidates", async () => {
+  const fixture = await separatedConsentVisualFixture("streamable");
+  for (const mutate of [
+    (g: typeof fixture.geometry) => { g.candidates[1]!.label = "jetzt ablehnen"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.label = "Reject analytics"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.label = "Reject Utiq"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.label = "Close"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.ariaLabel = "Accept all"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.tagName = "a"; g.candidates[1]!.role = "button"; g.candidates[1]!.linkDestination = "other_document"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.frameContext.frameKind = "child_frame"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.frameContext.frameUrl += "different"; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.containerId = "unretained"; },
+    (g: typeof fixture.geometry) => { g.containers[0]!.layer = "page_body"; },
+    (g: typeof fixture.geometry) => { g.containers[0]!.boundingBox = { x: 0, y: 0, left: 0, top: 0, width: 1366, height: 900, right: 1366, bottom: 900 }; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.consentContextConfirmed = false; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.clippedByScrollableAncestor = true; },
+    (g: typeof fixture.geometry) => { g.candidates[1]!.tagName = "div"; },
+    (g: typeof fixture.geometry) => { g.candidates.push({ ...g.candidates[1]!, candidateId: "other-reject" }); },
+    (g: typeof fixture.geometry) => { g.candidates.push({ ...g.candidates[0]!, candidateId: "other-accept" }); },
+  ]) {
+    const geometry = structuredClone(fixture.geometry); mutate(geometry);
+    assert.equal(comparisonPair(geometry), undefined, mutate.toString());
+  }
+  const link = structuredClone(fixture.geometry);
+  link.candidates[1]!.tagName = "a"; link.candidates[1]!.linkDestination = "same_document";
+  assert.ok(comparisonPair(link), "a global refusal link with retained same-document destination remains eligible");
 });

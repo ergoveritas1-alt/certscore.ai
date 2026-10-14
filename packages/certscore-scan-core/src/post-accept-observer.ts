@@ -1,3 +1,6 @@
+import { installBorlabsDeferredDialogReveal } from "./borlabs-passive-dialog-reveal.js";
+import { waitForConsentDocumentReady } from "./consent-document-readiness.js";
+import { retainResolverDiagnostic } from "./consent-action-resolver-diagnostics.js";
 import { buildObservedActionSourceProof } from "./observed-action-source-proof.js";
 import { installActionDomStorageCapture } from "./action-dom-storage-capture.js";
 import { readActionWriteCapture, buildActionWriteCoverage } from "./action-main-document-write-coverage.js";
@@ -588,6 +591,7 @@ export async function runPostAcceptObserver(
       await installPublicNetworkGuardRoute(context);
     }
     page = await context.newPage();
+    await installBorlabsDeferredDialogReveal(page, observationTargetUrl);
     originDomStorageCapture = await installActionDomStorageCapture(page, observationTargetUrl);
     if (input.runtimeGraph) graphCapture = await installRuntimeGraphCapture(page, {
       ...input.runtimeGraph, captureId: input.scanId, scenario: "post_accept", startedAt: new Date(parentScanStartedAtMs).toISOString(),
@@ -746,16 +750,25 @@ export async function runPostAcceptObserver(
       const signature = JSON.stringify(snapshot);
       if (signature === previousSnapshot) return;
       previousSnapshot = signature;
-      const retained = { ...snapshot, attempt: Math.min(10_000, ++resolverAttempt), elapsedMs: Math.min(30_000, Date.now() - resolverStartedAtMs) };
+      const bounded = retainResolverDiagnostic(snapshot, ++resolverAttempt, Date.now() - resolverStartedAtMs);
+      const retained = bounded.snapshot;
       const resolver = diagnostics.resolver!;
+      resolver.truncated ||= bounded.truncated;
       if (resolver.snapshots.length < 12) resolver.snapshots.push(retained);
       else { resolver.truncated = true; resolver.snapshots[11] = retained; }
     };
-    let resolution = input.allowCanonicalAcceptDiscovery
+    const searchDeadline = resolverStartedAtMs + remainingResultBudgetMs(actionSearchTimeoutMs);
+    const documentReady = actionSearchTimeoutMs === 0 || await waitForConsentDocumentReady(page, searchDeadline, effectiveSignal);
+    if (!documentReady) recordResolverSnapshot({ source: "named_recipe", state: "document_loading",
+      selectorMatchCount: 0, visibleCount: 0, enabledCount: 0, labelMatchCount: 0, actionableCount: 0, cmpIds: [], controlLabels: [] });
+    const searchRemaining = () => actionSearchTimeoutMs === 0 ? 0 : Math.max(1, searchDeadline - Date.now());
+    let resolution: AcceptRecipeResolution = !documentReady
+      ? { status: effectiveSignal?.aborted ? "aborted" : "not_found" }
+      : input.allowCanonicalAcceptDiscovery
       ? await waitForDeterministicOrCanonicalAcceptRecipe(
           page,
           recipes,
-          remainingResultBudgetMs(actionSearchTimeoutMs),
+          searchRemaining(),
           effectiveSignal,
           actionDiscovery,
           recordResolverSnapshot,
@@ -763,7 +776,7 @@ export async function runPostAcceptObserver(
       : await waitForDeterministicRecipe(
           page,
           recipes,
-          remainingResultBudgetMs(actionSearchTimeoutMs),
+          searchRemaining(),
           effectiveSignal,
           actionDiscovery,
           recordResolverSnapshot,
@@ -2563,6 +2576,8 @@ async function captureStorage(
   const items: PostRefusalStorageItem[] = [];
   for (const cookie of normalized.cookies.slice(0, 384)) {
     items.push(classifyStorageItem({
+      expiresAtEpochSeconds: cookie.expires,
+      capturedAtEpochSeconds: Date.now() / 1000,
       storageType: "cookie",
       name: cookie.name,
       value: cookie.value,
@@ -2616,6 +2631,8 @@ async function captureStorage(
 }
 
 function classifyStorageItem(input: {
+  expiresAtEpochSeconds?: number;
+  capturedAtEpochSeconds?: number;
   storageType: PostRefusalStorageItem["storageType"];
   name: string;
   value: string;
@@ -2627,6 +2644,7 @@ function classifyStorageItem(input: {
     ? vendorFor({ type: "cookie", cookieName: input.name, hostname: input.hostname })
     : vendorFor({ type: "cmp_runtime", storageKey: input.name, hostname: input.hostname });
   return {
+    ...(input.expiresAtEpochSeconds !== undefined ? { expiresAtEpochSeconds: input.expiresAtEpochSeconds, capturedAtEpochSeconds: input.capturedAtEpochSeconds } : {}),
     storageType: input.storageType,
     name: input.name.slice(0, 180),
     hostname: input.hostname.slice(0, 255),

@@ -1,7 +1,7 @@
 import { readDocumentSiteMetadata as captureDocumentSiteMetadata, captureWordpressFeedVersion } from "../cms-version-capture.js";
 import { runAccessibilityAudit, unavailableAccessibilityAudit } from "../accessibility-audit.js";
 import type { AccessibilityAuditObservation } from "@certscore/contracts";
-import { revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
+import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "../borlabs-passive-dialog-reveal.js";
 import { installFormDestinationTracing } from "../form-destination-trace.js";
 import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
@@ -69,7 +69,7 @@ import { isIP } from "node:net";
 import { connect as tlsConnect } from "node:tls";
 import { chromium, type Browser, type BrowserContext, type CDPSession, type Frame, type Page, type Request, type Response, type Route } from "playwright";
 import type { ArtifactWriter } from "../artifact-writer.js";
-import { consentGeometryProofCdpBudget } from "../consent-geometry-proof-budget.js";
+import { consentGeometryProofCdpBudget, consentProminenceSettleBudgetMs } from "../consent-geometry-proof-budget.js";
 import { isPairedConsentGeometryReady } from "../consent-paired-geometry-readiness.js";
 import { bindConsentGeometryScreenshot, preferredPreConsentScreenshotRef } from "../consent-geometry-screenshot-binding.js";
 import { createConsentVisualComparisonCollector } from "../consent-control-visual-comparison.js";
@@ -700,6 +700,22 @@ export async function preConsentRuntimeScanner(
   });
   lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
+  if (input.captureScope === "consent_proof") await installBorlabsDeferredDialogReveal(page);
+  let prominenceSettleAttempted = false;
+  const settleConsentProminence = async (pairObserved: boolean) => {
+    if (prominenceSettleAttempted || !pairObserved || input.captureScope !== "consent_proof" || screenshotMode === "never") return;
+    prominenceSettleAttempted = true;
+    const memoryMb = process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE === undefined
+      ? (process.env.AWS_LAMBDA_FUNCTION_NAME ? NaN : 3008) : Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE);
+    const settleMs = Math.min(consentProminenceSettleBudgetMs(memoryMb), Math.max(0, remainingModuleBudgetMs() - 1500));
+    if (settleMs <= 0) return;
+    await recordTiming(timingBreakdown, "consent prominence document settle",
+      "One bounded load wait before the existing paired geometry and screenshot; no consent interaction or deadline extension.",
+      async () => {
+        try { await page.waitForLoadState("load", { timeout: settleMs }); return "completed" as const; }
+        catch (error) { return error instanceof Error && error.name === "TimeoutError" ? "timed_out" as const : "failed" as const; }
+      }, outcome => outcome);
+  };
   const browserContext = context.newContext;
   let consentFrameRevision = 0;
   const recordConsentFrameChange = () => { consentFrameRevision += 1; };
@@ -1908,6 +1924,7 @@ export async function preConsentRuntimeScanner(
         })
       );
     if (settledVisualCheckpointNeeded) {
+      await settleConsentProminence(preScreenshotConsentObservation.acceptControlObserved && preScreenshotConsentObservation.rejectControlObserved);
       const settledScreenshotPath = input.artifactWriter.artifactPath("screenshot-pre-consent-settled.png");
       const settledDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
       const settledCapture = await recordTiming(
@@ -2856,6 +2873,7 @@ export async function preConsentRuntimeScanner(
           screenshotMode !== "never" &&
           remainingModuleBudgetMs() >= 1_500
         ) {
+          await settleConsentProminence(consentObservation.acceptControlObserved && consentObservation.rejectControlObserved);
           const synchronizedScreenshotPath = input.artifactWriter.artifactPath(
             "screenshot-pre-consent-cmp-controls.png",
           );
@@ -3293,7 +3311,6 @@ export async function preConsentRuntimeScanner(
     }
     const completedGeometryNegativeHasLaterSurfaceHint =
       consentGeometryDiagnosticWritten &&
-      consentObservation.controls.length === 0 &&
       consentObservation.likelyPresent &&
       consentObservation.basis.some((basis) =>
         basis === "geometry:hidden_cmp_markup_separated_from_visible_surface" ||
@@ -3315,7 +3332,7 @@ export async function preConsentRuntimeScanner(
           ? "consent control geometry revalidation"
           : "consent control geometry diagnostic",
         completedGeometryNegativeHasLaterSurfaceHint
-          ? "Revalidate a completed negative geometry packet after a later text-only surface hint; the newer same-session geometry remains authoritative."
+          ? "Revalidate an earlier negative geometry packet after later surface evidence or visible controls; the newer same-session geometry remains authoritative."
           : "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
         async () => {
         if (
@@ -3359,6 +3376,9 @@ export async function preConsentRuntimeScanner(
             };
           }
         }
+        await settleConsentProminence(Boolean(
+          (consentObservation.acceptControlObserved && consentObservation.rejectControlObserved) ||
+          (pairedConsentGeometryProof?.geometry.summary.firstLayerAccept && pairedConsentGeometryProof?.geometry.summary.firstLayerReject)));
         const geometryCaptureFrameRevision = consentFrameRevision;
         const geometryCaptureFrames = page.frames();
         const access = await recordTiming(

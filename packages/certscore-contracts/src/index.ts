@@ -1,3 +1,5 @@
+export * from "./cookie-disclosure-column";
+import { cmpPreferencesEvidenceSchema, type CmpPreferencesEvidence } from "./cmp-audit-evidence";
 export * from "./cmp-audit-evidence";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
 export * from "./collection-surface-snapshot";
@@ -3399,7 +3401,7 @@ const canonicalPolicyObservationSchema: z.ZodType<z.output<typeof policySurfaceO
 const canonicalDomSnapshotSchema: z.ZodType<z.output<typeof domSnapshotArtifactSchema>, z.ZodTypeDef, unknown> = domSnapshotArtifactSchema;
 const canonicalConsentUiObservationSchema: z.ZodType<z.output<typeof consentUiObservationSchema>, z.ZodTypeDef, z.input<typeof consentUiObservationSchema>> = consentUiObservationSchema;
 const canonicalPolicyInspectionSchema: z.ZodType<z.output<typeof policySurfaceInspectionOutcomeSchema>, z.ZodTypeDef, z.input<typeof policySurfaceInspectionOutcomeSchema>> = policySurfaceInspectionOutcomeSchema;
-const canonicalEvidenceBundleBaseSchema = z.object({
+const canonicalEvidenceBundleObjectSchema = z.object({
   accessibilityAudit: canonicalAccessibilityAuditSchema.optional(),
   runtimeMetadataSnapshots: z.array(canonicalDomSnapshotSchema).max(1).optional(),
   resourceInventoryContext: z.object({
@@ -3470,7 +3472,8 @@ const canonicalEvidenceBundleBaseSchema = z.object({
   scannerBuildProvenance: scannerBuildProvenanceSchema.optional(),
   scannerVersion: z.string(),
   schemaVersion: z.string(),
-}).superRefine((bundle, context) => {
+});
+const canonicalEvidenceBundleBaseSchema: z.ZodType<z.output<typeof canonicalEvidenceBundleObjectSchema>, z.ZodTypeDef, z.input<typeof canonicalEvidenceBundleObjectSchema>> = canonicalEvidenceBundleObjectSchema.superRefine((bundle, context) => {
   const policyObservationIds = new Set<string>();
   bundle.policySurfaceObservations.forEach((observation, index) => {
     if (policyObservationIds.has(observation.observationId)) {
@@ -3486,11 +3489,14 @@ const canonicalEvidenceBundleBaseSchema = z.object({
 });
 
 // Keep the large legacy contract named, preserving defaults and input types while adding a bounded extension.
+type CmpBundleExtension = { cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
 export const canonicalEvidenceBundleSchema: z.ZodType<
-  z.output<typeof canonicalEvidenceBundleBaseSchema> & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
+  z.output<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
   z.ZodTypeDef,
-  z.input<typeof canonicalEvidenceBundleBaseSchema> & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] }
+  z.input<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] }
 > = withRuntimeGraphCompatibility(canonicalEvidenceBundleBaseSchema.and(z.object({
+  cmpPreferencesEvidence: cmpPreferencesEvidenceSchema.optional(),
+  cmpPreferenceLaneOutcome: z.object({ status: z.enum(["joined", "limited"]), startedAt: z.string().datetime(), completedAt: z.string().datetime(), limitationCode: z.enum(["preference_budget_exhausted", "preference_worker_failed", "preference_inspection_cancelled"]).optional() }).optional(),
   runtimeEvidenceGraphs: z.array(canonicalRuntimeEvidenceGraphSchema).max(RUNTIME_EVIDENCE_GRAPH_LIMITS.graphs).optional(),
   runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(4).optional(),
 })));
@@ -3731,5 +3737,4 @@ export * from "./form-destination-trace";
 export * from "./california-notice-passages";
 export * from "./post-accept-form-reconciliation";
 export * from "./action-origin-dom-storage-observation";
-
 export * from "./observed-action-source-proof";

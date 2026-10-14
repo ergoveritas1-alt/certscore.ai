@@ -1893,9 +1893,12 @@ function buildConcernFromSharedInput(input: {
   if (input.domainContext?.investorOrSecuritiesPromotion !== null && input.domainContext?.investorOrSecuritiesPromotion !== undefined) {
     normalizedRawEvidence.investorOrSecuritiesPromotion = input.domainContext.investorOrSecuritiesPromotion;
   }
-  const fallbackBundle = extractEvidenceFromRaw(normalizedRawEvidence);
+  const typedCmpAudit = input.originType === "runtime_artifact" && input.originKey.startsWith("consent.cmp_audit.");
+  const fallbackBundle = extractEvidenceFromRaw(typedCmpAudit ? null : normalizedRawEvidence);
   const validationBundle = extractEvidenceFromValidationFinding(input.linkedValidationFinding ?? null);
-  const mergedEvidenceBundle = mergeConcernEvidenceBundles(fallbackBundle, validationBundle, input.evidence);
+  const mergedEvidenceBundle = typedCmpAudit
+    ? { ...fallbackBundle, fetchQuality: normalizeFetchQuality(fallbackBundle.fetchQuality), rawEvidence: normalizedRawEvidence, runtimeArtifacts: uniqueStrings(input.evidence ?? []) }
+    : mergeConcernEvidenceBundles(fallbackBundle, validationBundle, input.evidence);
   const policyRawEvidence = mergeRawEvidenceWithConcernBundle(normalizedRawEvidence, mergedEvidenceBundle);
   const evidenceBundle = {
     ...mergedEvidenceBundle,
@@ -3544,6 +3547,19 @@ function buildConsentNoSurfaceConcerns(
   return concerns;
 }
 
+function buildCmpAuditConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined, domainContext?: ScanDomainContext) {
+  const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
+  const audit = assessment?.cmpAudit;
+  if (!assessment || !audit || audit.scanId !== assessment.scan.scanId) return [];
+  return audit.rows.map(row => buildConcernFromSharedInput({ consentControlAssessment: assessment,
+    categoryId: "privacy", domainContext, description: row.detail, evidence: row.evidenceRefs,
+    observedValue: row.status, originKey: `consent.cmp_audit.${row.id}`, originType: "runtime_artifact",
+    severity: "low", sourceType: "signal", signalSource: "runtime_artifact_signal",
+    signalKey: `privacy.cmp_audit.${row.id}`, title: `CMP audit: ${row.id}`,
+    rawEvidence: { cmpAuditRow: row, cmpAuditSourceSha256: audit.sourceSha256, runtimeEvidenceArtifacts: row.evidenceRefs },
+  }));
+}
+
 function buildConsentVisualProminenceConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined,
   domainContext?: ScanDomainContext) {
   const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
@@ -4568,6 +4584,7 @@ export function buildNormalizedConcerns(input: {
     ...buildConsentDismissWithoutRejectConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentOptionsControlProminenceConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentVisualProminenceConcerns(input.runtimeArtifacts, input.domainContext),
+    ...buildCmpAuditConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildConsentPaidDeclinePathConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPreConsentStorageAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildPostRefusalObservationConcerns(input.runtimeArtifacts, input.domainContext),

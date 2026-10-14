@@ -6,6 +6,7 @@
  */
 
 export type NormalizedActionCookie = {
+  expires?: number;
   name: string;
   value: string;
   domain: string;
@@ -109,6 +110,7 @@ function normalizeCookies(value: unknown): {
       continue;
     }
     cookies.push({
+      ...(typeof candidate.expires === "number" && Number.isFinite(candidate.expires) && candidate.expires >= -1 ? { expires: candidate.expires } : {}),
       name,
       value: cookieValue,
       domain,

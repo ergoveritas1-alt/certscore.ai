@@ -59,6 +59,14 @@ export type KnownCmpActionCapability = {
 };
 
 export type KnownCmpDefinition = {
+  /** One read-only preference visit; never shared with Accept/Reject recipes. */
+  preferenceInspection?: {
+    version: string;
+    kind: "borlabs_v3";
+    entranceSelector: string;
+    controlSelector: string;
+    dialogSelector: string;
+  };
   /** Content-specific opt-in controls are not first-layer visitor consent choices. */
   nonFirstLayerSurfaceSelectors?: string[];
   /** Exclude actual consent dialogs from collection inventory, not blocked content. */
@@ -587,6 +595,12 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: ["Borlabs Cookie", "Borlabs Cookie CMP", "BorlabsCookie"],
     canonicalName: "Borlabs Cookie",
+    preferenceInspection: {
+      version: "borlabs_preferences.v1", kind: "borlabs_v3",
+      entranceSelector: ".brlbs-cmpnt-dialog-box-entrance",
+      controlSelector: "#CookieBoxPreferencesButton",
+      dialogSelector: ".brlbs-cmpnt-dialog",
+    },
     formExclusionSelectors: ["#BorlabsCookieBox", "[class*='brlbs-cmpnt-dialog']"],
     nonFirstLayerSurfaceSelectors: [".brlbs-cmpnt-content-blocker", "[data-borlabs-cookie-content-blocker]", "[data-borlabs-cookie-content-blocker-id]", "[data-borlabs-cookie-accept-service]"],
     acceptControlTargets: [{ scopeSelector: ".brlbs-cmpnt-dialog-box-entrance", resolution: "scoped_accessible_control" }],

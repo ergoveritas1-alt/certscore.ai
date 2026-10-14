@@ -50,3 +50,16 @@ export function classifyConsentPreferenceCategoryLabel(label: string): ConsentPr
   if (matched.some((term) => term.category === "necessary")) return "necessary";
   return "unknown";
 }
+
+/** A named service can contain a category word (e.g. Google Analytics). Only
+ * a category heading at the start of a toggle label establishes category UI.
+ * Service controls need an explicit enclosing service/vendor group. */
+export function classifyConsentPreferenceControl(input: { label: string; groupLabel?: string }): "category" | "service" | "unclassified" {
+  const group = normalize(input.groupLabel ?? "");
+  if (["services", "individual services", "vendors", "service providers", "dienste", "einzelne dienste", "anbieter", "fournisseurs", "servicios", "proveedores"].includes(group)) return input.label.trim() ? "service" : "unclassified";
+  const label = normalize(input.label);
+  return CONSENT_PREFERENCE_CATEGORY_REGISTRY.some(term => {
+    const phrase = normalize(term.phrase);
+    return label === phrase || [" —", " –", ":", " -", " ("].some(separator => label.startsWith(`${phrase}${separator}`));
+  }) ? "category" : "unclassified";
+}

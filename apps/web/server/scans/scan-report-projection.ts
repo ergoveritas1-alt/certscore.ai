@@ -45,6 +45,7 @@ import {
 import {
   buildPersistedFirstLayerConsentEvidence,
   projectFirstLayerConsentChoices,
+  withCanonicalConsentAssessmentSnapshot,
   withPersistedFirstLayerConsentEvidence
 } from "./scan-report-consent-projection";
 import { deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
@@ -599,10 +600,7 @@ export async function deriveScanReportProjection(
     : {
         ...scanRecord,
         runtimeArtifacts: canonicalRuntimeArtifacts,
-        snapshot: {
-          ...(scanRecord.snapshot ?? {}),
-          consent_control_assessment: assessment,
-        },
+        snapshot: withCanonicalConsentAssessmentSnapshot(record(scanRecord.snapshot), assessment),
       };
   const reportState = await measureReportProjectionPhase(
     scanRecord.scan.id,
@@ -826,7 +824,7 @@ export async function persistScanReportProjection(
     () => sourceHash(scanRecord, value, source)
   );
   const projectedSnapshot = {
-    ...(scanRecord.snapshot ?? {}),
+    ...withCanonicalConsentAssessmentSnapshot(record(scanRecord.snapshot), assessment),
     certscore_overall: value.score,
     cmp_vendor_name: value.cmpVendorName,
     consent_accept_observed: value.consentAcceptObserved,

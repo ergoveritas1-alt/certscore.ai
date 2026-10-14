@@ -1,0 +1,94 @@
+<!-- OWNED CANARY: intentional consent defects; OneTrust-style simulation, not a licensed OneTrust installation. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>ErgoVeritas · CMP evidence canary</title>
+  <style>
+    * { box-sizing:border-box; }
+    body { margin:0; background:#f1f5f9; color:#0f172a; font:16px/1.55 system-ui,sans-serif; }
+    main { max-width:1000px; margin:32px auto; padding:0 24px 64px; }
+    h1,h2,h3 { line-height:1.2; } h1 { margin:8px 0; font-size:30px; }
+    .eyebrow { color:#475569; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .intro { margin:8px 0 24px; color:#475569; }
+    .panel { background:white; border:1px solid #cbd5e1; border-radius:12px; padding:24px; margin:20px 0; }
+    .banner { border-top:4px solid #0f172a; }
+    .banner h2 { margin:0 0 12px; }
+    .controls { display:flex; flex-wrap:wrap; gap:20px; align-items:center; margin:24px 0; }
+    button { cursor:pointer; font:inherit; border-radius:6px; padding:14px 20px; min-height:50px; }
+    #onetrust-accept-btn-handler { background:#0f172a; border:1px solid #0f172a; color:white; font-weight:750; min-width:260px; }
+    #onetrust-reject-all-handler { background:white; border:1px solid #cbd5e1; color:#475569; font-size:14px; }
+    #onetrust-pc-btn-handler, .secondary { background:#f8fafc; border:1px solid #cbd5e1; color:#334155; }
+    button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #2563eb; outline-offset:4px; }
+    a { color:#075985; } code { background:#f1f5f9; padding:2px 4px; border-radius:3px; }
+    .preferences { margin-top:24px; border-top:1px solid #cbd5e1; padding-top:16px; }
+    .category { display:block; margin:12px 0; } input { width:18px; height:18px; vertical-align:middle; }
+    table { width:100%; border-collapse:collapse; text-align:left; font-size:14px; }
+    th,td { padding:12px 10px; vertical-align:top; border-bottom:1px solid #e2e8f0; overflow-wrap:anywhere; }
+    .table-wrap { overflow-x:auto; } .note { color:#475569; font-size:14px; }
+    [hidden] { display:none !important; }
+    @media(max-width:600px) { main { padding:0 16px 48px; } .panel { padding:20px; } .controls { gap:16px; } #onetrust-accept-btn-handler { min-width:100%; } }
+  </style>
+</head>
+<body>
+<main data-certscore-canary="cmp-details-test3-v1">
+  <div class="eyebrow">ErgoVeritas / owned scanner canary / test 3</div>
+  <h1>Consent choices under the microscope</h1>
+  <p class="intro">A OneTrust-style CMP simulation with intentional defects. No accounts, purchases, or personal form data.</p>
+
+  <section class="panel banner" id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
+    <h2>Your cookie choices</h2>
+    <p>Choose whether optional analytics and advertising cookies may be used. You can accept, reject, or choose categories. See our <a href="/test3-privacy-policy.html">Privacy Policy</a> and <a href="/test3-cookie-policy.html">Cookie Policy</a> before making a choice.</p>
+    <div class="controls">
+      <button id="onetrust-accept-btn-handler" type="button">Accept all cookies</button>
+      <button id="onetrust-reject-all-handler" type="button">Reject optional cookies</button>
+      <button id="onetrust-pc-btn-handler" type="button" aria-expanded="false" aria-controls="test3-preferences">Manage options</button>
+    </div>
+    <p class="note">Consent is remembered for 400 days; rejection for one day. These intentionally unequal periods are part of this test.</p>
+    <div class="preferences" id="test3-preferences" hidden>
+      <h3>Choose cookie categories</h3>
+      <label class="category"><input type="checkbox" checked disabled> Necessary — always active</label>
+      <label class="category"><input id="analytics-choice" type="checkbox"> Analytics — Google Analytics and Example Insights</label>
+      <label class="category"><input id="advertising-choice" type="checkbox"> Advertising — advertising measurement</label>
+      <p>Services are grouped by category. There are deliberately no individual service switches.</p>
+  <section class="panel" aria-labelledby="inventory-title">
+    <h2 id="inventory-title">CMP cookie inventory</h2>
+    <p>This intentionally incomplete inventory lists a cookie that never loads and omits cookies the page actually writes.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Cookie name</th><th scope="col">Purpose</th><th scope="col">Duration</th></tr></thead>
+      <tbody>
+        <tr><td><code>OptanonConsent</code><br>Consent preferences</td><td>Necessary — saves category choice and receipt</td><td>400 days after Accept; 1 day after Reject</td></tr>
+        <tr><td><code>_ga</code><br>Google Analytics</td><td>Analytics — audience measurement</td><td>1 day</td></tr>
+        <tr><td><code>example_insights_id</code><br>Example Insights (declared only)</td><td>Analytics — usage insights</td><td>Not specified</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+      <button class="secondary" id="save-preferences" type="button">Save preferences</button>
+    </div>
+  </section>
+  <p id="choice-status" role="status" aria-live="polite">No consent choice has been recorded.</p>
+  <button class="secondary" id="reopen-choices" type="button" hidden>Reopen cookie choices</button>
+
+
+
+  <section class="panel" aria-labelledby="scenarios-title">
+    <h2 id="scenarios-title">Deliberate evidence scenarios</h2>
+    <ul>
+      <li>Accept, Reject, and Options are all visible. Accept has a dark, wider button; Reject has a pale border.</li>
+      <li>Category controls are available in Options; individual service controls are absent.</li>
+      <li>Both policies are accessible before interacting with the banner.</li>
+      <li>A timestamped, versioned receipt records each choice locally. This does not demonstrate a server audit trail.</li>
+      <li>Analytics and advertising cookies are set before a choice. Confirmed Reject is followed by another analytics write and request.</li>
+      <li>The 400-day Accept period and one-day Reject period are deliberately unequal.</li>
+      <li><code>example_insights_id</code> is declared but never set; <code>_fbp</code> and post-choice <code>_gid</code> are not declared in the inventory.</li>
+      <li>The declared <code>_ga</code> duration is one day, while the runtime writes a 30-day cookie.</li>
+    </ul>
+    <p class="note">These are fixture expectations for evidence review. Scanner results must come from the captured visit; an unmeasured criterion remains Not assessed.</p>
+  </section>
+  <footer><a href="/test3-privacy-policy.html">Privacy Policy</a> · <a href="/test3-cookie-policy.html">Cookie Policy</a> · <a href="/test-environment-notice">Test environment notice</a></footer>
+</main>
+<script src="/test3-cmp-runtime.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+{
+  "policyVersion": "bounded_cmp_preferences.v1",
+  "ownerApprovalDate": "2026-10-13",
+  "approval": "Expanded preference inspection \u2014 approve the interaction and cost ceiling",
+  "scope": {
+    "isolatedVisits": 1,
+    "maximumOptionsClicks": 1,
+    "changesOrSaveAllowed": false,
+    "retries": 0,
+    "observationBudgetMs": 17000,
+    "coordinatorWaitFromDispatchMs": 19000,
+    "featureFlag": "CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED",
+    "defaultEnabled": false,
+    "productionDeploymentPerformed": false,
+    "memoryAwareBudget": "min(17000, floor(56000 * 1024 / memoryMB) - 2000); invalid deployed memory uses 10240 MB",
+    "productionDeploymentAuthorized": true,
+    "coordinatorTailWaitMs": 0,
+    "lateEvidencePublicationAllowed": false
+  },
+  "cost": {
+    "approvedMonthlyCeilingUsd": 100,
+    "scansPerMonth": 100000,
+    "conservativeComputeEstimateUsd": 93.34,
+    "basis": "At most 56 GB-seconds including a two-second worker setup/retention allowance x 100,000 scans x $0.0000166667/GB-second = $93.34. At 3008 MB: 17-second observation plus two seconds = $93.03. Invocation and bounded artifact overhead estimated below $5/month. The independent lane normally finishes within the existing passive barrier; monitor coordinator overlap before production rollout. No additional model calls. Production join is capped at the existing report barrier with zero preference tail wait. No coordinator wait is added.",
+    "lowerCostAlternative": "Passive existing-session inspection, with hidden features Not assessed."
+  },
+  "statusSemantics": {
+    "scannerUnsupported": "CertScore has no integration for the identified CMP or relevant operation; affected criteria remain Not assessed.",
+    "featureUnsupported": "Positive retained, product-version-bound evidence that the audited CMP lacks the capability. Never inferred from integration coverage or missing UI.",
+    "siteFeatureNotObserved": "Feature not observed in the completely inspected site surface; does not assert a vendor-wide capability limitation.",
+    "insufficient": "Not assessed when evidence, scope or capture is insufficient.",
+    "timedOut": "Inspection incomplete \u2014 timed out. Derived from retained observer deadline failure or a verified coordinator timeout; never interpreted as integration or product capability absence."
+  },
+  "scoring": "New CMP audit rows are checklist-only and score-neutral. Existing scoring rules remain unchanged.",
+  "implementationRevision": "borlabs_preferences.v1",
+  "verificationCostEstimateUsd": 0.5,
+  "borlabsRecipe": {
+    "version": "borlabs_preferences.v1",
+    "source": "https://borlabs.io/docs/javascript-api-v3/",
+    "opening": "Unique visible canonical Options label at the registry-bound entrance control; entrance disappears inside the same retained dialog element. Open shadow roots supported.",
+    "deferredDialog": "Reuse existing registered one-pixel passive reveal only when Borlabs configuration explicitly requires visitor interaction. No consent mutation.",
+    "inventory": "Visible controls and bounded documented Services/ServiceGroups read APIs. Declarations remain a partial inventory.",
+    "diagnostics": "Retain budget and last inspection phase; deadlines include navigation, readiness, opening and capture."
+  }
+}

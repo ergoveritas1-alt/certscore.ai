@@ -1,3 +1,4 @@
+import { cmpAuditRowsEqual } from "@certscore/contracts";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
@@ -2621,6 +2622,18 @@ export function deriveConcernPolicy(input: {
   const negativeEvidenceFlags = new Set<NormalizedConcernNegativeEvidenceFlag>();
 
   const suggestedUnifiedFindingId = input.concern.suggestedUnifiedFindingId;
+  if (input.concern.originKey.startsWith("consent.cmp_audit.")) {
+    const parsed = consentControlAssessmentSchema.safeParse(input.consentControlAssessment);
+    const audit = parsed.success ? parsed.data.cmpAudit : undefined;
+    const row = audit?.rows.find(row => input.concern.originKey === `consent.cmp_audit.${row.id}`);
+    const eligible = input.concern.originType === "runtime_artifact" && row &&
+      input.rawEvidence?.cmpAuditSourceSha256 === audit?.sourceSha256 && cmpAuditRowsEqual(row, input.rawEvidence?.cmpAuditRow);
+    // Checklist-only, score-neutral. This does not create executive findings.
+    return { allowedNarrativeTier: "weak", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
+      promotionEligibility: eligible ? "internal_only" : "blocked",
+      regulatoryChecklistEligibility: eligible && row.status === "observed" ? "observed" : eligible && row.status === "review" ? "review_signal" : "none",
+      negativeEvidenceFlags: eligible ? [] : ["canonical_consent_control_evidence_insufficient"], scoreEffects: [] };
+  }
   if (input.concern.originKey === "consent.visual_prominence.observed") {
     const expected = projectConsentVisualProminence(input.consentControlAssessment);
     const eligible = suggestedUnifiedFindingId === "accept_more_prominent_than_reject" &&

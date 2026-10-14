@@ -147,6 +147,8 @@ export const postRefusalNetworkRequestSchema = z.object({
 });
 
 export const postRefusalStorageItemSchema = z.object({
+  expiresAtEpochSeconds: z.number().finite().min(-1).optional(),
+  capturedAtEpochSeconds: z.number().finite().positive().optional(),
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
   name: actionStorageNameSchema,
   hostname: z.string().max(255).optional(),
@@ -893,6 +895,8 @@ export const postRefusalLaneOutcomeSchema = z.object({
   evidenceJoined: z.boolean(),
   maxTailWaitMs: z.number().int().min(0).max(30_000),
   status: z.enum(["joined", "not_applicable", "timed_out", "failed"]),
+  // Bounded coordinator diagnostic only; never a consent observation.
+  failureReason: z.enum(["evidence_validation_failed"]).optional(),
   limitationCode: z.enum([
     "reject_control_not_observed",
     "reject_path_timeout",
@@ -900,6 +904,7 @@ export const postRefusalLaneOutcomeSchema = z.object({
     "reject_path_incomplete_at_passive_barrier",
   ]).optional(),
 }).superRefine((outcome, context) => {
+  if (outcome.failureReason && outcome.status !== "failed") context.addIssue({ code: z.ZodIssueCode.custom, message: "Failure detail requires a failed lane outcome.", path: ["failureReason"] });
   if (outcome.status === "joined" && (!outcome.evidenceJoined || outcome.limitationCode)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
