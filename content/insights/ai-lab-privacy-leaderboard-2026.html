@@ -1,78 +1,17 @@
-// Self-contained republication of the October 12, 2026 AI Lab Privacy Leaderboard.
-// Preserve the historical article and report links; hosting metadata belongs to certscore.ai.
-// Visible FAQ answers and structured data share the same editorial source.
-export const AI_LAB_PRIVACY_STUDY_FAQ = [
-  {
-    "question": "Which AI company has the best privacy posture on its own website?",
-    "answer": "According to CertScore.ai MCP Light scans conducted on October 12, 2026, Hugging Face scored highest among the ten websites, at 92, with a single minor pre-consent storage observation. Its report describes an AWS WAF token as likely security-related. This ranking covers the recorded starting-page visit, not a full-site audit or compliance determination."
-  },
-  {
-    "question": "What happens after you click Reject on AI company websites?",
-    "answer": "On 2 of the 10 sites, tracking requests kept firing after a confirmed Reject click: eight non-essential Google requests on one site and two tracking requests on another. The linked reports retain the observations. These results describe the recorded visits and do not establish how every visitor or later visit will behave."
-  },
-  {
-    "question": "How does CertScore.ai scan a website?",
-    "answer": "CertScore.ai runs an automated browser scan of a website's public starting page. It observes pre-consent cookies and storage, tracker requests, consent-control behavior, including eligible Accept and Reject clicks, and policy surfaces. No account is needed. The linked report shows the retained observations and any limits on what the scan could assess."
-  },
-  {
-    "question": "Are these findings legal determinations?",
-    "answer": "No. The findings are automated observations of public pages, not legal advice, certification, or a compliance determination. A flagged signal identifies something to review against the retained evidence and its context. The scans cover a starting page and a bounded visit, so they do not establish a website's complete behavior."
-  },
-  {
-    "question": "What is CertScore.ai MCP Light?",
-    "answer": "CertScore.ai MCP Light is a free, no-auth MCP endpoint that lets AI agents run public website privacy scans from a compatible MCP client, with no OAuth required. You can also run the same type of scan manually in your browser at certscore.ai. Each report shows the observed signals, evidence and coverage limits."
-  }
-] as const;
-
-const canonicalUrl = "https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026";
-const socialImage = "https://certscore.ai/images/ai-leaderboard-social-card.png";
-const description = "CertScore.ai scanned the public websites of 10 AI companies for privacy signals: pre-consent cookies, trackers, and what happens after Reject. Hugging Face scored highest at 92.";
-const schemas = [
-  {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    headline: "Privacy signals on 10 AI companies' websites",
-    description,
-    url: canonicalUrl,
-    mainEntityOfPage: { "@type": "WebPage", "@id": canonicalUrl },
-    image: [socialImage],
-    author: { "@type": "Organization", name: "CertScore.ai", url: "https://certscore.ai" },
-    publisher: { "@type": "Organization", name: "CertScore.ai", url: "https://certscore.ai" },
-    datePublished: "2026-10-12",
-    dateModified: "2026-10-14",
-    inLanguage: "en"
-  },
-  {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: AI_LAB_PRIVACY_STUDY_FAQ.map(({ question, answer }) => ({
-      "@type": "Question",
-      name: question,
-      acceptedAnswer: { "@type": "Answer", text: answer }
-    }))
-  }
-];
-const structuredData = schemas.map((schema) =>
-  `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, "\\u003c")}</script>`
-).join("\n");
-const faqMarkup = AI_LAB_PRIVACY_STUDY_FAQ.map(({ question, answer }) =>
-  `<article><h3>${question}</h3><p>${answer}</p></article>`
-).join("\n");
-
-export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
+<!doctype html>
 <html lang="en"><head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
   <link rel="icon" href="/favicon.png">
   <title>AI Lab Privacy Leaderboard: We Scanned 10 AI Companies' Websites for Privacy Signals | CertScore.ai</title>
-  <meta name="description" content="${description}">
+  <meta name="description" content="CertScore.ai scanned the public websites of 10 AI companies for privacy signals: pre-consent cookies, trackers, and what happens after Reject. Hugging Face scored highest at 92.">
   <link rel="canonical" href="https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="CertScore.ai">
   <meta property="og:url" content="https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026">
   <meta property="og:title" content="AI Lab Privacy Leaderboard: We Scanned 10 AI Companies' Websites for Privacy Signals">
-  <meta property="og:description" content="${description}">
+  <meta property="og:description" content="CertScore.ai scanned the public websites of 10 AI companies for privacy signals: pre-consent cookies, trackers, and what happens after Reject. Hugging Face scored highest at 92.">
   <meta property="og:image" content="https://certscore.ai/images/ai-leaderboard-social-card.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
@@ -81,10 +20,11 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
   <meta property="article:published_time" content="2026-10-12">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="AI Lab Privacy Leaderboard: We Scanned 10 AI Companies' Websites for Privacy Signals">
-  <meta name="twitter:description" content="${description}">
+  <meta name="twitter:description" content="CertScore.ai scanned the public websites of 10 AI companies for privacy signals: pre-consent cookies, trackers, and what happens after Reject. Hugging Face scored highest at 92.">
   <meta name="twitter:image" content="https://certscore.ai/images/ai-leaderboard-social-card.png">
   <meta name="twitter:image:alt" content="AI Lab Privacy Leaderboard: Hugging Face scored highest at 92; tracking continued after Reject on 2 of 10 sites">
-  ${structuredData}
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Article","headline":"Privacy signals on 10 AI companies' websites","description":"CertScore.ai scanned the public websites of 10 AI companies for privacy signals: pre-consent cookies, trackers, and what happens after Reject. Hugging Face scored highest at 92.","url":"https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026","mainEntityOfPage":{"@type":"WebPage","@id":"https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026"},"image":["https://certscore.ai/images/ai-leaderboard-social-card.png"],"author":{"@type":"Organization","name":"CertScore.ai","url":"https://certscore.ai"},"publisher":{"@type":"Organization","name":"CertScore.ai","url":"https://certscore.ai"},"datePublished":"2026-10-12","dateModified":"2026-10-14","inLanguage":"en"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which AI company has the best privacy posture on its own website?","acceptedAnswer":{"@type":"Answer","text":"According to CertScore.ai MCP Light scans conducted on October 12, 2026, Hugging Face scored highest among the ten websites, at 92, with a single minor pre-consent storage observation. Its report describes an AWS WAF token as likely security-related. This ranking covers the recorded starting-page visit, not a full-site audit or compliance determination."}},{"@type":"Question","name":"What happens after you click Reject on AI company websites?","acceptedAnswer":{"@type":"Answer","text":"On 2 of the 10 sites, tracking requests kept firing after a confirmed Reject click: eight non-essential Google requests on one site and two tracking requests on another. The linked reports retain the observations. These results describe the recorded visits and do not establish how every visitor or later visit will behave."}},{"@type":"Question","name":"How does CertScore.ai scan a website?","acceptedAnswer":{"@type":"Answer","text":"CertScore.ai runs an automated browser scan of a website's public starting page. It observes pre-consent cookies and storage, tracker requests, consent-control behavior, including eligible Accept and Reject clicks, and policy surfaces. No account is needed. The linked report shows the retained observations and any limits on what the scan could assess."}},{"@type":"Question","name":"Are these findings legal determinations?","acceptedAnswer":{"@type":"Answer","text":"No. The findings are automated observations of public pages, not legal advice, certification, or a compliance determination. A flagged signal identifies something to review against the retained evidence and its context. The scans cover a starting page and a bounded visit, so they do not establish a website's complete behavior."}},{"@type":"Question","name":"What is CertScore.ai MCP Light?","acceptedAnswer":{"@type":"Answer","text":"CertScore.ai MCP Light is a free, no-auth MCP endpoint that lets AI agents run public website privacy scans from a compatible MCP client, with no OAuth required. You can also run the same type of scan manually in your browser at certscore.ai. Each report shows the observed signals, evidence and coverage limits."}}]}</script>
   <style>
 
     :root {
@@ -566,7 +506,11 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
         <div class="section-grid">
           <div><h2 id="faq-title">FAQ</h2></div>
           <div class="faq-list">
-            ${faqMarkup}
+            <article><h3>Which AI company has the best privacy posture on its own website?</h3><p>According to CertScore.ai MCP Light scans conducted on October 12, 2026, Hugging Face scored highest among the ten websites, at 92, with a single minor pre-consent storage observation. Its report describes an AWS WAF token as likely security-related. This ranking covers the recorded starting-page visit, not a full-site audit or compliance determination.</p></article>
+<article><h3>What happens after you click Reject on AI company websites?</h3><p>On 2 of the 10 sites, tracking requests kept firing after a confirmed Reject click: eight non-essential Google requests on one site and two tracking requests on another. The linked reports retain the observations. These results describe the recorded visits and do not establish how every visitor or later visit will behave.</p></article>
+<article><h3>How does CertScore.ai scan a website?</h3><p>CertScore.ai runs an automated browser scan of a website's public starting page. It observes pre-consent cookies and storage, tracker requests, consent-control behavior, including eligible Accept and Reject clicks, and policy surfaces. No account is needed. The linked report shows the retained observations and any limits on what the scan could assess.</p></article>
+<article><h3>Are these findings legal determinations?</h3><p>No. The findings are automated observations of public pages, not legal advice, certification, or a compliance determination. A flagged signal identifies something to review against the retained evidence and its context. The scans cover a starting page and a bounded visit, so they do not establish a website's complete behavior.</p></article>
+<article><h3>What is CertScore.ai MCP Light?</h3><p>CertScore.ai MCP Light is a free, no-auth MCP endpoint that lets AI agents run public website privacy scans from a compatible MCP client, with no OAuth required. You can also run the same type of scan manually in your browser at certscore.ai. Each report shows the observed signals, evidence and coverage limits.</p></article>
           </div>
         </div>
       </section>
@@ -580,4 +524,4 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
   </main>
 
 
-</body></html>`;
+</body></html>

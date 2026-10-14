@@ -1,0 +1,19 @@
+{
+  "pages": [
+    {
+      "path": "/insights/ai-lab-privacy-leaderboard-2026",
+      "title": "Privacy signals across 10 AI-company websites",
+      "description": "October 12, 2026 observations from Ireland: the leaderboard, retained report links, methodology and validation limits.",
+      "datePublished": "2026-10-12",
+      "dateModified": "2026-10-14",
+      "file": "ai-lab-privacy-leaderboard-2026.html"
+    }
+  ],
+  "assets": [
+    {
+      "path": "/images/ai-leaderboard-social-card.png",
+      "file": "assets/ai-leaderboard-social-card.png",
+      "contentType": "image/png"
+    }
+  ]
+}

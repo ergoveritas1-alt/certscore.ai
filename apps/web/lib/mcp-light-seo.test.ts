@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import robots from "../app/robots";
-import sitemap from "../app/sitemap";
+import { buildSitemap as sitemap } from "../app/sitemap";
 
 const guideUrl = "https://certscore.ai/guides/mcp-website-privacy-scanner";
 

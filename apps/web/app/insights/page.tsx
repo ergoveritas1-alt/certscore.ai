@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Badge, Card, CardContent, CardHeader, CardTitle } from "@website-signal-risk-scanner/ui";
 import { createPageMetadata } from "../../lib/seo";
+import { getPublishedInsightPages } from "../../server/insights/store";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = createPageMetadata({
   title: "Insights",
@@ -25,7 +27,12 @@ const insightPages = [
   }
 ];
 
-export default function InsightsIndexPage() {
+export default async function InsightsIndexPage() {
+  const published = await getPublishedInsightPages();
+  const pages = [
+    ...published.map((page) => ({ href: page.path, title: page.title, description: page.description })),
+    ...insightPages.filter((page) => !published.some((item) => item.path === page.href))
+  ];
   return (
     <section className="mx-auto max-w-5xl px-6 py-16">
       <div className="max-w-3xl space-y-4">
@@ -39,13 +46,13 @@ export default function InsightsIndexPage() {
       </div>
 
       <div className="mt-10 grid gap-6">
-        {insightPages.map((page) => (
+        {pages.map((page) => (
           <Card key={page.href} className="border-slate-200 bg-white">
             <CardHeader>
               <CardTitle>
-                <Link href={page.href} className="hover:text-ember">
+                <a href={page.href} className="hover:text-ember">
                   {page.title}
-                </Link>
+                </a>
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-slate-600">{page.description}</CardContent>

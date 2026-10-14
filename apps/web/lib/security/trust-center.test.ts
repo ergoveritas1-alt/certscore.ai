@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import sitemap from "../../app/sitemap";
+import { buildSitemap as sitemap } from "../../app/sitemap";
 import robots from "../../app/robots";
 
 const pageSource = readFileSync(new URL("../../app/trust/page.tsx", import.meta.url), "utf8");

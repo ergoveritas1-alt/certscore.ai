@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GET, SECURITY_TEXT } from "../../app/.well-known/security.txt/route";
-import sitemap from "../../app/sitemap";
+import { buildSitemap as sitemap } from "../../app/sitemap";
 
 test("security.txt publishes the canonical security policy contact", async () => {
   const response = GET();
