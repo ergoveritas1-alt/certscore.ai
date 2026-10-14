@@ -12,7 +12,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (!outcome || outcome.status !== "limited" || !outcome.limitationCode) return undefined;
     // Coordinator outcomes are coverage telemetry, never substituted browser evidence.
     const fallback = cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v5", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
+      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v6", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: outcome.limitationCode },
       rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? "Preference evidence was not retained; this criterion could not be assessed.", evidenceRefs: [] })) });
     const observations = completedChoiceObservations(bundle);
@@ -69,7 +69,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v2", inventoryEvidencePolicy: "cmp_inventory_tables.v5", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v2", inventoryEvidencePolicy: "cmp_inventory_tables.v6", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -244,7 +244,7 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
 }
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;
-type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "declarationCoverage" | "checkpoints">;
+type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints">;
 function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: InventoryFacts,
   { controlsUsable, declarationsUsable, privacyUsable, usable }: { controlsUsable: boolean; declarationsUsable: boolean; privacyUsable: boolean; usable: boolean },
   rows: CmpAuditAssessment["rows"], set: AuditSet) {
@@ -277,6 +277,15 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     const services = names?.length ? names.map(name => ({ name, source: "cmp_api_inventory" as const }))
       : labelled.map(name => ({ name, source: "labelled_control" as const }));
     if (services.length) rows.find(row => row.id === "services")!.inventory = { services };
+  }
+  const disclosed = declarationsUsable ? [...new Set(evidence.serviceDisclosures?.flatMap(disclosure => disclosure.names) ?? [])] : [];
+  if (disclosed.length) {
+    const row = rows.find(row => row.id === "services")!;
+    const services = [...(row.inventory?.services ?? [])];
+    for (const name of disclosed) if (!services.some(service => service.name === name) && services.length < 100)
+      services.push({ name, source: "cmp_named_disclosure" });
+    set("services", "observed", `${services.length} services named in the inspected CMP. This includes its explicit partner disclosure; it is not a complete service inventory. Individual service controls were not tested.`);
+    row.inventory = { services, serviceDisclosures: evidence.serviceDisclosures };
   }
   if (privacyUsable) {
     const reachable = evidence.privacyLinks.some(link => link.hitTargetBeforeAction);
@@ -362,9 +371,12 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   });
   applyInventoryFacts(bundle, { ...basic, controlInventoryComplete: false, declarationInventoryComplete: false }, { controlsUsable: true, declarationsUsable: true, privacyUsable: true, usable: false }, candidates, set);
   if (basic.serviceNames.length) {
-    const names = [...new Set(basic.serviceNames)];
-    set("services", "observed", `${names.length} services identified in the loaded CMP configuration. Individual service controls were not tested.`);
-    candidates.find(row => row.id === "services")!.inventory = { services: names.map(name => ({ name, source: "cmp_api_inventory" as const })) };
+    const services = [...new Set(basic.serviceNames)].map(name => ({ name, source: "cmp_api_inventory" as const })) as NonNullable<NonNullable<CmpAuditAssessment["rows"][number]["inventory"]>["services"]>;
+    for (const service of candidates.find(row => row.id === "services")!.inventory?.services ?? [])
+      if (!services.some(row => row.name === service.name) && services.length < 100) services.push(service);
+    set("services", "observed", `${services.length} services identified in the inspected CMP.${basic.serviceDisclosures?.length ? " Includes its explicit partner disclosure; the full inventory was not inspected." : ""} Individual service controls were not tested.`);
+    const row = candidates.find(row => row.id === "services")!;
+    row.inventory = { ...row.inventory, services };
   }
   for (const row of candidates) if (!["not_assessed", "incomplete"].includes(row.status)) {
     const previous = assessment.rows.find(item => item.id === row.id)!;
@@ -377,6 +389,6 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, assign, assessment.rows, observations); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v1", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v2", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

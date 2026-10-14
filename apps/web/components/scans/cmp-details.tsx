@@ -115,8 +115,8 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       rows={inventory.categories.map(category => [category.name, category.checked === null ? "Not captured" : category.checked ? "On" : "Off"])} /> : null}
     {inventory?.services?.length ? <>
       <CmpInventoryTable label={`CMP services · ${inventory.services.length}`} columns={["Service", "Identified from"]}
-        copyRows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])}
-        rows={inventory.services.map(service => [<CmpInventoryIdentity name={service.name} kind="service" />, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])} />
+        copyRows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : service.source === "cmp_named_disclosure" ? "CMP disclosure" : "Labelled control"])}
+        rows={inventory.services.map(service => [<CmpInventoryIdentity name={service.name} kind="service" />, service.source === "cmp_api_inventory" ? "CMP configuration" : service.source === "cmp_named_disclosure" ? "CMP disclosure" : "Labelled control"])} />
     </> : null}
     {inventory?.declarations?.length ? <CmpInventoryTable label={`Cookie details · ${inventory.declarations.length}`}
       columns={inventory.declarations.some(cookie => cookie.inferredPurpose) ? ["Cookie name / pattern", "CMP-stated purpose", "Inferred purpose", "CMP-stated retention"] : ["Cookie name / pattern", "Purpose", "Storage duration"]}

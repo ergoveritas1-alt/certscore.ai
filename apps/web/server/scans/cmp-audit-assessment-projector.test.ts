@@ -743,7 +743,7 @@ test("OneTrust service names reach the canonical assessment and report from one 
   const server=createServer((req,res)=>{
     if(req.url?.startsWith('/action/')){actions.push(req.url);res.end();return;}
     res.setHeader('content-type','text/html');
-    res.end(`<section id="onetrust-banner-sdk"><button aria-controls="prefs" onclick="fetch('/action/options');document.getElementById('prefs').hidden=false">Cookie settings</button><button onclick="fetch('/action/accept')">Accept all</button><button onclick="fetch('/action/reject')">Reject all</button></section><section id="prefs" hidden><label><input type="checkbox">Analytics</label><button onclick="fetch('/action/save')">Save</button></section><script>
+    res.end(`<section id="onetrust-banner-sdk"><p id="onetrust-policy-text">For this, we use unique identifiers like your IP address and share your data with 2 partners (Vimeo, Google).</p><button aria-controls="prefs" onclick="fetch('/action/options');document.getElementById('prefs').hidden=false">Cookie settings</button><button onclick="fetch('/action/accept')">Accept all</button><button onclick="fetch('/action/reject')">Reject all</button></section><section id="prefs" hidden><label><input type="checkbox">Analytics</label><button onclick="fetch('/action/save')">Save</button></section><script>
       window.OneTrust={GetDomainData:()=>({GeneralVendors:[{VendorCustomId:'V1',Name:'Named Media'}],Groups:[{CustomGroupId:'C2',GroupName:'Analytics',GeneralVendorsIds:['V1'],VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],Hosts:[{HostId:'H1',DisplayName:'metrics.example.test',HostName:'metrics.example.test'}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]})};
     </script>`);
   });
@@ -760,7 +760,7 @@ test("OneTrust service names reach the canonical assessment and report from one 
     const audit=deriveCmpAuditAssessment(input)!;
     const service=audit.rows.find(row=>row.id==='services')!;
     assert.equal(service.status,'observed');
-    assert.deepEqual(service.inventory!.services!.map(row=>row.name),['Named Analytics','Named Media']);
+    assert.deepEqual(service.inventory!.services!.map(row=>row.name),['Named Analytics','Named Media','Vimeo','Google']);
     const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
     const artifacts=withPersistedFirstLayerConsentEvidence({consentControlAssessment:assessment},{consent_control_assessment:assessment})!;
     const concerns=buildNormalizedConcerns({runtimeArtifacts:artifacts,reviewFindingCandidates:[],validationFindings:[]});
@@ -772,4 +772,28 @@ test("OneTrust service names reach the canonical assessment and report from one 
     const foreign=structuredClone(input);foreign.cmpPreferencesEvidence!.finalUrl='https://foreign.test/';
     assert.equal(deriveCmpAuditAssessment(foreign),undefined,"A foreign document cannot supply service evidence");
   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test("literal CMP partner identities are assessed without manufacturing configured inventory or tested controls", async () => {
+  const {parseNamedCmpPartnerDisclosure}=await import("@certscore/contracts");
+  const input=bundle(), packet=input.cmpPreferencesEvidence!;
+  packet.serviceNames=[];
+  packet.serviceDisclosures=[parseNamedCmpPartnerDisclosure("and share your data with 2 partners (Vimeo, Google)")!];
+  packet.declarationCoverage={scope:"configured_services",configured:0,resolved:0,unresolved:0,truncated:false};
+  const before=structuredClone(input);
+  const audit=deriveCmpAuditAssessment(input)!;
+  const service=audit.rows.find(row=>row.id==="services")!;
+  assert.equal(service.status,"observed");
+  assert.deepEqual(service.inventory!.services,[{name:"Vimeo",source:"cmp_named_disclosure"},{name:"Google",source:"cmp_named_disclosure"}]);
+  assert.match(service.detail,/not a complete service inventory/);
+  assert.match(service.detail,/controls were not tested/);
+  assert.deepEqual(input,before);
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const artifacts=withPersistedFirstLayerConsentEvidence({consentControlAssessment:assessment},{consent_control_assessment:assessment})!;
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:artifacts,reviewFindingCandidates:[],validationFindings:[]});
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.deepEqual(report.rows.find(row=>row.id==="services")!.supportingEvidence!.inventory!.services,service.inventory!.services);
+  assert.ok(concerns.filter(row=>row.originKey.startsWith("consent.cmp_audit.")).every(row=>!row.scoreEffects?.length));
+  input.cmpPreferencesEvidence!.documentToken=null;
+  assert.notEqual(deriveCmpAuditAssessment(input)?.rows.find(row=>row.id==="services")?.status,"observed");
 });

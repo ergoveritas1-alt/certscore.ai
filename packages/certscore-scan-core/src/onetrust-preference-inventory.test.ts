@@ -87,3 +87,27 @@ test("cookie and service payloads share a bounded allowance and cyclic subgroups
   assert.deepEqual(malformed.services,[]);
   assert.equal(malformed.coverage.unresolved,2);
 });
+
+test("the single loaded getter read retains only a unique rendered CMP disclosure", async () => {
+  const {chromium}=await import("playwright");
+  const {readOneTrustPreferenceInventory}=await import("./onetrust-preference-inventory.js");
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();
+    const text="For this, we use unique identifiers like your IP address and share your data with 2 partners (Vimeo, Google).";
+    for(const [html,expected] of [
+      [`<div id="onetrust-banner-sdk"><p id="onetrust-policy-text">${text}</p></div>`,["Vimeo","Google"]],
+      [`<p id="onetrust-policy-text">${text}</p>`,[]],
+      [`<div id="onetrust-banner-sdk" hidden><p id="onetrust-policy-text">${text}</p></div>`,[]],
+      [`<div id="onetrust-banner-sdk" style="opacity:0"><p id="onetrust-policy-text">${text}</p></div>`,[]],
+      [`<div id="onetrust-banner-sdk"><p id="onetrust-policy-text">${text}</p><p id="onetrust-policy-text">${text}</p></div>`,[]],
+      [`<div id="onetrust-banner-sdk"><p id="onetrust-policy-text">and share your data with 2 partners (<span hidden>Vimeo, Google</span>)</p></div>`,[]],
+    ] as const){
+      await page.setContent(`${html}<script>window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[]}}}</script>`);
+      const result=await readOneTrustPreferenceInventory(page);
+      assert.deepEqual(result?.serviceDisclosures.flatMap(d=>d.names),expected);
+      assert.deepEqual(result?.services,[],"A disclosure is not a configured vendor identity");
+      assert.equal(await page.evaluate(()=>(window as any).reads),1);
+    }
+  }finally{await browser.close();}
+});

@@ -1161,12 +1161,44 @@ export const detailedEvidenceOpenApiSchemas = {
                             "type": "string",
                             "enum": [
                               "cmp_api_inventory",
-                              "labelled_control"
+                              "labelled_control",
+                              "cmp_named_disclosure"
                             ]
                           }
                         }
                       },
                       "maxItems": 100
+                    },
+                    "serviceDisclosures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "version",
+                          "excerpt",
+                          "names"
+                        ],
+                        "properties": {
+                          "version": {
+                            "const": "cmp_named_partner_disclosure.v1",
+                            "type": "string"
+                          },
+                          "excerpt": {
+                            "type": "string",
+                            "maxLength": 600
+                          },
+                          "names": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            "maxItems": 20
+                          }
+                        }
+                      },
+                      "maxItems": 1
                     },
                     "declarations": {
                       "type": "array",

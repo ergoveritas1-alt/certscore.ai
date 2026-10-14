@@ -66,6 +66,7 @@ export async function captureCmpBasicEvidence(input: {
     capturedAtMs: Date.now() - input.scanStartedAtMs, provider: definition.canonicalName,
     controls: classifyControls(rawControls.controls, inventory), privacyLinks,
     declarations: inventory?.declarations ?? [], serviceNames: (inventory?.services ?? []).filter(Boolean),
+    serviceDisclosures: inventory && "serviceDisclosures" in inventory ? inventory.serviceDisclosures : undefined,
     limitations: ["passive_first_layer_only", "declaration_inventory_not_complete", ...(rawControls.overflow ? ["control_inventory_overflow"] : [])],
   });
 }

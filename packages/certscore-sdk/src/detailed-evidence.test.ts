@@ -57,3 +57,9 @@ test("SDK evidence reads reject selector drift and stop at the caller's page bou
     await assert.rejects(client.getReportEvidence(scanId, { section: "cmp", maxPages: 1 }), /maxPages/);
   } finally { globalThis.fetch = original; }
 });
+
+test("CMP disclosure sources survive SDK evidence reconstruction without becoming control tests", () => {
+  const services=[{name:"Vimeo",source:"cmp_named_disclosure"},{name:"Google",source:"cmp_named_disclosure"}];
+  const result=reconstructReportEvidencePages([page([{path:"",value:{cmpAudit:{scanId,rows:[{id:"services",status:"Observed",supportingEvidence:{inventory:{services}}}]}}}])]);
+  assert.deepEqual(result.cmpAudit?.rows[0]?.supportingEvidence?.inventory?.services,services);
+});

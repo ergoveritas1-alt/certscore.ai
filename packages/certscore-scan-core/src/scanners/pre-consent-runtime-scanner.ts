@@ -1019,7 +1019,10 @@ export async function preConsentRuntimeScanner(
   });
 
   const screenshots: ScreenshotArtifact[] = [];
-  const measureVisualComparison = createConsentVisualComparisonCollector(screenshots, input.scanStartedAtMs, remainingModuleBudgetMs);
+  const measureVisualComparison = createConsentVisualComparisonCollector(screenshots, input.scanStartedAtMs, remainingModuleBudgetMs, undefined,
+    diagnostic => timingBreakdown.push({ label: "consent pixel comparison", durationMs: diagnostic.elapsedMs,
+      outcome: diagnostic.status === "retained" ? "completed" : diagnostic.status === "timed_out" ? "timed_out" : "skipped",
+      detail: JSON.stringify({ policy: "authoritative_pair_first.v1", ...diagnostic }) }));
   const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;

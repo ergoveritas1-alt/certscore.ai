@@ -329,7 +329,7 @@ test("early OneTrust declarations and visible native label targets survive bound
       assert.deepEqual(packet.declarations.map(cookie => cookie.name), ["_ga"]);
       assert.deepEqual(packet.serviceNames, ["Named Analytics", "Named Media"]);
       assert.deepEqual(packet.declarationCoverage, {scope:"configured_services",configured:2,resolved:2,unresolved:0,truncated:false});
-      assert.equal(packet.inspectionDiagnostic?.configuration?.version,"onetrust_loaded_configuration.v2");
+      assert.equal(packet.inspectionDiagnostic?.configuration?.version,"onetrust_loaded_configuration.v3");
       assert.equal(packet.declarationInventoryComplete, false); assert.equal(packet.checkpoints?.declarations, true);
       assert.ok(packet.privacyLinks.some(link => link.hitTargetBeforeAction), JSON.stringify(packet.privacyLinks));
       assert.equal(clicks, mode === "open" ? 1 : 0);

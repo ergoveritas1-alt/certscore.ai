@@ -1,4 +1,14 @@
 import { z } from "zod";
+import { parseNamedCmpPartnerDisclosure } from "./cmp-named-disclosure";
+export { parseNamedCmpPartnerDisclosure } from "./cmp-named-disclosure";
+
+const cmpNamedDisclosureSchema = z.object({
+  version: z.literal("cmp_named_partner_disclosure.v1"), excerpt: z.string().min(1).max(600),
+  names: z.array(z.string().min(1).max(80)).min(1).max(20),
+}).strict().refine(value => {
+  const parsed = parseNamedCmpPartnerDisclosure(value.excerpt);
+  return parsed && JSON.stringify(parsed.names) === JSON.stringify(value.names);
+}, "Named partners must match the retained literal disclosure.");
 
 export const CMP_PREFERENCE_POLICY_VERSION = "bounded_cmp_preferences.v1" as const;
 export const CMP_PREFERENCE_BUDGET_MS = 17_000;
@@ -46,7 +56,8 @@ export const cmpInventoryTablesSchema = z.object({
 
   expiries: z.array(cmpCookieExpiryEvidenceSchema).max(4).optional(),
   categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
-  services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control"]) }).strict()).max(100).optional(),
+  services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure"]) }).strict()).max(100).optional(),
+  serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional() }).strict()).max(100).optional(),
   cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
 }).strict();
@@ -70,6 +81,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) })).max(100),
   declarationInventoryComplete: z.boolean(),
   serviceNames: z.array(z.string().min(1).max(240)).max(100).optional(),
+  serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   limitations: z.array(z.string().max(120)).max(24),
   // Completed, document-bound sub-observations survive unrelated later timeouts.
   // Optional for historical v1 packets; absence must not upgrade old limited captures.
@@ -89,7 +101,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   inspectionDiagnostic: z.object({
     revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
     basicCaptureReserveMs: z.number().int().min(0).max(1000).optional(),
-    configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2"]), status: z.enum(["available", "unavailable"]),
+    configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2", "onetrust_loaded_configuration.v3"]), status: z.enum(["available", "unavailable"]),
       groupCount: z.number().int().min(0).max(10000).optional(), retainedCookieCount: z.number().int().min(0).max(100).optional(), truncated: z.boolean().optional(),
     }).strict().optional(),
     phase: z.enum(["browser_start", "navigation", "cmp_readiness", "control_inventory", "surface_binding", "opening", "preference_inventory", "completed"]),
@@ -123,6 +135,7 @@ export const cmpBasicEvidenceSchema = z.object({
   privacyLinks: cmpPreferencesEvidenceSchema.innerType().shape.privacyLinks,
   declarations: cmpPreferencesEvidenceSchema.innerType().shape.declarations,
   serviceNames: z.array(z.string().min(1).max(240)).max(100),
+  serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   limitations: z.array(z.string().min(1).max(120)).max(8),
 }).strict();
 export type CmpBasicEvidence = z.infer<typeof cmpBasicEvidenceSchema>;

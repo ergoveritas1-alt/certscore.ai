@@ -9,7 +9,7 @@ import { createArtifactWriter } from "./artifact-writer.js";
 import type { ConsentControlGeometryArtifact } from "./consent-control-geometry.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 
-test("later scanner diagnostic keeps the original settled visual pair while retaining its later screenshot", { timeout: 30_000 }, async () => {
+test("scanner measures the authoritative pair once and defers interim decoding", { timeout: 30_000 }, async () => {
   const server = createServer((request, response) => {
     response.writeHead(request.url === "/" ? 200 : 204, { "content-type": "text/html" });
     response.end(request.url === "/" ? `<!doctype html><html><head><title>Local consent capture fixture</title><style>
@@ -33,11 +33,11 @@ test("later scanner diagnostic keeps the original settled visual pair while reta
           return writer.writeJsonArtifact(name, value);
         } } });
     assert.equal(result.moduleRun.status, "completed");
-    const paired = writes.find(row => row.visualComparison && row.screenshotArtifactRef?.endsWith("screenshot-pre-consent-settled.png"));
-    assert.ok(paired, "the existing settled capture must produce valid pixel measurements");
+    const paired = writes.find(row => row.visualComparison && row.screenshotArtifactRef?.endsWith("screenshot-pre-consent-geometry-proof.png"));
+    assert.ok(paired, "the authoritative capture must produce valid pixel measurements");
     const final = JSON.parse(await readFile(join(directory, "ConsentControlGeometryEvidence.json"), "utf8"));
     assert.deepEqual(final.visualComparison, paired.visualComparison);
-    assert.equal(final.capturedAt, paired.capturedAt, "keep the original geometry timestamp");
+    assert.equal(final.capturedAt, paired.capturedAt, "keep the measured geometry timestamp");
     assert.equal(final.screenshotArtifactRef, paired.screenshotArtifactRef);
     assert.ok(hasMaterialAcceptVisualProminence(final.visualComparison));
     assert.ok(result.screenshots.some(row => row.artifactId === "screenshot_pre_consent_geometry_proof"), "later evidence capture remains enabled");

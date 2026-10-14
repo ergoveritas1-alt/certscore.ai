@@ -176,13 +176,13 @@ test("separated pairing excludes scoped, ambiguous, cross-surface, dismiss and c
   assert.ok(comparisonPair(link), "a global refusal link with retained same-document destination remains eligible");
 });
 
-test("early analyses cannot spend the authoritative image's reserve or extend the shared 80 ms allowance", async t => {
+test("interim images never consume the single authoritative 80 ms allowance", async t => {
   const { createConsentVisualComparisonCollector } = await import("./consent-control-visual-comparison.js");
   const fixture = await consentVisualFixture();
   let now = 1000;
   t.mock.method(Date, "now", () => now);
   const early = { artifactId: "screenshot_pre_consent_settled", path: "early.png", url: fixture.geometry.pageUrl,
-    capturedAtMs: 1000, consentStateAtTime: "pre_consent" as const, pagePhase: "network_idle" as const };
+    documentIdentity: fixture.geometry.documentIdentity, capturedAtMs: 1000, consentStateAtTime: "pre_consent" as const, pagePhase: "network_idle" as const };
   const proof = { ...early, artifactId: "screenshot_pre_consent_geometry_proof", path: "proof.png" };
   const allowances: number[] = [];
   // Deterministic slow/inconclusive analysis; existing pixel-analysis fixtures
@@ -194,7 +194,41 @@ test("early analyses cannot spend the authoritative image's reserve or extend th
   await collector(geometry);
   await collector({ ...geometry, screenshotArtifactRef: proof.path });
   await collector({ ...geometry, screenshotArtifactRef: proof.path });
-  assert.deepEqual(allowances, [40, 40], "One early attempt cannot starve the final image");
+  assert.deepEqual(allowances, [80], "Interim frames cannot starve the final image or launch duplicate decodes");
   assert.equal(now, 1080, "No additional pixel-analysis allowance");
   assert.equal(geometry.visualComparison, undefined, "Budget priority cannot invent a measurement");
+});
+
+test("authoritative-only analysis avoids an interim timer overrun and cannot publish late or duplicate results", async t => {
+  const {createConsentVisualComparisonCollector}=await import("./consent-control-visual-comparison.js");
+  const fixture=await consentVisualFixture();
+  let now=1000, calls=0;
+  t.mock.method(Date,"now",()=>now);
+  const diagnostics:any[]=[];
+  const early={artifactId:"screenshot_pre_consent_settled",path:"early.png",url:fixture.geometry.pageUrl,documentIdentity:fixture.geometry.documentIdentity,capturedAtMs:1000,consentStateAtTime:"pre_consent" as const,pagePhase:"network_idle" as const};
+  const proof={...early,artifactId:"screenshot_pre_consent_geometry_proof",path:"proof.png"};
+  const collector=createConsentVisualComparisonCollector([early,proof],visualFixtureStartMs,()=>1000,
+    async (geometry,_images,deadline)=>{calls++; assert.equal(deadline-now,80);now+=81;return geometry;},d=>diagnostics.push(d));
+  await collector({...fixture.geometry,screenshotArtifactRef:early.path});
+  assert.equal(calls,0,"No native decode or delayed timer on interim images");
+  const geometry={...fixture.geometry,screenshotArtifactRef:proof.path};
+  assert.equal(await collector(geometry),geometry);
+  await collector(geometry);
+  assert.equal(calls,1,"No retry or overlapping decoder after the shared allowance");
+  assert.deepEqual(diagnostics.map(d=>d.status),["deferred","timed_out","no_budget"]);
+  assert.equal(geometry.visualComparison,undefined);
+});
+
+test("an unbound or unstable proof cannot spend the allowance reserved for an eligible recovery", async () => {
+  const {createConsentVisualComparisonCollector}=await import("./consent-control-visual-comparison.js");
+  const fixture=await consentVisualFixture();
+  const image={artifactId:"screenshot_pre_consent_geometry_proof",path:"proof.png",url:fixture.geometry.pageUrl,documentIdentity:fixture.geometry.documentIdentity,capturedAtMs:1000,consentStateAtTime:"pre_consent" as const,pagePhase:"network_idle" as const};
+  let calls=0;
+  const collector=createConsentVisualComparisonCollector([image],visualFixtureStartMs,()=>1000,async geometry=>{calls++;return geometry;});
+  const geometry={...fixture.geometry,screenshotArtifactRef:image.path};
+  await collector({...geometry,documentIdentity:{source:"cdp_loader_id",token:"wrong-loader"}});
+  await collector(geometry,{framesStable:false,frameRevision:2});
+  assert.equal(calls,0);
+  await collector(geometry,{framesStable:true,frameRevision:2});
+  assert.equal(calls,1);
 });

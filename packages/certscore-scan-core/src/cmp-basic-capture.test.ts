@@ -7,7 +7,7 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
   const browser = await chromium.launch({headless:true});
   try {
     const page = await browser.newPage();
-    await page.setContent(`<div id="onetrust-banner-sdk"><a href="https://example.test/privacy">Privacy policy</a><label><input type="checkbox">Analytics</label><button onclick="window.actions++">Manage options</button><section hidden><label><input type="checkbox">Marketing</label></section></div><script>
+    await page.setContent(`<div id="onetrust-banner-sdk"><p id="onetrust-policy-text">For this, we use unique identifiers like your IP address and share your data with 2 partners (Vimeo, Google).</p><a href="https://example.test/privacy">Privacy policy</a><label><input type="checkbox">Analytics</label><button onclick="window.actions++">Manage options</button><section hidden><label><input type="checkbox">Marketing</label></section></div><script>
       window.actions=0;window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'<strong>Named Analytics</strong>'}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]}}};
     </script>`);
     let token = "loader-1";
@@ -17,6 +17,7 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
     assert.ok(packet); assert.deepEqual(packet.controls.map(row=>row.label),["Analytics"]);
     assert.deepEqual(packet.declarations.map(row=>row.name),["_ga"]);
     assert.deepEqual(packet.serviceNames,["Named Analytics"]);
+    assert.deepEqual(packet.serviceDisclosures?.[0]?.names,["Vimeo","Google"]);
     assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction,true);
     assert.ok(packet.limitations.includes("declaration_inventory_not_complete"));
     assert.equal(await page.evaluate(()=>(window as any).actions),0);

@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import { parseNamedCmpPartnerDisclosure } from "@certscore/contracts";
 
 /** Documented read-only getter: https://developer.onetrust.com/onetrust/docs/javascript-api
  * Named fields follow OneTrust's own SDK (202507.1.0): VendorServices.ServiceName,
@@ -6,12 +7,12 @@ import type { Page } from "playwright";
  * No fetch, opening API, consent mutation, retry or second browser evaluation. */
 export function readOneTrustPreferenceInventory(page: Page) {
   // tsx names nested helpers; keep its helper local to this serialized read.
-  return page.evaluate<ReturnType<typeof readOneTrustInventoryInDocument>>(`(() => { const __name = (fn) => fn; return (${readOneTrustInventoryInDocument.toString()})(); })()`);
+  return page.evaluate<ReturnType<typeof readOneTrustInventoryInDocument>>(`(() => { const __name = (fn) => fn; return (${readOneTrustInventoryInDocument.toString()})(${parseNamedCmpPartnerDisclosure.toString()}); })()`);
 }
 
 /** Self-contained for browser serialization. One shared 100-record allowance
  * replaces the previous per-group host loops; nested groups share a 64-node cap. */
-export function readOneTrustInventoryInDocument() {
+export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNamedCmpPartnerDisclosure) {
   const api = (window as unknown as { OneTrust?: { GetDomainData?: () => unknown } }).OneTrust;
   if (typeof api?.GetDomainData !== "function") return undefined;
   let data: unknown;
@@ -23,7 +24,20 @@ export function readOneTrustInventoryInDocument() {
   const declarations: Array<{ name: string; purpose: string; duration: string; source: "cmp_api_inventory" }> = [];
   const groups: Row[] = [], seenGroups = new Set<object>();
   const queue = root.Groups.slice(0, 64);
-  let truncated = root.Groups.length > 64, visited = 0, serviceRecords = 0;
+  // The registered banner's literal counted partner list is a separate source
+  // from configured vendors. No page-body search, name registry or new read.
+  const disclosureNodes = typeof document === "undefined" ? [] : document.querySelectorAll("#onetrust-banner-sdk #onetrust-policy-text");
+  const disclosureNode = disclosureNodes.length === 1 ? disclosureNodes[0] : null;
+  let visible = Boolean(disclosureNode?.getClientRects().length);
+  let ancestor = disclosureNode;
+  for (let depth = 0; ancestor && depth < 16; depth++, ancestor = ancestor.parentElement) {
+    const style = getComputedStyle(ancestor);
+    if (style.visibility !== "visible" || style.display === "none" || style.opacity === "0") visible = false;
+  }
+  if (ancestor) visible = false;
+  const disclosure = visible ? readDisclosure?.((disclosureNode as HTMLElement).innerText) : undefined;
+  const serviceDisclosures = disclosure ? [disclosure] : [];
+  let truncated = root.Groups.length > 64, visited = disclosure?.names.length ?? 0, serviceRecords = visited;
   const text = (raw: unknown) => {
     if (typeof raw !== "string" || raw.length > 4096) return "";
     if (raw.includes("<")) {
@@ -125,7 +139,7 @@ export function readOneTrustInventoryInDocument() {
     }
   }
   const resolved = [...names.values()].filter(Boolean).length;
-  return { categories, services: [...new Set([...names.values()].filter(Boolean))], declarations, truncated,
+  return { categories, services: [...new Set([...names.values()].filter(Boolean))], serviceDisclosures, declarations, truncated,
     groupCount: Math.min(root.Groups.length + Math.max(0, groups.length - root.Groups.length), 10000),
     coverage: { scope: "configured_services" as const, configured: names.size, resolved, unresolved: names.size - resolved, truncated } };
 }

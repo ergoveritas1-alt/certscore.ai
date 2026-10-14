@@ -121,48 +121,55 @@ export function comparisonPair(geometry: ConsentControlGeometryArtifact) {
   return sharedSurface ? { accept, reject } : undefined;
 }
 
-/** One shared 80ms allowance across existing recaptures, inside the module budget. */
+export type ConsentVisualComparisonDiagnostic = {
+  status: "deferred" | "no_budget" | "not_eligible" | "retained" | "timed_out" | "unavailable";
+  artifactId?: string; allowanceMs: number; elapsedMs: number;
+};
+
+function pairedImage(geometry: ConsentControlGeometryArtifact, screenshots: ScreenshotArtifact[], scanStartedAtMs: number) {
+  const image = screenshots.find(s => s.path === geometry.screenshotArtifactRef && s.url === geometry.pageUrl &&
+    s.consentStateAtTime === "pre_consent" && s.documentIdentity?.token === geometry.documentIdentity?.token &&
+    s.documentIdentity?.source === "cdp_loader_id" && s.retentionStatus !== "withheld" && s.displayStatus !== "withheld");
+  if (!image || geometry.controlInspection?.structuralCoverage !== "complete") return undefined;
+  const skew = Math.abs(Date.parse(geometry.capturedAt) - scanStartedAtMs - image.capturedAtMs);
+  return Number.isInteger(skew) && skew <= 500 ? image : undefined;
+}
+
+/** Spend the existing shared 80ms once, on the authoritative paired capture.
+ * Interim image decoding can overrun its timer under event-loop contention and
+ * consume the final image's reserve. Deferring that work avoids duplicate
+ * decodes and keeps the final pair's full allowance without extending it. */
 export function createConsentVisualComparisonCollector(screenshots: ScreenshotArtifact[], scanStartedAtMs: number,
-  remainingModuleBudgetMs: () => number, measure = withConsentControlVisualComparison) {
+  remainingModuleBudgetMs: () => number, measure = withConsentControlVisualComparison,
+  onDiagnostic?: (value: ConsentVisualComparisonDiagnostic) => void) {
   let budgetMs = 80;
-  // Early captures may use half; retain at least half for the authoritative
-  // geometry proof/recovery image. This redistributes the existing allowance.
-  let earlyBudgetMs = 40;
-  let paired: { geometry: ConsentControlGeometryArtifact; state: ConsentVisualCaptureState } | undefined;
   return async (geometry: ConsentControlGeometryArtifact, state?: ConsentVisualCaptureState) => {
     const startedAtMs = Date.now();
-    const authoritative = screenshots.some(image => image.path === geometry.screenshotArtifactRef &&
-      ["screenshot_pre_consent_geometry_proof", "screenshot_pre_consent_packet_recovery"].includes(image.artifactId));
-    const allowanceMs = Math.min(budgetMs, authoritative ? budgetMs : earlyBudgetMs, remainingModuleBudgetMs());
-    if (allowanceMs <= 0) { paired = undefined; return geometry; }
-    try {
-      if (paired && state) {
-        const retained = retainPairedConsentVisualCapture({ previous: paired.geometry, current: geometry,
-          previousState: paired.state, currentState: state, screenshots, scanStartedAtMs });
-        if (retained !== geometry && Date.now() < startedAtMs + allowanceMs) return structuredClone(retained);
-      }
-      // Any intervening unbound, changed or incomplete capture invalidates reuse.
-      paired = undefined;
-      const result = await measure(geometry, screenshots, startedAtMs + allowanceMs, scanStartedAtMs);
-      if (state?.framesStable && result !== geometry && result.visualComparison &&
-          screenshots.some(s => s.artifactId === "screenshot_pre_consent_settled" && s.path === result.screenshotArtifactRef)) {
-        paired = { geometry: structuredClone(result), state: { ...state } };
-      }
-      return result;
-    } finally {
-      const spentMs = Math.max(1, Date.now() - startedAtMs);
-      budgetMs = Math.max(0, budgetMs - spentMs);
-      if (!authoritative) earlyBudgetMs = Math.max(0, earlyBudgetMs - spentMs);
+    const image = screenshots.find(image => image.path === geometry.screenshotArtifactRef);
+    const authoritative = image &&
+      ["screenshot_pre_consent_geometry_proof", "screenshot_pre_consent_packet_recovery"].includes(image.artifactId);
+    const diagnostic = (status: ConsentVisualComparisonDiagnostic["status"], allowanceMs = 0) =>
+      onDiagnostic?.({ status, artifactId: image?.artifactId, allowanceMs, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
+    if (!authoritative) { diagnostic("deferred"); return geometry; }
+    if (state?.framesStable === false || !comparisonPair(geometry) || !pairedImage(geometry, screenshots, scanStartedAtMs)) {
+      diagnostic("not_eligible"); return geometry;
     }
+    const allowanceMs = Math.min(budgetMs, remainingModuleBudgetMs());
+    if (allowanceMs <= 0) { diagnostic("no_budget"); return geometry; }
+    // Reserve before awaiting so overlapping or recovery callbacks cannot
+    // launch a second decode while the first native operation is finishing.
+    budgetMs = 0;
+    const result = await measure(geometry, screenshots, startedAtMs + allowanceMs, scanStartedAtMs);
+    const timedOut = Date.now() >= startedAtMs + allowanceMs;
+    diagnostic(timedOut ? "timed_out" : result.visualComparison ? "retained" : "unavailable", allowanceMs);
+    return timedOut ? geometry : result;
   };
 }
 
 /** Existing producer-owned files only; timeout cannot mutate a later packet. */
 export async function withConsentControlVisualComparison(geometry: ConsentControlGeometryArtifact,
   screenshots: ScreenshotArtifact[], deadlineAtMs: number, scanStartedAtMs: number): Promise<ConsentControlGeometryArtifact> {
-  const screenshot = screenshots.find(s => s.path === geometry.screenshotArtifactRef && s.url === geometry.pageUrl &&
-    s.consentStateAtTime === "pre_consent" && s.documentIdentity?.token === geometry.documentIdentity?.token &&
-    s.documentIdentity?.source === "cdp_loader_id" && s.retentionStatus !== "withheld" && s.displayStatus !== "withheld");
+  const screenshot = pairedImage(geometry, screenshots, scanStartedAtMs);
   if (!screenshot || !comparisonPair(geometry) || Date.now() >= deadlineAtMs) return geometry;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

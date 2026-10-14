@@ -262,3 +262,12 @@ test("v3 shows copied activity and inferred purpose tables separately from CMP d
   assert.doesNotMatch(html,/Requests after confirmed Reject|consent not confirmed/);
   assert.doesNotMatch(html,/id="evidence-row-post_reject_tracking_reduction"/);
 });
+
+test("named CMP disclosure rows keep their source distinct from configuration and tested controls", async () => {
+  const {CmpDetails}=await import("./cmp-details");
+  const audit=projectCmpAudit({scanId:"scan-1"});
+  Object.assign(audit.rows.find(row=>row.id==="services")!,{status:"Observed",supportingEvidence:{inventory:{services:[{name:"Vimeo",source:"cmp_named_disclosure"},{name:"Google",source:"cmp_named_disclosure"}]}}});
+  const html=renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust"/>);
+  assert.match(html,/Vimeo/);assert.match(html,/Google/);assert.match(html,/CMP disclosure/);
+  assert.doesNotMatch(html,/Labelled control|CMP configuration/);
+});
