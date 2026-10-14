@@ -41,6 +41,7 @@ export function accessibilityEvidenceRecap(audit: { failedRuleCount: number | nu
   const review = audit.reviewRuleCount ?? 0;
   const limited = audit.status !== "completed";
   return [audit.failedRuleCount === null ? "Not evaluated" : `${audit.failedRuleCount} ${audit.failedRuleCount === 1 ? "issue" : "issues"}`,
+    limitations.includes("child_frames_changed_main_document_retained") ? "Main page only" : null,
     review ? `${review} to review` : null, !review && limited ? "Coverage limited" : null,
     !review && !limited && audit.affectedNodeCount !== null && audit.affectedNodeCount > 0 ? `${audit.affectedNodeCount} affected elements` : null,
   ].filter(Boolean).join(" · ");

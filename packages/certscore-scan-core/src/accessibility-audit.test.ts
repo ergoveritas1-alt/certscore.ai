@@ -135,6 +135,57 @@ test("a same-URL document identity change discards all results", async () => {
   });
 });
 
+test("child-frame changes preserve only bound main-document positive findings from one axe run", async t => {
+  await withPage('<button></button><iframe title="Embedded" srcdoc="&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;title&gt;Child&lt;/title&gt;&lt;/head&gt;&lt;body&gt;&lt;button&gt;&lt;/button&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>', async page => {
+    const evaluate = page.evaluate.bind(page); let runs = 0;
+    t.mock.method(page, "evaluate", async (fn, arg) => {
+      const result = await evaluate(fn, arg);
+      if (arg && typeof arg === "object" && "exampleLimit" in arg) {
+        runs++;
+        await page.frames().find(frame => frame !== page.mainFrame())!.goto("data:text/html,<p>Changed child</p>");
+      }
+      return result;
+    });
+    const result = await audit(page);
+    assert.equal(runs, 1);
+    assert.equal(result.status, "limited");
+    assert.equal(result.frameCoverage?.resultScope, "positive_findings_only");
+    assert.equal(result.frameCoverage?.documentToken, "loader-a");
+    assert.ok(result.frameCoverage!.engineRuleCount > result.rulesEvaluated.length);
+    assert.equal(result.violations.find(row => row.ruleId === "button-name")?.nodeCount, 1);
+    assert.ok([...result.violations, ...result.reviewItems].every(row => row.representativeNodes.every(node => node.mainDocumentBound)));
+    assert.ok(!result.rulesEvaluated.includes("html-has-lang"));
+    assert.ok(result.frameCoverage!.excludedNodeCount >= 1);
+  });
+});
+
+test("changing frames with no independently bound main-page finding cannot produce a clean subset", async t => {
+  await withPage('<iframe title="Embedded" srcdoc="&lt;html lang=&quot;en&quot;&gt;&lt;head&gt;&lt;title&gt;Child&lt;/title&gt;&lt;/head&gt;&lt;body&gt;&lt;button&gt;&lt;/button&gt;&lt;/body&gt;&lt;/html&gt;"></iframe>', async page => {
+    const evaluate = page.evaluate.bind(page);
+    t.mock.method(page, "evaluate", async (fn, arg) => {
+      const result = await evaluate(fn, arg);
+      if (arg && typeof arg === "object" && "exampleLimit" in arg) await page.frames().find(frame => frame !== page.mainFrame())!.goto("data:text/html,<p>Changed child</p>");
+      return result;
+    });
+    const result = await audit(page);
+    assert.deepEqual(result.rulesEvaluated, []); assert.deepEqual(result.violations, []);
+    assert.deepEqual(result.limitations, ["frames_changed"]); assert.equal(result.frameCoverage, undefined);
+  });
+});
+
+test("main navigation invalidates results even when an external document-token callback is stale", async t => {
+  await withPage('<button></button>', async page => {
+    const evaluate = page.evaluate.bind(page);
+    t.mock.method(page, "evaluate", async (fn, arg) => {
+      const result = await evaluate(fn, arg);
+      if (arg && typeof arg === "object" && "exampleLimit" in arg) await page.goto("https://example.com/");
+      return result;
+    });
+    const result = await audit(page);
+    assert.deepEqual(result.limitations, ["document_changed"]); assert.equal(result.frameCoverage, undefined);
+  });
+});
+
 test("axe injection cannot add traffic, storage or forms to the frozen privacy baseline", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "certscore-accessibility-isolation-"));
   try {

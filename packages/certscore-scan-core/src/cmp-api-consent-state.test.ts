@@ -85,3 +85,79 @@ test("Transcend reads local consent without invoking cross-domain synchronizatio
     await browser.close();
   }
 });
+
+for (const provider of ["osano", "hubspot"] as const) test(`${provider}: complete documented decisions, fresh events and malformed updates`, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<script>
+      window.handlers=[]; window.registrations=0;
+      window.state={ANALYTICS:'DENY',MARKETING:'DENY',PERSONALIZATION:'DENY',ESSENTIAL:'ACCEPT','OPT-OUT':'ACCEPT',STORAGE:'DENY'};
+      window.Osano={cm:{getConsent:()=>window.state,addEventListener:(name,fn)=>{if(name!=='osano-cm-consent-saved')throw Error('wrong event');window.registrations++;window.handlers.push(fn)}}};
+      window._hsp={push:([name,fn])=>{if(name!=='addPrivacyConsentListener')throw Error('wrong API');window.registrations++;window.handlers.push(fn)}};
+      window.emit=data=>window.handlers.forEach(fn=>fn(data));
+    </script>`);
+    const baseline = await readCmpApiConsentSnapshot(page, provider);
+    assert.equal(baseline?.eventSequence, 0);
+    assert.equal(baseline?.decision, provider === "osano" ? "denied" : "unknown");
+    const granted = provider === "osano" ? { ANALYTICS: "ACCEPT", MARKETING: "ACCEPT", PERSONALIZATION: "ACCEPT", ESSENTIAL: "ACCEPT", "OPT-OUT": "ACCEPT", STORAGE: "DENY" }
+      : { categories: { analytics: true, advertisement: true, functionality: true }, allowed: true };
+    await page.evaluate(data => { (window as any).state=data; (window as any).emit(data); }, granted);
+    const state = await readCmpApiConsentSnapshot(page, provider);
+    assert.equal(state?.decision, "granted"); assert.equal(state?.eventSequence, 1); assert.ok(state?.eventObservedAtEpochMs);
+    for (const data of [null, {allowed:true}, {categories:{analytics:true}}, {ANALYTICS:"ACCEPT"}]) {
+      await page.evaluate(data => { (window as any).state=data; (window as any).emit(data); }, data);
+      assert.ok([undefined, "unknown"].includes((await readCmpApiConsentSnapshot(page, provider))?.decision));
+    }
+    if (provider === "osano") {
+      await page.evaluate(data => { (window as any).state=data; (window as any).emit({ANALYTICS:"ACCEPT"}); }, granted);
+      assert.equal(await readCmpApiConsentSnapshot(page, provider), undefined, "malformed event cannot witness an otherwise valid getter");
+      await page.evaluate(data=>{(window as any).state=data;(window as any).__tcfapi=()=>{};},granted);
+      assert.equal(await readCmpApiConsentSnapshot(page,provider),undefined,"non-TCF recipe cannot certify IAB purpose decisions");
+    }
+    assert.equal(await page.evaluate(() => (window as any).registrations), 1);
+  } finally { await browser.close(); }
+});
+
+test("Drupal: configured opt-in statuses require a matching fresh write; categories require complete source accounting", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<script>
+      window.statusValue=null;window.selected=[];window.writes=[];
+      window.drupalSettings={eu_cookie_compliance:{method:'opt_in'}};
+      window.Drupal={eu_cookie_compliance:{getCookieStatus:()=>window.statusValue,getAcceptedCategories:()=>window.selected}};
+      window.__certscoreReadPostAcceptWrites=()=>window.writes;
+    </script>`);
+    assert.equal((await readCmpApiConsentSnapshot(page, "drupal_eu_cookie"))?.decision, "unknown");
+    await page.evaluate(() => { (window as any).statusValue="2"; });
+    assert.equal((await readCmpApiConsentSnapshot(page, "drupal_eu_cookie"))?.eventSequence, 0);
+    await page.evaluate(() => { (window as any).writes=[{storageType:"cookie",name:"cookie-agreed",value:"2",sequence:4,observedAtEpochMs:Date.now()}]; });
+    const state = await readCmpApiConsentSnapshot(page, "drupal_eu_cookie");
+    assert.equal(state?.decision, "granted"); assert.equal(state?.eventSequence, 4);
+    await page.evaluate(() => { (window as any).drupalSettings.eu_cookie_compliance.method="categories"; });
+    assert.equal(await readCmpApiConsentSnapshot(page, "drupal_eu_cookie"), undefined);
+    await page.evaluate(() => Object.assign((window as any).drupalSettings.eu_cookie_compliance, {cookie_categories:["essential","analytics","ads"],cookie_categories_details:{essential:{id:"essential",checkbox_default_state:"required"},analytics:{id:"analytics"},ads:{id:"ads"}}}));
+    assert.equal((await readCmpApiConsentSnapshot(page, "drupal_eu_cookie"))?.decision, "mixed");
+    await page.evaluate(() => { (window as any).selected=["essential","analytics","ads"]; });
+    assert.equal((await readCmpApiConsentSnapshot(page, "drupal_eu_cookie"))?.decision, "granted");
+    await page.evaluate(() => { (window as any).drupalSettings.eu_cookie_compliance.method="default"; });
+    assert.equal(await readCmpApiConsentSnapshot(page, "drupal_eu_cookie"), undefined);
+  } finally { await browser.close(); }
+});
+
+test("HubSpot queues one read-only listener before bootstrap without accepting a legacy boolean", async () => {
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();
+    const before=await readCmpApiConsentSnapshot(page,"hubspot");
+    assert.equal(before?.canonicalState,"unregistered");assert.equal(before?.eventSequence,0);
+    assert.equal(await page.evaluate(()=>(window as any)._hsp.length),1);
+    await page.evaluate(()=>{ const command=(window as any)._hsp[0];command[1]({allowed:true}); });
+    assert.equal((await readCmpApiConsentSnapshot(page,"hubspot"))?.decision,"unknown");
+    await page.evaluate(()=>{ const command=(window as any)._hsp[0];command[1]({categories:{analytics:false,advertisement:false,functionality:false}}); });
+    const after=await readCmpApiConsentSnapshot(page,"hubspot");
+    assert.equal(after?.decision,"denied");assert.equal(after?.eventSequence,2);assert.ok(after?.eventObservedAtEpochMs);
+    assert.equal(await page.evaluate(()=>(window as any)._hsp.length),1);
+  } finally {await browser.close();}
+});

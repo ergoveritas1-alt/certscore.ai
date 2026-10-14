@@ -4,9 +4,21 @@ export const ACCESSIBILITY_AUDIT_VERSION = "certscore.accessibility-audit.v1" as
 export const ACCESSIBILITY_AUDIT_BUDGET_MS = 8_000;
 export const ACCESSIBILITY_WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"] as const;
 export const ACCESSIBILITY_LIMITS = { rules: 100, examplesPerRule: 5, selectorsPerNode: 8, evidenceBytes: 256 * 1024 } as const;
+/** Positive element findings only. Global, cross-frame and spacing rules are
+ * deliberately excluded when child-frame churn prevents complete coverage. */
+export const ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS = [
+  "image-alt", "input-image-alt", "role-img-alt", "svg-img-alt", "button-name", "input-button-name", "link-name",
+  "label", "select-name", "summary-name", "aria-command-name", "aria-input-field-name", "aria-meter-name",
+  "aria-progressbar-name", "aria-toggle-field-name", "aria-tooltip-name", "aria-allowed-attr", "aria-valid-attr",
+  "aria-valid-attr-value", "aria-prohibited-attr", "aria-roles", "aria-required-attr", "aria-required-parent",
+  "aria-required-children", "aria-hidden-focus", "autocomplete-valid", "form-field-multiple-labels", "list",
+  "listitem", "definition-list", "dlitem", "nested-interactive", "scrollable-region-focusable", "color-contrast",
+  "td-headers-attr", "td-has-header", "th-has-data-cells",
+] as const;
 
 const selectorSchema = z.union([z.string().min(1).max(400), z.array(z.string().min(1).max(400)).min(1).max(8)]);
 const nodeSchema = z.object({
+  mainDocumentBound: z.literal(true).optional(),
   selectors: z.array(selectorSchema).min(1).max(ACCESSIBILITY_LIMITS.selectorsPerNode),
   htmlSnippet: z.string().min(1).max(500),
   failureSummary: z.string().min(1).max(800),
@@ -51,6 +63,13 @@ export const accessibilityAuditObservationSchema = z.object({
   violations: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   reviewItems: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   limitations: z.array(z.string().max(120)).max(16),
+  frameCoverage: z.object({
+    version: z.literal("stable_main_document_evidence.v1"), resultScope: z.literal("positive_findings_only"),
+    documentToken: z.string().min(1).max(200), engineRunCount: z.literal(1),
+    engineRuleCount: z.number().int().positive().max(ACCESSIBILITY_LIMITS.rules),
+    changedChildFrameCount: z.number().int().positive().max(10000),
+    excludedNodeCount: z.number().int().nonnegative().max(200_000_000),
+  }).strict().optional(),
   // Bounded examples describe retained detail, separately from engine coverage.
   // Absence on historical records does not imply this policy was applied.
   exampleCoverage: z.object({
@@ -72,6 +91,16 @@ export const accessibilityAuditObservationSchema = z.object({
     const retained = rows.reduce((sum, row) => sum + row.representativeNodes.length, 0);
     if (audit.exampleCoverage.observedNodeCount !== observed || audit.exampleCoverage.retainedNodeCount !== retained ||
       audit.exampleCoverage.omittedNodeCount !== observed - retained) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Example coverage counts must match retained rule evidence." });
+  }
+  if (audit.frameCoverage) {
+    const rows = [...audit.violations, ...audit.reviewItems];
+    if (audit.status !== "limited" || audit.frameCoverage.documentToken !== audit.documentToken || !rows.length ||
+        !audit.limitations.includes("child_frames_changed_main_document_retained") ||
+        audit.rulesEvaluated.length !== new Set(rows.map(row => row.ruleId)).size ||
+        audit.frameCoverage.engineRuleCount < audit.rulesEvaluated.length ||
+        rows.some(row => !(ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS as readonly string[]).includes(row.ruleId) || row.representativeNodes.some(node => node.mainDocumentBound !== true))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Main-document subset requires bound positive rule/node evidence and limited frame coverage." });
+    }
   }
   const evaluated = new Set(audit.rulesEvaluated);
   if (evaluated.size !== audit.rulesEvaluated.length ||

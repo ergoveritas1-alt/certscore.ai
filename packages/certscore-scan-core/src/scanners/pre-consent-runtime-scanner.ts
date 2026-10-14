@@ -1,3 +1,5 @@
+import { captureCmpBasicEvidence } from "../cmp-basic-capture.js";
+import type { CmpBasicEvidence } from "@certscore/contracts";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "../evidence-work-budget.js";
 import { readDocumentSiteMetadata as captureDocumentSiteMetadata, captureWordpressFeedVersion } from "../cms-version-capture.js";
@@ -220,6 +222,8 @@ const ONE_PIXEL_TRANSPARENT_PNG = Buffer.from(
 export interface PreConsentRuntimeScannerInput {
   /** Required entry-page audit; omitted in consent, GPC and inventory workers. */
   accessibilityScanId?: string;
+  /** Passive basics belong exclusively to the required consent-proof lane. */
+  cmpBasicScanId?: string;
   /** Release only the passive deadline after all baseline observers are frozen. */
   onPassiveCaptureComplete?: () => void;
   url: string;
@@ -553,6 +557,7 @@ export function applyFinalDocumentPartyClassification(input: {
 
 export interface PreConsentRuntimeScannerResult {
   accessibilityAudit?: AccessibilityAuditObservation;
+  cmpBasicEvidence?: CmpBasicEvidence;
   gpcSignalObservation?: GpcSignalObservation;
   gpcOptOutObservation?: GpcOptOutObservation;
   gpcObservationSession?: GpcObservationSession;
@@ -1081,6 +1086,30 @@ export async function preConsentRuntimeScanner(
   let retainedGpcOptOutObservation: GpcOptOutObservation | undefined;
   let retainedGpcObservationSession: GpcObservationSession | undefined;
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
+  let retainedCmpBasicEvidence: CmpBasicEvidence | undefined;
+  let cmpBasicCaptureStarted = false;
+  const currentCmpBasicEvidence = () => {
+    const identity = currentBrowserDocumentIdentity(page);
+    return retainedCmpBasicEvidence?.documentToken === identity?.token && retainedCmpBasicEvidence?.documentUrl === page.url()
+      ? retainedCmpBasicEvidence : undefined;
+  };
+  const startCmpBasicCapture = () => {
+    if (!retainedConsentUiObservation?.controls.some(control => control.visible !== false) || !input.cmpBasicScanId || !captureConsentEvidence || cmpBasicCaptureStarted || remainingModuleBudgetMs() < 250) return;
+    cmpBasicCaptureStarted = true;
+    const basicStartedAt = Date.now();
+    const deadline = basicStartedAt + Math.min(remainingModuleBudgetMs(), 350);
+    let basicOutcome = "capture_unavailable";
+    void captureCmpBasicEvidence({ page, scanId: input.cmpBasicScanId, targetUrl: input.normalizedUrl,
+      scanStartedAtMs: input.scanStartedAtMs,
+      readBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token }),
+      isCurrent: () => !effectiveSignal?.aborted && Date.now() < deadline,
+      onOutcome: reason => { basicOutcome = reason; },
+    }).then(packet => {
+      if (packet && Date.now() < deadline && !effectiveSignal?.aborted) retainedCmpBasicEvidence = packet;
+      timingBreakdown.push({ label: "passive CMP basics", durationMs: Date.now() - basicStartedAt,
+        outcome: retainedCmpBasicEvidence ? "completed" : basicOutcome === "capture_slice_exhausted" ? "timed_out" : "skipped", detail: retainedCmpBasicEvidence ? "Document-bound first-layer facts retained without a preference-worker join." : basicOutcome });
+    }).catch(() => { timingBreakdown.push({ label: "passive CMP basics", durationMs: Date.now() - basicStartedAt, outcome: "failed", detail: "capture_failed" }); });
+  };
   let consentUiInspectionAttempted = false;
   let retainedCollectionSurfaceInventory: CollectionSurfaceInventory | undefined;
   let retainedCollectionSurfaceObservations: CollectionSurfaceObservation[] = [];
@@ -1240,6 +1269,7 @@ export async function preConsentRuntimeScanner(
       scriptEvents: deadlineScripts,
       iframeEvents: deadlineIframes,
       consentUiObservations: retainedConsentUiObservations,
+      cmpBasicEvidence: currentCmpBasicEvidence(),
       ...(retainedCollectionSurfaceInventory
         ? { collectionSurfaceInventory: retainedCollectionSurfaceInventory }
         : {}),
@@ -1556,6 +1586,7 @@ export async function preConsentRuntimeScanner(
           // passive CMP waits can consume the module budget, but must not leave
           // the final evidence packet without the observation already obtained.
           retainedConsentUiObservation = observation;
+          startCmpBasicCapture();
           return observation;
         })
       : Promise.resolve(emptyConsentUiObservation(input.scanStartedAtMs, page.url()));
@@ -2285,6 +2316,7 @@ export async function preConsentRuntimeScanner(
       )
       : initialConsentObservation;
     retainedConsentUiObservation = consentObservation;
+    startCmpBasicCapture();
     let domText = initialDomText;
     let domTextCapture: DocumentBoundCapture<string> | undefined = "domTextCapture" in pageEvidence
       ? pageEvidence.domTextCapture as DocumentBoundCapture<string> | undefined
@@ -2351,6 +2383,7 @@ export async function preConsentRuntimeScanner(
         );
       }
       retainedConsentUiObservation = consentObservation;
+      startCmpBasicCapture();
     }
     if (captureConsentEvidence && shouldRecaptureConsentUiAfterTimeout(consentObservation, {
       fastWait,
@@ -2390,6 +2423,7 @@ export async function preConsentRuntimeScanner(
         );
       }
       retainedConsentUiObservation = consentObservation;
+      startCmpBasicCapture();
     }
 
     // Mark absence complete only after the final visual frame has had its
@@ -2401,6 +2435,7 @@ export async function preConsentRuntimeScanner(
         "settled_control_inventory_completed",
       );
       retainedConsentUiObservation = consentObservation;
+      startCmpBasicCapture();
     }
 
     for (const script of scripts) {
@@ -2575,6 +2610,7 @@ export async function preConsentRuntimeScanner(
     }
     retainedCmpRuntimeObservations = cmpRuntimeObservations;
     retainedConsentUiObservation = consentObservation;
+    startCmpBasicCapture();
     const highConfidenceCmpRuntimeEvidence =
       hasHighConfidenceDirectCmpRuntimeEvidence(cmpRuntimeObservations);
     if (captureConsentEvidence && shouldRecaptureConsentUiAfterCmpRuntime(consentObservation, domText, cmpRuntimeObservations)) {
@@ -3020,6 +3056,7 @@ export async function preConsentRuntimeScanner(
         );
       }
       retainedConsentUiObservation = consentObservation;
+      startCmpBasicCapture();
     }
     if (
       captureConsentEvidence &&
@@ -3068,6 +3105,7 @@ export async function preConsentRuntimeScanner(
           domText = await refreshDomText();
         }
         retainedConsentUiObservation = consentObservation;
+        startCmpBasicCapture();
       } else {
         recordInstantTiming(
           timingBreakdown,
@@ -3142,12 +3180,14 @@ export async function preConsentRuntimeScanner(
             "recapture:post_visual_rapid_typed_controls",
           );
           retainedConsentUiObservation = consentObservation;
+          startCmpBasicCapture();
         } else if (isIncompleteConsentUiCapture(postScreenshotRapidObservation)) {
           consentObservation = annotateConsentUiObservation(
             consentObservation,
             "recapture:post_visual_rapid_inventory_incomplete",
           );
           retainedConsentUiObservation = consentObservation;
+          startCmpBasicCapture();
         }
       }
       if (shouldRecaptureConsentUiAfterScreenshot(consentObservation, domText, {
@@ -3176,6 +3216,7 @@ export async function preConsentRuntimeScanner(
         });
         consentObservation = recaptureResolution.observation;
         retainedConsentUiObservation = consentObservation;
+        startCmpBasicCapture();
         if (recaptureResolution.strongerEvidenceRetained) {
           domText = await refreshDomText();
         }
@@ -3286,6 +3327,7 @@ export async function preConsentRuntimeScanner(
             recaptureBasis,
           );
           retainedConsentUiObservation = consentObservation;
+          startCmpBasicCapture();
           domText = await refreshDomText();
         }
       }
@@ -3313,6 +3355,7 @@ export async function preConsentRuntimeScanner(
         likelyPresent: false,
       }, "geometry:late_non_surface_candidates_did_not_override");
       retainedConsentUiObservation = consentObservation;
+      startCmpBasicCapture();
     }
     const completedGeometryNegativeHasLaterSurfaceHint =
       consentGeometryDiagnosticWritten &&
@@ -3415,6 +3458,7 @@ export async function preConsentRuntimeScanner(
             "geometry_capture_unavailable",
           );
           retainedConsentUiObservation = consentObservation;
+          startCmpBasicCapture();
         }
         if (
           !supplementalScreenshotAttempted &&
@@ -3511,6 +3555,7 @@ export async function preConsentRuntimeScanner(
           );
         }
         retainedConsentUiObservation = consentObservation;
+        startCmpBasicCapture();
         if (
           geometry.pageUrl !== "about:blank" &&
           geometry.viewport.width > 0 &&
@@ -3527,6 +3572,7 @@ export async function preConsentRuntimeScanner(
             "geometry:captured",
           );
           retainedConsentUiObservation = consentObservation;
+          startCmpBasicCapture();
         }
         },
       ).catch((error: unknown) => {
@@ -3792,6 +3838,7 @@ export async function preConsentRuntimeScanner(
               boundedRecoveryOutcome = consentObservation.boundedSameSessionRecoveryOutcome ??
                 "geometry_incomplete";
               retainedConsentUiObservation = consentObservation;
+              startCmpBasicCapture();
             }
           } else if (recoveryTypedInventoryComplete) {
             boundedRecoveryOutcome = "geometry_budget_unavailable";
@@ -3807,6 +3854,7 @@ export async function preConsentRuntimeScanner(
           boundedSameSessionRecoveryOutcome: boundedRecoveryOutcome,
         };
         retainedConsentUiObservation = consentObservation;
+        startCmpBasicCapture();
       }
       timingBreakdown.push({
         label: "bounded same-session consent packet recovery total",
@@ -4177,6 +4225,7 @@ export async function preConsentRuntimeScanner(
     responseCaptureFinalized = true;
     return {
       accessibilityAudit,
+      cmpBasicEvidence: currentCmpBasicEvidence(),
       collectionSurfaceSnapshots,
       runtimeEvidenceGraph: finalizedProxyGraph ?? finishGraph(),
       moduleRun: {
@@ -4355,6 +4404,7 @@ export async function preConsentRuntimeScanner(
       ...(retainedGpcObservationSession ? { gpcObservationSession: retainedGpcObservationSession } : {}),
       ...(retainedGpcOptOutObservation ? { gpcOptOutObservation: retainedGpcOptOutObservation } : {}),
       consentUiObservations: retainedConsentUiObservations,
+      cmpBasicEvidence: currentCmpBasicEvidence(),
       ...(retainedCollectionSurfaceInventory
         ? { collectionSurfaceInventory: retainedCollectionSurfaceInventory }
         : {}),

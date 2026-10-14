@@ -18,7 +18,7 @@ export function AccessibilitySnapshotContent({ audit, observation }: Props) {
     {observation?.violations.length ? <ul className="list-disc space-y-1 pl-4">
       {observation.violations.slice(0, 5).map(rule => <li key={rule.ruleId}>{accessibilityRuleTitle(rule)}</li>)}
       {observation.violations.length > 5 ? <li>{observation.violations.length - 5} more issues</li> : null}
-    </ul> : <p>{audit.failedRuleCount === null ? accessibilityAuditUnavailableSummary(observation?.limitations) : audit.failedRuleCount === 0 ? "No failures detected in the evaluated checks." : `${accessibilityIssueCountLabel(audit)} recorded; detailed examples are unavailable.`}</p>}
+    </ul> : <p>{audit.failedRuleCount === null ? accessibilityAuditUnavailableSummary(observation?.limitations) : audit.failedRuleCount === 0 ? observation?.frameCoverage ? "Main-page checks needing review are retained below." : "No failures detected in the evaluated checks." : `${accessibilityIssueCountLabel(audit)} recorded; detailed examples are unavailable.`}</p>}
     <EvidenceJumpLink targetId="accessibility-evidence" className="inline-block">View accessibility issues &amp; evidence ↓</EvidenceJumpLink>
   </div>;
 }
@@ -70,9 +70,9 @@ export function AccessibilityEvidence({ audit, observation }: Props) {
         : audit.status !== "completed" ? <EvidenceStatusBadge label="Limited" tone="limited" /> : null} />
     <div className="mt-5 space-y-3 text-xs leading-5 text-zinc-600">
       <p>WCAG 2.2 A/AA automated checks on the starting page.</p>
-      <p>{audit.engine}{audit.engineVersion ? ` ${audit.engineVersion}` : ""}{observation?.rulesEvaluated.length ? ` · ${observation.rulesEvaluated.length} rules evaluated` : ""}</p>
-      {audit.status !== "completed" ? <p className="text-amber-800">{audit.failedRuleCount === null ? accessibilityAuditUnavailableSummary(observation?.limitations) : `Coverage is limited${audit.reviewRuleCount ? `: ${audit.reviewRuleCount} ${audit.reviewRuleCount === 1 ? "check needs" : "checks need"} manual review` : ""}.`}</p> : null}
-      {audit.failedRuleCount === 0 ? <p>No failures detected in the evaluated checks.</p> : null}
+      <p>{audit.engine}{audit.engineVersion ? ` ${audit.engineVersion}` : ""}{observation?.frameCoverage ? ` · ${observation.frameCoverage.engineRuleCount} rules run` : observation?.rulesEvaluated.length ? ` · ${observation.rulesEvaluated.length} rules evaluated` : ""}</p>
+      {observation?.frameCoverage ? <p className="text-amber-800">Main-page findings retained. Embedded-frame results could not be verified.</p> : audit.status !== "completed" ? <p className="text-amber-800">{audit.failedRuleCount === null ? accessibilityAuditUnavailableSummary(observation?.limitations) : `Coverage is limited${audit.reviewRuleCount ? `: ${audit.reviewRuleCount} ${audit.reviewRuleCount === 1 ? "check needs" : "checks need"} manual review` : ""}.`}</p> : null}
+      {audit.failedRuleCount === 0 && !observation?.frameCoverage ? <p>No failures detected in the evaluated checks.</p> : null}
       {audit.failedRuleCount !== null && audit.failedRuleCount > 0 && !observation?.violations.length ? <p>Detailed examples are unavailable.</p> : null}
     </div>
     <div className="mt-4 divide-y divide-zinc-200 border-t border-zinc-200">

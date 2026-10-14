@@ -105,6 +105,23 @@ export const cmpPreferencesEvidenceSchema = z.object({
 });
 export type CmpPreferencesEvidence = z.infer<typeof cmpPreferencesEvidenceSchema>;
 
+/** Passive facts captured by the required consent-proof visit. This is not an
+ * Options action, a complete preference inventory, or a product-capability test. */
+export const cmpBasicEvidenceSchema = z.object({
+  contractVersion: z.literal("certscore.cmp-basic-evidence.v1"),
+  sourceLane: z.literal("consent_proof"),
+  scanId: z.string().min(1).max(160), targetUrl: z.string().url().max(2000),
+  documentUrl: z.string().url().max(2000), documentToken: z.string().min(1).max(160),
+  capturedAtMs: z.number().finite().nonnegative(),
+  provider: z.string().min(1).max(120),
+  controls: cmpPreferencesEvidenceSchema.innerType().shape.controls,
+  privacyLinks: cmpPreferencesEvidenceSchema.innerType().shape.privacyLinks,
+  declarations: cmpPreferencesEvidenceSchema.innerType().shape.declarations,
+  serviceNames: z.array(z.string().min(1).max(240)).max(100),
+  limitations: z.array(z.string().min(1).max(120)).max(8),
+}).strict();
+export type CmpBasicEvidence = z.infer<typeof cmpBasicEvidenceSchema>;
+
 export const cmpAuditRowSchema = z.object({
     id: z.union([cmpAuditCriterionSchema, z.literal("implementation"), z.literal("prominence")]),
     status: z.enum(["observed", "not_observed", "review", "not_assessed", "partially_assessed", "feature_not_supported", "incomplete", "not_applicable"]),

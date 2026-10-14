@@ -231,3 +231,19 @@ test("executive copy uses the projected accessibility group without adding unpro
   assert.match(copy, /automated accessibility findings/);
   assert.doesNotMatch(copy, /4 accessibility issues|critical|high-impact|site-wide breakdown|narrow review|visitor choice/i);
 });
+
+test("retained main-page positives show limited scope consistently in the report and shared evidence", () => {
+  const projection=accessibilityProjectionFixture(); const observation=projection.observation;
+  observation.violations=[observation.violations.find(row=>row.ruleId==="button-name")!];
+  observation.violations[0]!.representativeNodes.forEach(node=>{node.mainDocumentBound=true;});
+  observation.rulesEvaluated=["button-name"];observation.status="limited";
+  observation.limitations=["child_frames_changed_main_document_retained"];
+  observation.frameCoverage={version:"stable_main_document_evidence.v1",resultScope:"positive_findings_only",documentToken:observation.documentToken!,engineRunCount:1,engineRuleCount:62,changedChildFrameCount:1,excludedNodeCount:5};
+  const audit=projectAccessibilityAuditSummary(projection)!;
+  const html=renderToStaticMarkup(<AccessibilityEvidence audit={audit} observation={observation}/>);
+  assert.match(html,/62 rules run/);assert.match(html,/Main-page findings retained/);assert.doesNotMatch(html,/No failures detected/);
+  const report=structuredClone(SHADOW_REPORT);report.scan.id=observation.scanId;report.accessibilityAudit=audit;report.accessibilityEvidence=observation;
+  const exported=buildDetailedEvidenceExport(report);
+  assert.equal(report.accessibilityAudit?.evidenceScope,"stable_main_document_positive_findings");
+  assert.match(exported.detailedEvidence.sections.find(row=>row.id==="accessibility")!.recap,/Main page only/);
+});

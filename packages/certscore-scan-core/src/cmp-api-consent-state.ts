@@ -1,6 +1,6 @@
 import type { Frame, Page } from "playwright";
 
-export type CmpApiConsentProvider = "termly" | "transcend" | "borlabs";
+export type CmpApiConsentProvider = "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie";
 
 export type CmpApiConsentSnapshot = {
   canonicalState: string;
@@ -15,6 +15,98 @@ export async function readCmpApiConsentSnapshot(
   provider: CmpApiConsentProvider,
 ): Promise<CmpApiConsentSnapshot | undefined> {
   return scope.evaluate(async ({ provider }) => {
+    if (provider === "osano" || provider === "hubspot") {
+      type Tracker = { sequence: number; state?: string; decision?: "granted" | "denied" | "mixed"; observedAtEpochMs?: number };
+      const target = window as unknown as {
+        __tcfapi?: unknown;
+        Osano?: { cm?: { getConsent?: () => unknown; addEventListener?: (event: string, callback: (data: unknown) => void) => void } };
+        _hsp?: { push: (command: [string, (data: unknown) => void]) => unknown };
+        __certscoreDocumentedConsentEvents?: Partial<Record<"osano" | "hubspot", Tracker>>;
+      };
+      const categoryNames = provider === "osano" ? ["ANALYTICS", "MARKETING", "PERSONALIZATION"] : ["analytics", "advertisement", "functionality"];
+      const decoder = { decode(raw: unknown) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+        const values = raw as Record<string, unknown>;
+        const allowed = provider === "osano" ? [...categoryNames, "ESSENTIAL", "OPT-OUT", "STORAGE"] : categoryNames;
+        if (Object.keys(values).length > allowed.length || Object.keys(values).some(key => !allowed.includes(key))) return undefined;
+        if (provider === "osano" && (values.ESSENTIAL !== "ACCEPT" || allowed.some(key => values[key] !== "ACCEPT" && values[key] !== "DENY"))) return undefined;
+        if (categoryNames.some(key => provider === "osano" ? !["ACCEPT", "DENY"].includes(values[key] as string) : typeof values[key] !== "boolean")) return undefined;
+        const entries = categoryNames.map(key => [key, provider === "osano" ? values[key] === "ACCEPT" : values[key] === true] as const);
+        const decision = entries.every(([, value]) => value) ? "granted" as const : entries.every(([, value]) => !value) ? "denied" as const : "mixed" as const;
+        // IAB STORAGE/OPT-OUT are separate scopes, not all-purpose consent. Keep
+        // their typed values in the state hash without treating defaults as votes.
+        return { canonicalState: JSON.stringify({ entries, ...(provider === "osano" ? { storage: values.STORAGE ?? null, optOut: values["OPT-OUT"] ?? null } : {}) }), decision };
+      } };
+      // This recipe confirms the non-TCF category scope. A TCF-enabled Osano
+      // visit also needs separately verified IAB purposes; do not infer them.
+      if (provider === "osano" && typeof target.__tcfapi === "function") return undefined;
+      if (provider === "osano" && (typeof target.Osano?.cm?.getConsent !== "function" || typeof target.Osano.cm.addEventListener !== "function")) return undefined;
+      // HubSpot documents this read-only queue initialization before its
+      // tracking script loads. Queue the listener before dispatch, rather than
+      // first discovering an API after the visitor action has already happened.
+      if (provider === "hubspot") target._hsp ??= [] as Array<[string, (data: unknown) => void]>;
+      if (provider === "hubspot" && typeof target._hsp?.push !== "function") return undefined;
+      if (!target.__certscoreDocumentedConsentEvents) Object.defineProperty(target, "__certscoreDocumentedConsentEvents", { value: {}, enumerable: false });
+      let tracker = target.__certscoreDocumentedConsentEvents![provider];
+      if (!tracker) {
+        tracker = { sequence: 0 }; target.__certscoreDocumentedConsentEvents![provider] = tracker;
+        const handlers = { listener(data: unknown) {
+          const raw = provider === "hubspot" && data && typeof data === "object" ? (data as { categories?: unknown }).categories : data;
+          const state = decoder.decode(raw);
+          // Invalid subsequent events invalidate earlier evidence rather than
+          // leaving a stale complete decision eligible for an action witness.
+          tracker!.sequence += 1; tracker!.observedAtEpochMs = Date.now();
+          tracker!.state = state?.canonicalState; tracker!.decision = state?.decision;
+        } };
+        if (provider === "osano") target.Osano!.cm!.addEventListener!("osano-cm-consent-saved", handlers.listener);
+        else target._hsp!.push(["addPrivacyConsentListener", handlers.listener]);
+      }
+      if (provider === "osano") {
+        const live = decoder.decode(target.Osano!.cm!.getConsent!());
+        if (!live || (tracker.sequence > 0 && tracker.state !== live.canonicalState)) return undefined;
+        return { ...live, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs };
+      }
+      return { canonicalState: tracker.state ?? "unregistered", decision: tracker.decision ?? "unknown" as const, eventSequence: tracker.sequence, eventObservedAtEpochMs: tracker.observedAtEpochMs };
+    }
+    if (provider === "drupal_eu_cookie") {
+      type Config = { method?: string; cookie_name?: string; cookie_value_disagreed?: string; cookie_value_agreed?: string; cookie_value_agreed_show_thank_you?: string;
+        cookie_categories?: string[]; cookie_categories_details?: Record<string, { id?: string; checkbox_default_state?: string }> };
+      const target = window as unknown as {
+        drupalSettings?: { eu_cookie_compliance?: Config };
+        Drupal?: { eu_cookie_compliance?: { getCookieStatus?: () => unknown; getAcceptedCategories?: () => unknown } };
+        __certscoreReadPostAcceptWrites?: () => Array<{ storageType: string; name: string; value?: string; sequence: number; observedAtEpochMs: number }>;
+        __certscoreReadPostRefusalWrites?: () => Array<{ storageType: string; name: string; value?: string; sequence: number; observedAtEpochMs: number }>;
+      };
+      const config = target.drupalSettings?.eu_cookie_compliance, api = target.Drupal?.eu_cookie_compliance;
+      if (!config || !["opt_in", "categories"].includes(config.method ?? "") || typeof api?.getCookieStatus !== "function") return undefined;
+      const key = config.cookie_name || "cookie-agreed";
+      if (!/^[A-Za-z0-9_-]{1,160}$/.test(key)) return undefined;
+      const status = api.getCookieStatus();
+      const denied = config.cookie_value_disagreed || "0", accepted = [config.cookie_value_agreed_show_thank_you || "1", config.cookie_value_agreed || "2"];
+      if (new Set([denied, ...accepted]).size !== 3 || [denied, ...accepted].some(value => typeof value !== "string" || value.length > 32)) return undefined;
+      const statusText = status == null ? null : String(status);
+      let decision: "granted" | "denied" | "mixed" | "unknown" = statusText === denied ? "denied" : accepted.includes(statusText ?? "") ? "granted" : "unknown";
+      let categories: Array<[string, boolean]> | undefined;
+      if (config.method === "categories") {
+        const configured = config.cookie_categories, details = config.cookie_categories_details;
+        if (!Array.isArray(configured) || !configured.length || configured.length > 96 || new Set(configured).size !== configured.length ||
+          configured.some(id => typeof id !== "string" || !/^[a-z0-9_-]{1,100}$/i.test(id) || details?.[id]?.id !== id) ||
+          !details || Object.keys(details).length !== configured.length || typeof api.getAcceptedCategories !== "function") return undefined;
+        const selected = api.getAcceptedCategories();
+        if (!Array.isArray(selected) || selected.length > configured.length || new Set(selected).size !== selected.length || selected.some(id => !configured.includes(id))) return undefined;
+        const optional = configured.filter(id => details[id]!.checkbox_default_state !== "required");
+        if (!optional.length) return undefined;
+        categories = optional.sort().map(id => [id, selected.includes(id)]);
+        if (decision !== "unknown") {
+          const categoryDecision = categories.every(([, value]) => value) ? "granted" : categories.every(([, value]) => !value) ? "denied" : "mixed";
+          decision = categoryDecision === decision ? decision : "mixed";
+        }
+      }
+      const writes = (target.__certscoreReadPostAcceptWrites ?? target.__certscoreReadPostRefusalWrites)?.() ?? [];
+      const witness = writes.slice(-96).reverse().find(write => write.storageType === "cookie" && write.name === key && write.value === statusText);
+      return { canonicalState: JSON.stringify({ method: config.method, status: statusText, categories }), decision,
+        eventSequence: witness?.sequence ?? 0, eventObservedAtEpochMs: witness?.observedAtEpochMs };
+    }
     if (provider === "borlabs") {
       const target = window as unknown as {
         BorlabsCookie?: { Consents?: { hasConsent?: (id: string, group: string) => boolean } };

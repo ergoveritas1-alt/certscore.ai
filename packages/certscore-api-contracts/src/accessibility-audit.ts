@@ -6,6 +6,7 @@ export const apiAccessibilityAuditSummarySchema = z.object({
   engineVersion: z.string().nullable(), durationMs: z.number().int().nonnegative().nullable(),
   failedRuleCount: z.number().int().nonnegative().nullable(), affectedNodeCount: z.number().int().nonnegative().nullable(),
   reviewRuleCount: z.number().int().nonnegative().nullable(),
+  evidenceScope: z.literal("stable_main_document_positive_findings").optional(),
 }).strict();
 
 export type ApiAccessibilityAuditSummary = z.infer<typeof apiAccessibilityAuditSummarySchema>;

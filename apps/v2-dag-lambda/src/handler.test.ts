@@ -5031,3 +5031,17 @@ test("CMP worker bounds a stalled artifact chain and cannot publish a second rep
   assert.equal(publications, 0);
   assert.ok(Date.now() - started < 1000);
 });
+
+test("passive CMP basics belong exclusively to the consent-proof lane", () => {
+  const basic = {contractVersion:"certscore.cmp-basic-evidence.v1" as const,sourceLane:"consent_proof" as const,scanId:"lane-fixture",
+    targetUrl:"https://example.com/",documentUrl:"https://example.com/",documentToken:"consent-loader",capturedAtMs:100,provider:"OneTrust",
+    controls:[],privacyLinks:[],declarations:[],serviceNames:[],limitations:["passive_first_layer_only"]};
+  const runtime=canonicalBundleFixture("lane-fixture",{cmpBasicEvidence:{...basic,documentToken:"runtime-loader"},scanLaneRuns:[laneRunFixture("runtime_evidence","runtime")]});
+  runtime.runtimeCoverage = {coverageStatus:"usable",fallbackModesUsed:[],limitationKeys:[],notes:[],silentEmpty:false,
+    observationCounts:{cookieEvents:0,cookiesBeforeConsent:0,networkEvents:0,normalizedVendors:0,observedJourneys:0,thirdPartyRequests:0}};
+  const policy=canonicalBundleFixture("lane-fixture",{cmpBasicEvidence:{...basic,documentToken:"policy-loader"},scanLaneRuns:[laneRunFixture("policy_evidence","policy")]});
+  const consent=canonicalBundleFixture("lane-fixture",{cmpBasicEvidence:basic,scanLaneRuns:[laneRunFixture("consent_proof","consent")]});
+  assert.deepEqual(mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:"lane-fixture",artifactRoot:"/tmp/lane-fixture",consentProof:consent,runtimeEvidence:runtime,policyEvidence:policy}).cmpBasicEvidence,basic);
+  delete consent.cmpBasicEvidence;
+  assert.equal(mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:"lane-fixture",artifactRoot:"/tmp/lane-fixture",consentProof:consent,runtimeEvidence:runtime,policyEvidence:policy}).cmpBasicEvidence,undefined);
+});

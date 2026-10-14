@@ -1494,7 +1494,8 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
         remainingChars: MAX_POLICY_SURFACE_TEXT_ARTIFACT_TOTAL_CHARS,
       },
     });
-    const observations = recovered.observations.map((observation) => ({
+    const recoveredFacets = [...recovered.observations, ...privacyAliasesForCombinedPrivacyCookieSurfaces(recovered.observations)];
+    const observations = recoveredFacets.map((observation) => ({
       ...observation,
       evidenceRefs: input.evidenceRef
         ? uniqueEvidenceRefs([...(observation.evidenceRefs ?? []), input.evidenceRef])
@@ -1557,7 +1558,7 @@ function privacyAliasesForCombinedPrivacyCookieSurfaces(
     .map((observation) => observation.normalizedUrl ?? observation.url)
     .filter(Boolean));
 
-  return observations
+  const privacyAliases = observations
     .filter((observation) =>
       observation.surfaceType === "cookie_policy" &&
       combinedPrivacyCookieSurfaceText(observation) &&
@@ -1574,6 +1575,18 @@ function privacyAliasesForCombinedPrivacyCookieSurfaces(
         "combined_privacy_cookie_surface",
       ]).slice(0, 16),
     }));
+  // One canonical combined document supplies two surface facets, with one fetch
+  // and one analysis. Keep the cookie facet without repeating paid extraction.
+  const fetchedCookieUrls = new Set(observations.filter(row => row.surfaceType === "cookie_policy" && row.status === "fetched").map(row => row.normalizedUrl ?? row.url));
+  const cookieAliases = observations.filter(row => row.surfaceType === "privacy_policy" && row.status === "fetched" &&
+    row.classifierReasonCodes?.includes("variant_combined_privacy_cookie_surface") && !fetchedCookieUrls.has(row.normalizedUrl ?? row.url))
+    .map(row => ({ ...row, observationId: `${row.observationId}_cookie_facet`, surfaceType: "cookie_policy" as const,
+      // Shared document provenance, separate surface semantics: GDPR topics
+      // remain exclusively on the privacy facet, never duplicated as cookie facts.
+      article13DisclosureSignals: [], discardedArticle13DisclosureSignals: [], gdprTransparencyTopicCandidates: [],
+      retainedArticle13SectionEvidence: [], gdprTransparencyTopicCoverageDiagnostics: [],
+    }));
+  return [...privacyAliases, ...cookieAliases];
 }
 
 function combinedPrivacyCookieSurfaceText(observation: PolicySurfaceObservation) {
@@ -2308,11 +2321,15 @@ async function processPolicyCandidate({
         sameOrigin: sameOrigin(input.normalizedUrl, fetchedFinalUrl),
         fetchable: true,
       };
+  // Classify the privacy facet before topic extraction, rather than adding a
+  // display-only privacy alias to a document analysed solely as a cookie policy.
+  const combinedPrivacyFacet = effectiveCandidate.deterministicSurfaceType === "cookie_policy" && effectiveCandidate.deterministicClassifierReasonCodes.includes("variant_combined_privacy_cookie_surface");
+  effectiveCandidate = privacyIndexPrivacyChildCandidate(effectiveCandidate) ?? effectiveCandidate;
   let fetchedHtml = fetched.html ?? fetched.text;
   const secondaryCandidateHtmlInputs = [fetchedHtml];
   let title = titleFromHtml(fetchedHtml);
   let explicitPrimaryPolicyIndex = false;
-  if (!boundedAfterSoftBudget && !boundedSameOriginSupplement &&
+  if (!combinedPrivacyFacet && !boundedAfterSoftBudget && !boundedSameOriginSupplement &&
       effectiveCandidate.deterministicSurfaceType === "privacy_policy") {
     const earlyChildren = highValueSecondaryCandidatesFromPolicyPage(
       effectiveCandidate.normalizedUrl,
@@ -2709,7 +2726,9 @@ async function processPolicyCandidate({
     indexCandidate: effectiveCandidate,
     indexTitle: title,
     indexText: analysisVisibleText,
-    candidates: boundedAfterSoftBudget
+    // Reuse the combined document analysis, without adding index-link model
+    // selection or child retrieval previously unavailable to its cookie facet.
+    candidates: boundedAfterSoftBudget || combinedPrivacyFacet
       ? []
       : highValueSecondaryCandidatesFromPolicyPage(
           effectiveCandidate.normalizedUrl,
@@ -5207,7 +5226,7 @@ function isExactPolicyDocumentCandidate(candidate: PolicySurfaceCandidate): bool
     linkText,
     url: candidate.normalizedUrl,
   });
-  return direct.surfaceType === "privacy_policy" &&
+  return (direct.surfaceType === "privacy_policy" || direct.variant === "combined_privacy_cookie_surface") &&
     direct.matchStrength === "direct" &&
     direct.confidence >= 0.72;
 }
@@ -6744,7 +6763,7 @@ export function buildGdprTransparencyTopicCoverageDiagnostics(input: {
 
   return GDPR_TRANSPARENCY_COVERAGE_TOPICS.map((topic) => {
     const evidenceRows = input.sectionEvidence.filter((evidence) => evidence.coverageArea === topic);
-    const evidence = evidenceRows.find((candidate) =>
+    const evidence = evidenceRows.find(candidate => candidate.signalObserved === "observed" && candidate.sectionExtractionState === "complete" && !candidate.extractionLimitation && candidate.selectedEvidenceStrength === "strong" && /^[a-f0-9]{64}$/.test(candidate.evidenceTextSha256 ?? "") && /^[a-f0-9]{64}$/.test(candidate.sourceDocumentTextSha256 ?? "")) ?? evidenceRows.find((candidate) =>
       candidate.signalObserved === "observed" &&
       /^[a-f0-9]{64}$/.test(candidate.evidenceTextSha256 ?? "") &&
       /^[a-f0-9]{64}$/.test(candidate.sourceDocumentTextSha256 ?? "")
@@ -6753,9 +6772,16 @@ export function buildGdprTransparencyTopicCoverageDiagnostics(input: {
       evidence?.signalObserved === "observed" &&
       /^[a-f0-9]{64}$/.test(evidence.evidenceTextSha256 ?? "") &&
       /^[a-f0-9]{64}$/.test(evidence.sourceDocumentTextSha256 ?? "");
+    // Positive evidence is scoped to the selected complete section. An unrelated
+    // bounded section cannot veto it; whole-document absence coverage is separate.
+    const completeObservedSection = evidenceBoundObserved &&
+      evidence?.sectionExtractionState === "complete" && !evidence.extractionLimitation &&
+      evidence.selectedEvidenceStrength === "strong" && targetOwned &&
+      input.documentRole === "policy_document" && input.documentTextCoverage?.status === "complete";
     const reasonCodes = uniqueStrings([
       evidenceBoundObserved ? "row_specific_disclosure_observed" : null,
       evidenceBoundObserved ? "evidence_hash_binding_verified" : null,
+      completeObservedSection ? "complete_selected_section_retained" : null,
       evidence?.signalObserved === "observed" && !evidenceBoundObserved
         ? "observed_candidate_missing_evidence_hash_binding"
         : null,
@@ -6775,12 +6801,12 @@ export function buildGdprTransparencyTopicCoverageDiagnostics(input: {
     ].filter((value): value is string => value !== null)).slice(0, 16);
 
     return {
-      contractVersion: "gdpr_transparency_topic_coverage_diagnostic.v1" as const,
+      contractVersion: "gdpr_transparency_topic_coverage_diagnostic.v2" as const,
       topic,
       evaluationState: evidenceBoundObserved ? "observed" as const : "unknown" as const,
-      coverageState: documentCoverageComplete ? "complete" as const : "limited" as const,
+      coverageState: documentCoverageComplete || completeObservedSection ? "complete" as const : "limited" as const,
       documentRetentionState: input.documentTextCoverage?.status ?? "unavailable" as const,
-      sectionExtractionState: input.contentCoverage.status,
+      sectionExtractionState: evidence?.sectionExtractionState ?? input.contentCoverage.status,
       evidenceSectionSha256: evidenceBoundObserved ? evidence?.evidenceTextSha256 : undefined,
       sourceDocumentSha256: evidenceBoundObserved ? evidence?.sourceDocumentTextSha256 : undefined,
       sectionExtractionMethod: evidenceBoundObserved ? evidence?.sectionExtractionMethod : undefined,
@@ -9635,6 +9661,7 @@ export function retainedArticle13SectionEvidenceFromSections(
       evidenceTextSha256: sha256Text(excerpt.slice(0, 1_200)),
       sourceCharStart: selected.charStart,
       sourceCharEnd: selected.charEnd,
+      sectionExtractionState: selected.extractionState ?? "malformed",
       evidenceSource: "deterministic" as const,
       selectedEvidenceStrength: signalObserved === "observed" ? "strong" as const : signalObserved === "partial" ? "partial" as const : "limited" as const,
       signalObserved,

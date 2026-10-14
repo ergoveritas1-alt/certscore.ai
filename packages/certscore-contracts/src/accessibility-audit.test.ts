@@ -44,3 +44,20 @@ test("example sampling metadata is independent of audit coverage and bound to re
     assert.equal(accessibilityAuditObservationSchema.safeParse({ ...audit, exampleCoverage: { ...audit.exampleCoverage, ...change } }).success, false);
   }
 });
+
+test("child-frame churn permits only verified main-document positive findings", () => {
+  const audit = accessibilityAuditFixture();
+  audit.status = "limited"; audit.limitations = ["child_frames_changed_main_document_retained"];
+  audit.reviewItems = []; audit.violations = [audit.violations[0]!];
+  audit.violations[0]!.ruleId = "button-name";
+  audit.violations[0]!.representativeNodes.forEach(node => { node.mainDocumentBound = true; });
+  audit.rulesEvaluated = ["button-name"];
+  audit.frameCoverage = { version: "stable_main_document_evidence.v1", resultScope: "positive_findings_only", documentToken: audit.documentToken!,
+    engineRunCount: 1, engineRuleCount: 62, changedChildFrameCount: 1, excludedNodeCount: 12 };
+  assert.equal(accessibilityAuditObservationSchema.safeParse(audit).success, true);
+  for (const patch of [{status:"completed"}, {documentToken:"other"}, {rulesEvaluated:["button-name","html-has-lang"]}, {violations:[]},
+    {frameCoverage:{...audit.frameCoverage,engineRunCount:2}}, {violations:[{...audit.violations[0],ruleId:"html-has-lang"}],rulesEvaluated:["html-has-lang"]},
+    {violations:[{...audit.violations[0],representativeNodes:audit.violations[0]!.representativeNodes.map(node => ({...node,mainDocumentBound:undefined}))}]}]) {
+    assert.equal(accessibilityAuditObservationSchema.safeParse({...audit,...patch}).success, false, JSON.stringify(patch));
+  }
+});

@@ -568,6 +568,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         scanStartedAtMs: startedAtMs,
         internalBudgetMs: scanProfile.internalBudgetMs,
         accessibilityScanId: accessibilityRequired ? scanId : undefined,
+        cmpBasicScanId: evidenceLane === "consent_proof" ? scanId : undefined,
         onPassiveCaptureComplete: accessibilityRequired ? completePassiveCapture : undefined,
         artifactWriter,
         captureScope: evidenceLane === "consent_proof"
@@ -1363,6 +1364,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   });
   const bundle = compactCanonicalEvidenceBundleForRetention(canonicalEvidenceBundleSchema.parse({
     accessibilityAudit: preConsentResult.accessibilityAudit,
+    cmpBasicEvidence: preConsentResult.cmpBasicEvidence,
     resourceInventoryContext,
     runtimeEvidenceGraphs: preConsentResult.runtimeEvidenceGraph ? [preConsentResult.runtimeEvidenceGraph] : undefined,
     scanId,

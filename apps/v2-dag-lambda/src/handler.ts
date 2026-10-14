@@ -4434,6 +4434,7 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     consentActionAttempts: consentProof.consentActionAttempts,
     consentFlowComparisons: consentProof.consentFlowComparisons,
     cmpRuntimeObservations: consentProof.cmpRuntimeObservations,
+    cmpBasicEvidence: consentProof.cmpBasicEvidence,
     policySurfaceObservations,
     siteIntegrityObservation: runtimeEvidence.siteIntegrityObservation,
     transportSecurityObservations,

@@ -630,3 +630,41 @@ test("v3 basic checkpoints retain verified page facts when CMP readiness cannot 
   assert.equal(projected.rows.find(row => row.id === "services")!.status, "Not assessed");
   assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
 });
+
+test("required-lane basics survive a cancelled optional inspection through persisted concern projection", () => {
+  const input = bundle(); delete input.cmpPreferencesEvidence;
+  input.cmpPreferenceLaneOutcome = { status: "limited", startedAt: input.startedAt, completedAt: "2026-10-13T00:00:12.000Z", limitationCode: "preference_inspection_cancelled" };
+  input.completedAt = "2026-10-13T00:00:12.000Z";
+  input.domSnapshots = [{ url: input.url, capturedAtMs: 100, consentStateAtTime: "pre_consent", documentIdentity: { token: "basic-loader" } }] as CanonicalEvidenceBundle["domSnapshots"];
+  input.cmpBasicEvidence = {
+    contractVersion: "certscore.cmp-basic-evidence.v1", sourceLane: "consent_proof", scanId: input.scanId, targetUrl: input.url,
+    documentUrl: input.url, documentToken: "basic-loader", capturedAtMs: 100,
+    provider: "Borlabs Cookie", controls: [{ label: "Analytics", kind: "category", checked: false, enabled: true }],
+    privacyLinks: [{ url: `${input.url}privacy`, hitTargetBeforeAction: true }],
+    declarations: [{ name: "_ga", purpose: "Analytics", duration: "2 years", source: "cmp_api_inventory" }],
+    serviceNames: ["Google Analytics"], limitations: ["passive_first_layer_only", "declaration_inventory_not_complete"],
+  };
+  input.cookieEvents = [{ cookieName: "_ga" }, { cookieName: "unmatched" }] as CanonicalEvidenceBundle["cookieEvents"];
+  const audit = deriveCmpAuditAssessment(input)!;
+  for (const id of ["categories", "services", "privacy_access", "cookie_information"]) {
+    const row = audit.rows.find(row => row.id === id)!;
+    assert.equal(row.status, "observed", id); assert.equal(row.limitation, undefined); assert.ok(row.evidenceRefs.includes("CanonicalEvidenceBundle.json#cmpBasicEvidence"));
+  }
+  assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.status, "partially_assessed");
+  assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.cookieComparison?.declarationInventoryComplete, false);
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const projected = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  assert.equal(projected.rows.find(row => row.id === "services")?.status, "Observed");
+  const historical = structuredClone(input); delete historical.cmpBasicEvidence;
+  assert.equal(deriveCmpAuditAssessment(historical)?.rows.find(row => row.id === "services")?.status, "incomplete");
+  for (const patch of [{scanId:"foreign"}, {documentToken:"old-loader"}, {targetUrl:"https://foreign.example/"}, {sourceLane:"runtime_evidence"}, {capturedAtMs:13000}]) {
+    const drifted = structuredClone(input); Object.assign(drifted.cmpBasicEvidence!, patch);
+    assert.equal(deriveCmpAuditAssessment(drifted)?.rows.find(row => row.id === "services")?.status, "incomplete");
+  }
+  const stale = structuredClone(input); stale.domSnapshots.push({...stale.domSnapshots[0]!,capturedAtMs:200,documentIdentity:{source:"cdp_loader_id",token:"later-loader"}});
+  assert.equal(deriveCmpAuditAssessment(stale)?.rows.find(row=>row.id==="services")?.status,"incomplete");
+  const deeper = bundle(); Object.assign(deeper, {completedAt:input.completedAt,domSnapshots:input.domSnapshots, cmpBasicEvidence:input.cmpBasicEvidence});
+  assert.deepEqual(deriveCmpAuditAssessment(deeper)?.rows.find(row => row.id === "categories")?.inventory,
+    {categories:[{name:"Analytics",checked:false}]});
+});

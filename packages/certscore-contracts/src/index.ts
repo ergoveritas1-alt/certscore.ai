@@ -1,5 +1,5 @@
 export * from "./cookie-disclosure-column";
-import { cmpPreferencesEvidenceSchema, type CmpPreferencesEvidence } from "./cmp-audit-evidence";
+import { cmpBasicEvidenceSchema, type CmpBasicEvidence, cmpPreferencesEvidenceSchema, type CmpPreferencesEvidence } from "./cmp-audit-evidence";
 export * from "./cmp-audit-evidence";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
 export * from "./collection-surface-snapshot";
@@ -1802,7 +1802,7 @@ export const policyDocumentTextCoverageSchema = z.object({
 });
 
 export const gdprTransparencyTopicCoverageDiagnosticSchema = z.object({
-  contractVersion: z.literal("gdpr_transparency_topic_coverage_diagnostic.v1"),
+  contractVersion: z.enum(["gdpr_transparency_topic_coverage_diagnostic.v1", "gdpr_transparency_topic_coverage_diagnostic.v2"]),
   topic: z.enum([
     "controller_contact",
     "processing_purposes",
@@ -2133,6 +2133,7 @@ export const policySurfaceObservationSchema = z.object({
     evidenceTextSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     sourceCharStart: z.number().int().nonnegative().optional(),
     sourceCharEnd: z.number().int().nonnegative().optional(),
+    sectionExtractionState: z.enum(["complete", "truncated", "malformed"]).optional(),
     evidenceSource: z.enum(["deterministic", "nano", "deterministic_plus_nano"]).default("deterministic"),
     selectedEvidenceStrength: z.enum(["strong", "partial", "limited"]).default("partial"),
     signalObserved: z.enum(["observed", "partial", "not_confirmed"]).default("partial"),
@@ -3489,12 +3490,13 @@ const canonicalEvidenceBundleBaseSchema: z.ZodType<z.output<typeof canonicalEvid
 });
 
 // Keep the large legacy contract named, preserving defaults and input types while adding a bounded extension.
-type CmpBundleExtension = { cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
+type CmpBundleExtension = { cmpBasicEvidence?: CmpBasicEvidence; cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
 export const canonicalEvidenceBundleSchema: z.ZodType<
   z.output<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
   z.ZodTypeDef,
   z.input<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] }
 > = withRuntimeGraphCompatibility(canonicalEvidenceBundleBaseSchema.and(z.object({
+  cmpBasicEvidence: cmpBasicEvidenceSchema.optional(),
   cmpPreferencesEvidence: cmpPreferencesEvidenceSchema.optional(),
   cmpPreferenceLaneOutcome: z.object({ status: z.enum(["joined", "limited"]), startedAt: z.string().datetime(), completedAt: z.string().datetime(), limitationCode: z.enum(["preference_budget_exhausted", "preference_worker_failed", "preference_inspection_cancelled"]).optional() }).optional(),
   runtimeEvidenceGraphs: z.array(canonicalRuntimeEvidenceGraphSchema).max(RUNTIME_EVIDENCE_GRAPH_LIMITS.graphs).optional(),

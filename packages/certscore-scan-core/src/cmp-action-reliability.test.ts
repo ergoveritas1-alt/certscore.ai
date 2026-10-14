@@ -14,11 +14,16 @@ type QualifiedCmp = {
   cookieName: string;
   reject: boolean;
   variant?: string;
-  apiProvider?: "termly" | "transcend";
+  apiProvider?: "termly" | "transcend" | "osano" | "hubspot" | "drupal_eu_cookie";
   runtimeScriptPath?: string;
 };
 
 const QUALIFIED_CMPS: QualifiedCmp[] = [
+  { accept:true,reject:true,canonicalName:"Osano",cookieName:"osano_consentmanager",apiProvider:"osano",
+    banner:'<div class="osano-cm-window">We use cookies<button class="osano-cm-accept-all">Accept all</button><button class="osano-cm-deny-all">Reject all</button></div>' },
+  { accept:true,reject:true,canonicalName:"Drupal EU Cookie Compliance module, non-TCF",cookieName:"cookie-agreed",apiProvider:"drupal_eu_cookie",
+    banner:'<div id="sliding-popup">We use cookies<button class="agree-button">Accept all</button><button class="decline-button">Reject all</button></div>' },
+
   {
     accept: true,
     banner: '<div id="cmpbox"><a href="#" class="cmpboxbtn cmpboxbtnno">Reject</a><a href="#" class="cmpboxbtn cmpboxbtnyes">Accept</a></div>',
@@ -48,6 +53,7 @@ const QUALIFIED_CMPS: QualifiedCmp[] = [
     canonicalName: "HubSpot Consent Banner",
     cookieName: "__hs_cookie_cat_pref",
     reject: true,
+    apiProvider: "hubspot",
   },
   {
     accept: true,
@@ -262,6 +268,14 @@ async function withCmpFixture(
           on: (event, callback) => { if (event === "consent") termlyHandlers.push(callback); },
         };
       }
+      const documentedHandlers=[];
+      let documentedState={ANALYTICS:'DENY',MARKETING:'DENY',PERSONALIZATION:'DENY',ESSENTIAL:'ACCEPT','OPT-OUT':'ACCEPT',STORAGE:'DENY'};
+      if(apiProvider==='osano')window.Osano={cm:{getConsent:()=>documentedState,addEventListener:(name,fn)=>documentedHandlers.push(fn)}};
+      if(apiProvider==='hubspot')window._hsp={push:([name,fn])=>documentedHandlers.push(fn)};
+      if(apiProvider==='drupal_eu_cookie'){
+        window.drupalSettings={eu_cookie_compliance:{method:'opt_in'}};
+        window.Drupal={eu_cookie_compliance:{getCookieStatus:()=>document.cookie.split(';').map(x=>x.trim()).find(x=>x.startsWith('cookie-agreed='))?.split('=')[1]??null}};
+      }
       let transcendState = { Essential: true, Functional: false, Analytics: false, Advertising: false };
       let transcendTimestamp = "2026-01-01T00:00:00.000Z";
       if (apiProvider === "transcend") {
@@ -271,7 +285,14 @@ async function withCmpFixture(
         };
       }
       const applyAction = (action) => {
-        if (apiProvider === "termly") {
+        if(apiProvider==='osano'){
+          for(const key of ['ANALYTICS','MARKETING','PERSONALIZATION'])documentedState[key]=action==='accept'?'ACCEPT':'DENY';
+          documentedHandlers.forEach(fn=>fn(documentedState));
+        }else if(apiProvider==='hubspot'){
+          const value=action==='accept';documentedHandlers.forEach(fn=>fn({categories:{analytics:value,advertisement:value,functionality:value}}));
+        }else if(apiProvider==='drupal_eu_cookie'){
+          document.cookie='cookie-agreed='+(action==='accept'?'2':'0')+'; Path=/; SameSite=Lax';
+        }else if (apiProvider === "termly") {
           for (const key of Object.keys(termlyState)) if (key !== "essential") termlyState[key] = action === "accept";
           termlyHandlers.forEach((handler) => handler({ categories: Object.keys(termlyState).filter(key => termlyState[key]), cookies: [] }));
         } else if (apiProvider === "transcend") {
@@ -309,6 +330,8 @@ async function withCmpFixture(
 
 function acceptSelector(canonicalName: string) {
   return {
+    "Drupal EU Cookie Compliance module, non-TCF": ".agree-button",
+    Osano: ".osano-cm-accept-all",
     Consentmanager: "a.cmpboxbtnyes",
     "Cookie Information": ".coi-banner__accept",
     "HubSpot Consent Banner": "#hs-eu-confirmation-button",
@@ -322,6 +345,8 @@ function acceptSelector(canonicalName: string) {
 
 function rejectSelector(canonicalName: string) {
   return {
+    "Drupal EU Cookie Compliance module, non-TCF": ".decline-button",
+    Osano: ".osano-cm-deny-all",
     Consentmanager: "a.cmpboxbtnno",
     "Cookie Information": ".coi-banner__decline",
     "HubSpot Consent Banner": "#hs-eu-decline-button",

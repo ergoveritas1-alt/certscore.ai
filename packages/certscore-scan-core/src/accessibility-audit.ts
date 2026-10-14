@@ -2,13 +2,14 @@ import axe, { type AxeResults, type Result, type NodeResult } from "axe-core";
 import type { Page } from "playwright";
 import {
   ACCESSIBILITY_AUDIT_BUDGET_MS, ACCESSIBILITY_AUDIT_VERSION, ACCESSIBILITY_LIMITS,
+  ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS,
   ACCESSIBILITY_WCAG_TAGS, accessibilityAuditObservationSchema,
   type AccessibilityAuditObservation, type AccessibilityRuleObservation,
 } from "@certscore/contracts";
 
 type Identity = NonNullable<AccessibilityRuleObservation["representativeNodes"][number]["imageLinkIdentity"]>;
-type IdentifiedNode = NodeResult & { imageLinkIdentity?: Identity };
-type CountedRule = Result & { observedNodeCount?: number };
+type IdentifiedNode = NodeResult & { imageLinkIdentity?: Identity; mainDocumentBound?: true };
+type CountedRule = Result & { observedNodeCount?: number; mainDocumentNodeCount?: number; mainDocumentNodes?: NodeResult[] };
 
 function safeText(value: string, max: number) {
   return value.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]")
@@ -43,6 +44,7 @@ function normalizeRule(rule: CountedRule): AccessibilityRuleObservation {
       const expected = Number.parseFloat(String(data?.expectedContrastRatio ?? ""));
       if (Number.isFinite(expected)) colorContrast.requiredContrastRatio = expected;
       return {
+        ...((node as IdentifiedNode).mainDocumentBound ? { mainDocumentBound: true as const } : {}),
         ...((node as IdentifiedNode).imageLinkIdentity ? { imageLinkIdentity: (node as IdentifiedNode).imageLinkIdentity } : {}),
         selectors: node.target.slice(0, ACCESSIBILITY_LIMITS.selectorsPerNode).map(target => Array.isArray(target)
           ? target.slice(0, 8).map(value => safeText(value, 400)) : safeText(target, 400)),
@@ -137,8 +139,9 @@ export async function runAccessibilityAudit(input: {
   let stopped = false;
   const work = async () => {
     const frames = input.page.frames(), frameUrls = frames.map(frame => frame.url()), limitations: string[] = [];
-    let frameNavigated = false;
-    const onNavigation = () => { frameNavigated = true; };
+    let mainNavigated = false;
+    const changedFrames = new Set<import("playwright").Frame>();
+    const onNavigation = (frame: import("playwright").Frame) => { if (frame === input.page.mainFrame()) mainNavigated = true; else changedFrames.add(frame); };
     input.page.on("framenavigated", onNavigation);
     try {
     if (frames.length > 16) limitations.push("frame_limit");
@@ -148,16 +151,29 @@ export async function runAccessibilityAudit(input: {
       catch { if (frame === input.page.mainFrame()) throw new Error("engine_injection_failed"); limitations.push("frame_unavailable"); }
     }
     if (stopped) throw new Error("cancelled");
-    const results = await input.page.evaluate(async ({ tags, exampleLimit }): Promise<AxeResults> => {
+    const results = await input.page.evaluate(async ({ tags, exampleLimit, mainRules }): Promise<AxeResults> => {
       const engine = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<AxeResults> } }).axe;
       const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, resultTypes: ["violations", "incomplete"], preload: false, elementRef: true });
       const identities = new WeakMap<Element, number>();
       let nextId = 0;
+      const frameElements = [...document.querySelectorAll("iframe,frame")].slice(0, 257);
       for (const rule of [...results.violations, ...results.incomplete]) {
         (rule as CountedRule).observedNodeCount = rule.nodes.length;
+        const mainNodes = mainRules.includes(rule.id) && frameElements.length <= 256 ? rule.nodes.filter(node => {
+          const element = node.element;
+          if (!element?.isConnected || element.ownerDocument !== document || element.getRootNode() !== document ||
+              element === document.body || element === document.documentElement || element.shadowRoot ||
+              frameElements.some(frame => frame === element || element.contains(frame))) return false;
+          if ([...node.any, ...node.all, ...node.none].some(check => check.relatedNodes?.some(related =>
+            related.element && related.element.ownerDocument !== document))) return false;
+          (node as IdentifiedNode).mainDocumentBound = true;
+          return true;
+        }) : [];
+        (rule as CountedRule).mainDocumentNodeCount = mainNodes.length;
+        if (mainNodes.length && mainNodes.length !== rule.nodes.length) (rule as CountedRule).mainDocumentNodes = mainNodes.slice(0, exampleLimit);
         rule.nodes = rule.nodes.slice(0, exampleLimit);
         const captureIdentity = results.violations.includes(rule) && ["image-alt", "link-name"].includes(rule.id);
-        for (const node of rule.nodes) {
+        for (const node of new Set([...rule.nodes, ...((rule as CountedRule).mainDocumentNodes ?? [])])) {
           const element = node.element;
           if (captureIdentity && element?.isConnected && element.ownerDocument === document) {
             const link = element.localName === "a" ? element : element.localName === "img" ? element.parentElement : null;
@@ -186,16 +202,30 @@ export async function runAccessibilityAudit(input: {
       // These groups contribute evaluated rule IDs, never element examples.
       for (const rule of [...results.passes, ...results.inapplicable]) rule.nodes = [];
       return results;
-    }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule });
+    }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule, mainRules: [...ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS] as string[] });
     if (results.testEngine.name !== "axe-core" || results.testEngine.version !== axe.version) return unavailable("engine_identity_mismatch");
-    if (input.page.url() !== documentUrl || input.documentIdentity()?.token !== documentToken) return unavailable("document_changed");
+    if (mainNavigated || input.page.url() !== documentUrl || input.documentIdentity()?.token !== documentToken) return unavailable("document_changed");
     const afterFrames = input.page.frames();
-    if (frameNavigated || frames.length !== afterFrames.length || frames.some((frame, i) => frame !== afterFrames[i] || frame.url() !== frameUrls[i])) {
-      return unavailable("frames_changed");
+    const childFramesChanged = changedFrames.size > 0 || frames.length !== afterFrames.length || frames.some((frame, i) => frame !== afterFrames[i] || frame.url() !== frameUrls[i]);
+    const engineRuleCount = new Set([...results.violations, ...results.incomplete, ...results.passes, ...results.inapplicable].map(rule => rule.id)).size;
+    let frameCoverage: AccessibilityAuditObservation["frameCoverage"];
+    if (childFramesChanged) {
+      const originalNodeCount = [...results.violations, ...results.incomplete].reduce((sum, rule) => sum + ((rule as CountedRule).observedNodeCount ?? rule.nodes.length), 0);
+      const retainMain = (rules: Result[]) => rules.flatMap(rule => {
+        const count = (rule as CountedRule).mainDocumentNodeCount ?? 0;
+        const nodes = ((rule as CountedRule).mainDocumentNodes ?? rule.nodes).filter(node => (node as IdentifiedNode).mainDocumentBound === true);
+        return count > 0 && nodes.length ? [{ ...rule, observedNodeCount: count, nodes }] : [];
+      });
+      results.violations = retainMain(results.violations); results.incomplete = retainMain(results.incomplete);
+      if (!results.violations.length && !results.incomplete.length) return unavailable("frames_changed");
+      frameCoverage = { version: "stable_main_document_evidence.v1", resultScope: "positive_findings_only", documentToken, engineRunCount: 1,
+        engineRuleCount, changedChildFrameCount: Math.min(10000, Math.max(1, changedFrames.size, Math.abs(frames.length - afterFrames.length))),
+        excludedNodeCount: originalNodeCount - [...results.violations, ...results.incomplete].reduce((sum, rule) => sum + (rule as CountedRule).observedNodeCount!, 0) };
+      limitations.push("child_frames_changed_main_document_retained");
     }
     if (results.violations.length > ACCESSIBILITY_LIMITS.rules || results.incomplete.length > ACCESSIBILITY_LIMITS.rules) limitations.push("rule_limit");
     if (results.incomplete.length) limitations.push("rules_need_review");
-    const rulesEvaluated = [...new Set([...results.violations, ...results.incomplete, ...results.passes, ...results.inapplicable].map(rule => rule.id))];
+    const rulesEvaluated = [...new Set([...results.violations, ...results.incomplete, ...(frameCoverage ? [] : [...results.passes, ...results.inapplicable])].map(rule => rule.id))];
     if (rulesEvaluated.length > ACCESSIBILITY_LIMITS.rules) return unavailable("rule_limit");
     const observation = {
       contractVersion: ACCESSIBILITY_AUDIT_VERSION, required: true, scanId: input.scanId, sourceLane: "runtime_evidence",
@@ -203,7 +233,7 @@ export async function runAccessibilityAudit(input: {
       configuredTags: [...ACCESSIBILITY_WCAG_TAGS], status: limitations.length ? "limited" : "completed",
       startedAt: new Date(startedAtMs).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - startedAtMs,
       rulesEvaluated, violations: results.violations.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeRule),
-      reviewItems: results.incomplete.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeRule), limitations: [...new Set(limitations)].slice(0, 16),
+      reviewItems: results.incomplete.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeRule), limitations: [...new Set(limitations)].slice(0, 16), ...(frameCoverage ? { frameCoverage } : {}),
     };
     const retained = retainAccessibilityExampleBreadth(observation);
     if (!retained) return unavailable("evidence_size_limit");

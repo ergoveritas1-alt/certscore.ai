@@ -29,7 +29,7 @@ export type KnownCmpActionConfirmation =
   | { kind: "local_storage_equals"; expectedValue: string; key: string }
   | {
       kind: "cmp_api_consent_state_changed";
-      provider: "termly" | "transcend" | "borlabs";
+      provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie";
     }
   | {
       kind: "tcf_purposes_or_cmp_cookie_changed";
@@ -250,6 +250,12 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "eu_cookie_compliance",
     ],
     canonicalName: "Drupal EU Cookie Compliance module, non-TCF",
+    recipeVersion: "v2",
+    acceptControlSelectors: ["#sliding-popup .agree-button"],
+    rejectControlSelectors: ["#sliding-popup .decline-button", "#sliding-popup .eu-cookie-compliance-reject-button"],
+    acceptConfirmation: { kind: "cmp_api_consent_state_changed", provider: "drupal_eu_cookie" },
+    rejectConfirmation: { kind: "cmp_api_consent_state_changed", provider: "drupal_eu_cookie" },
+    interactionDocumentationUrls: ["https://ftp.drupal.org/files/projects/eu_cookie_compliance-8.x-1.24.tar.gz"],
     cookieNames: ["cookie-agreed", "cookie-agreed-version", "cookie-agreed-categories"],
     domains: [],
     domSelectors: [
@@ -776,8 +782,8 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: ["HubSpot Banner", "HubSpot Cookie Banner", "HubSpot Consent Banner"],
     acceptConfirmation: {
-      kind: "cmp_cookie_names_changed",
-      cookieNames: ["__hs_cookie_cat_pref", "__hs_opt_out"],
+      kind: "cmp_api_consent_state_changed",
+      provider: "hubspot",
     },
     acceptControlSelectors: ["#hs-eu-confirmation-button"],
     canonicalName: "HubSpot Consent Banner",
@@ -790,11 +796,11 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     ],
     reopenControlHints: ["cookie settings", "privacy settings"],
     rejectConfirmation: {
-      kind: "cmp_cookie_names_changed",
-      cookieNames: ["__hs_cookie_cat_pref", "__hs_opt_out"],
+      kind: "cmp_api_consent_state_changed",
+      provider: "hubspot",
     },
     rejectControlSelectors: ["#hs-eu-decline-button"],
-    recipeVersion: "v1",
+    recipeVersion: "v2",
     role: "consent management platform",
     standards: ["gpc", "google_consent_mode"],
     storageKeys: ["__hs_cookie_cat_pref", "__hs_opt_out", "__hs_do_not_track"],
@@ -838,8 +844,8 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     aliases: ["Osano CMP"],
     canonicalName: "Osano",
     acceptConfirmation: {
-      kind: "cmp_cookie_changed",
-      cookieName: "osano_consentmanager",
+      kind: "cmp_api_consent_state_changed",
+      provider: "osano",
     },
     acceptControlSelectors: [".osano-cm-accept-all"],
     cookieNames: ["osano_consentmanager", "osano_consentmanager_uuid"],
@@ -852,11 +858,11 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     ],
     reopenControlHints: ["osano", "cookie preferences"],
     rejectConfirmation: {
-      kind: "cmp_cookie_changed",
-      cookieName: "osano_consentmanager",
+      kind: "cmp_api_consent_state_changed",
+      provider: "osano",
     },
     rejectControlSelectors: [".osano-cm-deny-all"],
-    recipeVersion: "v1",
+    recipeVersion: "v2",
     role: "consent management platform",
     standards: ["gpc"],
     urlPatterns: [/osano/i]

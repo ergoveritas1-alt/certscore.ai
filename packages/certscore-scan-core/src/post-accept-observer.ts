@@ -163,7 +163,7 @@ export interface PostAcceptActionRecipe {
       }
     | {
         kind: "cmp_api_consent_state_changed";
-        provider: "termly" | "transcend" | "borlabs";
+        provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie";
       }
     | {
         kind: "canonical_accept_transition";
@@ -2215,7 +2215,7 @@ async function waitForAcceptanceConfirmation(
       const actionBoundEvent = snapshot?.eventObservedAtEpochMs === undefined ||
         snapshot.eventObservedAtEpochMs >= actionDispatchedAtEpochMs;
       if (snapshot?.decision === "granted" && actionBoundEvent && (changed || freshEvent) &&
-        (confirmation.provider !== "borlabs" || (baseline.canonicalState !== undefined && freshEvent))) {
+        (!["borlabs", "osano", "hubspot", "drupal_eu_cookie"].includes(confirmation.provider) || (baseline.canonicalState !== undefined && freshEvent && (confirmation.provider === "borlabs" || snapshot.eventObservedAtEpochMs !== undefined)))) {
         return {
           stateHash: hashValue(snapshot.canonicalState),
           witnessType: "cmp_api_state",

@@ -6,7 +6,7 @@ import { cmpActionRecipeEnabled } from "./cmp-action-recipe-policy.js";
 import type { PostRefusalActionRecipe } from "./post-refusal-observer.js";
 
 export const CANONICAL_POST_REFUSAL_RECIPE_SET_ID =
-  "canonical-consent-control-reject-v25";
+  "canonical-consent-control-reject-v26";
 
 export const CERTSCORE_OWNED_ANALYTICS_REJECT_RECIPE: PostRefusalActionRecipe = {
   artifactVersion: "certscore.post_refusal_action_recipe.v1",
@@ -74,7 +74,9 @@ export function buildPostRefusalCmpActionRecipe(input: {
       input.confirmation.kind === "tcf_purposes_denied_or_cmp_storage_changed"
       ? "v2"
       : "v1";
-  const recipeVersion = baseRecipeVersion === "v4"
+  const recipeVersion = definition.recipeVersion && definition.recipeVersion !== "v1" && input.confirmation.kind === "cmp_api_consent_state_changed" && ["osano", "hubspot", "drupal_eu_cookie"].includes(input.confirmation.provider)
+    ? definition.recipeVersion
+    : baseRecipeVersion === "v4"
     ? baseRecipeVersion
     : controlSelectors.length > 1
       ? "v3"

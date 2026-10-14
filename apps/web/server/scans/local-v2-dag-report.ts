@@ -3186,7 +3186,7 @@ export function summarizePolicySurfaces(
     const topicDiagnostics = completeOwnedPolicyDocuments.flatMap((document) =>
       (document.gdprTransparencyTopicCoverageDiagnostics ?? []).filter((diagnostic) =>
         diagnostic.topic === topic &&
-        diagnostic.contractVersion === "gdpr_transparency_topic_coverage_diagnostic.v1"
+        ["gdpr_transparency_topic_coverage_diagnostic.v1", "gdpr_transparency_topic_coverage_diagnostic.v2"].includes(diagnostic.contractVersion)
       )
     );
     const topicDiagnosticCoverageSufficient =

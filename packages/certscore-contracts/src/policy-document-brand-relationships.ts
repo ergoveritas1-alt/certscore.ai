@@ -21,6 +21,18 @@ export type CanonicalPolicyDocumentBrandRelationship = {
 export const CANONICAL_POLICY_DOCUMENT_BRAND_RELATIONSHIPS:
   readonly CanonicalPolicyDocumentBrandRelationship[] = [
     {
+      targetDomain: "arstechnica.com",
+      policyDomains: ["condenast.com"],
+      ownerEntity: "Condé Nast",
+      reasonCode: "canonical_relationship_ars_technica_conde_nast_v1",
+      validFrom: "2026-10-14",
+      source: {
+        title: "Condé Nast — Ars Technica brand",
+        url: "https://commercial.condenast.com/brands/ars-technica",
+        verifiedAt: "2026-10-14",
+      },
+    },
+    {
       targetDomain: "tensorflow.org",
       policyDomains: ["policies.google.com", "privacy.google.com"],
       ownerEntity: "Google",

@@ -7112,3 +7112,30 @@ function mockSurfacePriority(
   ].indexOf(surfaceType);
   return priority >= 0 ? priority : 99;
 }
+
+test("combined notice is analyzed as privacy before extraction and retains both facets with one fetch", async () => {
+  const html = `<html><title>Privacy and Cookie Statement</title><main><h1>Privacy and Cookie Statement</h1><h2>Retention period</h2><p>We retain personal data for three years after the service relationship ends and then delete it unless a legal obligation requires a longer period.</p><h2>Your rights</h2><p>You have the right to access, rectify, erase and restrict processing of your personal data. You may object and request data portability. Contact privacy@example.test.</p><h2>Controller</h2><p>Example Limited is the controller for this website and your personal data. Contact privacy@example.test for privacy requests.</p>${"<p>We process personal information to provide services, measure usage and answer requests. Our controller can be contacted at privacy@example.test. Your personal data is retained for three years and then erased unless applicable law requires longer retention.</p>".repeat(15)}</main></html>`;
+  const requests:string[]=[];
+  const server=createServer((req,res)=>{requests.push(req.url!);res.setHeader("Content-Type","text/html");res.end(html);});
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
+  const address=server.address();assert.ok(address&&typeof address!=="string");
+  const url=`http://127.0.0.1:${address.port}/`, tempRoot=await mkdtemp(path.join(tmpdir(),"combined-notice-"));
+  let extractionCalls=0;
+  const mockProvider=createDefaultMockNanoPolicyAssistProvider();
+  const nanoAssistProvider:PolicyNanoAssistProvider={...mockProvider,extractTopics:async input=>{
+    extractionCalls++;assert.equal(input.surfaceType,"privacy_policy");
+    return {assistId:input.assistId,observedTopics:[],mentionedVendors:[],mentionedPurposes:[],mentionedRights:[],mentionedControls:[],confidence:.6};
+  }};
+  try {
+    const links=[{domLocation:"footer" as const,href:`${url}privacy-and-cookie-statement`,linkText:"Privacy and Cookie Statement",pageUrl:url}];
+    const recovered=await recoverPolicyDocumentsFromRetainedRenderedLinks({scannerInput:{url,normalizedUrl:url,scanStartedAtMs:Date.now(),internalBudgetMs:6000,artifactWriter:await createArtifactWriter(tempRoot),enableNanoPolicyAssist:true,nanoAssistProvider},links,existingObservations:[]});
+    const privacy=recovered.observations.find(row=>row.surfaceType==="privacy_policy");
+    assert.equal(privacy?.status,"fetched",JSON.stringify(recovered.observations));
+    assert.ok(privacy!.retainedArticle13SectionEvidence.some(row=>row.coverageArea==="data_retention"&&row.signalObserved==="observed"));
+    assert.equal(recovered.observations.filter(row=>row.status==="fetched"&&["privacy_policy","cookie_policy"].includes(row.surfaceType)).length,2);
+    assert.equal(recovered.timingBreakdown.filter(row=>row.label.startsWith("policy deterministic analysis")).length,1);
+    assert.equal(extractionCalls,1,"combined facets reuse the same routine model extraction call");
+    assert.deepEqual(recovered.observations.find(row=>row.surfaceType==="cookie_policy")?.retainedArticle13SectionEvidence,[]);
+    assert.equal(requests.filter(url=>url==="/privacy-and-cookie-statement").length,1,JSON.stringify(requests));
+  } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(tempRoot,{recursive:true,force:true});}
+});

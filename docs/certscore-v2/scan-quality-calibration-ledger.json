@@ -323,12 +323,12 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T20:19:04.955Z",
-      "lastContactAt": "2026-10-14T20:19:04.955Z",
+      "cooldownUntil": "2026-11-11T20:58:33.392Z",
+      "lastContactAt": "2026-10-14T20:58:33.392Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local CMP quality follow-up: a32e83a1-416a-4211-b9b6-436d659d5c09. One additional fresh HubSpot scan verifies clean-process CMP diagnostic materialization after a local server restart; four full scans total in this pass; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
+      "note": "Owner-requested local CMP quality follow-up: 3c50e59e-5fad-4598-ba9a-b725349b9906. Three explicit owner-approved local admissions verify independent evidence scope, semantic confirmation and combined notice fixes; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://hubspot.com"
     },
@@ -507,12 +507,12 @@
     },
     "https://ikea.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T19:57:32.641Z",
-      "lastContactAt": "2026-10-14T19:57:32.641Z",
+      "cooldownUntil": "2026-11-11T20:59:34.905Z",
+      "lastContactAt": "2026-10-14T20:59:34.905Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local CMP quality follow-up: bba498e0-5f5c-4704-8b6d-1fb7c933b346, 42db50bd-3f24-46c2-9711-1a7621810622. Four serial full scans total across IKEA, AT&T and Ars Technica; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
+      "note": "Owner-requested local CMP quality follow-up: 3da7c991-da4f-406b-9b3a-ed551490298a. Three explicit owner-approved local admissions verify independent evidence scope, semantic confirmation and combined notice fixes; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://ikea.com"
     },
@@ -646,12 +646,12 @@
     },
     "https://arstechnica.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T19:59:17.539Z",
-      "lastContactAt": "2026-10-14T19:59:17.539Z",
+      "cooldownUntil": "2026-11-11T20:59:07.678Z",
+      "lastContactAt": "2026-10-14T20:59:07.678Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local CMP quality follow-up: 3dde2428-fa1c-4f04-9470-312cec50e569. Four serial full scans total across IKEA, AT&T and Ars Technica; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
+      "note": "Owner-requested local CMP quality follow-up: ba23b31d-6f23-4c49-9462-63e691e3f997. Three explicit owner-approved local admissions verify independent evidence scope, semantic confirmation and combined notice fixes; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://arstechnica.com"
     },
@@ -1134,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T20:19:50.209Z",
+  "updatedAt": "2026-10-14T21:01:09.730Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]

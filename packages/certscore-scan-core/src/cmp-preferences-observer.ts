@@ -354,7 +354,7 @@ export async function runCmpPreferencesObserver(input: {
 /** Documented Borlabs v3 read APIs, with IDs from this document's configuration.
  * Source accounting can establish the configured-service cookie list, never
  * whole-site service coverage or available switches. Only captured visible controls establish choices. */
-async function readBorlabsPreferenceInventory(page: Page) {
+export async function readBorlabsPreferenceInventory(page: Page) {
   return page.evaluate(() => {
     type Service = { name?: string; serviceGroupId?: string; cookies?: Array<{ name?: string; purpose?: string; lifetime?: string }> };
     const target = window as unknown as {
@@ -393,7 +393,7 @@ async function readBorlabsPreferenceInventory(page: Page) {
   });
 }
 
-async function readPreferenceControls(controlled: Locator) {
+export async function readPreferenceControls(controlled: Locator) {
   return await controlled.locator('input[type="checkbox"], [role="switch"], [role="checkbox"]').evaluateAll(nodes => ({
       overflow: nodes.length > 100,
       controls: nodes.slice(0, 100).map(node => {
@@ -429,7 +429,7 @@ async function readPreferenceControls(controlled: Locator) {
     }));
 }
 
-function classifyControls(controls: Awaited<ReturnType<typeof readPreferenceControls>>["controls"], inventory?: { categories: string[]; services: string[] }) {
+export function classifyControls(controls: Awaited<ReturnType<typeof readPreferenceControls>>["controls"], inventory?: { categories: string[]; services: string[] }) {
   return controls.filter(control => control.visible).map(({ label, groupLabel, enabled, checked }) => ({
     label, enabled, checked,
     kind: inventory?.categories.includes(label) && !inventory.services.includes(label) ? "category" as const

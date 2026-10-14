@@ -293,3 +293,23 @@ test("bounded example coverage survives canonical projection and public summary 
   assert.equal(rejected.observation.exampleCoverage, undefined);
   assert.equal(rejected.observation.violations.length, 0);
 });
+
+test("main-document positives survive canonical persistence while child-frame coverage stays limited", () => {
+  const input = bundle(), audit = input.accessibilityAudit!;
+  audit.status = "limited"; audit.limitations = ["child_frames_changed_main_document_retained"];
+  audit.violations = [audit.violations.find(row=>row.ruleId==="button-name")!];
+  audit.rulesEvaluated = ["button-name"];
+  audit.violations[0]!.representativeNodes.forEach(node=>{node.mainDocumentBound=true;});
+  audit.frameCoverage = {version:"stable_main_document_evidence.v1",resultScope:"positive_findings_only",documentToken:audit.documentToken!,engineRunCount:1,engineRuleCount:62,changedChildFrameCount:2,excludedNodeCount:7};
+  const projection=projectAccessibilityAudit(input,source,audit.documentUrl); assert.ok(projection);
+  assert.equal(projectAccessibilityAuditSummary(projection)?.evidenceScope,"stable_main_document_positive_findings");
+  assert.equal(projectAccessibilityAuditSummary(projection)?.failedRuleCount,1);
+  assert.equal(projectAccessibilityAuditSummary(projection)?.status,"limited");
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:{accessibilityAudit:projection},reviewFindingCandidates:[],validationFindings:[]});
+  assert.ok(concerns.some(row=>row.originKey.includes("accessibility")));
+  const wrong=structuredClone(input);wrong.accessibilityAudit!.frameCoverage!.documentToken="foreign";
+  assert.throws(()=>projectAccessibilityAudit(wrong,source,audit.documentUrl),/malformed/);
+  const drifted=structuredClone(input);drifted.runtimeMetadataSnapshots![0]!.documentIdentity!.token="foreign";
+  const rejected=projectAccessibilityAudit(drifted,source,audit.documentUrl)!;
+  assert.equal(rejected.observation.frameCoverage,undefined);assert.deepEqual(rejected.observation.violations,[]);
+});
