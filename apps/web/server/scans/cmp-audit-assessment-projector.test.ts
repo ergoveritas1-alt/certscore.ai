@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { projectPostAcceptEvidenceForReport, cmpCookieExpiryEvidenceSchema, cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveCmpAuditAssessment } from "./cmp-audit-assessment-projector";
@@ -125,8 +126,9 @@ test("v2 narrow facts stay informational, source-bound and neutral when proof is
     refusalRegistration: { status: "confirmed" }, decisionEvidence: { basis: "verified_state", decision: "denied", observedAtMs: 1000, observedStateSha256: "a".repeat(64) },
     storage: { postAction: [{ storageType: "cookie", name: "borlabs-cookie", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 5184100, capturedAtEpochSeconds: 100 }] } } as any;
   const audit = deriveCmpAuditAssessment(b)!;
-  assert.equal(audit.version, "cmp_audit_assessment.v5");
-  for (const id of ["consent_record", "duration", "declared_not_found"]) assert.equal(audit.rows.find(row => row.id === id)?.status, "observed");
+  assert.equal(audit.version, "cmp_audit_assessment.v6");
+  for (const id of ["duration", "declared_not_found"]) assert.equal(audit.rows.find(row => row.id === id)?.status, "observed");
+  assert.equal(audit.rows.find(row => row.id === "consent_record")?.status, "not_assessed", "A malformed legacy packet cannot prove a stored record");
   assert.equal(audit.rows.find(row => row.id === "duration")!.inventory!.expiries![0]!.remainingSeconds, 5184000);
   assert.match(audit.rows.find(row => row.id === "declared_not_found")!.detail, /1 of 1/);
   const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
@@ -134,7 +136,7 @@ test("v2 narrow facts stay informational, source-bound and neutral when proof is
   const projection = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment, normalizedConcerns: concerns });
   assert.equal(projection.rows.find(row => row.id === "duration")!.label, "CMP cookie expiry");
   assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
-  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v1" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence") } };
+  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v1" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence").map(row => ({ ...row, inventory: row.inventory?.declarations ? { declarations: row.inventory.declarations.map(({ inferredPurpose, ...declaration }) => declaration) } : row.inventory })) } };
   assert.equal(projectCmpAudit({ scanId: "scan-1", consentControlAssessment: legacy }).rows.find(row => row.id === "duration")!.label, "Duration of consent or rejection is appropriate");
   b.postRefusalEvidence!.decisionEvidence!.decision = "unknown";
   assert.equal(deriveCmpAuditAssessment(b)!.rows.find(row => row.id === "consent_record")!.status, "not_assessed");
@@ -177,7 +179,7 @@ test("v3 identifies configured services through retained source accounting, pers
   packet.declarationCoverage = { scope: "configured_services", configured: 11, resolved: 11, unresolved: 0, truncated: false };
   const audit = deriveCmpAuditAssessment(input)!;
   const row = audit.rows.find(row => row.id === "services")!;
-  assert.equal(audit.version, "cmp_audit_assessment.v5");
+  assert.equal(audit.version, "cmp_audit_assessment.v6");
   assert.equal(row.status, "observed");
   assert.match(row.detail, /11 services identified/);
   const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
@@ -189,7 +191,7 @@ test("v3 identifies configured services through retained source accounting, pers
   assert.equal(projected.detail, row.detail);
   assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
   assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment }).rows.find(row => row.id === "services")!.status, "Not assessed");
-  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v2" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence") } };
+  const legacy = { ...assessment, cmpAudit: { ...audit, version: "cmp_audit_assessment.v2" as const, rows: audit.rows.filter(row => row.id !== "implementation" && row.id !== "prominence").map(row => ({ ...row, inventory: row.inventory?.declarations ? { declarations: row.inventory.declarations.map(({ inferredPurpose, ...declaration }) => declaration) } : row.inventory })) } };
   assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: legacy }).rows.find(row => row.id === "services")!.label, "Individual service checkboxes or toggles observed");
   assert.equal(legacy.cmpAudit.version, "cmp_audit_assessment.v2");
 });
@@ -269,11 +271,11 @@ test("v4 partial action coverage persists through concern policy; review still t
   };
   assert.equal(project().label, "Activity after Accept / Reject");
   assert.equal(project().status, "Partially assessed");
-  assert.match(project().detail!, /Accept: observation captured; consent confirmed.*other action was not assessed/);
+  assert.match(project().detail!, /Accept: 0.5-second activity check completed/);
   assert.equal(project(true).status, "Review recommended");
   input.postRefusalEvidence = postRefusalEvidencePacketSchema.parse(choicePacket("reject"));
   assert.equal(project().status, "Observed");
-  assert.match(project().detail!, /does not establish correct enforcement/);
+  assert.match(project().detail!, /Reject: 0.5-second activity check completed/);
   assert.equal(project(true).status, "Review recommended");
   delete input.cmpPreferencesEvidence;
   input.cmpPreferenceLaneOutcome = { status: "limited", startedAt: "2026-10-13T00:00:00.000Z", completedAt: "2026-10-13T00:00:17.000Z", limitationCode: "preference_budget_exhausted" };
@@ -344,7 +346,7 @@ test("inventory tables preserve canonical names, wildcard matches and capture sc
   const audit = deriveCmpAuditAssessment(input)!;
   assert.deepEqual(input, before, "retained source is never rewritten");
   assert.deepEqual(audit.rows.find(row => row.id === "services")!.inventory!.services!.map(row => row.name), packet.serviceNames);
-  assert.deepEqual(audit.rows.find(row => row.id === "cookie_information")!.inventory!.declarations, packet.declarations);
+  assert.deepEqual(audit.rows.find(row => row.id === "cookie_information")!.inventory!.declarations!.map(({ inferredPurpose, ...row }) => row), packet.declarations);
   const comparison = audit.rows.find(row => row.id === "found_not_declared")!;
   assert.equal(comparison.status, "review");
   assert.deepEqual(comparison.inventory!.cookies, [
@@ -510,7 +512,7 @@ test("v5 partial inventories retain named services, incomplete details and neutr
   assert.equal(audit.rows.find(row => row.id === "services")!.status, "observed");
   assert.match(audit.rows.find(row => row.id === "services")!.detail, /2 services identified.*Additional services/);
   assert.equal(audit.rows.find(row => row.id === "cookie_information")!.status, "partially_assessed");
-  assert.deepEqual(audit.rows.find(row => row.id === "cookie_information")!.inventory!.declarations, packet.declarations);
+  assert.deepEqual(audit.rows.find(row => row.id === "cookie_information")!.inventory!.declarations!.map(({ inferredPurpose, ...row }) => row), packet.declarations);
   const comparison = audit.rows.find(row => row.id === "found_not_declared")!;
   assert.equal(comparison.status, "partially_assessed");
   assert.equal(comparison.cookieComparison!.declarationInventoryComplete, false);
@@ -519,7 +521,7 @@ test("v5 partial inventories retain named services, incomplete details and neutr
   const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
   const concerns = buildNormalizedConcerns({ runtimeArtifacts: withCanonicalConsentAssessmentSnapshot({}, assessment), reviewFindingCandidates: [], validationFindings: [] });
   const projected = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
-  assert.equal(projected.version, "cmp_audit_report.v2");
+  assert.equal(projected.version, "cmp_audit_report.v3");
   assert.equal(projected.rows.find(row => row.id === "found_not_declared")!.status, "Partially assessed");
   assert.deepEqual(projected.rows.find(row => row.id === "found_not_declared")!.supportingEvidence!.inventory, comparison.inventory);
   assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
@@ -541,6 +543,7 @@ function completedUnconfirmedPacket(action: "accept" | "reject") {
     navigation: { outcome: "completed", documentCommitted: true, finalUrlAuthorized: true },
     click: { outcome: "completed", reResolvedBeforeDispatch: false, confirmationCheckedAfterError: false } };
   packet.storage.postActionCapturedAtMs = 600;
+  packet.timing.observationEndedAtMs = 600;
   packet.afterActionCapture = { policyVersion: "bounded_after_action_capture.v2", action, activationStatus: "completed", actionDispatchedAtMs: 100,
     captureEndedAtMs: 600, requestedWindowMs: 500, stopReason: "window_elapsed", requestsDropped: 0, storageSnapshotRetained: true,
     storageWriteCoverage: "bounded_main_document_sample", storageWrites: [], requestIds: [], requestAncestry: [] };
@@ -549,12 +552,13 @@ function completedUnconfirmedPacket(action: "accept" | "reject") {
 
 test("v5 completed after-click capture is assessable without claiming registered consent", () => {
   const input = bundle(); input.postAcceptEvidence = completedUnconfirmedPacket("accept") as any;
-  const direct = projectPostAcceptEvidenceForReport({ packet: input.postAcceptEvidence! });
+  const direct = projectPostAcceptEvidenceForReport({ packet: input.postAcceptEvidence!, packetSha256: createHash("sha256").update(JSON.stringify(input.postAcceptEvidence)).digest("hex") });
+  assert.equal(direct.execution?.status, "succeeded");
   assert.equal(direct.afterActionCapture?.activationStatus, "completed");
   assert.equal(direct.interactionDiagnostics?.click.outcome, "completed");
   let audit = deriveCmpAuditAssessment(input)!;
   assert.equal(audit.rows.find(row => row.id === "implementation")!.status, "partially_assessed");
-  assert.match(audit.rows.find(row => row.id === "implementation")!.detail, /Accept: observation captured; consent not confirmed/);
+  assert.match(audit.rows.find(row => row.id === "implementation")!.detail, /Accept: 0.5-second activity check completed/);
   assert.equal(audit.rows.find(row => row.id === "consent_record")!.status, "not_assessed");
   input.postRefusalEvidence = completedUnconfirmedPacket("reject") as any;
   audit = deriveCmpAuditAssessment(input)!;
@@ -667,4 +671,67 @@ test("required-lane basics survive a cancelled optional inspection through persi
   const deeper = bundle(); Object.assign(deeper, {completedAt:input.completedAt,domSnapshots:input.domSnapshots, cmpBasicEvidence:input.cmpBasicEvidence});
   assert.deepEqual(deriveCmpAuditAssessment(deeper)?.rows.find(row => row.id === "categories")?.inventory,
     {categories:[{name:"Analytics",checked:false}]});
+});
+
+test("v6 retains v1 after-click facts and hashed consent storage without upgrading registration", () => {
+  const input = bundle();
+  const packet = completedUnconfirmedPacket("accept") as NonNullable<CanonicalEvidenceBundle["postAcceptEvidence"]>;
+  packet.afterActionCapture!.policyVersion = "bounded_after_action_capture.v1";
+  delete packet.afterActionCapture!.requestAncestry;
+  const cookie = { storageType: "cookie" as const, name: "OptanonConsent", hostname: "example.com", identityBasis: "cookie_name_domain_path_partition" as const,
+    identityHash: "a".repeat(64), valueHash: "b".repeat(64), nonEssential: false };
+  packet.storage.preAction = [cookie];
+  packet.storage.postAction = [{ ...cookie, valueHash: "c".repeat(64) }];
+  input.postAcceptEvidence = packet;
+  const original = structuredClone(input), audit = deriveCmpAuditAssessment(input)!;
+  const stored = audit.rows.find(row => row.id === "consent_record")!;
+  assert.equal(stored.status, "observed");
+  assert.deepEqual(stored.inventory!.consentStorage, [{ visit: "Accept", name: "OptanonConsent", change: "updated" }]);
+  assert.equal(audit.rows.find(row => row.id === "implementation")!.inventory!.choiceActivity![0]!.requestCount, 0);
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: withCanonicalConsentAssessmentSnapshot({}, assessment), reviewFindingCandidates: [], validationFindings: [] });
+  const projected = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  assert.equal(projected.version, "cmp_audit_report.v3");
+  assert.equal(projected.rows.find(row => row.id === "consent_record")!.label, "Consent storage observed");
+  assert.equal(projected.rows.find(row => row.id === "consent_record")!.status, "Observed");
+  assert.ok(concerns.filter(row => row.originKey.startsWith("consent.cmp_audit.")).every(row => !row.scoreEffects?.length));
+  assert.deepEqual(input, original);
+  const unchanged = structuredClone(input); unchanged.postAcceptEvidence!.storage.postAction[0]!.valueHash = cookie.valueHash;
+  assert.equal(deriveCmpAuditAssessment(unchanged)!.rows.find(row => row.id === "consent_record")!.inventory!.consentStorage![0]!.change, "stored");
+  for (const change of [{ parentScanId: "other-scan" }, { cancellation: { requested: true, outcome: "aborted" } }]) {
+    const altered = structuredClone(input); Object.assign(altered.postAcceptEvidence!, change);
+    assert.equal(deriveCmpAuditAssessment(altered)!.rows.find(row => row.id === "consent_record")!.status, "not_assessed");
+  }
+});
+
+test("v6 inferred purposes remain separate from missing CMP disclosures and never establish services", () => {
+  const input = bundle();
+  input.cmpPreferencesEvidence!.declarations = [
+    { name: "_ga", purpose: "", duration: "", source: "cmp_api_inventory" },
+    { name: "OptanonConsent", purpose: "", duration: "", source: "cmp_api_inventory" },
+    { name: "custom_cookie", purpose: "", duration: "Session", source: "cmp_api_inventory" },
+  ];
+  const audit = deriveCmpAuditAssessment(input)!;
+  const detail = audit.rows.find(row => row.id === "cookie_information")!;
+  assert.equal(detail.status, "partially_assessed");
+  assert.match(detail.detail, /3 cookie names captured; 0 purposes and 1 storage duration retained/);
+  assert.equal(detail.inventory!.declarations![0]!.inferredPurpose!.category, "analytics");
+  assert.equal(detail.inventory!.declarations![1]!.inferredPurpose!.category, "consent_management");
+  assert.equal(detail.inventory!.declarations![2]!.inferredPurpose, undefined);
+  assert.ok(detail.inventory!.declarations!.every(row => row.purpose === ""));
+  assert.equal(audit.rows.find(row => row.id === "services")!.status, "not_assessed");
+  const { inferredPurpose } = detail.inventory!.declarations![0]!;
+  assert.deepEqual(inferredPurpose, { category: "analytics", basis: "canonical_cookie_registry.v1" });
+});
+
+test("v6 CMP tables preserve shared first-layer reportability for an independent action", () => {
+  const input = bundle(); input.postAcceptEvidence = completedUnconfirmedPacket("accept") as any;
+  const audit = deriveCmpAuditAssessment(input)!;
+  const assessment = consentControlAssessmentSchema.parse({ ...structuredClone(observedControlAssessment), cmpAudit: audit });
+  assessment.controls.accept.state = "unknown"; assessment.assessmentStatus = "limited";
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const result = projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(audit.rows.find(row=>row.id==="implementation")!.inventory!.choiceActivity!.length,1,"Original evidence remains retained");
+  assert.deepEqual(result.rows.find(row=>row.id==="implementation")!.supportingEvidence!.inventory!.choiceActivity,[]);
+  assert.equal(assessment.controls.accept.state,"unknown");
 });

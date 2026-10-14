@@ -10,7 +10,10 @@ export function detailedEvidenceLayout(report: ShadowReportData) {
     summary: row.status === "Observed" ? "A cookie policy or disclosure notice was found." : row.summary,
   }));
   const policyRows = [...report.gdprTransparencyRows, ...cookieRows];
-  const consentRows = report.consentRows.filter(row => !platformRows.includes(row) && !cookieRows.some(cookie => cookie.id === row.id));
+  const rejectActivityCaptured = report.cmpAudit?.version === "cmp_audit_report.v3" &&
+    report.cmpAudit.rows.find(row => row.id === "implementation")?.supportingEvidence?.inventory?.choiceActivity?.some(activity => activity.action === "reject");
+  const consentRows = report.consentRows.filter(row => !platformRows.includes(row) && !cookieRows.some(cookie => cookie.id === row.id) &&
+    !(rejectActivityCaptured && row.id === "post_reject_tracking_reduction" && row.status === "Limited"));
   const consentLinks: Record<string, SharedEvidenceLink> = {};
   const cmpLinks: Record<string, SharedEvidenceLink> = {};
   const cmp = report.cmpAudit?.rows;

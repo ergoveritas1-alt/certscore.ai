@@ -31,7 +31,7 @@ export const consentControlMeasurementSchema = z.object({
   backgroundUniformity: z.number().min(0).max(1), interiorUniformity: z.number().min(0).max(1),
 }).strict();
 export const publicCmpAuditSchema = z.object({
-  version: z.enum(["cmp_audit_report.v1", "cmp_audit_report.v2"]), scanId: z.string(), scope: z.literal("starting_page"),
+  version: z.enum(["cmp_audit_report.v1", "cmp_audit_report.v2", "cmp_audit_report.v3"]), scanId: z.string(), scope: z.literal("starting_page"),
   assessmentSourceHash: z.string().nullable(),
   limitationGroups: z.array(z.object({ id: z.enum(["preferences", "actions", "visual"]), code: ref, title: text,
     criterionIds: z.array(z.enum(["banner", "reject", "prominence", "categories", "services", "privacy_link", "privacy_access", "consent_record", "implementation", "duration", "declared_not_found", "found_not_declared", "cookie_information"])).min(1).max(13) }).strict()).max(3).optional(),
@@ -45,13 +45,18 @@ export const publicCmpAuditSchema = z.object({
       prominence: z.object({ accept: consentControlMeasurementSchema, reject: consentControlMeasurementSchema, captureSkewMs: count }).strict().optional(),
       requests: z.array(z.object({ hostname: ref, path: ref.refine(value => !/[?#]/.test(value), "Request evidence must omit query and fragment values"), vendor: text, category: text, msAfterReject: count }).strict()).max(100).optional(),
       inventory: z.object({
+  consentStorage: z.array(z.object({ visit: z.enum(["Accept", "Reject"]), name: z.string().min(1).max(160), change: z.enum(["stored", "updated"]) }).strict()).max(8).optional(),
+  choiceActivity: z.array(z.object({ action: z.enum(["accept", "reject"]), windowMs: z.number().int().nonnegative().max(30000), requestCount: z.number().int().nonnegative(), nonEssentialRequestCount: z.number().int().nonnegative(),
+    requests: z.array(z.object({ hostname: z.string().max(255), path: z.string().max(2048).refine(value => !/[?#]/.test(value), "Request paths omit query and fragment"), vendor: z.string().max(160), purpose: z.string().max(100), msAfterClick: z.number().int().nonnegative(), nonEssential: z.boolean() }).strict()).max(100),
+  }).strict().refine(value => value.requests.length <= value.requestCount && value.nonEssentialRequestCount <= value.requestCount && value.requests.filter(row => row.nonEssential).length <= value.nonEssentialRequestCount, "Activity counts must agree with retained requests")).max(2).refine(values => new Set(values.map(value => value.action)).size === values.length, "One activity window per action").optional(),
+
         expiries: z.array(z.object({ visit: z.enum(["Accept", "Reject", "Before choice"]), domain: z.string().min(1).max(255).optional(), path: z.string().min(1).max(1024).optional(), name: z.string().min(1).max(160),
           capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(), remainingSeconds: z.number().finite().nonnegative(),
         }).strict().refine(row => row.expiresAtEpochSeconds >= row.capturedAtEpochSeconds && Math.abs(row.remainingSeconds - (row.expiresAtEpochSeconds - row.capturedAtEpochSeconds)) <= 0.000001,
           "Remaining time must match the retained capture and expiry timestamps.")).max(4).optional(),
         categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
         services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control"]) }).strict()).max(100).optional(),
-        declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) }).strict()).max(100).optional(),
+        declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional() }).strict()).max(100).optional(),
         cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
       }).strict().optional(),
       cookieComparison: z.object({ declarationPatternCount: count, observedCookieNameCount: count, unmatchedNameCount: count,
@@ -60,6 +65,10 @@ export const publicCmpAuditSchema = z.object({
   }).strict()).length(13),
 }).strict().superRefine((audit, context) => {
   for (const row of audit.rows) {
+    const inventory = row.supportingEvidence?.inventory;
+    if ((inventory?.consentStorage && row.id !== "consent_record") || (inventory?.choiceActivity && row.id !== "implementation") ||
+      (audit.version !== "cmp_audit_report.v3" && (inventory?.consentStorage || inventory?.choiceActivity || inventory?.declarations?.some(item => item.inferredPurpose))))
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "After-click facts and inferred purpose require their v3 criteria." });
     if ((row.status === "Incomplete") !== Boolean(row.limitation)) context.addIssue({ code: z.ZodIssueCode.custom, message: "Incomplete criteria require a specific limitation; other statuses must not carry one." });
     if (row.supportingEvidence?.inventory?.expiries?.some(item => item.visit === "Before choice" && (!item.domain || !item.path?.startsWith("/"))))
       context.addIssue({ code: z.ZodIssueCode.custom, message: "Baseline expiry requires retained cookie identity." });

@@ -247,6 +247,18 @@ test("partial cookie comparisons show neutral unmatched labels and preserve avai
     declarations: [{ name: "_ga", purpose: "Measurement", duration: "", source: "cmp_visible_inventory" }] } } });
   const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" />);
   assert.match(html, /No match in captured list/); assert.match(html, /Unmatched names are not confirmed omissions/);
-  assert.match(html, /text-emerald-700/); assert.match(html, /Measurement/); assert.match(html, /Not listed/);
+  assert.match(html, /text-emerald-700/); assert.match(html, /Measurement/); assert.match(html, /Not captured/);
   assert.match(html, /Cookie matches · 2/);
+});
+
+test("v3 shows copied activity and inferred purpose tables separately from CMP disclosures", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1" }); audit.version="cmp_audit_report.v3";
+  Object.assign(audit.rows.find(row=>row.id==="consent_record")!, { label:"Consent storage observed",status:"Observed",supportingEvidence:{inventory:{consentStorage:[{visit:"Reject",name:"OptanonConsent",change:"updated"}]}} });
+  Object.assign(audit.rows.find(row=>row.id==="implementation")!, {status:"Observed",supportingEvidence:{inventory:{choiceActivity:[{action:"reject",windowMs:8000,requestCount:1,nonEssentialRequestCount:0,requests:[{hostname:"privacyportal-de.onetrust.com",path:"/request/v1/consentreceipts/anonymous",vendor:"OneTrust",purpose:"consent_management",msAfterClick:58,nonEssential:false}]}]}} });
+  Object.assign(audit.rows.find(row=>row.id==="cookie_information")!, {status:"Partially assessed",supportingEvidence:{inventory:{declarations:[{name:"_ga",purpose:"",duration:"",source:"cmp_api_inventory",inferredPurpose:{category:"analytics",basis:"canonical_cookie_registry.v1"}}]}} });
+  const html=renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" />);
+  for (const text of [/Consent storage observed/,/Updated after choice/,/Requests after Reject click · 1/,/CMP-stated purpose/,/Inferred purpose/,/CMP-stated retention/,/Not captured/,/analytics/,/consent management/]) assert.match(html,text);
+  assert.doesNotMatch(html,/Requests after confirmed Reject|consent not confirmed/);
+  assert.doesNotMatch(html,/id="evidence-row-post_reject_tracking_reduction"/);
 });

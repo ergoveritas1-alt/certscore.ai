@@ -44,7 +44,7 @@ export type CmpAuditRow = {
   };
 };
 export type CmpAuditProjection = {
-  version: typeof CMP_AUDIT_REPORT_VERSION | "cmp_audit_report.v2";
+  version: typeof CMP_AUDIT_REPORT_VERSION | "cmp_audit_report.v2" | "cmp_audit_report.v3";
   limitationGroups?: CmpLimitationGroup[];
   scope: "starting_page";
   scanId: string;
@@ -70,7 +70,8 @@ export function projectCmpAudit(input: {
   }));
   const set = (id: CmpAuditCriterionId, result: Partial<CmpAuditRow>) => Object.assign(rows.find(row => row.id === id)!, result);
   const parsed = consentControlAssessmentSchema.safeParse(input.consentControlAssessment);
-  const assessment = parsed.success && projectConsentControlReport(parsed.data, input.scanId) ? parsed.data : null;
+  const controlReport = parsed.success ? projectConsentControlReport(parsed.data, input.scanId) : null;
+  const assessment = parsed.success && controlReport ? parsed.data : null;
   if (assessment) {
     if (assessment.visualEvidence?.status === "withheld" && assessment.visualEvidence.reasonCodes.some(reason =>
       reason === "finalization_deadline_exceeded" || reason === "moderation_timeout")) {
@@ -193,7 +194,7 @@ export function projectCmpAudit(input: {
     for (const [id, label] of Object.entries(legacyLabels)) set(id as CmpAuditCriterionId, { label });
   }
   if (audit?.version === "cmp_audit_assessment.v2") set("services", { label: "Individual service checkboxes or toggles observed" });
-  if (audit && !["cmp_audit_assessment.v4", "cmp_audit_assessment.v5"].includes(audit.version)) {
+  if (audit && !["cmp_audit_assessment.v4", "cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version)) {
     set("privacy_access", { label: "Privacy policy accessible without interacting with cookie banner" });
     set("implementation", { label: "Settings are technically implemented correctly" });
   }
@@ -203,23 +204,38 @@ export function projectCmpAudit(input: {
       concern.originType === "runtime_artifact" && concern.externalSurfacingEligibility === "eligible" &&
       concern.promotionEligibility === "internal_only" && concern.evidenceBundle.rawEvidence?.cmpAuditSourceSha256 === audit.sourceSha256 &&
       cmpAuditRowsEqual(concern.evidenceBundle.rawEvidence?.cmpAuditRow, row));
+    // Shared first-layer reportability also applies to these narrower tables.
+    // Independent action evidence remains retained without overriding passive A/R/O.
+    const inventory = audit.version === "cmp_audit_assessment.v6" && row.inventory ? {
+      ...row.inventory,
+      ...(row.inventory.choiceActivity ? { choiceActivity: row.inventory.choiceActivity.filter(activity => controlReport?.controls[activity.action] === "observed") } : {}),
+      ...(row.inventory.consentStorage ? { consentStorage: row.inventory.consentStorage.filter(record => controlReport?.controls[record.visit === "Accept" ? "accept" : "reject"] === "observed") } : {}),
+    } : row.inventory;
+    const restrictedChoiceScope = inventory?.choiceActivity?.length !== row.inventory?.choiceActivity?.length || inventory?.consentStorage?.length !== row.inventory?.consentStorage?.length;
     // Policy-evaluated review findings take precedence over coverage results.
-    if (row.id === "implementation" && (contradiction || afterReject)) continue;
+    if (row.id === "implementation" && (contradiction || afterReject)) {
+      if (concern && audit.version === "cmp_audit_assessment.v6" && inventory?.choiceActivity) {
+        const existing = rows.find(item => item.id === "implementation")!;
+        existing.supportingEvidence = { ...existing.supportingEvidence, inventory };
+      }
+      continue;
+    }
     if (row.id === "prominence" && rows.find(item => item.id === "prominence")!.status !== "Not assessed") continue;
     // Preserve the more specific canonical failure reason when neither path is usable.
     if (row.id === "implementation" && row.status === "not_assessed" && rejectCoverage?.assessmentStatus === "coverage_limitation") continue;
     if (concern) set(row.id, { status: labels[row.status], limitation: row.limitation,
-      detail: audit.version === "cmp_audit_assessment.v5" && row.id === "duration" && row.inventory?.expiries?.length
+      detail: restrictedChoiceScope ? row.id === "consent_record" ? "Browser consent records were captured; see retained evidence." : "Activity checks completed; see retained evidence."
+        : ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version) && row.id === "duration" && row.inventory?.expiries?.length
         ? "CMP cookie expiry was captured. Time remaining is shown below."
         : row.id === "duration" && row.inventory?.expiries?.length
         ? "Consent-cookie expiry was captured. Long-term behavior was not tested."
         : row.id === "categories" && row.inventory?.categories?.length
         ? row.detail.replace(/^(\d+) selectable categories observed in the inspected consent surface:.*$/, (_match, count: string) => count === "1" ? "1 category was available." : `${count} categories were available.`) : row.detail || undefined,
       sourceIds: row.evidenceRefs,
-      ...((row.cookieComparison || row.inventory) ? { supportingEvidence: { ...(row.cookieComparison ? { cookieComparison: row.cookieComparison } : {}), ...(row.inventory ? { inventory: row.inventory } : {}) } } : {}) });
+      ...((row.cookieComparison || inventory) ? { supportingEvidence: { ...(row.cookieComparison ? { cookieComparison: row.cookieComparison } : {}), ...(inventory ? { inventory } : {}) } } : {}) });
   }
 
-  if (audit?.version === "cmp_audit_assessment.v5") {
+  if (audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version)) {
     set("duration", { label: "CMP cookie expiry" });
     set("found_not_declared", { label: "Unmatched cookie names" });
     set("implementation", { label: "Activity after Accept / Reject" });
@@ -232,6 +248,11 @@ export function projectCmpAudit(input: {
       [assessment.controls.accept.state, assessment.controls.reject.state].includes("not_observed")) {
       Object.assign(prominenceRow, { status: "Not applicable", detail: "A comparison requires both Accept and Reject controls; one was not observed in the complete inspection.", sourceIds: ["consentControlAssessment.controls"] });
     }
+  }
+
+  if (audit?.version === "cmp_audit_assessment.v6") {
+    set("consent_record", { label: "Consent storage observed" });
+    set("implementation", { label: "Activity after Accept / Reject" });
   }
 
   // Attribute only an already-applied, exactly attributable family amount.
@@ -248,8 +269,8 @@ export function projectCmpAudit(input: {
       row.deductionPoints = family.deductionPoints;
     }
   }
-  return { version: audit?.version === "cmp_audit_assessment.v5" ? "cmp_audit_report.v2" : CMP_AUDIT_REPORT_VERSION,
-    ...(audit?.version === "cmp_audit_assessment.v5" ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
+  return { version: audit?.version === "cmp_audit_assessment.v6" ? "cmp_audit_report.v3" : audit?.version === "cmp_audit_assessment.v5" ? "cmp_audit_report.v2" : CMP_AUDIT_REPORT_VERSION,
+    ...(audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version) ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
     assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows };
 }
 

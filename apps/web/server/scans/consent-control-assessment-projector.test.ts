@@ -1621,7 +1621,7 @@ test("v3 preference diagnostics survive full consent materialization independent
   });
   const before = structuredClone(b);
   const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g, noGo: false });
-  assert.equal(result.cmpAudit?.version, "cmp_audit_assessment.v5");
+  assert.equal(result.cmpAudit?.version, "cmp_audit_assessment.v6");
   assert.equal(result.cmpAudit?.support.reason, "preference_surface_binding_unavailable");
   assert.equal(result.cmpAudit?.rows.filter(row => row.limitation?.code === "preference_surface_binding_unavailable").length, 5);
   assert.deepEqual(result.controls, initial.controls);

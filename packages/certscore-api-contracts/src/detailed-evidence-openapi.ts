@@ -571,7 +571,8 @@ export const detailedEvidenceOpenApiSchemas = {
         "type": "string",
         "enum": [
           "cmp_audit_report.v1",
-          "cmp_audit_report.v2"
+          "cmp_audit_report.v2",
+          "cmp_audit_report.v3"
         ]
       },
       "scanId": {
@@ -954,6 +955,117 @@ export const detailedEvidenceOpenApiSchemas = {
                   "additionalProperties": false,
                   "required": [],
                   "properties": {
+                    "consentStorage": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "visit",
+                          "name",
+                          "change"
+                        ],
+                        "properties": {
+                          "visit": {
+                            "type": "string",
+                            "enum": [
+                              "Accept",
+                              "Reject"
+                            ]
+                          },
+                          "name": {
+                            "type": "string",
+                            "maxLength": 160
+                          },
+                          "change": {
+                            "type": "string",
+                            "enum": [
+                              "stored",
+                              "updated"
+                            ]
+                          }
+                        }
+                      },
+                      "maxItems": 8
+                    },
+                    "choiceActivity": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "action",
+                          "windowMs",
+                          "requestCount",
+                          "nonEssentialRequestCount",
+                          "requests"
+                        ],
+                        "properties": {
+                          "action": {
+                            "type": "string",
+                            "enum": [
+                              "accept",
+                              "reject"
+                            ]
+                          },
+                          "windowMs": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 30000
+                          },
+                          "requestCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "nonEssentialRequestCount": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "requests": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "hostname",
+                                "path",
+                                "vendor",
+                                "purpose",
+                                "msAfterClick",
+                                "nonEssential"
+                              ],
+                              "properties": {
+                                "hostname": {
+                                  "type": "string",
+                                  "maxLength": 255
+                                },
+                                "path": {
+                                  "type": "string",
+                                  "maxLength": 2048
+                                },
+                                "vendor": {
+                                  "type": "string",
+                                  "maxLength": 160
+                                },
+                                "purpose": {
+                                  "type": "string",
+                                  "maxLength": 100
+                                },
+                                "msAfterClick": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "nonEssential": {
+                                  "type": "boolean"
+                                }
+                              }
+                            },
+                            "maxItems": 100
+                          }
+                        }
+                      },
+                      "maxItems": 2
+                    },
                     "expiries": {
                       "type": "array",
                       "items": {
@@ -1086,6 +1198,24 @@ export const detailedEvidenceOpenApiSchemas = {
                               "cmp_visible_inventory",
                               "cmp_api_inventory"
                             ]
+                          },
+                          "inferredPurpose": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "category",
+                              "basis"
+                            ],
+                            "properties": {
+                              "category": {
+                                "type": "string",
+                                "maxLength": 80
+                              },
+                              "basis": {
+                                "const": "canonical_cookie_registry.v1",
+                                "type": "string"
+                              }
+                            }
                           }
                         }
                       },

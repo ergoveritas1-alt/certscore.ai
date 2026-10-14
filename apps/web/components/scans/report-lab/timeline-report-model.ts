@@ -823,10 +823,18 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const forms = canonical.collectionSurfaceAssessment?.forms ?? [];
   const afterAcceptForms = projectPostAcceptForms(scanRecord);
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
+  const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
+  const cmpAudit = projectCmpAudit({ scanId: scanRecord.scan.id, normalizedConcerns: canonical.normalizedConcerns,
+    consentControlAssessment: retainedConsentAssessment(scanRecord), checklistRows: reportableChecklistRows,
+    unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation });
+  const rejectActivityCaptured = cmpAudit.version === "cmp_audit_report.v3" &&
+    cmpAudit.rows.find(row => row.id === "implementation")?.supportingEvidence?.inventory?.choiceActivity?.some(activity => activity.action === "reject");
+  const visibleLimitations = evidenceRows.filter(row => row.status === "Limited" && !HIDDEN_DETAILED_EVIDENCE_ROW_IDS.includes(row.id) &&
+    !(rejectActivityCaptured && row.id === "post_reject_tracking_reduction"));
   const highlights = buildAssessmentHighlightsPresentation(findings, { kind: "page" }, {
     score: assessedScore,
-    coverage: { state: summaryCounts.technical_limitation > 0 ? "limited" : evidenceRows.length ? "complete" : "unknown", limitedCount: summaryCounts.technical_limitation,
-      items: evidenceRows.filter(row => row.status === "Limited" && !HIDDEN_DETAILED_EVIDENCE_ROW_IDS.includes(row.id)).map(row => ({ id: row.id, title: row.title })),
+    coverage: { state: visibleLimitations.length > 0 ? "limited" : evidenceRows.length ? "complete" : "unknown", limitedCount: visibleLimitations.length,
+      items: visibleLimitations.map(row => ({ id: row.id, title: row.title })),
     },
   });
   const verdict = highlights.text;
@@ -861,12 +869,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const scanConfig = record(scanRecord.scan.scanConfigJson);
   const crawlOptions = record(scanConfig?.crawlOptions);
   const metadata = siteMetadataProjectionSchema.safeParse(record(scanRecord.runtimeArtifacts)?.siteMetadata);
-  const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
   return {
     assessmentHighlightLinks: highlights.links,
-    cmpAudit: projectCmpAudit({ scanId: scanRecord.scan.id, normalizedConcerns: canonical.normalizedConcerns,
-      consentControlAssessment: retainedConsentAssessment(scanRecord),
-      checklistRows: reportableChecklistRows, unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation }),
+    cmpAudit,
     ...(scanConfig?.fullSite === true && crawlOptions ? { fullSite: { maxPages: Number(crawlOptions.maxPages), concurrency: Number(crawlOptions.concurrency), waitSeconds: Number(crawlOptions.waitSeconds) } } : {}),
     siteMetadata: metadata.success ? metadata.data : null,
     accessibilityAudit,

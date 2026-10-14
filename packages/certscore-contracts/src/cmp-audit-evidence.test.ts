@@ -56,3 +56,19 @@ test("v5 scopes cannot silently upgrade historical assessments or label partial 
   comparison.status = "review";
   assert.equal(cmpAuditAssessmentSchema.safeParse(candidate).success, false);
 });
+
+test("v6 scopes protect historical conclusions and bound independent activity facts", async () => {
+  const { cmpAuditAssessmentSchema, cmpAuditCriterionSchema } = await import("./cmp-audit-evidence");
+  const input: any = { version: "cmp_audit_assessment.v6", scanId: "scan", sourceSha256: "a".repeat(64), support: {state:"partial",provider:"OneTrust",recipeVersion:"v1",reason:"bounded"},
+    rows: [...cmpAuditCriterionSchema.options, "implementation", "prominence"].map(id => ({id,status:"not_assessed",detail:"",evidenceRefs:[]})) };
+  const row = input.rows.find((r: any) => r.id === "implementation");
+  Object.assign(row, {status:"observed",evidenceRefs:["CanonicalEvidenceBundle.json"],inventory:{choiceActivity:[{action:"reject",windowMs:8000,requestCount:0,nonEssentialRequestCount:0,requests:[]}]}});
+  assert.equal(cmpAuditAssessmentSchema.safeParse(input).success,true);
+  const old=structuredClone(input);old.version="cmp_audit_assessment.v5";
+  assert.equal(cmpAuditAssessmentSchema.safeParse(old).success,false,"New scopes cannot silently enter historical versions");
+  row.inventory.choiceActivity[0].nonEssentialRequestCount=1;
+  assert.equal(cmpAuditAssessmentSchema.safeParse(input).success,false);
+  row.inventory.choiceActivity[0].nonEssentialRequestCount=0;
+  row.inventory.choiceActivity.push(structuredClone(row.inventory.choiceActivity[0]));
+  assert.equal(cmpAuditAssessmentSchema.safeParse(input).success,false);
+});
