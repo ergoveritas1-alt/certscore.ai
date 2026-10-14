@@ -507,12 +507,12 @@
     },
     "https://ikea.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T21:47:33.546Z",
-      "lastContactAt": "2026-10-14T21:47:33.546Z",
+      "cooldownUntil": "2026-11-11T22:04:51.216Z",
+      "lastContactAt": "2026-10-14T22:04:51.216Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local CMP quality follow-up: e0228e76-2ef0-4221-a374-1fa0a2a59449. One explicit owner-approved local admission verifies bounded OneTrust service-name capture and CMP details; temporary local quota admission restored immediately. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
+      "note": "Owner-requested local CMP quality follow-up: 3e99f256-8aae-4abd-a2fb-03060ba64447. One explicit owner-approved local admission verifies explicit named CMP partner disclosure and authoritative prominence capture; temporary local quota admission restored immediately. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://ikea.com"
     },
@@ -1134,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T21:48:01.244Z",
+  "updatedAt": "2026-10-14T22:05:07.425Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]
