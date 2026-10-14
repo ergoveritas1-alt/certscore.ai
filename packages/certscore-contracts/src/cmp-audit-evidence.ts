@@ -41,6 +41,14 @@ export const cmpPreferenceDispatchSchema = z.object({
 });
 export type CmpPreferenceDispatch = z.infer<typeof cmpPreferenceDispatchSchema>;
 
+export const cmpPrivacyLinkSchema = z.object({
+  url: z.string().url().max(2000), hitTargetBeforeAction: z.boolean(),
+  access: z.object({ version: z.literal("privacy_link_access.v1"),
+    outcome: z.enum(["reachable", "outside_viewport", "not_rendered", "hidden", "transparent", "inactive", "pointer_disabled", "hit_target_missed", "inspection_incomplete"]),
+  }).strict().optional(),
+}).refine(link => !link.access || link.hitTargetBeforeAction === (link.access.outcome === "reachable"),
+  "Link accessibility diagnostics must agree with the retained click-target result.");
+
 const configuredConsentCookiesSchema = z.array(z.object({
   version: z.literal("cmp_configured_cookie_identity.v1"),
   configurationPath: z.string().min(1).max(160),
@@ -95,7 +103,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   action: z.object({ count: z.number().int().min(0).max(1), intent: z.literal("options"), label: z.string().max(160).nullable(), opened: z.boolean() }),
   controls: z.array(z.object({ label: z.string().max(240), kind: z.enum(["category", "service", "unclassified"]), enabled: z.boolean(), checked: z.boolean().nullable() })).max(100),
   controlInventoryComplete: z.boolean(),
-  privacyLinks: z.array(z.object({ url: z.string().url().max(2000), hitTargetBeforeAction: z.boolean() })).max(16),
+  privacyLinks: z.array(cmpPrivacyLinkSchema).max(16),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) })).max(100),
   declarationInventoryComplete: z.boolean(),
   serviceNames: z.array(z.string().min(1).max(240)).max(100).optional(),

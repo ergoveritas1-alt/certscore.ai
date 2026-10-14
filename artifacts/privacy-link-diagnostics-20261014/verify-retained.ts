@@ -1,0 +1,35 @@
+import {createRequire} from 'node:module';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import assert from 'node:assert/strict';
+import {canonicalEvidenceBundleSchema,consentControlAssessmentSchema} from '../../packages/certscore-contracts/src';
+const require=createRequire(import.meta.url);require.cache[require.resolve('server-only')]={exports:{}} as any;
+const sha=(bytes:Buffer|string)=>createHash('sha256').update(bytes).digest('hex');
+async function main(){
+ assert.ok(['localhost','127.0.0.1'].includes(new URL(process.env.DATABASE_URL!).hostname));
+ globalThis.fetch=(async()=>{throw Error('No HTTP/model calls during retained verification');}) as typeof fetch;
+ const {loadAnonymousPersistedScanReportProjection}=await import('../../apps/web/server/scans/scan-report-projection');
+ const {deriveCmpAuditAssessment}=await import('../../apps/web/server/scans/cmp-audit-assessment-projector');
+ const scanId='257741ec-9e2f-40e2-a912-b98fccedaf90';
+ const summary=JSON.parse(readFileSync(`artifacts/local-v2-dag-lambda-simulated/${scanId}/summary.json`,'utf8'));
+ const terminal=summary.sqsMessages.filter((x:any)=>x.status==='completed');assert.equal(terminal.length,1);
+ const event=terminal[0],u=new URL(event.artifactPointers.scanArtifactUri),path=`${summary.fakeS3Root}/${u.hostname}${u.pathname}`;
+ const bytes=readFileSync(path);assert.equal(sha(bytes),event.artifactMetadata.scanArtifactUri.sha256);
+ const bundle=canonicalEvidenceBundleSchema.parse(JSON.parse(bytes.toString()));
+ const saved:any=await loadAnonymousPersistedScanReportProjection({scanId});assert.ok(saved);
+ const savedHash=sha(JSON.stringify(saved));
+ const stored=consentControlAssessmentSchema.parse(saved.runtimeArtifacts.consentControlAssessment??saved.runtimeArtifacts.consent_control_assessment);
+ const row=deriveCmpAuditAssessment(bundle)!.rows.find(row=>row.id==='privacy_access')!;
+ const old=stored.cmpAudit!.rows.find(row=>row.id==='privacy_access')!;
+ assert.equal(row.status,old.status);assert.equal(row.status,'not_assessed');
+ assert.match(row.detail,/did not record why/);
+ assert.equal(bundle.cmpPreferencesEvidence!.privacyLinks.length,1);
+ assert.equal(bundle.cmpPreferencesEvidence!.privacyLinks[0]!.hitTargetBeforeAction,false);
+ assert.equal(bundle.cmpPreferencesEvidence!.privacyLinks[0]!.access,undefined);
+ assert.equal(sha(readFileSync(path)),sha(bytes));
+ assert.equal(sha(JSON.stringify(await loadAnonymousPersistedScanReportProjection({scanId}))),savedHash);
+ const receipt={scanId,originalBundleSha256:sha(bytes),sourceVerified:true,savedReportUnchanged:true,savedStatus:old.status,replayedStatus:row.status,previewDetail:row.detail,historicalReasonInvented:false,newScans:0,deployments:0};
+ writeFileSync('artifacts/privacy-link-diagnostics-20261014/retained-verification.json',JSON.stringify(receipt,null,2)+'\n');
+ console.log(JSON.stringify(receipt,null,2));
+}
+main().then(()=>process.exit()).catch(error=>{console.error(error);process.exit(1)});

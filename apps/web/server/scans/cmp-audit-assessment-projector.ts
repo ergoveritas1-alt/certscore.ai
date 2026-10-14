@@ -293,6 +293,27 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;
 type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints">;
+// Only typed, document-bound inspection reasons explain failure. A hit-test
+// miss does not identify what covered the link or establish vendor support.
+function privacyLinkAccessDetail(links: NonNullable<CanonicalEvidenceBundle["cmpPreferencesEvidence"]>["privacyLinks"]): string {
+  if (!links.length) return "No privacy-policy link was captured in this inspection.";
+  const outcomes = [...new Set(links.map(link => link.access?.outcome))];
+  if (outcomes.includes(undefined)) return "Privacy policy found; pre-consent link accessibility was not verified. This saved scan did not record why.";
+  if (outcomes.length > 1) return "Privacy-policy links were found, but none was verified as reachable before consent. Individual inspection reasons are retained in the supporting evidence.";
+  const reasons = {
+    outside_viewport: "Its link was outside the captured viewport, so pre-consent click access was not verified.",
+    not_rendered: "Its link was not rendered in the captured view.",
+    hidden: "Its link was marked hidden when inspected.",
+    transparent: "Its link was transparent when inspected.",
+    inactive: "Its link was in an inactive part of the page.",
+    pointer_disabled: "Its link did not accept pointer interaction when inspected.",
+    hit_target_missed: "Its link was on-screen, but the click-target check could not reach it.",
+    inspection_incomplete: "Link accessibility inspection did not complete.",
+    reachable: "Pre-consent link accessibility was verified.",
+  };
+  return `Privacy policy found. ${reasons[outcomes[0]!]}`;
+}
+
 function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: InventoryFacts,
   { controlsUsable, declarationsUsable, privacyUsable, usable }: { controlsUsable: boolean; declarationsUsable: boolean; privacyUsable: boolean; usable: boolean },
   rows: CmpAuditAssessment["rows"], set: AuditSet, observations: ReturnType<typeof retainedChoiceCaptures>) {
@@ -352,7 +373,7 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     const reachable = evidence.privacyLinks.some(link => link.hitTargetBeforeAction);
     set("privacy_access", reachable ? "observed" : "not_assessed", reachable
       ? "A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion."
-      : "No privacy-policy link was verified as reachable before consent interaction.", ["CmpPreferencesEvidencePacket.json"]);
+      : privacyLinkAccessDetail(evidence.privacyLinks), ["CmpPreferencesEvidencePacket.json"]);
   }
   if (declarationsUsable) {
     const entries = evidence.declarations.length;

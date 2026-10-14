@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmpPreferencesEvidenceSchema } from "./cmp-audit-evidence";
+import { cmpPreferencesEvidenceSchema, cmpPrivacyLinkSchema } from "./cmp-audit-evidence";
 
 function packet() {
   return {
@@ -119,4 +119,19 @@ test("deferred-panel verification diagnostics remain bounded and do not create o
   assert.deepEqual(result.inspectionDiagnostic!.surfaceBinding!.verification, input.inspectionDiagnostic.surfaceBinding.verification);
   for (const patch of [{ result: "assumed_ready" }, { role: "x".repeat(33) }, { html: "private" }, { version: "unknown" }])
     assert.equal(cmpPreferencesEvidenceSchema.safeParse({ ...input, inspectionDiagnostic: { ...input.inspectionDiagnostic, surfaceBinding: { ...input.inspectionDiagnostic.surfaceBinding, verification: { ...input.inspectionDiagnostic.surfaceBinding.verification, ...patch } } } }).success, false);
+});
+
+
+test("privacy-link diagnostics are optional for history, strict and consistent with hit testing", () => {
+  const link = { url: "https://example.test/privacy", hitTargetBeforeAction: false };
+  assert.deepEqual(cmpPrivacyLinkSchema.parse(link), link);
+  for (const outcome of ["reachable", "outside_viewport", "not_rendered", "hidden", "transparent", "inactive", "pointer_disabled", "hit_target_missed", "inspection_incomplete"]) {
+    const input = { ...link, hitTargetBeforeAction: outcome === "reachable", access: { version: "privacy_link_access.v1", outcome } };
+    assert.deepEqual(cmpPrivacyLinkSchema.parse(input), input);
+    assert.equal(cmpPrivacyLinkSchema.safeParse({ ...input, hitTargetBeforeAction: !input.hitTargetBeforeAction }).success, false);
+  }
+  for (const access of [{ version: "privacy_link_access.v1", outcome: "banner_blocked" }, { version: "privacy_link_access.v2", outcome: "hidden" }, { version: "privacy_link_access.v1", outcome: "hidden", rawHtml: "untrusted" }])
+    assert.equal(cmpPrivacyLinkSchema.safeParse({ ...link, access }).success, false);
+  const input = { ...packet(), privacyLinks: [{ ...link, access: { version: "privacy_link_access.v1", outcome: "outside_viewport" } }] };
+  assert.deepEqual(cmpPreferencesEvidenceSchema.parse(input).privacyLinks, input.privacyLinks);
 });

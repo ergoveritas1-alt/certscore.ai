@@ -325,3 +325,40 @@ the screenshot are under `artifacts/hubspot-fresh-verification-20261014/`.
 The repository contact ledger was updated for this one visit, with the central
 contact persisted under idempotent key
 `owner-hubspot-readiness-verification-20261014-257741ec`.
+
+## Privacy-link accessibility diagnostics
+
+`privacy_link_access.v1` adds an optional, strict per-link outcome to the existing
+retained CMP privacy-link record. The passive basic capture and isolated
+preference inspection reuse their existing link reads, canonical privacy-surface
+classification and loader checkpoints. No browser visit, RPC, scroll, click,
+policy fetch, retry, model call, wait or deadline increase is introduced. A shared
+50-ms browser read slice bounds geometry/style/hit work across at most 300 anchors
+(or the basic capture's existing 16 classified candidates); deadline/rectangle or
+ancestor-depth exhaustion stays explicitly incomplete. Candidate identity is
+rechecked before basic facts are retained.
+
+The diagnostic distinguishes reachable, outside viewport, not rendered, hidden,
+transparent, inactive, pointer disabled, hit-target missed and inspection
+incomplete. It identifies what the read actually established, never inventing a
+banner obstruction or unsupported CMP feature. Transparent/inert/hidden ancestors
+cannot establish reachable solely from DOM hit testing. Boolean/outcome
+contradictions and unrecognized diagnostics fail contract validation.
+
+Only eligible, document-bound evidence enters the canonical CMP assessment,
+source hash, normalized concerns, concern policy and shared report projection.
+Failed access stays Not assessed and score-neutral. Newly materialized rows use
+the specific retained reason; historical false results without a reason say that
+the saved scan did not record why. Persisted historical assessments and original
+artifacts are not rewritten. Multiple differing reasons remain in the existing
+supporting packet rather than asserting a single cause.
+
+Retained HubSpot scan `257741ec-9e2f-40e2-a912-b98fccedaf90` verifies one privacy
+link with a false hit-target result and no diagnostic; its exact reason cannot be
+recovered retrospectively. Original bundle SHA and before/after local persisted
+report hashes are unchanged. The offline replay remains Not assessed and uses
+explicit historical wording. Verification receipts are under
+`artifacts/privacy-link-diagnostics-20261014/`. No public rescan or deployment
+occurred. Existing capture budgets are unchanged; additive diagnostic storage is
+estimated below $0.05/month at 100,000 scans with one-year retention, as disclosed
+before implementation (below the repository's $1/month approval threshold).

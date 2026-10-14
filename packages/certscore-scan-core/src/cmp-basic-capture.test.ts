@@ -19,6 +19,7 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
     assert.deepEqual(packet.serviceNames,["Named Analytics"]);
     assert.deepEqual(packet.serviceDisclosures?.[0]?.names,["Vimeo","Google"]);
     assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction,true);
+    assert.deepEqual(packet.privacyLinks[0]?.access,{version:"privacy_link_access.v1",outcome:"reachable"});
     assert.ok(packet.limitations.includes("declaration_inventory_not_complete"));
     assert.equal(await page.evaluate(()=>(window as any).actions),0);
     assert.equal(await page.evaluate(()=>(window as any).reads),1,"One already-loaded configuration read; no additional getter call");

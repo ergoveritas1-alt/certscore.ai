@@ -159,7 +159,7 @@ test("v4 privacy reachability is independent of document retrieval through canon
     const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
     const row = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns }).rows.find(row => row.id === "privacy_access")!;
     assert.equal(row.status, mode === "not_reachable" ? "Not assessed" : "Observed");
-    assert.match(row.detail!, mode === "not_reachable" ? /No privacy-policy link was verified/ : /unobstructed click target/);
+    assert.match(row.detail!, mode === "not_reachable" ? /This saved scan did not record why/ : /unobstructed click target/);
     assert.ok(!row.deductionPoints);
   }
 });
@@ -1008,4 +1008,30 @@ test("joined workers with explicit failed clicks retain specific action limitati
   input.postAcceptEvidence=failedChoicePacket('accept') as any;delete input.postRefusalEvidence;
   input.postAcceptEvidence!.acceptanceRegistration.status='unsupported';
   assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==='implementation')!.status,'not_assessed','Unsupported integration remains distinct from a failed supported check');
+});
+
+
+test("privacy link diagnostics remain score-neutral and source-bound through canonical projection", () => {
+  let priorHash = "";
+  for (const outcome of ["outside_viewport", "not_rendered", "hidden", "transparent", "inactive", "pointer_disabled", "hit_target_missed", "inspection_incomplete"] as const) {
+    const input = bundle();
+    input.cmpPreferencesEvidence!.privacyLinks[0] = { url: "https://example.com/privacy", hitTargetBeforeAction: false, access: { version: "privacy_link_access.v1", outcome } };
+    const audit = deriveCmpAuditAssessment(input)!;
+    assert.notEqual(audit.sourceSha256, priorHash); priorHash = audit.sourceSha256;
+    const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+    const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+    const row = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns }).rows.find(row => row.id === "privacy_access")!;
+    assert.equal(row.status, "Not assessed");
+    assert.equal(row.detail, audit.rows.find(row => row.id === "privacy_access")!.detail);
+    assert.ok(!/banner|unsupported/i.test(row.detail!)); assert.ok(!row.deductionPoints);
+    input.cmpPreferencesEvidence!.documentToken = "wrong-loader";
+    input.cmpPreferencesEvidence!.status = "limited";
+    input.cmpPreferencesEvidence!.checkpoints = { version: "cmp_partial_capture.v1", documentToken: "loader-1", privacyLinks: true, declarations: false, controls: false, controlsSurface: "first_layer" };
+    const rejected = deriveCmpAuditAssessment(input);
+    assert.ok(!rejected || !rejected.rows.find(row => row.id === "privacy_access")!.detail.includes("Privacy policy found."));
+  }
+  const legacy = bundle(); legacy.cmpPreferencesEvidence!.privacyLinks[0]!.hitTargetBeforeAction = false;
+  const before = JSON.stringify(legacy);
+  assert.match(deriveCmpAuditAssessment(legacy)!.rows.find(row => row.id === "privacy_access")!.detail, /did not record why/);
+  assert.equal(JSON.stringify(legacy), before);
 });

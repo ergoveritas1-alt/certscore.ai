@@ -1,0 +1,26 @@
+{
+  "focusedTests": {
+    "passed": 56,
+    "failed": 0
+  },
+  "preferenceRegressionTests": {
+    "passed": 19,
+    "failed": 0
+  },
+  "additionalReasonAssertions": {
+    "passed": 1,
+    "failed": 0
+  },
+  "contractsBuild": "passed",
+  "scanCoreBuild": "passed",
+  "scanCoreTypecheck": "passed",
+  "webTypecheck": "passed",
+  "diffCheck": "passed",
+  "newScans": 0,
+  "deployments": 0,
+  "additionalBrowserRpc": 0,
+  "additionalWaits": 0,
+  "deadlinesChanged": false,
+  "estimatedDiagnosticStorageUsdPerMonthAt100kScans": "<0.05",
+  "historicalReportUnchanged": true
+}

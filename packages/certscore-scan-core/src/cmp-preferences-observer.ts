@@ -12,6 +12,7 @@ import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory
 import { readCmpScopeInventory } from "./cmp-scope-inventory.js";
 import { verifyDeferredPreferencePanel } from "./cmp-preference-panel-binding.js";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "./evidence-work-budget.js";
+import { readPrivacyLinkAccess } from "./privacy-link-access.js";
 
 /** A single isolated Options action. No preference changes, save, second click,
  * page retry, policy navigation, model call, or interaction in another lane. */
@@ -117,28 +118,12 @@ export async function runCmpPreferencesObserver(input: {
     }
     await binding();
     packet.inspectionDiagnostic!.phase = "control_inventory";
-    const links = await page.locator("a[href]").evaluateAll(nodes => nodes.slice(0, 300).map(node => {
-      const a = node as HTMLAnchorElement;
-      const reachable = [...a.getClientRects()].slice(0, 3).some(box => {
-        const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right), top = Math.max(0, box.top), bottom = Math.min(innerHeight, box.bottom);
-        if (right <= left || bottom <= top) return false;
-        return [[(left + right) / 2, (top + bottom) / 2], [left + (right - left) / 4, top + (bottom - top) / 4], [right - (right - left) / 4, bottom - (bottom - top) / 4]].some(([x, y]) => {
-          let hit = document.elementFromPoint(x!, y!);
-          for (let depth = 0; hit?.shadowRoot && depth < 8; depth++) {
-            const inner = hit.shadowRoot.elementFromPoint(x!, y!);
-            if (!inner || inner === hit) break;
-            hit = inner;
-          }
-          return Boolean(hit && (a === hit || a.contains(hit)));
-        });
-      });
-      return { url: a.href, label: (a.getAttribute("aria-label") ?? a.textContent ?? "").trim().slice(0, 160), hit: reachable };
-    }));
+    const links = await page.locator("a[href]").evaluateAll(readPrivacyLinkAccess, {});
     packet.privacyLinks = links.filter(link => {
       const classification = classifyPrivacySurface({ linkText: link.label, url: link.url });
       return link.url.length <= 2000 && /^https?:/.test(link.url) && (classification.surfaceType === "privacy_policy" || classification.variant === "combined_privacy_cookie_surface");
     })
-      .slice(0, 16).map(link => ({ url: link.url, hitTargetBeforeAction: link.hit }));
+      .slice(0, 16).map(({url, hitTargetBeforeAction, access}) => ({url, hitTargetBeforeAction, access}));
     await binding();
     packet.checkpoints!.privacyLinks = true;
     const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"] }> = [];

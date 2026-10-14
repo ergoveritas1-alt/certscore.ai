@@ -26,6 +26,7 @@ test("isolated preference inspection opens Options once, retains categories and 
     assert.deepEqual(packet.declarations.map(row => row.name), ["OptanonConsent", "_ga", "example_insights_id"]);
     assert.equal(packet.declarationInventoryComplete, false);
     assert.ok(packet.privacyLinks.some(link => link.hitTargetBeforeAction));
+    assert.ok(packet.privacyLinks.some(link => link.access?.outcome === "reachable"));
     assert.deepEqual(actions, ["/action/options"]);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
@@ -373,6 +374,8 @@ test("privacy-link reachability uses bounded real hit targets rather than only t
     for (mode of ["partial", "covered", "offscreen"]) {
       const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
       assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction, mode === "partial", JSON.stringify(packet));
+      assert.equal(packet.privacyLinks[0]?.access?.outcome, mode === "partial" ? "reachable" : mode === "covered" ? "hit_target_missed" : "outside_viewport");
+      assert.equal(packet.checkpoints?.privacyLinks, true);
       assert.equal(packet.action.count, 0);
     }
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
