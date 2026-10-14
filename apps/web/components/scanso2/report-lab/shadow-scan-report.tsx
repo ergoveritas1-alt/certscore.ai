@@ -414,7 +414,7 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
   const consentCoverageLimited = Object.values(report.controls).some((value) => value === "Unknown");
   const consentVendor = report.consentVendor ?? (Object.values(report.controls).some(value => value === "Observed") ? "Mechanism observed; provider unidentified" : consentCoverageLimited ? "Not determined" : "Not identified");
   const consentPlatformDetail = report.consentVendor
-    ? "Consent-platform identity retained in the canonical runtime and consent projection."
+    ? null
     : consentCoverageLimited
       ? "Consent inspection was incomplete or not representative, so platform identity was not determined."
       : "No consent-platform identity was retained in the completed scan context.";
@@ -448,7 +448,7 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
           </summary>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <VendorBrandChip className="max-w-[13rem]" label={consentVendor} showMeta={false} />
-            <p className="text-xs leading-5 text-zinc-600">{consentPlatformDetail}</p>
+            {consentPlatformDetail ? <p className="text-xs leading-5 text-zinc-600">{consentPlatformDetail}</p> : null}
           </div>
         </details>
         {report.consentControlsAvailable !== false ? <details className={signalRowClass}>
