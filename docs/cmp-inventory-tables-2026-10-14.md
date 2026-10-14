@@ -303,8 +303,15 @@ assessment. The resolver receives only the retained name, without invented
 hostname, domain or initiator context. Ambiguous or context-dependent names
 (including `CONSENT` and `test_cookie` without direct domain context) retain the
 neutral cookie symbol. Recognized brands without bundled artwork use initials.
-No new cookie signatures, vendor attribution rules or remote favicon calls were
-introduced.
+No assessment cookie signatures, vendor attribution rules or remote favicon
+calls were introduced. The exact `_GRECAPTCHA` name also has a decorative Google
+reCAPTCHA mapping, confirmed against Google's official FAQ:
+https://developers.google.com/recaptcha/docs/faq#does-recaptcha-use-cookies.
+This fills a missing icon match without changing purpose, essentiality or scan
+classification. Similar names and different casing remain neutral. Focused icon
+tests pass, and the local SITS row was verified with a loaded Google logo while
+retaining its original name, purpose and duration. No new scan or deployment ran;
+the additional exact-name mapping remains within the existing transfer estimate.
 
 The complete local SITS report now displays Google, Hotjar, HubSpot and LinkedIn
 logos where recognized across its cookie tables. The saved CMP replay is also

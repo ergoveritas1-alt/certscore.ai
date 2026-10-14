@@ -9,7 +9,11 @@ export function cmpCookieBrand(name: string): string | null {
   if (!name || name.length > 160) return null;
   const match = resolveCanonicalVendor({ type: "cookie", cookieName: name });
   if (match.status === "ambiguous") return null;
-  return match.status === "resolved" ? match.observation.vendor : resolveCanonicalCookieKnowledge(name).vendor;
+  if (match.status === "resolved") return match.observation.vendor;
+  // Brand artwork only; Google's exact documented name is not yet in the
+  // assessment registry. Do not broaden its purpose or necessity classification.
+  // https://developers.google.com/recaptcha/docs/faq#does-recaptcha-use-cookies
+  return resolveCanonicalCookieKnowledge(name).vendor ?? (name === "_GRECAPTCHA" ? "Google reCAPTCHA" : null);
 }
 
 export function CmpInventoryIdentity({ name, kind }: { name: string; kind: "cookie" | "service" }) {

@@ -8,7 +8,7 @@ test("identity decoration uses bundled logos for services and recognized cookie 
   const service = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name: "HubSpot", kind: "service" }));
   assert.match(service, /src="\/vendor-logos\/hubspot.png"/);
   assert.match(service, /alt=""/);
-  for (const [name, logo] of [["hubspotutk", "hubspot"], ["_ga", "google"], ["_ga_*", "google"], ["_hjSessionStorageTest", "hotjar"], ["_dc_gtm_*", "google"]] as const) {
+  for (const [name, logo] of [["hubspotutk", "hubspot"], ["_ga", "google"], ["_ga_*", "google"], ["_GRECAPTCHA", "google"], ["_hjSessionStorageTest", "hotjar"], ["_dc_gtm_*", "google"]] as const) {
     const html = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name, kind: "cookie" }));
     assert.ok(html.includes(`/vendor-logos/${logo}.png`));
     assert.match(html, /cookie pattern/);
@@ -27,6 +27,8 @@ test("identity decoration uses bundled logos for services and recognized cookie 
   assert.match(borlabs, />BO</);
   assert.equal(cmpCookieBrand("test_cookie"), null, "direct domain context must not be invented");
   assert.equal(cmpCookieBrand("CONSENT"), null, "a generic name does not identify a brand");
+  assert.equal(cmpCookieBrand("_GRECAPTCHA_extra"), null, "the documented brand match is exact");
+  assert.equal(cmpCookieBrand("_grecaptcha"), null, "cookie names are case-sensitive");
   assert.equal(cmpCookieBrand("x".repeat(161)), null);
 });
 
