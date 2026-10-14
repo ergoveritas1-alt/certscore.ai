@@ -175,3 +175,26 @@ test("separated pairing excludes scoped, ambiguous, cross-surface, dismiss and c
   link.candidates[1]!.tagName = "a"; link.candidates[1]!.linkDestination = "same_document";
   assert.ok(comparisonPair(link), "a global refusal link with retained same-document destination remains eligible");
 });
+
+test("early analyses cannot spend the authoritative image's reserve or extend the shared 80 ms allowance", async t => {
+  const { createConsentVisualComparisonCollector } = await import("./consent-control-visual-comparison.js");
+  const fixture = await consentVisualFixture();
+  let now = 1000;
+  t.mock.method(Date, "now", () => now);
+  const early = { artifactId: "screenshot_pre_consent_settled", path: "early.png", url: fixture.geometry.pageUrl,
+    capturedAtMs: 1000, consentStateAtTime: "pre_consent" as const, pagePhase: "network_idle" as const };
+  const proof = { ...early, artifactId: "screenshot_pre_consent_geometry_proof", path: "proof.png" };
+  const allowances: number[] = [];
+  // Deterministic slow/inconclusive analysis; existing pixel-analysis fixtures
+  // separately verify image binding, metrics, geometry and materiality.
+  const collector = createConsentVisualComparisonCollector([early, proof], visualFixtureStartMs, () => 1000,
+    async (geometry, _images, deadline) => { allowances.push(deadline - now); now = deadline; return geometry; });
+  const geometry = { ...fixture.geometry, screenshotArtifactRef: early.path };
+  await collector(geometry);
+  await collector(geometry);
+  await collector({ ...geometry, screenshotArtifactRef: proof.path });
+  await collector({ ...geometry, screenshotArtifactRef: proof.path });
+  assert.deepEqual(allowances, [40, 40], "One early attempt cannot starve the final image");
+  assert.equal(now, 1080, "No additional pixel-analysis allowance");
+  assert.equal(geometry.visualComparison, undefined, "Budget priority cannot invent a measurement");
+});

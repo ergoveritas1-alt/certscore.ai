@@ -4,6 +4,7 @@ import React, { type ReactNode } from "react";
 import { CMP_AUDIT_CRITERIA, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
+import { DisclosureChevron } from "./report-finding-row";
 import type { ShadowEvidenceRow } from "./report-lab/shadow-report-data";
 import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
 import { EvidenceJumpLink } from "./evidence-jump-link";
@@ -18,7 +19,7 @@ import type { ConsentBannerPreview, ConsentRejectPreview, ConsentProminencePrevi
 
 const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
   Informational: "neutral", "Feature not supported": "limited", Observed: "positive",
-  "Not observed": "neutral", "Review recommended": "review", "Partially assessed": "context", "Not assessed": "limited",
+  "Incomplete": "limited", "Not applicable": "neutral", "Not observed": "neutral", "Review recommended": "review", "Partially assessed": "context", "Not assessed": "limited",
 };
 
 export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, cookieEvidenceAnchor, rejectActionAvailable = false, bannerPreview, rejectPreview, prominencePreview }: {
@@ -37,40 +38,48 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
   const rows: CmpAuditRow[] = audit?.rows ?? CMP_AUDIT_CRITERIA.map(criterion => ({
     ...criterion, status: "Not assessed" as const, sourceIds: [],
   }));
+  const grouped = new Set((audit?.limitationGroups ?? []).flatMap(group => group.criterionIds));
+  const renderRow = (row: CmpAuditRow) => {
+    const source = evidenceRows.find(source => row.sourceIds.includes(source.id) || evidenceRowAnchor(source.id) === row.evidenceAnchor);
+    const { id, label, status, detail, sourceIds, supportingEvidence } = row;
+    const visualPreview = status === "Observed" && id === "banner" ? bannerPreview :
+      status === "Observed" && id === "reject" ? rejectPreview :
+      id === "prominence" && supportingEvidence?.prominence && ["Observed", "Review recommended", "Informational"].includes(status) ? prominencePreview : null;
+    return <DetailedEvidenceFinding key={id} id={`cmp-criterion-${id}`} title={label} summary={row.limitation ? undefined : detail} assessmentStatus={status}
+      headerActions={visualPreview ? <ConsentBannerViewer preview={visualPreview} /> :
+        id === "privacy_link" && status === "Observed" && source?.policyEvidence?.sourceUrl
+          ? <PolicyLinkViewer sourceUrl={source.policyEvidence.sourceUrl} /> : null}
+      sharedEvidence={sharedEvidence[id]}
+      badge={<EvidenceStatusBadge label={status === "Review recommended" ? "Review" : status} tone={statusTone[status]} showIcon={statusTone[status] !== "review"} />}
+      canonicalEvidenceJson={source?.canonicalEvidenceJson}
+      evidenceRefs={source?.evidenceRefs ?? sourceIds}
+      correctionSteps={source?.correctionSteps ?? cmpCorrectionSteps(row)}
+      evidenceJson={{ scope: audit?.scope ?? "starting_page", scanId: audit?.scanId ?? null,
+        assessmentSourceHash: audit?.assessmentSourceHash ?? null,
+        criterion: { id, label, status, detail, sourceIds, supportingEvidence, limitation: row.limitation } }}>
+      {supportingEvidence ? <CmpSupportingEvidence evidence={supportingEvidence} /> : null}
+      {id === "services" && status === "Observed" && !supportingEvidence?.inventory?.services?.length ?
+        <p className="text-xs text-zinc-500">Service names were not saved in this report.</p> : null}
+      {!sharedEvidence[id] && (id === "implementation" && rejectActionAvailable ?
+        <EvidenceJumpLink targetId="post-reject-action-evidence" className="inline-block text-xs">View Reject action evidence ↓</EvidenceJumpLink> :
+        id === "reject" && row.evidenceAnchor ? <EvidenceJumpLink targetId="consent-choice-controls" className="inline-block text-xs">View consent choices ↓</EvidenceJumpLink> :
+        row.evidenceAnchor && !["implementation", "banner", "prominence", "reject"].includes(id) ? <EvidenceJumpLink targetId={row.evidenceAnchor} className="inline-block text-xs">View supporting evidence ↓</EvidenceJumpLink> : null)}
+      {id === "cookie_information" && cookieEvidenceAnchor ? <EvidenceJumpLink targetId={cookieEvidenceAnchor} className="inline-block text-xs">View cookie-disclosure availability ↓</EvidenceJumpLink> : null}
+    </DetailedEvidenceFinding>;
+  };
   return <details id="cmp-details" className="group/cmp border-b border-r border-zinc-200 p-5">
     <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.cmp} recap={evidenceSectionRecap(rows)} badge={<EvidenceHeaderStatus rows={rows} />} />
     <div className="mt-5">
       <VendorBrandChip label={vendor ?? "Consent platform not identified"} showMeta={false} />
       <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4>
       <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">
-        {rows.map(row => {
-          const source = evidenceRows.find(source => row.sourceIds.includes(source.id) || evidenceRowAnchor(source.id) === row.evidenceAnchor);
-          const { id, label, status, detail, sourceIds, supportingEvidence } = row;
-          const visualPreview = status === "Observed" && id === "banner" ? bannerPreview :
-            status === "Observed" && id === "reject" ? rejectPreview :
-            id === "prominence" && supportingEvidence?.prominence && ["Observed", "Review recommended", "Informational"].includes(status) ? prominencePreview : null;
-          return <DetailedEvidenceFinding key={id} id={`cmp-criterion-${id}`} title={label} summary={detail} assessmentStatus={status}
-            headerActions={visualPreview ? <ConsentBannerViewer preview={visualPreview} /> :
-              id === "privacy_link" && status === "Observed" && source?.policyEvidence?.sourceUrl
-                ? <PolicyLinkViewer sourceUrl={source.policyEvidence.sourceUrl} /> : null}
-            sharedEvidence={sharedEvidence[id]}
-            badge={<EvidenceStatusBadge label={status === "Review recommended" ? "Review" : status} tone={statusTone[status]} showIcon={statusTone[status] !== "review"} />}
-            canonicalEvidenceJson={source?.canonicalEvidenceJson}
-            evidenceRefs={source?.evidenceRefs ?? sourceIds}
-            correctionSteps={source?.correctionSteps ?? cmpCorrectionSteps(row)}
-            evidenceJson={{ scope: audit?.scope ?? "starting_page", scanId: audit?.scanId ?? null,
-              assessmentSourceHash: audit?.assessmentSourceHash ?? null,
-              criterion: { id, label, status, detail, sourceIds, supportingEvidence } }}>
-            {supportingEvidence ? <CmpSupportingEvidence evidence={supportingEvidence} /> : null}
-            {id === "services" && status === "Observed" && !supportingEvidence?.inventory?.services?.length ?
-              <p className="text-xs text-zinc-500">Service names were not saved in this report.</p> : null}
-            {!sharedEvidence[id] && (id === "implementation" && rejectActionAvailable ?
-              <EvidenceJumpLink targetId="post-reject-action-evidence" className="inline-block text-xs">View Reject action evidence ↓</EvidenceJumpLink> :
-              id === "reject" && row.evidenceAnchor ? <EvidenceJumpLink targetId="consent-choice-controls" className="inline-block text-xs">View consent choices ↓</EvidenceJumpLink> :
-              row.evidenceAnchor && !["implementation", "banner", "prominence", "reject"].includes(id) ? <EvidenceJumpLink targetId={row.evidenceAnchor} className="inline-block text-xs">View supporting evidence ↓</EvidenceJumpLink> : null)}
-            {id === "cookie_information" && cookieEvidenceAnchor ? <EvidenceJumpLink targetId={cookieEvidenceAnchor} className="inline-block text-xs">View cookie-disclosure availability ↓</EvidenceJumpLink> : null}
-          </DetailedEvidenceFinding>;
-        })}
+        {rows.filter(row => !grouped.has(row.id)).map(renderRow)}
+        {(audit?.limitationGroups ?? []).map(group => <details key={group.id} id={`cmp-limitation-${group.id}`} className="group/cmp-limitation py-3">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-zinc-800 [&::-webkit-details-marker]:hidden">
+            <span className="flex items-start justify-between gap-3"><span>{group.title}<span className="mt-1 block text-xs font-normal text-zinc-500">{`${group.criterionIds.length} ${group.criterionIds.length === 1 ? "check" : "checks"} · View affected checks`}</span></span><span className="flex shrink-0 items-center gap-2"><EvidenceStatusBadge label="Incomplete" tone="limited" /><DisclosureChevron className="text-zinc-400 group-open/cmp-limitation:rotate-180" /></span></span>
+          </summary>
+          <div className="mt-2 divide-y divide-zinc-200">{rows.filter(row => group.criterionIds.includes(row.id)).map(renderRow)}</div>
+        </details>)}
       </div>
       {children}
     </div>
@@ -81,7 +90,7 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
   const comparison = evidence.prominence, cookies = evidence.cookieComparison, inventory = evidence.inventory;
   return <div className="mt-2 space-y-3 rounded-md bg-zinc-50 p-3 text-xs leading-5 text-zinc-700">
     {inventory?.expiries?.length ? <>
-      <CmpInventoryTable label={`Consent-cookie expiry · ${inventory.expiries.length}`} columns={["Visit", "Cookie", "Remaining days"]}
+      <CmpInventoryTable label={`${inventory.expiries.some(item => item.visit === "Before choice") ? "CMP cookie expiry" : "Consent-cookie expiry"} · ${inventory.expiries.length}`} columns={["Capture", "Cookie", "Remaining days"]}
         columnClasses={["w-[20%] sm:w-auto", "w-[45%] sm:w-auto", "w-[35%] sm:w-auto"]}
         copyRows={inventory.expiries.map(cookie => [cookie.visit, cookie.name, formatRemainingDays(cookie.remainingSeconds)])}
         rows={inventory.expiries.map(cookie => [cookie.visit, <CmpInventoryIdentity name={cookie.name} kind="cookie" />, formatRemainingDays(cookie.remainingSeconds)])} />
@@ -120,24 +129,24 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
     {cookies ? <>
       {!inventory?.cookies?.length ? <p className="font-semibold text-zinc-900">Unmatched cookie names · {cookies.unmatchedNameCount}</p> : null}
       <p>{cookies.observedCookieNameCount} cookie names checked against {cookies.declarationPatternCount} CMP patterns, including wildcards.</p>
-      {inventory?.cookies?.length ? <CookieMatchTable entries={inventory.cookies} /> :
+      {inventory?.cookies?.length ? <CookieMatchTable entries={inventory.cookies} partial={cookies?.declarationInventoryComplete === false} /> :
         <CmpInventoryTable label="Unmatched cookie names" columns={["Cookie name", "CMP match"]}
           copyRows={cookies.unmatchedNames.map(name => [name, "No match"])}
           rows={cookies.unmatchedNames.map(name => [<CmpInventoryIdentity name={name} kind="cookie" />, <CmpCookieMatch matched={false} />])} />}
       {inventory?.cookies?.length && inventory.cookies.length < cookies.observedCookieNameCount ? <p>Showing {inventory.cookies.length} of {cookies.observedCookieNameCount} compared cookie names.</p> : null}
       {!inventory?.cookies?.length ? <p>Only unmatched names were saved in this report; matched-cookie rows are unavailable.</p> : null}
       {!inventory?.cookies?.length && cookies.unmatchedNames.length < cookies.unmatchedNameCount ? <p>Showing {cookies.unmatchedNames.length} of {cookies.unmatchedNameCount} unmatched names.</p> : null}
-      <p>{cookies.allUnmatchedOnlyAfterAccept ? "The unmatched cookies were found after Accept and were not seen before consent. " : "Cookies found during the scan were compared with the CMP list. "}Names alone do not show each cookie’s purpose or consent requirements.</p>
+      {cookies.declarationInventoryComplete === false ? <p>Compared with a partial CMP list. Unmatched names are not confirmed omissions.</p> : <p>{cookies.allUnmatchedOnlyAfterAccept ? "The unmatched cookies were found after Accept and were not seen before consent. " : "Cookies found during the scan were compared with the CMP list. "}Names alone do not show each cookie’s purpose or consent requirements.</p>}
     </> : null}
   </div>;
 }
 
-function CookieMatchTable({ entries }: { entries: NonNullable<NonNullable<NonNullable<CmpAuditRow["supportingEvidence"]>["inventory"]>["cookies"]> }) {
+function CookieMatchTable({ entries, partial = false }: { partial?: boolean; entries: NonNullable<NonNullable<NonNullable<CmpAuditRow["supportingEvidence"]>["inventory"]>["cookies"]> }) {
   // Match results come from the canonical assessment; the component never runs
   // a second matcher or infers a purpose from a name.
   return <CmpInventoryTable label={`Cookie matches · ${entries.length}`} columns={["Cookie name", "CMP match", "CMP pattern", "Observed"]}
-    copyRows={entries.map(cookie => [cookie.name, cookie.matchedPattern !== null ? "Matched" : "No match", cookie.matchedPattern ?? "—", cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])}
-    rows={entries.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, <CmpCookieMatch matched={cookie.matchedPattern !== null} />,
+    copyRows={entries.map(cookie => [cookie.name, cookie.matchedPattern !== null ? "Matched" : partial ? "No match in captured list" : "No match", cookie.matchedPattern ?? "—", cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])}
+    rows={entries.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, <CmpCookieMatch matched={cookie.matchedPattern !== null} partial={partial} />,
       <span className="font-mono text-[11px]">{cookie.matchedPattern ?? "—"}</span>,
       cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])} />;
 }

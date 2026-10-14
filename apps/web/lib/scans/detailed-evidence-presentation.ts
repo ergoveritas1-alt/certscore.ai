@@ -11,7 +11,7 @@ export function evidenceHeaderStatus(rows: readonly EvidenceSummaryRow[]): { lab
   if (rows.some(row => row.status === "Potential gap")) return { label: "Review", description: "Potential gap in this section", concern: true };
   if (rows.some(row => ["Partial concern", "Review signal", "Needs review", "Review recommended", "Warning"].includes(row.status))) return { label: "Review", description: "Finding needs review", concern: false };
   if (rows.some(row => row.priority === "high" && row.status === "Observed")) return { label: "Review", description: "Observed finding to review in this section", concern: true };
-  if (rows.some(row => ["Not confirmed", "Limited", "Insufficient evidence", "Not testable", "Not assessed", "Partially assessed"].includes(row.status))) return { label: "Limited", description: "Evidence coverage is limited; not a confirmed issue", concern: false };
+  if (rows.some(row => ["Not confirmed", "Limited", "Insufficient evidence", "Not testable", "Not assessed", "Partially assessed", "Incomplete"].includes(row.status))) return { label: "Limited", description: "Evidence coverage is limited; not a confirmed issue", concern: false };
   return null;
 }
 

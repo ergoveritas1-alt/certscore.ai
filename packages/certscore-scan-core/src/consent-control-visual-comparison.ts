@@ -123,13 +123,18 @@ export function comparisonPair(geometry: ConsentControlGeometryArtifact) {
 
 /** One shared 80ms allowance across existing recaptures, inside the module budget. */
 export function createConsentVisualComparisonCollector(screenshots: ScreenshotArtifact[], scanStartedAtMs: number,
-  remainingModuleBudgetMs: () => number) {
+  remainingModuleBudgetMs: () => number, measure = withConsentControlVisualComparison) {
   let budgetMs = 80;
+  // Early captures may use half; retain at least half for the authoritative
+  // geometry proof/recovery image. This redistributes the existing allowance.
+  let earlyBudgetMs = 40;
   let paired: { geometry: ConsentControlGeometryArtifact; state: ConsentVisualCaptureState } | undefined;
   return async (geometry: ConsentControlGeometryArtifact, state?: ConsentVisualCaptureState) => {
     const startedAtMs = Date.now();
-    const allowanceMs = Math.min(budgetMs, remainingModuleBudgetMs());
-    if (allowanceMs <= 0) return geometry;
+    const authoritative = screenshots.some(image => image.path === geometry.screenshotArtifactRef &&
+      ["screenshot_pre_consent_geometry_proof", "screenshot_pre_consent_packet_recovery"].includes(image.artifactId));
+    const allowanceMs = Math.min(budgetMs, authoritative ? budgetMs : earlyBudgetMs, remainingModuleBudgetMs());
+    if (allowanceMs <= 0) { paired = undefined; return geometry; }
     try {
       if (paired && state) {
         const retained = retainPairedConsentVisualCapture({ previous: paired.geometry, current: geometry,
@@ -138,13 +143,17 @@ export function createConsentVisualComparisonCollector(screenshots: ScreenshotAr
       }
       // Any intervening unbound, changed or incomplete capture invalidates reuse.
       paired = undefined;
-      const result = await withConsentControlVisualComparison(geometry, screenshots, startedAtMs + allowanceMs, scanStartedAtMs);
+      const result = await measure(geometry, screenshots, startedAtMs + allowanceMs, scanStartedAtMs);
       if (state?.framesStable && result !== geometry && result.visualComparison &&
           screenshots.some(s => s.artifactId === "screenshot_pre_consent_settled" && s.path === result.screenshotArtifactRef)) {
         paired = { geometry: structuredClone(result), state: { ...state } };
       }
       return result;
-    } finally { budgetMs = Math.max(0, budgetMs - Math.max(1, Date.now() - startedAtMs)); }
+    } finally {
+      const spentMs = Math.max(1, Date.now() - startedAtMs);
+      budgetMs = Math.max(0, budgetMs - spentMs);
+      if (!authoritative) earlyBudgetMs = Math.max(0, earlyBudgetMs - spentMs);
+    }
   };
 }
 

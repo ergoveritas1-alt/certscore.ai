@@ -10,7 +10,7 @@ export function cmpPreferenceBudgetMs(memoryMb: number = 3008): number {
   return Math.min(CMP_PREFERENCE_BUDGET_MS, Math.floor(56_000 * 1024 / memory) - 2_000);
 }
 export const cmpAuditCriterionSchema = z.enum(["categories", "services", "privacy_access", "consent_record", "duration", "declared_not_found", "found_not_declared", "cookie_information"]);
-export type ExtendedCmpCriterion = z.infer<typeof cmpAuditCriterionSchema> | "implementation";
+export type ExtendedCmpCriterion = z.infer<typeof cmpAuditCriterionSchema> | "implementation" | "prominence";
 
 /** Scanner integration coverage is independent of a CMP's product capabilities.
  * Registry recognition, a missing adapter, and an absent control cannot prove
@@ -30,7 +30,7 @@ export const cmpPreferenceDispatchSchema = z.object({
 export type CmpPreferenceDispatch = z.infer<typeof cmpPreferenceDispatchSchema>;
 
 export const cmpCookieExpiryEvidenceSchema = z.object({
-  visit: z.enum(["Accept", "Reject"]), name: z.string().min(1).max(160),
+  visit: z.enum(["Accept", "Reject", "Before choice"]), domain: z.string().min(1).max(255).optional(), path: z.string().min(1).max(1024).optional(), name: z.string().min(1).max(160),
   capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(),
   remainingSeconds: z.number().finite().nonnegative(),
 }).strict().refine(row => row.expiresAtEpochSeconds >= row.capturedAtEpochSeconds &&
@@ -102,8 +102,9 @@ export const cmpPreferencesEvidenceSchema = z.object({
 export type CmpPreferencesEvidence = z.infer<typeof cmpPreferencesEvidenceSchema>;
 
 export const cmpAuditRowSchema = z.object({
-    id: z.union([cmpAuditCriterionSchema, z.literal("implementation")]),
-    status: z.enum(["observed", "not_observed", "review", "not_assessed", "partially_assessed", "feature_not_supported"]),
+    id: z.union([cmpAuditCriterionSchema, z.literal("implementation"), z.literal("prominence")]),
+    status: z.enum(["observed", "not_observed", "review", "not_assessed", "partially_assessed", "feature_not_supported", "incomplete", "not_applicable"]),
+    limitation: z.object({ group: z.enum(["preferences", "actions", "visual"]), code: z.string().min(1).max(120) }).strict().optional(),
     detail: z.string().max(500),
     evidenceRefs: z.array(z.string().max(240)).max(12),
     inventory: cmpInventoryTablesSchema.optional(),
@@ -113,6 +114,7 @@ export const cmpAuditRowSchema = z.object({
       unmatchedNameCount: z.number().int().nonnegative(),
       unmatchedNames: z.array(z.string().min(1).max(160)).max(100),
       allUnmatchedOnlyAfterAccept: z.boolean(),
+      declarationInventoryComplete: z.boolean().optional(),
     }).optional(),
     // Capability absence needs an explicit, version-bound product source. No
     // current generic DOM inspector emits this; unknown stays not_assessed.
@@ -121,28 +123,37 @@ export const cmpAuditRowSchema = z.object({
 }).superRefine((row, ctx) => {
   const inventory = row.inventory;
   if (inventory && ((inventory.categories && row.id !== "categories") || (inventory.services && row.id !== "services") || (inventory.declarations && row.id !== "cookie_information") ||
-    (inventory.cookies && row.id !== "found_not_declared") || (inventory.expiries && row.id !== "duration") || row.status === "not_assessed" || row.evidenceRefs.length === 0)) {
+    (inventory.cookies && row.id !== "found_not_declared") || (inventory.expiries && row.id !== "duration") || ["not_assessed", "incomplete", "not_applicable"].includes(row.status) || row.evidenceRefs.length === 0)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Inventory tables require the corresponding assessed criterion and retained evidence." });
   }
   const c = row.cookieComparison;
-  if (c && (row.id !== "found_not_declared" || row.status !== "review" || c.unmatchedNameCount < 1 ||
-    c.unmatchedNameCount > c.observedCookieNameCount || c.unmatchedNames.length < 1 || c.unmatchedNames.length > c.unmatchedNameCount || c.unmatchedNames.join("").length > 500 ||
+  if (c && (row.id !== "found_not_declared" ||
+    (c.declarationInventoryComplete === undefined ? row.status !== "review" || c.unmatchedNameCount < 1 || c.unmatchedNames.length < 1
+      : c.declarationInventoryComplete ? !["review", "not_observed"].includes(row.status) || (row.status === "review") !== (c.unmatchedNameCount > 0)
+      : row.status !== "partially_assessed") ||
+    c.unmatchedNameCount > c.observedCookieNameCount || c.unmatchedNames.length > c.unmatchedNameCount || c.unmatchedNames.join("").length > 500 ||
     new Set(c.unmatchedNames).size !== c.unmatchedNames.length)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Cookie comparison details require consistent bounded mismatch evidence." });
   }
 });
 
 export const cmpAuditAssessmentSchema = z.object({
-  version: z.enum(["cmp_audit_assessment.v1", "cmp_audit_assessment.v2", "cmp_audit_assessment.v3", "cmp_audit_assessment.v4"]),
+  version: z.enum(["cmp_audit_assessment.v1", "cmp_audit_assessment.v2", "cmp_audit_assessment.v3", "cmp_audit_assessment.v4", "cmp_audit_assessment.v5"]),
   scanId: z.string().min(1),
   sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
   support: cmpInspectionSupportSchema,
-  rows: z.array(cmpAuditRowSchema).min(8).max(9),
+  rows: z.array(cmpAuditRowSchema).min(8).max(10),
 }).superRefine((assessment, ctx) => {
-  const expectedIds = [...cmpAuditCriterionSchema.options, ...(assessment.version === "cmp_audit_assessment.v4" ? ["implementation"] : [])];
+  const expectedIds = [...cmpAuditCriterionSchema.options, ...(["cmp_audit_assessment.v4", "cmp_audit_assessment.v5"].includes(assessment.version) ? ["implementation"] : []), ...(assessment.version === "cmp_audit_assessment.v5" ? ["prominence"] : [])];
   if (assessment.rows.length !== expectedIds.length || new Set(assessment.rows.map(row => row.id)).size !== expectedIds.length || expectedIds.some(id => !assessment.rows.some(row => row.id === id))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CMP audit criteria must be unique." });
   for (const row of assessment.rows) {
-    if (row.status === "partially_assessed" && assessment.version !== "cmp_audit_assessment.v4") ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Partial assessment requires the v4 scope." });
+    if (row.status === "partially_assessed" && !["cmp_audit_assessment.v4", "cmp_audit_assessment.v5"].includes(assessment.version)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Partial assessment requires the v4 scope." });
+    if (assessment.version !== "cmp_audit_assessment.v5" && (row.limitation || ["incomplete", "not_applicable"].includes(row.status) ||
+      row.cookieComparison?.declarationInventoryComplete !== undefined || row.inventory?.expiries?.some(item => item.visit === "Before choice")))
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Narrowed evidence scope requires v5." });
+    if (row.status === "incomplete" && !row.limitation) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Incomplete inspection requires its specific cause." });
+    if (row.status === "not_applicable" && !row.capabilityProof) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not applicable requires explicit applicability proof." });
+    if (row.inventory?.expiries?.some(item => item.visit === "Before choice" && (!item.domain || !item.path?.startsWith("/")))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Baseline expiry requires retained cookie identity." });
     if (row.status !== "not_assessed" && row.evidenceRefs.length === 0) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Assessed CMP criteria require retained evidence." });
     if (row.status === "feature_not_supported" && (!row.capabilityProof || row.capabilityProof.provider !== assessment.support.provider)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Feature absence requires version-bound capability proof for this CMP." });
   }

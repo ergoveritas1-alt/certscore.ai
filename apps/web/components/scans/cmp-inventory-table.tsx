@@ -73,10 +73,10 @@ export function CmpInventoryTable({ label, columns, rows, copyRows, columnClasse
   </div>;
 }
 
-export function CmpCookieMatch({ matched }: { matched: boolean }) {
+export function CmpCookieMatch({ matched, partial = false }: { matched: boolean; partial?: boolean }) {
   return matched ? <span className="inline-flex items-center gap-1 whitespace-nowrap text-emerald-700">
     <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 8 3 3 7-7" /></svg><span className="sr-only sm:not-sr-only">Matched</span>
-  </span> : <span className="text-amber-800">No match</span>;
+  </span> : partial ? <span className="text-zinc-600">No match in captured list</span> : <span className="text-amber-800">No match</span>;
 }
 
 /** Plain tab-separated text preserves the full list when pasted into a grid.

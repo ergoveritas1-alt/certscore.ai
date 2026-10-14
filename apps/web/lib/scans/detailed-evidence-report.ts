@@ -27,11 +27,11 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
   const sourceRows = [...report.consentRows, ...report.gdprTransparencyRows, ...report.preConsentRuntimeRows, ...report.trackingExternalRows];
   const audit = report.cmpAudit?.scanId === report.scan.id ? report.cmpAudit : undefined;
   const cmpAudit = publicCmpAuditSchema.parse({
-    version: "cmp_audit_report.v1", scanId: report.scan.id, scope: "starting_page",
+    version: audit?.version ?? "cmp_audit_report.v1", limitationGroups: audit?.limitationGroups, scanId: report.scan.id, scope: "starting_page",
     assessmentSourceHash: audit?.assessmentSourceHash ?? null,
     inspectionSupport: audit?.inspectionSupport,
     rows: (audit?.rows ?? CMP_AUDIT_CRITERIA.map(criterion => ({ ...criterion, status: "Not assessed", sourceIds: [] }))).map(row => ({
-      id: row.id, label: row.label, status: row.status, detail: "detail" in row ? row.detail : undefined,
+      id: row.id, label: row.label, status: row.status, limitation: "limitation" in row ? row.limitation : undefined, detail: "detail" in row ? row.detail : undefined,
       sourceIds: row.sourceIds, evidenceAnchor: "evidenceAnchor" in row ? row.evidenceAnchor : undefined,
       supportingEvidence: "supportingEvidence" in row ? row.supportingEvidence : undefined,
     })),

@@ -169,3 +169,26 @@ test("inline request evidence requires confirmed canonical Reject coverage and e
   row.assessmentStatus = "coverage_limitation";
   assert.equal(project().supportingEvidence, undefined);
 });
+
+test("report v2 applicability uses complete persisted control absence, never unknown or unusable visits", () => {
+  const assessment = consentControlAssessmentSchema.parse({ ...structuredClone(observedControlAssessment), cmpAudit: {
+    version: "cmp_audit_assessment.v5", scanId: "scan-1", sourceSha256: "a".repeat(64),
+    support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
+    rows: ["categories", "services", "privacy_access", "consent_record", "duration", "declared_not_found", "found_not_declared", "cookie_information", "implementation", "prominence"].map(id => ({ id, status: "not_assessed", detail: "No verified evidence", evidenceRefs: [] })),
+  } });
+  assessment.controls.reject.state = "not_observed";
+  assert.equal(find(projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment }), "prominence").status, "Not applicable");
+  for (const mutate of [
+    (a: typeof assessment) => { a.controls.reject.state = "unknown"; a.assessmentStatus = "limited"; },
+    (a: typeof assessment) => { a.coverage.status = "limited"; a.assessmentStatus = "limited"; },
+    (a: typeof assessment) => { a.scan.noGo = true; },
+    (a: typeof assessment) => { a.document.identityStatus = "mismatched"; },
+    (a: typeof assessment) => { a.scan.scanId = "another-scan"; },
+  ]) {
+    const changed = structuredClone(assessment); mutate(changed);
+    assert.notEqual(find(projectCmpAudit({ scanId: "scan-1", consentControlAssessment: changed }), "prominence").status, "Not applicable");
+  }
+  const withReview = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment, unifiedFindings: [finding("accept_more_prominent_than_reject"), finding("acceptance_signal_contradicts_action")] });
+  assert.equal(find(withReview, "prominence").status, "Review recommended");
+  assert.equal(find(withReview, "implementation").status, "Review recommended");
+});

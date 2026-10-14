@@ -568,8 +568,11 @@ export const detailedEvidenceOpenApiSchemas = {
     ],
     "properties": {
       "version": {
-        "const": "cmp_audit_report.v1",
-        "type": "string"
+        "type": "string",
+        "enum": [
+          "cmp_audit_report.v1",
+          "cmp_audit_report.v2"
+        ]
       },
       "scanId": {
         "type": "string"
@@ -587,6 +590,60 @@ export const detailedEvidenceOpenApiSchemas = {
             "type": "null"
           }
         ]
+      },
+      "limitationGroups": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "code",
+            "title",
+            "criterionIds"
+          ],
+          "properties": {
+            "id": {
+              "type": "string",
+              "enum": [
+                "preferences",
+                "actions",
+                "visual"
+              ]
+            },
+            "code": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 4000
+            },
+            "criterionIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "banner",
+                  "reject",
+                  "prominence",
+                  "categories",
+                  "services",
+                  "privacy_link",
+                  "privacy_access",
+                  "consent_record",
+                  "implementation",
+                  "duration",
+                  "declared_not_found",
+                  "found_not_declared",
+                  "cookie_information"
+                ]
+              },
+              "maxItems": 13
+            }
+          }
+        },
+        "maxItems": 3
       },
       "inspectionSupport": {
         "type": "object",
@@ -678,8 +735,32 @@ export const detailedEvidenceOpenApiSchemas = {
                 "Not assessed",
                 "Partially assessed",
                 "Feature not supported",
-                "Informational"
+                "Informational",
+                "Incomplete",
+                "Not applicable"
               ]
+            },
+            "limitation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "group",
+                "code"
+              ],
+              "properties": {
+                "group": {
+                  "type": "string",
+                  "enum": [
+                    "preferences",
+                    "actions",
+                    "visual"
+                  ]
+                },
+                "code": {
+                  "type": "string",
+                  "maxLength": 2048
+                }
+              }
             },
             "detail": {
               "type": "string",
@@ -890,8 +971,17 @@ export const detailedEvidenceOpenApiSchemas = {
                             "type": "string",
                             "enum": [
                               "Accept",
-                              "Reject"
+                              "Reject",
+                              "Before choice"
                             ]
+                          },
+                          "domain": {
+                            "type": "string",
+                            "maxLength": 255
+                          },
+                          "path": {
+                            "type": "string",
+                            "maxLength": 1024
                           },
                           "name": {
                             "type": "string",
@@ -1076,6 +1166,9 @@ export const detailedEvidenceOpenApiSchemas = {
                       "maxItems": 100
                     },
                     "allUnmatchedOnlyAfterAccept": {
+                      "type": "boolean"
+                    },
+                    "declarationInventoryComplete": {
                       "type": "boolean"
                     }
                   }

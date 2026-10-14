@@ -31,3 +31,28 @@ test("preference binding diagnostics reject unbounded or unrecognized values", (
     assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success,false,JSON.stringify(patch));
   }
 });
+
+test("v5 scopes cannot silently upgrade historical assessments or label partial matches as Review", async () => {
+  const { cmpAuditAssessmentSchema, cmpAuditCriterionSchema } = await import("./cmp-audit-evidence");
+  const historical = { version: "cmp_audit_assessment.v4", scanId: "historical", sourceSha256: "a".repeat(64),
+    support: { state: "partial", provider: "OneTrust", recipeVersion: "v1", reason: "inspection_incomplete" },
+    rows: [...cmpAuditCriterionSchema.options, "implementation"].map(id => ({ id, status: "not_assessed", detail: "Original conclusion", evidenceRefs: [] })) };
+  assert.deepEqual(cmpAuditAssessmentSchema.parse(historical), historical);
+  const candidate: any = structuredClone(historical); candidate.version = "cmp_audit_assessment.v5";
+  candidate.rows.push({ id: "prominence", status: "not_assessed", detail: "Measurements missing", evidenceRefs: [] });
+  Object.assign(candidate.rows[0], { status: "incomplete", limitation: { group: "preferences", code: "preference_operation_timed_out" }, evidenceRefs: ["packet"] });
+  assert.equal(cmpAuditAssessmentSchema.safeParse(candidate).success, true);
+  candidate.version = "cmp_audit_assessment.v4";
+  assert.equal(cmpAuditAssessmentSchema.safeParse(candidate).success, false);
+  candidate.version = "cmp_audit_assessment.v5"; delete candidate.rows[0].limitation;
+  assert.equal(cmpAuditAssessmentSchema.safeParse(candidate).success, false);
+  Object.assign(candidate.rows[0], { status: "not_applicable" });
+  assert.equal(cmpAuditAssessmentSchema.safeParse(candidate).success, false, "Missing support cannot establish not applicable");
+  Object.assign(candidate.rows[0], { status: "not_assessed", evidenceRefs: [] });
+  const comparison = candidate.rows.find((row: any) => row.id === "found_not_declared");
+  Object.assign(comparison, { status: "partially_assessed", evidenceRefs: ["packet"], cookieComparison: {
+    declarationPatternCount: 1, observedCookieNameCount: 1, unmatchedNameCount: 0, unmatchedNames: [], allUnmatchedOnlyAfterAccept: false, declarationInventoryComplete: false } });
+  assert.equal(cmpAuditAssessmentSchema.safeParse(candidate).success, true);
+  comparison.status = "review";
+  assert.equal(cmpAuditAssessmentSchema.safeParse(candidate).success, false);
+});

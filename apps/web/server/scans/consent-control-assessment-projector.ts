@@ -775,7 +775,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
           : "unknown";
 
   return deriveConsentControlAssessment({
-    cmpAudit: deriveCmpAuditAssessment(input.bundle),
+    cmpAudit: deriveCmpAuditAssessment(input.bundle, input.consentControlGeometryEvidence),
     visualEvidence,
     scan: {
       scanId: input.scanId ?? input.bundle.scanId,

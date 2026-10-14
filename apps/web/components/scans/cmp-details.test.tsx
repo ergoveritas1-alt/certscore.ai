@@ -215,3 +215,38 @@ test("compact CMP tables retain all rows, exact matches and historical limitatio
   services.status = "Observed"; services.supportingEvidence = undefined;
   assert.match(renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" />), /Service names were not saved/);
 });
+
+test("v2 groups one shared preference failure and retains every criterion anchor and JSON evidence", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1" });
+  audit.version = "cmp_audit_report.v2";
+  const ids = ["categories", "services", "cookie_information"] as const;
+  for (const id of ids) Object.assign(audit.rows.find(row => row.id === id)!, { status: "Incomplete", detail: "This check depends on the incomplete preference inspection.",
+    sourceIds: ["packet"], limitation: { group: "preferences", code: "preference_operation_timed_out" } });
+  audit.limitationGroups = [{ id: "preferences", code: "preference_operation_timed_out", title: "Preference inspection timed out", criterionIds: [...ids] }];
+  for (const compact of [true, false]) {
+    const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" compact={compact} />);
+    assert.equal((html.match(/>Preference inspection timed out</g) ?? []).length, 1);
+    assert.equal((html.match(/id="cmp-criterion-/g) ?? []).length, 13);
+    assert.match(html, /id="cmp-limitation-preferences"/);
+    assert.match(html, /3 checks · View affected checks/);
+    const group = html.slice(html.indexOf('id="cmp-limitation-preferences"'));
+    for (const id of ids) assert.match(group, new RegExp(`id="cmp-criterion-${id}"`));
+    assert.match(group, /JSON evidence/);
+    assert.doesNotMatch(group, /Correction steps|Review recommended/);
+  }
+});
+
+test("partial cookie comparisons show neutral unmatched labels and preserve available detail fields", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1" });
+  Object.assign(audit.rows.find(row => row.id === "found_not_declared")!, { status: "Partially assessed", label: "Unmatched cookie names", supportingEvidence: {
+    inventory: { cookies: [{ name: "_ga", matchedPattern: "_ga", observedIn: ["before_choice"] }, { name: "unknown_name", matchedPattern: null, observedIn: ["before_choice"] }] },
+    cookieComparison: { declarationPatternCount: 1, observedCookieNameCount: 2, unmatchedNameCount: 1, unmatchedNames: ["unknown_name"], allUnmatchedOnlyAfterAccept: false, declarationInventoryComplete: false } } });
+  Object.assign(audit.rows.find(row => row.id === "cookie_information")!, { status: "Partially assessed", supportingEvidence: { inventory: {
+    declarations: [{ name: "_ga", purpose: "Measurement", duration: "", source: "cmp_visible_inventory" }] } } });
+  const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" />);
+  assert.match(html, /No match in captured list/); assert.match(html, /Unmatched names are not confirmed omissions/);
+  assert.match(html, /text-emerald-700/); assert.match(html, /Measurement/); assert.match(html, /Not listed/);
+  assert.match(html, /Cookie matches · 2/);
+});

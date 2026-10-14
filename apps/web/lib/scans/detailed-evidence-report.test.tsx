@@ -181,3 +181,41 @@ test("CMP service and declaration tables survive shared evidence pagination with
   inconsistent.cmpAudit!.rows.find(row => row.id === "duration")!.supportingEvidence!.inventory!.expiries![0]!.remainingSeconds = 60;
   assert.throws(() => buildDetailedEvidenceExport(inconsistent), /Remaining time must match/);
 });
+
+test("report v2 exports partial evidence and grouped capture failures without losing individual criteria", () => {
+  const report = fixture(), audit = report.cmpAudit!;
+  audit.version = "cmp_audit_report.v2";
+  const incomplete = ["categories", "services"] as const;
+  for (const id of incomplete) Object.assign(audit.rows.find(row => row.id === id)!, {
+    status: "Incomplete", detail: "Preference inspection timed out", sourceIds: ["CmpPreferencesEvidencePacket.json"],
+    limitation: { group: "preferences", code: "preference_operation_timed_out" },
+  });
+  audit.limitationGroups = [{ id: "preferences", title: "Preference inspection timed out", code: "preference_operation_timed_out", criterionIds: [...incomplete] }];
+  Object.assign(audit.rows.find(row => row.id === "found_not_declared")!, { status: "Partially assessed", supportingEvidence: {
+    cookieComparison: { declarationPatternCount: 1, observedCookieNameCount: 2, unmatchedNameCount: 1, unmatchedNames: ["cookie_a"], allUnmatchedOnlyAfterAccept: false, declarationInventoryComplete: false },
+    inventory: { cookies: [{ name: "cookie_a", matchedPattern: null, observedIn: ["before_choice"] }] },
+  } });
+  Object.assign(audit.rows.find(row => row.id === "duration")!, { status: "Observed", sourceIds: ["CanonicalEvidenceBundle.json"], supportingEvidence: {
+    inventory: { expiries: [{ visit: "Before choice", name: "OptanonConsent", domain: ".example.com", path: "/", capturedAtEpochSeconds: 1700000000, expiresAtEpochSeconds: 1700086400, remainingSeconds: 86400 }] },
+  } });
+  const before = structuredClone(report);
+  const prepared = { ...report, ...buildDetailedEvidenceExport(report) };
+  const exported = buildReportDisplayExport(selectReportEvidenceSection(prepared, "cmp").report, { scanId: report.scan.id });
+  const page = buildReportEvidencePage({ scanId: report.scan.id, report: exported, section: "cmp" });
+  const rebuilt = reconstructReportEvidencePages([{ ...page, entries: page.entries.map(entry => ({ ...entry, value: entry.value })) }]);
+  assert.equal(rebuilt.cmpAudit?.version, "cmp_audit_report.v2");
+  assert.equal(rebuilt.cmpAudit?.rows.length, 13);
+  assert.deepEqual(rebuilt.cmpAudit?.limitationGroups, audit.limitationGroups);
+  assert.equal(rebuilt.cmpAudit?.rows.find(row => row.id === "found_not_declared")?.status, "Partially assessed");
+  assert.deepEqual(rebuilt.cmpAudit?.rows.find(row => row.id === "duration")?.supportingEvidence, audit.rows.find(row => row.id === "duration")?.supportingEvidence);
+  assert.deepEqual(report, before);
+  for (const mutate of [
+    (value: typeof audit) => { value.version = "cmp_audit_report.v1"; },
+    (value: typeof audit) => { value.rows.find(row => row.id === "found_not_declared")!.status = "Review recommended"; },
+    (value: typeof audit) => { delete value.rows.find(row => row.id === "categories")!.limitation; },
+    (value: typeof audit) => { value.limitationGroups![0]!.criterionIds.push("banner"); },
+  ]) {
+    const changed = structuredClone(report); mutate(changed.cmpAudit!);
+    assert.throws(() => buildDetailedEvidenceExport(changed));
+  }
+});

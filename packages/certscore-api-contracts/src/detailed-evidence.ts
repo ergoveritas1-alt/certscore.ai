@@ -31,18 +31,21 @@ export const consentControlMeasurementSchema = z.object({
   backgroundUniformity: z.number().min(0).max(1), interiorUniformity: z.number().min(0).max(1),
 }).strict();
 export const publicCmpAuditSchema = z.object({
-  version: z.literal("cmp_audit_report.v1"), scanId: z.string(), scope: z.literal("starting_page"),
+  version: z.enum(["cmp_audit_report.v1", "cmp_audit_report.v2"]), scanId: z.string(), scope: z.literal("starting_page"),
   assessmentSourceHash: z.string().nullable(),
+  limitationGroups: z.array(z.object({ id: z.enum(["preferences", "actions", "visual"]), code: ref, title: text,
+    criterionIds: z.array(z.enum(["banner", "reject", "prominence", "categories", "services", "privacy_link", "privacy_access", "consent_record", "implementation", "duration", "declared_not_found", "found_not_declared", "cookie_information"])).min(1).max(13) }).strict()).max(3).optional(),
   inspectionSupport: z.object({ state: z.enum(["supported", "partial", "unsupported", "unknown"]),
     provider: z.string().max(120).nullable(), recipeVersion: z.string().max(100).nullable(), reason: z.string().max(240) }).strict().optional(),
   rows: z.array(z.object({
-    id: z.enum(["banner", "reject", "prominence", "categories", "services", "privacy_link", "privacy_access", "consent_record", "implementation", "duration", "declared_not_found", "found_not_declared", "cookie_information"]), label: text, status: z.enum(["Observed", "Not observed", "Review recommended", "Not assessed", "Partially assessed", "Feature not supported", "Informational"]),
+    id: z.enum(["banner", "reject", "prominence", "categories", "services", "privacy_link", "privacy_access", "consent_record", "implementation", "duration", "declared_not_found", "found_not_declared", "cookie_information"]), label: text, status: z.enum(["Observed", "Not observed", "Review recommended", "Not assessed", "Partially assessed", "Feature not supported", "Informational", "Incomplete", "Not applicable"]),
+    limitation: z.object({ group: z.enum(["preferences", "actions", "visual"]), code: ref }).strict().optional(),
     detail: text.optional(), sourceIds: z.array(ref).max(30), evidenceAnchor: ref.optional(),
     supportingEvidence: z.object({
       prominence: z.object({ accept: consentControlMeasurementSchema, reject: consentControlMeasurementSchema, captureSkewMs: count }).strict().optional(),
       requests: z.array(z.object({ hostname: ref, path: ref.refine(value => !/[?#]/.test(value), "Request evidence must omit query and fragment values"), vendor: text, category: text, msAfterReject: count }).strict()).max(100).optional(),
       inventory: z.object({
-        expiries: z.array(z.object({ visit: z.enum(["Accept", "Reject"]), name: z.string().min(1).max(160),
+        expiries: z.array(z.object({ visit: z.enum(["Accept", "Reject", "Before choice"]), domain: z.string().min(1).max(255).optional(), path: z.string().min(1).max(1024).optional(), name: z.string().min(1).max(160),
           capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(), remainingSeconds: z.number().finite().nonnegative(),
         }).strict().refine(row => row.expiresAtEpochSeconds >= row.capturedAtEpochSeconds && Math.abs(row.remainingSeconds - (row.expiresAtEpochSeconds - row.capturedAtEpochSeconds)) <= 0.000001,
           "Remaining time must match the retained capture and expiry timestamps.")).max(4).optional(),
@@ -52,10 +55,24 @@ export const publicCmpAuditSchema = z.object({
         cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
       }).strict().optional(),
       cookieComparison: z.object({ declarationPatternCount: count, observedCookieNameCount: count, unmatchedNameCount: count,
-        unmatchedNames: z.array(z.string().max(160)).max(100), allUnmatchedOnlyAfterAccept: z.boolean() }).strict().optional(),
+        unmatchedNames: z.array(z.string().max(160)).max(100), allUnmatchedOnlyAfterAccept: z.boolean(), declarationInventoryComplete: z.boolean().optional() }).strict().optional(),
     }).strict().optional(),
   }).strict()).length(13),
 }).strict().superRefine((audit, context) => {
+  for (const row of audit.rows) {
+    if ((row.status === "Incomplete") !== Boolean(row.limitation)) context.addIssue({ code: z.ZodIssueCode.custom, message: "Incomplete criteria require a specific limitation; other statuses must not carry one." });
+    if (row.supportingEvidence?.inventory?.expiries?.some(item => item.visit === "Before choice" && (!item.domain || !item.path?.startsWith("/"))))
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Baseline expiry requires retained cookie identity." });
+  }
+  for (const row of audit.rows) if (row.supportingEvidence?.cookieComparison?.declarationInventoryComplete === false && row.status !== "Partially assessed")
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Partial declaration comparison must remain partially assessed." });
+  if (audit.version === "cmp_audit_report.v1" && (audit.limitationGroups?.length || audit.rows.some(row => row.limitation || ["Incomplete", "Not applicable"].includes(row.status) || row.supportingEvidence?.cookieComparison?.declarationInventoryComplete !== undefined || row.supportingEvidence?.inventory?.expiries?.some(item => item.visit === "Before choice"))))
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Narrowed CMP presentation requires report v2." });
+  for (const group of audit.limitationGroups ?? []) if (group.criterionIds.some(id => !audit.rows.some(row => row.id === id && row.status === "Incomplete" && row.limitation?.group === group.id)))
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Limitation groups must reference matching incomplete criteria." });
+  if (new Set(audit.limitationGroups?.map(group => group.id)).size !== (audit.limitationGroups?.length ?? 0) ||
+    audit.limitationGroups?.some(group => new Set(group.criterionIds).size !== group.criterionIds.length))
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Limitation groups and their criteria must be unique." });
   if (new Set(audit.rows.map(row => row.id)).size !== 13) context.addIssue({ code: z.ZodIssueCode.custom, message: "CMP criteria must be unique." });
 });
 

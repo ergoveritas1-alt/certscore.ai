@@ -26,7 +26,7 @@ export const CMP_AUDIT_CRITERIA = [
 ] as const;
 
 export type CmpAuditCriterionId = typeof CMP_AUDIT_CRITERIA[number]["id"];
-export type CmpAuditStatus = "Observed" | "Not observed" | "Review recommended" | "Not assessed" | "Partially assessed" | "Feature not supported" | "Informational";
+export type CmpAuditStatus = "Observed" | "Not observed" | "Review recommended" | "Not assessed" | "Partially assessed" | "Feature not supported" | "Informational" | "Incomplete" | "Not applicable";
 export type CmpAuditRow = {
   id: CmpAuditCriterionId;
   label: string;
@@ -34,6 +34,7 @@ export type CmpAuditRow = {
   detail?: string;
   evidenceAnchor?: string;
   sourceIds: string[];
+  limitation?: { group: "preferences" | "actions" | "visual"; code: string };
   deductionPoints?: number;
   supportingEvidence?: {
     prominence?: Pick<ConsentControlVisualComparison, "accept" | "reject" | "captureSkewMs">;
@@ -43,7 +44,8 @@ export type CmpAuditRow = {
   };
 };
 export type CmpAuditProjection = {
-  version: typeof CMP_AUDIT_REPORT_VERSION;
+  version: typeof CMP_AUDIT_REPORT_VERSION | "cmp_audit_report.v2";
+  limitationGroups?: CmpLimitationGroup[];
   scope: "starting_page";
   scanId: string;
   assessmentSourceHash: string | null;
@@ -191,11 +193,11 @@ export function projectCmpAudit(input: {
     for (const [id, label] of Object.entries(legacyLabels)) set(id as CmpAuditCriterionId, { label });
   }
   if (audit?.version === "cmp_audit_assessment.v2") set("services", { label: "Individual service checkboxes or toggles observed" });
-  if (audit && audit.version !== "cmp_audit_assessment.v4") {
+  if (audit && !["cmp_audit_assessment.v4", "cmp_audit_assessment.v5"].includes(audit.version)) {
     set("privacy_access", { label: "Privacy policy accessible without interacting with cookie banner" });
     set("implementation", { label: "Settings are technically implemented correctly" });
   }
-  const labels = { partially_assessed: "Partially assessed", observed: "Observed", not_observed: "Not observed", review: "Review recommended", not_assessed: "Not assessed", feature_not_supported: "Feature not supported" } as const;
+  const labels = { incomplete: "Incomplete", not_applicable: "Not applicable", partially_assessed: "Partially assessed", observed: "Observed", not_observed: "Not observed", review: "Review recommended", not_assessed: "Not assessed", feature_not_supported: "Feature not supported" } as const;
   if (audit) for (const row of audit.rows) {
     const concern = input.normalizedConcerns?.find(concern => concern.originKey === `consent.cmp_audit.${row.id}` &&
       concern.originType === "runtime_artifact" && concern.externalSurfacingEligibility === "eligible" &&
@@ -203,15 +205,33 @@ export function projectCmpAudit(input: {
       cmpAuditRowsEqual(concern.evidenceBundle.rawEvidence?.cmpAuditRow, row));
     // Policy-evaluated review findings take precedence over coverage results.
     if (row.id === "implementation" && (contradiction || afterReject)) continue;
+    if (row.id === "prominence" && rows.find(item => item.id === "prominence")!.status !== "Not assessed") continue;
     // Preserve the more specific canonical failure reason when neither path is usable.
     if (row.id === "implementation" && row.status === "not_assessed" && rejectCoverage?.assessmentStatus === "coverage_limitation") continue;
-    if (concern) set(row.id, { status: labels[row.status],
-      detail: row.id === "duration" && row.inventory?.expiries?.length
+    if (concern) set(row.id, { status: labels[row.status], limitation: row.limitation,
+      detail: audit.version === "cmp_audit_assessment.v5" && row.id === "duration" && row.inventory?.expiries?.length
+        ? "CMP cookie expiry was captured. Time remaining is shown below."
+        : row.id === "duration" && row.inventory?.expiries?.length
         ? "Consent-cookie expiry was captured. Long-term behavior was not tested."
         : row.id === "categories" && row.inventory?.categories?.length
         ? row.detail.replace(/^(\d+) selectable categories observed in the inspected consent surface:.*$/, "$1 categories were available.") : row.detail || undefined,
       sourceIds: row.evidenceRefs,
       ...((row.cookieComparison || row.inventory) ? { supportingEvidence: { ...(row.cookieComparison ? { cookieComparison: row.cookieComparison } : {}), ...(row.inventory ? { inventory: row.inventory } : {}) } } : {}) });
+  }
+
+  if (audit?.version === "cmp_audit_assessment.v5") {
+    set("duration", { label: "CMP cookie expiry" });
+    set("found_not_declared", { label: "Unmatched cookie names" });
+    set("implementation", { label: "Activity after Accept / Reject" });
+    const prominenceRow = rows.find(row => row.id === "prominence")!;
+    if (prominenceRow.status === "Not assessed" && assessment?.visualEvidence?.status === "withheld") {
+      Object.assign(prominenceRow, { status: "Incomplete", detail: "The retained image could not complete screenshot review.",
+        limitation: { group: "visual", code: assessment.visualEvidence.reasonCodes[0] ?? "visual_evidence_withheld" }, sourceIds: ["consentControlAssessment.visualEvidence"] });
+    }
+    if (prominenceRow.status === "Not assessed" && assessment?.assessmentStatus === "complete" && assessment.coverage.status === "complete" &&
+      [assessment.controls.accept.state, assessment.controls.reject.state].includes("not_observed")) {
+      Object.assign(prominenceRow, { status: "Not applicable", detail: "A comparison requires both Accept and Reject controls; one was not observed in the complete inspection.", sourceIds: ["consentControlAssessment.controls"] });
+    }
   }
 
   // Attribute only an already-applied, exactly attributable family amount.
@@ -228,6 +248,24 @@ export function projectCmpAudit(input: {
       row.deductionPoints = family.deductionPoints;
     }
   }
-  return { version: CMP_AUDIT_REPORT_VERSION, scope: "starting_page", scanId: input.scanId,
+  return { version: audit?.version === "cmp_audit_assessment.v5" ? "cmp_audit_report.v2" : CMP_AUDIT_REPORT_VERSION,
+    ...(audit?.version === "cmp_audit_assessment.v5" ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
     assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows };
+}
+
+export type CmpLimitationGroup = { id: "preferences" | "actions" | "visual"; code: string; title: string; criterionIds: CmpAuditCriterionId[] };
+
+/** Group persisted coverage outcomes; never infer a finding from missing rows. */
+export function cmpLimitationGroups(rows: readonly CmpAuditRow[]): CmpLimitationGroup[] {
+  return (["preferences", "actions", "visual"] as const).flatMap(id => {
+    const affected = rows.filter(row => row.status === "Incomplete" && row.limitation?.group === id);
+    if (!affected.length) return [];
+    const code = affected[0]!.limitation!.code;
+    const timeout = code.includes("time") || code.includes("deadline") || code === "preference_budget_exhausted";
+    const title = id === "preferences" ? timeout ? "Preference inspection timed out" : code.includes("adapter") || code.includes("unsupported") ? "Scanner support for these CMP checks is unavailable" : "Preference inspection incomplete"
+      : id === "actions" ? timeout ? "Consent-action observation timed out" : "Consent-action observation incomplete"
+      : timeout ? "Screenshot review timed out" : code === "safety_check_unavailable" ? "Screenshot review incomplete"
+      : code === "visual_measurement_unavailable" ? "Button comparison incomplete" : "Screenshot evidence unavailable";
+    return [{ id, code, title, criterionIds: affected.map(row => row.id) }];
+  });
 }
