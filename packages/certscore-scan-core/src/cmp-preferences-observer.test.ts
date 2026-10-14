@@ -151,7 +151,7 @@ test("OneTrust registered dialog binding opens only the existing hidden preferen
       assert.equal(saves, 0);
       if (mode === "valid") {
         assert.equal(packet.status, "completed", JSON.stringify(packet));
-        assert.equal(packet.support.recipeVersion, "onetrust_preferences.v1");
+        assert.equal(packet.support.recipeVersion, "onetrust_preferences.v2");
         assert.equal(packet.action.count, 1); assert.equal(packet.action.opened, true);
         assert.equal(packet.controls[0]?.kind, "category"); assert.equal(clicks, 1);
       } else {
@@ -161,4 +161,59 @@ test("OneTrust registered dialog binding opens only the existing hidden preferen
       }
     }
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+
+test("registered OneTrust on-demand panel stays under the same vendor root and within the original budget", {timeout: 25_000}, async () => {
+  let mode = "lazy", clicks = 0, saves = 0, accepts = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    if (req.url === "/saved") { saves++; res.end(); return; }
+    if (req.url === "/accepted") { accepts++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    const panel = `<section id="${mode === "wrong-panel" ? "unrelated-panel" : "onetrust-pc-sdk"}" role="${mode === "wrong-role" ? "article" : "dialog"}" aria-label="Cookie preferences"><label><input type="checkbox">Analytics</label><fieldset><legend>Individual services</legend><label><input type="checkbox">Example Analytics</label></fieldset><details><summary>Cookies</summary><table><thead><tr><th>Cookie name</th><th>Purpose</th><th>Storage duration</th></tr></thead><tbody><tr><td>hidden_cookie</td><td>Hidden</td><td>1 year</td></tr></tbody></table></details><button onclick="fetch('/saved')">Save preferences</button></section>`;
+    res.end(`<div id="onetrust-consent-sdk"><div id="onetrust-banner-sdk"><button id="onetrust-pc-btn-handler" aria-label="Cookie settings, Opens the preference center dialog">Cookie settings</button><button onclick="fetch('/accepted')">Accept all</button></div></div><script>
+      document.getElementById('onetrust-pc-btn-handler').onclick=()=>{fetch('/clicked');
+        ${mode === "navigate" ? "location.reload();" : mode === "never" ? "" : `setTimeout(()=>{
+          const root=document.getElementById('onetrust-consent-sdk');
+          ${mode === "root-replaced" ? "root.outerHTML=root.outerHTML;" : ""}
+          ${mode === "outside-root" ? "document.body" : "document.getElementById('onetrust-consent-sdk')"}.insertAdjacentHTML('beforeend', ${JSON.stringify(panel)});
+          ${mode === "duplicate" ? `document.getElementById('onetrust-consent-sdk').insertAdjacentHTML('beforeend', ${JSON.stringify(panel)});` : ""}
+        },100);`}
+      };
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address=server.address();assert.ok(address && typeof address!=="string");
+  const memory=process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE="10240";
+  try {
+    for(mode of ["lazy", "outside-root", "root-replaced", "duplicate", "wrong-role", "navigate", "never", "wrong-panel"]){
+      clicks=0;saves=0;accepts=0;
+      const started=Date.now();
+      const packet=await runCmpPreferencesObserver({parentDispatchSha256:"a".repeat(64),config:{policyVersion:"bounded_cmp_preferences.v1",enabled:true,scanId:mode,exactTargetUrl:`http://127.0.0.1:${address.port}/`}});
+      assert.equal(clicks,1,mode);assert.equal(saves,0);assert.equal(accepts,0);
+      assert.equal(packet.action.count,1);assert.equal(packet.inspectionDiagnostic?.budgetMs,3600);
+      assert.ok(Date.now()-started<4600,`Absolute inspection deadline exceeded: ${mode}`);
+      assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.mode,"registered_deferred");
+      assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.priorMatches,0);
+      if(mode==="lazy"){
+        assert.equal(packet.status,"completed",JSON.stringify(packet));assert.equal(packet.action.opened,true);
+        assert.deepEqual(packet.controls.map(c=>c.kind),["category","service"]);
+        assert.equal(packet.controlInventoryComplete,false,"Unopened sections remain outside complete inspection");
+        assert.equal(packet.declarations.length,0,"Closed cookie sections must not be labelled visible inventory");
+        assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.outcome,"opened");
+      }else{
+        assert.equal(packet.action.opened,false,mode);assert.equal(packet.controls.length,0,mode);assert.equal(packet.declarations.length,0,mode);
+        assert.equal(packet.checkpoints?.controls??false,false,mode);
+        if(["never","wrong-panel"].includes(mode))assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.outcome,"timed_out");
+        if(mode==="duplicate"){
+          assert.equal(packet.support.reason,"preference_surface_ambiguous");
+          assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.outcome,"ambiguous");
+        }
+      }
+    }
+  }finally{
+    if(memory===undefined)delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE=memory;
+    await new Promise<void>(resolve=>server.close(()=>resolve()));
+  }
 });

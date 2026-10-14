@@ -27,7 +27,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "borlabs_preferences.v1", budgetMs, phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v2", budgetMs, phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -167,8 +167,29 @@ export async function runCmpPreferencesObserver(input: {
     const controlled = match.recipe ? page.locator(match.recipe.dialogSelector)
       : registeredDialog ? page.locator(registeredDialog.dialogSelector)
       : controlledId && /^[A-Za-z][\w:-]{0,120}$/.test(controlledId) ? page.locator(`[id="${controlledId}"]`) : null;
-    if (!controlled || await controlled.count() !== 1 || (match.recipe && await match.scope.count() !== 1)) {
-      packet.limitations.push("preference_surface_binding_unavailable"); return finish();
+    packet.inspectionDiagnostic!.phase = "surface_binding";
+    const priorMatches = controlled ? await controlled.count() : 0;
+    const surfaceBinding: NonNullable<NonNullable<CmpPreferencesEvidence["inspectionDiagnostic"]>["surfaceBinding"]> = {
+      version: "cmp_surface_binding.v1", mode: match.recipe ? "borlabs" : registeredDialog ? "registered_existing" : "aria_controls",
+      priorMatches: Math.min(priorMatches, 1000), outcome: "checking",
+    };
+    packet.inspectionDiagnostic!.surfaceBinding = surfaceBinding;
+    const stopBinding = (outcome: typeof surfaceBinding.outcome, reason: string) => {
+      surfaceBinding.outcome = outcome; packet.support.reason = reason; packet.limitations.push(reason); return finish();
+    };
+    if (!controlled || priorMatches > 1 || (match.recipe && await match.scope.count() !== 1)) {
+      return stopBinding(priorMatches > 1 ? "ambiguous" : "missing", priorMatches > 1 ? "preference_surface_ambiguous" : "preference_surface_binding_unavailable");
+    }
+    // A registered OneTrust button may create its panel on opening. Bind that
+    // transition to the exact existing vendor root, never to a guessed new modal.
+    const deferredRoot = priorMatches === 0 && registeredDialog?.deferredRootSelector
+      ? page.locator(registeredDialog.deferredRootSelector) : undefined;
+    const deferredRootHandle = deferredRoot && await deferredRoot.count() === 1 ? await deferredRoot.elementHandle() : null;
+    if (priorMatches === 0) {
+      if (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle)) {
+        return stopBinding(deferredRoot ? "parent_unbound" : "missing", deferredRoot ? "preference_parent_binding_unavailable" : "preference_surface_missing");
+      }
+      surfaceBinding.mode = "registered_deferred";
     }
     // Read the already-loaded configuration before the optional panel transition.
     // This moves the API read earlier; no second API read or visit is added.
@@ -184,13 +205,18 @@ export async function runCmpPreferencesObserver(input: {
       packet.checkpoints!.declarations = true;
       packet.checkpoints!.controls = true;
     }
-    const dialogHandle = await controlled.elementHandle();
-    const beforeVisible = controlled ? await controlled.isVisible() : false;
-    if (!match.recipe && beforeVisible) { packet.limitations.push("preference_surface_binding_unavailable"); return finish(); }
+    const dialogHandle = priorMatches === 1 ? await controlled.elementHandle() : null;
+    const beforeVisible = priorMatches === 1 && await controlled.isVisible();
+    surfaceBinding.priorVisible = beforeVisible;
+    if (!match.recipe && beforeVisible) return stopBinding("already_visible", "preference_surface_already_visible");
+    surfaceBinding.outcome = "ready";
     await binding();
-    const dispatchFields = await match.control.evaluate(element => ({ label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls") }));
+    const dispatchFields = await match.control.evaluate((element, expected) => ({ label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls"),
+      registered: !expected.selector || element.matches(expected.selector),
+      parentBound: !expected.root || Boolean(expected.root.isConnected && expected.root.contains(element)),
+    }), { selector: registeredDialog?.controlSelector, root: deferredRootHandle });
     const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe ? "observation" : "action" });
-    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId) throw new Error("preference_control_changed");
+    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound) throw new Error("preference_control_changed");
     packet.inspectionDiagnostic!.phase = "opening";
     await dispatchLocatorClickWithVerifiedGeometry(match.control, Math.min(500, remaining()), () => {
       remaining();
@@ -203,9 +229,19 @@ export async function runCmpPreferencesObserver(input: {
       await match.scope.waitFor({ state: "hidden", timeout: remaining() });
       if (!beforeVisible || !dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
     }
-    await controlled.waitFor({ state: "visible", timeout: remaining() });
-    if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
+    // Waiting on presence does not select a panel for inspection. Recheck exact
+    // uniqueness before accepting any opening or reading preference evidence.
+    await controlled.first().waitFor({ state: "visible", timeout: remaining() });
+    if (await controlled.count() !== 1) throw new Error("preference_surface_ambiguous");
+    if (surfaceBinding.mode === "registered_deferred") {
+      if (!deferredRoot || !deferredRootHandle || await deferredRoot.count() !== 1 ||
+          !await deferredRoot.evaluate((element, previous) => element === previous && element.isConnected, deferredRootHandle) ||
+          !await controlled.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element) &&
+            ["dialog", "region"].includes(element.getAttribute("role") ?? "") &&
+            (element.getAttribute("aria-label")?.trim() || element.getAttribute("aria-labelledby")?.trim())), deferredRootHandle)) throw new Error("preference_surface_changed");
+    } else if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
     await binding();
+    surfaceBinding.outcome = "opened";
     packet.action.opened = true;
     packet.inspectionDiagnostic!.phase = "preference_inventory";
     const raw = await readPreferenceControls(controlled);
@@ -218,7 +254,7 @@ export async function runCmpPreferencesObserver(input: {
     const incompleteSections = match.recipe ? 1 : await controlled.locator('iframe, [aria-expanded="false"], details:not([open]), [hidden], [role="tab"][aria-selected="false"]').count();
     packet.controlInventoryComplete = !match.recipe && !raw.overflow && incompleteSections === 0 && raw.controls.every(control => control.visible) && packet.controls.every(control => control.kind !== "unclassified");
     if (!packet.controlInventoryComplete) packet.limitations.push(raw.overflow ? "control_inventory_overflow" : match.recipe ? "bounded_vendor_preference_inventory" : "deeper_preference_sections_not_opened");
-    const tables = borlabs ? [] : await controlled.locator("table").evaluateAll(nodes => nodes.slice(0, 8).map(table => ({
+    const tables = borlabs ? [] : await controlled.locator("table:visible").evaluateAll(nodes => nodes.slice(0, 8).map(table => ({
       headers: [...table.querySelectorAll("thead th")].map(th => (th.textContent ?? "").trim().slice(0, 120)),
       overflow: table.querySelectorAll("tbody tr").length > 100,
       rows: [...table.querySelectorAll("tbody tr")].slice(0, 100).map(row => [...row.querySelectorAll("td")].map(cell => ({ text: (cell.textContent ?? "").trim().slice(0, 240), code: cell.querySelector("code")?.textContent?.trim().slice(0, 160) }))),
@@ -249,7 +285,11 @@ export async function runCmpPreferencesObserver(input: {
     if (!packet.checkpoints?.controls) { packet.controls = []; packet.action.opened = false; }
     packet.controlInventoryComplete = false;
     const timedOut = expired || Date.now() >= deadline || (error instanceof Error && (error.name === "TimeoutError" || error.message === "preference_budget_exhausted"));
-    const reason = timedOut ? "preference_budget_exhausted" : input.signal?.aborted ? "preference_inspection_cancelled" : "preference_inspection_incomplete";
+    const bindingFailure = error instanceof Error && ["preference_surface_changed", "preference_surface_ambiguous", "preference_document_changed", "preference_control_changed"].includes(error.message) ? error.message : null;
+    const reason = timedOut ? "preference_budget_exhausted" : input.signal?.aborted ? "preference_inspection_cancelled" : bindingFailure ?? "preference_inspection_incomplete";
+    if (packet.inspectionDiagnostic?.surfaceBinding && !packet.checkpoints?.controls) {
+      packet.inspectionDiagnostic.surfaceBinding.outcome = timedOut ? "timed_out" : reason === "preference_surface_ambiguous" ? "ambiguous" : "changed";
+    }
     packet.support.reason = reason;
     packet.limitations.push(reason);
     return finish();

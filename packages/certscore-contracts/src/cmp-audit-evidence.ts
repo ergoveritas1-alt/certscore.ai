@@ -82,8 +82,14 @@ export const cmpPreferencesEvidenceSchema = z.object({
     truncated: z.boolean(),
   }).optional(),
   inspectionDiagnostic: z.object({
-    revision: z.literal("borlabs_preferences.v1"), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
-    phase: z.enum(["browser_start", "navigation", "cmp_readiness", "control_inventory", "opening", "preference_inventory", "completed"]),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    phase: z.enum(["browser_start", "navigation", "cmp_readiness", "control_inventory", "surface_binding", "opening", "preference_inventory", "completed"]),
+    surfaceBinding: z.object({
+      version: z.literal("cmp_surface_binding.v1"),
+      mode: z.enum(["aria_controls", "registered_existing", "registered_deferred", "borlabs"]),
+      priorMatches: z.number().int().min(0).max(1000), priorVisible: z.boolean().optional(),
+      outcome: z.enum(["checking", "ready", "opened", "missing", "ambiguous", "already_visible", "parent_unbound", "changed", "timed_out"]),
+    }).strict().optional(),
   }).optional(),
 }).superRefine((packet, ctx) => {
   if (packet.status === "completed" && (!packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });

@@ -441,3 +441,18 @@ test("expiry evidence rejects inconsistent arithmetic and nonpersistent timestam
     assert.equal(cmpCookieExpiryEvidenceSchema.safeParse({ ...valid, ...change }).success, false);
   }
 });
+
+test("preference binding diagnostics do not promote a limited IKEA-style pre-click packet", () => {
+  const input=bundle(),packet=input.cmpPreferencesEvidence!;
+  Object.assign(packet,{status:"limited",support:{state:"partial",provider:"OneTrust",recipeVersion:"onetrust_preferences.v2",reason:"preference_surface_missing"},
+    action:{count:0,intent:"options",label:null,opened:false},controls:[],privacyLinks:[],declarations:[],controlInventoryComplete:false,declarationInventoryComplete:false,
+    limitations:["preference_surface_missing"],inspectionDiagnostic:{revision:"cmp_preferences.v2",budgetMs:17000,phase:"surface_binding",
+      surfaceBinding:{version:"cmp_surface_binding.v1",mode:"registered_existing",priorMatches:0,priorVisible:false,outcome:"missing"}}});
+  const before=structuredClone(input);
+  const audit=deriveCmpAuditAssessment(input)!;
+  assert.ok(audit.rows.every(row=>row.status==="not_assessed"));
+  assert.equal(audit.support.reason,"preference_surface_missing");
+  assert.deepEqual(input,before);
+  packet.inspectionDiagnostic!.surfaceBinding!.outcome="opened";
+  assert.ok(deriveCmpAuditAssessment(input)!.rows.every(row=>row.status==="not_assessed"),"Diagnostics cannot substitute for retained controls or opening proof");
+});
