@@ -1,5 +1,27 @@
 import React, { type ReactNode } from "react";
 import { CopyJsonButton } from "./copy-json-button";
+import { getVendorBrandMark } from "./vendor-brand-chip";
+
+/** Decorative only: service names are retained identities. Cookie names do not
+ * carry vendor attribution, so they always use the neutral cookie symbol. */
+export function CmpInventoryIdentity({ name, kind }: { name: string; kind: "cookie" | "service" }) {
+  const logoPath = kind === "service" ? getVendorBrandMark(name).logoPath : undefined;
+  return <span className="inline-flex max-w-full items-center gap-1.5 align-middle">
+    <span aria-hidden="true" className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-zinc-400">
+      {logoPath ? <img src={logoPath} alt="" width={16} height={16} loading="lazy" className="h-4 w-4 object-contain" /> :
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          {kind === "cookie" ? <>
+            <path d="M21 12a9 9 0 1 1-9-9 4 4 0 0 0 4 4 4 4 0 0 0 5 5Z" />
+            <path d="M8 8h.01M8 15h.01M13 12h.01M15 16h.01" strokeWidth="3" />
+          </> : <>
+            <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
+            <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+          </>}
+        </svg>}
+    </span>
+    <span className={`min-w-0 ${kind === "cookie" ? "font-mono text-[11px]" : ""}`}>{name}</span>
+  </span>;
+}
 
 /** One compact window for all CMP lists: header plus up to eight 36px rows.
  * Cells wrap on mobile and remain untruncated at every width. */

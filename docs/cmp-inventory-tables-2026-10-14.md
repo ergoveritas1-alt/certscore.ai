@@ -173,3 +173,27 @@ Incremental metadata storage/transfer is estimated below $0.05/month at
 100,000 scans/month with 30-day retention; disclosed before implementation
 and pre-approved under the below-$1 cost policy. The one-time retained packet
 reads cost less than $0.01.
+
+## Table identity icons
+
+All cookie-name cells in the expiry, declaration, comparison and historical
+unmatched-name tables now include a compact neutral cookie icon. Service and
+post-Reject request cells reuse bundled service logos when available, with a
+neutral service icon otherwise. Cookie names without retained vendor attribution
+do not receive a guessed vendor logo. These are decorative, hidden from assistive
+technology, and leave the complete names and copied table text unchanged.
+No external favicon service, asset download or new evidence field is introduced.
+
+The saved SITS replay retains its original assessments and 36 declaration rows,
+14 compared cookies and five post-Reject HubSpot requests. All five HubSpot logos
+load locally. At mobile width 390px and desktop width 1280px there is no page
+overflow; the mobile expiry table also fits without horizontal overflow. All
+cookie rows include their neutral icons. Seventeen focused component/copy tests
+and the web typecheck pass. Preview screenshots: `mobile-cookie-icons.png` and
+`desktop-table-icons.png`. Nothing has been deployed or rescanned.
+
+No scanner latency, evidence storage, browser work or model calls are added.
+Potential extra page transfer if shipped is estimated below $0.20/month at
+100,000 SITS-sized report views, including repeated inline icons and the existing
+1.5KB HubSpot asset (cached across its five rows). This estimate was disclosed
+during implementation and is pre-approved under the below-$1 policy.

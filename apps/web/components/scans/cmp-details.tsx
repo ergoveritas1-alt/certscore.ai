@@ -10,7 +10,7 @@ import { EvidenceJumpLink } from "./evidence-jump-link";
 import type { SharedEvidenceLink } from "./report-lab/detailed-evidence-layout";
 import { EvidenceSectionHeader } from "./evidence-section-header";
 import { EvidenceHeaderStatus, evidenceSectionRecap } from "./evidence-header-status";
-import { CmpInventoryTable, CmpCookieMatch } from "./cmp-inventory-table";
+import { CmpInventoryTable, CmpCookieMatch, CmpInventoryIdentity } from "./cmp-inventory-table";
 import { VendorBrandChip } from "./vendor-brand-chip";
 
 const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
@@ -72,7 +72,7 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       <CmpInventoryTable label={`Consent-cookie expiry · ${inventory.expiries.length}`} columns={["Visit", "Cookie", "Remaining days"]}
         columnClasses={["w-[20%] sm:w-auto", "w-[45%] sm:w-auto", "w-[35%] sm:w-auto"]}
         copyRows={inventory.expiries.map(cookie => [cookie.visit, cookie.name, formatRemainingDays(cookie.remainingSeconds)])}
-        rows={inventory.expiries.map(cookie => [cookie.visit, <span className="font-mono text-[11px]">{cookie.name}</span>, formatRemainingDays(cookie.remainingSeconds)])} />
+        rows={inventory.expiries.map(cookie => [cookie.visit, <CmpInventoryIdentity name={cookie.name} kind="cookie" />, formatRemainingDays(cookie.remainingSeconds)])} />
       <p>Time remaining when the cookie was captured.</p>
     </> : null}
     {inventory?.categories?.length ? <CmpInventoryTable label={`Category choices · ${inventory.categories.length}`} columns={["Category", "Captured setting"]}
@@ -81,12 +81,12 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
     {inventory?.services?.length ? <>
       <CmpInventoryTable label={`CMP services · ${inventory.services.length}`} columns={["Service", "Identified from"]}
         copyRows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])}
-        rows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])} />
+        rows={inventory.services.map(service => [<CmpInventoryIdentity name={service.name} kind="service" />, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])} />
     </> : null}
     {inventory?.declarations?.length ? <CmpInventoryTable label={`Cookie details · ${inventory.declarations.length}`}
       columns={["Cookie name / pattern", "Purpose", "Storage duration"]}
       copyRows={inventory.declarations.map(cookie => [cookie.name, cookie.purpose || "Not listed", disclosureText(cookie.duration) || "Not listed"])}
-      rows={inventory.declarations.map(cookie => [<span className="font-mono text-[11px]">{cookie.name}</span>, cookie.purpose || "Not listed", disclosureText(cookie.duration) || "Not listed"])} /> : null}
+      rows={inventory.declarations.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, cookie.purpose || "Not listed", disclosureText(cookie.duration) || "Not listed"])} /> : null}
     {inventory?.cookies?.length && !cookies ? <CookieMatchTable entries={inventory.cookies} /> : null}
     {comparison ? <>
       <CmpInventoryTable label="Accept / Reject comparison" columns={["Control", "Size (px)", "Fill contrast"]}
@@ -99,7 +99,7 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
         columns={["Service", "Category", "After Reject", "Request"]}
         columnClasses={["w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[55%] sm:w-auto"]}
         copyRows={evidence.requests.map(request => [request.vendor, request.category, `+${request.msAfterReject} ms`, `${request.hostname}${request.path}`])}
-        rows={evidence.requests.map(request => [request.vendor, request.category, <span className="whitespace-nowrap">+{request.msAfterReject} ms</span>,
+        rows={evidence.requests.map(request => [<CmpInventoryIdentity name={request.vendor} kind="service" />, request.category, <span className="whitespace-nowrap">+{request.msAfterReject} ms</span>,
           <span className="block max-w-[18rem] whitespace-normal break-all font-mono text-[11px] leading-4">
             <span className="block">{request.hostname}</span><span className="block text-zinc-500">{request.path}</span>
           </span>])} />
@@ -111,7 +111,7 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       {inventory?.cookies?.length ? <CookieMatchTable entries={inventory.cookies} /> :
         <CmpInventoryTable label="Unmatched cookie names" columns={["Cookie name", "CMP match"]}
           copyRows={cookies.unmatchedNames.map(name => [name, "No match"])}
-          rows={cookies.unmatchedNames.map(name => [<span className="font-mono text-[11px]">{name}</span>, <CmpCookieMatch matched={false} />])} />}
+          rows={cookies.unmatchedNames.map(name => [<CmpInventoryIdentity name={name} kind="cookie" />, <CmpCookieMatch matched={false} />])} />}
       {inventory?.cookies?.length && inventory.cookies.length < cookies.observedCookieNameCount ? <p>Showing {inventory.cookies.length} of {cookies.observedCookieNameCount} compared cookie names.</p> : null}
       {!inventory?.cookies?.length ? <p>Only unmatched names were saved in this report; matched-cookie rows are unavailable.</p> : null}
       {!inventory?.cookies?.length && cookies.unmatchedNames.length < cookies.unmatchedNameCount ? <p>Showing {cookies.unmatchedNames.length} of {cookies.unmatchedNameCount} unmatched names.</p> : null}
@@ -125,7 +125,7 @@ function CookieMatchTable({ entries }: { entries: NonNullable<NonNullable<NonNul
   // a second matcher or infers a purpose from a name.
   return <CmpInventoryTable label={`Cookie matches · ${entries.length}`} columns={["Cookie name", "CMP match", "CMP pattern", "Observed"]}
     copyRows={entries.map(cookie => [cookie.name, cookie.matchedPattern !== null ? "Matched" : "No match", cookie.matchedPattern ?? "—", cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])}
-    rows={entries.map(cookie => [<span className="font-mono text-[11px]">{cookie.name}</span>, <CmpCookieMatch matched={cookie.matchedPattern !== null} />,
+    rows={entries.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, <CmpCookieMatch matched={cookie.matchedPattern !== null} />,
       <span className="font-mono text-[11px]">{cookie.matchedPattern ?? "—"}</span>,
       cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])} />;
 }

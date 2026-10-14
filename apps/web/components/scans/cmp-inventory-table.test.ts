@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildCmpTableCopyPayload } from "./cmp-inventory-table";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { buildCmpTableCopyPayload, CmpInventoryIdentity } from "./cmp-inventory-table";
+
+test("identity decoration uses local service logos without attributing cookies or fetching remote icons", () => {
+  const service = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name: "HubSpot", kind: "service" }));
+  assert.match(service, /src="\/vendor-logos\/hubspot.png"/);
+  assert.match(service, /alt=""/);
+  for (const [kind, name] of [["cookie", "hubspotutk"], ["cookie", "google"], ["service", "unknown.example"]] as const) {
+    const html = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name, kind }));
+    assert.match(html, /aria-hidden="true"/);
+    assert.match(html, /<svg/);
+    assert.doesNotMatch(html, /<img|https?:/);
+    assert.ok(html.includes(name));
+  }
+});
 
 test("copy includes the headers and every retained row beyond the visible eight", () => {
   const rows = Array.from({ length: 36 }, (_, index) => [`cookie_${index}`, "tracking", "2 years"]);
