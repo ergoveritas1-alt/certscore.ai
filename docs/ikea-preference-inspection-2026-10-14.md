@@ -84,8 +84,45 @@ must accompany the producer diagnostics; this change is not being deployed now.
 - Scan-core build, web typecheck and whitespace validation.
 - Both retained IKEA preference packets reviewed without changing original bytes.
 
-A fresh IKEA scan is still needed to confirm which live variant it presents and
-whether the new binding succeeds there. No historical findings were repaired or
-promoted, and no live verification claim is made from the local fixtures.
+### Owner-authorized fresh local verification
+
+Fresh full scan `e5478fa0-d292-4e3f-8991-b72ba2d5de23` completed on October 14,
+2026 at 18:50 UTC, with one canonical terminal result in 16,986 ms. Verified the
+producer artifact SHA-256 and schema, persisted report and shared evidence export
+criterion/status parity, accessibility counts, and withholding of unapproved
+images. This local simulated-Lambda run is not proof of production EU egress.
+
+Live preference verification did **not** succeed. The v2 recipe was selected,
+but inspection returned at 8,337 ms with zero Options clicks, no controls or
+declarations, and `surface_binding` / `priorMatches: 0` / `timed_out`. The packet
+uses `preference_budget_exhausted`, but that reason also covers Playwright
+`TimeoutError`; elapsed time does not establish exhaustion of the 17-second
+absolute allowance. The retained diagnostics do not identify the exact failed
+locator operation, so delayed panel creation is still not proven as the cause.
+
+Banner and Reject remain Observed. Prominence is Not assessed: the geometry-proof
+image review reached its finalization deadline with a 75 ms allowance and was
+withheld; no visual comparison survived into the verified bundle. The independent
+Reject lane also hit its existing eight-second tail limit. No missing evidence
+was promoted or borrowed from a historical scan. Accessibility retained one
+`list` violation affecting two elements plus two manual-review rule groups
+(contrast: 46 elements; duplicate ARIA IDs: one). Eight representative examples
+were retained across 49 observed nodes, with the other 41 explicitly accounted
+for. UI and export retain the full counts.
+
+The normal anonymous submission was rejected at 20/day before creation. The owner
+then approved one local exception to 21. A dev-server memory restart interrupted
+that admission before acceptance; submission-status and the unchanged quota count
+confirmed no scan had been accepted. Reusing the same request ID created exactly
+one scan, and source was immediately restored byte-for-byte to 20 before polling.
+No production setting, capture budget, requester identity, or deployment changed.
+Estimated one-time verification/contact-ledger cost remains below $0.10. No
+second target scan was run. Historical assessments remain unchanged. The actual
+contact was recorded in both the repository cooldown ledger and the central
+all-channel ledger under idempotent key
+`ikea-preference-verification-20261014`.
+
+The full report is opened locally with CMP Details expanded. Remaining live
+limitations must not be described as a successful deeper-preference verification.
 
 Ignored review receipts and test logs: `artifacts/ikea-preferences-20261014/`.

@@ -507,12 +507,12 @@
     },
     "https://ikea.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:27:03.456Z",
-      "lastContactAt": "2026-10-14T18:27:03.456Z",
+      "cooldownUntil": "2026-11-11T18:50:30.612Z",
+      "lastContactAt": "2026-10-14T18:50:30.612Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local complementary CMP-depth verification pass, scan b3aa4074-6fd8-440c-84b2-2a7e6aa99b8c. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested one fresh local IKEA preference verification, scan e5478fa0-d292-4e3f-8991-b72ba2d5de23. One approved local quota exception (20 to 21, immediately restored); same admission request recovered after dev restart before acceptance. No target retry, region/identity switch or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://ikea.com"
     },
@@ -1134,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T18:28:04.894Z",
+  "updatedAt": "2026-10-14T18:51:30.020Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]
