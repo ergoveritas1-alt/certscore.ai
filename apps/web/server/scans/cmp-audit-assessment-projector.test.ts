@@ -607,3 +607,26 @@ test("scanner adapter absence stays separate from failed inspection and CMP feat
   assert.ok(rows.every(row => row.status === "not_assessed"));
   assert.ok(rows.every(row => !row.limitation));
 });
+
+test("v3 basic checkpoints retain verified page facts when CMP readiness cannot complete", () => {
+  const input = bundle(), packet = input.cmpPreferencesEvidence!;
+  Object.assign(packet, { status: "limited", action: { count: 0, intent: "options", label: null, opened: false },
+    support: { state: "partial", provider: "OneTrust", recipeVersion: "bounded_cmp_preferences.v1", reason: "preference_readiness_incomplete" },
+    controlInventoryComplete: false, declarationInventoryComplete: false,
+    declarations: [{ name: "_ga", purpose: "", duration: "1 day", source: "cmp_api_inventory" }],
+    checkpoints: { version: "cmp_partial_capture.v1", documentToken: packet.documentToken, privacyLinks: true, declarations: true, controls: true, controlsSurface: "first_layer" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v3", budgetMs: 3600, basicCaptureReserveMs: 1000, phase: "control_inventory",
+      configuration: { version: "onetrust_loaded_configuration.v1", status: "available", groupCount: 1, retainedCookieCount: 1, truncated: false } },
+    limitations: ["preference_readiness_incomplete"],
+  });
+  const audit = deriveCmpAuditAssessment(input)!;
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: withCanonicalConsentAssessmentSnapshot({}, assessment), reviewFindingCandidates: [], validationFindings: [] });
+  const projected = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  assert.equal(projected.rows.find(row => row.id === "categories")!.status, "Observed");
+  assert.equal(projected.rows.find(row => row.id === "categories")!.detail, "1 category was available.");
+  assert.equal(projected.rows.find(row => row.id === "privacy_access")!.status, "Observed");
+  assert.equal(projected.rows.find(row => row.id === "cookie_information")!.status, "Partially assessed");
+  assert.equal(projected.rows.find(row => row.id === "services")!.status, "Not assessed");
+  assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
+});

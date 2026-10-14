@@ -214,7 +214,7 @@ export function projectCmpAudit(input: {
         : row.id === "duration" && row.inventory?.expiries?.length
         ? "Consent-cookie expiry was captured. Long-term behavior was not tested."
         : row.id === "categories" && row.inventory?.categories?.length
-        ? row.detail.replace(/^(\d+) selectable categories observed in the inspected consent surface:.*$/, "$1 categories were available.") : row.detail || undefined,
+        ? row.detail.replace(/^(\d+) selectable categories observed in the inspected consent surface:.*$/, (_match, count: string) => count === "1" ? "1 category was available." : `${count} categories were available.`) : row.detail || undefined,
       sourceIds: row.evidenceRefs,
       ...((row.cookieComparison || row.inventory) ? { supportingEvidence: { ...(row.cookieComparison ? { cookieComparison: row.cookieComparison } : {}), ...(row.inventory ? { inventory: row.inventory } : {}) } } : {}) });
   }

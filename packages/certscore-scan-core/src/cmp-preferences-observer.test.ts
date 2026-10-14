@@ -310,3 +310,91 @@ test("parent cancellation after the single Options dispatch stays distinct from 
     assert.ok(Date.now() - started < 2500, "Cancellation cannot consume the remaining allowance");
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test("early OneTrust declarations and visible native label targets survive bounded deeper inspection", { timeout: 20_000 }, async () => {
+  let mode = "open", clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/options") { clicks++; res.end(); return; }
+    res.setHeader("content-type", "text/html");
+    res.end(`<section id="onetrust-banner-sdk"><button aria-controls="prefs" onclick="fetch('/options');document.getElementById('prefs').hidden=false">Cookie settings</button><a href="/privacy-cookies/" aria-label="Privacy and cookie statement">Read notice</a></section>
+      ${mode === "open" ? '<section id="prefs" hidden><label><input style="display:none" type="checkbox">Analytics</label><label><input style="opacity:0;width:0;height:0" type="checkbox">Marketing</label><fieldset disabled><label><input style="display:none" type="checkbox">Disabled category</label></fieldset><div hidden><label><input type="checkbox">Hidden category</label></div><details><summary>More cookies</summary><table><tr><td>not_opened</td></tr></table></details></section>' : ''}
+      <script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C2',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]})};</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (mode of ["open", "missing_panel"]) {
+      clicks = 0;
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.deepEqual(packet.declarations.map(cookie => cookie.name), ["_ga"]);
+      assert.equal(packet.declarationInventoryComplete, false); assert.equal(packet.checkpoints?.declarations, true);
+      assert.ok(packet.privacyLinks.some(link => link.hitTargetBeforeAction), JSON.stringify(packet.privacyLinks));
+      assert.equal(clicks, mode === "open" ? 1 : 0);
+      if (mode === "open") {
+        assert.equal(packet.status, "completed");
+        assert.deepEqual(packet.controls.filter(control => control.enabled).map(control => control.label), ["Analytics", "Marketing"]);
+        assert.ok(!packet.controls.some(control => control.label === "Hidden category"));
+        assert.equal(packet.controls.find(control => control.label === "Disabled category")?.enabled, false);
+      } else assert.equal(packet.status, "limited");
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("visible first-layer choices survive absent Options without any interaction", { timeout: 10_000 }, async () => {
+  let clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    res.setHeader("content-type", "text/html");
+    res.end('<section id="onetrust-banner-sdk"><label><input type="checkbox">Analytics</label><button onclick="fetch(\'/clicked\')">Accept all</button></section>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "first-layer", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.equal(packet.status, "limited"); assert.equal(packet.action.count, 0); assert.equal(clicks, 0);
+    assert.equal(packet.checkpoints?.controls, true); assert.equal(packet.checkpoints?.controlsSurface, "first_layer");
+    assert.equal(packet.controls[0]?.kind, "category"); assert.equal(packet.controls[0]?.label, "Analytics");
+    assert.equal(packet.controlInventoryComplete, false);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("privacy-link reachability uses bounded real hit targets rather than only the bounding-box center", { timeout: 12_000 }, async () => {
+  let mode = "partial";
+  const server = createServer((req, res) => {
+    res.setHeader("content-type", "text/html");
+    res.end(`<section id="onetrust-banner-sdk"><button>Accept all</button><a href="/privacy/" style="position:fixed;left:${mode === "offscreen" ? 5000 : 20}px;top:20px;width:200px;height:40px;display:block">Privacy policy</a></section><div style="position:fixed;z-index:10;left:${mode === "partial" ? 100 : 20}px;top:${mode === "partial" ? 30 : 20}px;width:${mode === "partial" ? 40 : 200}px;height:${mode === "partial" ? 20 : 40}px;background:black"></div>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (mode of ["partial", "covered", "offscreen"]) {
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction, mode === "partial", JSON.stringify(packet));
+      assert.equal(packet.action.count, 0);
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("a missing ready CMP cannot consume the basic-evidence reserve", { timeout: 7000 }, async () => {
+  const server = createServer((req, res) => {
+    res.setHeader("content-type", "text/html");
+    res.end('<section id="onetrust-banner-sdk"><a href="/privacy/">Privacy policy</a><label><input type="checkbox">Analytics</label></section><script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:"C2",GroupName:"Analytics",FirstPartyCookies:[{Name:"_ga",Lifespan:"1 day"}]}]})};</script>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const memory = process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "10240";
+  try {
+    const started = Date.now();
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "reserve", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.ok(Date.now() - started < 4600);
+    assert.equal(packet.inspectionDiagnostic?.budgetMs, 3600);
+    assert.equal(packet.support.reason, "preference_readiness_incomplete"); assert.equal(packet.action.count, 0);
+    assert.ok(packet.privacyLinks.some(link => link.hitTargetBeforeAction));
+    assert.equal(packet.controls[0]?.label, "Analytics"); assert.equal(packet.checkpoints?.controlsSurface, "first_layer");
+    assert.equal(packet.declarations[0]?.name, "_ga"); assert.equal(packet.checkpoints?.declarations, true);
+    assert.equal(packet.declarationInventoryComplete, false);
+  } finally {
+    if (memory === undefined) delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = memory;
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});

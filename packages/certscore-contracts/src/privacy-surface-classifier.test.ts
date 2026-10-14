@@ -489,3 +489,12 @@ test("registry covers every supported locale", () => {
     assert.equal(registryLocales.has(locale), true, locale);
   }
 });
+
+test("combined privacy and cookie statements retain their shared canonical scope", () => {
+  for (const linkText of ["Privacy and cookie statement", "Privacy & Cookie statement", "Read our privacy and cookie statement, opens in a new tab"]) {
+    const result = classifyPrivacySurface({ linkText, url: "https://example.test/privacy-cookies/" });
+    assert.equal(result.surfaceType, "cookie_policy");
+    assert.equal(result.variant, "combined_privacy_cookie_surface");
+  }
+  assert.notEqual(classifyPrivacySurface({ linkText: "Cookie statement", url: "https://example.test/cookies" }).variant, "combined_privacy_cookie_surface");
+});

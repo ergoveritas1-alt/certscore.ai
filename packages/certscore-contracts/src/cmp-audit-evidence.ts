@@ -82,7 +82,11 @@ export const cmpPreferencesEvidenceSchema = z.object({
     truncated: z.boolean(),
   }).optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    basicCaptureReserveMs: z.number().int().min(0).max(1000).optional(),
+    configuration: z.object({ version: z.literal("onetrust_loaded_configuration.v1"), status: z.enum(["available", "unavailable"]),
+      groupCount: z.number().int().min(0).max(10000).optional(), retainedCookieCount: z.number().int().min(0).max(100).optional(), truncated: z.boolean().optional(),
+    }).strict().optional(),
     phase: z.enum(["browser_start", "navigation", "cmp_readiness", "control_inventory", "surface_binding", "opening", "preference_inventory", "completed"]),
     surfaceBinding: z.object({
       version: z.literal("cmp_surface_binding.v1"),

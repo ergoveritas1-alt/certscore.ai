@@ -280,12 +280,12 @@
     },
     "https://att.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:07:38.654Z",
-      "lastContactAt": "2026-10-14T18:07:38.654Z",
+      "cooldownUntil": "2026-11-11T19:58:40.604Z",
+      "lastContactAt": "2026-10-14T19:58:40.604Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local five-site evidence-diversity verification pass, scan b3a9d0db-2969-44cd-a08c-69a44d704e55. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: 1f4885fd-d203-42db-abae-92190521a4b2. Four serial full scans total across IKEA, AT&T and Ars Technica; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://att.com"
     },
@@ -507,12 +507,12 @@
     },
     "https://ikea.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:50:30.612Z",
-      "lastContactAt": "2026-10-14T18:50:30.612Z",
+      "cooldownUntil": "2026-11-11T19:57:32.641Z",
+      "lastContactAt": "2026-10-14T19:57:32.641Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested one fresh local IKEA preference verification, scan e5478fa0-d292-4e3f-8991-b72ba2d5de23. One approved local quota exception (20 to 21, immediately restored); same admission request recovered after dev restart before acceptance. No target retry, region/identity switch or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: bba498e0-5f5c-4704-8b6d-1fb7c933b346, 42db50bd-3f24-46c2-9711-1a7621810622. Four serial full scans total across IKEA, AT&T and Ars Technica; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://ikea.com"
     },
@@ -646,12 +646,12 @@
     },
     "https://arstechnica.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:06:26.885Z",
-      "lastContactAt": "2026-10-14T18:06:26.885Z",
+      "cooldownUntil": "2026-11-11T19:59:17.539Z",
+      "lastContactAt": "2026-10-14T19:59:17.539Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local five-site evidence-diversity verification pass, scan f93bab26-e522-46b5-b5f3-5435e3b5b32e. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: 3dde2428-fa1c-4f04-9470-312cec50e569. Four serial full scans total across IKEA, AT&T and Ars Technica; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://arstechnica.com"
     },
@@ -1134,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T18:51:30.020Z",
+  "updatedAt": "2026-10-14T20:02:24.410Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]

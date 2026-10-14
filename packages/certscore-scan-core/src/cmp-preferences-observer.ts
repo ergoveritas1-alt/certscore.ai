@@ -8,6 +8,8 @@ import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 import { dispatchLocatorClickWithVerifiedGeometry, locatorHasViewportHitTarget } from "./cmp-control-actionability.js";
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
 import { cookieDisclosureColumn } from "@certscore/contracts";
+import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
+import { EVIDENCE_WORK_POLICY } from "./evidence-work-budget.js";
 
 /** A single isolated Options action. No preference changes, save, second click,
  * page retry, policy navigation, model call, or interaction in another lane. */
@@ -27,7 +29,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v2", budgetMs, phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v3", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -91,10 +93,8 @@ export async function runCmpPreferencesObserver(input: {
     // Avoid repeated shadow-piercing all-vendor queries while the parser and
     // blocking CMP bootstrap scripts are still initializing. This consumes the
     // same absolute preference deadline, never an additional wait allowance.
-    if (!await waitForConsentDocumentReady(page, deadline, input.signal)) {
-      remaining();
-      throw new Error("preference_budget_exhausted");
-    }
+    const readinessDeadline = deadline - packet.inspectionDiagnostic!.basicCaptureReserveMs!;
+    let cmpReady = await waitForConsentDocumentReady(page, readinessDeadline, input.signal);
     await binding();
     const readySelectors = definitions.flatMap(definition => definition.preferenceInspection
       ? [`${definition.preferenceInspection.entranceSelector} ${definition.preferenceInspection.controlSelector}`]
@@ -102,28 +102,39 @@ export async function runCmpPreferencesObserver(input: {
     // Playwright's CSS locator traverses open shadow roots (Borlabs v3).
     const readyControl = page.locator(readySelectors.map(selector => `${selector}:visible`).join(",")).first();
     let revealed = false;
-    while (!await readyControl.isVisible()) {
+    while (cmpReady && !await readyControl.isVisible()) {
       remaining();
+      if (Date.now() >= readinessDeadline) { cmpReady = false; break; }
       // Reuse the registered passive one-pixel scroll only when Borlabs' own
       // configuration explicitly defers its dialog until visitor interaction.
       if (!revealed) revealed = await revealBorlabsDeferredDialog(page);
       packet.inspectionDiagnostic!.passiveDialogReveal = revealed;
-      try { await readyControl.waitFor({ state: "visible", timeout: Math.min(250, remaining()) }); }
+      try { await readyControl.waitFor({ state: "visible", timeout: Math.max(1, Math.min(250, readinessDeadline - Date.now(), remaining())) }); }
       catch (error) { if (!(error instanceof Error) || error.name !== "TimeoutError") throw error; }
     }
     await binding();
     packet.inspectionDiagnostic!.phase = "control_inventory";
     const links = await page.locator("a[href]").evaluateAll(nodes => nodes.slice(0, 300).map(node => {
-      const a = node as HTMLAnchorElement, box = a.getBoundingClientRect();
-      let hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-      for (let depth = 0; hit?.shadowRoot && depth < 8; depth++) {
-        const inner = hit.shadowRoot.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-        if (!inner || inner === hit) break;
-        hit = inner;
-      }
-      return { url: a.href, label: (a.textContent ?? "").trim().slice(0, 160), hit: box.width > 0 && box.height > 0 && Boolean(hit && (a === hit || a.contains(hit))) };
+      const a = node as HTMLAnchorElement;
+      const reachable = [...a.getClientRects()].slice(0, 3).some(box => {
+        const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right), top = Math.max(0, box.top), bottom = Math.min(innerHeight, box.bottom);
+        if (right <= left || bottom <= top) return false;
+        return [[(left + right) / 2, (top + bottom) / 2], [left + (right - left) / 4, top + (bottom - top) / 4], [right - (right - left) / 4, bottom - (bottom - top) / 4]].some(([x, y]) => {
+          let hit = document.elementFromPoint(x!, y!);
+          for (let depth = 0; hit?.shadowRoot && depth < 8; depth++) {
+            const inner = hit.shadowRoot.elementFromPoint(x!, y!);
+            if (!inner || inner === hit) break;
+            hit = inner;
+          }
+          return Boolean(hit && (a === hit || a.contains(hit)));
+        });
+      });
+      return { url: a.href, label: (a.getAttribute("aria-label") ?? a.textContent ?? "").trim().slice(0, 160), hit: reachable };
     }));
-    packet.privacyLinks = links.filter(link => link.url.length <= 2000 && /^https?:/.test(link.url) && classifyPrivacySurface({ linkText: link.label, url: link.url }).surfaceType === "privacy_policy")
+    packet.privacyLinks = links.filter(link => {
+      const classification = classifyPrivacySurface({ linkText: link.label, url: link.url });
+      return link.url.length <= 2000 && /^https?:/.test(link.url) && (classification.surfaceType === "privacy_policy" || classification.variant === "combined_privacy_cookie_surface");
+    })
       .slice(0, 16).map(link => ({ url: link.url, hitTargetBeforeAction: link.hit }));
     await binding();
     packet.checkpoints!.privacyLinks = true;
@@ -139,12 +150,54 @@ export async function runCmpPreferencesObserver(input: {
     }, scopeSelectors);
     packet.inspectionDiagnostic!.passiveDialogReveal = revealed || scopeInventory.revealed;
     if (scopeInventory.overflow) { packet.limitations.push("control_inventory_overflow"); return finish(); }
+    for (const index of scopeInventory.indices) detected.add(definitions[index]!.canonicalName);
+    if (detected.size === 1) packet.support = { state: "partial", provider: [...detected][0]!, recipeVersion: CMP_PREFERENCE_POLICY_VERSION, reason: "inspection_incomplete" };
+    // Preserve a bounded read of this document's already-loaded configuration
+    // before panel binding/opening can consume the remaining inspection budget.
+    // Ambiguous vendor identity never authorizes an API read or a click.
+    const oneTrust = detected.size === 1 && detected.has("OneTrust") && remaining() > 250
+      ? await readOneTrustPreferenceInventory(page) : undefined;
+    if (detected.size === 1 && detected.has("OneTrust")) packet.inspectionDiagnostic!.configuration = {
+      version: "onetrust_loaded_configuration.v1", status: oneTrust ? "available" : "unavailable",
+      ...(oneTrust ? { groupCount: oneTrust.groupCount, retainedCookieCount: oneTrust.declarations.length, truncated: oneTrust.truncated } : {}),
+    };
+    if (oneTrust) {
+      await binding();
+      packet.declarations = oneTrust.declarations;
+      packet.declarationInventoryComplete = false;
+      packet.checkpoints!.declarations = true;
+      if (oneTrust.truncated) packet.limitations.push("cookie_inventory_overflow");
+    }
+    const detectedIndex = detected.size === 1 ? scopeInventory.indices.find(index => definitions[index]?.canonicalName === [...detected][0]) : undefined;
+    const borlabs = detectedIndex !== undefined && definitions[detectedIndex]?.preferenceInspection?.kind === "borlabs_v3" && remaining() > 250
+      ? await readBorlabsPreferenceInventory(page) : undefined;
+    if (borlabs) {
+      await binding();
+      packet.declarations = borlabs.declarations;
+      packet.serviceNames = borlabs.services.filter(Boolean);
+      packet.declarationCoverage = borlabs.coverage;
+      packet.declarationInventoryComplete = borlabs.coverage.configured > 0 && !borlabs.coverage.unresolved && !borlabs.coverage.truncated;
+      packet.checkpoints!.declarations = true;
+    }
+    // Basic visible choices are valuable even when no unique Options control
+    // exists. Preserve their own checkpoint before optional deeper inspection.
+    if (detectedIndex !== undefined && remaining() > 250) {
+      const initial = await readPreferenceControls(page.locator(scopeSelectors[detectedIndex]!));
+      await binding();
+      packet.controls = classifyControls(initial.controls, borlabs ?? oneTrust);
+      packet.checkpoints!.controls = packet.controls.length > 0;
+      if (initial.overflow) packet.limitations.push("control_inventory_overflow");
+    }
+    if (!cmpReady) {
+      packet.support.reason = "preference_readiness_incomplete";
+      packet.limitations.push("preference_readiness_incomplete");
+      return finish();
+    }
     for (const definitionIndex of scopeInventory.indices) {
       remaining();
       const definition = definitions[definitionIndex]!;
       const recipe = definition.preferenceInspection;
       const scope = page.locator(scopeSelectors[definitionIndex]!);
-      detected.add(definition.canonicalName);
       const controls = scope.locator(recipe?.controlSelector ?? 'button, [role="button"], input[type="button"]');
       const inventory = await controls.evaluateAll(nodes => ({ overflow: nodes.length > 100,
         fields: nodes.slice(0, 100).map(element => ({ label: (element.textContent ?? "").trim().slice(0, 240), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value })) }));
@@ -195,20 +248,6 @@ export async function runCmpPreferencesObserver(input: {
       }
       surfaceBinding.mode = "registered_deferred";
     }
-    // Read the already-loaded configuration before the optional panel transition.
-    // This moves the API read earlier; no second API read or visit is added.
-    const borlabs = match.recipe?.kind === "borlabs_v3" ? await readBorlabsPreferenceInventory(page) : undefined;
-    if (borlabs) {
-      const raw = await readPreferenceControls(match.scope);
-      packet.controls = classifyControls(raw.controls, borlabs);
-      await binding();
-      packet.declarations = borlabs.declarations;
-      packet.serviceNames = borlabs.services.filter(Boolean);
-      packet.declarationCoverage = borlabs.coverage;
-      packet.declarationInventoryComplete = borlabs.coverage.configured > 0 && !borlabs.coverage.unresolved && !borlabs.coverage.truncated;
-      packet.checkpoints!.declarations = true;
-      packet.checkpoints!.controls = true;
-    }
     const dialogHandle = priorMatches === 1 ? await controlled.elementHandle() : null;
     const beforeVisible = priorMatches === 1 && await controlled.isVisible();
     surfaceBinding.priorVisible = beforeVisible;
@@ -250,7 +289,7 @@ export async function runCmpPreferencesObserver(input: {
     packet.inspectionDiagnostic!.phase = "preference_inventory";
     const raw = await readPreferenceControls(controlled);
     await binding();
-    packet.controls = classifyControls(raw.controls, borlabs);
+    packet.controls = classifyControls(raw.controls, borlabs ?? oneTrust);
     packet.checkpoints!.controls = true;
     packet.checkpoints!.controlsSurface = "preferences";
     // Visible toggles establish presence, not completeness of collapsed tabs,
@@ -294,7 +333,7 @@ export async function runCmpPreferencesObserver(input: {
     const bindingFailure = error instanceof Error && ["preference_surface_changed", "preference_surface_ambiguous", "preference_document_changed", "preference_control_changed"].includes(error.message) ? error.message : null;
     const reason = input.signal?.aborted ? "preference_inspection_cancelled" : budgetExhausted ? "preference_budget_exhausted"
       : operationTimedOut ? "preference_operation_timed_out" : bindingFailure ?? "preference_inspection_incomplete";
-    if (packet.inspectionDiagnostic?.surfaceBinding && !packet.checkpoints?.controls) {
+    if (packet.inspectionDiagnostic?.surfaceBinding && !packet.action.opened) {
       packet.inspectionDiagnostic.surfaceBinding.outcome = timedOut ? "timed_out" : reason === "preference_surface_ambiguous" ? "ambiguous" : "changed";
     }
     packet.support.reason = reason;
@@ -363,14 +402,34 @@ async function readPreferenceControls(controlled: Locator) {
         const root = node.getRootNode() as Document | ShadowRoot;
         const labelledBy = (node.getAttribute("aria-labelledby") ?? "").split(/\s+/).filter(Boolean).map(id => root.getElementById(id)?.textContent ?? "").join(" ");
         const label = (node.getAttribute("aria-label") ?? (labelledBy || (input.labels?.length ? [...input.labels].map(label => label.textContent).join(" ") : ""))).trim().slice(0, 240);
+        // Styled checkboxes often hide the input and expose its associated
+        // label. Require an exact native label/control association, visible
+        // viewport geometry and a real hit target; hidden panels stay excluded.
+        const labelledTargetVisible = node instanceof HTMLInputElement && [...(node.labels ?? [])].some(label => {
+          if (label.control !== node) return false;
+          const rect = label.getBoundingClientRect(), style = getComputedStyle(label);
+          if (rect.width <= 0 || rect.height <= 0 || style.visibility !== "visible" || style.display === "none" || Number(style.opacity) === 0) return false;
+          const x = Math.max(0, rect.left) + Math.min(rect.width, innerWidth - Math.max(0, rect.left)) / 2;
+          const y = Math.max(0, rect.top) + Math.min(rect.height, innerHeight - Math.max(0, rect.top)) / 2;
+          if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+          let hit = document.elementFromPoint(x, y);
+          for (let depth = 0; hit?.shadowRoot && depth < 8; depth++) {
+            const inner = hit.shadowRoot.elementFromPoint(x, y);
+            if (!inner || inner === hit) break;
+            hit = inner;
+          }
+          return Boolean(hit && (hit === label || label.contains(hit)));
+        });
         const group = node.closest("fieldset, [role=group]");
         const groupLabel = group?.getAttribute("aria-label") ?? group?.querySelector("legend")?.textContent ?? "";
-        return { label, groupLabel: groupLabel.trim().slice(0, 160), visible: box.width > 0 && box.height > 0 && getComputedStyle(node).visibility !== "hidden", enabled: !input.disabled && node.getAttribute("aria-disabled") !== "true", checked: node instanceof HTMLInputElement ? input.checked : node.getAttribute("aria-checked") === "true" };
+        const style = getComputedStyle(node);
+        return { label, groupLabel: groupLabel.trim().slice(0, 160), visible: labelledTargetVisible || box.width > 0 && box.height > 0 && style.visibility !== "hidden" && Number(style.opacity) > 0,
+          enabled: !node.matches(":disabled") && node.getAttribute("aria-disabled") !== "true", checked: node instanceof HTMLInputElement ? input.checked : node.getAttribute("aria-checked") === "true" };
       }),
     }));
 }
 
-function classifyControls(controls: Awaited<ReturnType<typeof readPreferenceControls>>["controls"], inventory?: Awaited<ReturnType<typeof readBorlabsPreferenceInventory>>) {
+function classifyControls(controls: Awaited<ReturnType<typeof readPreferenceControls>>["controls"], inventory?: { categories: string[]; services: string[] }) {
   return controls.filter(control => control.visible).map(({ label, groupLabel, enabled, checked }) => ({
     label, enabled, checked,
     kind: inventory?.categories.includes(label) && !inventory.services.includes(label) ? "category" as const
