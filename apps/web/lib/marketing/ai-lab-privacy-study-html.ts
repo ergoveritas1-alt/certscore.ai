@@ -4,7 +4,7 @@
 export const AI_LAB_PRIVACY_STUDY_FAQ = [
   {
     "question": "Which AI company has the best privacy posture on its own website?",
-    "answer": "Hugging Face scored highest in this ten-site sample, at 92, with a single minor pre-consent storage observation. The report describes that item as an AWS WAF token, likely security-related. This ranking reflects the public starting page and capture window, rather than a full-site audit or a legal compliance assessment."
+    "answer": "According to CertScore.ai MCP Light scans conducted on October 12, 2026, Hugging Face scored highest among the ten websites, at 92, with a single minor pre-consent storage observation. Its report describes an AWS WAF token as likely security-related. This ranking covers the recorded starting-page visit, not a full-site audit or compliance determination."
   },
   {
     "question": "What happens after you click Reject on AI company websites?",
@@ -25,7 +25,7 @@ export const AI_LAB_PRIVACY_STUDY_FAQ = [
 ] as const;
 
 const canonicalUrl = "https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026";
-const socialImage = "https://certscore.ai/images/social/website-privacy-scanner.png";
+const socialImage = "https://certscore.ai/images/ai-leaderboard-social-card.png";
 const description = "CertScore.ai scanned the public websites of 10 AI companies for privacy signals: pre-consent cookies, trackers, and what happens after Reject. Hugging Face scored highest at 92.";
 const schemas = [
   {
@@ -71,19 +71,19 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="CertScore.ai">
   <meta property="og:url" content="https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026">
-  <meta property="og:title" content="AI Lab Privacy Leaderboard: Privacy signals on 10 AI companies' websites | CertScore.ai">
+  <meta property="og:title" content="AI Lab Privacy Leaderboard: We Scanned 10 AI Companies' Websites for Privacy Signals">
   <meta property="og:description" content="${description}">
-  <meta property="og:image" content="https://certscore.ai/images/social/website-privacy-scanner.png">
+  <meta property="og:image" content="https://certscore.ai/images/ai-leaderboard-social-card.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="CertScore.ai: website privacy evidence and consent testing">
+  <meta property="og:image:alt" content="AI Lab Privacy Leaderboard: Hugging Face scored highest at 92; tracking continued after Reject on 2 of 10 sites">
   <meta property="article:published_time" content="2026-10-12">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="AI Lab Privacy Leaderboard: Privacy signals on 10 AI companies' websites | CertScore.ai">
+  <meta name="twitter:title" content="AI Lab Privacy Leaderboard: We Scanned 10 AI Companies' Websites for Privacy Signals">
   <meta name="twitter:description" content="${description}">
-  <meta name="twitter:image" content="https://certscore.ai/images/social/website-privacy-scanner.png">
-  <meta name="twitter:image:alt" content="CertScore.ai: website privacy evidence and consent testing">
+  <meta name="twitter:image" content="https://certscore.ai/images/ai-leaderboard-social-card.png">
+  <meta name="twitter:image:alt" content="AI Lab Privacy Leaderboard: Hugging Face scored highest at 92; tracking continued after Reject on 2 of 10 sites">
   ${structuredData}
   <style>
 

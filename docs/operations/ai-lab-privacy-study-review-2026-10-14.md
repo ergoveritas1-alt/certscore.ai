@@ -12,12 +12,15 @@ https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026
   The owner subsequently requested clarification that readers can run the same
   type of scan manually in their browser at certscore.ai; the MCP Light answer
   now makes that distinction without promising identical results across visits.
+- Bound the Hugging Face FAQ ranking explicitly to CertScore.ai MCP Light scans
+  on October 12, 2026, following the owner's attribution request.
 - Add the supplied scanner CTA and the MCP Light documentation link. Preserve
   the existing scanner, report and contact links.
 - Place Perplexity's not-scored status before its unchanged coverage explanation.
 - Apply the exact requested title and description; retain the canonical URL and
-  complete Open Graph/Twitter metadata. No dedicated leaderboard social card
-  exists in the repository; retain the existing valid 1200 by 630 CertScore card.
+  complete Open Graph/Twitter metadata. At the owner's subsequent request, add
+  a dedicated 1200 by 630 leaderboard card at /images/ai-leaderboard-social-card.png
+  and the exact page-only sharing title; site-wide defaults remain unchanged.
 - Add a direct Research link from the homepage. The existing Insights index
   already links to the paper and remains unchanged.
 
@@ -34,7 +37,7 @@ projection code changes are included.
 
 The title and description match the request exactly. Both schemas parse as JSON,
 and FAQPage questions/answers match the visible content. FAQ answer word counts
-are 49, 52, 51, 50 and 52. The four summary bullets match the supplied wording.
+are 52, 52, 51, 50 and 52. The four summary bullets match the supplied wording.
 The HTML contains zero em dashes. Local desktop (1280 px) and mobile (390 px)
 checks showed no horizontal overflow; the CTA and FAQ were visually inspected.
 
@@ -46,7 +49,7 @@ and the live host serves the expected commit.
 
 ## Cost estimate
 
-The extra static text and JSON-LD use existing AWS capacity and add no service,
+The extra static text, JSON-LD and leaderboard PNG use existing AWS capacity and add no service,
 scan, model call or retention setting. Estimated incremental transfer/storage is
 below $0.01/month at 10,000 page views, disclosed before implementation and below
 the $1/month pre-approved threshold. Existing deployment CI applies.
