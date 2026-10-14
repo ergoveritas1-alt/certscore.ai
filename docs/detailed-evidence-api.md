@@ -13,7 +13,7 @@ The additional `cmpAudit` and `cmsSecurity` fields preserve safe structured supp
 
 The SDK exposes generated standalone types, `getReportEvidencePage`, and bounded `getReportEvidence` reconstruction. Reconstruction rejects mixed snapshots, incomplete pages, invalid string chunks, unresolved/cyclic references and unsafe object paths. It makes no scan requests. MCP OAuth and Light use the same evidence endpoint and section selectors. Their ordinary bundles carry optional deep-section navigation, with existing navigation taking priority at tight byte limits.
 
-This is local, unreleased work. No API deployment or SDK/MCP publication is part of this change. The estimated incremental transfer and formatting cost is below $1/month at 100,000 on-demand evidence reads; no recurring scanner or model spend is added. The retained SITS full projection adds 33,763 bytes before response deduplication in the final SITS verification. Existing pagination and read quotas are preserved.
+Released October 13, 2026 (October 14 UTC) on AWS ECS/Fargate from `959292e886c814b651c14f633ef15052dd3ab89b`, with SDK 0.2.16 and hosted/npm MCP 0.2.27. See the [production release verification](certscore-v2/releases/2026-10-13-detailed-evidence-production-verification.md). The estimated incremental transfer and formatting cost is below $1/month at 100,000 on-demand evidence reads; no recurring scanner or model spend is added. The retained SITS full projection adds 33,763 bytes before response deduplication in the local saved-scan verification. Existing pagination and read quotas are preserved.
 
 Regenerate and verify the public type mirrors with:
 
