@@ -13,6 +13,7 @@ export type { GpcBoundedObservation } from "./gpc-bounded-observation.js";
 export * from "./gpc-activity-comparison.js";
 
 export * from "./report-page.js";
+export * from "./detailed-evidence.js";
 export * from "./privacy-audit.js";
 
 export { apiV2ChoicePathExecutionSchema } from "./scan-observation-results.js";

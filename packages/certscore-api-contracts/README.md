@@ -8,6 +8,10 @@ CertScore outputs are automated public-web observations for human and agentic re
 
 Current scope:
 
+- Versioned Detailed Evidence display schemas, 13-row CMP audit, safe CMS/version evidence, and focused `cmp`/`cms` report-evidence selectors.
+- `detailedEvidence` carries shared report wording, counts, display labels and correction steps. Source assessments, canonical findings and scores remain separate.
+- OpenAPI and standalone SDK evidence types are generated from these schemas by `pnpm exec tsx scripts/sync-detailed-evidence-contract.ts` (`--check` verifies parity).
+
 - Pulse v1 public constants.
 - Pulse v1 public response/status/error schemas.
 - Pulse v1 OpenAPI document builder used by the web route.

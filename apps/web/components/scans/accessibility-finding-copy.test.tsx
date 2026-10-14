@@ -51,3 +51,10 @@ test("editorial rendering preserves original rule payloads and separate review s
   assert.match(html, /Check whether keyboard focus enters hidden content/);
   assert.match(html, /Keyboard focus should not enter content hidden from assistive technology/);
 });
+
+test("zero detected accessibility issues still names checks requiring review", () => {
+  const audit = projectAccessibilityAuditSummary(accessibilityProjectionFixture(accessibilityAuditFixture()))!;
+  const html = renderToStaticMarkup(<AccessibilityEvidence audit={{ ...audit, failedRuleCount: 0, affectedNodeCount: 0, reviewRuleCount: 2 }} />);
+  assert.match(html, /0 issues · 2 to review/);
+  assert.match(html, />Review</);
+});

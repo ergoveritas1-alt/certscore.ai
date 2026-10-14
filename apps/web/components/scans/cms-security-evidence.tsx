@@ -3,7 +3,8 @@ import React from "react";
 import type { CmsSecurityProjection } from "@certscore/contracts";
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { EvidenceTools } from "./report-finding-row";
-import { DisclosureChevron } from "./report-finding-row";
+import { EvidenceSectionHeader } from "./evidence-section-header";
+import { EVIDENCE_SECTION_TITLES, CMS_CORRECTION_STEPS, cmsAdvisoryDisplayCopy, cmsEvidenceRecap, cmsEvidenceVersionLabel } from "../../lib/scans/detailed-evidence-presentation";
 
 /** The assessment is persisted upstream; this view neither detects nor promotes findings. */
 export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityProjection | null }) {
@@ -11,17 +12,12 @@ export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityPr
   const { assessment } = projection;
   const plugins = projection.pluginInventory?.detections ?? [];
   const flagged = assessment.matches.length > 0;
-  const versionLabel = (row: typeof assessment.detections[number]) => row.version ??
-    (row.versionStatus === "conflicting" ? "Conflicting versions" : row.observedVersions.length === 1 ? `${row.observedVersions[0]} · ${row.versionBasis === "inferred" ? "Asset version" : "Partial version"}` : row.informationalOnly ? "Hosted service" : "Version not detected");
+  const versionLabel = cmsEvidenceVersionLabel;
   const sourceLabels = { meta_generator: "Page metadata", asset_path: "Page asset", html_generator_comment: "Generator comment", core_asset_version: "Core asset version", feed_generator: "Linked feed generator" };
   return <details id="cms-security-evidence" className="group/cms-security border-b border-r border-zinc-200 bg-white p-5">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-sky-600 [&::-webkit-details-marker]:hidden">
-      <span className="min-w-0">
-        <span className="block text-xs font-semibold uppercase text-zinc-500">CMS &amp; version</span>
-        <span className="mt-1 block text-sm font-semibold text-zinc-900">{assessment.detections.map(row => `${row.name}${row.version ? " " : " · "}${versionLabel(row)}`).join(" · ") || "Plugins detected"}</span>
-      </span>
-      <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={flagged ? [{status: "Warning"}] : []} /><DisclosureChevron className="shrink-0 text-zinc-400 group-open/cms-security:rotate-180" /></span>
-    </summary>
+    <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.cms}
+      recap={cmsEvidenceRecap(assessment.detections, plugins.length)}
+      badge={<EvidenceHeaderStatus rows={flagged ? [{status: "Warning"}] : []} />} />
     <div className="mt-3 space-y-4 border-t border-zinc-200 pt-3 text-sm">
       {assessment.detections.map(detection => {
         const matches = assessment.matches.filter(match => match.detectionRef === detection.evidenceRef);
@@ -32,11 +28,9 @@ export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityPr
             <span className="font-medium text-zinc-900">{versionLabel(detection)}</span>
           </div> : null}
           {matches.length ? <div className="space-y-2">{matches.map(match => <DetailedEvidenceFinding key={match.evidenceRef} id={match.evidenceRef}
-            title={`${match.record.kind === "vulnerability" ? "Potential exposure" : "Support ended"}: ${detection.name}`}
-            summary={`${detection.name} · ${versionLabel(detection)}`} badge={<EvidenceHeaderStatus rows={[{status: "Warning"}]} />}
+            {...cmsAdvisoryDisplayCopy(detection.name, versionLabel(detection), match.record.kind)} badge={<EvidenceHeaderStatus rows={[{status: "Warning"}]} />}
             evidenceJson={{ detection, match, catalogueVersion: assessment.catalogueVersion, sourceHash: projection.sourceHash }}
-            correctionSteps={["Confirm the deployed version against the retained declaration and vendor advisory.",
-              "Apply the vendor's supported update or mitigation, then verify the deployed version and affected behavior."]}>
+            correctionSteps={CMS_CORRECTION_STEPS}>
             <p className="text-xs font-medium text-zinc-800">{match.record.title}</p>
             {match.record.fixedVersions?.length ? <p className="mt-1 text-xs text-zinc-700">Vendor fixes: {match.record.fixedVersions.join(", ")}</p> : null}
             <a href={match.record.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs font-medium text-sky-800 underline">View vendor source</a>

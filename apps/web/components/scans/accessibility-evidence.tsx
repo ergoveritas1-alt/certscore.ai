@@ -8,7 +8,8 @@ import { EvidenceJumpLink } from "./evidence-jump-link";
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { DisclosureChevron } from "./report-finding-row";
 import { EvidenceStatusBadge } from "./evidence-status-badge";
-import { reportCardTitle } from "./report-typography";
+import { EvidenceSectionHeader } from "./evidence-section-header";
+import { accessibilityEvidenceRecap } from "../../lib/scans/detailed-evidence-presentation";
 
 type Props = { audit: ApiAccessibilityAuditSummary; observation?: AccessibilityAuditObservation | null };
 
@@ -63,15 +64,10 @@ function RuleEvidence({ rule, review = false }: { rule: AccessibilityRuleObserva
 
 export function AccessibilityEvidence({ audit, observation }: Props) {
   return <details id="accessibility-evidence" className="group/accessibility border-b border-r border-zinc-200 p-5">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-      <div className="min-w-0"><p className="text-xs font-semibold uppercase text-zinc-500">{ACCESSIBILITY_REPORT_LABEL} · Starting page</p>
-        <h3 className={`mt-1 ${reportCardTitle}`}>{accessibilityIssueCountLabel(audit)}{audit.affectedNodeCount !== null ? ` · ${audit.affectedNodeCount} element instances` : ""}</h3></div>
-      <span className="flex shrink-0 items-center gap-2">
-        {audit.failedRuleCount !== null && audit.failedRuleCount > 0 ? <EvidenceStatusBadge label="Issues found" tone="review" />
-          : audit.reviewRuleCount ? <EvidenceStatusBadge label="Review" tone="review" /> : null}
-        <DisclosureChevron className="text-zinc-400 group-open/accessibility:rotate-180" />
-      </span>
-    </summary>
+    <EvidenceSectionHeader title={ACCESSIBILITY_REPORT_LABEL}
+      recap={accessibilityEvidenceRecap(audit)}
+      badge={audit.failedRuleCount !== null && audit.failedRuleCount > 0 || audit.reviewRuleCount ? <EvidenceStatusBadge label="Review" tone="review" />
+        : audit.status !== "completed" ? <EvidenceStatusBadge label="Limited" tone="limited" /> : null} />
     <div className="mt-5 space-y-3 text-xs leading-5 text-zinc-600">
       <p>WCAG 2.2 A/AA automated checks on the starting page.</p>
       <p>{audit.engine}{audit.engineVersion ? ` ${audit.engineVersion}` : ""}{observation?.rulesEvaluated.length ? ` · ${observation.rulesEvaluated.length} rules evaluated` : ""}</p>

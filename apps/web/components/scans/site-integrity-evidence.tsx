@@ -4,12 +4,12 @@ import { getSiteIntegrityPageFindings, getSiteIntegrityLinkOccurrences, summariz
 import { EvidenceHeaderStatus } from "./evidence-header-status";
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { DisclosureChevron } from "./report-finding-row";
-import { reportCardTitle } from "./report-typography";
+import { EvidenceSectionHeader } from "./evidence-section-header";
 
 export function SiteIntegrityCallout({ finding }: { finding?: SiteIntegrityReportFinding | null }) {
   if (!finding) return null;
   return <aside aria-label="Site integrity review" className="my-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-    <p className="text-xs font-semibold uppercase text-amber-900">Site integrity · Review recommended</p>
+    <p className="text-xs font-semibold uppercase text-amber-900">Site integrity · Review</p>
     <p className="mt-1 font-semibold text-zinc-900">{finding.title}</p>
     <p className="mt-1 text-sm text-zinc-700">{finding.summary}</p>
     <a className="mt-2 inline-block text-sm font-medium text-sky-800 underline" href="#site-integrity-evidence">Review retained evidence</a>
@@ -62,15 +62,9 @@ export function SiteIntegrityEvidence({ finding, sampleNotice }: { finding?: Sit
   const high = findings.some(item => item.severity === "high");
   return <section id="site-integrity-evidence" aria-label="Site integrity" className="border-b border-r border-zinc-200 bg-white">
     <details className="group/site-integrity">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 [&::-webkit-details-marker]:hidden">
-        <div><p className="text-xs font-semibold uppercase text-zinc-500">Site integrity</p>
-          <h3 title="Hidden outbound links" className={`mt-1 ${reportCardTitle}`}>Hidden links</h3>
-        </div>
-        <span className="flex shrink-0 items-center gap-3">
-          {findings.length ? <EvidenceHeaderStatus rows={[{status: "Partial concern", priority: high ? "high" : undefined}]} /> : null}
-          <DisclosureChevron className="text-zinc-400 group-open/site-integrity:rotate-180" />
-        </span>
-      </summary>
+      <EvidenceSectionHeader title="Site integrity"
+        recap={`${totals.count === null ? "Hidden" : `${totals.lowerBound ? "≥" : ""}${totals.count} hidden`} links · ${findings.length} ${findings.length === 1 ? "page" : "pages"}`}
+        badge={findings.length ? <EvidenceHeaderStatus rows={[{status: "Partial concern", priority: high ? "high" : undefined}]} /> : null} />
     <div className="grid grid-cols-3 divide-x divide-zinc-200 border-y border-zinc-200 bg-zinc-50/60">
       {[{ label: "Link occurrences", value: totals.count === null ? "—" : `${totals.lowerBound ? "≥" : ""}${totals.count}` }, { label: "Affected pages", value: findings.length }, { label: "Destination domains", value: destinations.length }].map(metric => <div key={metric.label} className="px-4 py-3 sm:px-5"><p className="text-xl font-semibold tabular-nums text-zinc-950">{metric.value}</p><p className="mt-0.5 text-xs text-zinc-500">{metric.label}</p></div>)}
     </div>

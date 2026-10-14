@@ -1,3 +1,4 @@
+import { EVIDENCE_SECTION_TITLES } from "../../../lib/scans/detailed-evidence-presentation";
 import { AssessmentHighlightsText } from "../assessment-highlights-text";
 import { EvidenceColumns } from "../evidence-columns";
 import { detailedEvidenceLayout, type SharedEvidenceLink } from "./detailed-evidence-layout";
@@ -5,7 +6,8 @@ import { DetailedEvidenceFinding } from "../detailed-evidence-finding";
 import { policyFindingSummary } from "../detailed-evidence-copy";
 import { AccessibilityEvidence, AccessibilitySnapshotContent } from "../accessibility-evidence";
 import { ACCESSIBILITY_REPORT_LABEL, accessibilityIssueCountLabel } from "../../../lib/scans/accessibility-report";
-import { EvidenceHeaderStatus } from "../evidence-header-status";
+import { EvidenceHeaderStatus, evidenceSectionRecap } from "../evidence-header-status";
+import { EvidenceSectionHeader } from "../evidence-section-header";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { ViewerTimestamp } from "../../time/viewer-timestamp";
 import { FormDestinationEvidence } from "../form-destination-evidence";
@@ -36,7 +38,7 @@ import { DisclosureChevron, StatusBadge, FindingRow } from "../report-finding-ro
 import { describeSiteTechnology } from "@certscore/contracts";
 import { FullSiteWorkspace, FullSiteTiming, FullSiteRegion, FullSiteScanDuration } from "../full-site-workspace";
 import type { ReactNode } from "react";
-import { reportCardTitle, reportEyebrow, reportSectionTitle } from "../report-typography";
+import { reportEyebrow, reportSectionTitle } from "../report-typography";
 import { InventorySortProvider, InventorySortHeader, InventorySortedBody } from "../inventory-sorting";
 import { consolidateInventoryServices } from "./inventory-service-groups";
 import { InventoryEvidenceLegend } from "../inventory-evidence-icon";
@@ -62,7 +64,6 @@ import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-covera
 import { ShadowReportShareMenu } from "./shadow-report-actions";
 import { ExpandableExecutiveGrid } from "./expandable-executive-grid";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
-import { countRowsRequiringReview } from "./evidence-directory-summary";
 import {
   describeIndustryBenchmarkDifference,
   getIndustryBenchmark,
@@ -1518,16 +1519,9 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
 
   return (
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase text-zinc-500">GPC{homepage ? " · Starting page" : ""}</p>
-          <h3 title={gpcSummaryLabel(projection)} className="mt-1 text-lg font-semibold text-zinc-950">{gpcSummaryLabel(projection)}</h3>
-        </div>
-        <span className="flex shrink-0 items-center gap-2">
-          <EvidenceHeaderStatus rows={projection.californiaDeductionPoints > 0 ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />
-          <DisclosureChevron className="text-zinc-400 group-open/gpc:rotate-180" />
-        </span>
-      </summary>
+      <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc}
+        recap={projection.assessment.status === "indeterminate" ? "Response not determined" : projection.comparisonHeadline}
+        badge={<EvidenceHeaderStatus rows={projection.californiaDeductionPoints > 0 ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />} />
       <div className="mt-4">
         <DetailedEvidenceFinding title="GPC comparison" summary={gpcCardResponse(projection)}
           badge={<EvidenceHeaderStatus rows={projection.californiaDeductionPoints > 0 ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />}
@@ -1562,9 +1556,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
     ["Page title", report.siteMetadata?.observation.title],
   ].filter(([, value]) => value && !/^(unknown|not identified|not captured|not determined)$/i.test(value.trim()));
   const { cookieRows, policyRows, consentRows, consentLinks, cmpLinks } = detailedEvidenceLayout(report);
-  const observedGdprTransparencyRows = policyRows.filter((row) => row.status === "Observed").length;
-  const trackingExternalReviewCount = countRowsRequiringReview(report.trackingExternalRows);
-  const preConsentRuntimeReviewCount = countRowsRequiringReview(report.preConsentRuntimeRows);
+  const controlCount = Object.values(report.controls).filter(status => status === "Observed").length;
   return (
     <section className={`scroll-mt-6 border-t border-zinc-200 bg-white [&_:target]:scroll-mt-6 [&_[data-evidence-target]]:scroll-mt-6 ${compact ? "[&_.p-5]:!px-3 [&_.p-5]:!py-2 [&_.mt-5]:!mt-2.5 [&_.py-3]:!py-1.5 [&_h3]:!text-sm [&_summary]:min-h-8" : ""}`} id="evidence">
       <div className={compact ? "py-4" : "mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-10"}>
@@ -1581,10 +1573,9 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               cookieEvidenceAnchor={cookieRows[0] ? evidenceRowAnchor(cookieRows[0].id) : undefined} rejectActionAvailable={Boolean(report.rejectPath)}
               evidenceRows={[...report.consentRows, ...report.gdprTransparencyRows, ...report.preConsentRuntimeRows, ...report.trackingExternalRows]} />
             <details id="consent-review-evidence" className="group/consent border-b border-r border-zinc-200 p-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Consent surface{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>Consent controls</h3></div>
-                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={consentRows.filter(row => row.id !== "reject_all_path_availability")} /><DisclosureChevron className="text-zinc-400 group-open/consent:rotate-180" /></span>
-              </summary>
+              <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.consent}
+                recap={report.consentControlsAvailable !== false ? `${controlCount} of 3 controls observed` : "Control evidence unavailable"}
+                badge={<EvidenceHeaderStatus rows={consentRows.filter(row => row.id !== "reject_all_path_availability")} />} />
               {report.consentControlsAvailable !== false ? <div id="consent-choice-controls" className="mt-5 scroll-mt-6"><p className="mb-2 text-xs font-semibold text-zinc-600">Consent choices</p><ControlStatusGrid report={report} /></div> : null}
               {report.acceptPath || report.rejectPath ? (
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -1596,17 +1587,11 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               <EvidenceIndexRows rows={consentRows} sharedEvidence={consentLinks} />
             </details>
             {compact && report.fullSite ? <SitewideEvidenceCard group="tracking"><EvidenceIndexRows rows={report.trackingExternalRows} /></SitewideEvidenceCard> : <details className="group/tracking border-b border-r border-zinc-200 p-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Tracking &amp; embeds{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{trackingExternalReviewCount} need review · {report.trackingExternalRows.length} checks</h3></div>
-                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.trackingExternalRows} /><DisclosureChevron className="text-zinc-400 group-open/tracking:rotate-180" /></span>
-              </summary>
+              <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.tracking} recap={evidenceSectionRecap(report.trackingExternalRows)} badge={<EvidenceHeaderStatus rows={report.trackingExternalRows} />} />
               <EvidenceIndexRows rows={report.trackingExternalRows} />
             </details>}
             <details className="group/policy border-b border-r border-zinc-200 p-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Policy &amp; transparency{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{observedGdprTransparencyRows} observed · {policyRows.length} checks</h3></div>
-                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={policyRows} /><DisclosureChevron className="text-zinc-400 group-open/policy:rotate-180" /></span>
-              </summary>
+              <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.policy} recap={evidenceSectionRecap(policyRows)} badge={<EvidenceHeaderStatus rows={policyRows} />} />
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {policyRows.map((row) => (
                   <DetailedEvidenceFinding key={row.id} id={evidenceRowAnchor(row.id)} title={row.title}
@@ -1622,27 +1607,18 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
 
             {report.accessibilityAudit ? <AccessibilityEvidence audit={report.accessibilityAudit} observation={report.accessibilityEvidence} /> : null}
             {!compact ? <details aria-label="Site metadata" className="group/metadata border-b border-r border-zinc-200 p-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Site metadata</p><h3 className={`mt-1 ${reportCardTitle}`}>{metadataFields.length} details</h3></div>
-                <DisclosureChevron className="text-zinc-400 group-open/metadata:rotate-180" />
-              </summary>
+              <EvidenceSectionHeader title="Page information" recap={`${metadataFields.length} details`} />
               <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-zinc-200 pt-4 text-sm">
                 {metadataFields.map(([label, value]) => <div key={label}><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-0.5 break-words font-medium">{value}</dd></div>)}
               </dl>
             </details> : null}
             {compact && report.fullSite ? <SitewideEvidenceCard group="runtime"><EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools /></SitewideEvidenceCard> : <details className="group/runtime border-b border-r border-zinc-200 p-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Storage &amp; tracking{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{preConsentRuntimeReviewCount} need review · {report.preConsentRuntimeRows.length} checks</h3></div>
-                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.preConsentRuntimeRows} /><DisclosureChevron className="text-zinc-400 group-open/runtime:rotate-180" /></span>
-              </summary>
+              <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.runtime} recap={evidenceSectionRecap(report.preConsentRuntimeRows)} badge={<EvidenceHeaderStatus rows={report.preConsentRuntimeRows} />} />
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>}
             {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} focus="ccpa_cpra" /> : null}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>
-                <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={report.transportRows} /><DisclosureChevron className="text-zinc-400 group-open/transport:rotate-180" /></span>
-              </summary>
+              <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.transport} recap={evidenceSectionRecap(report.transportRows)} badge={<EvidenceHeaderStatus rows={report.transportRows} />} />
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
                 {report.transportRows.map((row) => (
                   <DetailedEvidenceFinding key={row.id} id={evidenceRowAnchor(row.id)} title={row.title} summary={row.summary} assessmentStatus={row.status}
@@ -1653,10 +1629,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
             </details>
             {!compact && report.metrics.forms > 0 ? (
               <details className="group/collection border-b border-r border-zinc-200 p-5">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-                  <div><p className="text-xs font-semibold uppercase text-zinc-500">Collection surfaces</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.metrics.forms} {report.metrics.forms === 1 ? "form" : "forms"} · {report.metrics.fields} {report.metrics.fields === 1 ? "field" : "fields"}</h3></div>
-                  <DisclosureChevron className="text-zinc-400 group-open/collection:rotate-180" />
-                </summary>
+                <EvidenceSectionHeader title="Forms & fields" recap={`${report.metrics.forms} ${report.metrics.forms === 1 ? "form" : "forms"} · ${report.metrics.fields} ${report.metrics.fields === 1 ? "field" : "fields"}`} />
                 <p className="mt-5 text-sm leading-6 text-zinc-600">Read-only main-document inventory. Field values were not retained. Assessment: {report.collectionStatus ?? "Unavailable"}.</p>
                 {(report.collectionLimitations?.length ?? 0) > 0 ? (
                   <p className="mt-2 text-xs leading-5 text-amber-800">Coverage limits: {report.collectionLimitations?.join(", ")}.</p>
@@ -1697,7 +1670,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
                 </div>
               </details>
             ) : null}
-            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden"><div className="min-w-0"><p className="text-xs font-semibold uppercase text-zinc-500">GPC{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>Evidence unavailable</h3></div><span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={[{status: "Limited"}]} /><DisclosureChevron className="shrink-0 text-zinc-400 group-open/gpc:rotate-180" /></span></summary><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>}
+            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc} recap="Evidence unavailable" badge={<EvidenceHeaderStatus rows={[{status: "Limited"}]} />} /><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>}
             {report.cmsSecurity && (report.cmsSecurity.assessment.detections.length > 0 || (report.cmsSecurity.pluginInventory?.detections.length ?? 0) > 0) ? <CmsSecurityEvidence projection={report.cmsSecurity} /> : null}
           </EvidenceColumns>
         </div>

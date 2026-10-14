@@ -55,7 +55,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.26`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.27`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 
@@ -246,7 +246,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.15` or newer for typed GPC, Accept Path, and Reject Path results, canonical form totals and score deductions on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
+Status: published. Install `@certscore/sdk@0.2.16` or newer for typed GPC, Accept Path, and Reject Path results, canonical form totals and score deductions on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
 
 Choice-path interpretation:
 
@@ -473,3 +473,5 @@ Report observed Do Not Sell/Share controls and notice passages as evidence. Cont
 Completed bundles include an evidence index and optional next actions for task-relevant report evidence and tracking JSON/CSV exports. Delivery labels describe the response, not evidence absence. Summarize whether the result was new or reused. Retain the baseline scan ID, date and execution region for a later explicitly requested fresh recheck; missing findings do not verify a fix. Offer remediation or the same review for another user-selected site only when useful. Light provides the optional certscore_launch_review, certscore_compare_scans and certscore_remediation_checklist prompts and certscore://project-instructions resource. certscore://example-report tests retrieval without creating a scan.
 
 Focused report retrieval: certscore_get_report_evidence_page accepts section=consent, gpc, policy, tracking, transport or forms with an existing scanId. Preserve section on every cursor request. Shared scan identity, score, findings and coverage remain included. Not-returned or unselected fields do not establish absence. JSON downloads retain the selector. Use workpaper=tracking separately for starting-page JSON/CSV exports; never combine the selectors. No new scan or model call is made.
+
+Detailed Evidence parity: SDK 0.2.16 adds getReportEvidence(scanId, {section}) for bounded, snapshot-checked reconstruction. MCP 0.2.27 supports section="cmp" and section="cms" in certscore_get_report_evidence_page. The same API endpoint supports these selectors. These reads expose existing report assessments, wording, correction steps and safe retained evidence; they do not create scans, findings or score changes.

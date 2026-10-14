@@ -1,3 +1,5 @@
+import { EVIDENCE_SECTION_TITLES } from "../../lib/scans/detailed-evidence-presentation";
+import { cmpCorrectionSteps } from "../../lib/scans/cmp-correction-steps";
 import React, { type ReactNode } from "react";
 import { CMP_AUDIT_CRITERIA, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
@@ -6,7 +8,8 @@ import type { ShadowEvidenceRow } from "./report-lab/shadow-report-data";
 import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
 import { EvidenceJumpLink } from "./evidence-jump-link";
 import type { SharedEvidenceLink } from "./report-lab/detailed-evidence-layout";
-import { DisclosureChevron } from "./report-finding-row";
+import { EvidenceSectionHeader } from "./evidence-section-header";
+import { EvidenceHeaderStatus, evidenceSectionRecap } from "./evidence-header-status";
 import { VendorBrandChip } from "./vendor-brand-chip";
 
 const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
@@ -28,13 +31,7 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
     ...criterion, status: "Not assessed" as const, sourceIds: [],
   }));
   return <details id="cmp-details" className="group/cmp border-b border-r border-zinc-200 p-5">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-      <div>
-        <p className="text-xs font-semibold uppercase text-zinc-500">Consent management{compact ? " · Starting page" : ""}</p>
-        <h3 className="mt-1 text-lg font-semibold text-zinc-950">CMP Details</h3>
-      </div>
-      <DisclosureChevron className="shrink-0 text-zinc-400 group-open/cmp:rotate-180" />
-    </summary>
+    <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.cmp} recap={evidenceSectionRecap(rows)} badge={<EvidenceHeaderStatus rows={rows} />} />
     <div className="mt-5">
       <VendorBrandChip label={vendor ?? "Consent platform not identified"} showMeta={false} />
       <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4>
@@ -96,27 +93,4 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       <p>{cookies.allUnmatchedOnlyAfterAccept ? "These cookies were found after Accept and were not seen before consent. " : "Cookies found during the scan were compared with the CMP list. "}Names alone do not show each cookie’s purpose or consent requirements.</p>
     </> : null}
   </div>;
-}
-
-
-/** Review guidance for existing projected results, not additional findings. */
-function cmpCorrectionSteps(row: CmpAuditRow): string[] {
-  if (row.status !== "Review recommended" && row.status !== "Not observed") return [];
-  switch (row.id) {
-    case "prominence": return [
-      "Compare Accept and Reject on the same page.",
-      "Make Reject as easy to find and use, then check both controls in a fresh session.",
-    ];
-    case "implementation": return [
-      "Check the listed requests, their purposes and their consent categories.",
-      "For requests that require consent, update the tag or integration to respect Reject.",
-      "Retest before a choice, after Reject and after Accept. Confirm each choice and check the resulting activity.",
-    ];
-    case "found_not_declared": return [
-      "Check the unmatched names against the CMP list and confirm their purposes and consent state.",
-      "Add any confirmed omissions to the CMP list.",
-      "Repeat the comparison after updating the list.",
-    ];
-    default: return ["Check the evidence for this item before making changes."];
-  }
 }

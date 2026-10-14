@@ -3,9 +3,11 @@ import type { ReportEvidenceSection } from "@certscore/api-contracts";
 // Select existing display projections only. Never classify findings or infer observations.
 const CONTEXT_FIELDS = ["scan", "score", "scoreExplanation", "verdict", "findings", "nextStep", "coverage"] as const;
 const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
-  consent: ["controls", "consentVendor", "consentRows", "acceptPath", "rejectPath", "choicePathComparison"],
+  consent: ["controls", "consentControlsAvailable", "consentVendor", "consentRows", "acceptPath", "rejectPath", "choicePathComparison", "cmpAudit"],
+  cmp: ["cmpAudit", "consentVendor"],
+  cms: ["cmsSecurity"],
   gpc: ["gpcResponse", "gpcLaneStatus"],
-  policy: ["gdprTransparencyRows", "policySurfaceCoverage"],
+  policy: ["gdprTransparencyRows", "policySurfaceCoverage", "consentRows"],
   tracking: ["preConsentRuntimeRows", "trackingExternalRows", "inventory", "inventorySummary", "resourceInventory", "trackerVendors", "fullSiteReport"],
   transport: ["transportRows"],
   forms: ["formsSummary", "collectionFields", "collectionLimitations", "collectionStatus", "collectionSurfaces", "collectionTableRows", "fullSiteReport"],
@@ -13,7 +15,13 @@ const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
 };
 
 export function selectReportEvidenceSection(report: Record<string, unknown>, section: ReportEvidenceSection) {
-  const requested = [...CONTEXT_FIELDS, ...SECTION_FIELDS[section]];
+  const sections: Record<ReportEvidenceSection, readonly string[]> = { consent: ["cmp", "consent"], cmp: ["cmp"], cms: ["cms"], gpc: ["gpc"], policy: ["policy"], tracking: ["tracking", "runtime"], transport: ["transport"], forms: [], accessibility: ["accessibility"] };
+  const presentation = report.detailedEvidence as { sections?: Array<{ id: string }> } | undefined;
+  report = { ...report,
+    ...(presentation ? { detailedEvidence: { ...presentation, sections: presentation.sections?.filter(item => sections[section].includes(item.id)) ?? [] } } : {}),
+    ...(section === "policy" && Array.isArray(report.consentRows) ? { consentRows: report.consentRows.filter(row => ["cookie_notice_policy_availability", "cookie-notice-policy"].includes(row.id)) } : {}),
+  };
+  const requested = [...CONTEXT_FIELDS, ...SECTION_FIELDS[section], "detailedEvidence"];
   const fields = requested.filter(key => Object.hasOwn(report, key) && report[key] !== undefined);
   return {
     report: Object.fromEntries(fields.map(key => [key, report[key]])),

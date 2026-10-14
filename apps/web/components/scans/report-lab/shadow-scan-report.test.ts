@@ -92,18 +92,6 @@ test("purpose mix merges case-only labels without double-counting retained recor
   assert.equal(counts.reduce((total, row) => total + row.value, 0), 7);
 });
 
-test("evidence section headings distinguish review, observed, and total check counts", async () => {
-  const source = await readFile(
-    "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
-    "utf8"
-  );
-
-  assert.match(source, /\{trackingExternalReviewCount\} need review · \{report\.trackingExternalRows\.length\} checks/);
-  assert.match(source, /\{preConsentRuntimeReviewCount\} need review · \{report\.preConsentRuntimeRows\.length\} checks/);
-  assert.match(source, /\{observedGdprTransparencyRows\} observed · \{policyRows\.length\} checks/);
-  assert.match(source, /positive · \{report\.transportRows\.length\} checks/);
-});
-
 test("benchmark labels and values come from canonical non-essential inventory tallies", async () => {
   const source = await readFile(
     "apps/web/components/scans/report-lab/shadow-scan-report.tsx",
@@ -275,9 +263,9 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   const consentControlsIndex = snapshotSource.indexOf(">Consent controls<");
   const gpcIndex = snapshotSource.indexOf(">Global Privacy Control (GPC)<");
   const transportSecurityIndex = snapshotSource.indexOf(">Transport security<");
-  const runtimeIndex = evidenceDirectorySource.indexOf(">Storage &amp; tracking{");
+  const runtimeIndex = evidenceDirectorySource.indexOf('title={EVIDENCE_SECTION_TITLES.runtime}');
   const gpcCardIndex = evidenceDirectorySource.indexOf("<GpcEvidenceIndexCard");
-  const transportIndex = evidenceDirectorySource.indexOf(">Transport security{");
+  const transportIndex = evidenceDirectorySource.indexOf('title={EVIDENCE_SECTION_TITLES.transport}');
 
   assert.ok(consentPlatformIndex >= 0);
   assert.ok(consentPlatformIndex < consentControlsIndex);
@@ -291,7 +279,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.doesNotMatch(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /href="#gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
-  assert.match(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
+  assert.match(gpcEvidenceCardSource, /projection\.comparisonHeadline/);
   assert.match(gpcEvidenceCardSource, /projection\.coverageSummary/);
   assert.doesNotMatch(gpcEvidenceCardSource, /<details open=/);
   assert.doesNotMatch(evidenceDirectorySource, /expanded=\{report\.reviewFocus === "ccpa_cpra"\}/);
@@ -301,7 +289,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(runtimeIndex >= 0);
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(transportIndex < gpcCardIndex);
-  assert.match(source, />GPC\{homepage \? " · Starting page" : ""\}/);
+  assert.match(gpcEvidenceCardSource, /title=\{EVIDENCE_SECTION_TITLES\.gpc\}/);
   assert.match(gpcEvidenceCardSource, /<DetailedEvidenceFinding/);
   assert.match(gpcEvidenceCardSource, /evidenceJson=\{evidenceJson\}/);
   assert.match(source, /"Advertising \/ measurement"/);

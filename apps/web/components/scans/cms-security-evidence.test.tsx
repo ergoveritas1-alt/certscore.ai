@@ -48,3 +48,12 @@ test("plugins show separately from the unknown core version without extra warnin
   const legacy = projection(signals); delete legacy.pluginInventory;
   assert.doesNotMatch(renderToStaticMarkup(<CmsSecurityEvidence projection={legacy} />), /<table/);
 });
+
+test("multiple platform detections keep the header compact and the details intact", () => {
+  const sample = projection([signal("WordPress 6.8")]);
+  sample.assessment.detections.push({ ...sample.assessment.detections[0]!, name: "Other platform", evidenceRef: "site_integrity:dom:other" });
+  const html = renderToStaticMarkup(<CmsSecurityEvidence projection={sample} />);
+  assert.match(html, /2 platforms detected/);
+  assert.match(html, /WordPress/);
+  assert.match(html, /Other platform/);
+});

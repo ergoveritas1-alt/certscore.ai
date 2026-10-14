@@ -2021,23 +2021,23 @@ test("focused report evidence preserves selector through SDK reads and rejects m
     coverage: { scope: "public_report_projection", exportTruncated: false, observationCompleteness: "see_report_coverage", exclusions: ["unselected_report_sections"] },
     reconstruction: "Retain the section and coverage limitations.",
   };
-  for (const toolProfile of ["full", "light"] as const) {
-    const mock = installFetch([{ status: 200, body: base }, { status: 200, body: { ...base, pagination: { offset: 1, returned: 1, total: 2, complete: true, nextCursor: null } } }]);
+  for (const toolProfile of ["full", "light"] as const) for (const section of ["gpc", "cmp", "cms"] as const) {
+    const mock = installFetch([{ status: 200, body: { ...base, section } }, { status: 200, body: { ...base, section, pagination: { offset: 1, returned: 1, total: 2, complete: true, nextCursor: null } } }]);
     try {
       await withMcpClient(async client => {
-        const first = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, section: "gpc" } });
+        const first = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, section } });
         assert.equal(first.isError, undefined);
         const guidance = first._meta?.["ai.certscore/responseGuidance"] as any;
-        assert.deepEqual(guidance.nextAction.arguments, { scanId, cursor: "cursor", section: "gpc" });
-        assert.match((first.content as any[])[0].text, /gpc section/);
+        assert.deepEqual(guidance.nextAction.arguments, { scanId, cursor: "cursor", section });
+        assert.match((first.content as any[])[0].text, new RegExp(`${section} section`));
         const second = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: guidance.nextAction.arguments });
         assert.equal(second.isError, undefined);
         assert.equal((second._meta?.["ai.certscore/responseGuidance"] as any).nextAction.tool, null);
-        const invalid = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, section: "gpc", workpaper: "tracking" } });
+        const invalid = await client.callTool({ name: "certscore_get_report_evidence_page", arguments: { scanId, section, workpaper: "tracking" } });
         assert.equal(invalid.isError, true);
       }, { toolProfile });
       assert.equal(mock.calls.length, 2);
-      for (const call of mock.calls) assert.equal(new URL(call).searchParams.get("section"), "gpc");
+      for (const call of mock.calls) assert.equal(new URL(call).searchParams.get("section"), section);
       assert.equal(new URL(mock.calls[1]!).searchParams.get("cursor"), "cursor");
     } finally { mock.restore(); }
   }

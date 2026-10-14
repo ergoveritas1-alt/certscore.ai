@@ -1,9 +1,10 @@
 import { visibleFullSiteReport, visibleResourceInventory } from "./report-visible-fields";
 import { apiFormSnapshotExport } from "./form-snapshot-export";
+import { detailedEvidenceReportSchema, publicCmpAuditSchema, publicCmsSecuritySchema } from "@certscore/api-contracts";
 /** Report content only: omit diagnostic downloads and encode repeated records once. */
 const REPORT_FIELDS = new Set([
   "scan", "score", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
-  "coverage", "controls", "consentVendor", "consentRows", "gdprTransparencyRows",
+  "coverage", "controls", "consentControlsAvailable", "consentVendor", "consentRows", "gdprTransparencyRows", "detailedEvidence", "cmpAudit", "cmsSecurity",
   "preConsentRuntimeRows", "trackingExternalRows", "transportRows", "relatedRows",
   "policySurfaceCoverage", "gpcResponse", "gpcLaneStatus", "acceptPath", "rejectPath", "accessibilityAudit", "accessibilityEvidence",
   "choicePathComparison", "timeline", "inventory", "inventorySummary", "resourceInventory",
@@ -24,6 +25,12 @@ export function buildReportDisplayExport(report: Record<string, unknown>, option
     ...(report.fullSiteReport ? { fullSiteReport: visibleFullSiteReport(report.fullSiteReport as Record<string, unknown>) } : {}),
     ...(report.resourceInventory ? { resourceInventory: visibleResourceInventory(report.resourceInventory as Record<string, unknown>) } : {}),
   };
+  for (const [key, schema] of [["detailedEvidence", detailedEvidenceReportSchema], ["cmpAudit", publicCmpAuditSchema], ["cmsSecurity", publicCmsSecuritySchema]] as const) {
+    if (report[key] === undefined || report[key] === null) continue;
+    const parsed = schema.safeParse(report[key]);
+    if (parsed.success && (!scanId || parsed.data.scanId === scanId)) report[key] = parsed.data;
+    else delete report[key];
+  }
   const seen = new Map<string, string>();
   function project(value: unknown, path: string): unknown {
     if (!value || typeof value !== "object") return value;

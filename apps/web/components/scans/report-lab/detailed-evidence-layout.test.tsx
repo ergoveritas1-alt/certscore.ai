@@ -59,7 +59,7 @@ test("both layouts keep one full shared view, working aliases and distinct check
     assert.doesNotMatch(html,/>Decline consent control</);
     assert.match(html,/id="evidence-row-reject_all_path_availability"[^>]*data-shared-evidence-target="cmp-criterion-reject"/);
     for(const id of ["privacy_access","duration","declared_not_found","found_not_declared","cookie_information"])assert.match(html,new RegExp(`id="cmp-criterion-${id}"`));
-    assert.ok(html.indexOf('id="evidence-row-cookie_notice_policy_availability"')>html.indexOf('Policy &amp; transparency'));
+    assert.ok(html.indexOf('id="evidence-row-cookie_notice_policy_availability"')>html.indexOf('Policies &amp; disclosures'));
     assert.doesNotMatch(html,/Platform identification evidence|Preference check:/);
   }
 });

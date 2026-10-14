@@ -1,5 +1,6 @@
 import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
 import { reportEvidencePageOpenApi } from "./report-page-openapi.js";
+import { detailedEvidenceOpenApiSchemas } from "./detailed-evidence-openapi.js";
 import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.js";
 import { gpcActivityComparisonOpenApi } from "./gpc-activity-comparison-openapi.js";
 import { apiV2Disclaimer, CERTSCORE_API_V2_SCHEMA_VERSION } from "./api-v2.js";
@@ -627,13 +628,13 @@ export function buildCertScoreApiV2OpenApiDocument() {
         get: {
           operationId: "getReportEvidencePage", tags: ["Scans", "Runtime Inventory"],
           summary: "Retrieve retained report evidence or the tracking workpaper.",
-          description: "Use section=consent, gpc, policy, tracking, transport, forms or accessibility for focused retained report sections with shared identity, score, findings and coverage context. For forms, follow scan.links.formsEvidence; collectionTableRows includes phase-labelled field metadata and each available snapshot.url is a separate API JPEG read using the same bearer credential. Preserve section on cursor continuation. Unselected or not-returned fields do not establish absence. Use workpaper=tracking separately for the starting-page inventory, privacy choices/notices and GPC evidence; section and workpaper cannot be combined. Default returns paginated JSON with download URLs; format=download returns one JSON document; format=csv requires workpaper=tracking. Preserve workpaper on cursor continuation. Workspace reports require an authorized read credential or a returned five-minute download capability. Anonymous access is limited to eligible public scans. Existing report-page read quotas apply; no scan is created. Inventory sale, sharing and vendor-specific GPC honoring remain not_assessed.",
+          description: "Use section=cmp, cms, consent, gpc, policy, tracking, transport, forms or accessibility for focused retained report sections with shared identity, score, findings and coverage context. For forms, follow scan.links.formsEvidence; collectionTableRows includes phase-labelled field metadata and each available snapshot.url is a separate API JPEG read using the same bearer credential. Preserve section on cursor continuation. Unselected or not-returned fields do not establish absence. Use workpaper=tracking separately for the starting-page inventory, privacy choices/notices and GPC evidence; section and workpaper cannot be combined. Default returns paginated JSON with download URLs; format=download returns one JSON document; format=csv requires workpaper=tracking. Preserve workpaper on cursor continuation. Workspace reports require an authorized read credential or a returned five-minute download capability. Anonymous access is limited to eligible public scans. Existing report-page read quotas apply; no scan is created. Inventory sale, sharing and vendor-specific GPC honoring remain not_assessed.",
           security: [{ bearerAuth: [] }, {}],
           parameters: [
             { name: "scanId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
             { name: "cursor", in: "query", schema: { type: "string" } },
             { name: "workpaper", in: "query", schema: { type: "string", enum: ["tracking"] } },
-            { name: "section", in: "query", schema: { type: "string", enum: ["consent", "gpc", "policy", "tracking", "transport", "forms", "accessibility"] } },
+            { name: "section", in: "query", schema: { type: "string", enum: ["consent", "gpc", "policy", "tracking", "transport", "forms", "accessibility", "cmp", "cms"] } },
             { name: "format", in: "query", schema: { type: "string", enum: ["download", "csv"] } },
             { name: "downloadTicket", in: "query", description: "Confidential report-scoped capability from download.url; downloads only.", schema: { type: "string" } },
           ],
@@ -762,6 +763,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
         }
       },
       schemas: {
+        ...detailedEvidenceOpenApiSchemas,
         ...scanReportSummaryOpenApi,
         ReportEvidencePage: reportEvidencePageOpenApi,
         CreateScanRequest: {

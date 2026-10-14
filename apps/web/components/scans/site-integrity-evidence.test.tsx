@@ -33,7 +33,7 @@ test("only projected integrity findings render a separate review callout and det
   const finding = selectSiteIntegrityFinding(packets);
   assert.ok(finding);
   const html = renderToStaticMarkup(<><SiteIntegrityCallout finding={finding} /><SiteIntegrityEvidence finding={finding} /></>);
-  assert.match(html, /Site integrity · Review recommended/);
+  assert.match(html, /Site integrity · Review/);
   assert.doesNotMatch(html, /High priority|Flagged|rose-/);
   assert.match(html, /href="#site-integrity-evidence"/);
   assert.match(html, /id="site-integrity-evidence"/);

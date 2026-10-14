@@ -1955,6 +1955,11 @@ export function buildScanBundle(input: {
   const navigation = bundleReviewNavigation(bundle);
   if (navigation) bundle.reviewNavigation = navigation;
   captureFullPayloadBytes();
+  // Optional deep-section links must not displace existing forms/action navigation in tight envelopes.
+  if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.reviewNavigation) {
+    bundle.reviewNavigation.evidenceIndex = bundle.reviewNavigation.evidenceIndex.filter((item: { key: string }) => !["cmp", "cms"].includes(item.key));
+    refresh();
+  }
   if (bundle.mcpMetadata.actualBytes > maxBytes && bundle.reviewNavigation) {
     delete bundle.reviewNavigation;
     refresh();

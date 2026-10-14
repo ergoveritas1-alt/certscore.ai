@@ -1,5 +1,11 @@
 # @certscore/sdk
 
+## 0.2.16
+
+- Type the shared Detailed Evidence presentation, all 13 CMP audit criteria and safe CMS/version evidence.
+- Add `cmp` and `cms` evidence selectors and on-demand `getReportEvidence` reconstruction with bounded, snapshot-checked pagination.
+- Generate standalone public types from the API schemas; preserve source statuses, evidence provenance and canonical findings.
+
 ## 0.2.15
 
 - Type and export canonical `ScanFormsSummary` and `ScanScoreExplanation` on scan resources, scan jobs and Pulse results.

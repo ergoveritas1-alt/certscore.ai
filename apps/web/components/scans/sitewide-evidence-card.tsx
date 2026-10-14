@@ -4,13 +4,14 @@ import { createContext, useContext, type ReactNode } from "react";
 import { sitewideEvidenceGroups, type SitewideEvidencePage } from "../../lib/scans/sitewide-evidence-index";
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { checklistRemediation } from "../../lib/scans/checklist-remediation";
-import { DisclosureChevron } from "./report-finding-row";
+import { EVIDENCE_SECTION_TITLES } from "../../lib/scans/detailed-evidence-presentation";
+import { EvidenceSectionHeader } from "./evidence-section-header";
 import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
 
 export const SitewideEvidenceContext = createContext<{pages: SitewideEvidencePage[]; limitedPages: number} | null>(null);
 export function SitewideEvidenceCard({group, children}: {group: keyof typeof sitewideEvidenceGroups; children?: ReactNode}) {
   const evidence = useContext(SitewideEvidenceContext);
-  const title = group === "tracking" ? "Tracking & embeds" : "Storage & tracking";
+  const title = group === "tracking" ? EVIDENCE_SECTION_TITLES.tracking : EVIDENCE_SECTION_TITLES.runtime;
   const ids = new Set<string>(sitewideEvidenceGroups[group]);
   const pages = evidence?.pages.map(page => ({...page, rows: page.rows.filter(row => ids.has(row.id))})) ?? [];
   const checks = [...ids].map(id => {
@@ -30,10 +31,9 @@ export function SitewideEvidenceCard({group, children}: {group: keyof typeof sit
   }).filter(check => check.observations.length);
   const count = checks.filter(check => check.needsReview).length;
   return <details className="group/sitewide border-b border-r border-zinc-200 p-5">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-      <div><p className="text-xs font-semibold uppercase text-zinc-500">{title} · Sitewide</p><h3 className="mt-1 text-sm font-semibold">{evidence ? `${count} ${count === 1 ? "needs" : "need"} review · ${pages.length} ${pages.length === 1 ? "page" : "pages"}` : "Sitewide assessment unavailable"}</h3></div>
-      <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={[...pages.flatMap(page => page.rows), ...(!evidence || evidence.limitedPages ? [{status: "Limited"}] : [])]} /><DisclosureChevron className="text-zinc-400 group-open/sitewide:rotate-180"/></span>
-    </summary>
+    <EvidenceSectionHeader title={`${title} · Sitewide`}
+      recap={evidence ? `${checks.length} checks · ${pages.length} ${pages.length === 1 ? "page" : "pages"}${count ? ` · ${count} to review` : ""}` : "Sitewide assessment unavailable"}
+      badge={<EvidenceHeaderStatus rows={[...pages.flatMap(page => page.rows), ...(!evidence || evidence.limitedPages ? [{status: "Limited"}] : [])]} />} />
     {evidence ? <div className="mt-3 divide-y border-t">
       {evidence.limitedPages ? <p className="py-2 text-xs text-amber-800">{evidence.limitedPages} page(s) have unavailable or limited coverage.</p> : null}
       {checks.map(check => <DetailedEvidenceFinding key={check.id} id={evidenceRowAnchor(check.id)} title={check.title}

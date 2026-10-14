@@ -1,4 +1,5 @@
 import type { ReportEvidencePage } from "./types.js";
+import { reconstructReportEvidencePages, type ReportEvidenceDocument } from "./detailed-evidence.js";
 import { createHmac } from "node:crypto";
 import { recordCertScoreErrorContext, CertScoreError, CertScoreApiError, InvalidUrlError, CertScoreScanFailedError, ThrottledError } from "./errors.js";
 import { adaptivePollIntervalMs, parseRetryAfter, retryDelayMs, sleep, SUCCESS_STATUSES, throwForTerminalStatus, throwTimeout } from "./poll.js";
@@ -283,6 +284,23 @@ export class CertScoreClient {
     if (options.workpaper) endpoint.searchParams.set("workpaper", options.workpaper);
     if (options.section) endpoint.searchParams.set("section", options.section);
     return this.fetchJson<ReportEvidencePage>(endpoint, options);
+  }
+
+  /** Read and reconstruct retained report evidence only when explicitly requested. */
+  async getReportEvidence(scanId: string, options: ApiV2RequestOptions & { section?: ReportEvidencePage["section"]; maxPages?: number } = {}): Promise<ReportEvidenceDocument> {
+    const maxPages = options.maxPages ?? 20;
+    if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) throw new Error("maxPages must be between 1 and 100.");
+    const pages: ReportEvidencePage[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < maxPages; i++) {
+      const page = await this.getReportEvidencePage(scanId, { ...options, cursor });
+      if (page.scanId !== scanId || page.section !== options.section || pages[0] && page.snapshot !== pages[0].snapshot) throw new Error("Mismatched report evidence snapshot.");
+      pages.push(page);
+      if (page.pagination.complete) return reconstructReportEvidencePages(pages);
+      if (!page.pagination.nextCursor || page.pagination.nextCursor === cursor) throw new Error("Invalid report evidence continuation.");
+      cursor = page.pagination.nextCursor;
+    }
+    throw new Error("Report evidence exceeds maxPages; use getReportEvidencePage for explicit continuation.");
   }
 
   /** Retrieve the API v2 Pulse wrapper for an eligible public scan. */

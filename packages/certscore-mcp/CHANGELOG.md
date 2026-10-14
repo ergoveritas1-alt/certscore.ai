@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.27
+
+- Retrieve CMP audit and CMS/version sections through the existing evidence tool on OAuth and Light.
+- Expose shared report wording, correction steps and safe supporting evidence on demand; preserve compact bundle budgets and existing navigation.
+
 ## 0.2.26
 
 - Add Light review prompts, project instructions and scan-free retained-example connection testing.
@@ -20,6 +25,7 @@
 - Surface bounded baseline/GPC activity comparisons alongside retained observation facts.
 
 ## Unreleased
+
 
 - Prepare Cursor integration `1.0.4` with query-first cookie, tracker, consent, GDPR, CCPA, ePrivacy, privacy-risk, and website-scanner discovery metadata while preserving the `CertScore.ai` no-auth Light endpoint.
 

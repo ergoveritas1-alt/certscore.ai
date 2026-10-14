@@ -192,6 +192,8 @@ const nextConfig = {
         "../../packages/certscore-api-contracts/src/openapi-chatgpt.ts",
       "./openapi-v2.js": "../../packages/certscore-api-contracts/src/openapi-v2.ts",
       "./report-page.js": "../../packages/certscore-api-contracts/src/report-page.ts",
+      "./detailed-evidence.js": "../../packages/certscore-api-contracts/src/detailed-evidence.ts",
+      "./detailed-evidence-openapi.js": "../../packages/certscore-api-contracts/src/detailed-evidence-openapi.ts",
       "./report-page-openapi.js":
         "../../packages/certscore-api-contracts/src/report-page-openapi.ts",
       "./pulse-v1.js": "../../packages/certscore-api-contracts/src/pulse-v1.ts",

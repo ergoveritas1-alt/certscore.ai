@@ -1,7 +1,8 @@
+import { EVIDENCE_SECTION_TITLES } from "./detailed-evidence-presentation";
 import type { AccessibilityRuleObservation } from "@certscore/contracts";
 import type { ApiAccessibilityAuditSummary } from "@certscore/api-contracts";
 
-export const ACCESSIBILITY_REPORT_LABEL = "Accessibility (WCAG)";
+export const ACCESSIBILITY_REPORT_LABEL = EVIDENCE_SECTION_TITLES.accessibility;
 
 /** Short display labels only; retained rule identities and assessments are unchanged. */
 const RULE_TITLES: Record<string, string> = {

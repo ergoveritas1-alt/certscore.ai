@@ -2,7 +2,7 @@ import { EvidenceHeaderStatus } from "./evidence-header-status";
 import React from "react";
 import type { PrivacyAuditEvidence, ReportReviewFocus } from "@certscore/api-contracts";
 import { REVIEW_FOCUS_LABELS } from "../../lib/scans/report-review-focus";
-import { DisclosureChevron } from "./report-finding-row";
+import { EvidenceSectionHeader } from "./evidence-section-header";
 
 export function RegulatoryReviewFocus({ focus }: { focus: ReportReviewFocus }) {
   return <form method="get" aria-label="Review focus" className="inline-flex shrink-0 items-center gap-3 border-b border-zinc-200 text-xs">
@@ -19,13 +19,9 @@ export function CaliforniaPrivacyWorkpaper({ evidence, focus }: { evidence?: Pri
   const candidates = evidence?.contractVersion === "certscore.privacy-audit-evidence.v2" ? evidence.controlCandidates : [];
   const topics = evidence ? [...new Set(evidence.notices.flatMap(notice => notice.passages.map(passage => passage.topic)))] : [];
   return <details id="california-privacy-evidence" className="group/privacy-choices border-b border-r border-zinc-200 p-5">
-    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
-      <div>
-        <p className="text-xs font-semibold uppercase text-zinc-500">CCPA/CPRA · Starting page</p>
-        <h3 className="mt-1 text-lg font-semibold text-zinc-950">Privacy choices &amp; notices</h3>
-      </div>
-      <span className="flex shrink-0 items-center gap-2"><EvidenceHeaderStatus rows={!evidence ? [{status: "Limited"}] : candidates.length ? [{status: "Needs review"}] : []} /><DisclosureChevron className="text-zinc-400 group-open/privacy-choices:rotate-180" /></span>
-    </summary>
+    <EvidenceSectionHeader title="California privacy choices"
+      recap={evidence ? `${evidence.controls.length} ${evidence.controls.length === 1 ? "choice" : "choices"} · ${evidence.notices.length} ${evidence.notices.length === 1 ? "notice" : "notices"}` : "Evidence unavailable"}
+      badge={<EvidenceHeaderStatus rows={!evidence ? [{status: "Limited"}] : candidates.length ? [{status: "Needs review"}] : []} />} />
     <p className="mt-1 text-xs text-zinc-500">{evidence ? `${evidence.controls.length} observed ${evidence.controls.length === 1 ? "choice" : "choices"}${candidates.length ? ` · ${candidates.length} ${candidates.length === 1 ? "link" : "links"} to review` : ""} · ${evidence.notices.length} ${evidence.notices.length === 1 ? "notice" : "notices"}${topics.length ? ` · ${topics.length} ${topics.length === 1 ? "topic" : "topics"} found` : ""}` : "Evidence unavailable"}</p>
     <div className="mt-4 space-y-4 text-sm text-zinc-700">
       {!evidence ? <p>No verified privacy-choice or notice evidence was retained for this scan. This does not establish that these items are absent.</p> : <>

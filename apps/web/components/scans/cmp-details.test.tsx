@@ -15,7 +15,7 @@ test("CMP details precede consent controls without redundant platform details in
     const controlStart = html.indexOf('id="consent-review-evidence"');
     assert.ok(cmpStart > 0 && cmpStart < controlStart);
     const cmpHtml = html.slice(cmpStart, controlStart);
-    assert.match(cmpHtml, /CMP Details/);
+    assert.match(cmpHtml, /CMP details/);
     assert.match(cmpHtml, /13 criteria/);
     assert.doesNotMatch(cmpHtml, /Platform identification evidence|Preference check:/);
     assert.doesNotMatch(html.slice(controlStart), /Controls &amp; CMP|Consent-management framework signal|CMP identity and control context/);
