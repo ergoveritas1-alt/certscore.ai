@@ -7,7 +7,7 @@ import { SHADOW_REPORT } from "./report-lab/shadow-report-data";
 import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 
-test("CMP details precede consent controls and own the framework evidence in both report layouts", () => {
+test("CMP details precede consent controls without redundant platform details in both report layouts", () => {
   const report = { ...SHADOW_REPORT, cmpAudit: projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment }) };
   for (const compact of [false, true]) {
     const html = renderToStaticMarkup(<EvidenceDirectory report={report} compact={compact} />);
@@ -17,9 +17,9 @@ test("CMP details precede consent controls and own the framework evidence in bot
     const cmpHtml = html.slice(cmpStart, controlStart);
     assert.match(cmpHtml, /CMP Details/);
     assert.match(cmpHtml, /13 criteria/);
-    assert.match(cmpHtml, /Platform identification evidence/);
+    assert.doesNotMatch(cmpHtml, /Platform identification evidence|Preference check:/);
     assert.doesNotMatch(html.slice(controlStart), /Controls &amp; CMP|Consent-management framework signal|CMP identity and control context/);
-    assert.equal((html.match(/id="evidence-row-consent-management-framework"/g) ?? []).length, 1);
+    assert.doesNotMatch(html, /id="evidence-row-consent-management-framework"/);
     assert.equal((cmpHtml.match(/id="cmp-criterion-/g) ?? []).length, 13);
   }
 });
@@ -31,15 +31,16 @@ test("expanded executive Consent platform links to the CMP details anchor", () =
   assert.match(platform, /View CMP Details/);
 });
 
-test("timeout is distinguished from integration and product capability support", async () => {
+test("internal preference inspection status does not distract from criterion assessments", async () => {
   const { CmpDetails } = await import("./cmp-details");
   const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
   audit.inspectionSupport = { state: "unknown", provider: null, recipeVersion: null, reason: "preference_budget_exhausted" };
   const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" />);
-  assert.match(html, /Inspection incomplete — timed out/);
-  assert.doesNotMatch(html, /Support not established|Feature not supported|CMP not supported by CertScore/);
+  assert.match(html, /Borlabs Cookie/);
+  assert.match(html, /13 criteria/);
+  assert.doesNotMatch(html, /Preference check:|Inspection incomplete — timed out|Support not established|CMP not supported by CertScore/);
   audit.inspectionSupport = { ...audit.inspectionSupport, state: "unsupported", reason: "adapter_unavailable" };
-  assert.match(renderToStaticMarkup(<CmpDetails audit={audit} vendor="Another CMP" />), /CMP not supported by CertScore/);
+  assert.doesNotMatch(renderToStaticMarkup(<CmpDetails audit={audit} vendor="Another CMP" />), /Preference check:|CMP not supported by CertScore/);
 });
 
 test("CMP details render Not assessed reasons without point deductions", async () => {

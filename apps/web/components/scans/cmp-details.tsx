@@ -6,7 +6,7 @@ import type { ShadowEvidenceRow } from "./report-lab/shadow-report-data";
 import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
 import { EvidenceJumpLink } from "./evidence-jump-link";
 import type { SharedEvidenceLink } from "./report-lab/detailed-evidence-layout";
-import { DisclosureChevron, EvidenceTools } from "./report-finding-row";
+import { DisclosureChevron } from "./report-finding-row";
 import { VendorBrandChip } from "./vendor-brand-chip";
 
 const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
@@ -14,14 +14,13 @@ const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
   "Not observed": "neutral", "Review recommended": "review", "Partially assessed": "context", "Not assessed": "limited",
 };
 
-export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, platformEvidence = [], cookieEvidenceAnchor, rejectActionAvailable = false }: {
+export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, cookieEvidenceAnchor, rejectActionAvailable = false }: {
   audit?: CmpAuditProjection;
   vendor: string | null;
   compact?: boolean;
   children?: ReactNode;
   evidenceRows?: readonly ShadowEvidenceRow[];
   sharedEvidence?: Record<string, SharedEvidenceLink>;
-  platformEvidence?: readonly ShadowEvidenceRow[];
   cookieEvidenceAnchor?: string;
   rejectActionAvailable?: boolean;
 }) {
@@ -38,11 +37,6 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
     </summary>
     <div className="mt-5">
       <VendorBrandChip label={vendor ?? "Consent platform not identified"} showMeta={false} />
-      {platformEvidence.map(row => <details id={evidenceRowAnchor(row.id)} key={row.id} className="group/platform mt-2 text-xs text-zinc-600">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">Platform identification evidence<DisclosureChevron className="text-zinc-400 group-open/platform:rotate-180" /></summary>
-        <div className="mt-3"><EvidenceTools canonicalEvidenceJson={row.canonicalEvidenceJson} evidenceJson={row.evidenceJson} evidenceRefs={row.evidenceRefs} correctionSteps={[]} showCorrections={false} /></div>
-      </details>)}
-      {audit?.inspectionSupport ? <p className="mt-2 text-xs text-zinc-600">Preference check: <span className="font-semibold">{audit.inspectionSupport.reason === "preference_budget_exhausted" ? "Inspection incomplete — timed out" : { supported: "Supported", partial: "Partially supported", unsupported: "CMP not supported by CertScore", unknown: "Support not established" }[audit.inspectionSupport.state]}</span></p> : null}
       <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4>
       <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">
         {rows.map(row => {

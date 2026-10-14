@@ -1561,7 +1561,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
     ["Language", report.siteMetadata?.observation.language],
     ["Page title", report.siteMetadata?.observation.title],
   ].filter(([, value]) => value && !/^(unknown|not identified|not captured|not determined)$/i.test(value.trim()));
-  const { platformRows: cmpRows, cookieRows, policyRows, consentRows, consentLinks, cmpLinks } = detailedEvidenceLayout(report);
+  const { cookieRows, policyRows, consentRows, consentLinks, cmpLinks } = detailedEvidenceLayout(report);
   const observedGdprTransparencyRows = policyRows.filter((row) => row.status === "Observed").length;
   const trackingExternalReviewCount = countRowsRequiringReview(report.trackingExternalRows);
   const preConsentRuntimeReviewCount = countRowsRequiringReview(report.preConsentRuntimeRows);
@@ -1578,7 +1578,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
           <EvidenceColumns siteIntegrity={<SiteIntegrityEvidence finding={report.siteIntegrity} />} hasSiteIntegrity={Boolean(report.siteIntegrity)}>
             {additionalEvidence}
             <CmpDetails audit={report.cmpAudit} vendor={report.consentVendor} compact={compact} sharedEvidence={cmpLinks}
-              platformEvidence={cmpRows} cookieEvidenceAnchor={cookieRows[0] ? evidenceRowAnchor(cookieRows[0].id) : undefined} rejectActionAvailable={Boolean(report.rejectPath)}
+              cookieEvidenceAnchor={cookieRows[0] ? evidenceRowAnchor(cookieRows[0].id) : undefined} rejectActionAvailable={Boolean(report.rejectPath)}
               evidenceRows={[...report.consentRows, ...report.gdprTransparencyRows, ...report.preConsentRuntimeRows, ...report.trackingExternalRows]} />
             <details id="consent-review-evidence" className="group/consent border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
