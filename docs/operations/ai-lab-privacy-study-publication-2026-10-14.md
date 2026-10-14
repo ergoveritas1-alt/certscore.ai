@@ -6,9 +6,8 @@ Public URL: https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026
 
 Original: https://muse.ai/s/ai-lab-privacy-leaderboard-xhxr5xtxvxexh9xah7
 
-The self-contained static document preserves the original October 12 article body,
-rankings, methodology, validation limits and ten distinct retained scan-report
-links. Its canonical and sharing metadata point to certscore.ai. It uses the
+The self-contained static document preserves the original October 12 rankings, observed findings, methodology,
+validation limits and ten distinct retained scan-report links. Its canonical and sharing metadata point to certscore.ai. It uses the
 existing local social image and favicon, removes the Google Fonts import, and
 fixes wrapping of the report link in desktop leaderboard rows. No Muse frame,
 remote font, script, authentication or new scanner run is required to read it.
@@ -16,8 +15,14 @@ The Insights index and sitemap link to the article.
 
 The captured original document SHA-256 (including its doctype) is
 `8ff92c3f05c540e69fd0a862d4d5fa4e32f29f786f48d5d7293fd011e2380364`.
-Article-body equality and ten original report links were checked against that
-capture; hosting metadata and CSS are the only document differences.
+Article-body equality and ten original report links were checked for the initial
+copy. The owner then requested removal of em dashes and formulaic wording.
+The final copy uses a shorter factual headline, removes stock phrases and an
+unsupported comparison of company openness, labels the original HTTP check
+without implying an independent reviewer, and uses the existing public support
+address. Counts, scores, report links, scan location, date, coverage and validation
+limits remain unchanged. No em or en dashes remain in the document or sharing
+metadata.
 This republication does not independently validate the historical scan findings
 or run the original cross-checks again.
 

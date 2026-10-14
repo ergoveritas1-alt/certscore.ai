@@ -7,24 +7,24 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
   <meta name="color-scheme" content="light dark">
   <link rel="icon" href="/favicon.png">
   <title>AI Lab Privacy Leaderboard</title>
-  <meta name="description" content="A CertScore.ai snapshot of privacy signals across 10 leading AI lab websites, with scores, standout findings and an independent cross-check.">
+  <meta name="description" content="Scores, retained reports and methodology from CertScore.ai's October 12, 2026 scans of 10 AI-company websites.">
   <link rel="canonical" href="https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="CertScore.ai">
   <meta property="og:url" content="https://certscore.ai/insights/ai-lab-privacy-leaderboard-2026">
   <meta property="og:title" content="10 AI labs. One privacy test.">
-  <meta property="og:description" content="Nobody got a perfect score. See the privacy leaderboard, the signals behind the scores and what an independent check confirmed.">
+  <meta property="og:description" content="Scores, observed privacy signals, report links and methodology for 10 AI-company websites scanned on October 12, 2026.">
   <meta property="og:image" content="https://certscore.ai/images/social/website-privacy-scanner.png">
   <meta property="og:image:type" content="image/png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="CertScore.ai — website privacy evidence and consent testing">
+  <meta property="og:image:alt" content="CertScore.ai: website privacy evidence and consent testing">
   <meta property="article:published_time" content="2026-10-12">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="10 AI labs. One privacy test.">
-  <meta name="twitter:description" content="Nobody got a perfect score. See how 10 leading AI lab websites ranked on observed privacy signals.">
+  <meta name="twitter:description" content="Privacy signals on 10 AI-company websites, with scores, report links and the limits of the observations.">
   <meta name="twitter:image" content="https://certscore.ai/images/social/website-privacy-scanner.png">
-  <meta name="twitter:image:alt" content="CertScore.ai — website privacy evidence and consent testing">
+  <meta name="twitter:image:alt" content="CertScore.ai: website privacy evidence and consent testing">
   <style>
 
     :root {
@@ -340,8 +340,8 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
       <section class="hero article-hero">
         <div>
           <p class="kicker">Run with CertScore.ai MCP Light · October 12, 2026</p>
-          <h1>We Scanned 10 AI Companies' Websites for Privacy Signals. Here's the Leaderboard.</h1>
-          <p class="dek">The companies building AI also run some of the most-visited websites. We pointed CertScore.ai's privacy scanner at ten of them: OpenAI, Anthropic, Google DeepMind, Meta AI, xAI, Mistral, Perplexity, Cohere, Groq, and Hugging Face, and ranked what we observed: cookies and storage set before consent, trackers firing pre-consent, and what happens after a visitor clicks “Reject.”</p>
+          <h1>Privacy signals on 10 AI companies' websites</h1>
+          <p class="dek">We scanned the public starting pages of ten AI companies: OpenAI, Anthropic, Google DeepMind, Meta AI, xAI, Mistral, Perplexity, Cohere, Groq, and Hugging Face. The reports cover cookies and storage set before consent, tracking requests, and activity after a visitor clicks “Reject.” The scores below summarize the observations from those visits.</p>
         </div>
       </section>
 
@@ -406,13 +406,13 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
       <section class="section" id="findings">
         <div class="section-grid">
           <div>
-            <h2>What stood out</h2>
+            <h2>Findings</h2>
           </div>
           <div class="story-list">
-            <article class="story"><span class="story-no">01</span><div><h3>The open-source leader scored highest.</h3><p>Hugging Face, the most open company on the list, also runs the tightest ship: a 92 with a single minor storage observation.</p></div></article>
-            <article class="story"><span class="story-no">02</span><div><h3>Reject doesn't always mean reject.</h3><p>The clearest pattern we saw was post-refusal enforcement. On cohere.com, eight non-essential Google requests were observed more than seven seconds <em>after</em> a confirmed Reject click. On openai.com, two tracking requests began just under a second after Reject. Under GDPR/ePrivacy logic, a refusal should suppress optional tracking. These observations suggest refusal doesn't always stop optional tracking. (Both are “partial concern” / “potential gap” findings, not verdicts. See methodology.)</p></div></article>
-            <article class="story"><span class="story-no">03</span><div><h3>Pre-consent tracking.</h3><p>Mistral's site fired Google Analytics before any consent interaction, and its banner didn't offer reject on the first layer. DeepMind's pages set YouTube cookies (<code>__Secure-ROLLOUT_TOKEN</code>) before consent via embeds. Groq's pre-consent inventory included a Reddit pixel. None of this is exotic technology. It's the standard marketing stack, running before the visitor is asked.</p></div></article>
-            <article class="story"><span class="story-no">04</span><div><h3>Nobody aced the test.</h3><p>Even the leaders carry “review recommended” notes, mostly around storage set before consent where essentiality couldn't be confirmed. The gap between first place (92) and last scored (59) is wide, but every site had something flagged.</p></div></article>
+            <article class="story"><span class="story-no">01</span><div><h3>Hugging Face had the highest score.</h3><p>Hugging Face scored 92. Its report flagged one pre-consent storage item, an AWS WAF token described as likely security-related.</p></div></article>
+            <article class="story"><span class="story-no">02</span><div><h3>Tracking requests after Reject clicks.</h3><p>On cohere.com, eight non-essential Google requests were observed more than seven seconds <em>after</em> a confirmed Reject click. On openai.com, two tracking requests began just under a second after Reject. The reports describe both as “partial concern” / “potential gap” findings. These are observations from the recorded visits, not legal verdicts.</p></div></article>
+            <article class="story"><span class="story-no">03</span><div><h3>Pre-consent tracking.</h3><p>Mistral's site fired Google Analytics before any consent interaction, and its banner didn't offer reject on the first layer. DeepMind's pages set YouTube cookies (<code>__Secure-ROLLOUT_TOKEN</code>) before consent via embeds. Groq's pre-consent inventory included a Reddit pixel.</p></div></article>
+            <article class="story"><span class="story-no">04</span><div><h3>All nine scored sites had review notes.</h3><p>Scores ranged from 59 to 92. All nine scored sites had something flagged for review, mostly storage set before consent where essentiality could not be confirmed.</p></div></article>
           </div>
         </div>
       </section>
@@ -435,11 +435,11 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
     <section class="validation" id="validation">
       <div class="wrap section-grid">
         <div>
-          <h2>Independent validation</h2>
+          <h2>HTTP cross-check</h2>
           <p class="section-intro">To check the scanner's work, we re-verified the headline signals without touching CertScore.ai: fresh, cookie-less HTTP fetches of each homepage (no JavaScript, no consent interaction), inspecting response <code>Set-Cookie</code> headers and the raw HTML for tracker/CMP signatures.</p>
         </div>
         <div class="proofs">
-          <article class="proof"><span class="mark">7 OF 10</span><h3>Vendor presence confirmed</h3><p>The HTML independently shows YouTube embeds on deepmind.google, Axeptio on mistral.ai, OneTrust on x.ai, CookieYes on cohere.com, PostHog on groq.com, Stripe on huggingface.co, and Webflow + CloudFront on anthropic.com, matching the vendors CertScore.ai reported.</p></article>
+          <article class="proof"><span class="mark">7 OF 10</span><h3>Vendor presence confirmed</h3><p>The HTML shows YouTube embeds on deepmind.google, Axeptio on mistral.ai, OneTrust on x.ai, CookieYes on cohere.com, PostHog on groq.com, Stripe on huggingface.co, and Webflow + CloudFront on anthropic.com, matching the vendors CertScore.ai reported.</p></article>
           <article class="proof"><span class="mark">EXACT COOKIE MATCH</span><h3>x.ai</h3><p><code>gb_anon_id</code> is set on the very first HTTP response, before any consent is possible, the same cookie CertScore.ai flagged as its first retained pre-consent item.</p></article>
           <article class="proof"><span class="mark">MECHANISM CHECK</span><h3>JavaScript timing</h3><p>Most flagged cookies don't appear in response headers at all; they're set by JavaScript seconds after load, consistent with CertScore.ai's “first observed N seconds after scan start” timings.</p></article>
           <article class="proof limit"><span class="mark">LIMITS</span><h3>Post-Reject behavior</h3><p>Post-Reject behavior (the cohere.com and openai.com findings) can't be validated without driving consent clicks in a real browser, so that part rests on CertScore.ai's evidence alone. openai.com and meta.ai block plain-HTTP fetching with bot challenges, so their HTML couldn't be independently inspected either.</p></article>
@@ -450,7 +450,7 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
     <div class="wrap">
       <section class="section">
         <div class="section-grid">
-          <div><h2>The fine print</h2><p class="section-intro">Please keep this attached to any republication.</p></div>
+          <div><h2>Reading the results</h2><p class="section-intro">Please keep this attached to any republication.</p></div>
           <div class="fine-print"><p>These are <strong>automated observations of public web pages</strong>, not legal advice, certification, or a determination of compliance. A flagged signal means “worth a human look,” not “violation.” Sites change constantly. Rescan before citing.</p></div>
         </div>
       </section>
@@ -459,7 +459,7 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
         <div class="run-grid">
           <div><h2>Run your own</h2></div>
           <div class="run-copy">
-            <p>Every scan above links to a full evidence report. You can run the same check on any public site, free, in seconds, no account needed:</p>
+            <p>Every scan above links to a full evidence report. You can request the same check for a public website without an account:</p>
             <ul class="run-links">
               <li><strong>Scan your site:</strong> <a href="https://certscore.ai" target="_blank" rel="noopener">https://certscore.ai</a></li>
               <li><strong>For AI agents:</strong> CertScore.ai MCP Light works with any MCP client, no OAuth required.</li>
@@ -483,7 +483,7 @@ export const AI_LAB_PRIVACY_STUDY_HTML = String.raw`<!doctype html>
 
       <footer>
         <span>Run with CertScore.ai MCP Light · October 12, 2026</span>
-        <span>Republishing &amp; other inquiries: <a href="mailto:muse@certscore.ai">muse@certscore.ai</a></span>
+        <span>Republishing &amp; other inquiries: <a href="mailto:support@certscore.ai">support@certscore.ai</a></span>
         <span>10 public websites · 9 scored · 1 limited</span>
       </footer>
     </div>
