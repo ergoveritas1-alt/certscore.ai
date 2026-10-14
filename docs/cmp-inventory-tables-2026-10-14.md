@@ -293,6 +293,31 @@ documented above. The changes remain local and unpushed.
 
 ## Finding badge alignment
 
+### Cookie brand decoration
+
+Cookie table rows now use bundled brand logos for unambiguous names recognized
+by the existing canonical vendor resolver or cookie knowledge base. This is
+decorative pattern recognition, labelled in the icon tooltip; it does not identify
+the observed setter, infer a purpose, change CMP pattern matches or alter any
+assessment. The resolver receives only the retained name, without invented
+hostname, domain or initiator context. Ambiguous or context-dependent names
+(including `CONSENT` and `test_cookie` without direct domain context) retain the
+neutral cookie symbol. Recognized brands without bundled artwork use initials.
+No new cookie signatures, vendor attribution rules or remote favicon calls were
+introduced.
+
+The complete local SITS report now displays Google, Hotjar, HubSpot and LinkedIn
+logos where recognized across its cookie tables. The saved CMP replay is also
+updated. Twenty-five focused table/CMP/export tests and the web typecheck pass;
+390px mobile verification showed no page overflow. All names, copy text, retained
+evidence, API fields and assessments are unchanged. No scan or deployment ran.
+
+The browser preview's compressed bundle increased by 49,440 bytes from reusing
+the canonical registry. Conservative incremental transfer is about $0.50/month
+at 100,000 report views if shipped, within the disclosed below-$1/month estimate;
+the change is currently local only. Existing bundled logo transfer remains within
+the earlier icon estimate, with browser caching.
+
 Detailed Evidence finding headers now keep the status badge and visual-preview
 control at the upper right at every width. Titles wrap alongside that group;
 descriptions use the full width below. This removes the previous below-640px

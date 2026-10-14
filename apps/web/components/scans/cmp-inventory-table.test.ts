@@ -2,19 +2,32 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildCmpTableCopyPayload, CmpInventoryIdentity } from "./cmp-inventory-table";
+import { buildCmpTableCopyPayload, CmpInventoryIdentity, cmpCookieBrand } from "./cmp-inventory-table";
 
-test("identity decoration uses local service logos without attributing cookies or fetching remote icons", () => {
+test("identity decoration uses bundled logos for services and recognized cookie patterns", () => {
   const service = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name: "HubSpot", kind: "service" }));
   assert.match(service, /src="\/vendor-logos\/hubspot.png"/);
   assert.match(service, /alt=""/);
-  for (const [kind, name] of [["cookie", "hubspotutk"], ["cookie", "google"], ["service", "unknown.example"]] as const) {
+  for (const [name, logo] of [["hubspotutk", "hubspot"], ["_ga", "google"], ["_ga_*", "google"], ["_hjSessionStorageTest", "hotjar"], ["_dc_gtm_*", "google"]] as const) {
+    const html = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name, kind: "cookie" }));
+    assert.ok(html.includes(`/vendor-logos/${logo}.png`));
+    assert.match(html, /cookie pattern/);
+    assert.ok(html.includes(name));
+    assert.doesNotMatch(html, /https?:/);
+  }
+  for (const [kind, name] of [["cookie", "google"], ["cookie", "CONSENT"], ["cookie", "test_cookie"], ["cookie", "_rdt_uuid"], ["service", "unknown.example"]] as const) {
     const html = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name, kind }));
     assert.match(html, /aria-hidden="true"/);
     assert.match(html, /<svg/);
     assert.doesNotMatch(html, /<img|https?:/);
     assert.ok(html.includes(name));
   }
+  const borlabs = renderToStaticMarkup(createElement(CmpInventoryIdentity, { name: "borlabs-cookie", kind: "cookie" }));
+  assert.match(borlabs, /Borlabs cookie pattern/);
+  assert.match(borlabs, />BO</);
+  assert.equal(cmpCookieBrand("test_cookie"), null, "direct domain context must not be invented");
+  assert.equal(cmpCookieBrand("CONSENT"), null, "a generic name does not identify a brand");
+  assert.equal(cmpCookieBrand("x".repeat(161)), null);
 });
 
 test("copy includes the headers and every retained row beyond the visible eight", () => {
