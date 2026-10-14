@@ -75,3 +75,37 @@ cover overflow, foreign/malformed/cancelled evidence, unconfirmed choices, confi
 identity, getter refusal, ambiguous/replaced panels, navigation and shared action
 reportability. Accessibility still preserves full counts with bounded examples;
 unstable-frame coverage is not promoted to complete by this change.
+
+## Three owner-approved local verification scans
+
+The owner approved three local quota exceptions on October 14. Exactly three scans
+ran; the anonymous limit was restored to 20 immediately after each admission and
+its original file hash verified. No deployment or additional rescan occurred.
+The canonical contact ledger records all three outcomes and their new cooldowns.
+
+| Site / local report ID | Observed | Review | Partial | Incomplete | Not assessed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Georgia Tech / `b0f8f20c-5399-425a-b782-5006e4cd2fe0` | 7 | 1 | 0 | 5 | 0 |
+| FullStory / `c2c8f805-4f9f-4b3f-916f-f5ea4e647a70` | 5 | 0 | 1 | 6 | 1 |
+| HubSpot / `d9bf307b-9618-40ee-b644-3187a6684e5b` | 3 | 0 | 0 | 5 | 5 |
+
+Georgia Tech retained typed configuration for `cookie_compliance`, both action
+snapshots/expiries and a valid prominence comparison. Its five preference-dependent
+checks remain incomplete because no unique actionable Options control was resolved.
+FullStory retained completed Accept storage/expiry and a partial activity check;
+Reject failed before dispatch because its hit target was intercepted. Options was
+not uniquely actionable, and prominence had no retained pixel comparison.
+HubSpot dispatched one Options click but failed the registered deferred-panel
+identity/role/root verification. The available diagnostic does not distinguish
+which binding predicate failed. Both action visits withheld dispatch with
+`transparent_consent_scope_not_ready`; no post-choice evidence was invented.
+These scans therefore do not establish successful live preference inspection for
+HubSpot or Osano, despite passing the local fixtures. Retain the failures as leads.
+
+Original bundle, manifest and geometry SHA checks passed. Fresh CMP assessments
+match replay from those original bytes; saved projection hashes remained unchanged
+on verification, and report/export rows agree. All three full report pages returned
+HTTP 200 and rendered CMP Details expanded in a local browser check. End-to-end
+local scan durations were 15.520, 16.403 and 20.247 seconds respectively; no worker
+budget was extended. One-time scan spend remains within the approved below-$0.30
+estimate. Detailed receipts are in `artifacts/cmp-facet-fixes-20261014/`.

@@ -42,12 +42,12 @@
     },
     "https://fullstory.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:26:43.552Z",
-      "lastContactAt": "2026-10-14T18:26:43.552Z",
+      "cooldownUntil": "2026-11-11T22:51:22.472Z",
+      "lastContactAt": "2026-10-14T22:51:22.472Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local complementary CMP-depth verification pass, scan 09c8c608-53a7-4cb7-8ebb-f82c0d31bd1b. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: c2c8f805-4f9f-4b3f-916f-f5ea4e647a70. Three explicit owner-approved local admissions verify independent CMP storage/expiry evidence, configured Drupal cookie identity and registered preference-panel bindings; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://fullstory.com"
     },
@@ -73,12 +73,12 @@
     },
     "https://gatech.edu": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:27:28.618Z",
-      "lastContactAt": "2026-10-14T18:27:28.618Z",
+      "cooldownUntil": "2026-11-11T22:50:53.752Z",
+      "lastContactAt": "2026-10-14T22:50:53.752Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local complementary CMP-depth verification pass, scan 4f4844e2-d0c6-4779-8e48-dfd69218cbe1. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: b0f8f20c-5399-425a-b782-5006e4cd2fe0. Three explicit owner-approved local admissions verify independent CMP storage/expiry evidence, configured Drupal cookie identity and registered preference-panel bindings; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://gatech.edu"
     },
@@ -323,12 +323,12 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T20:58:33.392Z",
-      "lastContactAt": "2026-10-14T20:58:33.392Z",
+      "cooldownUntil": "2026-11-11T22:51:50.141Z",
+      "lastContactAt": "2026-10-14T22:51:50.141Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local CMP quality follow-up: 3c50e59e-5fad-4598-ba9a-b725349b9906. Three explicit owner-approved local admissions verify independent evidence scope, semantic confirmation and combined notice fixes; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
+      "note": "Owner-requested local CMP quality follow-up: d9bf307b-9618-40ee-b644-3187a6684e5b. Three explicit owner-approved local admissions verify independent CMP storage/expiry evidence, configured Drupal cookie identity and registered preference-panel bindings; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://hubspot.com"
     },
@@ -1134,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T22:05:07.425Z",
+  "updatedAt": "2026-10-14T22:52:27.715Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]
