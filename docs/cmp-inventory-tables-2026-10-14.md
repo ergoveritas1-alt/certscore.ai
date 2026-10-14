@@ -291,6 +291,16 @@ bounded rectangle metadata is estimated below $0.05/month at 100,000 scans with
 30-day retention; image-view traffic remains subject to the rollout cost review
 documented above. The changes remain local and unpushed.
 
+## Finding badge alignment
+
+Detailed Evidence finding headers now keep the status badge and visual-preview
+control at the upper right at every width. Titles wrap alongside that group;
+descriptions use the full width below. This removes the previous below-640px
+stacking that placed badges under the description. Local saved-evidence preview
+verified all 13 headers at 320px and 390px without page overflow. The 20 focused
+CMP/report tests pass. Assessments and evidence are unchanged; no scan, deployment,
+or incremental infrastructure cost is involved.
+
 ## Fresh SITS service-name verification
 
 The owner explicitly approved one fresh local SITS scan as a one-time exception
