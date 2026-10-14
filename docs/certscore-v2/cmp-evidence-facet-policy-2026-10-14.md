@@ -150,3 +150,34 @@ remain unchanged, as do model calls, scoring and saved reports. Additional bound
 panel diagnostic storage is estimated below $0.01/month at 100,000 scans with one
 year retention, within the repository's pre-approved threshold and existing budget.
 No new public scan, deployment or contact-ledger admission occurred for these repairs.
+
+## Two owner-approved fresh recovery-verification scans
+
+Exactly two additional local admissions were approved and used for HubSpot and
+FullStory after commit `76c52f43`. The original quota file was restored after each
+admission, with equal before/after hashes; usage increased from 37 to 39 and the
+limit remains 20. No deployment or further rescan occurred.
+
+- HubSpot: `92533fe5-31f7-41d6-88b4-a300899a3399`, 15.673 seconds. Three CMP checks
+  Observed, three Not assessed and seven Incomplete. Preference inspection was
+  cancelled before its packet was retained (`preference_inspection_cancelled`).
+  Therefore no new panel-verification predicate was retained and the live HubSpot
+  repair remains unverified. Accept failed actionability; Reject was not attempted
+  because the consent scope was not ready. Do not describe this as a successful
+  preference-panel verification or borrow old action observations.
+- FullStory: `f7b36da6-7043-4789-8ca7-093de4d0377f`, 19.747 seconds. Five CMP checks
+  Observed, one Review, two Not assessed and five Incomplete. Reject was clicked
+  once; its complete eight-second after-click capture retained storage and dropped
+  zero requests. The existing separately eligible after-click Review projection
+  reports 22 tracking requests. Semantic refusal registration was unconfirmed.
+  No geometry-recovery fallback was needed on this visit, so the successful action
+  capture does not establish that a live interception exercised the new recovery.
+  Deeper preferences still have no unique actionable Options control.
+
+Original bundle/manifest/geometry checksum checks, canonical CMP replay against
+persisted assessments, saved projection immutability, report/export parity and both
+quota restoration receipts passed. Both actual report pages were opened in the
+in-app browser with CMP Details expanded and visually checked. Screenshots and
+receipts are in `artifacts/cmp-targeted-repairs-20261014/`. The one-time scan spend
+remains within the approved below-$0.20 estimate. The central-history export and
+updated calibration registry check passed; both contacts received new cooldowns.

@@ -42,12 +42,12 @@
     },
     "https://fullstory.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T22:51:22.472Z",
-      "lastContactAt": "2026-10-14T22:51:22.472Z",
+      "cooldownUntil": "2026-11-11T23:07:28.665Z",
+      "lastContactAt": "2026-10-14T23:07:28.665Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local CMP quality follow-up: c2c8f805-4f9f-4b3f-916f-f5ea4e647a70. Three explicit owner-approved local admissions verify independent CMP storage/expiry evidence, configured Drupal cookie identity and registered preference-panel bindings; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
+      "note": "Owner-requested local CMP quality follow-up: f7b36da6-7043-4789-8ca7-093de4d0377f. Two explicit owner-approved local admissions verify bounded preference-panel readiness and Reject geometry recovery; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://fullstory.com"
     },
@@ -323,12 +323,12 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T22:51:50.141Z",
-      "lastContactAt": "2026-10-14T22:51:50.141Z",
+      "cooldownUntil": "2026-11-11T23:06:55.095Z",
+      "lastContactAt": "2026-10-14T23:06:55.095Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local CMP quality follow-up: d9bf307b-9618-40ee-b644-3187a6684e5b. Three explicit owner-approved local admissions verify independent CMP storage/expiry evidence, configured Drupal cookie identity and registered preference-panel bindings; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
+      "note": "Owner-requested local CMP quality follow-up: 92533fe5-31f7-41d6-88b4-a300899a3399. Two explicit owner-approved local admissions verify bounded preference-panel readiness and Reject geometry recovery; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://hubspot.com"
     },
@@ -1134,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T22:52:27.715Z",
+  "updatedAt": "2026-10-14T23:08:02.518Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]
