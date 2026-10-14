@@ -293,6 +293,25 @@ documented above. The changes remain local and unpushed.
 
 ## Finding badge alignment
 
+### Privacy-policy link viewer
+
+The observed CMP Privacy-policy link criterion now has the same compact
+magnifier treatment as other evidence previews when its referenced checklist
+row retains a typed policy source URL. It opens a small native dialog showing
+that URL as a clickable link, opening in a separate tab. It neither fetches the
+policy nor invents a destination from the scanned hostname, CMP identity,
+unrelated finding or sample data. Missing references and unsafe, malformed or
+credential-bearing URLs omit the control. The assessment remains unchanged.
+
+The complete local SITS report resolves its retained reference to
+`https://sits.com/en/privacy-policy`. Browser verification confirmed the popup,
+no accidental criterion expansion, focus trapping, Escape close and focus return.
+At 390px the dialog fits without page overflow. Twenty-one focused CMP/export
+tests and the web typecheck pass. No site visit, scan, API/model call, deployment
+or production write was performed. Incremental UI transfer is estimated below
+$0.05/month at 100,000 report views if shipped, disclosed during implementation;
+the change remains local only.
+
 ### Prominence retention diagnosis
 
 Comparison of saved SITS scan `a68a5b3b-df92-429a-bbef-975aa2fdddf0` with

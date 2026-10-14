@@ -7,6 +7,29 @@ import { SHADOW_REPORT } from "./report-lab/shadow-report-data";
 import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 
+test("privacy-link magnifier uses only the referenced retained policy URL", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
+  const criterion = audit.rows.find(row => row.id === "privacy_link")!;
+  Object.assign(criterion, { status: "Observed", sourceIds: ["privacy_notice_availability"] });
+  const source = { ...SHADOW_REPORT.gdprTransparencyRows[0]!, id: "privacy_notice_availability",
+    policyEvidence: { capturedAt: "2026-10-14T16:22:53Z", documentTitle: "Privacy policy", sourceUrl: "https://sits.com/en/privacy-policy", sections: [] } };
+  const render = () => renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" evidenceRows={[source]} />);
+  assert.match(render(), /aria-label="View privacy-policy link"/);
+  assert.doesNotMatch(render(), /<dialog|<iframe/, "opening the control does not happen during render");
+  for (const url of ["javascript:alert(1)", "data:text/html,policy", "https://user:password@example.test/privacy", "not a URL"]) {
+    source.policyEvidence.sourceUrl = url;
+    assert.doesNotMatch(render(), /View privacy-policy link/);
+  }
+  source.policyEvidence.sourceUrl = "https://sits.com/en/privacy-policy";
+  source.id = "another-policy-check";
+  assert.doesNotMatch(render(), /View privacy-policy link/, "unrelated policy references cannot fill a missing link");
+  source.id = "privacy_notice_availability";
+  criterion.status = "Not assessed";
+  assert.doesNotMatch(render(), /View privacy-policy link/);
+  assert.doesNotMatch(renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" />), /View privacy-policy link/);
+});
+
 test("banner magnifier requires an observed banner and retained crop; image loading waits for opening", async () => {
   const { CmpDetails } = await import("./cmp-details");
   const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });

@@ -13,6 +13,7 @@ import { EvidenceHeaderStatus, evidenceSectionRecap } from "./evidence-header-st
 import { CmpInventoryTable, CmpCookieMatch, CmpInventoryIdentity } from "./cmp-inventory-table";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { ConsentBannerViewer } from "./consent-banner-viewer";
+import { PolicyLinkViewer } from "./policy-link-viewer";
 import type { ConsentBannerPreview, ConsentRejectPreview, ConsentProminencePreview } from "../../lib/scans/visual-evidence";
 
 const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
@@ -49,7 +50,9 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
             status === "Observed" && id === "reject" ? rejectPreview :
             id === "prominence" && supportingEvidence?.prominence && ["Observed", "Review recommended", "Informational"].includes(status) ? prominencePreview : null;
           return <DetailedEvidenceFinding key={id} id={`cmp-criterion-${id}`} title={label} summary={detail} assessmentStatus={status}
-            headerActions={visualPreview ? <ConsentBannerViewer preview={visualPreview} /> : null}
+            headerActions={visualPreview ? <ConsentBannerViewer preview={visualPreview} /> :
+              id === "privacy_link" && status === "Observed" && source?.policyEvidence?.sourceUrl
+                ? <PolicyLinkViewer sourceUrl={source.policyEvidence.sourceUrl} /> : null}
             sharedEvidence={sharedEvidence[id]}
             badge={<EvidenceStatusBadge label={status === "Review recommended" ? "Review" : status} tone={statusTone[status]} showIcon={statusTone[status] !== "review"} />}
             canonicalEvidenceJson={source?.canonicalEvidenceJson}
