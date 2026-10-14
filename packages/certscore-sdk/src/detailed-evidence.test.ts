@@ -63,3 +63,14 @@ test("CMP disclosure sources survive SDK evidence reconstruction without becomin
   const result=reconstructReportEvidencePages([page([{path:"",value:{cmpAudit:{scanId,rows:[{id:"services",status:"Observed",supportingEvidence:{inventory:{services}}}]}}}])]);
   assert.deepEqual(result.cmpAudit?.rows[0]?.supportingEvidence?.inventory?.services,services);
 });
+
+test("cookie comparison evidence preserves candidate templates and expiry arithmetic through SDK reconstruction", () => {
+  const cookies = [{ name: "_ga_S4EX53B760", matchedPattern: null, observedIn: ["after_accept"],
+    possibleTemplateMatch: { pattern: "_ga_xxxxxxxxxx", basis: "ga4_placeholder.v1" },
+    observedExpiry: { visit: "Accept", name: "_ga_S4EX53B760", capturedAtEpochSeconds: 100, expiresAtEpochSeconds: 200, remainingSeconds: 100 } }];
+  const result = reconstructReportEvidencePages([page([{ path: "", value: { cmpAudit: { scanId, rows: [
+    { id: "found_not_declared", status: "Partially assessed", supportingEvidence: { inventory: { cookies }, cookieComparison: { unmatchedNameCount: 1, possibleTemplateNameCount: 1 } } },
+  ] } } }])]);
+  assert.deepEqual(result.cmpAudit?.rows[0]?.supportingEvidence?.inventory?.cookies, cookies);
+  assert.equal(result.cmpAudit?.rows[0]?.supportingEvidence?.cookieComparison?.possibleTemplateNameCount, 1);
+});

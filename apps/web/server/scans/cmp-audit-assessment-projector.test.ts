@@ -797,3 +797,98 @@ test("literal CMP partner identities are assessed without manufacturing configur
   input.cmpPreferencesEvidence!.documentToken=null;
   assert.notEqual(deriveCmpAuditAssessment(input)?.rows.find(row=>row.id==="services")?.status,"observed");
 });
+
+function partialCookieCaptureFixture() {
+  const input = bundle();
+  input.cmpPreferencesEvidence!.declarations = ["_ga", "_ga_xxxxxxxxxx"].map(name => ({ name, purpose: "", duration: "", source: "cmp_api_inventory" }));
+  input.cookieEvents = [{ cookieName: "baseline" }] as any;
+  const packet = completedUnconfirmedPacket("accept") as NonNullable<CanonicalEvidenceBundle["postAcceptEvidence"]>;
+  packet.storage.postAction = ["_ga", "_ga_S4EX53B760", "other"].map((name, i) => ({ storageType: "cookie", name, nonEssential: false,
+    identityBasis: "cookie_name_domain_path_partition", identityHash: String(i + 1).repeat(64), valueHash: "a".repeat(64), expiresAtEpochSeconds: 34560100, capturedAtEpochSeconds: 100 }));
+  input.postAcceptEvidence = postAcceptEvidencePacketSchema.parse(packet);
+  return input;
+}
+
+test("partial cookie comparison adds completed click snapshots without changing confirmation, Review eligibility or CMP retention", () => {
+  const input = partialCookieCaptureFixture(), before = structuredClone(input);
+  const audit = deriveCmpAuditAssessment(input)!, row = audit.rows.find(row => row.id === "found_not_declared")!;
+  assert.equal(row.status, "partially_assessed");
+  assert.equal(row.cookieComparison!.observedCookieNameCount, 4);
+  assert.equal(row.cookieComparison!.unmatchedNameCount, 3, "Possible templates remain unverified matches");
+  assert.equal(row.cookieComparison!.possibleTemplateNameCount, 1);
+  const candidate = row.inventory!.cookies!.find(cookie => cookie.name === "_ga_S4EX53B760")!;
+  assert.equal(candidate.matchedPattern, null);
+  assert.deepEqual(candidate.possibleTemplateMatch, { pattern: "_ga_xxxxxxxxxx", basis: "ga4_placeholder.v1" });
+  assert.equal(candidate.observedExpiry!.remainingSeconds, 34560000);
+  const details = audit.rows.find(row => row.id === "cookie_information")!;
+  assert.equal(details.status, "partially_assessed");
+  assert.equal(details.inventory!.declarations![0]!.duration, "");
+  assert.equal(details.inventory!.declarations![0]!.observedExpiry!.remainingSeconds, 34560000);
+  assert.equal(details.inventory!.declarations![1]!.observedExpiry, undefined, "Template does not borrow a runtime cookie's expiry");
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const report = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  assert.deepEqual(report.rows.find(row => row.id === "found_not_declared")!.supportingEvidence!.inventory, row.inventory);
+  assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
+  assert.deepEqual(input, before);
+  input.cmpPreferencesEvidence!.declarationInventoryComplete = true;
+  const complete = deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "found_not_declared")!;
+  assert.equal(complete.cookieComparison!.observedCookieNameCount, 1, "Unconfirmed click facts do not broaden complete-inventory Review eligibility");
+  assert.deepEqual(complete.cookieComparison!.unmatchedNames, ["baseline"]);
+});
+
+test("cookie enrichments reject incomplete/foreign captures and ambiguous or invalid expiry while preserving partial assessments", () => {
+  for (const mode of ["incomplete", "foreign", "ambiguous", "expiry"] as const) {
+    const input = partialCookieCaptureFixture();
+    if (mode === "incomplete") input.postAcceptEvidence!.afterActionCapture!.stopReason = "aborted";
+    if (mode === "foreign") input.postAcceptEvidence!.parentScanId = "foreign";
+    if (mode === "ambiguous") input.postAcceptEvidence!.storage.postAction.push({ ...input.postAcceptEvidence!.storage.postAction[0]!, identityHash: "f".repeat(64) });
+    if (mode === "expiry") input.postAcceptEvidence!.storage.postAction[0]!.expiresAtEpochSeconds = 50;
+    const audit = deriveCmpAuditAssessment(input)!;
+    const cookie = audit.rows.find(row => row.id === "cookie_information")!.inventory!.declarations![0]!;
+    assert.equal(cookie.observedExpiry, undefined, mode);
+    const comparison = audit.rows.find(row => row.id === "found_not_declared")!;
+    assert.equal(comparison.status, "partially_assessed");
+    if (["incomplete", "foreign"].includes(mode)) assert.equal(comparison.cookieComparison!.observedCookieNameCount, 1, mode);
+  }
+});
+
+test("shared reportability withholds after-Accept cookie details without discarding the retained assessment", () => {
+  const input = partialCookieCaptureFixture(), audit = deriveCmpAuditAssessment(input)!;
+  const assessment = consentControlAssessmentSchema.parse({ ...structuredClone(observedControlAssessment), cmpAudit: audit });
+  assessment.controls.accept.state = "unknown"; assessment.assessmentStatus = "limited";
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const report = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  const row = report.rows.find(row => row.id === "found_not_declared")!;
+  assert.equal(row.status, "Partially assessed");
+  assert.equal(row.supportingEvidence!.cookieComparison, undefined);
+  assert.deepEqual(row.supportingEvidence!.inventory!.cookies!.map(cookie => cookie.name), ["baseline"]);
+  assert.ok(report.rows.find(row => row.id === "cookie_information")!.supportingEvidence!.inventory!.declarations!.every(cookie => !cookie.observedExpiry));
+  assert.equal(audit.rows.find(row => row.id === "found_not_declared")!.inventory!.cookies!.length, 4);
+});
+
+test("template counts preserve full captured totals while table rows remain bounded", () => {
+  const input = bundle();
+  input.cmpPreferencesEvidence!.declarations = [{ name: "_ga_xxxxxxxxxx", purpose: "", duration: "", source: "cmp_api_inventory" }];
+  input.cookieEvents = Array.from({ length: 101 }, (_, i) => ({ cookieName: `_ga_${String(i).padStart(10, "0")}` })) as any;
+  const row = deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "found_not_declared")!;
+  assert.equal(row.status, "partially_assessed");
+  assert.equal(row.cookieComparison!.possibleTemplateNameCount, 101);
+  assert.equal(row.cookieComparison!.unmatchedNameCount, 101);
+  assert.equal(row.inventory!.cookies!.length, 100);
+});
+
+test("unnamed and overlong action cookies retain source identity and explicit comparison accounting", () => {
+  const input = partialCookieCaptureFixture();
+  input.postAcceptEvidence!.artifactVersion = "certscore.post_accept_evidence.v2";
+  input.postAcceptEvidence!.storage.postAction.push(...["", "x".repeat(180)].map(name => ({
+    storageType: "cookie" as const, name, hostname: "example.com", identityBasis: "cookie_name_domain_path_partition" as const, identityHash: "c".repeat(64), valueHash: "d".repeat(64), nonEssential: false,
+  })));
+  input.postAcceptEvidence = postAcceptEvidencePacketSchema.parse(input.postAcceptEvidence);
+  const before = structuredClone(input), row = deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "found_not_declared")!;
+  assert.equal(row.status, "partially_assessed");
+  assert.equal(row.cookieComparison!.observedCookieNameCount, 4);
+  assert.equal(row.cookieComparison!.omittedAfterAcceptCookieCount, 2);
+  assert.match(row.detail, /2 after-click cookie entries had no comparable saved name/);
+  assert.deepEqual(input, before, "The original unnamed/long snapshot evidence is not filtered or renamed");
+});

@@ -30,6 +30,11 @@ export const consentControlMeasurementSchema = z.object({
   fillContrast: z.number().min(1).max(21), outerEmphasisFraction: z.number().min(0).max(1),
   backgroundUniformity: z.number().min(0).max(1), interiorUniformity: z.number().min(0).max(1),
 }).strict();
+const observedCookieExpirySchema = z.object({ visit: z.enum(["Accept", "Reject", "Before choice"]), domain: z.string().min(1).max(255).optional(), path: z.string().min(1).max(1024).optional(), name: z.string().min(1).max(160),
+          capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(), remainingSeconds: z.number().finite().nonnegative(),
+        }).strict().refine(row => row.expiresAtEpochSeconds >= row.capturedAtEpochSeconds && Math.abs(row.remainingSeconds - (row.expiresAtEpochSeconds - row.capturedAtEpochSeconds)) <= 0.000001,
+          "Remaining time must match the retained capture and expiry timestamps.");
+
 export const publicCmpAuditSchema = z.object({
   version: z.enum(["cmp_audit_report.v1", "cmp_audit_report.v2", "cmp_audit_report.v3"]), scanId: z.string(), scope: z.literal("starting_page"),
   assessmentSourceHash: z.string().nullable(),
@@ -50,25 +55,27 @@ export const publicCmpAuditSchema = z.object({
     requests: z.array(z.object({ hostname: z.string().max(255), path: z.string().max(2048).refine(value => !/[?#]/.test(value), "Request paths omit query and fragment"), vendor: z.string().max(160), purpose: z.string().max(100), msAfterClick: z.number().int().nonnegative(), nonEssential: z.boolean() }).strict()).max(100),
   }).strict().refine(value => value.requests.length <= value.requestCount && value.nonEssentialRequestCount <= value.requestCount && value.requests.filter(row => row.nonEssential).length <= value.nonEssentialRequestCount, "Activity counts must agree with retained requests")).max(2).refine(values => new Set(values.map(value => value.action)).size === values.length, "One activity window per action").optional(),
 
-        expiries: z.array(z.object({ visit: z.enum(["Accept", "Reject", "Before choice"]), domain: z.string().min(1).max(255).optional(), path: z.string().min(1).max(1024).optional(), name: z.string().min(1).max(160),
-          capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(), remainingSeconds: z.number().finite().nonnegative(),
-        }).strict().refine(row => row.expiresAtEpochSeconds >= row.capturedAtEpochSeconds && Math.abs(row.remainingSeconds - (row.expiresAtEpochSeconds - row.capturedAtEpochSeconds)) <= 0.000001,
-          "Remaining time must match the retained capture and expiry timestamps.")).max(4).optional(),
+        expiries: z.array(observedCookieExpirySchema).max(4).optional(),
         categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
         services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure"]) }).strict()).max(100).optional(),
         serviceDisclosures: z.array(z.object({ version: z.literal("cmp_named_partner_disclosure.v1"), excerpt: z.string().min(1).max(600), names: z.array(z.string().min(1).max(80)).min(1).max(20) }).strict()).max(1).optional(),
-        declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional() }).strict()).max(100).optional(),
-        cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
+        declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional(), observedExpiry: observedCookieExpirySchema.optional() }).strict().refine(row => !row.observedExpiry || (row.observedExpiry.name === row.name && row.observedExpiry.visit === "Accept"), "Observed expiry requires an exact cookie-name and capture match")).max(100).optional(),
+        cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2),
+          possibleTemplateMatch: z.object({ pattern: z.string().min(1).max(160), basis: z.literal("ga4_placeholder.v1") }).strict().optional(), observedExpiry: observedCookieExpirySchema.optional(),
+        }).strict().refine(row => (!row.possibleTemplateMatch || row.matchedPattern === null) && (!row.observedExpiry || (row.observedExpiry.name === row.name && row.observedExpiry.visit === "Accept" && row.observedIn.includes("after_accept"))), "Cookie details require consistent match and capture provenance")).max(100).optional(),
       }).strict().optional(),
-      cookieComparison: z.object({ declarationPatternCount: count, observedCookieNameCount: count, unmatchedNameCount: count,
+      cookieComparison: z.object({ declarationPatternCount: count, observedCookieNameCount: count, unmatchedNameCount: count, possibleTemplateNameCount: count.optional(), omittedAfterAcceptCookieCount: z.number().int().positive().optional(),
         unmatchedNames: z.array(z.string().max(160)).max(100), allUnmatchedOnlyAfterAccept: z.boolean(), declarationInventoryComplete: z.boolean().optional() }).strict().optional(),
     }).strict().optional(),
   }).strict()).length(13),
 }).strict().superRefine((audit, context) => {
   for (const row of audit.rows) {
     const inventory = row.supportingEvidence?.inventory;
+    const comparison = row.supportingEvidence?.cookieComparison;
+    if (comparison && (comparison.possibleTemplateNameCount ?? 0) > comparison.unmatchedNameCount)
+      context.addIssue({ code: z.ZodIssueCode.custom, message: "Possible template candidates are a subset of unverified matches." });
     if ((inventory?.consentStorage && row.id !== "consent_record") || (inventory?.choiceActivity && row.id !== "implementation") ||
-      (audit.version !== "cmp_audit_report.v3" && (inventory?.consentStorage || inventory?.choiceActivity || inventory?.declarations?.some(item => item.inferredPurpose))))
+      (audit.version !== "cmp_audit_report.v3" && (comparison?.possibleTemplateNameCount !== undefined || comparison?.omittedAfterAcceptCookieCount !== undefined || inventory?.consentStorage || inventory?.choiceActivity || inventory?.declarations?.some(item => item.inferredPurpose || item.observedExpiry) || inventory?.cookies?.some(item => item.possibleTemplateMatch || item.observedExpiry))))
       context.addIssue({ code: z.ZodIssueCode.custom, message: "After-click facts and inferred purpose require their v3 criteria." });
     if ((row.status === "Incomplete") !== Boolean(row.limitation)) context.addIssue({ code: z.ZodIssueCode.custom, message: "Incomplete criteria require a specific limitation; other statuses must not carry one." });
     if (row.supportingEvidence?.inventory?.expiries?.some(item => item.visit === "Before choice" && (!item.domain || !item.path?.startsWith("/"))))

@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { parseNamedCmpPartnerDisclosure } from "./cmp-named-disclosure";
+import { possibleCmpCookieTemplate } from "./cmp-cookie-template";
+export { possibleCmpCookieTemplate } from "./cmp-cookie-template";
 export { parseNamedCmpPartnerDisclosure } from "./cmp-named-disclosure";
 
 const cmpNamedDisclosureSchema = z.object({
@@ -58,8 +60,18 @@ export const cmpInventoryTablesSchema = z.object({
   categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
   services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure"]) }).strict()).max(100).optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
-  declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional() }).strict()).max(100).optional(),
-  cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
+  declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional(),
+    observedExpiry: cmpCookieExpiryEvidenceSchema.optional(),
+  }).strict().refine(row => !row.observedExpiry || (row.observedExpiry.name === row.name && row.observedExpiry.visit === "Accept"), "Observed expiry requires an exact cookie-name and capture match")).max(100).optional(),
+  cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2),
+    possibleTemplateMatch: z.object({ pattern: z.string().min(1).max(160), basis: z.literal("ga4_placeholder.v1") }).strict().optional(),
+    observedExpiry: cmpCookieExpiryEvidenceSchema.optional(),
+  }).strict().superRefine((row, ctx) => {
+    if (row.possibleTemplateMatch && (row.matchedPattern !== null || !possibleCmpCookieTemplate(row.possibleTemplateMatch.pattern, row.name)))
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Possible templates must remain separate from verified matches" });
+    if (row.observedExpiry && (row.observedExpiry.name !== row.name || row.observedExpiry.visit !== "Accept" || !row.observedIn.includes("after_accept")))
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Observed expiry requires matching capture provenance" });
+  })).max(100).optional(),
 }).strict();
 
 export const cmpPreferencesEvidenceSchema = z.object({
@@ -151,6 +163,9 @@ export const cmpAuditRowSchema = z.object({
       declarationPatternCount: z.number().int().nonnegative(),
       observedCookieNameCount: z.number().int().nonnegative(),
       unmatchedNameCount: z.number().int().nonnegative(),
+      // Subset of names without a verified match; never subtracts from them.
+      possibleTemplateNameCount: z.number().int().nonnegative().optional(),
+      omittedAfterAcceptCookieCount: z.number().int().positive().optional(),
       unmatchedNames: z.array(z.string().min(1).max(160)).max(100),
       allUnmatchedOnlyAfterAccept: z.boolean(),
       declarationInventoryComplete: z.boolean().optional(),
@@ -170,7 +185,7 @@ export const cmpAuditRowSchema = z.object({
     (c.declarationInventoryComplete === undefined ? row.status !== "review" || c.unmatchedNameCount < 1 || c.unmatchedNames.length < 1
       : c.declarationInventoryComplete ? !["review", "not_observed"].includes(row.status) || (row.status === "review") !== (c.unmatchedNameCount > 0)
       : row.status !== "partially_assessed") ||
-    c.unmatchedNameCount > c.observedCookieNameCount || c.unmatchedNames.length > c.unmatchedNameCount || c.unmatchedNames.join("").length > 500 ||
+    (c.possibleTemplateNameCount ?? 0) > c.unmatchedNameCount || c.unmatchedNameCount > c.observedCookieNameCount || c.unmatchedNames.length > c.unmatchedNameCount || c.unmatchedNames.join("").length > 500 ||
     new Set(c.unmatchedNames).size !== c.unmatchedNames.length)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Cookie comparison details require consistent bounded mismatch evidence." });
   }
@@ -190,7 +205,7 @@ export const cmpAuditAssessmentSchema = z.object({
     if (!["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(assessment.version) && (row.limitation || ["incomplete", "not_applicable"].includes(row.status) ||
       row.cookieComparison?.declarationInventoryComplete !== undefined || row.inventory?.expiries?.some(item => item.visit === "Before choice")))
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Narrowed evidence scope requires v5." });
-    if (assessment.version !== "cmp_audit_assessment.v6" && (row.inventory?.consentStorage || row.inventory?.choiceActivity || row.inventory?.declarations?.some(item => item.inferredPurpose)))
+    if (assessment.version !== "cmp_audit_assessment.v6" && (row.cookieComparison?.possibleTemplateNameCount !== undefined || row.cookieComparison?.omittedAfterAcceptCookieCount !== undefined || row.inventory?.consentStorage || row.inventory?.choiceActivity || row.inventory?.declarations?.some(item => item.inferredPurpose || item.observedExpiry) || row.inventory?.cookies?.some(item => item.possibleTemplateMatch || item.observedExpiry)))
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "After-click facts and inferred purpose require v6 scope." });
     if (row.status === "incomplete" && !row.limitation) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Incomplete inspection requires its specific cause." });
     if (row.status === "not_applicable" && !row.capabilityProof) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Not applicable requires explicit applicability proof." });

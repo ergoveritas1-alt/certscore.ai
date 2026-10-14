@@ -82,3 +82,17 @@ test("OneTrust named-service configuration keeps its capture revision distinct f
   input.inspectionDiagnostic.configuration.version="assumed_supported";
   assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success,false);
 });
+
+test("cookie template candidates and expiry evidence cannot become verified matches or guessed retention", async () => {
+  const { cmpInventoryTablesSchema, possibleCmpCookieTemplate } = await import("./cmp-audit-evidence");
+  assert.equal(possibleCmpCookieTemplate("_ga_xxxxxxxxxx", "_ga_S4EX53B760"), true);
+  for (const [pattern, name] of [["_ga_*", "_ga_S4EX53B760"], ["_ga_xxxxxxxxxx", "_ga_123"], ["_ga_xxxxxxxxxx", "_ga_xxxxxxxxxx"], ["cookie_xxxxxxxxxx", "cookie_S4EX53B760"], ["_ga_xxxxxxxxxx", "_ga_S4EX53B760_extra"]])
+    assert.equal(possibleCmpCookieTemplate(pattern!, name!), false);
+  const cookie = { name: "_ga_S4EX53B760", matchedPattern: null, observedIn: ["after_accept"], possibleTemplateMatch: { pattern: "_ga_xxxxxxxxxx", basis: "ga4_placeholder.v1" },
+    observedExpiry: { visit: "Accept", name: "_ga_S4EX53B760", capturedAtEpochSeconds: 100, expiresAtEpochSeconds: 200, remainingSeconds: 100 } };
+  assert.equal(cmpInventoryTablesSchema.safeParse({ cookies: [cookie] }).success, true);
+  for (const patch of [{ matchedPattern: "_ga_xxxxxxxxxx" }, { name: "unrelated" }, { observedIn: ["before_choice"] },
+    { observedExpiry: { ...cookie.observedExpiry, remainingSeconds: 101 } }, { observedExpiry: { ...cookie.observedExpiry, name: "_ga" } }])
+    assert.equal(cmpInventoryTablesSchema.safeParse({ cookies: [{ ...cookie, ...patch }] }).success, false);
+  assert.equal(cmpInventoryTablesSchema.safeParse({ declarations: [{ name: "_ga_xxxxxxxxxx", purpose: "", duration: "", source: "cmp_api_inventory", observedExpiry: cookie.observedExpiry }] }).success, false);
+});

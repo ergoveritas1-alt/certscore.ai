@@ -204,7 +204,7 @@ test("compact CMP tables retain all rows, exact matches and historical limitatio
   assert.match(html, />Off<\/td>/); assert.match(html, />On<\/td>/); assert.match(html, />Not captured<\/td>/);
   assert.match(html, /CMP services · 11/); assert.match(html, /Service 11/);
   assert.match(html, /Cookie details · 36/); assert.match(html, /cookie_35/);
-  assert.match(html, /Storage duration/); assert.match(html, />&lt;100ms<\/td>/);
+  assert.match(html, /CMP-stated retention/); assert.match(html, />&lt;100ms<\/td>/);
   assert.match(html, /text-emerald-700/); assert.match(html, /_ga_\*/); assert.match(html, /No match/);
   assert.match(html, /Before choice · After Accept/);
   assert.equal((html.match(/role="region"/g) ?? []).length, 5);
@@ -270,4 +270,21 @@ test("named CMP disclosure rows keep their source distinct from configuration an
   const html=renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust"/>);
   assert.match(html,/Vimeo/);assert.match(html,/Google/);assert.match(html,/CMP disclosure/);
   assert.doesNotMatch(html,/Labelled control|CMP configuration/);
+});
+
+test("cookie tables distinguish possible templates and measured remaining time from CMP disclosures", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
+  const observedExpiry = { visit: "Accept" as const, name: "_ga", capturedAtEpochSeconds: 100, expiresAtEpochSeconds: 34560100, remainingSeconds: 34560000 };
+  Object.assign(audit.rows.find(row => row.id === "cookie_information")!, { status: "Partially assessed", supportingEvidence: { inventory: { declarations: [
+    { name: "_ga", purpose: "", duration: "", source: "cmp_api_inventory", observedExpiry },
+    { name: "_ga_xxxxxxxxxx", purpose: "", duration: "", source: "cmp_api_inventory" },
+  ] } } });
+  Object.assign(audit.rows.find(row => row.id === "found_not_declared")!, { status: "Partially assessed", supportingEvidence: { inventory: { cookies: [
+    { name: "_ga_S4EX53B760", matchedPattern: null, observedIn: ["after_accept"], possibleTemplateMatch: { pattern: "_ga_xxxxxxxxxx", basis: "ga4_placeholder.v1" }, observedExpiry: { ...observedExpiry, name: "_ga_S4EX53B760" } },
+  ] } } });
+  const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" />);
+  for (const text of [/Possible template match/, /Observed time remaining/, /400 days/, /After Accept click/, /CMP-stated retention/, /Not captured/, /Partially assessed/]) assert.match(html, text);
+  assert.match(html, /Possible template matches are name similarities, not verified CMP matches/);
+  assert.doesNotMatch(html, /aria-label="Matched"/, "A candidate template has no verified-match tick");
 });

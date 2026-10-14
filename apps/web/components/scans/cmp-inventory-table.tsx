@@ -48,6 +48,7 @@ export function CmpInventoryTable({ label, columns, rows, copyRows, columnClasse
   copyRows: readonly (readonly string[])[];
 }) {
   if (!rows.length) return null;
+  const wide = columns.length >= 4;
   return <div className="min-w-0">
     <div className="mb-2 flex items-center justify-between gap-2">
       <p className="font-semibold text-zinc-900">{label}</p>
@@ -56,10 +57,10 @@ export function CmpInventoryTable({ label, columns, rows, copyRows, columnClasse
     </div>
     <div role="region" aria-label={label} tabIndex={0}
       className="max-h-[322px] max-w-full overflow-auto rounded-md border border-zinc-200 bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
-      <table className={`w-full table-fixed border-collapse text-left text-[11px] sm:table-auto sm:text-xs ${columns.length === 4 ? "min-w-[40rem]" : ""}`}>
+      <table className={`w-full table-fixed border-collapse text-left text-[11px] sm:table-auto sm:text-xs ${columns.length > 4 ? "min-w-[52rem]" : wide ? "min-w-[40rem]" : ""}`}>
         <caption className="sr-only">{label}</caption>
         <thead className="sticky top-0 z-10 bg-zinc-100 text-zinc-600"><tr className="h-8">
-          {columns.map((column, index) => <th key={column} scope="col" className={`px-2 py-1 font-medium sm:px-3 ${columnClasses?.[index] ?? (index === 0 ? columns.length === 4 ? "w-[30%] sm:w-auto" : "w-[42%] sm:w-auto" : "")}`}>{column}</th>)}
+          {columns.map((column, index) => <th key={column} scope="col" className={`px-2 py-1 font-medium sm:px-3 ${columnClasses?.[index] ?? (index === 0 ? wide ? "w-[30%] sm:w-auto" : "w-[42%] sm:w-auto" : "")}`}>{column}</th>)}
         </tr></thead>
         <tbody className="divide-y divide-zinc-100">{rows.map((cells, index) => <tr key={index} className="h-9">
           {cells.map((cell, column) => column === 0
@@ -68,7 +69,7 @@ export function CmpInventoryTable({ label, columns, rows, copyRows, columnClasse
         </tr>)}</tbody>
       </table>
     </div>
-    {columns.length === 4 ? <p className="mt-1 text-[11px] text-zinc-500 sm:hidden">Scroll sideways to see all columns.</p> : null}
+    {wide ? <p className="mt-1 text-[11px] text-zinc-500">Scroll sideways to see all columns.</p> : null}
     {rows.length > 8 ? <p className="mt-1 text-[11px] text-zinc-500">{rows.length} rows · Scroll to see more</p> : null}
   </div>;
 }

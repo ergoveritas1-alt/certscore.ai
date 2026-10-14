@@ -1248,6 +1248,51 @@ export const detailedEvidenceOpenApiSchemas = {
                                 "type": "string"
                               }
                             }
+                          },
+                          "observedExpiry": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "visit",
+                              "name",
+                              "capturedAtEpochSeconds",
+                              "expiresAtEpochSeconds",
+                              "remainingSeconds"
+                            ],
+                            "properties": {
+                              "visit": {
+                                "type": "string",
+                                "enum": [
+                                  "Accept",
+                                  "Reject",
+                                  "Before choice"
+                                ]
+                              },
+                              "domain": {
+                                "type": "string",
+                                "maxLength": 255
+                              },
+                              "path": {
+                                "type": "string",
+                                "maxLength": 1024
+                              },
+                              "name": {
+                                "type": "string",
+                                "maxLength": 160
+                              },
+                              "capturedAtEpochSeconds": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "expiresAtEpochSeconds": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "remainingSeconds": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            }
                           }
                         }
                       },
@@ -1289,6 +1334,69 @@ export const detailedEvidenceOpenApiSchemas = {
                               ]
                             },
                             "maxItems": 2
+                          },
+                          "possibleTemplateMatch": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "pattern",
+                              "basis"
+                            ],
+                            "properties": {
+                              "pattern": {
+                                "type": "string",
+                                "maxLength": 160
+                              },
+                              "basis": {
+                                "const": "ga4_placeholder.v1",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "observedExpiry": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "visit",
+                              "name",
+                              "capturedAtEpochSeconds",
+                              "expiresAtEpochSeconds",
+                              "remainingSeconds"
+                            ],
+                            "properties": {
+                              "visit": {
+                                "type": "string",
+                                "enum": [
+                                  "Accept",
+                                  "Reject",
+                                  "Before choice"
+                                ]
+                              },
+                              "domain": {
+                                "type": "string",
+                                "maxLength": 255
+                              },
+                              "path": {
+                                "type": "string",
+                                "maxLength": 1024
+                              },
+                              "name": {
+                                "type": "string",
+                                "maxLength": 160
+                              },
+                              "capturedAtEpochSeconds": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "expiresAtEpochSeconds": {
+                                "type": "number",
+                                "minimum": 0
+                              },
+                              "remainingSeconds": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            }
                           }
                         }
                       },
@@ -1316,6 +1424,14 @@ export const detailedEvidenceOpenApiSchemas = {
                       "minimum": 0
                     },
                     "unmatchedNameCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "possibleTemplateNameCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "omittedAfterAcceptCookieCount": {
                       "type": "integer",
                       "minimum": 0
                     },

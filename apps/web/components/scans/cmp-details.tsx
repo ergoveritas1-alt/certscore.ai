@@ -118,10 +118,13 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
         copyRows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : service.source === "cmp_named_disclosure" ? "CMP disclosure" : "Labelled control"])}
         rows={inventory.services.map(service => [<CmpInventoryIdentity name={service.name} kind="service" />, service.source === "cmp_api_inventory" ? "CMP configuration" : service.source === "cmp_named_disclosure" ? "CMP disclosure" : "Labelled control"])} />
     </> : null}
-    {inventory?.declarations?.length ? <CmpInventoryTable label={`Cookie details · ${inventory.declarations.length}`}
-      columns={inventory.declarations.some(cookie => cookie.inferredPurpose) ? ["Cookie name / pattern", "CMP-stated purpose", "Inferred purpose", "CMP-stated retention"] : ["Cookie name / pattern", "Purpose", "Storage duration"]}
-      copyRows={inventory.declarations.map(cookie => [cookie.name, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), disclosureText(cookie.duration) || "Not captured"])}
-      rows={inventory.declarations.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), disclosureText(cookie.duration) || "Not captured"])} /> : null}
+    {inventory?.declarations?.length ? <>
+      <CmpInventoryTable label={`Cookie details · ${inventory.declarations.length}`}
+        columns={["Cookie name / pattern", "CMP-stated purpose", ...(inventory.declarations.some(cookie => cookie.inferredPurpose) ? ["Inferred purpose"] : []), "CMP-stated retention", ...(inventory.declarations.some(cookie => cookie.observedExpiry) ? ["Observed time remaining"] : [])]}
+        copyRows={inventory.declarations.map(cookie => [cookie.name, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), disclosureText(cookie.duration) || "Not captured", ...(inventory.declarations!.some(item => item.observedExpiry) ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])}
+        rows={inventory.declarations.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), disclosureText(cookie.duration) || "Not captured", ...(inventory.declarations!.some(item => item.observedExpiry) ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])} />
+      {inventory.declarations.some(cookie => cookie.observedExpiry) ? <p>Time remaining was measured after the Accept click, separately from CMP-stated retention.</p> : null}
+    </> : null}
     {inventory?.declarations?.some(cookie => cookie.inferredPurpose) ? <p>Inferred purposes use CertScore’s cookie registry, separately from the CMP’s descriptions.</p> : null}
     {inventory?.cookies?.length && !cookies ? <CookieMatchTable entries={inventory.cookies} /> : null}
     {comparison ? <>
@@ -159,11 +162,17 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
 function CookieMatchTable({ entries, partial = false }: { partial?: boolean; entries: NonNullable<NonNullable<NonNullable<CmpAuditRow["supportingEvidence"]>["inventory"]>["cookies"]> }) {
   // Match results come from the canonical assessment; the component never runs
   // a second matcher or infers a purpose from a name.
-  return <CmpInventoryTable label={`Cookie matches · ${entries.length}`} columns={["Cookie name", "CMP match", "CMP pattern", "Observed"]}
-    copyRows={entries.map(cookie => [cookie.name, cookie.matchedPattern !== null ? "Matched" : partial ? "No match in captured list" : "No match", cookie.matchedPattern ?? "—", cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])}
-    rows={entries.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, <CmpCookieMatch matched={cookie.matchedPattern !== null} partial={partial} />,
-      <span className="font-mono text-[11px]">{cookie.matchedPattern ?? "—"}</span>,
-      cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])} />;
+  const hasExpiry = entries.some(cookie => cookie.observedExpiry);
+  const matchText = (cookie: typeof entries[number]) => cookie.matchedPattern !== null ? "Matched" : cookie.possibleTemplateMatch ? "Possible template match" : partial ? "No match in captured list" : "No match";
+  return <>
+    <CmpInventoryTable label={`Cookie matches · ${entries.length}`} columns={["Cookie name", "CMP match", "CMP pattern", "Observed", ...(hasExpiry ? ["Observed time remaining"] : [])]}
+      copyRows={entries.map(cookie => [cookie.name, matchText(cookie), cookie.matchedPattern ?? cookie.possibleTemplateMatch?.pattern ?? "—", cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept click").join(" · "), ...(hasExpiry ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])}
+      rows={entries.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, cookie.possibleTemplateMatch ? <span className="text-zinc-600">Possible template match</span> : <CmpCookieMatch matched={cookie.matchedPattern !== null} partial={partial} />,
+        <span className="font-mono text-[11px]">{cookie.matchedPattern ?? cookie.possibleTemplateMatch?.pattern ?? "—"}</span>,
+        cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept click").join(" · "), ...(hasExpiry ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])} />
+    {entries.some(cookie => cookie.possibleTemplateMatch) ? <p>Possible template matches are name similarities, not verified CMP matches.</p> : null}
+    {hasExpiry ? <p>Observed time remaining is measured after the Accept click, not the original cookie lifetime.</p> : null}
+  </>;
 }
 
 function disclosureText(value: string) {
