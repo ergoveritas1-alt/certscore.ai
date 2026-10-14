@@ -103,6 +103,7 @@ test("inline CMP evidence renders comparison, both requests, every cookie name a
 test("compact CMP tables retain all rows, exact matches and historical limitations", async () => {
   const { CmpDetails } = await import("./cmp-details");
   const audit = projectCmpAudit({ scanId: "scan-1" });
+  audit.rows.find(row => row.id === "categories")!.supportingEvidence = { inventory: { categories: [{ name: "Statistics", checked: false }, { name: "Marketing", checked: true }, { name: "External media", checked: null }] } };
   audit.rows.find(row => row.id === "services")!.supportingEvidence = { inventory: { services: Array.from({ length: 11 }, (_, i) => ({ name: `Service ${i + 1}`, source: "cmp_api_inventory" as const })) } };
   audit.rows.find(row => row.id === "cookie_information")!.supportingEvidence = { inventory: { declarations: Array.from({ length: 36 }, (_, i) => ({ name: `cookie_${i}`, purpose: "Measurement", duration: i ? "2 years" : "&lt;100ms", source: "cmp_api_inventory" as const })) } };
   audit.rows.find(row => row.id === "found_not_declared")!.supportingEvidence = { inventory: { cookies: [
@@ -110,14 +111,16 @@ test("compact CMP tables retain all rows, exact matches and historical limitatio
     { name: "unknown", matchedPattern: null, observedIn: ["after_accept"] },
   ] } };
   const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" />);
+  assert.match(html, /Category choices · 3/); assert.match(html, /Captured setting/);
+  assert.match(html, />Off<\/td>/); assert.match(html, />On<\/td>/); assert.match(html, />Not captured<\/td>/);
   assert.match(html, /CMP services · 11/); assert.match(html, /Service 11/);
   assert.match(html, /Cookie details · 36/); assert.match(html, /cookie_35/);
   assert.match(html, /Storage duration/); assert.match(html, />&lt;100ms<\/td>/);
   assert.match(html, /text-emerald-700/); assert.match(html, /_ga_\*/); assert.match(html, /No match/);
   assert.match(html, /Before choice · After Accept/);
-  assert.equal((html.match(/role="region"/g) ?? []).length, 3);
-  assert.equal((html.match(/max-h-\[322px\]/g) ?? []).length, 3);
-  assert.equal((html.match(/tabindex="0"/g) ?? []).length, 3);
+  assert.equal((html.match(/role="region"/g) ?? []).length, 4);
+  assert.equal((html.match(/max-h-\[322px\]/g) ?? []).length, 4);
+  assert.equal((html.match(/tabindex="0"/g) ?? []).length, 4);
   assert.doesNotMatch(html, /Search service|All purposes|All types/);
   const services = audit.rows.find(row => row.id === "services")!;
   services.status = "Observed"; services.supportingEvidence = undefined;

@@ -158,6 +158,7 @@ test("California export is limited on missing, malformed or cross-scan evidence,
 
 test("CMP service and declaration tables survive shared evidence pagination without changing assessments", () => {
   const report = fixture();
+  Object.assign(report.cmpAudit!.rows.find(row => row.id === "categories")!, { status: "Observed", sourceIds: ["CmpPreferencesEvidencePacket.json"], supportingEvidence: { inventory: { categories: [{ name: "Statistics", checked: false }] } } });
   Object.assign(report.cmpAudit!.rows.find(row => row.id === "services")!, { status: "Observed", sourceIds: ["CmpPreferencesEvidencePacket.json"], supportingEvidence: { inventory: { services: [{ name: "Example Analytics", source: "cmp_api_inventory" }] } } });
   Object.assign(report.cmpAudit!.rows.find(row => row.id === "cookie_information")!, { status: "Observed", sourceIds: ["CmpPreferencesEvidencePacket.json"], supportingEvidence: { inventory: { declarations: [{ name: "example_*", purpose: "Measurement", duration: "30 days", source: "cmp_api_inventory" }] } } });
   const before = structuredClone(report);
@@ -165,7 +166,7 @@ test("CMP service and declaration tables survive shared evidence pagination with
   const exported = buildReportDisplayExport(selectReportEvidenceSection(prepared, "cmp").report, { scanId: report.scan.id });
   const page = buildReportEvidencePage({ scanId: report.scan.id, report: exported, section: "cmp" });
   const rebuilt = reconstructReportEvidencePages([{ ...page, entries: page.entries.map(entry => ({ ...entry, value: entry.value })) }]);
-  for (const id of ["services", "cookie_information", "found_not_declared"]) {
+  for (const id of ["categories", "services", "cookie_information", "found_not_declared"]) {
     const source = report.cmpAudit!.rows.find(row => row.id === id)!;
     const row = rebuilt.cmpAudit!.rows.find(row => row.id === id)!;
     assert.equal(row.status, source.status);

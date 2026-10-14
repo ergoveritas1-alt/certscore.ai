@@ -363,3 +363,34 @@ test("inventory tables preserve canonical names, wildcard matches and capture sc
   const limited = deriveCmpAuditAssessment(input);
   assert.ok(!limited || limited.rows.every(row => !row.inventory), "unverified sub-observations cannot populate tables");
 });
+
+test("category table retains selectable controls and captured settings through canonical policy", () => {
+  const input = bundle();
+  input.cmpPreferencesEvidence!.controls = [
+    { label: "Essential", kind: "category", enabled: false, checked: true },
+    { label: "Statistics", kind: "category", enabled: true, checked: false },
+    { label: "Marketing", kind: "category", enabled: true, checked: true },
+    { label: "External media", kind: "category", enabled: true, checked: null },
+  ];
+  const before = structuredClone(input);
+  const audit = deriveCmpAuditAssessment(input)!;
+  const expected = [{ name: "Statistics", checked: false }, { name: "Marketing", checked: true }, { name: "External media", checked: null }];
+  assert.deepEqual(audit.rows.find(row => row.id === "categories")!.inventory!.categories, expected);
+  assert.deepEqual(input, before);
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const row = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns }).rows.find(row => row.id === "categories")!;
+  assert.equal(row.status, "Observed");
+  assert.equal(row.detail, "3 categories were available.");
+  assert.deepEqual(row.supportingEvidence!.inventory!.categories, expected);
+  assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment }).rows.find(row => row.id === "categories")!.supportingEvidence, undefined);
+  const corrupted = structuredClone(concerns);
+  (corrupted.find(row => row.originKey === "consent.cmp_audit.categories")!.evidenceBundle.rawEvidence!.cmpAuditRow as any).inventory.categories[0].checked = true;
+  assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: corrupted }).rows.find(row => row.id === "categories")!.supportingEvidence, undefined);
+  delete assessment.cmpAudit!.rows.find(row => row.id === "categories")!.inventory;
+  const legacyConcerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const historical = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: legacyConcerns }).rows.find(row => row.id === "categories")!;
+  assert.match(historical.detail!, /Statistics; Marketing; External media/);
+  assert.equal(historical.supportingEvidence, undefined);
+  assert.ok(concerns.filter(row => row.originKey.startsWith("consent.cmp_audit.")).every(row => !row.scoreEffects?.length));
+});

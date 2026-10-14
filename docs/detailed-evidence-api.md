@@ -30,6 +30,7 @@ The October 14 follow-up is live from `94399fef7c45f348ef27da535198f783670f61f2`
 `cmpAudit.rows[].supportingEvidence.inventory` optionally carries bounded,
 value-free table evidence:
 
+- `categories`: selectable category `name` and captured `checked` state (boolean or null).
 - `services`: service `name` and `source` (`cmp_api_inventory` or `labelled_control`).
 - `declarations`: cookie/pattern `name`, `purpose`, `duration`, and declaration `source`.
 - `cookies`: observed `name`, `matchedPattern` (null means no match), and

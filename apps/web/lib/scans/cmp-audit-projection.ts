@@ -182,7 +182,10 @@ export function projectCmpAudit(input: {
     if (row.id === "implementation" && (contradiction || afterReject)) continue;
     // Preserve the more specific canonical failure reason when neither path is usable.
     if (row.id === "implementation" && row.status === "not_assessed" && rejectCoverage?.assessmentStatus === "coverage_limitation") continue;
-    if (concern) set(row.id, { status: labels[row.status], detail: row.detail || undefined, sourceIds: row.evidenceRefs,
+    if (concern) set(row.id, { status: labels[row.status],
+      detail: row.id === "categories" && row.inventory?.categories?.length
+        ? row.detail.replace(/^(\d+) selectable categories observed in the inspected consent surface:.*$/, "$1 categories were available.") : row.detail || undefined,
+      sourceIds: row.evidenceRefs,
       ...((row.cookieComparison || row.inventory) ? { supportingEvidence: { ...(row.cookieComparison ? { cookieComparison: row.cookieComparison } : {}), ...(row.inventory ? { inventory: row.inventory } : {}) } } : {}) });
   }
 

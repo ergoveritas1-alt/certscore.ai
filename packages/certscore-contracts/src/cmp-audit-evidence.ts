@@ -31,6 +31,7 @@ export type CmpPreferenceDispatch = z.infer<typeof cmpPreferenceDispatchSchema>;
 
 /** Bounded, display-safe facts; never cookie values or a control test verdict. */
 export const cmpInventoryTablesSchema = z.object({
+  categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
   services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control"]) }).strict()).max(100).optional(),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) }).strict()).max(100).optional(),
   cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
@@ -104,7 +105,7 @@ export const cmpAuditRowSchema = z.object({
 
 }).superRefine((row, ctx) => {
   const inventory = row.inventory;
-  if (inventory && ((inventory.services && row.id !== "services") || (inventory.declarations && row.id !== "cookie_information") ||
+  if (inventory && ((inventory.categories && row.id !== "categories") || (inventory.services && row.id !== "services") || (inventory.declarations && row.id !== "cookie_information") ||
     (inventory.cookies && row.id !== "found_not_declared") || row.status === "not_assessed" || row.evidenceRefs.length === 0)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Inventory tables require the corresponding assessed criterion and retained evidence." });
   }

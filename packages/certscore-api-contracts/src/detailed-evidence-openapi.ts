@@ -873,6 +873,34 @@ export const detailedEvidenceOpenApiSchemas = {
                   "additionalProperties": false,
                   "required": [],
                   "properties": {
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "checked"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "checked": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "maxItems": 100
+                    },
                     "services": {
                       "type": "array",
                       "items": {

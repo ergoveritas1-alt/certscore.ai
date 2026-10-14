@@ -43,7 +43,8 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
     const categories = evidence.controls.filter(control => control.kind === "category" && control.enabled);
     const services = new Set(evidence.controls.filter(control => control.kind === "service" && control.label.trim()).map(control => control.label.trim()));
     if (categories.length) set("categories", "observed", `${categories.length} selectable categories observed in the inspected consent surface: ${categories.map(control => control.label).join("; ")}.`);
-    else if (usable && evidence.controlInventoryComplete) set("categories", "not_observed", "No selectable category controls were observed in the inspected preference panel.");
+    if (categories.length) rows.find(row => row.id === "categories")!.inventory = { categories: categories.filter(control => control.label.trim()).map(control => ({ name: control.label.trim(), checked: control.checked })) };
+    if (!categories.length && usable && evidence.controlInventoryComplete) set("categories", "not_observed", "No selectable category controls were observed in the inspected preference panel.");
     if (services.size) set("services", "observed", `${services.size} individual ${services.size === 1 ? "service was" : "services were"} identified by labelled controls in the inspected CMP view. Control functionality was not tested.`);
   }
   // v3 describes identified services, not separate choice controls. Use the
@@ -119,7 +120,7 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
     }
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v4", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", cookieComparisonPolicy: "cookie_name_comparison_details.v1", inventoryEvidencePolicy: "cmp_inventory_tables.v1", evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", cookieComparisonPolicy: "cookie_name_comparison_details.v1", inventoryEvidencePolicy: "cmp_inventory_tables.v2", evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 

@@ -74,3 +74,27 @@ scope note remain unchanged. All five rows fit without vertical scrolling at
 a sideways-scroll hint for the request address. This is presentation only;
 no scanner, persistence, export contract, cost or latency change. Existing UI
 tests and web typecheck pass. Nothing has been deployed.
+
+## Category choices follow-up
+
+Category choices use the same table with Category and Captured setting columns.
+Only retained, document/checkpoint-eligible enabled category controls supply rows.
+Captured checked states display as On, Off or Not captured; these are observations
+of the inspected view, not a functional toggle test. The shared report projection
+shortens the recap when the structured table is present; older records without
+table data retain their named recap. The canonical assessment summary, statuses
+and scoring remain unchanged. `cmp_inventory_tables.v2` binds new materializations
+to this additive evidence policy; historical records are not upgraded on read.
+
+The existing SITS evidence retains Statistics, Marketing and External media, each
+captured unchecked. All three rows and both columns fit at 1280px and 390px. The
+local preview leaves the criterion expanded. No new scan, browser work, wait,
+model call or deployment was made. API, generated OpenAPI and SDK types carry
+`inventory.categories`; SDK/MCP evidence page reconstruction preserves the array.
+44 focused tests and web/SDK/MCP typechecks pass, including source binding, tamper
+rejection, disabled-category exclusion, nullable states and legacy summary coverage.
+
+Incremental storage estimate for category metadata is under $0.10/month at
+100,000 scans/month and 30-day retention, within the existing below-$1 estimate
+for these table additions. This was disclosed before implementation. The scanner
+packet already retained these fields; scanner capture and compute are unchanged.
