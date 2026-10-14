@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { isDeepStrictEqual } from "node:util";
 
 // Scoped bootstrap for the two resources declared in insights-publishing.tf.
 // It avoids applying unrelated drift in the shared production Terraform stack.
@@ -21,7 +22,7 @@ if (process.argv.includes("--apply")) {
   try { existing = aws("iam", "get-role", "--role-name", roleName).Role; }
   catch (error) { if (!String((error as { stderr?: Buffer }).stderr).includes("NoSuchEntity")) throw error; }
   if (existing) {
-    if (JSON.stringify(existing.AssumeRolePolicyDocument) !== JSON.stringify(trust)) throw new Error("Existing publisher trust differs; inspect before changing it");
+    if (!isDeepStrictEqual(existing.AssumeRolePolicyDocument, trust)) throw new Error("Existing publisher trust differs; inspect before changing it");
   } else {
     aws("iam", "create-role", "--role-name", roleName, "--assume-role-policy-document", JSON.stringify(trust));
   }
