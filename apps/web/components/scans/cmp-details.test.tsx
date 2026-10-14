@@ -21,6 +21,24 @@ test("banner magnifier requires an observed banner and retained crop; image load
   assert.doesNotMatch(render(), /View captured cookie banner/);
 });
 
+test("Reject magnifier is separate from the banner and requires an observed Reject with retained pixels", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
+  const rejectPreview = { href: "/api/scans/scan-1/visual-evidence/banner", crop: {
+    version: "consent_control_crop.v1" as const, control: "reject" as const,
+    x: 407, y: 544.75, width: 552, height: 73, imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) } };
+  const render = () => renderToStaticMarkup(<CmpDetails audit={audit} vendor="Example CMP" rejectPreview={rejectPreview} />);
+  assert.match(render(), /aria-label="View captured Reject option"/);
+  assert.doesNotMatch(render(), /View captured cookie banner|<image|<dialog/);
+  for (const compact of [false, true]) {
+    assert.match(renderToStaticMarkup(<EvidenceDirectory compact={compact} report={{ ...SHADOW_REPORT, cmpAudit: audit,
+      scan: { ...SHADOW_REPORT.scan, consentRejectPreview: rejectPreview } }} />), /View captured Reject option/);
+  }
+  assert.doesNotMatch(renderToStaticMarkup(<CmpDetails audit={audit} vendor="Example CMP" />), /View captured Reject option/);
+  audit.rows.find(row => row.id === "reject")!.status = "Not observed";
+  assert.doesNotMatch(render(), /View captured Reject option/);
+});
+
 test("CMP details precede consent controls without redundant platform details in both report layouts", () => {
   const report = { ...SHADOW_REPORT, cmpAudit: projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment }) };
   for (const compact of [false, true]) {

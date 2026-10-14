@@ -632,6 +632,7 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
   const visualEvidence = visualArtifacts
     .find((artifact) => artifact.status === "available" && artifact.key);
   const banner = visualArtifacts.find(artifact => artifact.status === "available" && artifact.key && artifact.bannerCrop);
+  const reject = visualArtifacts.find(artifact => artifact.status === "available" && artifact.key && artifact.rejectCrop);
   return {
     benchmark: scanRecord.domainBenchmark?.industry ?? "Comparable public websites",
     createdAt: formatTimestamp(scanRecord.scan.createdAt),
@@ -652,6 +653,10 @@ function buildReportIdentity(scanRecord: ScanDetailResponse): ShadowReportData["
     consentBannerPreview: banner?.bannerCrop ? {
       href: `/api/scans/${encodeURIComponent(scanRecord.scan.id)}/visual-evidence/${encodeURIComponent(banner.id)}`,
       crop: banner.bannerCrop,
+    } : null,
+    consentRejectPreview: reject?.rejectCrop ? {
+      href: `/api/scans/${encodeURIComponent(scanRecord.scan.id)}/visual-evidence/${encodeURIComponent(reject.id)}`,
+      crop: reject.rejectCrop,
     } : null,
   };
 }

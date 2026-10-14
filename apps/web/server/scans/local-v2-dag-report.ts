@@ -1,7 +1,7 @@
 import { buildFirstLayerRejectPathProjection } from "./scan-report-consent-projection";
 import { reportArtifactIdentityKey, verifyReportArtifactTransfer } from "../../../../packages/shared/src/report-artifact-transfer";
 import { withVerifiedConsentVisualSource } from "./consent-visual-provenance";
-import { deriveConsentBannerCrop } from "./consent-banner-crop";
+import { deriveConsentBannerCrop, deriveConsentRejectCrop } from "./consent-banner-crop";
 import { createVerifiedPolicyTextCache } from "./verified-policy-text-cache";
 import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
@@ -6386,6 +6386,8 @@ function buildMaterializedLocalV2Detail(
         mime_type: "image/png",
         ...(capturedErrorShell || screenshotWithheld ? {} : {
           bannerCrop: deriveConsentBannerCrop({ assessment: consentControlAssessment,
+            geometry: options.consentControlGeometryEvidence, screenshot }) ?? undefined,
+          rejectCrop: deriveConsentRejectCrop({ assessment: consentControlAssessment,
             geometry: options.consentControlGeometryEvidence, screenshot }) ?? undefined,
         }),
         page_url: safeLocalV2DocumentUrl(screenshot.url, canonicalDocumentUrl),

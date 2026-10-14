@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
-import { deriveConsentBannerCrop } from "./consent-banner-crop";
+import { deriveConsentBannerCrop, deriveConsentRejectCrop } from "./consent-banner-crop";
 
 function fixture() {
   const visual = { version: "consent_control_visual_comparison.v1", documentToken: "document-1",
@@ -38,6 +38,15 @@ test("banner crop uses retained container bounds without changing the assessment
   assert.deepEqual(input, before);
 });
 
+test("Reject crop retains the exact assessed button with bounded surrounding pixels", () => {
+  const input = fixture(), before = structuredClone(input);
+  assert.deepEqual(deriveConsentRejectCrop(input), { version: "consent_control_crop.v1", control: "reject",
+    x: 407, y: 544.75, width: 552, height: 73, imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) });
+  assert.deepEqual(input, before);
+  input.geometry.candidates[1]!.containerId = "separate-link";
+  assert.ok(deriveConsentRejectCrop(input), "a separated Reject control does not need the banner's shared container");
+});
+
 test("inner action clusters use the enclosing semantic dialog rather than clipping banner edges", () => {
   const input = fixture();
   input.geometry.candidates.forEach(c => { c.containerId = "inner"; });
@@ -60,6 +69,7 @@ test("withheld, unavailable, unbound or mismatched screenshot evidence cannot su
     (x: ReturnType<typeof fixture>) => { x.geometry.visualComparison = { ...x.geometry.visualComparison, screenshotSha256: "b".repeat(64) }; },
   ]) {
     const input = fixture(); mutate(input); assert.equal(deriveConsentBannerCrop(input), null);
+    assert.equal(deriveConsentRejectCrop(input), null);
   }
 });
 

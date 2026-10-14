@@ -1,6 +1,6 @@
 import { consentControlAssessmentSchema, consentControlVisualComparisonSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { z } from "zod";
-import { consentBannerCropSchema, type ConsentBannerCrop } from "../../lib/scans/visual-evidence";
+import { consentBannerCropSchema, consentRejectCropSchema, type ConsentRejectCrop, type ConsentBannerCrop } from "../../lib/scans/visual-evidence";
 
 const boxSchema = z.object({ x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(),
   width: z.number().finite().positive(), height: z.number().finite().positive() });
@@ -15,11 +15,12 @@ const fileName = (path: string) => path.split("/").at(-1);
 
 /** Presentation metadata from the already verified consent packet. This never
  * determines banner availability, control states, prominence or findings. */
-export function deriveConsentBannerCrop(input: {
+type ConsentCropInput = {
   assessment: unknown;
   geometry: unknown;
   screenshot: NonNullable<CanonicalEvidenceBundle["screenshots"]>[number];
-}): ConsentBannerCrop | null {
+};
+function verifiedConsentVisualSource(input: ConsentCropInput) {
   const assessment = consentControlAssessmentSchema.safeParse(input.assessment);
   const geometry = geometrySchema.safeParse(input.geometry);
   const shot = input.screenshot;
@@ -32,6 +33,13 @@ export function deriveConsentBannerCrop(input: {
     fileName(shot.path) !== fileName(visual.screenshotArtifactRef) ||
     g.screenshotArtifactRef !== visual.screenshotArtifactRef ||
     JSON.stringify(g.visualComparison) !== JSON.stringify(visual)) return null;
+  return { geometry: g, visual };
+}
+
+export function deriveConsentBannerCrop(input: ConsentCropInput): ConsentBannerCrop | null {
+  const source = verifiedConsentVisualSource(input);
+  if (!source) return null;
+  const { geometry: g, visual } = source;
   const accept = g.candidates.find(c => c.candidateId === visual.accept.candidateId);
   const reject = g.candidates.find(c => c.candidateId === visual.reject.candidateId);
   if (!accept?.containerId || accept.containerId !== reject?.containerId) return null;
@@ -50,6 +58,21 @@ export function deriveConsentBannerCrop(input: {
     [visual.accept, visual.reject].some(({ bounds: [x, y, w, h] }) =>
       x < b.x || y < b.y || x + w > b.x + b.width || y + h > b.y + b.height)) return null;
   const crop = consentBannerCropSchema.safeParse({ version: "consent_banner_crop.v1", ...b,
+    imageWidth: visual.imageWidth, imageHeight: visual.imageHeight, screenshotSha256: visual.screenshotSha256 });
+  return crop.success ? crop.data : null;
+}
+
+/** The assessed first-layer Reject rectangle, with 12px of surrounding context.
+ * This remains a view of retained pixels, not a new visibility assessment. */
+export function deriveConsentRejectCrop(input: ConsentCropInput): ConsentRejectCrop | null {
+  const source = verifiedConsentVisualSource(input);
+  if (!source) return null;
+  const { visual } = source;
+  const [x, y, width, height] = visual.reject.bounds;
+  const crop = consentRejectCropSchema.safeParse({ version: "consent_control_crop.v1", control: "reject",
+    x: Math.max(0, x - 12), y: Math.max(0, y - 12),
+    width: Math.min(visual.imageWidth, x + width + 12) - Math.max(0, x - 12),
+    height: Math.min(visual.imageHeight, y + height + 12) - Math.max(0, y - 12),
     imageWidth: visual.imageWidth, imageHeight: visual.imageHeight, screenshotSha256: visual.screenshotSha256 });
   return crop.success ? crop.data : null;
 }

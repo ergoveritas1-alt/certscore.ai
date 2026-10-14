@@ -1,14 +1,21 @@
 import { z } from "zod";
 
-export const consentBannerCropSchema = z.object({
-  version: z.literal("consent_banner_crop.v1"),
+const consentScreenshotCropFields = {
   x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(),
   width: z.number().finite().positive(), height: z.number().finite().positive(),
   imageWidth: z.number().int().positive().max(16000), imageHeight: z.number().int().positive().max(16000),
   screenshotSha256: z.string().regex(/^[a-f0-9]{64}$/),
-}).strict().refine(crop => crop.x + crop.width <= crop.imageWidth && crop.y + crop.height <= crop.imageHeight);
+};
+const withinImage = (crop: { x: number; y: number; width: number; height: number; imageWidth: number; imageHeight: number }) =>
+  crop.x + crop.width <= crop.imageWidth && crop.y + crop.height <= crop.imageHeight;
+export const consentBannerCropSchema = z.object({ version: z.literal("consent_banner_crop.v1"),
+  ...consentScreenshotCropFields }).strict().refine(withinImage);
+export const consentRejectCropSchema = z.object({ version: z.literal("consent_control_crop.v1"), control: z.literal("reject"),
+  ...consentScreenshotCropFields }).strict().refine(withinImage);
 export type ConsentBannerCrop = z.infer<typeof consentBannerCropSchema>;
 export type ConsentBannerPreview = { href: string; crop: ConsentBannerCrop };
+export type ConsentRejectCrop = z.infer<typeof consentRejectCropSchema>;
+export type ConsentRejectPreview = { href: string; crop: ConsentRejectCrop };
 
 export type HomepageScreenshotWithheldReason = "sensitive_visual_content" | "safety_check_unavailable";
 export type HomepageScreenshotState =
@@ -40,6 +47,7 @@ export type VisualEvidenceArtifact = {
   };
   width: number | null;
   bannerCrop?: ConsentBannerCrop;
+  rejectCrop?: ConsentRejectCrop;
 };
 
 function getRecord(value: unknown): Record<string, unknown> | null {
@@ -73,6 +81,7 @@ export function normalizeVisualEvidenceArtifact(value: unknown): VisualEvidenceA
   const width = getNumber(record.width) ?? getNumber(viewport?.width);
   const height = getNumber(record.height) ?? getNumber(viewport?.height);
   const bannerCrop = consentBannerCropSchema.safeParse(record.bannerCrop);
+  const rejectCrop = consentRejectCropSchema.safeParse(record.rejectCrop);
 
   if (!id && !key) {
     return null;
@@ -100,7 +109,8 @@ export function normalizeVisualEvidenceArtifact(value: unknown): VisualEvidenceA
       width
     },
     width,
-    ...(status === "available" && key && bannerCrop.success ? { bannerCrop: bannerCrop.data } : {})
+    ...(status === "available" && key && bannerCrop.success ? { bannerCrop: bannerCrop.data } : {}),
+    ...(status === "available" && key && rejectCrop.success ? { rejectCrop: rejectCrop.data } : {})
   };
 }
 

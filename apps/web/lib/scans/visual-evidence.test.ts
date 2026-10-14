@@ -75,6 +75,18 @@ test("banner crop metadata is bounded and omitted for unavailable or historical 
   }
 });
 
+test("Reject crop metadata rejects other controls, overflow and unavailable image sources", () => {
+  const rejectCrop = { version: "consent_control_crop.v1", control: "reject", x: 407, y: 544.75, width: 552, height: 73,
+    imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) };
+  const artifact = { id: "reject", key: "scans/banner.png", status: "available", rejectCrop };
+  assert.deepEqual(normalizeVisualEvidenceArtifact(artifact)?.rejectCrop, rejectCrop);
+  for (const row of [{ ...artifact, status: "withheld" }, { ...artifact, key: null },
+    { ...artifact, rejectCrop: { ...rejectCrop, control: "accept" } },
+    { ...artifact, rejectCrop: { ...rejectCrop, height: 2000 } }, { ...artifact, rejectCrop: undefined }]) {
+    assert.equal(normalizeVisualEvidenceArtifact(row)?.rejectCrop, undefined);
+  }
+});
+
 test("homepage screenshot state distinguishes withheld images and preserves historical scans", () => {
   assert.deepEqual(getHomepageScreenshotState({
     homepage_screenshot: {

@@ -237,3 +237,29 @@ potential additional view traffic is not a scan-time cost. At 100,000 additional
 SITS-sized image opens, transfer could be about $4/month. Production rollout
 must review that usage estimate and obtain cost approval if the expected
 increment is $1/month or more; no such recurring usage has been enabled here.
+
+## Reject-option magnifier (local review)
+
+Reject option now uses the same magnifier and accessible modal, with a separate
+`consent_control_crop.v1` / `control: reject` rectangle. Its crop comes from the
+canonical assessment's retained first-layer Reject measurement and includes
+12px of surrounding pixels, bounded by the original image. A separated Reject
+link does not need to share the banner's enclosing dialog. The existing image,
+document, assessment and safety binding checks still apply. Missing, withheld,
+invalid or unbound evidence omits the magnifier, as does a non-Observed row.
+Historical records are not rewritten and the UI does not infer control bounds.
+
+Saved SITS uses the same checksum-verified available settled image. Its crop is
+x=407, y=544.75, width=552, height=73, showing the original “Accept essential
+cookies” refusal-equivalent button. All saved assessments remain unchanged.
+Thirty focused crop, metadata, UI and shared export tests plus web typecheck
+pass. Browser checks confirm the exact crop, mobile fit at 390px, keyboard focus
+containment, Escape/close restoration and no accidental finding expansion.
+Screenshot: `mobile-reject-preview.png`.
+
+No new scan, screenshot capture, model call, AWS artifact read or deployment was
+performed. Current local incremental infrastructure cost is $0. If shipped,
+the extra bounded rectangle metadata and deterministic projection are estimated
+below $0.05/month at 100,000 scans and 30-day retention. On-demand transfer uses
+the same existing image endpoint; the production traffic approval consideration
+documented above still applies. This remains local and unpushed for review.
