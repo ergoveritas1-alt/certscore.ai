@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import sharp from "sharp";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,15 +14,24 @@ import {
   LOCAL_V2_DAG_SCAN_PROCESSOR,
   type LocalV2DagLambdaDispatchPayload,
   uploadAuxiliaryArtifactFiles,
+  writeAndUploadLocalV2DagLambdaArtifacts,
+  buildLocalV2DagLambdaScanTuning,
 } from "./handler.js";
 import {
-  applyHomepageScreenshotSafetyGate,
+  applyHomepageScreenshotSafetyGate as applySafetyGate,
   CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS,
   createHomepageScreenshotSafetyReviewCoordinator,
   createOpenAiScreenshotSafetyClassifier,
   SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS,
   SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS,
 } from "./screenshot-safety.js";
+
+const coordinators = new Map<string, ReturnType<typeof createHomepageScreenshotSafetyReviewCoordinator>>();
+async function applyHomepageScreenshotSafetyGate(input: Parameters<typeof applySafetyGate>[0]) {
+  const reviewCoordinator = input.reviewCoordinator ?? createHomepageScreenshotSafetyReviewCoordinator(input);
+  coordinators.set(input.artifactRoot, reviewCoordinator);
+  return applySafetyGate({ ...input, reviewCoordinator });
+}
 
 test("safe homepage screenshots enter the existing retained artifact path", async () => {
   const directory = await testDirectory("safe");
@@ -524,3 +535,324 @@ function bundleFixture(screenshotPath: string): CanonicalEvidenceBundle {
     },
   };
 }
+
+async function waitUntil(predicate: () => boolean) {
+  const deadlineAt = Date.now() + 1_000;
+  while (!predicate()) {
+    assert.ok(Date.now() < deadlineAt, "expected review progress within one second");
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
+async function pairedFixture(directory: string) {
+  const screenshotPath = path.join(directory, "screenshot-pre-consent-settled.png");
+  const bytes = await sharp({ create: { width: 100, height: 100, channels: 3, background: "white" } }).png().toBuffer();
+  await writeFile(screenshotPath, bytes);
+  const source = bundleFixture(screenshotPath);
+  const identity = { source: "cdp_loader_id" as const, token: "document-pair" };
+  source.screenshots[0] = { ...source.screenshots[0]!, documentIdentity: identity,
+    artifactId: "screenshot_pre_consent_settled", pagePhase: "network_idle" };
+  const candidates = ["accept_all", "reject_all"].map((actionType, index) => ({
+    candidateId: `candidate_${index}`, label: index ? "Reject" : "Accept", actionType,
+    layer: "first_layer", enabled: true, intersectsViewport: true, decisionStatus: "confirmed_visible",
+    consentContextConfirmed: true, selectorHint: `#${actionType}`, tagName: "button", classifierReasonCodes: [],
+    boundingBox: { x: 20, y: 20 + index * 30, width: 40, height: 20 },
+    frameContext: { frameKind: "main_frame", frameUrl: source.url }, screenshotArtifactRef: screenshotPath,
+  }));
+  source.consentUiObservations = [{
+    observationId: "paired-observation", observedAtMs: 500, likelyPresent: true,
+    captureStatus: "observed", inventoryOutcome: "partial", layerInspected: "first_layer",
+    documentUrl: source.url, documentIdentity: identity,
+    captureDiagnostics: { completedChannels: ["dom_inventory", "geometry"], failedChannels: [], timedOutChannels: [] },
+    controls: candidates.map(row => ({ actionType: row.actionType as "accept_all" | "reject_all",
+      label: row.label, visible: true, selectorHint: "button", tagName: row.tagName })),
+    evidenceRefs: [],
+  }];
+  // A third, unresolved selection control must remain partial without taking
+  // away the verified pair's review allowance.
+  candidates.push({ ...candidates[0]!, candidateId: "candidate_2", actionType: "save_preferences", label: "Save choices" });
+  const geometry = {
+    artifactVersion: "consent_control_geometry.v1", sourceScanner: "consent_control_geometry_diagnostic",
+    pageUrl: source.url, documentIdentity: identity, screenshotArtifactRef: screenshotPath,
+    capturedAt: new Date(Date.parse(source.startedAt) + source.screenshots[0]!.capturedAtMs + 129).toISOString(),
+    viewport: { width: 100, height: 100 },
+    candidates,
+    controlInspection: {
+      version: "control_specific_inspection.v2", retainedCandidateCount: candidates.length,
+      structuralCoverage: "complete", reasonCodes: [],
+      captureCoverage: { inventoryTruncated: false, documentReadyState: "complete", mainFrameAvailable: true,
+        documentAndFramesStable: true, frameCount: 1, capturedFrameCount: 1 },
+      candidates: candidates.map(row => ({ candidateId: row.candidateId,
+        role: row.actionType === "save_preferences" ? "selection_submit" : "decision",
+        unresolvedIntents: row.actionType === "save_preferences" ? ["reject"] : [] })),
+    },
+    visualComparison: {
+      version: "consent_control_visual_comparison.v1", documentToken: identity.token,
+      screenshotArtifactRef: screenshotPath, screenshotSha256: createHash("sha256").update(bytes).digest("hex"),
+      imageWidth: 100, imageHeight: 100, captureSkewMs: 129,
+      accept: { candidateId: "candidate_0", bounds: [20, 20, 40, 20], fillContrast: 2,
+        outerEmphasisFraction: 0, backgroundUniformity: 1, interiorUniformity: 1 },
+      reject: { candidateId: "candidate_1", bounds: [20, 50, 40, 20], fillContrast: 2,
+        outerEmphasisFraction: 0, backgroundUniformity: 1, interiorUniformity: 1 },
+    },
+  };
+  const saveGeometry = () => writeFile(path.join(directory, "ConsentControlGeometryEvidence.json"), JSON.stringify(geometry));
+  await saveGeometry();
+  return { source, geometry, saveGeometry, screenshotPath };
+}
+
+async function diagnostics(directory: string) {
+  return coordinators.get(directory)!.diagnostics();
+}
+
+test("a verified A/R pair gets the existing allowance while unrelated inventory stays partial", async () => {
+  const directory = await testDirectory("partial-pair");
+  try {
+    const { source } = await pairedFixture(directory);
+    const before = structuredClone(source.consentUiObservations);
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+      classifier: async () => { await new Promise(resolve => setTimeout(resolve, 150)); return { safeForDisplay: true }; } });
+    assert.equal(result.screenshots[0]?.displayStatus, "available");
+    assert.deepEqual(result.consentUiObservations, before);
+    const diagnostic = await diagnostics(directory);
+    assert.equal(diagnostic.reviews[0]!.finalization!.budgetMs, 2_000);
+    assert.equal(diagnostic.reviews[0]!.finalization!.outcome.status, "safe");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+for (const drift of ["document", "image_hash", "candidate", "bounds", "frame", "inspection", "missing_observation", "dimensions", "capture_time"] as const) {
+  test(`partial inventory does not gain review time from ${drift} drift`, async () => {
+    const directory = await testDirectory(`pair-drift-${drift}`);
+    try {
+      const { source, geometry, saveGeometry } = await pairedFixture(directory);
+      if (drift === "document") geometry.documentIdentity.token = "other-document";
+      if (drift === "image_hash") geometry.visualComparison.screenshotSha256 = "a".repeat(64);
+      if (drift === "candidate") geometry.candidates[1]!.actionType = "accept_all";
+      if (drift === "bounds") geometry.candidates[1]!.boundingBox.width = 39;
+      if (drift === "frame") geometry.candidates[1]!.frameContext.frameKind = "child_frame";
+      if (drift === "inspection") geometry.controlInspection.captureCoverage.documentAndFramesStable = false;
+      if (drift === "missing_observation") source.consentUiObservations = [];
+      if (drift === "dimensions") geometry.visualComparison.imageWidth = 101;
+      if (drift === "capture_time") geometry.capturedAt = new Date(Date.parse(geometry.capturedAt) + 1_000).toISOString();
+      await saveGeometry();
+      const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+        classifier: async () => new Promise(() => undefined) });
+      assert.equal(result.screenshots[0]?.displayStatus, "withheld");
+      assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 75);
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+}
+
+test("an eligible hung review remains bounded, withheld and immutable after a late approval", async () => {
+  const directory = await testDirectory("pair-deadline");
+  try {
+    const { source, screenshotPath } = await pairedFixture(directory);
+    let finish: (result: { safeForDisplay: boolean }) => void = () => undefined;
+    const startedAt = Date.now();
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+      classifier: async () => new Promise(resolve => { finish = resolve; }) });
+    assert.ok(Date.now() - startedAt < SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS + 100);
+    assert.equal(result.screenshots[0]?.safetyFailureCode, "finalization_deadline_exceeded");
+    const frozen = JSON.stringify(await diagnostics(directory));
+    finish({ safeForDisplay: true });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(JSON.stringify(await diagnostics(directory)), frozen);
+    assert.equal(result.screenshots[0]?.displayStatus, "withheld");
+    await assert.rejects(stat(screenshotPath), /ENOENT/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("identical bytes share review across paths; different bytes require independent reviews", async () => {
+  const directory = await testDirectory("identical-bytes");
+  try {
+    const firstPath = path.join(directory, "screenshot-one.png");
+    const secondPath = path.join(directory, "screenshot-two.png");
+    const thirdPath = path.join(directory, "screenshot-three.png");
+    await Promise.all([writeFile(firstPath, "same bytes"), writeFile(secondPath, "same bytes"), writeFile(thirdPath, "different bytes")]);
+    const source = bundleFixture(firstPath);
+    source.screenshots.push({ ...source.screenshots[0]!, artifactId: "second", path: secondPath },
+      { ...source.screenshots[0]!, artifactId: "third", path: thirdPath });
+    let calls = 0;
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+      classifier: async () => { calls += 1; return { safeForDisplay: true }; } });
+    assert.equal(calls, 2);
+    assert.ok(result.screenshots.every(row => row.displayStatus === "available"));
+    assert.equal((await diagnostics(directory)).reviews.filter((row: { sharedIdenticalBytes: boolean }) => row.sharedIdenticalBytes).length, 1);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("replacing a reviewed file never inherits the original bytes' approval", async () => {
+  const directory = await testDirectory("replaced-file");
+  try {
+    const screenshotPath = path.join(directory, "screenshot-pre-consent.png");
+    await writeFile(screenshotPath, "original bytes");
+    const source = bundleFixture(screenshotPath);
+    let started!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    let finish!: (result: { safeForDisplay: boolean }) => void;
+    const coordinator = createHomepageScreenshotSafetyReviewCoordinator({ artifactRoot: directory,
+      classifier: async () => { started(); return new Promise(resolve => { finish = resolve; }); } });
+    coordinator.schedule(source.screenshots[0]!);
+    await ready;
+    await writeFile(screenshotPath, "replacement bytes");
+    finish({ safeForDisplay: true });
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source, reviewCoordinator: coordinator });
+    assert.equal(result.screenshots[0]?.displayStatus, "withheld");
+    assert.equal(result.screenshots[0]?.safetyFailureCode, "temporary_file_unavailable");
+    assert.equal((await diagnostics(directory)).reviews[0]!.byteBindingFailure, "reviewed_image_bytes_changed");
+    await assert.rejects(stat(screenshotPath), /ENOENT/);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("queued representative review has priority and concurrency never exceeds two", async () => {
+  const directory = await testDirectory("queue-priority");
+  try {
+    const filenames = ["screenshot-first.png", "screenshot-second.png", "screenshot-third.png", "screenshot-pre-consent-settled.png"];
+    for (const [index, filename] of filenames.entries()) await writeFile(path.join(directory, filename), `image ${index}`);
+    let active = 0, peak = 0;
+    const started: string[] = [];
+    const completions: (() => void)[] = [];
+    const coordinator = createHomepageScreenshotSafetyReviewCoordinator({ artifactRoot: directory,
+      classifier: async ({ bytes }) => {
+        active += 1; peak = Math.max(peak, active); started.push(bytes.toString());
+        await new Promise<void>(resolve => { completions.push(resolve); }); active -= 1;
+        return { safeForDisplay: true };
+      } });
+    const images = filenames.map(filename => ({ path: path.join(directory, filename), captureMethod: "primary_full_page" as const }));
+    // Wait for the first two to start, then enqueue both competitors.
+    coordinator.schedule(images[0]!); coordinator.schedule(images[1]!);
+    await waitUntil(() => started.length >= 2);
+    coordinator.schedule(images[2]!); coordinator.schedule(images[3]!);
+    coordinator.prioritize(images[3]!.path);
+    await waitUntil(() => coordinator.diagnostics().reviews.every(row => row.queuedAtMs !== undefined));
+    completions[0]!();
+    await waitUntil(() => started.length >= 3);
+    assert.equal(started[2], "image 3");
+    assert.equal(peak, 2);
+    coordinator.cancelPending();
+    for (const finish of completions) finish();
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("diagnostics distinguish HTTP phases and finalization without retaining request data", async () => {
+  const directory = await testDirectory("http-timing");
+  try {
+    const screenshotPath = path.join(directory, "screenshot-pre-consent.png");
+    await writeFile(screenshotPath, "private image bytes");
+    const classifier = createOpenAiScreenshotSafetyClassifier({ OPENAI_API_KEY: "private-key" }, async () => {
+      await new Promise(resolve => setTimeout(resolve, 5));
+      return new Response(JSON.stringify({ results: [{ categories: { sexual: false } }] }));
+    });
+    await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: bundleFixture(screenshotPath), classifier });
+    const diagnostic = await diagnostics(directory);
+    const row = diagnostic.reviews[0]!;
+    assert.ok(row.scheduledAtMs <= row.readStartedAtMs!);
+    assert.ok(row.queuedAtMs! <= row.executionStartedAtMs!);
+    assert.ok(row.executionStartedAtMs! <= row.requestStartedAtMs!);
+    assert.ok(row.requestStartedAtMs! < row.responseHeadersAtMs!);
+    assert.ok(row.responseHeadersAtMs! <= row.responseBodyAtMs!);
+    assert.ok(row.responseBodyAtMs! <= row.completedAtMs!);
+    assert.ok(row.finalization!.completedAtMs >= row.completedAtMs!);
+    const text = JSON.stringify(diagnostic);
+    for (const secret of ["private-key", "private image bytes", directory, "api.openai.com"]) assert.ok(!text.includes(secret));
+    assert.ok(text.length < 8_000);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("review diagnostics persist in the existing manifest without an additional artifact upload", async () => {
+  const directory = await testDirectory("manifest-timing");
+  const previousBucket = process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "certscore-test-artifacts";
+  try {
+    const screenshotPath = path.join(directory, "screenshot-pre-consent.png");
+    await writeFile(screenshotPath, "safe image bytes");
+    const source = bundleFixture(screenshotPath);
+    const coordinator = createHomepageScreenshotSafetyReviewCoordinator({ artifactRoot: directory,
+      classifier: async () => ({ safeForDisplay: true }) });
+    const uploads: string[] = [];
+    await writeAndUploadLocalV2DagLambdaArtifacts({ artifactRoot: directory, bundle: source,
+      screenshotSafetyReviewCoordinator: coordinator, phaseTimings: [], payload: payloadFixture(),
+      scanTuning: buildLocalV2DagLambdaScanTuning({}), s3Client: { async send(command) {
+        uploads.push(command.input.Key ?? ""); return { $metadata: {} };
+      } } });
+    const manifest = JSON.parse(await readFile(path.join(directory, "LocalV2DagLambdaManifest.json"), "utf8"));
+    assert.equal(manifest.screenshotSafetyReview.version, "screenshot_safety_review_diagnostics.v1");
+    assert.equal(manifest.screenshotSafetyReview.reviews[0].finalization.outcome.status, "safe");
+    assert.equal(uploads.length, 3, "only canonical bundle, existing screenshot and existing manifest");
+    assert.ok(!uploads.some(key => key.includes("ScreenshotSafetyReviewDiagnostics")));
+    assert.ok(!JSON.stringify(manifest.screenshotSafetyReview).includes("safe image bytes"));
+  } finally {
+    if (previousBucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = previousBucket;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+for (const failure of ["sensitive", "transport_error", "aborted"] as const) {
+  test(`a verified pair remains withheld after ${failure} without altering its partial inventory`, async () => {
+    const directory = await testDirectory(`pair-failure-${failure}`);
+    try {
+      const { source } = await pairedFixture(directory);
+      const before = structuredClone(source.consentUiObservations);
+      const controller = new AbortController();
+      const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source, signal: controller.signal,
+        classifier: async () => {
+          if (failure === "sensitive") return { safeForDisplay: false };
+          if (failure === "aborted") controller.abort();
+          throw new Error("private transport details must not be persisted");
+        } });
+      assert.equal(result.screenshots[0]?.displayStatus, "withheld");
+      assert.deepEqual(result.consentUiObservations, before);
+      assert.ok(!JSON.stringify(await diagnostics(directory)).includes("private transport details"));
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+}
+
+test("all current producer capture IDs can retain independently reviewed bytes", async () => {
+  const directory = await testDirectory("all-capture-ids");
+  try {
+    const ids = ["screenshot_pre_consent", "screenshot_pre_consent_settled", "screenshot_pre_consent_cmp_empty",
+      "screenshot_pre_consent_cmp_controls", "screenshot_pre_consent_packet_recovery",
+      "screenshot_pre_consent_no_go_confirmation", "screenshot_pre_consent_full_page", "screenshot_pre_consent_geometry_proof"];
+    const source = bundleFixture(path.join(directory, "screenshot-pre-consent.png"));
+    source.screenshots = ids.map((artifactId, index) => ({ ...source.screenshots[0]!, artifactId,
+      path: path.join(directory, `${artifactId.replaceAll("_", "-")}.png`), capturedAtMs: index * 100 }));
+    for (const [index, image] of source.screenshots.entries()) await writeFile(image.path, `unique image ${index}`);
+    let calls = 0;
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+      classifier: async () => { calls += 1; return { safeForDisplay: true }; } });
+    assert.equal(calls, ids.length);
+    assert.ok(result.screenshots.every(row => row.displayStatus === "available"));
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("unrelated AX inventory timeout does not shorten a verified DOM/geometry pair's review", async () => {
+  const directory = await testDirectory("unrelated-channel-timeout");
+  try {
+    const { source } = await pairedFixture(directory);
+    source.consentUiObservations[0]!.captureDiagnostics!.timedOutChannels = ["accessibility_tree"];
+    const before = structuredClone(source.consentUiObservations);
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+      classifier: async () => { await new Promise(resolve => setTimeout(resolve, 150)); return { safeForDisplay: true }; } });
+    assert.equal(result.screenshots[0]?.displayStatus, "available");
+    assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 2_000);
+    assert.deepEqual(result.consentUiObservations, before);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("a deadline while reading the moderation response is diagnosed as a timeout", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let headers!: () => void;
+  const headersReceived = new Promise<void>(resolve => { headers = resolve; });
+  const classifier = createOpenAiScreenshotSafetyClassifier({ OPENAI_API_KEY: "test-key", CERTSCORE_SCREENSHOT_SAFETY_TIMEOUT_MS: "2000" }, async (_url, init) => {
+    const stream = new ReadableStream({ start(controller) {
+      init?.signal?.addEventListener("abort", () => controller.error(new Error("aborted")), { once: true });
+    } });
+    return new Response(stream);
+  });
+  const outcome = classifier({ bytes: Buffer.from("image"), mimeType: "image/png",
+    onPhase(phase) { if (phase === "response_headers") headers(); } });
+  await headersReceived;
+  t.mock.timers.tick(2_001);
+  await assert.rejects(outcome, { failureCode: "moderation_timeout" });
+});

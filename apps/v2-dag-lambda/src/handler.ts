@@ -1393,7 +1393,7 @@ async function runLocalV2DagLambdaScanBundle(
   });
 }
 
-async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
+export async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   artifactRoot: string;
   bundle: CanonicalEvidenceBundle;
   joinedPostAcceptArtifact?: Pick<LocalV2DagLambdaShardResult, "artifactMetadata" | "artifactPointers">;
@@ -1411,13 +1411,15 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
 }> {
   const { artifactRoot, payload, phaseTimings, scanTuning } = input;
+  const screenshotSafetyReviewCoordinator = input.screenshotSafetyReviewCoordinator ??
+    createHomepageScreenshotSafetyReviewCoordinator({ artifactRoot, signal: input.signal });
   const bundle = await timeLambdaPhase(
     phaseTimings,
     "screenshot_safety_gate",
     () => applyHomepageScreenshotSafetyGate({
       artifactRoot,
       bundle: input.bundle,
-      reviewCoordinator: input.screenshotSafetyReviewCoordinator,
+      reviewCoordinator: screenshotSafetyReviewCoordinator,
       signal: input.signal,
     }),
   );
@@ -1475,6 +1477,9 @@ async function writeAndUploadLocalV2DagLambdaArtifacts(input: {
       },
     } : {}),
     ...(input.laneTimingSummary ? { laneTimingSummary: input.laneTimingSummary } : {}),
+    ...(screenshotSafetyReviewCoordinator.diagnostics().reviews.length ? {
+      screenshotSafetyReview: screenshotSafetyReviewCoordinator.diagnostics(),
+    } : {}),
     payload,
     phaseTimings,
     pointers,
@@ -5267,6 +5272,7 @@ async function writeManifest(input: {
   payload: LocalV2DagLambdaDispatchPayload;
   phaseTimings: LocalV2DagLambdaPhaseTiming[];
   pointers: LocalV2DagLambdaArtifactPointers;
+  screenshotSafetyReview?: ReturnType<HomepageScreenshotSafetyReviewCoordinator["diagnostics"]>;
   scanTuning: ReturnType<typeof buildLocalV2DagLambdaScanTuning>;
 }) {
   const manifestPath = path.join(input.artifactRoot, "LocalV2DagLambdaManifest.json");
@@ -5285,6 +5291,9 @@ async function writeManifest(input: {
     })),
     phaseTimings: input.phaseTimings,
     performanceDiagnostics: buildLambdaPerformanceDiagnostics(input.bundle, input.phaseTimings),
+    // Operational diagnostics travel in the existing verified worker manifest;
+    // they never enter observed evidence, findings, scoring or report content.
+    ...(input.screenshotSafetyReview ? { screenshotSafetyReview: input.screenshotSafetyReview } : {}),
     pointers: input.pointers,
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     productionFindingIntegration: false,
