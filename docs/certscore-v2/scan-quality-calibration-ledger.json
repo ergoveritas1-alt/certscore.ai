@@ -244,12 +244,12 @@
     },
     "https://weather.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:21:32.602Z",
-      "lastContactAt": "2026-10-14T18:21:32.602Z",
+      "cooldownUntil": "2026-11-11T20:12:43.703Z",
+      "lastContactAt": "2026-10-14T20:12:43.703Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local complementary CMP-depth initial pass, scan 9640df84-c554-450b-ae4e-96c5d392e9ab. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: 6687f0ce-c8c2-423c-8c27-ec2385fd80a6. Three serial full scans total across Weather.com, Sentry and HubSpot; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://weather.com"
     },
@@ -323,12 +323,12 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:21:00.171Z",
-      "lastContactAt": "2026-10-14T18:21:00.171Z",
+      "cooldownUntil": "2026-11-11T20:19:04.955Z",
+      "lastContactAt": "2026-10-14T20:19:04.955Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local complementary CMP-depth initial pass, scan 69aff51c-73d3-4b09-9cee-3c5cc35dd9c7. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: a32e83a1-416a-4211-b9b6-436d659d5c09. One additional fresh HubSpot scan verifies clean-process CMP diagnostic materialization after a local server restart; four full scans total in this pass; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://hubspot.com"
     },
@@ -693,12 +693,12 @@
     },
     "https://sentry.io": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T18:07:57.511Z",
-      "lastContactAt": "2026-10-14T18:07:57.511Z",
+      "cooldownUntil": "2026-11-11T20:13:06.661Z",
+      "lastContactAt": "2026-10-14T20:13:06.661Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Owner-requested local five-site evidence-diversity verification pass, scan bc2fd49d-13d7-48c6-b3b5-f30ca91bc688. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
+      "note": "Owner-requested local CMP quality follow-up: fcf47867-f63d-4ef7-b100-63db1ae21ab4. Three serial full scans total across Weather.com, Sentry and HubSpot; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
       "state": "cooldown",
       "url": "https://sentry.io"
     },
@@ -1134,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T20:02:24.410Z",
+  "updatedAt": "2026-10-14T20:19:50.209Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]

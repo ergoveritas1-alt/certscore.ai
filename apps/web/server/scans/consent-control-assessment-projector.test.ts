@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { cmpPreferencesEvidenceSchema, deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 
 function bundle(
@@ -1603,4 +1603,31 @@ test("verified independent consent binding is not overwritten by a later runtime
   assert.equal(result.document.identityStatus, "matched");
   assert.equal(result.controls.accept.state, "observed");
   assert.deepEqual(b, before);
+});
+
+test("v3 preference diagnostics survive full consent materialization independently of first-layer controls", () => {
+  const { b, g } = independentConsentLaneFixture();
+  const initial = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g, noGo: false });
+  b.cmpPreferencesEvidence = cmpPreferencesEvidenceSchema.parse({
+    contractVersion: "certscore.cmp-preferences-evidence.v1", policyVersion: "bounded_cmp_preferences.v1",
+    scanId: b.scanId, parentDispatchSha256: "a".repeat(64), targetUrl: b.url, finalUrl: b.url, documentToken: "preference-session-token",
+    startedAt: "2026-10-14T00:00:00.000Z", completedAt: "2026-10-14T00:00:04.000Z", status: "limited",
+    support: { state: "partial", provider: "HubSpot Consent Banner", recipeVersion: "bounded_cmp_preferences.v1", reason: "preference_surface_binding_unavailable" },
+    action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
+    privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: ["preference_surface_binding_unavailable"],
+    checkpoints: { version: "cmp_partial_capture.v1", documentToken: "preference-session-token", privacyLinks: true, declarations: false, controls: false, controlsSurface: "first_layer" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v3", budgetMs: 17000, basicCaptureReserveMs: 1000, phase: "surface_binding",
+      surfaceBinding: { version: "cmp_surface_binding.v1", mode: "aria_controls", priorMatches: 0, outcome: "missing" } },
+  });
+  const before = structuredClone(b);
+  const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g, noGo: false });
+  assert.equal(result.cmpAudit?.version, "cmp_audit_assessment.v5");
+  assert.equal(result.cmpAudit?.support.reason, "preference_surface_binding_unavailable");
+  assert.equal(result.cmpAudit?.rows.filter(row => row.limitation?.code === "preference_surface_binding_unavailable").length, 5);
+  assert.deepEqual(result.controls, initial.controls);
+  assert.deepEqual(b, before);
+  (b.cmpPreferencesEvidence.inspectionDiagnostic as any).revision = "unrecognized_revision";
+  const malformed = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g, noGo: false });
+  assert.equal(malformed.cmpAudit, undefined, "Unverifiable diagnostics cannot supply CMP facts");
+  assert.deepEqual(malformed.controls, initial.controls);
 });
