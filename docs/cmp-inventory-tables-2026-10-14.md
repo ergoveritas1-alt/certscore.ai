@@ -129,3 +129,47 @@ $0.10/month per 100,000 report views for SITS-sized table text, disclosed before
 completion and pre-approved under the below-$1 cost policy. There are no added
 model calls, browser runs, timeouts, infrastructure resources or evidence-storage
 fields. The standalone development bundle is local-only and is not shipped.
+
+## Precise consent-cookie expiry follow-up
+
+The expiry criterion uses the shared, copyable table with Visit, Cookie and
+Remaining days columns. The values derive from the retained browser expiry
+minus its capture timestamp; no configured lifetime or initial creation time
+is inferred. Days are formatted to at most eight decimal places (approximately
+millisecond resolution); unrounded remaining seconds and both original epoch
+timestamps remain in supporting JSON and the API/SDK/MCP evidence export.
+The recap retains the long-term behavior limitation without repeating the table.
+
+New `inventory.expiries` metadata is produced only from the existing
+scan/target-bound, production-projectable action-cookie eligibility path with
+identity/value hash proof. Invalid, missing, session-only or already-expired
+timestamp tuples do not create exact table rows. Metadata cannot alter the
+historical assessment, rounded canonical summary, policy eligibility or score.
+It also survives a preference-worker timeout when independent action proof
+is valid. `cmp_inventory_tables.v3` versions new materializations; historical
+records remain unchanged on read. Arrays are bounded at four rows and do not
+include cookie values or identity/value hashes. Internal and public schemas
+validate timestamp arithmetic; row/source-hash matching remains mandatory.
+
+For saved SITS scan `a68a5b3b-df92-429a-bbef-975aa2fdddf0`, the original Accept
+and Reject packet bytes were verified against the retained AWS manifest's SHA-256
+and size, and their storage observations matched the canonical bundle exactly.
+The `borlabs-cookie` rows show 59.99992611 days for Accept and 59.99995527 for
+Reject. These are a few seconds below 60 days because capture followed cookie
+creation. Both criterion outcomes remain Observed; the original canonical
+assessments remain unchanged. No production record was written.
+
+50 focused tests pass, including timestamp precision, arithmetic consistency,
+foreign/unprojectable action rejection, missing hashes/timestamps, independent
+coverage, concern tamper rejection, and API-to-SDK reconstruction. Web, SDK and
+MCP typechecks and generated contract checks pass. Desktop/mobile verification
+confirms both rows, all columns, clipboard headers/values and no overflow.
+Artifacts: `expiry-verification.json`, updated `verification.json`, and
+`desktop-cookie-expiry.png` / `mobile-cookie-expiry.png`. The local preview
+leaves the expiry criterion expanded. Nothing has been deployed.
+
+No new scan, observation, browser work, model call, action or wait was added.
+Incremental metadata storage/transfer is estimated below $0.05/month at
+100,000 scans/month with 30-day retention; disclosed before implementation
+and pre-approved under the below-$1 cost policy. The one-time retained packet
+reads cost less than $0.01.

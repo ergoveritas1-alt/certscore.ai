@@ -42,6 +42,10 @@ export const publicCmpAuditSchema = z.object({
       prominence: z.object({ accept: consentControlMeasurementSchema, reject: consentControlMeasurementSchema, captureSkewMs: count }).strict().optional(),
       requests: z.array(z.object({ hostname: ref, path: ref.refine(value => !/[?#]/.test(value), "Request evidence must omit query and fragment values"), vendor: text, category: text, msAfterReject: count }).strict()).max(100).optional(),
       inventory: z.object({
+        expiries: z.array(z.object({ visit: z.enum(["Accept", "Reject"]), name: z.string().min(1).max(160),
+          capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(), remainingSeconds: z.number().finite().nonnegative(),
+        }).strict().refine(row => row.expiresAtEpochSeconds >= row.capturedAtEpochSeconds && Math.abs(row.remainingSeconds - (row.expiresAtEpochSeconds - row.capturedAtEpochSeconds)) <= 0.000001,
+          "Remaining time must match the retained capture and expiry timestamps.")).max(4).optional(),
         categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
         services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control"]) }).strict()).max(100).optional(),
         declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) }).strict()).max(100).optional(),

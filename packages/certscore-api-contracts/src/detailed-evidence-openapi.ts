@@ -873,6 +873,46 @@ export const detailedEvidenceOpenApiSchemas = {
                   "additionalProperties": false,
                   "required": [],
                   "properties": {
+                    "expiries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "visit",
+                          "name",
+                          "capturedAtEpochSeconds",
+                          "expiresAtEpochSeconds",
+                          "remainingSeconds"
+                        ],
+                        "properties": {
+                          "visit": {
+                            "type": "string",
+                            "enum": [
+                              "Accept",
+                              "Reject"
+                            ]
+                          },
+                          "name": {
+                            "type": "string",
+                            "maxLength": 160
+                          },
+                          "capturedAtEpochSeconds": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "expiresAtEpochSeconds": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "remainingSeconds": {
+                            "type": "number",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "maxItems": 4
+                    },
                     "categories": {
                       "type": "array",
                       "items": {

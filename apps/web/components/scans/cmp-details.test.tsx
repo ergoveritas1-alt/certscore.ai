@@ -110,7 +110,14 @@ test("compact CMP tables retain all rows, exact matches and historical limitatio
     { name: "_ga_123", matchedPattern: "_ga_*", observedIn: ["before_choice", "after_accept"] },
     { name: "unknown", matchedPattern: null, observedIn: ["after_accept"] },
   ] } };
+  audit.rows.find(row => row.id === "duration")!.supportingEvidence = { inventory: { expiries: [
+    { visit: "Accept", name: "borlabs-cookie", capturedAtEpochSeconds: 1791946223.384, expiresAtEpochSeconds: 1797130217, remainingSeconds: 1797130217 - 1791946223.384 },
+    { visit: "Reject", name: "borlabs-cookie", capturedAtEpochSeconds: 1791946219.865, expiresAtEpochSeconds: 1797130216, remainingSeconds: 1797130216 - 1791946219.865 },
+  ] } };
   const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" />);
+  assert.match(html, /Consent-cookie expiry · 2/); assert.match(html, /Remaining days/);
+  assert.match(html, /59\.99992611/); assert.match(html, /59\.99995527/);
+  assert.match(html, /Time remaining when the cookie was captured/);
   assert.match(html, /Category choices · 3/); assert.match(html, /Captured setting/);
   assert.match(html, />Off<\/td>/); assert.match(html, />On<\/td>/); assert.match(html, />Not captured<\/td>/);
   assert.match(html, /CMP services · 11/); assert.match(html, /Service 11/);
@@ -118,9 +125,9 @@ test("compact CMP tables retain all rows, exact matches and historical limitatio
   assert.match(html, /Storage duration/); assert.match(html, />&lt;100ms<\/td>/);
   assert.match(html, /text-emerald-700/); assert.match(html, /_ga_\*/); assert.match(html, /No match/);
   assert.match(html, /Before choice · After Accept/);
-  assert.equal((html.match(/role="region"/g) ?? []).length, 4);
-  assert.equal((html.match(/max-h-\[322px\]/g) ?? []).length, 4);
-  assert.equal((html.match(/tabindex="0"/g) ?? []).length, 4);
+  assert.equal((html.match(/role="region"/g) ?? []).length, 5);
+  assert.equal((html.match(/max-h-\[322px\]/g) ?? []).length, 5);
+  assert.equal((html.match(/tabindex="0"/g) ?? []).length, 5);
   assert.doesNotMatch(html, /Search service|All purposes|All types/);
   const services = audit.rows.find(row => row.id === "services")!;
   services.status = "Observed"; services.supportingEvidence = undefined;

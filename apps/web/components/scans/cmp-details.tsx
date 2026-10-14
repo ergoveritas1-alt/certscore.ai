@@ -68,6 +68,13 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
 function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow["supportingEvidence"]> }) {
   const comparison = evidence.prominence, cookies = evidence.cookieComparison, inventory = evidence.inventory;
   return <div className="mt-2 space-y-3 rounded-md bg-zinc-50 p-3 text-xs leading-5 text-zinc-700">
+    {inventory?.expiries?.length ? <>
+      <CmpInventoryTable label={`Consent-cookie expiry · ${inventory.expiries.length}`} columns={["Visit", "Cookie", "Remaining days"]}
+        columnClasses={["w-[20%] sm:w-auto", "w-[45%] sm:w-auto", "w-[35%] sm:w-auto"]}
+        copyRows={inventory.expiries.map(cookie => [cookie.visit, cookie.name, formatRemainingDays(cookie.remainingSeconds)])}
+        rows={inventory.expiries.map(cookie => [cookie.visit, <span className="font-mono text-[11px]">{cookie.name}</span>, formatRemainingDays(cookie.remainingSeconds)])} />
+      <p>Time remaining when the cookie was captured.</p>
+    </> : null}
     {inventory?.categories?.length ? <CmpInventoryTable label={`Category choices · ${inventory.categories.length}`} columns={["Category", "Captured setting"]}
       copyRows={inventory.categories.map(category => [category.name, category.checked === null ? "Not captured" : category.checked ? "On" : "Off"])}
       rows={inventory.categories.map(category => [category.name, category.checked === null ? "Not captured" : category.checked ? "On" : "Off"])} /> : null}
@@ -125,4 +132,8 @@ function CookieMatchTable({ entries }: { entries: NonNullable<NonNullable<NonNul
 
 function disclosureText(value: string) {
   return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
+function formatRemainingDays(seconds: number) {
+  return Number((seconds / 86400).toFixed(8)).toString();
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { cmpCookieExpiryEvidenceSchema, cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveCmpAuditAssessment } from "./cmp-audit-assessment-projector";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
@@ -393,4 +393,51 @@ test("category table retains selectable controls and captured settings through c
   assert.match(historical.detail!, /Statistics; Marketing; External media/);
   assert.equal(historical.supportingEvidence, undefined);
   assert.ok(concerns.filter(row => row.originKey.startsWith("consent.cmp_audit.")).every(row => !row.scoreEffects?.length));
+});
+
+test("expiry tables preserve timestamp precision through policy without claiming original storage life", () => {
+  const input = bundle();
+  input.postRefusalEvidence = { parentScanId: input.scanId, normalizedUrl: input.url, productionProjectable: true,
+    refusalRegistration: { status: "confirmed" }, decisionEvidence: { basis: "verified_state", decision: "denied", observedAtMs: 1000, observedStateSha256: "a".repeat(64) },
+    storage: { postAction: [{ storageType: "cookie", name: "borlabs-cookie", identityHash: "a".repeat(64), valueHash: "b".repeat(64), expiresAtEpochSeconds: 1797130216, capturedAtEpochSeconds: 1791946219.865 }] } } as any;
+  const before = structuredClone(input);
+  const audit = deriveCmpAuditAssessment(input)!;
+  const expected = { visit: "Reject", name: "borlabs-cookie", capturedAtEpochSeconds: 1791946219.865, expiresAtEpochSeconds: 1797130216, remainingSeconds: 1797130216 - 1791946219.865 };
+  const duration = audit.rows.find(row => row.id === "duration")!;
+  assert.equal(duration.status, "observed"); assert.match(duration.detail, /approximately 60 days/);
+  assert.deepEqual(duration.inventory!.expiries, [expected]); assert.deepEqual(input, before);
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const row = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns }).rows.find(row => row.id === "duration")!;
+  assert.equal(row.status, "Observed");
+  assert.equal(row.detail, "Consent-cookie expiry was captured. Long-term behavior was not tested.");
+  assert.deepEqual(row.supportingEvidence!.inventory!.expiries, [expected]);
+  const corrupted = structuredClone(concerns);
+  const expiry = (corrupted.find(row => row.originKey === "consent.cmp_audit.duration")!.evidenceBundle.rawEvidence!.cmpAuditRow as any).inventory.expiries[0];
+  expiry.expiresAtEpochSeconds += 1; expiry.remainingSeconds += 1;
+  assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: corrupted }).rows.find(row => row.id === "duration")!.supportingEvidence, undefined);
+  assert.ok(concerns.filter(row => row.originKey.startsWith("consent.cmp_audit.")).every(row => !row.scoreEffects?.length));
+  delete input.cmpPreferencesEvidence;
+  input.cmpPreferenceLaneOutcome = { status: "limited", limitationCode: "preference_budget_exhausted", startedAt: "2026-10-13T00:00:00.000Z", completedAt: "2026-10-13T00:00:17.000Z" };
+  assert.deepEqual(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "duration")!.inventory!.expiries, [expected], "independent expiry survives preference failure");
+  for (const mutate of [
+    () => { input.postRefusalEvidence!.parentScanId = "foreign"; },
+    () => { input.postRefusalEvidence!.productionProjectable = false; },
+    () => { Reflect.deleteProperty(input.postRefusalEvidence!.storage.postAction[0]!, "valueHash"); },
+    () => { delete input.postRefusalEvidence!.storage.postAction[0]!.capturedAtEpochSeconds; },
+    () => { input.postRefusalEvidence!.storage.postAction[0]!.expiresAtEpochSeconds = -1; },
+    () => { input.postRefusalEvidence!.storage.postAction[0]!.expiresAtEpochSeconds = 10; },
+  ]) {
+    input.postRefusalEvidence = structuredClone(before.postRefusalEvidence); mutate();
+    assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "duration")!.inventory, undefined);
+  }
+});
+
+
+test("expiry evidence rejects inconsistent arithmetic and nonpersistent timestamps", () => {
+  const valid = { visit: "Accept", name: "borlabs-cookie", capturedAtEpochSeconds: 100, expiresAtEpochSeconds: 5184100, remainingSeconds: 5184000 };
+  assert.equal(cmpCookieExpiryEvidenceSchema.safeParse(valid).success, true);
+  for (const change of [{ remainingSeconds: 60 }, { expiresAtEpochSeconds: -1 }, { capturedAtEpochSeconds: NaN }, { expiresAtEpochSeconds: 10 }, { cookieValue: "private" }]) {
+    assert.equal(cmpCookieExpiryEvidenceSchema.safeParse({ ...valid, ...change }).success, false);
+  }
 });

@@ -29,8 +29,17 @@ export const cmpPreferenceDispatchSchema = z.object({
 });
 export type CmpPreferenceDispatch = z.infer<typeof cmpPreferenceDispatchSchema>;
 
+export const cmpCookieExpiryEvidenceSchema = z.object({
+  visit: z.enum(["Accept", "Reject"]), name: z.string().min(1).max(160),
+  capturedAtEpochSeconds: z.number().finite().positive(), expiresAtEpochSeconds: z.number().finite().positive(),
+  remainingSeconds: z.number().finite().nonnegative(),
+}).strict().refine(row => row.expiresAtEpochSeconds >= row.capturedAtEpochSeconds &&
+  Math.abs(row.remainingSeconds - (row.expiresAtEpochSeconds - row.capturedAtEpochSeconds)) <= 0.000001,
+  "Remaining time must match the retained capture and expiry timestamps.");
+
 /** Bounded, display-safe facts; never cookie values or a control test verdict. */
 export const cmpInventoryTablesSchema = z.object({
+  expiries: z.array(cmpCookieExpiryEvidenceSchema).max(4).optional(),
   categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
   services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control"]) }).strict()).max(100).optional(),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) }).strict()).max(100).optional(),
@@ -106,7 +115,7 @@ export const cmpAuditRowSchema = z.object({
 }).superRefine((row, ctx) => {
   const inventory = row.inventory;
   if (inventory && ((inventory.categories && row.id !== "categories") || (inventory.services && row.id !== "services") || (inventory.declarations && row.id !== "cookie_information") ||
-    (inventory.cookies && row.id !== "found_not_declared") || row.status === "not_assessed" || row.evidenceRefs.length === 0)) {
+    (inventory.cookies && row.id !== "found_not_declared") || (inventory.expiries && row.id !== "duration") || row.status === "not_assessed" || row.evidenceRefs.length === 0)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Inventory tables require the corresponding assessed criterion and retained evidence." });
   }
   const c = row.cookieComparison;

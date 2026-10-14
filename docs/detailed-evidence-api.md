@@ -30,13 +30,14 @@ The October 14 follow-up is live from `94399fef7c45f348ef27da535198f783670f61f2`
 `cmpAudit.rows[].supportingEvidence.inventory` optionally carries bounded,
 value-free table evidence:
 
+- `expiries`: cookie `name`, `visit` (Accept/Reject), original `capturedAtEpochSeconds` and `expiresAtEpochSeconds`, and unrounded `remainingSeconds`. Up to four rows; remaining time must agree with both timestamps. This is remaining time at capture, not an original Max-Age or configured lifetime.
 - `categories`: selectable category `name` and captured `checked` state (boolean or null).
 - `services`: service `name` and `source` (`cmp_api_inventory` or `labelled_control`).
 - `declarations`: cookie/pattern `name`, `purpose`, `duration`, and declaration `source`.
 - `cookies`: observed `name`, `matchedPattern` (null means no match), and
   `observedIn` (`before_choice`, `after_accept`, or both).
 
-Each list is capped at 100 entries. Match results use the canonical deterministic
+Service, category, declaration and comparison lists are capped at 100 entries; expiry lists at four. Match results use the canonical deterministic
 wildcard comparison; a match indicates declaration coverage, not correct consent
 handling. Before-choice and confirmed-Accept observations remain distinct.
 Names, purposes and durations are retained text; missing fields remain empty in

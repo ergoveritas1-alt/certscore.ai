@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, cmpAuditAssessmentSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
+import { projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
 import { isKnownCmpCookieName } from "@website-signal-risk-scanner/shared";
 
 /** Materialize only from the coordinator's verified canonical bundle. Browser
@@ -11,10 +11,11 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
     if (!outcome || outcome.status !== "limited" || !outcome.limitationCode) return undefined;
     // Coordinator outcomes are coverage telemetry, never substituted browser evidence.
     const fallback = cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v4", scanId: bundle.scanId,
-      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
+      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", inventoryEvidencePolicy: "cmp_inventory_tables.v3", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: outcome.limitationCode },
       rows: ([...cmpAuditCriterionSchema.options, "implementation"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? "Preference evidence was not retained; this criterion could not be assessed.", evidenceRefs: [] })) });
-    applyClientFacts(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs }));
+    const expiries = applyClientFacts(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs }));
+    if (expiries.length) fallback.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail, evidenceRefs: refs }));
     return cmpAuditAssessmentSchema.parse(fallback);
   }
@@ -81,7 +82,8 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
   const reject = bundle.postRefusalEvidence;
   const accepted = accept?.parentScanId === bundle.scanId && accept.normalizedUrl === evidence.targetUrl && accept.productionProjectable && accept.acceptanceRegistration.status === "confirmed";
   for (const [id, detail] of Object.entries(independentAuditDetails(bundle))) set(id as ExtendedCmpCriterion, "not_assessed", detail, ["CanonicalEvidenceBundle.json"]);
-  applyClientFacts(bundle, set);
+  const expiries = applyClientFacts(bundle, set);
+  if (expiries.length) rows.find(row => row.id === "duration")!.inventory = { expiries };
   applyChoiceActivity(bundle, set);
   if (declarationsUsable && evidence.declarations.length) {
     const captured = new Set([...(bundle.cookieEvents ?? []).map(cookie => cookie.cookieName), ...(accepted && accept ? accept.storage.postAction : []).filter(item => item.storageType === "cookie").map(item => item.name)]);
@@ -120,7 +122,7 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
     }
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v4", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", cookieComparisonPolicy: "cookie_name_comparison_details.v1", inventoryEvidencePolicy: "cmp_inventory_tables.v2", evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", cookieComparisonPolicy: "cookie_name_comparison_details.v1", inventoryEvidencePolicy: "cmp_inventory_tables.v3", evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -177,10 +179,19 @@ function applyClientFacts(bundle: CanonicalEvidenceBundle, set: (id: ExtendedCmp
   const confirmed = actions.filter(item => item.confirmed && item.packet?.decisionEvidence?.decision === item.expected &&
     item.packet.decisionEvidence.basis === "verified_state" && Number.isFinite(item.packet.decisionEvidence.observedAtMs) && item.packet.decisionEvidence.observedStateSha256);
   if (confirmed.length) set("consent_record", "observed", `${confirmed.map(item => item.label).join(" and ")} client-side decision confirmed with a timestamp and hashed state evidence. Server-side audit history is outside this assessment.`, ["CanonicalEvidenceBundle.json"]);
-  const lifetimes = actions.flatMap(({ label, packet }) => packet!.storage.postAction.filter(item => item.storageType === "cookie" &&
+  const expiryCookies = actions.flatMap(({ label, packet }) => packet!.storage.postAction.filter(item => item.storageType === "cookie" &&
     isKnownCmpCookieName(item.name) && item.identityHash && item.valueHash && Number.isFinite(item.expiresAtEpochSeconds) && item.expiresAtEpochSeconds! > 0 && Number.isFinite(item.capturedAtEpochSeconds))
-    .slice(0, 2).map(item => `${label} visit: ${item.name}, approximately ${Math.max(0, Math.round((item.expiresAtEpochSeconds! - item.capturedAtEpochSeconds!) / 86400))} days`));
+    .slice(0, 2).map(item => ({ visit: label, item })));
+  const lifetimes = expiryCookies.map(({ visit, item }) => `${visit} visit: ${item.name}, approximately ${Math.max(0, Math.round((item.expiresAtEpochSeconds! - item.capturedAtEpochSeconds!) / 86400))} days`);
   if (lifetimes.length) set("duration", "observed", `${lifetimes.join("; ")}. Captured cookie expiry only; future choice persistence and appropriateness are not assessed.`, ["CanonicalEvidenceBundle.json"]);
+  // Preserve the historical assessment above. Exact table evidence requires
+  // valid timestamp arithmetic and never asserts the original configured life.
+  return expiryCookies.flatMap(({ visit, item }) => {
+    const parsed = cmpCookieExpiryEvidenceSchema.safeParse({ visit, name: item.name,
+      capturedAtEpochSeconds: item.capturedAtEpochSeconds, expiresAtEpochSeconds: item.expiresAtEpochSeconds,
+      remainingSeconds: item.expiresAtEpochSeconds! - item.capturedAtEpochSeconds! });
+    return parsed.success ? [parsed.data] : [];
+  });
 }
 
 /** Reuse canonical action eligibility and completion rules. A partial capture
