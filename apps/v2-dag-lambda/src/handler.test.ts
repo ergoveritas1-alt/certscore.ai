@@ -5012,3 +5012,22 @@ for (const preferences of ["complete", "hang", "wrong_hash", "wrong_target"] as 
     }
   });
 }
+
+
+test("CMP worker bounds a stalled artifact chain and cannot publish a second report", async () => {
+  let scannerSignal: AbortSignal | undefined;
+  let publications = 0;
+  const started = Date.now();
+  const result = await handler(validPayload({ orchestrationMode: "worker", workerLane: "cmp_preferences", parentDispatchSha256: "e".repeat(64),
+    cmpPreferenceInspection: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "scan-local-1", exactTargetUrl: "https://example.com/" } }), {
+    artifactChainTimeoutMs: 20, handlerSafetyTimeoutMs: 30, scannerWorkTimeoutMs: 10,
+    runArtifactChain: async (_payload, options) => { scannerSignal = options.signal; return new Promise(() => undefined); },
+    sqsClient: { async send() { publications++; return { $metadata: {} }; } },
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(result.workerLane, "cmp_preferences");
+  assert.equal(result.error?.code, "v2_dag_lambda_safety_timeout");
+  assert.equal(scannerSignal?.aborted, true);
+  assert.equal(publications, 0);
+  assert.ok(Date.now() - started < 1000);
+});

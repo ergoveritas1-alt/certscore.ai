@@ -1,4 +1,4 @@
-import { cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
+import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
 import { FULL_SITE_PAGE_DISPATCH } from "./full-site-dispatch-contract.js";
@@ -5975,6 +5975,20 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       ),
       Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 2_000)
     ));
+    if (evidenceWorker && payload.workerLane === "cmp_preferences") {
+      // Bound the entire worker, including a stalled browser shutdown/upload,
+      // rather than relying only on the observer's browser deadline.
+      const memory = process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE === undefined
+        ? (process.env.AWS_LAMBDA_FUNCTION_NAME ? NaN : 3008)
+        : Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE);
+      const preferenceBudget = cmpPreferenceBudgetMs(memory);
+      const setupElapsedMs = Math.max(0, Date.now() - handlerStartedAtMs);
+      handlerSafetyTimeoutMs = Math.min(handlerSafetyTimeoutMs, preferenceBudget + 2_000);
+      scannerWorkTimeoutMs = Math.max(10, Math.min(options.scannerWorkTimeoutMs ?? preferenceBudget,
+        preferenceBudget - setupElapsedMs, handlerSafetyTimeoutMs - 2_000));
+      artifactChainTimeoutMs = Math.max(10, Math.min(options.artifactChainTimeoutMs ?? preferenceBudget + 1_000,
+        preferenceBudget + 1_000 - setupElapsedMs, handlerSafetyTimeoutMs - 1_000));
+    }
     resultPublishTimeoutMs = Math.max(10, Math.min(
       options.resultPublishTimeoutMs ?? LOCAL_V2_DAG_LAMBDA_DEFAULT_RESULT_PUBLISH_TIMEOUT_MS,
       Math.max(10, handlerSafetyTimeoutMs - artifactChainTimeoutMs)
