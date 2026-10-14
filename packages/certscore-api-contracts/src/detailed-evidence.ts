@@ -41,6 +41,11 @@ export const publicCmpAuditSchema = z.object({
     supportingEvidence: z.object({
       prominence: z.object({ accept: consentControlMeasurementSchema, reject: consentControlMeasurementSchema, captureSkewMs: count }).strict().optional(),
       requests: z.array(z.object({ hostname: ref, path: ref.refine(value => !/[?#]/.test(value), "Request evidence must omit query and fragment values"), vendor: text, category: text, msAfterReject: count }).strict()).max(100).optional(),
+      inventory: z.object({
+        services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control"]) }).strict()).max(100).optional(),
+        declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) }).strict()).max(100).optional(),
+        cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
+      }).strict().optional(),
       cookieComparison: z.object({ declarationPatternCount: count, observedCookieNameCount: count, unmatchedNameCount: count,
         unmatchedNames: z.array(z.string().max(160)).max(100), allUnmatchedOnlyAfterAccept: z.boolean() }).strict().optional(),
     }).strict().optional(),

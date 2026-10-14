@@ -19,7 +19,7 @@ function fixture(): ShadowReportData {
     rows: CMP_AUDIT_CRITERIA.map(row => ({ ...row, status: "Not assessed", sourceIds: [] })) };
   Object.assign(report.cmpAudit.rows.find(row => row.id === "banner")!, { status: "Observed", detail: "Consent surface observed on the initial visit." });
   Object.assign(report.cmpAudit.rows.find(row => row.id === "found_not_declared")!, { status: "Review recommended", detail: "2 observed cookie names did not match 3 retained CMP declaration patterns.", sourceIds: ["cmp-cookie-proof"], deductionPoints: 15,
-    supportingEvidence: { cookieComparison: { declarationPatternCount: 3, observedCookieNameCount: 4, unmatchedNameCount: 2, unmatchedNames: ["cookie_a", "cookie_b"], allUnmatchedOnlyAfterAccept: true } } });
+    supportingEvidence: { inventory: { cookies: [{ name: "cookie_a", matchedPattern: null, observedIn: ["after_accept"] }, { name: "declared_123", matchedPattern: "declared_*", observedIn: ["before_choice", "after_accept"] }] }, cookieComparison: { declarationPatternCount: 3, observedCookieNameCount: 4, unmatchedNameCount: 2, unmatchedNames: ["cookie_a", "cookie_b"], allUnmatchedOnlyAfterAccept: true } } });
   const signals: CmsSignal[] = [{ evidenceRef: "site_integrity:dom:0", kind: "meta_generator", value: "WordPress 6.8.3", sourceUrl: "https://example.com/", artifactRef: "runtime:dom:1" }];
   report.cmsSecurity = { contractVersion: "certscore.cms-security-projection.v2", scanId: report.scan.id, verificationStatus: "verified", sourceHash: "a".repeat(64), documentUrl: "https://example.com/", documentToken: "private-document-token", capturedAt: "2026-10-07T00:00:00.000Z", evidenceRef: "runtime:dom:1", signals,
     assessment: assessCmsSignals(signals, "2026-10-07T00:00:00.000Z", undefined, "v2"), pluginInventory: assessCmsPluginSignals(signals) } satisfies CmsSecurityProjection;
@@ -36,6 +36,7 @@ test("report and focused exports retain the 13 CMP outcomes, comparisons and sha
   const raw = rebuilt.cmpAudit!.rows.find(row => row.id === "found_not_declared")!;
   assert.equal(raw.status, "Review recommended");
   assert.deepEqual(raw.supportingEvidence?.cookieComparison?.unmatchedNames, ["cookie_a", "cookie_b"]);
+  assert.deepEqual(raw.supportingEvidence?.inventory, report.cmpAudit!.rows.find(row => row.id === "found_not_declared")!.supportingEvidence!.inventory);
   const section = rebuilt.detailedEvidence!.sections[0]!;
   assert.equal(section.title, "CMP details");
   assert.equal(section.displayStatus, "Review");
@@ -153,4 +154,25 @@ test("California export is limited on missing, malformed or cross-scan evidence,
     assert.equal(exported.privacyAuditEvidence, undefined);
   }
   assert.deepEqual(report.findings, before);
+});
+
+test("CMP service and declaration tables survive shared evidence pagination without changing assessments", () => {
+  const report = fixture();
+  Object.assign(report.cmpAudit!.rows.find(row => row.id === "services")!, { status: "Observed", sourceIds: ["CmpPreferencesEvidencePacket.json"], supportingEvidence: { inventory: { services: [{ name: "Example Analytics", source: "cmp_api_inventory" }] } } });
+  Object.assign(report.cmpAudit!.rows.find(row => row.id === "cookie_information")!, { status: "Observed", sourceIds: ["CmpPreferencesEvidencePacket.json"], supportingEvidence: { inventory: { declarations: [{ name: "example_*", purpose: "Measurement", duration: "30 days", source: "cmp_api_inventory" }] } } });
+  const before = structuredClone(report);
+  const prepared = { ...report, ...buildDetailedEvidenceExport(report) };
+  const exported = buildReportDisplayExport(selectReportEvidenceSection(prepared, "cmp").report, { scanId: report.scan.id });
+  const page = buildReportEvidencePage({ scanId: report.scan.id, report: exported, section: "cmp" });
+  const rebuilt = reconstructReportEvidencePages([{ ...page, entries: page.entries.map(entry => ({ ...entry, value: entry.value })) }]);
+  for (const id of ["services", "cookie_information", "found_not_declared"]) {
+    const source = report.cmpAudit!.rows.find(row => row.id === id)!;
+    const row = rebuilt.cmpAudit!.rows.find(row => row.id === id)!;
+    assert.equal(row.status, source.status);
+    assert.deepEqual(row.supportingEvidence, source.supportingEvidence);
+  }
+  assert.deepEqual(report, before);
+  const unsafe = structuredClone(report);
+  (unsafe.cmpAudit!.rows.find(row => row.id === "services")!.supportingEvidence!.inventory!.services![0] as any).cookieValue = "private";
+  assert.throws(() => buildDetailedEvidenceExport(unsafe), /unrecognized_keys|Unrecognized key/);
 });

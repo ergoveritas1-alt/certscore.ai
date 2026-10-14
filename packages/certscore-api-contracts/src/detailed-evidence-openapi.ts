@@ -868,6 +868,114 @@ export const detailedEvidenceOpenApiSchemas = {
                   },
                   "maxItems": 100
                 },
+                "inventory": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [],
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "source"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "cmp_api_inventory",
+                              "labelled_control"
+                            ]
+                          }
+                        }
+                      },
+                      "maxItems": 100
+                    },
+                    "declarations": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "purpose",
+                          "duration",
+                          "source"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 160
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "duration": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "cmp_visible_inventory",
+                              "cmp_api_inventory"
+                            ]
+                          }
+                        }
+                      },
+                      "maxItems": 100
+                    },
+                    "cookies": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "name",
+                          "matchedPattern",
+                          "observedIn"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "maxLength": 160
+                          },
+                          "matchedPattern": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 160
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "observedIn": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "before_choice",
+                                "after_accept"
+                              ]
+                            },
+                            "maxItems": 2
+                          }
+                        }
+                      },
+                      "maxItems": 100
+                    }
+                  }
+                },
                 "cookieComparison": {
                   "type": "object",
                   "additionalProperties": false,

@@ -10,6 +10,7 @@ import { EvidenceJumpLink } from "./evidence-jump-link";
 import type { SharedEvidenceLink } from "./report-lab/detailed-evidence-layout";
 import { EvidenceSectionHeader } from "./evidence-section-header";
 import { EvidenceHeaderStatus, evidenceSectionRecap } from "./evidence-header-status";
+import { CmpInventoryTable, CmpCookieMatch } from "./cmp-inventory-table";
 import { VendorBrandChip } from "./vendor-brand-chip";
 
 const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
@@ -49,6 +50,8 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
               assessmentSourceHash: audit?.assessmentSourceHash ?? null,
               criterion: { id, label, status, detail, sourceIds, supportingEvidence } }}>
             {supportingEvidence ? <CmpSupportingEvidence evidence={supportingEvidence} /> : null}
+            {id === "services" && status === "Observed" && !supportingEvidence?.inventory?.services?.length ?
+              <p className="text-xs text-zinc-500">Service names were not saved in this report.</p> : null}
             {!sharedEvidence[id] && (id === "implementation" && rejectActionAvailable ?
               <EvidenceJumpLink targetId="post-reject-action-evidence" className="inline-block text-xs">View Reject action evidence ↓</EvidenceJumpLink> :
               id === "reject" && row.evidenceAnchor ? <EvidenceJumpLink targetId="consent-choice-controls" className="inline-block text-xs">View consent choices ↓</EvidenceJumpLink> :
@@ -63,8 +66,16 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
 }
 
 function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow["supportingEvidence"]> }) {
-  const comparison = evidence.prominence, cookies = evidence.cookieComparison;
+  const comparison = evidence.prominence, cookies = evidence.cookieComparison, inventory = evidence.inventory;
   return <div className="mt-2 space-y-3 rounded-md bg-zinc-50 p-3 text-xs leading-5 text-zinc-700">
+    {inventory?.services?.length ? <>
+      <CmpInventoryTable label={`CMP services · ${inventory.services.length}`} columns={["Service", "Identified from"]}
+        rows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])} />
+    </> : null}
+    {inventory?.declarations?.length ? <CmpInventoryTable label={`Cookie details · ${inventory.declarations.length}`}
+      columns={["Cookie name / pattern", "Purpose", "Storage duration"]}
+      rows={inventory.declarations.map(cookie => [<span className="font-mono text-[11px]">{cookie.name}</span>, cookie.purpose || "Not listed", disclosureText(cookie.duration) || "Not listed"])} /> : null}
+    {inventory?.cookies?.length && !cookies ? <CookieMatchTable entries={inventory.cookies} /> : null}
     {comparison ? <>
       <table className="w-full text-left">
         <caption className="mb-2 text-left font-semibold text-zinc-900">Accept / Reject comparison</caption>
@@ -86,11 +97,28 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       <p>These requests were recorded during the post-Reject check. The data sent by them was not assessed.</p>
     </> : null}
     {cookies ? <>
-      <p className="font-semibold text-zinc-900">Unmatched cookie names · {cookies.unmatchedNameCount}</p>
+      {!inventory?.cookies?.length ? <p className="font-semibold text-zinc-900">Unmatched cookie names · {cookies.unmatchedNameCount}</p> : null}
       <p>{cookies.observedCookieNameCount} cookie names checked against {cookies.declarationPatternCount} CMP patterns, including wildcards.</p>
-      <ul className="flex flex-wrap gap-2" aria-label="Unmatched cookie names">{cookies.unmatchedNames.map(name => <li key={name} className="max-w-full break-all rounded bg-white px-2 py-1 font-mono text-[11px]">{name}</li>)}</ul>
-      {cookies.unmatchedNames.length < cookies.unmatchedNameCount ? <p>Showing {cookies.unmatchedNames.length} of {cookies.unmatchedNameCount} unmatched names.</p> : null}
-      <p>{cookies.allUnmatchedOnlyAfterAccept ? "These cookies were found after Accept and were not seen before consent. " : "Cookies found during the scan were compared with the CMP list. "}Names alone do not show each cookie’s purpose or consent requirements.</p>
+      {inventory?.cookies?.length ? <CookieMatchTable entries={inventory.cookies} /> :
+        <CmpInventoryTable label="Unmatched cookie names" columns={["Cookie name", "CMP match"]}
+          rows={cookies.unmatchedNames.map(name => [<span className="font-mono text-[11px]">{name}</span>, <CmpCookieMatch matched={false} />])} />}
+      {inventory?.cookies?.length && inventory.cookies.length < cookies.observedCookieNameCount ? <p>Showing {inventory.cookies.length} of {cookies.observedCookieNameCount} compared cookie names.</p> : null}
+      {!inventory?.cookies?.length ? <p>Only unmatched names were saved in this report; matched-cookie rows are unavailable.</p> : null}
+      {!inventory?.cookies?.length && cookies.unmatchedNames.length < cookies.unmatchedNameCount ? <p>Showing {cookies.unmatchedNames.length} of {cookies.unmatchedNameCount} unmatched names.</p> : null}
+      <p>{cookies.allUnmatchedOnlyAfterAccept ? "The unmatched cookies were found after Accept and were not seen before consent. " : "Cookies found during the scan were compared with the CMP list. "}Names alone do not show each cookie’s purpose or consent requirements.</p>
     </> : null}
   </div>;
+}
+
+function CookieMatchTable({ entries }: { entries: NonNullable<NonNullable<NonNullable<CmpAuditRow["supportingEvidence"]>["inventory"]>["cookies"]> }) {
+  // Match results come from the canonical assessment; the component never runs
+  // a second matcher or infers a purpose from a name.
+  return <CmpInventoryTable label={`Cookie matches · ${entries.length}`} columns={["Cookie name", "CMP match", "CMP pattern", "Observed"]}
+    rows={entries.map(cookie => [<span className="font-mono text-[11px]">{cookie.name}</span>, <CmpCookieMatch matched={cookie.matchedPattern !== null} />,
+      <span className="font-mono text-[11px]">{cookie.matchedPattern ?? "—"}</span>,
+      cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])} />;
+}
+
+function disclosureText(value: string) {
+  return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }

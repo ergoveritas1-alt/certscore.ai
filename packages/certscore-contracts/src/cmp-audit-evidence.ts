@@ -29,6 +29,13 @@ export const cmpPreferenceDispatchSchema = z.object({
 });
 export type CmpPreferenceDispatch = z.infer<typeof cmpPreferenceDispatchSchema>;
 
+/** Bounded, display-safe facts; never cookie values or a control test verdict. */
+export const cmpInventoryTablesSchema = z.object({
+  services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control"]) }).strict()).max(100).optional(),
+  declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) }).strict()).max(100).optional(),
+  cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2) }).strict()).max(100).optional(),
+}).strict();
+
 export const cmpPreferencesEvidenceSchema = z.object({
   contractVersion: z.literal("certscore.cmp-preferences-evidence.v1"),
   policyVersion: z.literal(CMP_PREFERENCE_POLICY_VERSION),
@@ -47,6 +54,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   privacyLinks: z.array(z.object({ url: z.string().url().max(2000), hitTargetBeforeAction: z.boolean() })).max(16),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) })).max(100),
   declarationInventoryComplete: z.boolean(),
+  serviceNames: z.array(z.string().min(1).max(240)).max(100).optional(),
   limitations: z.array(z.string().max(120)).max(24),
   // Completed, document-bound sub-observations survive unrelated later timeouts.
   // Optional for historical v1 packets; absence must not upgrade old limited captures.
@@ -82,6 +90,7 @@ export const cmpAuditRowSchema = z.object({
     status: z.enum(["observed", "not_observed", "review", "not_assessed", "partially_assessed", "feature_not_supported"]),
     detail: z.string().max(500),
     evidenceRefs: z.array(z.string().max(240)).max(12),
+    inventory: cmpInventoryTablesSchema.optional(),
     cookieComparison: z.object({
       declarationPatternCount: z.number().int().nonnegative(),
       observedCookieNameCount: z.number().int().nonnegative(),
@@ -94,6 +103,11 @@ export const cmpAuditRowSchema = z.object({
     capabilityProof: z.object({ provider: z.string().min(1).max(120), productVersion: z.string().min(1).max(120), sourceUrl: z.string().url(), sourceSha256: z.string().regex(/^[a-f0-9]{64}$/) }).optional(),
 
 }).superRefine((row, ctx) => {
+  const inventory = row.inventory;
+  if (inventory && ((inventory.services && row.id !== "services") || (inventory.declarations && row.id !== "cookie_information") ||
+    (inventory.cookies && row.id !== "found_not_declared") || row.status === "not_assessed" || row.evidenceRefs.length === 0)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Inventory tables require the corresponding assessed criterion and retained evidence." });
+  }
   const c = row.cookieComparison;
   if (c && (row.id !== "found_not_declared" || row.status !== "review" || c.unmatchedNameCount < 1 ||
     c.unmatchedNameCount > c.observedCookieNameCount || c.unmatchedNames.length < 1 || c.unmatchedNames.length > c.unmatchedNameCount || c.unmatchedNames.join("").length > 500 ||

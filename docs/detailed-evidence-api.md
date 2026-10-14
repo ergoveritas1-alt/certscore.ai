@@ -24,3 +24,27 @@ pnpm exec tsx scripts/sync-detailed-evidence-contract.ts --check
 ```
 
 The October 14 follow-up is live from `94399fef7c45f348ef27da535198f783670f61f2`, with SDK 0.2.17 and MCP 0.2.28. It adds California privacy-choice evidence to shared/full and focused policy exports, preserves typed MCP proof during compaction, and simplifies legacy display summaries without changing assessments. See [follow-up production verification](certscore-v2/releases/2026-10-14-detailed-evidence-fixes-production-verification.md).
+
+### CMP inventory tables
+
+`cmpAudit.rows[].supportingEvidence.inventory` optionally carries bounded,
+value-free table evidence:
+
+- `services`: service `name` and `source` (`cmp_api_inventory` or `labelled_control`).
+- `declarations`: cookie/pattern `name`, `purpose`, `duration`, and declaration `source`.
+- `cookies`: observed `name`, `matchedPattern` (null means no match), and
+  `observedIn` (`before_choice`, `after_accept`, or both).
+
+Each list is capped at 100 entries. Match results use the canonical deterministic
+wildcard comparison; a match indicates declaration coverage, not correct consent
+handling. Before-choice and confirmed-Accept observations remain distinct.
+Names, purposes and durations are retained text; missing fields remain empty in
+JSON and display as “Not listed.” Cookie values, document tokens and unrelated
+runtime diagnostics are excluded.
+
+These optional fields flow through the persisted CMP assessment, normalized
+concern policy, and shared report projection. API report-evidence pages, SDK
+reconstruction and MCP evidence pages carry the same fields. Missing historical
+lists are not reconstructed from counts. Existing assessments and source hashes
+remain unchanged on read; older retained bundles require an explicit verified
+materialization to add supplemental table evidence.

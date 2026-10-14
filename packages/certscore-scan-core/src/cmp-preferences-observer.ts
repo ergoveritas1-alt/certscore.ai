@@ -73,7 +73,7 @@ export async function runCmpPreferencesObserver(input: {
     session.on("Page.frameNavigated", ({ frame }) => {
       if (!frame.parentId && frame.loaderId !== packet.documentToken) {
         packet.checkpoints = undefined; packet.controls = []; packet.privacyLinks = [];
-        packet.declarations = []; packet.declarationInventoryComplete = false;
+        packet.declarations = []; packet.serviceNames = undefined; packet.declarationInventoryComplete = false;
         packet.controlInventoryComplete = false; packet.action.opened = false;
         packet.documentToken = null; packet.limitations.push("preference_document_changed");
       }
@@ -173,6 +173,7 @@ export async function runCmpPreferencesObserver(input: {
       packet.controls = classifyControls(raw.controls, borlabs);
       await binding();
       packet.declarations = borlabs.declarations;
+      packet.serviceNames = borlabs.services.filter(Boolean);
       packet.declarationCoverage = borlabs.coverage;
       packet.declarationInventoryComplete = borlabs.coverage.configured > 0 && !borlabs.coverage.unresolved && !borlabs.coverage.truncated;
       packet.checkpoints!.declarations = true;

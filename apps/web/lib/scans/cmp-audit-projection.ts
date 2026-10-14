@@ -38,6 +38,7 @@ export type CmpAuditRow = {
   supportingEvidence?: {
     prominence?: Pick<ConsentControlVisualComparison, "accept" | "reject" | "captureSkewMs">;
     requests?: Array<{ hostname: string; path: string; vendor: string; category: string; msAfterReject: number }>;
+    inventory?: CmpAuditAssessment["rows"][number]["inventory"];
     cookieComparison?: NonNullable<CmpAuditAssessment["rows"][number]["cookieComparison"]>;
   };
 };
@@ -182,7 +183,7 @@ export function projectCmpAudit(input: {
     // Preserve the more specific canonical failure reason when neither path is usable.
     if (row.id === "implementation" && row.status === "not_assessed" && rejectCoverage?.assessmentStatus === "coverage_limitation") continue;
     if (concern) set(row.id, { status: labels[row.status], detail: row.detail || undefined, sourceIds: row.evidenceRefs,
-      ...(row.cookieComparison ? { supportingEvidence: { cookieComparison: row.cookieComparison } } : {}) });
+      ...((row.cookieComparison || row.inventory) ? { supportingEvidence: { ...(row.cookieComparison ? { cookieComparison: row.cookieComparison } : {}), ...(row.inventory ? { inventory: row.inventory } : {}) } } : {}) });
   }
 
   // Attribute only an already-applied, exactly attributable family amount.

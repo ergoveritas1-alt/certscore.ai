@@ -55,6 +55,15 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
     serviceCoverage.unresolved === 0 && !serviceCoverage.truncated) {
     set("services", "observed", `The CMP configuration identifies ${serviceCoverage.resolved} individual ${serviceCoverage.resolved === 1 ? "service" : "services"}. Separate service controls were not assessed.`);
   }
+  // Supplemental evidence follows the same document/checkpoint eligibility as
+  // the assessment. Historical counts never manufacture missing service names.
+  if (rows.find(row => row.id === "services")!.status === "observed") {
+    const names = declarationsUsable && checkpoint?.declarations ? evidence.serviceNames : undefined;
+    const labelled = controlsUsable ? [...new Set(evidence.controls.filter(control => control.kind === "service" && control.label.trim()).map(control => control.label.trim()))] : [];
+    const services = names?.length ? names.map(name => ({ name, source: "cmp_api_inventory" as const }))
+      : labelled.map(name => ({ name, source: "labelled_control" as const }));
+    if (services.length) rows.find(row => row.id === "services")!.inventory = { services };
+  }
   if (privacyUsable) {
     const reachable = evidence.privacyLinks.some(link => link.hitTargetBeforeAction);
     set("privacy_access", reachable ? "observed" : "not_assessed", reachable
@@ -63,6 +72,9 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
   }
   if (declarationsUsable) {
     if (evidence.declarations.some(row => row.purpose && row.duration)) set("cookie_information", "observed", `Cookie names, purposes and duration text were retained for ${evidence.declarations.filter(row => row.purpose && row.duration).length} CMP inventory entries.`, ["CmpPreferencesEvidencePacket.json"]);
+  }
+  if (declarationsUsable && rows.find(row => row.id === "cookie_information")!.status === "observed") {
+    rows.find(row => row.id === "cookie_information")!.inventory = { declarations: evidence.declarations };
   }
   const accept = bundle.postAcceptEvidence;
   const reject = bundle.postRefusalEvidence;
@@ -82,9 +94,19 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
       const matched = patterns.filter(pattern => [...before].some(name => matchesCookieDeclaration(pattern, name)));
       set("declared_not_found", "observed", `${matched.length} of ${patterns.length} retained CMP cookie declaration patterns matched the pre-consent cookie capture; ${patterns.length - matched.length} were not observed in that window. Unobserved cookies may require consent or another page; this is not a declaration defect.`, ["CmpPreferencesEvidencePacket.json", "CanonicalEvidenceBundle.json"]);
     }
-    const missing = [...captured].filter(name => !evidence.declarations.some(row => matchesCookieDeclaration(row.name, name)));
+    // Reuse the existing comparison work for table evidence; do not run a
+    // second matcher just to decorate the report.
+    const cookieMatches = [...captured].map(name => ({ name,
+      matchedPattern: evidence.declarations.find(row => matchesCookieDeclaration(row.name, name))?.name ?? null }));
+    const missing = cookieMatches.filter(row => row.matchedPattern === null).map(row => row.name);
     if (evidence.declarationInventoryComplete && comparable && captured.size > 0) {
       set("found_not_declared", missing.length ? "review" : "not_observed", missing.length ? `${missing.length} observed cookie names did not match the retained CMP declaration patterns.` : "No unmatched cookie names in the complete configured-service declarations and bounded runtime capture. Service/network coverage is not implied.", ["CmpPreferencesEvidencePacket.json", "CanonicalEvidenceBundle.json"]);
+      const baselineNames = new Set((bundle.cookieEvents ?? []).map(cookie => cookie.cookieName));
+      const acceptedNames = new Set((accepted && accept ? accept.storage.postAction : []).filter(item => item.storageType === "cookie").map(item => item.name));
+      rows.find(row => row.id === "found_not_declared")!.inventory = { cookies: cookieMatches.slice(0, 100).map(({ name, matchedPattern }) => ({
+        name, matchedPattern,
+        observedIn: [...(baselineNames.has(name) ? ["before_choice" as const] : []), ...(acceptedNames.has(name) ? ["after_accept" as const] : [])],
+      })) };
       if (missing.length) {
         const row = rows.find(row => row.id === "found_not_declared")!;
         const baseline = new Set((bundle.cookieEvents ?? []).map(cookie => cookie.cookieName));
@@ -97,7 +119,7 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
     }
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v4", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", cookieComparisonPolicy: "cookie_name_comparison_details.v1", evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v4", cookieComparisonPolicy: "cookie_name_comparison_details.v1", inventoryEvidencePolicy: "cmp_inventory_tables.v1", evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 

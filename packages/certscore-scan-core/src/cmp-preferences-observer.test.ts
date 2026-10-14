@@ -94,6 +94,7 @@ test("Borlabs delayed entrance opens once without ARIA controls; choices and API
         assert.equal(packet.controlInventoryComplete, false);
         assert.deepEqual(packet.declarations, [{ name: "_ga", purpose: "Audience measurement", duration: "2 years", source: "cmp_api_inventory" }]);
         assert.equal(packet.declarationInventoryComplete, true);
+        assert.deepEqual(packet.serviceNames, ["Google Analytics"]);
         assert.deepEqual(packet.declarationCoverage, { scope: "configured_services", configured: 1, resolved: 1, unresolved: 0, truncated: false });
       } else if (mode === "no-transition") {
         assert.equal(clicks, 1); assert.equal(packet.action.opened, false);
@@ -105,6 +106,7 @@ test("Borlabs delayed entrance opens once without ARIA controls; choices and API
       } else if (mode === "navigation") {
         assert.equal(packet.checkpoints, undefined);
         assert.equal(packet.declarations.length, 0);
+        assert.equal(packet.serviceNames, undefined);
         assert.equal(packet.controls.length, 0);
         assert.equal(packet.declarationInventoryComplete, false);
       } else { assert.equal(clicks, 0); assert.equal(packet.action.count, 0); }

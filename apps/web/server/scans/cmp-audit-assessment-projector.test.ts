@@ -326,3 +326,40 @@ test("cookie omission review matches exact names and globs without claiming miss
   assert.equal(bounded.cookieComparison?.unmatchedNames.length, 3);
   assert.equal(bounded.cookieComparison?.unmatchedNameCount, 100);
 });
+
+test("inventory tables preserve canonical names, wildcard matches and capture scope through policy", () => {
+  const input = bundle(), packet = input.cmpPreferencesEvidence!;
+  packet.checkpoints = { version: "cmp_partial_capture.v1", documentToken: "loader-1", privacyLinks: true, declarations: true, controls: true, controlsSurface: "preferences" };
+  packet.serviceNames = ["Google Analytics", "Consent preferences"];
+  packet.declarationCoverage = { scope: "configured_services", configured: 2, resolved: 2, unresolved: 0, truncated: false };
+  packet.declarations = [
+    { name: "_ga_*", purpose: "Audience measurement", duration: "2 years", source: "cmp_api_inventory" },
+    { name: "consent", purpose: "Preferences", duration: "60 days", source: "cmp_api_inventory" },
+  ];
+  packet.declarationInventoryComplete = true;
+  input.cookieEvents = [{ cookieName: "_ga_123" }, { cookieName: "unexpected" }] as any;
+  const before = structuredClone(input);
+  const audit = deriveCmpAuditAssessment(input)!;
+  assert.deepEqual(input, before, "retained source is never rewritten");
+  assert.deepEqual(audit.rows.find(row => row.id === "services")!.inventory!.services!.map(row => row.name), packet.serviceNames);
+  assert.deepEqual(audit.rows.find(row => row.id === "cookie_information")!.inventory!.declarations, packet.declarations);
+  const comparison = audit.rows.find(row => row.id === "found_not_declared")!;
+  assert.equal(comparison.status, "review");
+  assert.deepEqual(comparison.inventory!.cookies, [
+    { name: "_ga_123", matchedPattern: "_ga_*", observedIn: ["before_choice"] },
+    { name: "unexpected", matchedPattern: null, observedIn: ["before_choice"] },
+  ]);
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const projected = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  assert.deepEqual(projected.rows.find(row => row.id === "found_not_declared")!.supportingEvidence!.inventory, comparison.inventory);
+  assert.ok(concerns.filter(row => row.originKey.startsWith("consent.cmp_audit.")).every(row => !row.scoreEffects?.length));
+  assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment }).rows.find(row => row.id === "services")!.supportingEvidence, undefined);
+  const corrupted = structuredClone(concerns);
+  const raw = corrupted.find(row => row.originKey === "consent.cmp_audit.services")!.evidenceBundle.rawEvidence as any;
+  raw.cmpAuditRow.inventory.services[0].name = "Wrong retained name";
+  assert.equal(projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: corrupted }).rows.find(row => row.id === "services")!.supportingEvidence, undefined);
+  packet.status = "limited"; packet.checkpoints!.declarations = false; packet.checkpoints!.controls = false;
+  const limited = deriveCmpAuditAssessment(input);
+  assert.ok(!limited || limited.rows.every(row => !row.inventory), "unverified sub-observations cannot populate tables");
+});
