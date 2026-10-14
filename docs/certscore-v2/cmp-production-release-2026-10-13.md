@@ -43,3 +43,19 @@ Borlabs UI, ambiguous controls, partial captures, diagnostics bounds, paired
 prominence proof, score-neutral canonical projection, and coordinator checksum,
 target binding, hanging worker and no-tail publication cases. Deployment timings,
 exact revisions and fresh scan results are recorded in the release artifacts.
+
+## Fresh production verification follow-up
+
+Scan `a68a5b3b-df92-429a-bbef-975aa2fdddf0` retained a completed Options
+inspection: 11.103 seconds in the observer and 13.905 seconds including dispatch,
+finishing 3.945 seconds before the passive barrier. It captured three selectable
+categories, all 11 configured services, and 36 cookie declarations. The scanner
+packet is bound to release `f40383de9b8bd4430f529ad2b79eab5ad95ad3e6`.
+
+Verification exposed an omitted WC01 materiality-policy dependency in the first
+release. The follow-up includes the previously approved materiality evaluator
+and its normalized-concern/policy integration. It retains the same evidence,
+keeps styling-only comparisons score-neutral, and does not change the scanner.
+The retained SITS dimensions (Accept 528×45, Reject 528×49) remain below the
+material review threshold. Canonical report reprojection is scoped to this one
+fresh scan, with no new site visit or model work.

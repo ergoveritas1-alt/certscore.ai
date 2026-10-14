@@ -1,3 +1,4 @@
+import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { readAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
 import { describeAccessibilityEvidence, getAccessibilityFindingIdForRuleCode } from "./accessibility-evidence";
@@ -872,7 +873,8 @@ function extractEvidenceFromRaw(rawEvidence: Record<string, unknown> | null | un
 
   const counts: Record<string, number> = {};
   const entities: Record<string, string[]> = {};
-  if (hasTypedConsentVisualProminence(rawEvidence.consentVisualProminence)) {
+  if (hasTypedConsentVisualProminence(rawEvidence.consentVisualProminence) &&
+    (rawEvidence.consentProminenceMateriality as { outcome?: string } | undefined)?.outcome !== "styling_only") {
     addEntity(entities, "consentVisualProminence", [JSON.stringify(rawEvidence.consentVisualProminence)]);
   }
   const flags = new Set<string>();
@@ -3565,18 +3567,21 @@ function buildConsentVisualProminenceConcerns(runtimeArtifacts: Record<string, u
   const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
   const projection = projectConsentVisualProminence(assessment);
   if (!projection || !hasTypedConsentVisualProminence(projection)) return [];
+  const materiality = assessConsentProminenceMateriality(projection)!;
   const comparison = projection.comparison;
   const refs = ["scan_runtime_artifacts.consent_control_assessment", "ConsentControlGeometryEvidence.json",
     `sha256:${comparison.screenshotSha256}`];
   return [buildConcernFromSharedInput({
     consentControlAssessment: assessment,
     categoryId: "privacy", domainContext,
-    description: "The retained first-layer visual comparison shows materially stronger fill contrast or surrounding emphasis on Accept than Reject.",
+    description: materiality.outcome === "material"
+      ? "The retained comparison shows stronger styling on Accept together with substantially less button area for Reject."
+      : "Visual styling difference observed. No additional material disadvantage for Reject was established by the retained comparison.",
     evidence: refs, observedValue: "accept_more_prominent", originKey: "consent.visual_prominence.observed",
     originType: "runtime_artifact", severity: "medium", signalKey: "privacy.dark_pattern_accept_button_prominence",
     signalLabel: "Accept action more prominent than reject", signalSource: "runtime_artifact_signal", sourceType: "signal",
     title: "Accept action more prominent than reject",
-    rawEvidence: { unifiedFindingId: "accept_more_prominent_than_reject", consentVisualProminence: projection, runtimeEvidenceArtifacts: refs,
+    rawEvidence: { unifiedFindingId: "accept_more_prominent_than_reject", consentVisualProminence: projection, consentProminenceMateriality: materiality, runtimeEvidenceArtifacts: refs,
       pageUrl: assessment!.document.canonicalDocumentId },
   })];
 }

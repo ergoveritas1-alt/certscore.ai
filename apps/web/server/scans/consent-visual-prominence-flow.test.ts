@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import test from "node:test";
 import { consentControlAssessmentSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
-import { consentVisualFixture, visualFixtureStartMs } from "../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison";
+import { consentVisualFixture, separatedConsentVisualFixture, visualFixtureStartMs } from "../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison";
 import { measureConsentControlVisualComparison, retainPairedConsentVisualCapture } from "../../../../packages/certscore-scan-core/src/consent-control-visual-comparison";
 import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
 import { withPersistedFirstLayerConsentEvidence } from "./scan-report-consent-projection";
@@ -9,8 +10,8 @@ import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildUnifiedFindingPackets, buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 
-async function source(style: Parameters<typeof consentVisualFixture>[0] = "filled") {
-  const fixture = await consentVisualFixture(style);
+async function source(style: Parameters<typeof consentVisualFixture>[0] = "filled", stacked = false, separated?: "streamable" | "witt" | "qobuz") {
+  const fixture = separated ? await separatedConsentVisualFixture(separated) : await consentVisualFixture(style, stacked);
   fixture.geometry.visualComparison = await measureConsentControlVisualComparison(fixture);
   const { geometry } = fixture;
   const bundle = { scanId: "visual-fixture", schemaVersion: "2.0", url: geometry.pageUrl, normalizedUrl: geometry.pageUrl,
@@ -41,14 +42,19 @@ function project(assessment: ReturnType<typeof assess>) {
 }
 
 test("typed visual evidence -> assessment -> persistence -> concern policy -> unified report finding", async () => {
-  for (const style of ["filled", "outline", "equal", "reject_filled"] as const) {
-    const input = await source(style), assessment = assess(input);
+  for (const stacked of [false, true]) for (const style of ["filled", "outline", "equal", "reject_filled"] as const) {
+    const input = await source(style, stacked), assessment = assess(input);
     assert.ok(assessment.visualComparison);
     assert.equal(assessment.controls.reject.state, "observed");
     assert.deepEqual(consentControlAssessmentSchema.parse(assessment), assessment);
     const projection = project(assessment);
     const concern = projection.concerns.find(c => c.originKey === "consent.visual_prominence.observed");
-    const expected = style === "filled" || style === "outline";
+    const styling = style === "filled" || style === "outline";
+    const expected = false;
+    assert.equal(concern?.promotionEligibility === "internal_only", styling);
+    const cmp = projectCmpAudit({ scanId: assessment.scan.scanId, consentControlAssessment: assessment, normalizedConcerns: projection.concerns, unifiedFindings: projection.display });
+    assert.equal(cmp.rows.find(r => r.id === "prominence")?.status, styling ? "Observed" : "Not assessed");
+    if (styling) assert.deepEqual(cmp.rows.find(r => r.id === "prominence")?.supportingEvidence?.prominence?.accept, assessment.visualComparison!.accept);
     assert.equal(concern?.promotionEligibility === "eligible", expected);
     const finding = projection.display.find(f => f.unifiedFindingId === "accept_more_prominent_than_reject");
     assert.equal(finding?.presentationDecision.status === "surface", expected);
@@ -81,7 +87,8 @@ test("an intact early capture survives a later withheld image through the canoni
   const assessment = assess({ ...input, geometry: retained });
   assert.deepEqual(assessment.visualComparison, input.geometry.visualComparison);
   assert.equal(assessment.visualEvidence?.status, "available");
-  assert.equal(project(assessment).display.find(row => row.unifiedFindingId === "accept_more_prominent_than_reject")?.presentationDecision.status, "surface");
+  assert.notEqual(project(assessment).display.find(row => row.unifiedFindingId === "accept_more_prominent_than_reject")?.presentationDecision.status, "surface");
+  assert.equal(project(assessment).concerns.find(c => c.originKey === "consent.visual_prominence.observed")?.promotionEligibility, "internal_only");
   assert.equal(input.bundle.screenshots[1]!.displayStatus, "withheld");
 });
 
@@ -107,11 +114,47 @@ test("concern policy rejects a detached visual projection and adds no new score 
   const assessment = assess(await source());
   const concern = project(assessment).concerns.find(c => c.originKey === "consent.visual_prominence.observed")!;
   const valid = { concern, consentControlAssessment: assessment, rawEvidence: concern.evidenceBundle.rawEvidence, evidenceStrengthFlags: concern.evidenceStrengthFlags };
-  assert.equal(deriveConcernPolicy(valid).promotionEligibility, "eligible");
+  assert.equal(deriveConcernPolicy(valid).promotionEligibility, "internal_only");
   assert.deepEqual(deriveConcernPolicy(valid).scoreEffects, []);
+  const forged = structuredClone(valid.rawEvidence)!;
+  (forged.consentProminenceMateriality as { outcome: string }).outcome = "material";
+  assert.equal(deriveConcernPolicy({ ...valid, rawEvidence: forged }).promotionEligibility, "blocked");
   assert.equal(deriveConcernPolicy({ ...valid, consentControlAssessment: undefined }).promotionEligibility, "blocked");
   const altered = structuredClone(valid.rawEvidence)!;
   const projection = altered.consentVisualProminence as { assessmentSourceHash: string };
   projection.assessmentSourceHash = "fnv1a-00000000";
   assert.equal(deriveConcernPolicy({ ...valid, rawEvidence: altered }).promotionEligibility, "blocked");
+});
+
+test("styling plus substantially smaller Reject still surfaces through canonical policy", async () => {
+  const input = await source();
+  const reject = input.geometry.candidates[1]!;
+  reject.boundingBox.width = 80;
+  reject.boundingBox.right = reject.boundingBox.x + 80;
+  // Re-measure the retained fixture image against the changed geometry.
+  const fixture = await consentVisualFixture();
+  input.geometry.visualComparison = await measureConsentControlVisualComparison({ ...fixture, geometry: input.geometry });
+  const assessment = assess(input), projection = project(assessment);
+  assert.equal(projection.concerns.find(c => c.originKey === "consent.visual_prominence.observed")?.promotionEligibility, "eligible");
+  assert.equal(projection.display.find(f => f.unifiedFindingId === "accept_more_prominent_than_reject")?.presentationDecision.status,"surface");
+  assert.ok(projectExecutiveFindingsFromUnifiedPackets(projection.display).topFindings.some(f => f.id === "asymmetric_consent_ui"));
+});
+
+
+test("separated layout fixtures preserve canonical materiality and fail-closed evidence boundaries", async () => {
+  for (const layout of ["streamable", "witt", "qobuz"] as const) {
+    const input = await source("filled", false, layout);
+    assert.ok(input.geometry.visualComparison, layout);
+    const assessment = assess(input), projection = project(assessment);
+    assert.ok(assessment.visualComparison, layout);
+    const material = layout !== "qobuz";
+    assert.equal(projection.concerns.find(c => c.originKey === "consent.visual_prominence.observed")?.promotionEligibility,
+      material ? "eligible" : "internal_only", layout);
+    const cmp = projectCmpAudit({ scanId: assessment.scan.scanId, consentControlAssessment: assessment,
+      normalizedConcerns: projection.concerns, unifiedFindings: projection.display });
+    assert.equal(cmp.rows.find(r => r.id === "prominence")?.status, material ? "Review recommended" : "Observed", layout);
+    assert.deepEqual(cmp.rows.find(r => r.id === "prominence")?.supportingEvidence?.prominence?.reject, assessment.visualComparison!.reject);
+    input.bundle.screenshots[0]!.documentIdentity!.token = "mismatched";
+    assert.equal(assess(input).visualComparison, undefined, "separation never relaxes document proof");
+  }
 });

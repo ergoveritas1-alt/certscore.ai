@@ -1,3 +1,4 @@
+import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { cmpAuditRowsEqual } from "@certscore/contracts";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@certscore/contracts";
@@ -2636,9 +2637,17 @@ export function deriveConcernPolicy(input: {
   }
   if (input.concern.originKey === "consent.visual_prominence.observed") {
     const expected = projectConsentVisualProminence(input.consentControlAssessment);
+    const materiality = assessConsentProminenceMateriality(expected);
     const eligible = suggestedUnifiedFindingId === "accept_more_prominent_than_reject" &&
       input.concern.originType === "runtime_artifact" && expected && hasTypedConsentVisualProminence(expected) &&
-      JSON.stringify(expected) === JSON.stringify(input.rawEvidence?.consentVisualProminence);
+      JSON.stringify(expected) === JSON.stringify(input.rawEvidence?.consentVisualProminence) &&
+      materiality?.policyVersion === (input.rawEvidence?.consentProminenceMateriality as typeof materiality)?.policyVersion &&
+      materiality?.outcome === (input.rawEvidence?.consentProminenceMateriality as typeof materiality)?.outcome &&
+      materiality?.reason === (input.rawEvidence?.consentProminenceMateriality as typeof materiality)?.reason;
+    if (eligible && materiality?.outcome === "styling_only") {
+      return { allowedNarrativeTier: "weak", externalSurfacingEligibility: "eligible", promotionEligibility: "internal_only",
+        regulatoryChecklistEligibility: "none", negativeEvidenceFlags: [], scoreEffects: [] };
+    }
     return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
       promotionEligibility: eligible ? "eligible" : "blocked", regulatoryChecklistEligibility: eligible ? "review_signal" : "none",
       negativeEvidenceFlags: eligible ? [] : ["canonical_consent_control_evidence_insufficient"], scoreEffects: [] };
