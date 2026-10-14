@@ -2,10 +2,11 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ConsentBannerPreview, ConsentRejectPreview } from "../../lib/scans/visual-evidence";
+import type { ConsentBannerPreview, ConsentRejectPreview, ConsentProminencePreview } from "../../lib/scans/visual-evidence";
 
-export function ConsentBannerViewer({ preview }: { preview: ConsentBannerPreview | ConsentRejectPreview }) {
-  const subject = preview.crop.version === "consent_control_crop.v1" ? "Reject option" : "cookie banner";
+export function ConsentBannerViewer({ preview }: { preview: ConsentBannerPreview | ConsentRejectPreview | ConsentProminencePreview }) {
+  const subject = preview.crop.version === "consent_prominence_crop.v1" ? "Accept / Reject comparison" :
+    preview.crop.version === "consent_control_crop.v1" ? "Reject option" : "cookie banner";
   const [open, setOpen] = useState(false);
   const [failed, setFailed] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);

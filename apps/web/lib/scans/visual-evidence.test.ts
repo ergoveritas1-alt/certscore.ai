@@ -87,6 +87,18 @@ test("Reject crop metadata rejects other controls, overflow and unavailable imag
   }
 });
 
+test("paired crop metadata requires an available image and an in-bounds versioned rectangle", () => {
+  const prominenceCrop = { version: "consent_prominence_crop.v1", x: 407, y: 426.75, width: 552, height: 191,
+    imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) };
+  const artifact = { id: "paired", key: "scans/banner.png", status: "available", prominenceCrop };
+  assert.deepEqual(normalizeVisualEvidenceArtifact(artifact)?.prominenceCrop, prominenceCrop);
+  for (const row of [{ ...artifact, status: "withheld" }, { ...artifact, key: null },
+    { ...artifact, prominenceCrop: { ...prominenceCrop, version: "unknown" } },
+    { ...artifact, prominenceCrop: { ...prominenceCrop, height: 2000 } }, { ...artifact, prominenceCrop: undefined }]) {
+    assert.equal(normalizeVisualEvidenceArtifact(row)?.prominenceCrop, undefined);
+  }
+});
+
 test("homepage screenshot state distinguishes withheld images and preserves historical scans", () => {
   assert.deepEqual(getHomepageScreenshotState({
     homepage_screenshot: {

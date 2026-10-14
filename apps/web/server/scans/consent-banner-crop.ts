@@ -1,6 +1,7 @@
 import { consentControlAssessmentSchema, consentControlVisualComparisonSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { z } from "zod";
-import { consentBannerCropSchema, consentRejectCropSchema, type ConsentRejectCrop, type ConsentBannerCrop } from "../../lib/scans/visual-evidence";
+import { consentBannerCropSchema, consentRejectCropSchema, consentProminenceCropSchema,
+  type ConsentRejectCrop, type ConsentBannerCrop, type ConsentProminenceCrop } from "../../lib/scans/visual-evidence";
 
 const boxSchema = z.object({ x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(),
   width: z.number().finite().positive(), height: z.number().finite().positive() });
@@ -36,9 +37,8 @@ function verifiedConsentVisualSource(input: ConsentCropInput) {
   return { geometry: g, visual };
 }
 
-export function deriveConsentBannerCrop(input: ConsentCropInput): ConsentBannerCrop | null {
-  const source = verifiedConsentVisualSource(input);
-  if (!source) return null;
+type VerifiedVisualSource = NonNullable<ReturnType<typeof verifiedConsentVisualSource>>;
+function bannerCropFromSource(source: VerifiedVisualSource): ConsentBannerCrop | null {
   const { geometry: g, visual } = source;
   const accept = g.candidates.find(c => c.candidateId === visual.accept.candidateId);
   const reject = g.candidates.find(c => c.candidateId === visual.reject.candidateId);
@@ -64,9 +64,7 @@ export function deriveConsentBannerCrop(input: ConsentCropInput): ConsentBannerC
 
 /** The assessed first-layer Reject rectangle, with 12px of surrounding context.
  * This remains a view of retained pixels, not a new visibility assessment. */
-export function deriveConsentRejectCrop(input: ConsentCropInput): ConsentRejectCrop | null {
-  const source = verifiedConsentVisualSource(input);
-  if (!source) return null;
+function rejectCropFromSource(source: VerifiedVisualSource): ConsentRejectCrop | null {
   const { visual } = source;
   const [x, y, width, height] = visual.reject.bounds;
   const crop = consentRejectCropSchema.safeParse({ version: "consent_control_crop.v1", control: "reject",
@@ -75,4 +73,38 @@ export function deriveConsentRejectCrop(input: ConsentCropInput): ConsentRejectC
     height: Math.min(visual.imageHeight, y + height + 12) - Math.max(0, y - 12),
     imageWidth: visual.imageWidth, imageHeight: visual.imageHeight, screenshotSha256: visual.screenshotSha256 });
   return crop.success ? crop.data : null;
+}
+
+function prominenceCropFromSource({ visual }: VerifiedVisualSource): ConsentProminenceCrop | null {
+  const [ax, ay, aw, ah] = visual.accept.bounds;
+  const [rx, ry, rw, rh] = visual.reject.bounds;
+  const x = Math.max(0, Math.min(ax, rx) - 12), y = Math.max(0, Math.min(ay, ry) - 12);
+  // One contiguous crop preserves relative position, size and intervening UI.
+  // Never stitch or resize the two controls independently.
+  const crop = consentProminenceCropSchema.safeParse({ version: "consent_prominence_crop.v1", x, y,
+    width: Math.min(visual.imageWidth, Math.max(ax + aw, rx + rw) + 12) - x,
+    height: Math.min(visual.imageHeight, Math.max(ay + ah, ry + rh) + 12) - y,
+    imageWidth: visual.imageWidth, imageHeight: visual.imageHeight, screenshotSha256: visual.screenshotSha256 });
+  return crop.success ? crop.data : null;
+}
+
+export function deriveConsentBannerCrop(input: ConsentCropInput) {
+  const source = verifiedConsentVisualSource(input);
+  return source ? bannerCropFromSource(source) : null;
+}
+export function deriveConsentRejectCrop(input: ConsentCropInput) {
+  const source = verifiedConsentVisualSource(input);
+  return source ? rejectCropFromSource(source) : null;
+}
+export function deriveConsentProminenceCrop(input: ConsentCropInput) {
+  const source = verifiedConsentVisualSource(input);
+  return source ? prominenceCropFromSource(source) : null;
+}
+
+/** Verify once per existing image, without adding capture or artifact reads. */
+export function deriveConsentScreenshotCrops(input: ConsentCropInput) {
+  const source = verifiedConsentVisualSource(input);
+  if (!source) return {};
+  const bannerCrop = bannerCropFromSource(source), rejectCrop = rejectCropFromSource(source), prominenceCrop = prominenceCropFromSource(source);
+  return { ...(bannerCrop ? { bannerCrop } : {}), ...(rejectCrop ? { rejectCrop } : {}), ...(prominenceCrop ? { prominenceCrop } : {}) };
 }

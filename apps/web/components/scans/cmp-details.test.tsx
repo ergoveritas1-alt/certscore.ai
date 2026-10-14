@@ -39,6 +39,33 @@ test("Reject magnifier is separate from the banner and requires an observed Reje
   assert.doesNotMatch(render(), /View captured Reject option/);
 });
 
+test("prominence magnifier needs a retained comparison and preserves observed or review assessments", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
+  const row = audit.rows.find(row => row.id === "prominence")!;
+  const measurement = { candidateId: "accept", bounds: [419, 438.75, 528, 45] as [number, number, number, number],
+    fillContrast: 9, outerEmphasisFraction: 0, backgroundUniformity: 1, interiorUniformity: 1 };
+  row.supportingEvidence = { prominence: { accept: measurement, reject: { ...measurement, candidateId: "reject", bounds: [419, 556.75, 528, 49] }, captureSkewMs: 100 } };
+  const prominencePreview = { href: "/api/scans/scan-1/visual-evidence/banner", crop: {
+    version: "consent_prominence_crop.v1" as const, x: 407, y: 426.75, width: 552, height: 191,
+    imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) } };
+  const render = () => renderToStaticMarkup(<CmpDetails audit={audit} vendor="Example CMP" prominencePreview={prominencePreview} />);
+  for (const status of ["Observed", "Review recommended", "Informational"] as const) {
+    row.status = status;
+    assert.match(render(), /aria-label="View captured Accept \/ Reject comparison"/);
+    assert.doesNotMatch(render(), /<image|<dialog/);
+    assert.equal(row.status, status);
+  }
+  for (const compact of [false, true]) {
+    assert.match(renderToStaticMarkup(<EvidenceDirectory compact={compact} report={{ ...SHADOW_REPORT, cmpAudit: audit,
+      scan: { ...SHADOW_REPORT.scan, consentProminencePreview: prominencePreview } }} />), /View captured Accept \/ Reject comparison/);
+  }
+  row.status = "Not assessed";
+  assert.doesNotMatch(render(), /View captured Accept \/ Reject comparison/);
+  row.status = "Observed"; delete row.supportingEvidence;
+  assert.doesNotMatch(render(), /View captured Accept \/ Reject comparison/);
+});
+
 test("CMP details precede consent controls without redundant platform details in both report layouts", () => {
   const report = { ...SHADOW_REPORT, cmpAudit: projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment }) };
   for (const compact of [false, true]) {

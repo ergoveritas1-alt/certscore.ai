@@ -13,14 +13,14 @@ import { EvidenceHeaderStatus, evidenceSectionRecap } from "./evidence-header-st
 import { CmpInventoryTable, CmpCookieMatch, CmpInventoryIdentity } from "./cmp-inventory-table";
 import { VendorBrandChip } from "./vendor-brand-chip";
 import { ConsentBannerViewer } from "./consent-banner-viewer";
-import type { ConsentBannerPreview, ConsentRejectPreview } from "../../lib/scans/visual-evidence";
+import type { ConsentBannerPreview, ConsentRejectPreview, ConsentProminencePreview } from "../../lib/scans/visual-evidence";
 
 const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
   Informational: "neutral", "Feature not supported": "limited", Observed: "positive",
   "Not observed": "neutral", "Review recommended": "review", "Partially assessed": "context", "Not assessed": "limited",
 };
 
-export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, cookieEvidenceAnchor, rejectActionAvailable = false, bannerPreview, rejectPreview }: {
+export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, cookieEvidenceAnchor, rejectActionAvailable = false, bannerPreview, rejectPreview, prominencePreview }: {
   audit?: CmpAuditProjection;
   vendor: string | null;
   compact?: boolean;
@@ -31,6 +31,7 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
   rejectActionAvailable?: boolean;
   bannerPreview?: ConsentBannerPreview | null;
   rejectPreview?: ConsentRejectPreview | null;
+  prominencePreview?: ConsentProminencePreview | null;
 }) {
   const rows: CmpAuditRow[] = audit?.rows ?? CMP_AUDIT_CRITERIA.map(criterion => ({
     ...criterion, status: "Not assessed" as const, sourceIds: [],
@@ -44,9 +45,11 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
         {rows.map(row => {
           const source = evidenceRows.find(source => row.sourceIds.includes(source.id) || evidenceRowAnchor(source.id) === row.evidenceAnchor);
           const { id, label, status, detail, sourceIds, supportingEvidence } = row;
+          const visualPreview = status === "Observed" && id === "banner" ? bannerPreview :
+            status === "Observed" && id === "reject" ? rejectPreview :
+            id === "prominence" && supportingEvidence?.prominence && ["Observed", "Review recommended", "Informational"].includes(status) ? prominencePreview : null;
           return <DetailedEvidenceFinding key={id} id={`cmp-criterion-${id}`} title={label} summary={detail} assessmentStatus={status}
-            headerActions={status === "Observed" ? id === "banner" && bannerPreview ? <ConsentBannerViewer preview={bannerPreview} /> :
-              id === "reject" && rejectPreview ? <ConsentBannerViewer preview={rejectPreview} /> : null : null}
+            headerActions={visualPreview ? <ConsentBannerViewer preview={visualPreview} /> : null}
             sharedEvidence={sharedEvidence[id]}
             badge={<EvidenceStatusBadge label={status === "Review recommended" ? "Review" : status} tone={statusTone[status]} showIcon={statusTone[status] !== "review"} />}
             canonicalEvidenceJson={source?.canonicalEvidenceJson}

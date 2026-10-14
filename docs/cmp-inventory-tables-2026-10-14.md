@@ -263,3 +263,30 @@ the extra bounded rectangle metadata and deterministic projection are estimated
 below $0.05/month at 100,000 scans and 30-day retention. On-demand transfer uses
 the same existing image endpoint; the production traffic approval consideration
 documented above still applies. This remains local and unpushed for review.
+
+## Accept / Reject comparison magnifier (local review)
+
+Accept / Reject prominence now has the same magnifier when a reportable retained
+comparison and matching available screenshot crop exist. The optional
+`consent_prominence_crop.v1` rectangle contains both assessed controls with 12px
+of surrounding context. One contiguous crop preserves their original sizes,
+spacing and any intervening UI; controls are never stitched together, recolored
+or resized independently. Separated controls retain their original separation.
+Observed, Review and historical informational comparisons keep their assessments.
+Missing comparison evidence, unavailable images or invalid binding omit the icon.
+
+SITS uses the existing checksum-verified settled screenshot, cropped at x=407,
+y=426.75, width=552, height=191. Its Save consent control remains between Accept
+all and Accept essential cookies. The saved replay confirms unchanged assessments.
+Thirty-three focused metadata, crop, UI and shared-export tests, three existing
+visual-materialization tests, and web typecheck pass. Browser verification covers
+the exact crop, 390px mobile fit, keyboard focus, Escape restoration and no
+accidental finding expansion. Screenshot: `mobile-prominence-preview.png`.
+
+Materialization now verifies each existing screenshot's crop source once for all
+three views, replacing repeated verification. No new scan, capture, model call,
+image derivative, AWS artifact read, production write or deployment was made.
+Current local incremental infrastructure cost is $0. If shipped, the extra
+bounded rectangle metadata is estimated below $0.05/month at 100,000 scans with
+30-day retention; image-view traffic remains subject to the rollout cost review
+documented above. The changes remain local and unpushed.

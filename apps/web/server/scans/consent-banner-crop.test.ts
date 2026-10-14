@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
-import { deriveConsentBannerCrop, deriveConsentRejectCrop } from "./consent-banner-crop";
+import { deriveConsentBannerCrop, deriveConsentRejectCrop, deriveConsentProminenceCrop, deriveConsentScreenshotCrops } from "./consent-banner-crop";
 
 function fixture() {
   const visual = { version: "consent_control_visual_comparison.v1", documentToken: "document-1",
@@ -47,6 +47,19 @@ test("Reject crop retains the exact assessed button with bounded surrounding pix
   assert.ok(deriveConsentRejectCrop(input), "a separated Reject control does not need the banner's shared container");
 });
 
+test("paired crop preserves original layout, including intervening space and separated controls", () => {
+  const input = fixture(), before = structuredClone(input);
+  assert.deepEqual(deriveConsentProminenceCrop(input), { version: "consent_prominence_crop.v1",
+    x: 407, y: 426.75, width: 552, height: 191, imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) });
+  assert.deepEqual(input, before);
+  assert.deepEqual(deriveConsentScreenshotCrops(input), { bannerCrop: deriveConsentBannerCrop(input),
+    rejectCrop: deriveConsentRejectCrop(input), prominenceCrop: deriveConsentProminenceCrop(input) });
+  input.assessment.visualComparison.reject.bounds = [1100, 700, 100, 40];
+  input.geometry.candidates[1]!.containerId = "separated-link";
+  assert.deepEqual(deriveConsentProminenceCrop(input), { version: "consent_prominence_crop.v1",
+    x: 407, y: 426.75, width: 805, height: 325.25, imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) });
+});
+
 test("inner action clusters use the enclosing semantic dialog rather than clipping banner edges", () => {
   const input = fixture();
   input.geometry.candidates.forEach(c => { c.containerId = "inner"; });
@@ -70,6 +83,8 @@ test("withheld, unavailable, unbound or mismatched screenshot evidence cannot su
   ]) {
     const input = fixture(); mutate(input); assert.equal(deriveConsentBannerCrop(input), null);
     assert.equal(deriveConsentRejectCrop(input), null);
+    assert.equal(deriveConsentProminenceCrop(input), null);
+    assert.deepEqual(deriveConsentScreenshotCrops(input), {});
   }
 });
 

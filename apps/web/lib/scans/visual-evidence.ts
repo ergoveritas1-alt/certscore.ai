@@ -12,10 +12,14 @@ export const consentBannerCropSchema = z.object({ version: z.literal("consent_ba
   ...consentScreenshotCropFields }).strict().refine(withinImage);
 export const consentRejectCropSchema = z.object({ version: z.literal("consent_control_crop.v1"), control: z.literal("reject"),
   ...consentScreenshotCropFields }).strict().refine(withinImage);
+export const consentProminenceCropSchema = z.object({ version: z.literal("consent_prominence_crop.v1"),
+  ...consentScreenshotCropFields }).strict().refine(withinImage);
 export type ConsentBannerCrop = z.infer<typeof consentBannerCropSchema>;
 export type ConsentBannerPreview = { href: string; crop: ConsentBannerCrop };
 export type ConsentRejectCrop = z.infer<typeof consentRejectCropSchema>;
 export type ConsentRejectPreview = { href: string; crop: ConsentRejectCrop };
+export type ConsentProminenceCrop = z.infer<typeof consentProminenceCropSchema>;
+export type ConsentProminencePreview = { href: string; crop: ConsentProminenceCrop };
 
 export type HomepageScreenshotWithheldReason = "sensitive_visual_content" | "safety_check_unavailable";
 export type HomepageScreenshotState =
@@ -48,6 +52,7 @@ export type VisualEvidenceArtifact = {
   width: number | null;
   bannerCrop?: ConsentBannerCrop;
   rejectCrop?: ConsentRejectCrop;
+  prominenceCrop?: ConsentProminenceCrop;
 };
 
 function getRecord(value: unknown): Record<string, unknown> | null {
@@ -82,6 +87,7 @@ export function normalizeVisualEvidenceArtifact(value: unknown): VisualEvidenceA
   const height = getNumber(record.height) ?? getNumber(viewport?.height);
   const bannerCrop = consentBannerCropSchema.safeParse(record.bannerCrop);
   const rejectCrop = consentRejectCropSchema.safeParse(record.rejectCrop);
+  const prominenceCrop = consentProminenceCropSchema.safeParse(record.prominenceCrop);
 
   if (!id && !key) {
     return null;
@@ -110,7 +116,8 @@ export function normalizeVisualEvidenceArtifact(value: unknown): VisualEvidenceA
     },
     width,
     ...(status === "available" && key && bannerCrop.success ? { bannerCrop: bannerCrop.data } : {}),
-    ...(status === "available" && key && rejectCrop.success ? { rejectCrop: rejectCrop.data } : {})
+    ...(status === "available" && key && rejectCrop.success ? { rejectCrop: rejectCrop.data } : {}),
+    ...(status === "available" && key && prominenceCrop.success ? { prominenceCrop: prominenceCrop.data } : {})
   };
 }
 
