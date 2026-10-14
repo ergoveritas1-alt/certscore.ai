@@ -69,31 +69,29 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
   const comparison = evidence.prominence, cookies = evidence.cookieComparison, inventory = evidence.inventory;
   return <div className="mt-2 space-y-3 rounded-md bg-zinc-50 p-3 text-xs leading-5 text-zinc-700">
     {inventory?.categories?.length ? <CmpInventoryTable label={`Category choices · ${inventory.categories.length}`} columns={["Category", "Captured setting"]}
+      copyRows={inventory.categories.map(category => [category.name, category.checked === null ? "Not captured" : category.checked ? "On" : "Off"])}
       rows={inventory.categories.map(category => [category.name, category.checked === null ? "Not captured" : category.checked ? "On" : "Off"])} /> : null}
     {inventory?.services?.length ? <>
       <CmpInventoryTable label={`CMP services · ${inventory.services.length}`} columns={["Service", "Identified from"]}
+        copyRows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])}
         rows={inventory.services.map(service => [service.name, service.source === "cmp_api_inventory" ? "CMP configuration" : "Labelled control"])} />
     </> : null}
     {inventory?.declarations?.length ? <CmpInventoryTable label={`Cookie details · ${inventory.declarations.length}`}
       columns={["Cookie name / pattern", "Purpose", "Storage duration"]}
+      copyRows={inventory.declarations.map(cookie => [cookie.name, cookie.purpose || "Not listed", disclosureText(cookie.duration) || "Not listed"])}
       rows={inventory.declarations.map(cookie => [<span className="font-mono text-[11px]">{cookie.name}</span>, cookie.purpose || "Not listed", disclosureText(cookie.duration) || "Not listed"])} /> : null}
     {inventory?.cookies?.length && !cookies ? <CookieMatchTable entries={inventory.cookies} /> : null}
     {comparison ? <>
-      <table className="w-full text-left">
-        <caption className="mb-2 text-left font-semibold text-zinc-900">Accept / Reject comparison</caption>
-        <thead><tr className="border-b border-zinc-200"><th scope="col" className="py-1">Control</th><th scope="col">Size (px)</th><th scope="col">Fill contrast</th></tr></thead>
-        <tbody>{(["accept", "reject"] as const).map(role => <tr key={role}>
-          <th scope="row" className="py-1 font-medium">{role === "accept" ? "Accept" : "Reject / necessary only"}</th>
-          <td>{comparison[role].bounds[2]} × {comparison[role].bounds[3]}</td>
-          <td>{comparison[role].fillContrast.toFixed(3)}:1</td>
-        </tr>)}</tbody>
-      </table>
+      <CmpInventoryTable label="Accept / Reject comparison" columns={["Control", "Size (px)", "Fill contrast"]}
+        copyRows={(["accept", "reject"] as const).map(role => [role === "accept" ? "Accept" : "Reject / necessary only", `${comparison[role].bounds[2]} × ${comparison[role].bounds[3]}`, `${comparison[role].fillContrast.toFixed(3)}:1`])}
+        rows={(["accept", "reject"] as const).map(role => [role === "accept" ? "Accept" : "Reject / necessary only", `${comparison[role].bounds[2]} × ${comparison[role].bounds[3]}`, `${comparison[role].fillContrast.toFixed(3)}:1`])} />
       <p>Button sizes and screenshot were captured {comparison.captureSkewMs} ms apart on the starting page. Fill contrast compares button backgrounds, not text readability.</p>
     </> : null}
     {evidence.requests?.length ? <>
       <CmpInventoryTable label={`Requests after confirmed Reject · ${evidence.requests.length}`}
         columns={["Service", "Category", "After Reject", "Request"]}
         columnClasses={["w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[15%] sm:w-auto", "w-[55%] sm:w-auto"]}
+        copyRows={evidence.requests.map(request => [request.vendor, request.category, `+${request.msAfterReject} ms`, `${request.hostname}${request.path}`])}
         rows={evidence.requests.map(request => [request.vendor, request.category, <span className="whitespace-nowrap">+{request.msAfterReject} ms</span>,
           <span className="block max-w-[18rem] whitespace-normal break-all font-mono text-[11px] leading-4">
             <span className="block">{request.hostname}</span><span className="block text-zinc-500">{request.path}</span>
@@ -105,6 +103,7 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
       <p>{cookies.observedCookieNameCount} cookie names checked against {cookies.declarationPatternCount} CMP patterns, including wildcards.</p>
       {inventory?.cookies?.length ? <CookieMatchTable entries={inventory.cookies} /> :
         <CmpInventoryTable label="Unmatched cookie names" columns={["Cookie name", "CMP match"]}
+          copyRows={cookies.unmatchedNames.map(name => [name, "No match"])}
           rows={cookies.unmatchedNames.map(name => [<span className="font-mono text-[11px]">{name}</span>, <CmpCookieMatch matched={false} />])} />}
       {inventory?.cookies?.length && inventory.cookies.length < cookies.observedCookieNameCount ? <p>Showing {inventory.cookies.length} of {cookies.observedCookieNameCount} compared cookie names.</p> : null}
       {!inventory?.cookies?.length ? <p>Only unmatched names were saved in this report; matched-cookie rows are unavailable.</p> : null}
@@ -118,6 +117,7 @@ function CookieMatchTable({ entries }: { entries: NonNullable<NonNullable<NonNul
   // Match results come from the canonical assessment; the component never runs
   // a second matcher or infers a purpose from a name.
   return <CmpInventoryTable label={`Cookie matches · ${entries.length}`} columns={["Cookie name", "CMP match", "CMP pattern", "Observed"]}
+    copyRows={entries.map(cookie => [cookie.name, cookie.matchedPattern !== null ? "Matched" : "No match", cookie.matchedPattern ?? "—", cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])}
     rows={entries.map(cookie => [<span className="font-mono text-[11px]">{cookie.name}</span>, <CmpCookieMatch matched={cookie.matchedPattern !== null} />,
       <span className="font-mono text-[11px]">{cookie.matchedPattern ?? "—"}</span>,
       cookie.observedIn.map(phase => phase === "before_choice" ? "Before choice" : "After Accept").join(" · ")])} />;

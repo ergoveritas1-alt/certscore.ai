@@ -1,16 +1,22 @@
 import React, { type ReactNode } from "react";
+import { CopyJsonButton } from "./copy-json-button";
 
 /** One compact window for all CMP lists: header plus up to eight 36px rows.
  * Cells wrap on mobile and remain untruncated at every width. */
-export function CmpInventoryTable({ label, columns, rows, columnClasses }: {
+export function CmpInventoryTable({ label, columns, rows, copyRows, columnClasses }: {
   label: string;
   columns: readonly string[];
   columnClasses?: readonly string[];
   rows: readonly (readonly ReactNode[])[];
+  copyRows: readonly (readonly string[])[];
 }) {
   if (!rows.length) return null;
   return <div className="min-w-0">
-    <p className="mb-2 font-semibold text-zinc-900">{label}</p>
+    <div className="mb-2 flex items-center justify-between gap-2">
+      <p className="font-semibold text-zinc-900">{label}</p>
+      <CopyJsonButton payload={buildCmpTableCopyPayload(columns, copyRows)} label={`Copy ${label} table`}
+        className="inline-flex h-7 !min-h-0 w-7 shrink-0 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600" />
+    </div>
     <div role="region" aria-label={label} tabIndex={0}
       className="max-h-[322px] max-w-full overflow-auto rounded-md border border-zinc-200 bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600">
       <table className={`w-full table-fixed border-collapse text-left text-[11px] sm:table-auto sm:text-xs ${columns.length === 4 ? "min-w-[40rem]" : ""}`}>
@@ -34,4 +40,14 @@ export function CmpCookieMatch({ matched }: { matched: boolean }) {
   return matched ? <span className="inline-flex items-center gap-1 whitespace-nowrap text-emerald-700">
     <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 8 3 3 7-7" /></svg><span className="sr-only sm:not-sr-only">Matched</span>
   </span> : <span className="text-amber-800">No match</span>;
+}
+
+/** Plain tab-separated text preserves the full list when pasted into a grid.
+ * Embedded line breaks and tabs stay inside their cell rather than adding rows. */
+export function buildCmpTableCopyPayload(columns: readonly string[], rows: readonly (readonly string[])[]) {
+  return [columns, ...rows].map(row => row.map(value => {
+    const text = value.replace(/[\t\r\n]+/g, " ").trim();
+    // Site-supplied labels stay literal when pasted into spreadsheet cells.
+    return /^[=+@-]/.test(text) && !/^[+-]?\d+(?:\.\d+)?(?:\s*(?:ms|s))?$/.test(text) ? `'${text}` : text;
+  }).join("\t")).join("\n");
 }

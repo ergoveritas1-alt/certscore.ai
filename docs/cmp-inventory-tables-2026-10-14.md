@@ -98,3 +98,34 @@ Incremental storage estimate for category metadata is under $0.10/month at
 100,000 scans/month and 30-day retention, within the existing below-$1 estimate
 for these table additions. This was disclosed before implementation. The scanner
 packet already retained these fields; scanner capture and compute are unchanged.
+
+## Copy icons follow-up
+
+Each CMP table header has a compact copy icon within the expanded evidence body.
+Collapsing the evidence hides it. This includes categories, services, cookie
+comparisons, historical unmatched-name lists, cookie declarations, requests after
+Reject, and the Accept/Reject visual comparison. The existing shared clipboard
+button supplies keyboard activation, copied confirmation, failure feedback and
+retry; no new client dependency or scanner work was added.
+
+Copy uses tab-separated headers and every retained row, including rows outside
+the eight-row viewport. Match icons become Matched/No match text, request hostname
+and path form one cell, and embedded tabs/newlines are normalized within cells.
+Formula-like site-supplied text is escaped as literal spreadsheet content. Full
+JSON evidence and assessment fields are unchanged; clipboard text is presentation
+only and is not a new API, SDK or MCP evidence field.
+
+The local preview now mounts the actual React components so the icons work,
+rather than showing static SSR output alone. Desktop and mobile interaction
+checks exercised the real button handlers with a stub clipboard to preserve the
+user's clipboard, including all 36 declaration rows, 14 compared cookies, five
+requests, comparison rows, keyboard copy, failed writes and successful retry.
+Collapsed controls are hidden and both viewports have no page overflow. Focused
+copy/UI tests and web typecheck pass. Artifacts include `copy-verification.json`
+and the desktop/mobile `category-copy.png` screenshots.
+
+No deployment or new scan was made. Incremental page-transfer estimate is under
+$0.10/month per 100,000 report views for SITS-sized table text, disclosed before
+completion and pre-approved under the below-$1 cost policy. There are no added
+model calls, browser runs, timeouts, infrastructure resources or evidence-storage
+fields. The standalone development bundle is local-only and is not shipped.
