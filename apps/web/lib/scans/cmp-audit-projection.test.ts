@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { consentControlAssessmentSchema } from "@certscore/contracts";
 import type { ScanScoreExplanation } from "@certscore/api-contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
@@ -32,6 +33,24 @@ test("unknown control remains unassessed; a complete negative retains its result
   assert.equal(find(projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment }), "reject").status, "Not assessed");
   assessment.controls.reject.state = "not_observed";
   assert.equal(find(projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment }), "reject").status, "Not observed");
+});
+
+test("prominence explains a retained screenshot safety timeout without changing assessments", () => {
+  const assessment = consentControlAssessmentSchema.parse(structuredClone(observedControlAssessment));
+  assessment.visualEvidence = { status: "withheld", artifactRefs: [], reasonCodes: ["safety_check_unavailable", "finalization_deadline_exceeded"] };
+  const before = structuredClone(assessment);
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment });
+  const row = find(audit, "prominence");
+  assert.equal(row.status, "Not assessed");
+  assert.equal(row.detail, "Screenshot safety review timed out; the button comparison was not assessed.");
+  assert.deepEqual(row.sourceIds, ["consentControlAssessment.visualEvidence"]);
+  assert.equal(row.supportingEvidence, undefined);
+  assert.equal(find(audit, "reject").status, "Observed");
+  assert.deepEqual(assessment, before);
+  const wrongScan = projectCmpAudit({ scanId: "another-scan", consentControlAssessment: assessment });
+  assert.doesNotMatch(find(wrongScan, "prominence").detail!, /timed out/);
+  assessment.visualEvidence.status = "available";
+  assert.doesNotMatch(find(projectCmpAudit({ scanId: "scan-1", consentControlAssessment: assessment }), "prominence").detail!, /timed out/);
 });
 
 test("missing, malformed, blocked, wrong-scan and document-unbound assessments cannot create negatives", () => {

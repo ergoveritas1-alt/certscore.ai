@@ -70,6 +70,13 @@ export function projectCmpAudit(input: {
   const parsed = consentControlAssessmentSchema.safeParse(input.consentControlAssessment);
   const assessment = parsed.success && projectConsentControlReport(parsed.data, input.scanId) ? parsed.data : null;
   if (assessment) {
+    if (assessment.visualEvidence?.status === "withheld" && assessment.visualEvidence.reasonCodes.some(reason =>
+      reason === "finalization_deadline_exceeded" || reason === "moderation_timeout")) {
+      set("prominence", {
+        detail: "Screenshot safety review timed out; the button comparison was not assessed.",
+        sourceIds: ["consentControlAssessment.visualEvidence"],
+      });
+    }
     if (assessment.surface.status === "observed_actionable" || assessment.surface.status === "observed_non_actionable") {
       set("banner", { status: "Observed", detail: "Consent surface observed on the initial visit.",
         evidenceAnchor: "consent-review-evidence", sourceIds: ["consentControlAssessment.surface"] });

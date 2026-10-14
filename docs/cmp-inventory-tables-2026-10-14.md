@@ -293,6 +293,36 @@ documented above. The changes remain local and unpushed.
 
 ## Finding badge alignment
 
+### Prominence retention diagnosis
+
+Comparison of saved SITS scan `a68a5b3b-df92-429a-bbef-975aa2fdddf0` with
+local scan `58ac0b55-641b-4cd1-bdd1-6d5c7bb24613` confirms that button capture
+still worked: the new geometry retains Accept 528 x 45 px, Reject 528 x 49 px,
+and a 129 ms geometry/image skew. The new screenshots all have the typed
+`finalization_deadline_exceeded` safety failure. The consent-proof manifest records
+a 79 ms screenshot-safety finalization phase. Both old and new first-layer
+inventories were marked `partial`, so the existing safety gate selected its
+75 ms finalization allowance, rather than the 2,000 ms allowance reserved for
+`complete_with_controls`. Two earlier images completed review successfully;
+none of the new images completed in time. The retained evidence does not explain
+why the external moderation request took longer on this occasion.
+
+The shared CMP report projection now describes the retained typed timeout as
+"Screenshot safety review timed out; the button comparison was not assessed."
+This applies only to usable, scan-bound assessments whose withheld visual evidence
+records a finalization deadline or moderation timeout. It preserves Not assessed,
+source hashes, scoring, withheld-image handling, and the underlying assessment.
+The website and shared export use the same reason. Existing positive/review
+projections retain precedence. No safety bypass, timer change, late review,
+historical image repair, scan, model call or deployment was performed. Deleted
+withheld images cannot restore this report's visual comparison. Upstream review
+scheduling/finalization reliability remains a separate follow-up.
+
+Twenty-one focused CMP/export tests pass, including wrong-scan rejection and
+preservation of structured Reject visibility, and the local report was visually
+verified with the specific timeout reason. The wording change has no incremental
+scan latency or paid-service usage.
+
 ### Cookie brand decoration
 
 Cookie table rows now use bundled brand logos for unambiguous names recognized
