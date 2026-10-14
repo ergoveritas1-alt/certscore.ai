@@ -1,0 +1,89 @@
+{
+  "newScans": 1,
+  "extraRescans": 0,
+  "deployments": 0,
+  "quotaRestoredTo": 20,
+  "receipts": [
+    {
+      "url": "https://hubspot.com",
+      "scanId": "257741ec-9e2f-40e2-a912-b98fccedaf90",
+      "elapsedMs": 18594,
+      "originalBundleAndManifestVerified": true,
+      "geometryVerified": true,
+      "canonicalCmpReplayMatchesPersisted": true,
+      "reportExportParity": true,
+      "quotaRestored": true,
+      "counts": {
+        "Observed": 6,
+        "Incomplete": 5,
+        "Not assessed": 1,
+        "Review recommended": 1
+      },
+      "preference": {
+        "support": {
+          "state": "partial",
+          "provider": "HubSpot Consent Banner",
+          "recipeVersion": "bounded_cmp_preferences.v1",
+          "reason": "unique_actionable_options_not_resolved"
+        },
+        "diagnostic": {
+          "revision": "cmp_preferences.v3",
+          "passiveDialogReveal": false,
+          "budgetMs": 17000,
+          "basicCaptureReserveMs": 1000,
+          "phase": "control_inventory"
+        },
+        "checkpoints": {
+          "version": "cmp_partial_capture.v1",
+          "documentToken": "E3CA354DADBEDAD591E823B7DC1A3AF7",
+          "privacyLinks": true,
+          "declarations": false,
+          "controls": false,
+          "controlsSurface": "first_layer"
+        },
+        "categories": []
+      },
+      "prominence": {
+        "status": "Observed",
+        "measured": true,
+        "captureSkewMs": 435
+      },
+      "actionDetails": {
+        "accept": {
+          "status": "unconfirmed",
+          "acceptanceExercised": false,
+          "actionDispatchedAtMs": 9292,
+          "reason": "cmp_acceptance_state_not_observed",
+          "witnesses": []
+        },
+        "reject": {
+          "status": "unconfirmed",
+          "refusalExercised": false,
+          "actionDispatchedAtMs": 9807,
+          "reason": "cmp_rejection_state_not_observed",
+          "witnesses": []
+        }
+      },
+      "actions": [
+        {
+          "action": "postAcceptEvidence",
+          "click": "completed",
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "acceptance_registration_not_confirmed"
+          ]
+        },
+        {
+          "action": "postRefusalEvidence",
+          "click": "completed",
+          "limitations": [
+            "interaction_authorization:scan_target_resolution:sharded_scan_resolved_exact_target.v2",
+            "redirect_target_resolved_exact:0",
+            "refusal_registration_not_confirmed"
+          ]
+        }
+      ],
+      "reportUrl": "http://localhost:3000/scan/257741ec-9e2f-40e2-a912-b98fccedaf90#cmp-details"
+    }
+  ]
+}

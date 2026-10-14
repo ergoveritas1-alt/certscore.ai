@@ -1,0 +1,12 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import {selectCalibrationTargets,validateCalibrationLedger} from '../../scripts/lib/scan-quality-calibration-ledger';
+const root='artifacts/hubspot-fresh-verification-20261014',round=process.argv[2],urls=process.argv.slice(3);
+assert.ok(urls.length&&urls.length<=3);
+const manifest=JSON.parse(readFileSync('docs/certscore-v2/scan-quality-calibration-manifest.json','utf8'));
+const ledger=JSON.parse(readFileSync(`${root}/central-ledger.json`,'utf8'));
+assert.deepEqual(validateCalibrationLedger(ledger,new Set(manifest.targets.map((t:any)=>t.url))),[]);
+const targets=manifest.targets.filter((t:any)=>urls.includes(t.url));assert.equal(targets.length,urls.length);
+const selection=selectCalibrationTargets({ledger,targets,limit:targets.length,minimumCooldownDays:28,now:new Date(),rotationKey:`owner-cmp-targeted-repairs-20261014-${round}`,cooldownOverrideReason:'Owner explicitly requested one fresh local HubSpot scan on October 14 after retained/local verification of action readiness, prominence and capture diagnostics, including one temporary local quota exception. Preserve holds, no-go restrictions, identity, region and existing capture budgets; no deployment.'});
+for(const target of selection.selected)(target as any).scanUrl=target.url==='https://sentry.io'?'https://sentry.io/welcome/':target.url==='https://hubspot.com'?'https://www.hubspot.com/':target.url==='https://ikea.com'?'https://www.ikea.com/':target.url==='https://fullstory.com'?'https://www.fullstory.com/':target.url==='https://gatech.edu'?'https://www.gatech.edu/':target.url;
+assert.equal(selection.selected.length,targets.length,JSON.stringify(selection.excluded));writeFileSync(`${root}/${round}-selection.json`,JSON.stringify(selection,null,2));console.log(selection.selected.map(t=>t.url));

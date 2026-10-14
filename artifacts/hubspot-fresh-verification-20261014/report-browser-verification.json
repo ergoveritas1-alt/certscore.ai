@@ -1,0 +1,13 @@
+{
+  "scanId": "257741ec-9e2f-40e2-a912-b98fccedaf90",
+  "reportUrl": "http://localhost:3000/scan/257741ec-9e2f-40e2-a912-b98fccedaf90#cmp-details",
+  "cmpExpanded": true,
+  "browserId": "5",
+  "tabId": "11",
+  "screenshot": "hubspot-cmp-expanded.png",
+  "newAdmissions": 1,
+  "usageAfter": 40,
+  "quotaRestoredTo": 20,
+  "deployments": 0,
+  "oneTimeCostEstimateUsd": "<0.10"
+}

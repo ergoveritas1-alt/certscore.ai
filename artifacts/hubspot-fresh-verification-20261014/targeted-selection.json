@@ -1,0 +1,27 @@
+{
+  "excluded": [],
+  "generatedAt": "2026-10-14T23:36:56.068Z",
+  "minimumCooldownDays": 28,
+  "rotationKey": "owner-cmp-targeted-repairs-20261014-targeted",
+  "selected": [
+    {
+      "url": "https://hubspot.com",
+      "role": "saas",
+      "lanes": [
+        "consent_controls",
+        "gdpr_transparency",
+        "transport_evidence",
+        "third_party_attribution",
+        "no_go_resilience",
+        "language_inference"
+      ],
+      "scanUrl": "https://www.hubspot.com/"
+    }
+  ],
+  "cooldownOverride": {
+    "reason": "Owner explicitly requested one fresh local HubSpot scan on October 14 after retained/local verification of action readiness, prominence and capture diagnostics, including one temporary local quota exception. Preserve holds, no-go restrictions, identity, region and existing capture budgets; no deployment.",
+    "appliedToUrls": [
+      "https://hubspot.com"
+    ]
+  }
+}

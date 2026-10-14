@@ -1,0 +1,20 @@
+{
+  "request": {
+    "domain": "https://www.hubspot.com/",
+    "forceNewScan": true,
+    "localV2RunViaLambda": true,
+    "localV2ScanProfile": "full",
+    "scanFrom": "eu-de",
+    "requestId": "71705f02-0af2-4525-bbbf-4dd8d599b634"
+  },
+  "httpStatus": 202,
+  "body": {
+    "queuedCount": 1,
+    "reusedExistingScan": false,
+    "scanId": "257741ec-9e2f-40e2-a912-b98fccedaf90",
+    "scanUrl": "/scan/257741ec-9e2f-40e2-a912-b98fccedaf90",
+    "warning": null
+  },
+  "localQuotaAllowance": 40,
+  "originalQuotaSha256": "bd443b8bbbeec2f30cd5f1963231394a615843b3c6049771c7bb96ddc62afb68"
+}

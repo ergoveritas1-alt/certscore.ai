@@ -1,0 +1,11 @@
+{
+  "approved": true,
+  "maxAdmissions": 1,
+  "initialUsage": 39,
+  "targets": [
+    "https://hubspot.com"
+  ],
+  "instruction": "Run one fresh local HubSpot scan to verify action readiness, prominence and CMP details; show full report expanded; one explicit quota exception; restore limit; no deployment.",
+  "estimatedOneTimeUsd": "<0.10",
+  "recurringBudgetIncreaseUsd": 0
+}

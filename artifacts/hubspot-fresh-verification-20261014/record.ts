@@ -1,0 +1,14 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+import {recordCalibrationOutcomes,validateCalibrationLedger} from '../../scripts/lib/scan-quality-calibration-ledger';
+const root='artifacts/hubspot-fresh-verification-20261014';
+const results=['targeted'].flatMap(round=>JSON.parse(readFileSync(`${root}/${round}/results.json`,'utf8')));
+assert.equal(results.length,1);assert.equal(new Set(results.map(r=>r.scanId)).size,1);
+const summary={generatedAt:new Date().toISOString(),results:results.map(r=>{const s=JSON.parse(readFileSync(`artifacts/local-v2-dag-lambda-simulated/${r.scanId}/summary.json`,'utf8'));return {url:r.url,scannerRuntimeStarted:true,status:s.resultStatus,completedAt:s.sqsMessages.find((m:any)=>m.status==='completed')?.completedAt,runtime:{noGoCandidate:r.noGo,noGoReasons:r.noGoAssessment?[r.noGoAssessment.reasonCode]:[]}};})};
+writeFileSync(`${root}/contact-outcomes.json`,JSON.stringify(summary,null,2));
+const manifest=JSON.parse(readFileSync('docs/certscore-v2/scan-quality-calibration-manifest.json','utf8')),path='docs/certscore-v2/scan-quality-calibration-ledger.json',ledger=JSON.parse(readFileSync(path,'utf8'));
+const candidate=recordCalibrationOutcomes({ledger,minimumCooldownDays:28,now:new Date(),summary,targetUrls:new Set(manifest.targets.map((t:any)=>t.url))});
+for(const url of new Set(results.map(r=>r.url)))candidate.entries[url]!.note=`Owner-requested local CMP quality follow-up: ${results.filter(r=>r.url===url).map(r=>r.scanId).join(', ')}. One explicit owner-approved local admission verifies bounded HubSpot action readiness, paired prominence capture and CMP failure diagnostics; temporary local quota admission restored immediately afterward. No deployment, identity/region switch, extra capture budget or retries of no-go results.`;
+assert.deepEqual(validateCalibrationLedger(candidate,new Set(manifest.targets.map((t:any)=>t.url))),[]);
+writeFileSync(`${root}/ledger-candidate.json`,JSON.stringify(candidate,null,2)+'\n');writeFileSync(path,JSON.stringify(candidate,null,2)+'\n');
+console.log('Recorded one targeted HubSpot verification contact');

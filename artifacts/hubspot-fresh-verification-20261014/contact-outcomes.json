@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-10-14T23:38:34.935Z",
+  "results": [
+    {
+      "url": "https://hubspot.com",
+      "scannerRuntimeStarted": true,
+      "status": "completed",
+      "completedAt": "2026-10-14T23:37:17.049Z",
+      "runtime": {
+        "noGoCandidate": false,
+        "noGoReasons": []
+      }
+    }
+  ]
+}

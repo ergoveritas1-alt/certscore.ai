@@ -283,3 +283,45 @@ ceilings are unchanged. Added diagnostic reason storage is estimated below
 $0.01/month at 100,000 scans with one-year retention, within the existing approved
 budget and repository's pre-approved threshold; no extra storage request or
 artifact is introduced in the scan path.
+
+## One owner-approved fresh HubSpot verification
+
+Exactly one fresh local scan was authorized and admitted after `14b04eb6`:
+`257741ec-9e2f-40e2-a912-b98fccedaf90`, target `https://www.hubspot.com/`.
+Registry validation and a fresh successful central-history export preceded
+canonical selection with the owner's explicit targeted cooldown override. Local
+usage was 39; the temporary admission limit was 40 and the original limit of 20
+was restored immediately after admission with equal original/restored file hashes.
+No extra scan or deployment occurred. Estimated one-time spend remains below $0.10.
+
+The scan completed in 18.594 seconds. Both Accept and Reject clicked once and
+completed their bounded activity windows (three and eight seconds, respectively),
+with zero dropped requests and retained storage snapshots. Semantic consent
+registration remains unconfirmed; factual after-click capture is still usable
+under the existing scoped policy. Neither action needed re-resolution or a
+geometry fallback on this visit, so this verifies the live capture outcomes
+without asserting that each repair branch was exercised.
+
+Prominence is Observed from a document-bound, approved 1366-by-900 screenshot and
+retained measurements, with 435-ms geometry/image skew. Accept/Reject fill contrast
+was 16.467/16.463 and outer emphasis 0.041/0.041; no material prominence disadvantage
+met the existing review threshold. Screenshot bytes, document binding, original
+bundle/manifest/geometry hashes, canonical CMP replay against the persisted
+assessment, report/export parity and quota restoration checks passed.
+
+CMP Details shows six Observed checks, one Review, five Incomplete and one
+Not assessed. The Review retains 11 eligible tracking requests after the Reject
+click, including X/Twitter, HubSpot, LinkedIn and Google, first observed 0.11 seconds
+after the click. Browser consent records and CMP cookie expiry are Observed.
+The preference packet was saved after 4.478 seconds and retains its privacy-link
+checkpoint; its Options control was not uniquely actionable, so no preference
+click occurred. Five deeper preference checks remain explicitly incomplete.
+Pre-choice privacy-link reachability remains Not assessed because its retained
+hit-target check was false; this does not assert that HubSpot lacks that feature.
+
+The actual full report was opened in the in-app browser with CMP Details expanded
+and visually checked. Receipts, fresh source verification, quota restoration and
+the screenshot are under `artifacts/hubspot-fresh-verification-20261014/`.
+The repository contact ledger was updated for this one visit, with the central
+contact persisted under idempotent key
+`owner-hubspot-readiness-verification-20261014-257741ec`.
