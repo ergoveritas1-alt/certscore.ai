@@ -51,12 +51,28 @@ export const accessibilityAuditObservationSchema = z.object({
   violations: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   reviewItems: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   limitations: z.array(z.string().max(120)).max(16),
+  // Bounded examples describe retained detail, separately from engine coverage.
+  // Absence on historical records does not imply this policy was applied.
+  exampleCoverage: z.object({
+    version: z.literal("breadth_before_detail.v1"),
+    observedNodeCount: z.number().int().nonnegative().max(200_000_000),
+    retainedNodeCount: z.number().int().nonnegative().max(1000),
+    omittedNodeCount: z.number().int().nonnegative().max(200_000_000),
+    byteBudgetLimited: z.boolean(),
+  }).strict().optional(),
 }).strict().superRefine((audit, ctx) => {
   if (Date.parse(audit.completedAt) < Date.parse(audit.startedAt)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Audit timing is reversed." });
   if (new Set(audit.configuredTags).size !== ACCESSIBILITY_WCAG_TAGS.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Incomplete configured WCAG tags." });
   if ((audit.status === "completed" || audit.violations.length > 0 || audit.reviewItems.length > 0) && (!audit.documentToken || !audit.rulesEvaluated.length)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed evidence requires a bound document and evaluated rules." });
   if (audit.status === "completed" && (audit.limitations.length || audit.reviewItems.length)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Unresolved coverage cannot be complete." });
   if ((audit.status === "failed" || audit.status === "not_testable") && (audit.violations.length || audit.reviewItems.length || audit.rulesEvaluated.length)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Failed audits cannot supply results." });
+  if (audit.exampleCoverage) {
+    const rows = [...audit.violations, ...audit.reviewItems];
+    const observed = rows.reduce((sum, row) => sum + row.nodeCount, 0);
+    const retained = rows.reduce((sum, row) => sum + row.representativeNodes.length, 0);
+    if (audit.exampleCoverage.observedNodeCount !== observed || audit.exampleCoverage.retainedNodeCount !== retained ||
+      audit.exampleCoverage.omittedNodeCount !== observed - retained) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Example coverage counts must match retained rule evidence." });
+  }
   const evaluated = new Set(audit.rulesEvaluated);
   if (evaluated.size !== audit.rulesEvaluated.length ||
       new Set(audit.violations.map(rule => rule.ruleId)).size !== audit.violations.length ||

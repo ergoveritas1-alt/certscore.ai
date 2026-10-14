@@ -275,3 +275,21 @@ test("review items alone never become observed failures", () => {
   assert.equal(projectAccessibilityAuditSummary(projection)?.reviewRuleCount, 4);
   assert.deepEqual(buildNormalizedConcerns({ runtimeArtifacts: { accessibilityAudit: projection }, reviewFindingCandidates: [], validationFindings: [] }), []);
 });
+
+test("bounded example coverage survives canonical projection and public summary without changing counts", () => {
+  const input = bundle();
+  input.accessibilityAudit!.violations[0]!.nodeCount = 500;
+  input.accessibilityAudit!.exampleCoverage = { version: "breadth_before_detail.v1", observedNodeCount: 503,
+    retainedNodeCount: 4, omittedNodeCount: 499, byteBudgetLimited: true };
+  const source = { verificationStatus: "verified", sha256: "a".repeat(64) };
+  const projected = projectAccessibilityAudit(input, source, input.normalizedUrl)!;
+  assert.equal(projected.observation.status, "completed");
+  const summary = projectAccessibilityAuditSummary(projected)!;
+  assert.equal(summary.affectedNodeCount, 503);
+  assert.deepEqual(summary.exampleCoverage, input.accessibilityAudit!.exampleCoverage);
+  input.runtimeMetadataSnapshots![0]!.documentIdentity!.token = "wrong-loader";
+  const rejected = projectAccessibilityAudit(input, source, input.normalizedUrl)!;
+  assert.equal(rejected.observation.status, "limited");
+  assert.equal(rejected.observation.exampleCoverage, undefined);
+  assert.equal(rejected.observation.violations.length, 0);
+});

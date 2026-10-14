@@ -33,3 +33,14 @@ test("optional image-link identity is bounded, versioned and preserves historica
   delete node.imageLinkIdentity;
   assert.equal(accessibilityAuditObservationSchema.safeParse(audit).success, true);
 });
+
+test("example sampling metadata is independent of audit coverage and bound to retained counts", () => {
+  const audit = accessibilityAuditFixture();
+  audit.violations[0]!.nodeCount = 500;
+  audit.exampleCoverage = { version: "breadth_before_detail.v1", observedNodeCount: 503,
+    retainedNodeCount: 4, omittedNodeCount: 499, byteBudgetLimited: true };
+  assert.equal(accessibilityAuditObservationSchema.parse(audit).status, "completed");
+  for (const change of [{ observedNodeCount: 4 }, { retainedNodeCount: 500 }, { omittedNodeCount: 0 }, { version: "unknown" }]) {
+    assert.equal(accessibilityAuditObservationSchema.safeParse({ ...audit, exampleCoverage: { ...audit.exampleCoverage, ...change } }).success, false);
+  }
+});

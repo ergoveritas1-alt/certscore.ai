@@ -158,3 +158,27 @@ test("axe injection cannot add traffic, storage or forms to the frozen privacy b
     }
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("prolific axe results retain full counts while browser transfer carries bounded examples", { timeout: 25_000 }, async t => {
+  await withPage('<button></button>'.repeat(300), async page => {
+    const evaluate = page.evaluate.bind(page);
+    let maxTransferredNodes = 0, transferredCount = 0;
+    t.mock.method(page, "evaluate", async (fn, arg) => {
+      const result = await evaluate(fn, arg);
+      if (arg && typeof arg === "object" && "exampleLimit" in arg) {
+        const data = result as import("axe-core").AxeResults;
+        maxTransferredNodes = Math.max(...data.violations.map(rule => rule.nodes.length));
+        transferredCount = (data.violations.find(rule => rule.id === "button-name") as any)?.observedNodeCount;
+        assert.ok([...data.passes, ...data.inapplicable].every(rule => rule.nodes.length === 0));
+      }
+      return result;
+    });
+    const result = await audit(page);
+    assert.equal(result.violations.find(rule => rule.ruleId === "button-name")?.nodeCount, 300);
+    assert.equal(transferredCount, 300);
+    assert.ok(maxTransferredNodes <= 5);
+    assert.equal(result.violations.find(rule => rule.ruleId === "button-name")?.representativeNodes.length, 5);
+    assert.ok(result.exampleCoverage!.omittedNodeCount >= 295);
+    assert.equal(result.exampleCoverage!.byteBudgetLimited, false);
+  });
+});

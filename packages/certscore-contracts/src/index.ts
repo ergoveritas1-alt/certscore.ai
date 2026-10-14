@@ -4,7 +4,7 @@ export * from "./cmp-audit-evidence";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
 export * from "./collection-surface-snapshot";
 export * from "./post-accept-form-snapshots";
-import { COLLECTION_SURFACE_INVENTORY_VERSION, COLLECTION_SURFACE_ASSESSMENT_VERSION, MAX_COLLECTION_SURFACE_FORMS, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM, MAX_COLLECTION_SURFACE_FIELDS, MAX_COLLECTION_SURFACE_INVENTORY_BYTES, collectionSurfaceSemanticCategorySchema, collectionSurfaceEvidenceRefSchema, collectionSurfaceFieldSchema, formPrivacyDisclosureSchema, collectionSurfaceFormSchema } from "./collection-surface-form";
+import { COLLECTION_SURFACE_INVENTORY_VERSION, COLLECTION_SURFACE_ASSESSMENT_VERSION, MAX_COLLECTION_SURFACE_FORMS, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM, MAX_COLLECTION_SURFACE_FIELDS, MAX_COLLECTION_SURFACE_CONTROL_INDEX, MAX_COLLECTION_SURFACE_INVENTORY_BYTES, collectionSurfaceSemanticCategorySchema, collectionSurfaceEvidenceRefSchema, collectionSurfaceFieldSchema, formPrivacyDisclosureSchema, collectionSurfaceFormSchema } from "./collection-surface-form";
 export * from "./post-accept-form-capture";
 import { formDestinationTraceSchema } from "./form-destination-trace";
 import { siteIntegrityObservationSchema } from "./site-integrity";
@@ -821,7 +821,7 @@ export const collectionSurfaceObservationSchema = z.object({
   directVsInferred: directVsInferredSchema,
 });
 
-export { COLLECTION_SURFACE_INVENTORY_VERSION, COLLECTION_SURFACE_ASSESSMENT_VERSION, MAX_COLLECTION_SURFACE_FORMS, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM, MAX_COLLECTION_SURFACE_FIELDS, MAX_COLLECTION_SURFACE_INVENTORY_BYTES, collectionSurfaceSemanticCategorySchema, collectionSurfaceEvidenceRefSchema, collectionSurfaceFieldSchema, formPrivacyDisclosureSchema, collectionSurfaceFormSchema } from "./collection-surface-form";
+export { COLLECTION_SURFACE_INVENTORY_VERSION, COLLECTION_SURFACE_ASSESSMENT_VERSION, MAX_COLLECTION_SURFACE_FORMS, MAX_COLLECTION_SURFACE_FIELDS_PER_FORM, MAX_COLLECTION_SURFACE_FIELDS, MAX_COLLECTION_SURFACE_CONTROL_INDEX, MAX_COLLECTION_SURFACE_INVENTORY_BYTES, collectionSurfaceSemanticCategorySchema, collectionSurfaceEvidenceRefSchema, collectionSurfaceFieldSchema, formPrivacyDisclosureSchema, collectionSurfaceFormSchema } from "./collection-surface-form";
 
 export const collectionSurfaceInventoryCoverageSchema = z.object({
   status: z.enum(["complete", "limited", "failed"]),

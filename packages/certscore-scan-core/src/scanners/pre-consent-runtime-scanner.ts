@@ -1,3 +1,5 @@
+import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
+import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "../evidence-work-budget.js";
 import { readDocumentSiteMetadata as captureDocumentSiteMetadata, captureWordpressFeedVersion } from "../cms-version-capture.js";
 import { runAccessibilityAudit, unavailableAccessibilityAudit } from "../accessibility-audit.js";
 import type { AccessibilityAuditObservation } from "@certscore/contracts";
@@ -6,7 +8,7 @@ import { installFormDestinationTracing } from "../form-destination-trace.js";
 import { SITE_INTEGRITY_LIMITS, siteIntegrityCodeProofSchema, siteIntegrityObservationSchema, type SiteIntegrityObservation } from "@certscore/contracts";
 import { createHash, randomUUID } from "node:crypto";
 import { createProxyDestinationCapture } from "../proxy-destination-capture.js";
-import { captureCollectionSurfaceSnapshots, type FormSnapshotReviewer } from "../collection-surface-snapshots";
+import { captureCollectionSurfaceSnapshots, FORM_SNAPSHOT_BUDGET_MS, type FormSnapshotReviewer } from "../collection-surface-snapshots";
 import { createGpcSignalCapture, installGpcNavigatorSignal } from "../gpc-signal-capture.js";
 import { startGpcObservationSession } from "../gpc-observation-session.js";
 import { createGpcImpactCapture } from "../gpc-impact-capture.js";
@@ -22,6 +24,7 @@ import {
   type CmpRuntimeObservation,
   type CollectionSurfaceInventory,
   type CollectionSurfaceObservation,
+  type CollectionSurfaceSnapshot,
   type CookieEvent,
   type CookieSnapshot,
   type DomSnapshotArtifact,
@@ -629,6 +632,8 @@ export async function preConsentRuntimeScanner(
   const captureRuntimeEvidence = captureScope !== "consent_proof";
   const captureConsentEvidence = captureScope !== "runtime_evidence";
   const captureRenderedPolicyEvidence = captureScope === "combined";
+  const requiredAccessibility = Boolean(input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only");
+  const requiredTailReserveMs = requiredAccessibility ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0;
   const impactCapture = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only" ? createGpcImpactCapture({
     expectedEnabled: input.globalPrivacyControlEnabled === true, now: () => elapsed(input.scanStartedAtMs),
   }) : undefined;
@@ -3999,7 +4004,8 @@ export async function preConsentRuntimeScanner(
     });
     const transportNetworkProbes = earlyTransportNetworkProbes;
     throwIfAborted(input.signal);
-    const transportSecurityRemainingMs = remainingModuleBudgetMs();
+    const transportSecurityRemainingMs = optionalEvidenceAllowance({ remainingMs: remainingModuleBudgetMs(),
+      maximumMs: 12_000, requiredReserveMs: requiredTailReserveMs });
     const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } =
       transportNetworkProbes && transportSecurityRemainingMs >= 1_000
         ? await recordBoundedTiming(
@@ -4031,7 +4037,7 @@ export async function preConsentRuntimeScanner(
             timingBreakdown,
             "page evidence: transport security skipped",
             transportNetworkProbes
-              ? "Skipped bounded transport security observation because the pre-consent module budget was exhausted."
+              ? "Retained early transport evidence; the final refresh yielded to required evidence and finalization."
               : "Dedicated consent-proof lane leaves transport evidence to the parallel runtime-evidence Lambda.",
           );
           return retainedTransportSecurityObservation
@@ -4080,15 +4086,19 @@ export async function preConsentRuntimeScanner(
       iframeEvents,
     });
     await emitPassiveRuntimeCheckpoint();
-    const collectionSurfaceSnapshots = input.formSnapshotReviewer && retainedCollectionSurfaceInventory
-      ? await captureCollectionSurfaceSnapshots(page, retainedCollectionSurfaceInventory, input.formSnapshotReviewer, input.signal)
-      : undefined;
+    let formPixelWorkCompleted = true;
+    let formVisualBudgetMs = 0;
+    let crawlMetadataBudgetMs = 0;
     if (input.onInventoryPage) {
-      // Optional crawl metadata must never downgrade or delay the canonical homepage assessment.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try { await Promise.race([input.onInventoryPage(page),new Promise<void>(resolve=>{timer=setTimeout(resolve,250);})]); }
-      catch { /* The crawl fails closed if its comparable context is unavailable. */ }
-      finally { if(timer)clearTimeout(timer); }
+      const allowance = optionalEvidenceAllowance({ remainingMs: remainingModuleBudgetMs(),
+        maximumMs: 250, requiredReserveMs: requiredTailReserveMs });
+      crawlMetadataBudgetMs = allowance;
+      if (allowance > 0) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try { await Promise.race([input.onInventoryPage(page), new Promise<void>(resolve => { timer = setTimeout(resolve, allowance); })]); }
+        catch { /* The crawl fails closed if its comparable context is unavailable. */ }
+        finally { if (timer) clearTimeout(timer); }
+      }
     }
     const retainPolicyRecoverySession = input.retainRenderedPolicyRecoverySession === true &&
       retainedRenderedPolicyLinkEvidence.length > 0;
@@ -4100,10 +4110,41 @@ export async function preConsentRuntimeScanner(
     const finalizedProxyGraph = proxyDestinations || input.accessibilityScanId ? finishGraph() : undefined;
     if (input.accessibilityScanId) responseCaptureFinalized = true;
     if (input.accessibilityScanId) input.onPassiveCaptureComplete?.();
-    const accessibilityAudit = input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only"
-      ? await recordTiming(timingBreakdown, "required accessibility audit", "Bundled axe WCAG A/AA audit after frozen baseline capture, before single-result publication.", () =>
-          runAccessibilityAudit({ page, scanId: input.accessibilityScanId!, documentIdentity: () => currentBrowserDocumentIdentity(page), signal: input.signal }))
+    const accessibilityBudgetMs = Math.max(0, Math.min(ACCESSIBILITY_AUDIT_BUDGET_MS,
+      remainingModuleBudgetMs() - EVIDENCE_WORK_POLICY.finalizationReserveMs));
+    const accessibilityAudit = requiredAccessibility
+      ? accessibilityBudgetMs <= 0 ? unavailableAccessibilityAudit({ scanId: input.accessibilityScanId!,
+          documentUrl: input.normalizedUrl, documentToken: baselineDocumentIdentity?.token, reason: "audit_budget_exhausted" })
+      : await recordTiming(timingBreakdown, "required accessibility audit", "Bundled axe WCAG A/AA audit after frozen baseline capture, before single-result publication.", () =>
+          runAccessibilityAudit({ page, scanId: input.accessibilityScanId!, documentIdentity: () => currentBrowserDocumentIdentity(page), signal: input.signal, budgetMs: accessibilityBudgetMs }))
       : undefined;
+    // Optional form pixels cannot compete with the required audit on the same
+    // renderer. Inventory/trace/graph and every privacy observer are frozen;
+    // later visual work cannot add to the baseline or create a finding.
+    let collectionSurfaceSnapshots: CollectionSurfaceSnapshot[] | undefined;
+    if (input.formSnapshotReviewer && retainedCollectionSurfaceInventory) {
+      const allowance = page.isClosed() ? 0 : optionalEvidenceAllowance({ remainingMs: remainingModuleBudgetMs(),
+        maximumMs: FORM_SNAPSHOT_BUDGET_MS });
+      formVisualBudgetMs = allowance;
+      const optionalDeadline = Date.now() + allowance;
+      const cleanupReserveMs = Math.min(250, allowance);
+      let resolvePixelWork!: () => void;
+      const pixelWork = new Promise<void>(resolve => { resolvePixelWork = resolve; });
+      formPixelWorkCompleted = false;
+      collectionSurfaceSnapshots = await captureCollectionSurfaceSnapshots(page, retainedCollectionSurfaceInventory,
+        input.formSnapshotReviewer, input.signal, undefined, optionalDeadline - cleanupReserveMs, {
+          onPixelWorkCompleted() { formPixelWorkCompleted = true; resolvePixelWork(); },
+        });
+      // Cleanup stays inside the existing image allowance. Required browser
+      // evidence is already frozen and audited before any masking begins.
+      if (!formPixelWorkCompleted) await boundedCleanup(pixelWork, Math.max(0, optionalDeadline - Date.now()));
+    }
+    recordInstantTiming(timingBreakdown, "evidence work priority", JSON.stringify({
+      policy: EVIDENCE_WORK_POLICY.version, requiredAccessibility,
+      accessibilityBudgetMs: requiredAccessibility ? accessibilityBudgetMs : 0,
+      finalizationReserveMs: EVIDENCE_WORK_POLICY.finalizationReserveMs,
+      transportRefreshBudgetMs: transportSecurityRemainingMs, formVisualBudgetMs, crawlMetadataBudgetMs, formPixelWorkCompleted,
+    }));
     if (proxyDestinations && !retainOwnedBrowserForPolicyRecovery) {
       responseCaptureFinalized = true;
       await boundedCleanup(browser.close(), Math.min(1000, remainingModuleBudgetMs()));
@@ -5231,6 +5272,8 @@ function signalTypeForMatchSource(
 }
 
 type ConsolidatedPageEvidenceSnapshot = {
+  workAllocation?: { version: string; inspectedFieldCount: number; totalFieldCandidates: number; discoveredAnchorCount: number;
+    inspectedPolicyLinks: number; linkDiscoveryTruncated: boolean; localStorageKeyCount: number; sessionStorageKeyCount: number };
   documentReadyState: DocumentReadyState;
   siteIntegrityObservation?: SiteIntegrityObservation;
   apiAccesses: Array<{ apiName: string; category: string; timestampMs: number }>;
@@ -5332,10 +5375,11 @@ async function capturePostSettlePageEvidence(input: {
     "page evidence: consolidated snapshot",
     "One read-only main-document snapshot for storage keys, scripts, iframes, API probes, public collection surfaces, and bounded visible text.",
     2_500,
-    () => captureConsolidatedPageEvidenceSnapshot(input.page, input.captureSiteIntegrity),
+    () => captureConsolidatedPageEvidenceSnapshot(input.page, input.captureSiteIntegrity, input.captureRenderedPolicyLinks),
     () => undefined,
   );
   if (snapshot) {
+    recordInstantTiming(input.timingBreakdown, "runtime detail allocation", JSON.stringify(snapshot.workAllocation));
     if (snapshot.documentReadyState === "loading") input.onIncompleteCapture(RUNTIME_PAGE_INVENTORY_LOADING);
     for (const [label, detail] of [
       ["page evidence: storage snapshot", "Local/session storage keys retained by the consolidated snapshot."],
@@ -5374,9 +5418,10 @@ async function capturePostSettlePageEvidence(input: {
       "page evidence: consolidated snapshot retry",
       "One short atomic retry preserves storage, script, iframe, browser-API, collection-surface, and text evidence without restoring the six-call legacy fallback.",
       1_000,
-      () => captureConsolidatedPageEvidenceSnapshot(input.page, input.captureSiteIntegrity),
+      () => captureConsolidatedPageEvidenceSnapshot(input.page, input.captureSiteIntegrity, input.captureRenderedPolicyLinks),
       () => undefined,
     );
+    if (retrySnapshot) recordInstantTiming(input.timingBreakdown, "runtime detail allocation", JSON.stringify(retrySnapshot.workAllocation));
     if (!retrySnapshot) input.onIncompleteCapture();
     else if (retrySnapshot.documentReadyState === "loading") input.onIncompleteCapture(RUNTIME_PAGE_INVENTORY_LOADING);
     const retryEvidence = retrySnapshot
@@ -5517,10 +5562,10 @@ async function capturePostSettlePageEvidence(input: {
   };
 }
 
-async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIntegrity: false | "starting_page_main_document" | "additional_page_main_document" = false): Promise<ConsolidatedPageEvidenceSnapshot> {
+export async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIntegrity: false | "starting_page_main_document" | "additional_page_main_document" = false, captureRenderedPolicyLinks = true): Promise<ConsolidatedPageEvidenceSnapshot> {
   const before = currentBrowserDocumentIdentity(page);
   const cmpSelectors = KNOWN_CMP_REGISTRY.flatMap((definition) => definition.formExclusionSelectors ?? definition.domSelectors ?? []).slice(0, 100);
-  const snapshot = await page.evaluate(({ cmpSelectors, maxFieldCandidates, captureSiteIntegrity, integrityLimits, privacyHints }) => {
+  const snapshot = await page.evaluate(({ cmpSelectors, maxFieldCandidates, captureSiteIntegrity, captureRenderedPolicyLinks, integrityLimits, privacyHints, workLimits, workPolicyVersion }) => {
     // tsx/esbuild can preserve nested browser-callback names by emitting calls to
     // its module-scoped __name helper. Playwright serializes only this callback,
     // so provide the no-op helper in the page before any nested callback runs.
@@ -5532,25 +5577,58 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
     const sessionStorageEntries: Record<string, string> = Object.create(null);
     let localStorageReadComplete = false;
     let sessionStorageReadComplete = false;
-    try {
-      for (let index = 0; index < window.localStorage.length; index += 1) {
-        const key = window.localStorage.key(index);
-        if (key !== null) localStorageEntries[key] = "[redacted]";
+    const storageDeadline = performance.now() + workLimits.storageBudgetMs;
+    const storageAreas = [
+      { store: () => window.localStorage, entries: localStorageEntries, total: 0 },
+      { store: () => window.sessionStorage, entries: sessionStorageEntries, total: 0 },
+    ];
+    const stores = storageAreas.map(area => { try { const store = area.store(); area.total = store.length; return store; } catch { return null; } });
+    for (let index = 0; index < workLimits.storageKeysPerArea && performance.now() < storageDeadline; index++) {
+      let pending = false;
+      for (const [areaIndex, area] of storageAreas.entries()) {
+        const store = stores[areaIndex];
+        if (!store || index >= area.total) continue;
+        pending = true;
+        try { const key = store.key(index); if (key !== null) area.entries[key] = "[redacted]"; } catch { stores[areaIndex] = null; }
       }
-      localStorageReadComplete = true;
-    } catch {}
-    try {
-      for (let index = 0; index < window.sessionStorage.length; index += 1) {
-        const key = window.sessionStorage.key(index);
-        if (key !== null) sessionStorageEntries[key] = "[redacted]";
-      }
-      sessionStorageReadComplete = true;
-    } catch {}
+      if (!pending) break;
+    }
+    const readComplete = (index: number) => {
+      try { return stores[index] !== null && stores[index]!.length === storageAreas[index]!.total &&
+        Object.keys(storageAreas[index]!.entries).length === storageAreas[index]!.total; } catch { return false; }
+    };
+    localStorageReadComplete = readComplete(0);
+    sessionStorageReadComplete = readComplete(1);
+    // Read cheap baseline facts before layout/style-heavy optional details.
+    const core = {
+      apiAccesses: ((window as typeof window & { __certscoreBrowserApiAccesses?: Array<{ apiName: string; category: string; timestampMs: number }> }).__certscoreBrowserApiAccesses ?? []).slice(0, 60),
+      domText: document.body?.innerText ?? "",
+      frames: Array.from(document.querySelectorAll("iframe"), frame => ({ src: frame.src || undefined, name: frame.name || undefined })),
+      scripts: Array.from(document.scripts, script => ({ src: script.src || undefined, async: script.async, defer: script.defer })),
+    };
     const allFieldCandidates = document.querySelectorAll('input, textarea, select, [role="checkbox"], [role="switch"]');
-    const inspectedFieldCandidates = Array.from(
-      { length: Math.min(allFieldCandidates.length, maxFieldCandidates) },
-      (_, index) => allFieldCandidates.item(index),
-    ).filter((candidate): candidate is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement => Boolean(candidate));
+    const fieldGroups = new Map<Element | null, Array<{ element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement; domOrder: number }>>();
+    const discoveryDeadline = performance.now() + workLimits.fieldDiscoveryBudgetMs;
+    for (let index = 0; index < Math.min(allFieldCandidates.length, workLimits.fieldDiscoveryCandidates); index++) {
+      if (performance.now() >= discoveryDeadline) break;
+      const element = allFieldCandidates[index] as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+      const group = (element as HTMLInputElement).form ?? element.closest('form, [role="form"]');
+      let candidates = fieldGroups.get(group);
+      if (!candidates) {
+        if (fieldGroups.size >= workLimits.fieldGroups) continue;
+        candidates = []; fieldGroups.set(group, candidates);
+      }
+      if (candidates.length < maxFieldCandidates) candidates.push({ element, domOrder: index });
+    }
+    const inspectedFieldCandidates: Array<{ element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement; domOrder: number }> = [];
+    for (let round = 0; round < maxFieldCandidates && inspectedFieldCandidates.length < maxFieldCandidates; round++) {
+      let added = false;
+      for (const candidates of fieldGroups.values()) {
+        if (candidates[round]) { inspectedFieldCandidates.push(candidates[round]!); added = true; }
+        if (inspectedFieldCandidates.length === maxFieldCandidates) break;
+      }
+      if (!added) break;
+    }
     const groupRefs = new WeakMap<Element, string>();
     let nextGroupRef = 0;
     const groupRefFor = (element: Element) => {
@@ -5695,7 +5773,11 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
         disclosureRemainingMs = Math.max(0, disclosureRemainingMs - (performance.now() - disclosureStarted));
       }
     };
-    const rows = inspectedFieldCandidates.flatMap((element, domOrder) => {
+    const fieldDeadline = performance.now() + workLimits.fieldDetailBudgetMs;
+    let inspectedFieldCount = 0;
+    const rows = inspectedFieldCandidates.flatMap(({ element, domOrder }) => {
+      if (performance.now() >= fieldDeadline) return [];
+      inspectedFieldCount++;
       const type = (element.getAttribute("type") || element.tagName.toLowerCase()).toLowerCase();
       // Styled native choices may have a zero-sized transparent input while
       // their browser-associated label is the visible control. Retain the
@@ -5759,27 +5841,77 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
       documentReadyState: document.readyState,
       pageUrl: window.location.href,
       rows,
-      inspectedFieldCandidateCount: inspectedFieldCandidates.length,
-      candidateScanTruncated: allFieldCandidates.length > inspectedFieldCandidates.length,
+      inspectedFieldCandidateCount: inspectedFieldCount,
+      candidateScanTruncated: allFieldCandidates.length > inspectedFieldCount,
     };
-    const anchorElements: HTMLAnchorElement[] = [];
-    const pendingRoots: Array<Document | ShadowRoot> = [document];
-    const seenRoots = new Set<Document | ShadowRoot>();
-    while (pendingRoots.length > 0) {
-      const root = pendingRoots.shift();
-      if (!root || seenRoots.has(root)) continue;
-      seenRoots.add(root);
-      for (const element of root.querySelectorAll("a[href]")) {
-        anchorElements.push(element as HTMLAnchorElement);
-      }
-      for (const element of root.querySelectorAll("*")) {
-        if (element.shadowRoot) pendingRoots.push(element.shadowRoot);
+    const anchorGroups: HTMLAnchorElement[][] = [];
+    let discoveredAnchorCount = 0;
+    let linkDiscoveryTruncated = false;
+    const collectAnchors = (root: Document | ShadowRoot) => {
+      const elements = root.querySelectorAll<HTMLAnchorElement>("a[href]");
+      discoveredAnchorCount += elements.length;
+      const half = workLimits.anchors / 2;
+      const selected: HTMLAnchorElement[] = [];
+      for (let index = 0; index < Math.min(elements.length, half); index++) selected.push(elements[index]!);
+      for (let index = Math.max(half, elements.length - half); index < elements.length; index++) selected.push(elements[index]!);
+      anchorGroups.push(selected);
+      return selected;
+    };
+    const mainAnchors = collectAnchors(document);
+    const mainDocumentAnchorCount = discoveredAnchorCount;
+    // Policy link traversal belongs to the policy lane in sharded scans. The
+    // baseline/GPC snapshot must not pay for unused names, styles or shadow walks.
+    if (captureRenderedPolicyLinks) {
+      const deadline = performance.now() + workLimits.shadowDiscoveryBudgetMs;
+      const pendingRoots: Array<Document | ShadowRoot> = [document];
+      let visitedElements = 0;
+      let discoveryExhausted = false;
+      for (let rootIndex = 0; rootIndex < pendingRoots.length; rootIndex++) {
+        const root = pendingRoots[rootIndex]!;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+        while (walker.nextNode()) {
+          if (++visitedElements > workLimits.shadowElements || performance.now() >= deadline) {
+            linkDiscoveryTruncated = true; discoveryExhausted = true; break;
+          }
+          const element = walker.currentNode as Element;
+          if (element.shadowRoot) {
+            if (pendingRoots.length < workLimits.shadowRoots) {
+              pendingRoots.push(element.shadowRoot);
+              // Keep proof from each discovered root before spending its next
+              // turn searching for still-deeper roots.
+              collectAnchors(element.shadowRoot);
+            } else linkDiscoveryTruncated = true;
+          }
+        }
+        if (discoveryExhausted) break;
       }
     }
-    const selectedAnchors = anchorElements.length > 1_000
-      ? [...anchorElements.slice(0, 500), ...anchorElements.slice(-500)]
-      : anchorElements;
-    const renderedLinks = selectedAnchors.flatMap((element) => {
+    const selectedAnchors: HTMLAnchorElement[] = [];
+    if (captureRenderedPolicyLinks) {
+      const selected = new Set<HTMLAnchorElement>();
+      // A shadow-rich page must not displace the document's footer/header proof.
+      for (const element of mainAnchors.filter(element => element.closest("footer, header")).slice(0, 100)) {
+        selected.add(element); selectedAnchors.push(element);
+      }
+      for (let round = 0; round < workLimits.anchors && selectedAnchors.length < workLimits.anchors; round++) {
+        let added = false;
+        for (const group of anchorGroups) {
+          const element = group[round];
+          if (element && !selected.has(element)) { selected.add(element); selectedAnchors.push(element); added = true; }
+          if (selectedAnchors.length === workLimits.anchors) break;
+        }
+        if (!added && anchorGroups.every(group => round >= group.length)) break;
+      }
+    }
+    if (captureRenderedPolicyLinks && discoveredAnchorCount > selectedAnchors.length) linkDiscoveryTruncated = true;
+    const renderedLinkDeadline = performance.now() + workLimits.renderedLinkBudgetMs;
+    let inspectedPolicyLinks = 0;
+    const policyAnchors = !captureRenderedPolicyLinks ? [] : selectedAnchors
+      .map(element => ({ element, rank: element.closest("footer") ? 0 : element.closest("header") ? 1 : 2 }))
+      .sort((a, b) => a.rank - b.rank).map(row => row.element);
+    const renderedLinks = policyAnchors.flatMap((element) => {
+      if (performance.now() >= renderedLinkDeadline) { linkDiscoveryTruncated = true; return []; }
+      inspectedPolicyLinks++;
       const href = element.getAttribute("href")?.trim();
       if (!href) return [];
       const labelledBy = element.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
@@ -5798,6 +5930,7 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
       const accessibleNameSource: RetainedRenderedPolicyLink["accessibleNameSource"] = named?.[0] ?? "none";
       let linkVisibility: "visible" | "hidden" = "visible";
       for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
+        if (performance.now() >= renderedLinkDeadline) { linkDiscoveryTruncated = true; return []; }
         const style = getComputedStyle(current);
         if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
             current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) {
@@ -5828,10 +5961,10 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
     const hiddenLinks: SiteIntegrityObservation["links"] = [];
     let inspectedLinks = 0;
     let codeProofBytes = 0;
-    let integrityTruncated = anchorElements.length > integrityLimits.inspectedLinks;
+    let integrityTruncated = mainDocumentAnchorCount > integrityLimits.inspectedLinks;
     if (captureSiteIntegrity) {
       const stopAt = performance.now() + integrityLimits.captureBudgetMs;
-      for (const element of selectedAnchors) {
+      for (const element of mainAnchors) {
         if (performance.now() >= stopAt || hiddenLinks.length >= integrityLimits.retainedLinks) { integrityTruncated = true; break; }
         const index = inspectedLinks++;
         if (element.ownerDocument !== document || !element.textContent?.trim() ||
@@ -5916,19 +6049,14 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
         }
       }
     }
-    const apiScope = window as typeof window & {
-      __certscoreBrowserApiAccesses?: Array<{ apiName: string; category: string; timestampMs: number }>;
-    };
     return {
+      ...core,
       documentReadyState: document.readyState,
+      workAllocation: { version: workPolicyVersion, inspectedFieldCount, totalFieldCandidates: allFieldCandidates.length,
+        discoveredAnchorCount, inspectedPolicyLinks, linkDiscoveryTruncated,
+        localStorageKeyCount: storageAreas[0]!.total, sessionStorageKeyCount: storageAreas[1]!.total },
       integrityCapture: { links: hiddenLinks, inspectedLinks, truncated: integrityTruncated, capturedAt: new Date().toISOString() },
-      apiAccesses: (apiScope.__certscoreBrowserApiAccesses ?? []).slice(0, 60),
       collectionCapture,
-      domText: document.body?.innerText ?? "",
-      frames: [...document.querySelectorAll("iframe")].map((frame) => ({
-        src: frame.src || undefined,
-        name: frame.name || undefined,
-      })),
       localStorageEntries,
       localStorageKeys: Object.keys(localStorageEntries),
       sessionStorageKeys: Object.keys(sessionStorageEntries),
@@ -5936,14 +6064,9 @@ async function captureConsolidatedPageEvidenceSnapshot(page: Page, captureSiteIn
       localStorageReadComplete, sessionStorageReadComplete,
       pageUrl: window.location.href,
       links: renderedLinks,
-      scripts: [...document.scripts].map((script) => ({
-        src: script.src || undefined,
-        async: script.async,
-        defer: script.defer,
-      })),
       sessionStorageEntries,
     };
-  }, { cmpSelectors, maxFieldCandidates: MAX_COLLECTION_SURFACE_INSPECTED_FIELDS, captureSiteIntegrity, integrityLimits: SITE_INTEGRITY_LIMITS, privacyHints: [...new Set(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [...entry.privacyPolicyLabels, ...entry.contextHints]).map(hint => hint.toLocaleLowerCase()))] });
+  }, { cmpSelectors, maxFieldCandidates: MAX_COLLECTION_SURFACE_INSPECTED_FIELDS, captureSiteIntegrity, captureRenderedPolicyLinks, workLimits: EVIDENCE_WORK_POLICY.runtimeSnapshot, workPolicyVersion: EVIDENCE_WORK_POLICY.version, integrityLimits: SITE_INTEGRITY_LIMITS, privacyHints: [...new Set(PRIVACY_EVIDENCE_LOCALE_REGISTRY.flatMap(entry => [...entry.privacyPolicyLabels, ...entry.contextHints]).map(hint => hint.toLocaleLowerCase()))] });
   const identity = stableBrowserDocumentIdentity(before, currentBrowserDocumentIdentity(page));
   const { integrityCapture, ...evidence } = snapshot;
   if (!captureSiteIntegrity || !identity || snapshot.pageUrl !== page.url()) return evidence;
@@ -10750,7 +10873,7 @@ export async function captureCollectionSurfaceInventory(
   scanStartedAtMs: number,
   pageUrl: string,
 ): Promise<CollectionSurfaceInventory> {
-  const snapshot = await captureConsolidatedPageEvidenceSnapshot(page);
+  const snapshot = await captureConsolidatedPageEvidenceSnapshot(page, false, false);
   return buildCollectionSurfaceInventory({
     ...snapshot.collectionCapture,
     pageUrl: snapshot.collectionCapture.pageUrl || pageUrl,

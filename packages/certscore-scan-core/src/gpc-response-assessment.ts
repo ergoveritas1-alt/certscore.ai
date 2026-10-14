@@ -181,6 +181,13 @@ export function buildGpcResponseAssessment(input: {
   for (const [label, bundle, lane] of [["baseline", input.baseline, baselineLane], ["gpc", input.gpc, gpcLane]] as const) {
     if (lane?.accessOutcome !== "representative_page") coverageLimits.add(`${label}_not_representative`);
     if (bundle?.runtimeCoverage?.coverageStatus !== "usable") coverageLimits.add(`${label}_runtime_coverage_insufficient`);
+    // New bounded reads explicitly declare incomplete storage coverage. Retain
+    // their observed keys, but never compare the sample as a complete set.
+    // Legacy records without captureContext keep their historical semantics.
+    if (bundle?.storageSnapshots.some(snapshot => snapshot.captureContext &&
+      (!snapshot.captureContext.localStorageReadComplete || !snapshot.captureContext.sessionStorageReadComplete))) {
+      coverageLimits.add(`${label}_web_storage_inventory_incomplete`);
+    }
     const runtime = bundle?.modulesRun.find((module) => module.moduleName === "preConsentRuntimeScanner");
     if (runtime?.status !== "completed" || !runtime.timingBreakdown?.some((timing) =>
       timing.label === "passive evidence quiet wait" && timing.outcome === "completed")) coverageLimits.add(`${label}_settle_not_completed`);

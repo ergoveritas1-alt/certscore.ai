@@ -15,7 +15,8 @@ export function projectAccessibilityAuditSummary(value: unknown, scanId?: string
   return { status: audit.status, required: audit.required, scope: audit.scope, engine: audit.engine, engineVersion: audit.engineVersion,
     durationMs: audit.durationMs, failedRuleCount: audit.rulesEvaluated.length ? audit.violations.length : null,
     affectedNodeCount: audit.rulesEvaluated.length ? audit.violations.reduce((sum, rule) => sum + rule.nodeCount, 0) : null,
-    reviewRuleCount: audit.rulesEvaluated.length ? audit.reviewItems.length : null };
+    reviewRuleCount: audit.rulesEvaluated.length ? audit.reviewItems.length : null,
+    ...(audit.exampleCoverage ? { exampleCoverage: audit.exampleCoverage } : {}) };
 }
 
 /** Overall delivery coverage changes without changing privacy evidence or finding eligibility. */

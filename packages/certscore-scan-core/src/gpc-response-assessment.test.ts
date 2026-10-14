@@ -465,3 +465,17 @@ test("full-site inventory pages do not collect GPC impact metadata", async () =>
       "additional inventory pages do not receive another loading-document allowance");
   } finally { await rm(tempRoot, { recursive: true, force: true }); }
 });
+
+for (const lane of ["baseline", "gpc"] as const) test(`bounded ${lane} storage cannot establish complete GPC comparison coverage`, () => {
+  const base = gpcRuntimeFixture({ enabled: false }), gpc = gpcRuntimeFixture({ enabled: true });
+  const target = lane === "baseline" ? base : gpc;
+  target.storageSnapshots.push({ artifactId: "bounded-storage", capturedAtMs: 950, consentStateAtTime: "pre_consent", url: target.url,
+    localStorage: { observed: "[redacted]" }, sessionStorage: {}, localStorageKeys: ["observed"], sessionStorageKeys: [], valuesRedacted: true, evidenceRefs: [],
+    captureContext: { contractVersion: "storage-capture-context.v1", origin: new URL(target.url).origin, localStorageReadComplete: false, sessionStorageReadComplete: true } });
+  const result = assess(base, gpc);
+  assert.equal(result.status, "indeterminate");
+  assert.equal(result.scoreEffect, "none");
+  assert.equal(result.comparison.comparable, false);
+  assert.ok(result.comparison.limitationKeys.includes(`${lane}_web_storage_inventory_incomplete`));
+  assert.ok(result.comparison.deltas.webStorage.baselineOnlyCount + result.comparison.deltas.webStorage.gpcOnlyCount > 0, "keep observed sampled keys as descriptive evidence");
+});

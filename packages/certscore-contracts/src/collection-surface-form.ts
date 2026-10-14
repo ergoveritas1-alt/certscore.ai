@@ -6,6 +6,9 @@ export const COLLECTION_SURFACE_ASSESSMENT_VERSION = "certscore.collection-surfa
 export const MAX_COLLECTION_SURFACE_FORMS = 10;
 export const MAX_COLLECTION_SURFACE_FIELDS_PER_FORM = 20;
 export const MAX_COLLECTION_SURFACE_FIELDS = 60;
+// Discovery may sample later forms without renumbering their native DOM index.
+// This is an identity bound, separate from the 250 inspected-field work limit.
+export const MAX_COLLECTION_SURFACE_CONTROL_INDEX = 9_999;
 export const MAX_COLLECTION_SURFACE_INVENTORY_BYTES = 64 * 1024;
 
 export const collectionSurfaceSemanticCategorySchema = z.enum([
@@ -42,7 +45,7 @@ export const collectionSurfaceFieldSchema = z.object({
   checkedState: z.enum(["checked", "unchecked", "mixed", "unknown"]).optional(),
   review: z.object({ version: z.literal("collection-field-review.v1"), category: z.enum(FIELD_REVIEW_CATEGORIES), preselectedMarketing: z.boolean() }).strict().optional(),
   fieldRef: z.string().min(1).max(80),
-  controlIndex: z.number().int().nonnegative().max(249).optional(),
+  controlIndex: z.number().int().nonnegative().max(MAX_COLLECTION_SURFACE_CONTROL_INDEX).optional(),
   elementType: z.enum(["input", "textarea", "select", "custom_control"]),
   inputType: z.string().min(1).max(40),
   semanticCategory: collectionSurfaceSemanticCategorySchema,

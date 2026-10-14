@@ -8,6 +8,7 @@ import {
 
 type Identity = NonNullable<AccessibilityRuleObservation["representativeNodes"][number]["imageLinkIdentity"]>;
 type IdentifiedNode = NodeResult & { imageLinkIdentity?: Identity };
+type CountedRule = Result & { observedNodeCount?: number };
 
 function safeText(value: string, max: number) {
   return value.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted]")
@@ -26,11 +27,11 @@ function safeHtml(html: string) {
   }).join("").slice(0, 500) || "<element>";
 }
 
-function normalizeRule(rule: Result): AccessibilityRuleObservation {
+function normalizeRule(rule: CountedRule): AccessibilityRuleObservation {
   return {
     ruleId: rule.id, impact: rule.impact ?? null, tags: rule.tags.slice(0, 24),
     help: safeText(rule.help, 300), description: safeText(rule.description, 600), helpUrl: rule.helpUrl,
-    nodeCount: rule.nodes.length,
+    nodeCount: rule.observedNodeCount ?? rule.nodes.length,
     representativeNodes: rule.nodes.slice(0, ACCESSIBILITY_LIMITS.examplesPerRule).map(node => {
       const data = [...node.any, ...node.all, ...node.none].find(check => check.id === "color-contrast")?.data as Record<string, unknown> | undefined;
       const colorContrast: NonNullable<AccessibilityRuleObservation["representativeNodes"][number]["colorContrast"]> = {};
@@ -51,6 +52,56 @@ function normalizeRule(rule: Result): AccessibilityRuleObservation {
       };
     }),
   };
+}
+
+/** Preserve rule coverage/counts first. Extra repeated element examples yield
+ * fairly across rules only when the existing byte ceiling is reached. */
+export function retainAccessibilityExampleBreadth<T extends {
+  violations: AccessibilityRuleObservation[]; reviewItems: AccessibilityRuleObservation[];
+}>(observation: T, byteLimit: number = ACCESSIBILITY_LIMITS.evidenceBytes): T & {
+  exampleCoverage: NonNullable<AccessibilityAuditObservation["exampleCoverage"]>;
+} | null {
+  const source = [...observation.violations, ...observation.reviewItems];
+  const fullCoverage = { version: "breadth_before_detail.v1" as const,
+    observedNodeCount: source.reduce((total, rule) => total + rule.nodeCount, 0),
+    retainedNodeCount: source.reduce((total, rule) => total + rule.representativeNodes.length, 0),
+    omittedNodeCount: 0, byteBudgetLimited: false };
+  fullCoverage.omittedNodeCount = fullCoverage.observedNodeCount - fullCoverage.retainedNodeCount;
+  const full = { ...observation, exampleCoverage: fullCoverage };
+  if (Buffer.byteLength(JSON.stringify(full), "utf8") <= byteLimit) return full;
+  const pinned = new Set(["image-alt", "link-name", "meta-viewport", "target-size"]);
+  const retained = source.map(rule => ({ ...rule,
+    representativeNodes: rule.representativeNodes.slice(0, pinned.has(rule.ruleId) ? ACCESSIBILITY_LIMITS.examplesPerRule : 1) }));
+  const result = { ...observation,
+    violations: retained.slice(0, observation.violations.length), reviewItems: retained.slice(observation.violations.length),
+    exampleCoverage: { ...fullCoverage, byteBudgetLimited: true },
+  };
+  const measure = () => {
+    result.exampleCoverage.retainedNodeCount = retained.reduce((total, rule) => total + rule.representativeNodes.length, 0);
+    result.exampleCoverage.omittedNodeCount = result.exampleCoverage.observedNodeCount - result.exampleCoverage.retainedNodeCount;
+    return Buffer.byteLength(JSON.stringify(result), "utf8");
+  };
+  let usedBytes = measure();
+  if (usedBytes > byteLimit) return null; // Never fabricate a rule without usable proof.
+  // Reserve a few bytes for changing count digits, rather than serializing the
+  // entire observation for every example. This bounds allocation CPU as well.
+  usedBytes += 16;
+  const impact = { critical: 0, serious: 1, moderate: 2, minor: 3 };
+  const order = source.map((rule, index) => ({ rule, index })).sort((a, b) =>
+    (impact[a.rule.impact ?? "minor"] - impact[b.rule.impact ?? "minor"]) || a.rule.ruleId.localeCompare(b.rule.ruleId) || a.index - b.index);
+  for (let round = 1; round < ACCESSIBILITY_LIMITS.examplesPerRule; round++) {
+    for (const { rule, index } of order) {
+      const target = retained[index]!;
+      if (target.representativeNodes.length > round || !rule.representativeNodes[round]) continue;
+      const node = rule.representativeNodes[round]!;
+      const addedBytes = Buffer.byteLength(JSON.stringify(node), "utf8") + 1;
+      if (usedBytes + addedBytes <= byteLimit) {
+        target.representativeNodes.push(node);
+        usedBytes += addedBytes;
+      }
+    }
+  }
+  return measure() <= byteLimit ? result : null;
 }
 
 export function unavailableAccessibilityAudit(input: {
@@ -102,11 +153,13 @@ export async function runAccessibilityAudit(input: {
       const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, resultTypes: ["violations", "incomplete"], preload: false, elementRef: true });
       const identities = new WeakMap<Element, number>();
       let nextId = 0;
-      for (const rule of [...results.violations, ...results.incomplete, ...results.passes, ...results.inapplicable]) {
+      for (const rule of [...results.violations, ...results.incomplete]) {
+        (rule as CountedRule).observedNodeCount = rule.nodes.length;
+        rule.nodes = rule.nodes.slice(0, exampleLimit);
         const captureIdentity = results.violations.includes(rule) && ["image-alt", "link-name"].includes(rule.id);
-        for (const [index, node] of rule.nodes.entries()) {
+        for (const node of rule.nodes) {
           const element = node.element;
-          if (captureIdentity && index < exampleLimit && element?.isConnected && element.ownerDocument === document) {
+          if (captureIdentity && element?.isConnected && element.ownerDocument === document) {
             const link = element.localName === "a" ? element : element.localName === "img" ? element.parentElement : null;
             const imageOnly = link?.localName === "a" && link.children.length === 1 && link.firstElementChild?.localName === "img" &&
               Array.from(link.childNodes).every(child => child === link.firstElementChild || child.nodeType === Node.TEXT_NODE && !child.textContent?.trim());
@@ -116,11 +169,22 @@ export async function runAccessibilityAudit(input: {
             (node as IdentifiedNode).imageLinkIdentity = { contractVersion: "certscore.accessibility-image-link-identity.v1",
               nodeId: identities.get(element)!, imageOnlyLinkId: imageOnly ? identities.get(link!)! : null };
           }
-          // Never serialize live elements (including check-related nodes) out of the browser.
           delete node.element;
-          for (const check of [...(node.any ?? []), ...(node.all ?? []), ...(node.none ?? [])]) for (const related of check.relatedNodes ?? []) delete related.element;
+          // Related elements and arbitrary rule data are not used by the typed
+          // observation. Do not transfer thousands of unused DOM excerpts.
+          for (const check of [...node.any, ...node.all, ...node.none]) {
+            check.relatedNodes = [];
+            if (check.id !== "color-contrast") delete check.data;
+            else if (check.data && typeof check.data === "object") {
+              const data = check.data as Record<string, unknown>;
+              check.data = Object.fromEntries(["fgColor", "bgColor", "fontSize", "fontWeight", "contrastRatio", "expectedContrastRatio"]
+                .filter(key => typeof data[key] === "string" || typeof data[key] === "number").map(key => [key, data[key]]));
+            }
+          }
         }
       }
+      // These groups contribute evaluated rule IDs, never element examples.
+      for (const rule of [...results.passes, ...results.inapplicable]) rule.nodes = [];
       return results;
     }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule });
     if (results.testEngine.name !== "axe-core" || results.testEngine.version !== axe.version) return unavailable("engine_identity_mismatch");
@@ -141,8 +205,9 @@ export async function runAccessibilityAudit(input: {
       rulesEvaluated, violations: results.violations.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeRule),
       reviewItems: results.incomplete.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeRule), limitations: [...new Set(limitations)].slice(0, 16),
     };
-    if (Buffer.byteLength(JSON.stringify(observation), "utf8") > ACCESSIBILITY_LIMITS.evidenceBytes) return unavailable("evidence_size_limit");
-    return accessibilityAuditObservationSchema.parse(observation);
+    const retained = retainAccessibilityExampleBreadth(observation);
+    if (!retained) return unavailable("evidence_size_limit");
+    return accessibilityAuditObservationSchema.parse(retained);
     } finally { input.page.off("framenavigated", onNavigation); }
   };
   try {

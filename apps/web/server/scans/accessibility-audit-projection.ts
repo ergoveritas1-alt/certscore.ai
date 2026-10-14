@@ -42,7 +42,7 @@ export function projectAccessibilityAudit(bundle: CanonicalEvidenceBundle, sourc
   // Failed/not-testable observations contain no evaluable results. Preserve
   // their actual coverage reason rather than inventing a binding failure.
   if (!bound && observation.status !== "failed" && observation.status !== "not_testable") {
-    observation = { ...observation, status: "limited", rulesEvaluated: [], violations: [], reviewItems: [], limitations: ["evidence_binding_invalid"] };
+    observation = { ...observation, status: "limited", rulesEvaluated: [], violations: [], reviewItems: [], exampleCoverage: undefined, limitations: ["evidence_binding_invalid"] };
   }
   return accessibilityAuditProjectionSchema.parse({
     contractVersion: "certscore.accessibility-audit-projection.v1", verificationStatus: "verified",

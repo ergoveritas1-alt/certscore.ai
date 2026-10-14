@@ -150,3 +150,10 @@ test("form notices are optional, bounded and reject active links", () => {
   withNotice.forms[0]!.privacyDisclosure.excerpts[0]!.text = "x".repeat(601);
   assert.equal(collectionSurfaceInventorySchema.safeParse(withNotice).success, false);
 });
+
+test("sampled fields retain later native control indices without exceeding the discovery bound", async () => {
+  const { collectionSurfaceFieldSchema, MAX_COLLECTION_SURFACE_CONTROL_INDEX } = await import("./index.js");
+  assert.equal(collectionSurfaceFieldSchema.parse({ ...field(0), controlIndex: 401 }).controlIndex, 401);
+  assert.equal(collectionSurfaceFieldSchema.safeParse({ ...field(0), controlIndex: MAX_COLLECTION_SURFACE_CONTROL_INDEX + 1 }).success, false);
+  assert.equal(collectionSurfaceFieldSchema.safeParse({ ...field(0), controlIndex: -1 }).success, false);
+});
