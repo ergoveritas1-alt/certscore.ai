@@ -1,0 +1,93 @@
+name: Publish Static Insights to S3
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "content/insights/**"
+  workflow_dispatch:
+    inputs:
+      rollback_release:
+        description: "Optional retained content release SHA to restore"
+        required: false
+        type: string
+
+concurrency:
+  group: insights-s3-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      content_only: ${{ steps.scope.outputs.content_only }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Select content-only publication
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "content_only=true" >> "$GITHUB_OUTPUT"
+          else
+            changed=$(git diff --name-only "$BEFORE_SHA" HEAD)
+            if grep -qv '^content/insights/' <<< "$changed"; then
+              echo "content_only=false" >> "$GITHUB_OUTPUT"
+              echo "Mixed application/content release: publish content manually after the application release."
+            else
+              echo "content_only=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+  publish:
+    needs: scope
+    if: needs.scope.outputs.content_only == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: insights-production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: us-west-1
+      INSIGHTS_S3_BUCKET: ws01-scan-artifacts-199536052647-us-west-1
+      ROLLBACK_RELEASE: ${{ inputs.rollback_release }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.3
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install publishing dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Validate static content and publication contracts
+        run: |
+          pnpm exec tsx --test apps/web/scripts/insights-publish-plan.test.ts apps/web/server/insights/reader.test.ts
+          pnpm exec tsx apps/web/scripts/publish-insights.ts
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-region: us-west-1
+          role-to-assume: arn:aws:iam::199536052647:role/certscore-web-insights-publisher
+      - name: Publish content and verify unchanged app revision
+        shell: bash
+        run: |
+          args=(--apply --receipt insights-publication-receipt.json)
+          if [[ -n "$ROLLBACK_RELEASE" ]]; then args+=(--rollback "$ROLLBACK_RELEASE"); fi
+          pnpm exec tsx apps/web/scripts/publish-insights.ts "${args[@]}"
+      - name: Retain publication receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: insights-publication-receipt
+          path: insights-publication-receipt.json
+          if-no-files-found: ignore
+          retention-days: 30
