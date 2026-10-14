@@ -7,6 +7,20 @@ import { SHADOW_REPORT } from "./report-lab/shadow-report-data";
 import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 
+test("banner magnifier requires an observed banner and retained crop; image loading waits for opening", async () => {
+  const { CmpDetails } = await import("./cmp-details");
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
+  const bannerPreview = { href: "/api/scans/scan-1/visual-evidence/banner", crop: {
+    version: "consent_banner_crop.v1" as const, x: 100, y: 50, width: 500, height: 600,
+    imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) } };
+  const render = () => renderToStaticMarkup(<CmpDetails audit={audit} vendor="Example CMP" bannerPreview={bannerPreview} />);
+  assert.match(render(), /aria-label="View captured cookie banner"/);
+  assert.doesNotMatch(render(), /<image|<dialog/);
+  assert.doesNotMatch(renderToStaticMarkup(<CmpDetails audit={audit} vendor="Example CMP" />), /View captured cookie banner/);
+  audit.rows.find(row => row.id === "banner")!.status = "Not assessed";
+  assert.doesNotMatch(render(), /View captured cookie banner/);
+});
+
 test("CMP details precede consent controls without redundant platform details in both report layouts", () => {
   const report = { ...SHADOW_REPORT, cmpAudit: projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment }) };
   for (const compact of [false, true]) {

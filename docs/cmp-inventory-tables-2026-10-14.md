@@ -197,3 +197,43 @@ Potential extra page transfer if shipped is estimated below $0.20/month at
 100,000 SITS-sized report views, including repeated inline icons and the existing
 1.5KB HubSpot asset (cached across its five rows). This estimate was disclosed
 during implementation and is pre-approved under the below-$1 policy.
+
+## Cookie-banner magnifier (local review)
+
+The Cookie banner finding has a compact magnifier only when its assessment is
+Observed and a retained, available image has valid crop metadata. The modal
+shows a browser-side crop of that existing image, with a close control, Escape
+dismissal, keyboard focus containment and focus restoration. The image is loaded
+only when opened. No image is regenerated, stored as a derivative, enhanced,
+fetched from the current target site or sent to a model.
+
+`consent_banner_crop.v1` is presentation metadata on the existing visual artifact.
+It uses the already validated canonical assessment's visual comparison and
+representative screenshot reference, with matching document token and retained
+geometry. Both compared controls must share a container, and an enclosing
+first-layer semantic dialog must contain their bounds inside the image. Inner
+action clusters cannot crop out the banner header or footer. Unknown, malformed,
+withheld, document-mismatched or unanchored sources provide no magnifier. Historical
+records without metadata stay unchanged; there is no new read-time artifact fetch
+or production backfill. Neither the assessment nor its source hash is changed.
+
+The local SITS replay verifies original geometry and screenshot bytes against the
+saved manifest. Its available settled screenshot has SHA-256
+`5f71573b4892fc5be61f10b07187235c11c2c46354b785d2ffd73315c2475927`.
+The crop is x=395, y=151.75, width=576, height=596.5 in a 1366x900 image.
+The newer withheld geometry-proof image is neither loaded nor served.
+The saved replay preserves all criterion assessments. Focused UI, crop,
+visual-provenance, export and existing visual-materialization tests pass, along
+with the web typecheck. Mobile width 390px has no modal overflow. Browser checks
+verify opening does not toggle the finding, closing/Escape restore focus, and
+the crop retains the full visible banner. Screenshot: `mobile-banner-preview.png`.
+
+This remains local and unpushed, with no new scan, runtime browser work, model
+call, retention or deployment. Two one-time AWS artifact reads cost less than
+$0.01, disclosed during the work. New bounded metadata and deterministic
+projection, if shipped, are estimated below $0.10/month at 100,000 scans with
+30-day retention. On-demand image delivery reuses the existing image endpoint;
+potential additional view traffic is not a scan-time cost. At 100,000 additional
+SITS-sized image opens, transfer could be about $4/month. Production rollout
+must review that usage estimate and obtain cost approval if the expected
+increment is $1/month or more; no such recurring usage has been enabled here.

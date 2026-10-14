@@ -1570,6 +1570,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
           <EvidenceColumns siteIntegrity={<SiteIntegrityEvidence finding={report.siteIntegrity} />} hasSiteIntegrity={Boolean(report.siteIntegrity)}>
             {additionalEvidence}
             <CmpDetails audit={report.cmpAudit} vendor={report.consentVendor} compact={compact} sharedEvidence={cmpLinks}
+              bannerPreview={report.scan.consentBannerPreview}
               cookieEvidenceAnchor={cookieRows[0] ? evidenceRowAnchor(cookieRows[0].id) : undefined} rejectActionAvailable={Boolean(report.rejectPath)}
               evidenceRows={[...report.consentRows, ...report.gdprTransparencyRows, ...report.preConsentRuntimeRows, ...report.trackingExternalRows]} />
             <details id="consent-review-evidence" className="group/consent border-b border-r border-zinc-200 p-5">

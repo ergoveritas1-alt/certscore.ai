@@ -179,6 +179,7 @@ export type ShadowReportData = {
     reportUrl?: string;
     url: string;
     visualEvidenceHref?: string | null;
+    consentBannerPreview?: import("../../../lib/scans/visual-evidence").ConsentBannerPreview | null;
   };
   score: { label: string; value: number };
   formsSummary?: import("@certscore/api-contracts").ScanFormsSummary | null;

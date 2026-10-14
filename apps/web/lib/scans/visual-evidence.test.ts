@@ -64,6 +64,17 @@ test("getVisualEvidenceArtifacts supports camelCase fallback", () => {
   assert.equal(artifacts[0]?.status, "upload_failed");
 });
 
+test("banner crop metadata is bounded and omitted for unavailable or historical images", () => {
+  const bannerCrop = { version: "consent_banner_crop.v1", x: 100, y: 50, width: 500, height: 600,
+    imageWidth: 1366, imageHeight: 900, screenshotSha256: "a".repeat(64) };
+  const artifact = { id: "banner", key: "scans/banner.png", status: "available", bannerCrop };
+  assert.deepEqual(normalizeVisualEvidenceArtifact(artifact)?.bannerCrop, bannerCrop);
+  for (const row of [{ ...artifact, status: "withheld" }, { ...artifact, key: null },
+    { ...artifact, bannerCrop: { ...bannerCrop, width: 2000 } }, { ...artifact, bannerCrop: undefined }]) {
+    assert.equal(normalizeVisualEvidenceArtifact(row)?.bannerCrop, undefined);
+  }
+});
+
 test("homepage screenshot state distinguishes withheld images and preserves historical scans", () => {
   assert.deepEqual(getHomepageScreenshotState({
     homepage_screenshot: {
