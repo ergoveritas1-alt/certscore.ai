@@ -41,7 +41,7 @@ test("only projected integrity findings render a separate review callout and det
   assert.match(html, /Zero-size container with clipped overflow/);
   assert.match(html, /Destinations \(2\)/);
   assert.match(html, /Affected pages \(1\)/);
-  assert.match(html, /27-point score deduction/);
+  assert.doesNotMatch(html, /point score deduction/);
   assert.doesNotMatch(html, /href="https:/);
   for (const scannedPages of [1, 10]) {
     const summary = renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={scannedPages}
@@ -69,10 +69,10 @@ test("site integrity displays affected pages and explicitly unavailable and limi
     { pageId: "home", url: "https://clinic.example/", homepage: true, status: "limited" },
     { pageId: "unavailable", url: "https://clinic.example/missing", homepage: false, status: "unavailable" },
   ] }}><SiteIntegrityEvidence /></SiteIntegritySiteContext.Provider>);
-  assert.match(html, /27-point score deduction/);
+  assert.doesNotMatch(html, /point score deduction/);
   assert.match(html, /Affected pages \(1\)/);
-  assert.match(html, /Capture retained for 1 of 2 scanned pages/);
-  assert.match(html, /1 capture was limited/);
+  assert.match(html, /Capture coverage · 1 of 2 pages/);
+  assert.match(html, /· 1 limited/);
   assert.match(html, /1 page has unavailable evidence/);
   assert.equal((html.match(/id="site-integrity-evidence"/g) ?? []).length, 1);
 });
@@ -106,6 +106,6 @@ test("the destination view renders code for every retained hidden link", () => {
   assert.doesNotMatch(code, /Code excerpt not retained|<details[^>]* open|<a href="https:/);
   const panel = renderToStaticMarkup(<SiteIntegrityEvidence finding={finding} />);
   assert.equal((panel.match(/aria-label="Sanitized DOM excerpt for pharmacy.example"/g) ?? []).length, 12);
-  assert.match(panel, /40-point score deduction/);
+  assert.doesNotMatch(panel, /point score deduction/);
   assert.doesNotMatch(panel, /Code excerpt not retained/);
 });

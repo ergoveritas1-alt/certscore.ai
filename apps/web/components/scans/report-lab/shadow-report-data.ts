@@ -146,6 +146,7 @@ export type GpcResponseReportProjection = {
 };
 
 export type ShadowReportData = {
+  cmpAudit?: import("../../../lib/scans/cmp-audit-projection").CmpAuditProjection;
   reviewFocus?: import("@certscore/api-contracts").ReportReviewFocus;
   privacyAuditEvidence?: import("@certscore/api-contracts").PrivacyAuditEvidence | null;
   executiveRuntimeCards?: import("../../../lib/scans/executive-runtime-cards").ExecutiveRuntimeCard[];
@@ -217,6 +218,7 @@ export type ShadowReportData = {
     usableEvidence: number;
   };
   verdict: string;
+  assessmentHighlightLinks?: import("../../../lib/scans/assessment-highlights").AssessmentHighlightLink[];
   executiveHeadline: string;
   nextStep: string;
   timeline: Array<{

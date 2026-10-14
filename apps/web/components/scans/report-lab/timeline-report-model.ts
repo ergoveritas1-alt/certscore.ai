@@ -1,7 +1,7 @@
 import { projectAccessibilityPriorities } from "../../../lib/scans/accessibility-priority";
+import { projectCmpAudit } from "../../../lib/scans/cmp-audit-projection";
 import { groupAccessibilityPriorityEntries } from "../../../lib/scans/accessibility-priority-group";
 import { comparePriorityReviewFindings } from "../../../lib/scans/priority-review-order";
-import { accessibilityOverviewCopy } from "../../../lib/scans/accessibility-report";
 import { describePostRejectFinding } from "../../../lib/scans/post-reject-finding-copy";
 import { readAccessibilityAudit, projectAccessibilityAuditSummary } from "../../../lib/scans/accessibility-audit-evidence";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../../../lib/api-v2/scan-report-summary";
@@ -60,7 +60,8 @@ import type {
   ShadowReportData,
   TimelineReportData,
 } from "./shadow-report-data";
-import { buildExecutiveOverview } from "./executive-overview-copy";
+import { buildAssessmentHighlightsPresentation } from "../../../lib/scans/assessment-highlights";
+import { HIDDEN_DETAILED_EVIDENCE_ROW_IDS } from "../../../lib/scans/report-evidence-navigation";
 import { buildGpcResponseReportProjection } from "./gpc-report-projection";
 
 const CHECKLIST_GROUPS = {
@@ -806,29 +807,13 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const forms = canonical.collectionSurfaceAssessment?.forms ?? [];
   const afterAcceptForms = projectPostAcceptForms(scanRecord);
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
-  const verdict = buildExecutiveOverview({
-    context: { score: assessedScore, coverage: {
-      state: summaryCounts.technical_limitation > 0 ? "limited" : evidenceRows.length ? "complete" : "unknown",
-      limitedCount: summaryCounts.technical_limitation,
-    } },
-    acceptPath,
-    accessibility: accessibilityOverviewCopy(accessibilityAudit),
-    controls,
-    findings,
-    limitedCount: summaryCounts.technical_limitation,
-    limitedItems: reportableChecklistRows.filter((row) => checklistStatus(row) === "Limited").map((row) => row.label),
-    positiveCount: summaryCounts.positive_signal,
-    priorityIntroduction: formDestinationPriority ?? cmsPriority,
-    preConsentConcerns: {
-      storage: reportableChecklistRows.some(row => row.id === "pre_consent_cookies_storage" &&
-        (row.status === "Gap observed" || row.status === "Review signal")),
-      tracking: reportableChecklistRows.some(row => CHECKLIST_GROUPS.tracking.has(row.id) &&
-        (row.status === "Gap observed" || row.status === "Review signal")),
+  const highlights = buildAssessmentHighlightsPresentation(findings, { kind: "page" }, {
+    score: assessedScore,
+    coverage: { state: summaryCounts.technical_limitation > 0 ? "limited" : evidenceRows.length ? "complete" : "unknown", limitedCount: summaryCounts.technical_limitation,
+      items: evidenceRows.filter(row => row.status === "Limited" && !HIDDEN_DETAILED_EVIDENCE_ROW_IDS.includes(row.id)).map(row => ({ id: row.id, title: row.title })),
     },
-    rejectPath,
-    timeline,
-    transportPositiveCount: evidenceRows.filter((row) => CHECKLIST_GROUPS.transport.has(row.id) && row.status === "Observed").length,
   });
+  const verdict = highlights.text;
   const nextStep = findings[0]?.correctionSteps[0]
     ?? "Review the retained evidence and address the highest-priority projected finding first.";
   const collectionFields = forms.flatMap((form) => form.fields.map((field) =>
@@ -860,7 +845,12 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const scanConfig = record(scanRecord.scan.scanConfigJson);
   const crawlOptions = record(scanConfig?.crawlOptions);
   const metadata = siteMetadataProjectionSchema.safeParse(record(scanRecord.runtimeArtifacts)?.siteMetadata);
+  const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
   return {
+    assessmentHighlightLinks: highlights.links,
+    cmpAudit: projectCmpAudit({ scanId: scanRecord.scan.id, normalizedConcerns: canonical.normalizedConcerns,
+      consentControlAssessment: retainedConsentAssessment(scanRecord),
+      checklistRows: reportableChecklistRows, unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation }),
     ...(scanConfig?.fullSite === true && crawlOptions ? { fullSite: { maxPages: Number(crawlOptions.maxPages), concurrency: Number(crawlOptions.concurrency), waitSeconds: Number(crawlOptions.waitSeconds) } } : {}),
     siteMetadata: metadata.success ? metadata.data : null,
     accessibilityAudit,
@@ -946,7 +936,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     scan: buildReportIdentity(scanRecord),
     score: { label: scoreLabel(score), value: score },
     formsSummary: projectScanFormsSummary(scanRecord),
-    scoreExplanation: projectScanScoreExplanation(scanRecord, score),
+    scoreExplanation,
     timeline,
     trackingExternalRows: evidenceRows.filter((row) => CHECKLIST_GROUPS.tracking.has(row.id)),
     trackerVendors: [...vendorSurface.resolvedVendorNames, ...vendorSurface.unresolvedVendorHosts],

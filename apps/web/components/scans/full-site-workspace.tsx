@@ -12,7 +12,6 @@ import type { FullSiteScanNoticeData } from "../dashboard/full-site-scan-notice"
 import { describeSiteTechnology, type SiteMetadataProjection } from "@certscore/contracts";
 import { useTableRowLimit } from "./use-table-row-limit";
 import { TableScrollHint } from "./compact-scroll-hint";
-import { InventorySearchControls } from "./inventory-search-controls";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
 import type { ExecutiveRuntimeCard } from "../../lib/scans/executive-runtime-cards";
 import { ReportInventorySummary } from "./report-inventory-summary";
@@ -126,7 +125,7 @@ export function FullSiteWorkspace({
   homepageTimeline,
   evidenceDirectory,
   homepageVerdict,
-  homepageLimitedCount,
+  homepageHighlightLinks,
   homepageFindings = [],
   homepageRuntimeCards,
   homepageUrl,
@@ -151,7 +150,7 @@ export function FullSiteWorkspace({
   homepageTimeline?: ReactNode;
   evidenceDirectory?: ReactNode;
   homepageVerdict?: string;
-  homepageLimitedCount?: number;
+  homepageHighlightLinks?: readonly import("../../lib/scans/assessment-highlights").AssessmentHighlightLink[];
   homepageFindings?: ShadowFinding[];
   homepageRuntimeCards?: ExecutiveRuntimeCard[];
   homepageUrl?: string;
@@ -583,7 +582,7 @@ export function FullSiteWorkspace({
       {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
-          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={overview?.score} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageLimitedCount={homepageLimitedCount} />
+          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={overview?.score} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageHighlightLinks={homepageHighlightLinks} />
           {!(initialPending && !overview?.score) ? <SitePriorityReview scannedPages={scannedPages} findings={overview?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
           {homepageTimeline}
           </> : null}
@@ -596,11 +595,7 @@ export function FullSiteWorkspace({
               {data && tab === "resources" ? <details className="min-w-0 flex-1"><summary className="w-fit cursor-pointer rounded px-1 py-1.5 text-xs font-medium leading-5 text-zinc-600 hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">Resource breakdowns</summary><div className="mt-2 overflow-hidden rounded-lg border border-zinc-200 [&>section]:my-0 [&>section]:border-0"><SitewideInventorySummary mix={data.inventoryMix} updating={valuesUpdating} /></div></details> : null}
               <div className={tab === "pages" ? "hidden" : "ml-auto flex shrink-0 items-center gap-2"}><button type="button" onClick={() => setCollapseVersion(value => value + 1)} className="h-8 rounded px-2 text-xs text-sky-700 hover:bg-sky-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600">Collapse all</button>{data ? <CopyJsonButton className="inline-flex h-8 w-8 items-center justify-center rounded border border-zinc-200 text-sky-700" label="Copy entire inventory table with all service and resource details as JSON" payload={JSON.stringify({ services: data.services, pages: data.pageChoices }, null, 2)} /> : null}</div>
             </div>
-            {tab !== "pages" ? <InventorySearchControls value={{ query: filters.q, purpose: filters.purpose, kind: filters.kind }} purposes={data?.facets.purposes ?? []}
-              result={isFetching ? "Updating results…" : data ? `${data.resources.total} matching resources` : "Loading inventory…"}
-              onChange={patch => { setFilters(current => ({ ...current, ...(patch.query !== undefined ? { q: patch.query } : {}), ...(patch.purpose !== undefined ? { purpose: patch.purpose } : {}), ...(patch.kind !== undefined ? { kind: patch.kind } : {}) })); setOffset(0); }}
-              onClear={() => { setFilters(initialFilters); setOffset(0); }}/>
-              : activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all resources</button> : null}
+            {activeFilters.length ? <button className="mb-2 text-xs text-sky-800 underline" onClick={() => { setFilters(initialFilters); setOffset(0); }}>Show all resources</button> : null}
             <div className="group/scroll">
             <div id="site-resource-table" ref={inventoryRowLimit.ref} style={inventoryRowLimit.style} className="max-h-[376px] overflow-auto rounded-lg border border-zinc-200" tabIndex={0} aria-busy={isFetching} aria-label={tab === "pages" ? "Scrollable page observations" : `Scrollable ${inventoryView}`}
               onScroll={event => {

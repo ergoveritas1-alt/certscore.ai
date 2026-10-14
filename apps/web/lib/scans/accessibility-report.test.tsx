@@ -90,18 +90,18 @@ test("snapshot stays brief and directs readers to full, escaped accessibility ev
   assert.match(sectionSummary, /M12 3 2 21h20Z/, "section badge keeps its warning indicator");
   assert.doesNotMatch(failures, /Critical impact|High impact|Flagged|border-rose/);
   const summaries = [...failures.matchAll(/<summary\b[^>]*>(.*?)<\/summary>/gs)].map(match => match[1]).join("");
-  assert.doesNotMatch(summaries, /Critical|Serious|Scanner rule impact/);
-  assert.match(detailed, /Scanner rule impact: Critical/);
-  assert.match(detailed, /Scanner rule impact: Serious/);
-  assert.match(detailed, /Retained examples \(1 of 1\)/);
+  assert.doesNotMatch(summaries, /Critical|Serious|Impact:/);
+  assert.match(detailed, /Impact: Critical/);
+  assert.match(detailed, /Impact: Serious/);
+  assert.match(detailed, /Examples \(1 of 1\)/);
   assert.match(detailed, /&lt;input id&gt;/);
   assert.doesNotMatch(detailed, /<input id>/);
   const review = { ...observation, status: "limited" as const, violations: [], reviewItems: observation.violations, limitations: ["rules_need_review"] };
   const html = renderToStaticMarkup(<AccessibilityEvidence audit={projectAccessibilityAuditSummary(accessibilityProjectionFixture(review))!} observation={review} />);
   assert.match(html, /0 issues.*4 checks need manual review/s);
   assert.match(html, /Checks needing manual review/);
-  assert.match(html, />Needs review</);
-  assert.equal((html.match(/<span[^>]*>Needs review<\/span>/g) ?? []).length, review.reviewItems.length, "individual manual-review badges contain text only");
+  assert.match(html, />Review</);
+  assert.equal((html.match(/<span[^>]*>Review<\/span>/g) ?? []).length, review.reviewItems.length, "individual manual-review badges contain text only");
   assert.match(html.match(/<summary\b[^>]*>(.*?)<\/summary>/s)![1]!, /M12 3 2 21h20Z/, "manual-review section keeps its warning indicator");
   assert.doesNotMatch(html, />Issue found<|>Issues found<|Flagged|border-rose/);
   const clean = projectAccessibilityAuditSummary(accessibilityProjectionFixture({ violations: [] }))!;
@@ -187,26 +187,23 @@ test("privacy concerns lead accessibility without changing canonical statuses or
   }
 });
 
-test("executive overview uses projected accessibility after privacy without promoting audit context", () => {
-  const { audit } = fixture();
+test("executive overview mentions projected accessibility briefly after privacy concerns", () => {
+  const { packets } = fixture();
+  const accessibility = buildSitePriorityReview([], [], [], packets);
   const copy = buildExecutiveOverview({
-    findings: [
-      { id: "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage", title: "Classified non-essential pre-consent storage", status: "Potential gap", summary: "Storage was retained before consent." },
-      { id: "accessibility_priority_group", title: "Accessibility issues", status: "Observed", priority: "high", summary: "Automated accessibility findings need review." },
-    ],
-    accessibility: accessibilityOverviewCopy(audit),
+    findings: [{ title: "Classified non-essential pre-consent storage", summary: "Storage was retained before consent." },
+      { title: "Decline consent control", summary: "No refusal control was retained." }, ...accessibility],
   });
-  assert.ok(copy.indexOf("Storage was retained before consent") < copy.indexOf("Accessibility issues"), copy);
-  assert.doesNotMatch(copy, /4 accessibility issues|element instances|Transport security checks/);
+  assert.ok(copy.indexOf("pre-consent storage") < copy.indexOf("Semantic labeling accessibility issue"), copy);
+  assert.ok(copy.indexOf("Decline consent control") < copy.indexOf("Semantic labeling accessibility issue"), copy);
+  assert.doesNotMatch(copy, /3 priority issues/);
+  assert.doesNotMatch(copy, /element instances|manual review|Tracking activity and cookies\/storage/);
 });
 
-test("projected accessibility is identified without inventing audit counts or sitewide conclusions", () => {
-  const { audit } = fixture();
-  const copy = buildExecutiveOverview({
-    findings: [{ id: "accessibility_priority_group", title: "Accessibility issues", status: "Observed", priority: "high", summary: "Missing alternative text was found." }],
-    accessibility: accessibilityOverviewCopy(audit),
-  });
+test("executive copy uses the projected accessibility group without adding unprojected audit counts", () => {
+  const { packets } = fixture();
+  const copy = buildExecutiveOverview({ findings: buildSitePriorityReview([], [], [], packets) });
   assert.match(copy, /^Accessibility needs attention/);
-  assert.match(copy, /Missing alternative text was found/);
-  assert.doesNotMatch(copy, /4 accessibility issues|critical|high-impact|site-wide breakdown|visitor choice/);
+  assert.match(copy, /automated accessibility findings/);
+  assert.doesNotMatch(copy, /4 accessibility issues|critical|high-impact|site-wide breakdown|narrow review|visitor choice/i);
 });

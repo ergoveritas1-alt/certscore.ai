@@ -1,3 +1,4 @@
+import { cmpAuditAssessmentSchema, type CmpAuditAssessment } from "./cmp-audit-evidence";
 import { CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
 import { z } from "zod";
 import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
@@ -90,6 +91,7 @@ export const consentControlAssessmentSchema = z.object({
   artifactVersion: consentControlAssessmentVersionSchema,
   evidencePolicy: z.literal(CONSENT_CONTROL_EVIDENCE_POLICY).optional(),
   visualEvidence: consentControlVisualEvidenceSchema.optional(),
+  cmpAudit: cmpAuditAssessmentSchema.optional(),
   visualComparison: consentControlVisualComparisonSchema.optional(),
   assessmentStatus: consentControlAssessmentStatusSchema,
   scan: z.object({
@@ -143,6 +145,7 @@ export const consentControlAssessmentSchema = z.object({
     computedAt: z.string().datetime(),
   }),
 }).superRefine((assessment, context) => {
+  if (assessment.cmpAudit && assessment.cmpAudit.scanId !== assessment.scan.scanId) context.addIssue({ code: z.ZodIssueCode.custom, message: "CMP audit must bind the assessment scan." });
   const visual = assessment.visualComparison;
   if (visual && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
       assessment.document.identityStatus !== "matched" || assessment.surface.status !== "observed_actionable" ||
@@ -248,6 +251,7 @@ export type ConsentControlAssessmentGeometry = {
 };
 
 export type ConsentControlAssessmentInput = {
+  cmpAudit?: CmpAuditAssessment;
   visualEvidence?: z.infer<typeof consentControlVisualEvidenceSchema>;
   scan: {
     scanId: string;
@@ -689,6 +693,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     registryVersion: CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
     evidencePolicy: CONSENT_CONTROL_EVIDENCE_POLICY,
     visualEvidence: input.visualEvidence ?? null,
+    ...(input.cmpAudit ? { cmpAudit: input.cmpAudit } : {}),
     scan: input.scan,
     document: input.document,
     observations,
@@ -706,6 +711,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
         row.documentToken === canonicalDocumentToken && row.channels.includes("geometry")))
       ? visual : undefined;
   return consentControlAssessmentSchema.parse({
+    ...(input.cmpAudit ? { cmpAudit: input.cmpAudit } : {}),
     artifactType: "consent_control_assessment",
     artifactVersion: CONSENT_CONTROL_ASSESSMENT_VERSION,
     evidencePolicy: CONSENT_CONTROL_EVIDENCE_POLICY,

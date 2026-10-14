@@ -252,6 +252,13 @@ body:has([aria-label="Executive overview"]), body:has([data-full-site-report]) {
 @media (min-width: 640px) {
   .evidence-directory-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+/* Expanded evidence cards stay highlighted independently of navigation targets.
+   Inset outlines preserve the grid geometry and do not cover adjacent cards. */
+#evidence .evidence-directory-column > details[open],
+#evidence .evidence-directory-column > section:has(> details[open]) {
+  outline: 2px solid #7dd3fc;
+  outline-offset: -2px;
+}
 #evidence .evidence-directory-column > details { padding: 12px !important; }
 #evidence .evidence-directory-column > details > summary,
 #evidence .evidence-directory-column > section > details > summary {
@@ -278,3 +285,15 @@ body:has([aria-label="Executive overview"]), body:has([data-full-site-report]) {
 #evidence .evidence-directory-column > details > summary > span:first-child > span:first-child {
   font-size: 11px; line-height: 16px;
 }
+
+/* Quiet supporting links; the expanded evidence card supplies the location cue. */
+.report-evidence-link {
+  color: #52525b;
+  font-weight: inherit;
+  text-decoration: underline;
+  text-decoration-color: #d4d4d8;
+  text-underline-offset: 2px;
+}
+.report-evidence-link.text-inherit { color: inherit; }
+.report-evidence-link:hover { color: #0369a1; text-decoration-color: #38bdf8; }
+.report-evidence-link:focus-visible { outline: 2px solid #0ea5e9; outline-offset: 2px; border-radius: 2px; }

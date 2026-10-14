@@ -1,9 +1,11 @@
 "use client";
+import type { ReactNode } from "react";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import type { SitePriorityFinding } from "../../lib/scans/full-site-priority-review";
 import { VendorBrandChip } from "./vendor-brand-chip";
-import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
+import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails, hasRegulatoryChecklistCorrectionSteps } from "./regulatory-checklist-evidence-details";
 import type { ShadowEvidenceStatus, ShadowFinding } from "./report-lab/shadow-report-data";
+import { EvidenceJumpLink } from "./evidence-jump-link";
 import { findingEvidenceAnchor } from "../../lib/scans/report-evidence-navigation";
 const monoClass = "font-mono tabular-nums";
 
@@ -37,12 +39,25 @@ export function JsonEvidence({ value }: { value: Record<string, unknown> }) {
   );
 }
 
+export function EvidenceToolDisclosure({ label, children }: { label: string; children: ReactNode }) {
+  return <details className="group/evidence-tool min-w-0 max-w-full open:basis-full" aria-label={label}>
+    <summary className="inline-flex h-7 !min-h-0 w-fit cursor-pointer list-none items-center gap-1.5 whitespace-nowrap rounded-md bg-zinc-100/70 px-2.5 text-xs font-medium leading-5 text-zinc-600 transition-colors hover:bg-sky-50 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500 group-open/evidence-tool:bg-sky-50 group-open/evidence-tool:text-sky-800 [&::-webkit-details-marker]:hidden">
+      <svg aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-zinc-400 group-open/evidence-tool:text-sky-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d={label === "JSON evidence" ? "m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16" : "M14.5 6.5a5 5 0 0 0-6.8 6.8L3 18a2.1 2.1 0 0 0 3 3l4.7-4.7a5 5 0 0 0 6.8-6.8L14 13l-3-3 3.5-3.5Z"} />
+      </svg>
+      {label}<DisclosureChevron className="!h-3.5 !w-3.5 text-zinc-400 group-open/evidence-tool:rotate-180 group-open/evidence-tool:text-sky-600" />
+    </summary>
+    <div className="mt-3 min-w-0 border-l-2 border-sky-100 pl-3">{children}</div>
+  </details>;
+}
+
 export function EvidenceTools({
   canonicalEvidenceJson,
   correctionSteps,
   evidenceRefs,
   evidenceJson,
   showCorrections = true,
+  recommendedFixes,
 }: {
   canonicalEvidenceJson?: string;
   correctionSteps: readonly string[];
@@ -50,47 +65,38 @@ export function EvidenceTools({
   evidenceJson: Record<string, unknown>;
   stacked?: boolean;
   showCorrections?: boolean;
+  recommendedFixes?: ReactNode;
 }) {
+  const steps = correctionSteps.filter(step => step.trim().length > 0);
+  const hasCorrections = showCorrections && (canonicalEvidenceJson
+    ? hasRegulatoryChecklistCorrectionSteps(canonicalEvidenceJson) : steps.length > 0);
   return (
-    <div className="grid grid-cols-1 border-l border-t border-zinc-200">
-      <details className="group/tool border-b border-r border-zinc-200 p-4">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
-          JSON evidence
-          <DisclosureChevron className="text-zinc-400 group-open/tool:rotate-180" />
-        </summary>
-        <div className="mt-4">
-          {canonicalEvidenceJson ? (
-            <RegulatoryChecklistEvidenceDetails evidenceRefs={evidenceRefs} jsonPayload={canonicalEvidenceJson} />
-          ) : (
-            <JsonEvidence value={evidenceJson} />
-          )}
-        </div>
-      </details>
-      {showCorrections && (canonicalEvidenceJson ? (
-        <details className="group/correction border-b border-r border-zinc-200 p-4">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
-            Correction steps
-            <DisclosureChevron className="text-zinc-400 group-open/correction:rotate-180" />
-          </summary>
-          <div className="mt-4 [&>details]:!mt-0 [&>details]:!border-0 [&>details]:!bg-transparent [&>details>summary]:hidden">
+    <div className="flex min-w-0 flex-wrap items-start gap-x-2 gap-y-3">
+      {recommendedFixes ? <EvidenceToolDisclosure label="Recommended fixes">{recommendedFixes}</EvidenceToolDisclosure> : null}
+      <EvidenceToolDisclosure label="JSON evidence">
+        {canonicalEvidenceJson ? (
+          <RegulatoryChecklistEvidenceDetails evidenceRefs={evidenceRefs} jsonPayload={canonicalEvidenceJson} />
+        ) : (
+          <JsonEvidence value={evidenceJson} />
+        )}
+      </EvidenceToolDisclosure>
+      {hasCorrections && (canonicalEvidenceJson ? (
+        <EvidenceToolDisclosure label="Correction steps">
+          <div className="[&>details]:!mt-0 [&>details]:!border-0 [&>details]:!bg-transparent [&>details>summary]:hidden">
             <RegulatoryChecklistCorrectionSteps defaultOpen jsonPayload={canonicalEvidenceJson} />
           </div>
-        </details>
+        </EvidenceToolDisclosure>
       ) : (
-        <details className="group/tool border-b border-r border-zinc-200 p-4">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
-            Correction steps
-            <DisclosureChevron className="text-zinc-400 group-open/tool:rotate-180" />
-          </summary>
-          <ol className="mt-4 space-y-2 text-sm leading-6 text-zinc-600">
-            {correctionSteps.map((step, index) => (
+        <EvidenceToolDisclosure label="Correction steps">
+          <ol className="space-y-2 text-sm leading-6 text-zinc-600">
+            {steps.map((step, index) => (
               <li className="flex gap-3" key={step}>
                 <span className={`${monoClass} text-zinc-400`}>{String(index + 1).padStart(2, "0")}</span>
                 <span>{step}</span>
               </li>
             ))}
           </ol>
-        </details>
+        </EvidenceToolDisclosure>
       ))}
     </div>
   );
@@ -105,7 +111,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
         <span className={`min-w-0 ${priority ? "pr-7 sm:pr-0" : ""}`}>
           <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}{pages?.length ? <span className="ml-2 inline-block text-xs font-normal text-zinc-500">{pages.length === 1 && pages[0]?.homepage ? "Starting page" : `${pages.length} ${pages.length === 1 ? "page" : "pages"}`}</span> : null}</span>
           {!dense ? <span className={`${priority ? "mt-0.5 text-xs leading-5 text-zinc-500 sm:pr-4" : "mt-1 text-sm leading-6 text-zinc-600"} overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open:[display:block] group-open:[-webkit-line-clamp:unset]`}>{finding.summary}</span> : null}
-          {!dense && !priority ? <span className="mt-3 inline-flex sm:hidden"><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
+          {!dense ? <span className="mt-3 inline-flex sm:hidden"><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
         </span>
         {!dense && finding.focus ? <span className={`${priority ? "hidden self-center rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
         <span className={priority ? "absolute right-2 top-3 flex items-center gap-2 sm:static" : dense ? "flex items-start gap-2" : "hidden items-start gap-2 sm:flex"}>
@@ -134,30 +140,10 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
             <li className="border-l-2 border-sky-300 pl-3 leading-6" key={`${item}:${index}`}>{item}</li>
           ))}
         </ul>
-        <details className="group/fixes mt-4 border border-b-0 border-zinc-200 p-4" aria-label="Recommended fixes">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 [&::-webkit-details-marker]:hidden">
-            Recommended fixes
-            <DisclosureChevron className="text-zinc-400 group-open/fixes:rotate-180" />
-          </summary>
-          <div className="mt-4">
-            <a className="text-xs font-semibold text-sky-700 underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-600" href={`#${evidenceAnchor}`} onClick={event => {
-              let target = document.getElementById(evidenceAnchor) ?? document.getElementById("evidence");
-              if (!target) return;
-              event.preventDefault();
-              for (let parent = target.parentElement; parent; parent = parent.parentElement) if (parent.tagName === "DETAILS" && !parent.hasAttribute("open")) target = parent;
-              document.querySelectorAll("[data-evidence-target]").forEach(element => element.removeAttribute("data-evidence-target"));
-              target.setAttribute("data-evidence-target", "");
-              const focus = target.querySelector<HTMLElement>("summary") ?? target;
-              focus.setAttribute("tabindex", "-1");
-              window.requestAnimationFrame(() => {
-                focus.focus({ preventScroll: true });
-                target.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-              });
-            }}>{finding.evidenceJson.presentationGroup === "accessibility" ? "View accessibility breakdown in Detailed evidence ↓" : "View supporting evidence ↓"}</a>
+        <div className="mt-4"><EvidenceTools showCorrections={false} correctionSteps={finding.correctionSteps} evidenceJson={finding.evidenceJson} recommendedFixes={<>
+            <EvidenceJumpLink targetId={evidenceAnchor} className="text-xs">{finding.evidenceJson.presentationGroup === "accessibility" ? "View accessibility breakdown in Detailed evidence ↓" : "View supporting evidence ↓"}</EvidenceJumpLink>
           {finding.correctionSteps.length ? <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-zinc-600">{finding.correctionSteps.map((step, index) => <li key={`${index}:${step}`}>{step}</li>)}</ol> : <p className="mt-4 text-sm text-zinc-600">Review the supporting evidence for this finding.</p>}
-          </div>
-        </details>
-        <EvidenceTools showCorrections={false} correctionSteps={finding.correctionSteps} evidenceJson={finding.evidenceJson} />
+        </>} /></div>
       </div>
     </details>
   );

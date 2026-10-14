@@ -12,17 +12,41 @@ export type AssessmentHighlightFinding = {
   /** Only explicit canonical severity; never the generic checklist-card severity. */
   severity?: "critical" | "high" | "medium" | "low";
   correctionSteps?: readonly string[];
+  evidenceJson?: Record<string, unknown>;
 };
 export type AssessmentScope = { kind: "page" } | { kind: "site"; scannedPages: number | null };
 export type AssessmentContext = {
   score?: number | null;
-  coverage?: { state: "complete" | "limited" | "unknown"; limitedCount?: number };
+  coverage?: { state: "complete" | "limited" | "unknown"; limitedCount?: number; items?: readonly { id: string; title: string }[] };
 };
 type Domain = "privacy" | "accessibility" | "security" | "maintenance" | "other";
 export type AssessmentAttention = "high_priority" | "needs_work" | "attention" | "targeted_improvements" | "review" | "no_priority_observed" | "limited";
 
 export function normalizeAssessmentCopy(value: string) {
   return value.trim().replace(/\s+/g, " ");
+}
+
+/** Reader labels over already-projected identities, never a new assessment. */
+function readerTitle(finding: AssessmentHighlightFinding): string {
+  if (finding.id === "visual_contrast_accessibility_issue") return finding.summary?.startsWith("Low-contrast text was detected") ? "Low text contrast" : "Text contrast and color cues";
+  if (finding.id === "accessibility_priority_group" && Array.isArray(finding.evidenceJson?.findings)) {
+    const members = finding.evidenceJson.findings.filter((value): value is AssessmentHighlightFinding =>
+      Boolean(value && typeof value === "object" && typeof value.title === "string"));
+    if (members.length) {
+      const label = members.slice(0, 2).map(readerTitle).join(" and ") + (members.length > 2 ? " and other accessibility checks" : "");
+      if (label.length <= 100) return label;
+      const first = readerTitle(members[0]!);
+      return first.length <= 65 ? `${first} and other accessibility checks` : normalizeAssessmentCopy(finding.title);
+    }
+  }
+  return normalizeAssessmentCopy(finding.title);
+}
+
+function readerAction(finding: AssessmentHighlightFinding, action: string): string {
+  if (finding.id === "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction" && action === "Ensure a confirmed Reject suppresses optional tracker requests and storage writes, then retest the same post-Refusal observation window.") {
+    return "Update optional services to respect Reject, then retest tracking and storage after Reject.";
+  }
+  return action;
 }
 
 /** Editorial topic labels for existing finding identities, never eligibility or severity rules. */
@@ -61,6 +85,7 @@ export function buildAssessmentBrief(
     sourceRef: finding.id ?? `projected-finding:${findings.indexOf(finding) + 1}`,
     id: finding.id ?? null,
     title: normalizeAssessmentCopy(finding.title),
+    readerTitle: readerTitle(finding),
     summary: normalizeAssessmentCopy(finding.summary ?? ""),
     readerSummary: finding.id === "regulatory_gap__gdpr_eprivacy__privacy_notice_availability"
       ? "Privacy policy not found within the assessed scope."
@@ -69,7 +94,7 @@ export function buildAssessmentBrief(
     severity: finding.severity ?? null,
     priority: finding.priority ?? null,
     ...topicFor(finding),
-    actions: (finding.correctionSteps ?? []).map(normalizeAssessmentCopy).filter(Boolean),
+    actions: (finding.correctionSteps ?? []).map(normalizeAssessmentCopy).filter(Boolean).map(action => readerAction(finding, action)),
   }));
   const primary = sources[0] ?? null;
   const coverage = context.coverage ?? { state: "unknown" as const };
@@ -113,7 +138,7 @@ export function buildAssessmentBrief(
     findingCount: findings.length,
     primary,
     secondary: sources.slice(1),
-    firstAction: primary?.actions[0] ?? (coverage.state === "limited" ? "Review the limited checks in Coverage and verify them manually." : null),
+    firstAction: primary?.actions[0] ?? null,
     sourceRefs: sources.map(source => source.sourceRef),
   };
 }

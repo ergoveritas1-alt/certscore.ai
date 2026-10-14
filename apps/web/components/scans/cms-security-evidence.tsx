@@ -1,6 +1,8 @@
 import { EvidenceHeaderStatus } from "./evidence-header-status";
 import React from "react";
 import type { CmsSecurityProjection } from "@certscore/contracts";
+import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
+import { EvidenceTools } from "./report-finding-row";
 import { DisclosureChevron } from "./report-finding-row";
 
 /** The assessment is persisted upstream; this view neither detects nor promotes findings. */
@@ -29,11 +31,16 @@ export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityPr
             <h3 className="font-semibold text-zinc-900">{detection.name}</h3>
             <span className="font-medium text-zinc-900">{versionLabel(detection)}</span>
           </div> : null}
-          {matches.length ? <div className="space-y-2">{matches.map(match => <div key={match.evidenceRef} id={match.evidenceRef} className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-            <p className="font-medium text-amber-950">{match.record.kind === "vulnerability" ? "Potential exposure" : "Support ended"}: {match.record.title}</p>
+          {matches.length ? <div className="space-y-2">{matches.map(match => <DetailedEvidenceFinding key={match.evidenceRef} id={match.evidenceRef}
+            title={`${match.record.kind === "vulnerability" ? "Potential exposure" : "Support ended"}: ${detection.name}`}
+            summary={`${detection.name} · ${versionLabel(detection)}`} badge={<EvidenceHeaderStatus rows={[{status: "Warning"}]} />}
+            evidenceJson={{ detection, match, catalogueVersion: assessment.catalogueVersion, sourceHash: projection.sourceHash }}
+            correctionSteps={["Confirm the deployed version against the retained declaration and vendor advisory.",
+              "Apply the vendor's supported update or mitigation, then verify the deployed version and affected behavior."]}>
+            <p className="text-xs font-medium text-zinc-800">{match.record.title}</p>
             {match.record.fixedVersions?.length ? <p className="mt-1 text-xs text-zinc-700">Vendor fixes: {match.record.fixedVersions.join(", ")}</p> : null}
             <a href={match.record.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs font-medium text-sky-800 underline">View vendor source</a>
-          </div>)}</div> : detection.version || detection.informationalOnly ? <p className="text-zinc-600">{detection.informationalOnly ? "Hosted service; version checks do not apply." : detection.version ? "No issue matched in the selected version checks." : ""}</p> : null}
+          </DetailedEvidenceFinding>)}</div> : detection.version || detection.informationalOnly ? <p className="text-zinc-600">{detection.informationalOnly ? "Hosted service; version checks do not apply." : detection.version ? "No issue matched in the selected version checks." : ""}</p> : null}
         </div>;
       })}
       {plugins.length ? <div>
@@ -46,6 +53,9 @@ export function CmsSecurityEvidence({ projection }: { projection?: CmsSecurityPr
           </tr>)}</tbody>
         </table>
       </div> : null}
+      <EvidenceTools correctionSteps={[]} evidenceJson={{ contractVersion: projection.contractVersion,
+        scanId: projection.scanId, sourceHash: projection.sourceHash, evidenceRef: projection.evidenceRef,
+        detections: assessment.detections, signals: projection.signals, pluginInventory: projection.pluginInventory }} />
       {projection.signals.length ? <details className="border-t border-zinc-100 pt-3 text-xs text-zinc-600">
         <summary className="cursor-pointer font-medium">How we identified this</summary>
         <ul className="mt-2 space-y-2">{projection.signals.map(signal => <li id={signal.evidenceRef} key={signal.evidenceRef} className="break-words">

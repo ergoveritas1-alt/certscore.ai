@@ -1,3 +1,4 @@
+export * from "./cmp-audit-evidence";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
 export * from "./collection-surface-snapshot";
 export * from "./post-accept-form-snapshots";

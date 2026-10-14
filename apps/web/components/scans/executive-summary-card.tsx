@@ -1,3 +1,4 @@
+import { EvidenceJumpLink } from "./evidence-jump-link";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import type { ChoicePathExecution } from "@certscore/contracts";
 import { afterClickCoverageLabel } from "./after-action-summary";
@@ -2322,6 +2323,7 @@ function formatRejectResolverMethod(resolverMethod: string) {
 
 export function CompactRejectPathCard(input: {
   projection?: ExecutiveRejectPathProjection | null;
+  sharedEvidenceTarget?: string;
 }) {
   if (input.projection?.state === "incomplete" && !input.projection.afterClickCoverage) {
     return <div className="rounded-md border border-zinc-200 p-3 text-xs text-zinc-600" data-reject-path-state="incomplete" data-testid="executive-reject-path-card">
@@ -2367,7 +2369,7 @@ export function CompactRejectPathCard(input: {
       {context.length > 0 ? (
         <p className="mt-1 text-[10px] font-medium leading-4 text-slate-500">{context.join(" · ")}</p>
       ) : null}
-      {input.projection.evidenceRows.length > 0 ? (
+      {input.sharedEvidenceTarget ? <EvidenceJumpLink targetId={input.sharedEvidenceTarget} className="mt-2 inline-block text-xs">View post-Reject tracking evidence ↓</EvidenceJumpLink> : input.projection.evidenceRows.length > 0 ? (
         <ul className="mt-1.5 space-y-1" aria-label="Retained Reject-path evidence">
           {input.projection.evidenceRows.map((row, index) => (
             <li className="rounded-lg border border-white/80 bg-white/75 px-2 py-1 text-[10px] leading-4 text-slate-700" key={`${row.label}:${index}`}>

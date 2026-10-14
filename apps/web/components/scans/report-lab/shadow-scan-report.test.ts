@@ -100,7 +100,7 @@ test("evidence section headings distinguish review, observed, and total check co
 
   assert.match(source, /\{trackingExternalReviewCount\} need review · \{report\.trackingExternalRows\.length\} checks/);
   assert.match(source, /\{preConsentRuntimeReviewCount\} need review · \{report\.preConsentRuntimeRows\.length\} checks/);
-  assert.match(source, /\{observedGdprTransparencyRows\} observed · \{report\.gdprTransparencyRows\.length\} checks/);
+  assert.match(source, /\{observedGdprTransparencyRows\} observed · \{policyRows\.length\} checks/);
   assert.match(source, /positive · \{report\.transportRows\.length\} checks/);
 });
 
@@ -288,7 +288,7 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.match(snapshotSource, /gpcSummaryLabel\(report\.gpcResponse\)/);
   assert.match(snapshotSource, /report\.gpcResponse\.coverageSummary/);
   assert.doesNotMatch(snapshotSource, /<GpcStatusBadge/);
-  assert.match(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
+  assert.doesNotMatch(source, /CA −\{report\.gpcResponse\.californiaDeductionPoints\}/);
   assert.match(source, /href="#gpc-evidence"/);
   assert.match(source, /data-testid="gpc-evidence-index-card"/);
   assert.match(gpcEvidenceCardSource, /gpcSummaryLabel\(projection\)/);
@@ -302,7 +302,8 @@ test("GPC appears as a quiet snapshot signal and a dedicated evidence-index comp
   assert.ok(runtimeIndex < gpcCardIndex);
   assert.ok(transportIndex < gpcCardIndex);
   assert.match(source, />GPC\{homepage \? " · Starting page" : ""\}/);
-  assert.match(source, /Evidence data \(JSON\)/);
+  assert.match(gpcEvidenceCardSource, /<DetailedEvidenceFinding/);
+  assert.match(gpcEvidenceCardSource, /evidenceJson=\{evidenceJson\}/);
   assert.match(source, /"Advertising \/ measurement"/);
   assert.match(source, /"Consent \/ CMP"/);
   assert.match(modelSource, /buildGpcResponseReportProjection\(canonical\.ownerUnifiedFindings\)/);

@@ -66,7 +66,7 @@ test("importance and coverage remain independent", () => {
   assert.equal(brief.attention, "attention");
   assert.equal(brief.coverage.state, "limited");
   const copy = buildAssessmentHighlights([reject], page, context);
-  assert.match(copy, /2 checklist items remain technically limited/);
+  assert.match(copy, /See Detailed evidence for checks that could not be completed/);
   assert.ok(copy.includes(reject.summary));
 });
 
@@ -75,8 +75,8 @@ test("completed and limited empty assessments never claim legal compliance", () 
   const limited = buildAssessmentBrief([], page, { score: 100, coverage: { state: "limited", limitedCount: 3 } });
   assert.equal(complete.attention, "no_priority_observed");
   assert.equal(limited.attention, "limited");
-  assert.match(buildAssessmentHighlights([], page, { coverage: limited.coverage }), /3 checklist items remain technically limited/);
-  assert.equal(buildAssessmentHighlights([], page, { coverage: limited.coverage }).match(/manually/g)?.length, 1);
+  assert.match(buildAssessmentHighlights([], page, { coverage: limited.coverage }), /See Detailed evidence for checks that could not be completed/);
+  assert.equal(buildAssessmentHighlights([], page, { coverage: limited.coverage }).match(/Detailed evidence/g)?.length, 1);
   assert.doesNotMatch(`${complete.lead} ${limited.lead}`, /compliant|secure|no risk|passed|all clear/i);
 });
 
@@ -119,5 +119,5 @@ test("oversized source prose is never cut into an unqualified assertion", () => 
   const copy = buildAssessmentHighlights([finding], page);
   assert.ok(copy.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
   assert.doesNotMatch(copy, /Unqualified assertion/);
-  assert.match(copy, /Regulatory Risk Review/);
+  assert.match(copy, /Detailed evidence/);
 });

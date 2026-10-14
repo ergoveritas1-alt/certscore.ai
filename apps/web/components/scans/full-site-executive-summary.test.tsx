@@ -3,14 +3,15 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buildSiteAssessmentSummary, FullSiteExecutiveSummary } from "./full-site-executive-summary";
-import { FullSiteExecutiveSummary as LegacyFullSiteExecutiveSummary } from "../scanso2/full-site-executive-summary";
 import { deriveCanonicalOverallScoreExplanationForReport } from "../../server/scans/canonical-overall-score";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "../../lib/scans/gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
+import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
+import { buildExecutiveOverview } from "./report-lab/executive-overview-copy";
 
 const score = {version: "test", value: 29, assessedNonEssentialStorage: 9, scoredPages: 10, limitedPages: 0, scope: "Retained evidence", priorityReview: [], sources: []};
 
-test("page and site score retain the canonical missing-policy deduction without an inline callout", () => {
+test("page and site scores preserve findings without displaying deduction amounts", () => {
   for (const complete of [true, false]) {
     const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ scanCompleted: true, coverageLimited: false,
       runtimeArtifacts: { policyDisclosureSummary: { privacyPolicyPresent: false }, policySurfaceInspection: { coverageStatus: complete ? "complete" : "limited",
@@ -24,11 +25,17 @@ test("page and site score retain the canonical missing-policy deduction without 
       checklistRows, unifiedFindings: [] });
     assert.equal(explanation?.score ?? null, complete ? 91 : null);
     assert.equal(explanation?.totalPolicyDeductionPoints ?? 0, complete ? 9 : 0);
+    const priorityReview = buildSitePriorityReview(checklistRows, []);
+    const homepageVerdict = buildExecutiveOverview({ findings: priorityReview });
     for (const scannedPages of [1, 10]) {
       const html = renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={scannedPages}
-        score={{ ...score, value: explanation?.score ?? null, deductions: explanation?.deductions }} />);
-      assert.doesNotMatch(html, /Privacy policy not found: −9 points|privacy-policy-score-deduction/);
-      if (complete) assert.match(html, /(?:Page|Site) score 91 out of 100/);
+        homepageVerdict={homepageVerdict}
+        score={{ ...score, priorityReview, value: explanation?.score ?? null, deductions: explanation?.deductions }} />);
+      assert.doesNotMatch(html, /privacy-policy-score-deduction|−9 points/);
+      const highlights = html.match(/Assessment highlights<\/h3><p[^>]*>(.*?)<\/p>/)?.[1];
+      assert.ok(highlights);
+      if (complete) assert.match(highlights, /Privacy policy not found/);
+      else assert.doesNotMatch(highlights, /Privacy policy not found/);
     }
     const unscored = renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={10}
       score={{ ...score, value: null, deductions: explanation?.deductions }} />);
@@ -59,21 +66,10 @@ test("site paragraphs prioritize meaning and action while preserving the lead's 
   assert.doesNotMatch(summary, /all 10 pages|priority issues across/);
 });
 
-test("site overview carries starting-page checklist limits into its first paragraph", () => {
-  const siteScore = { ...score, value: 90, scoredPages: 12, priorityReview: [
-    { id: "regulatory_gap__gdpr_eprivacy__outdated_transfer_framework_reference", title: "Outdated transfer framework referenced", status: "Partial concern" as const, summary: "The current transfer basis was not established by this scan.", correctionSteps: [], pages: [], evidence: [], evidenceJson: {}, rank: 1 },
-  ] };
-  for (const Summary of [FullSiteExecutiveSummary, LegacyFullSiteExecutiveSummary]) {
-    const html = renderToStaticMarkup(<Summary pending={false} scannedPages={12} homepageLimitedCount={1} score={siteScore} />);
-    assert.match(html, /1 checklist item remains technically limited and should be verified manually/);
-    assert.match(html, /focused review of privacy disclosures/);
-  }
-});
-
 test("site score and coverage influence significance without inventing a finding", () => {
   assert.equal(buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "complete" } }), "No priority issues were identified in the assessed evidence.");
   const limited = buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "limited" } });
-  assert.match(limited, /Coverage/);
+  assert.match(limited, /Detailed evidence/);
   assert.doesNotMatch(limited, /all clear|compliant|safe/);
   const poor = buildSiteAssessmentSummary([{ title: "Projected issue", status: "Potential gap" }], 10, { score: 35 });
   assert.match(poor, /high-priority remediation/);

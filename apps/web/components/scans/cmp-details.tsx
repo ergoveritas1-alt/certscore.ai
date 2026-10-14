@@ -1,0 +1,128 @@
+import React, { type ReactNode } from "react";
+import { CMP_AUDIT_CRITERIA, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
+import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
+import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
+import type { ShadowEvidenceRow } from "./report-lab/shadow-report-data";
+import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
+import { EvidenceJumpLink } from "./evidence-jump-link";
+import type { SharedEvidenceLink } from "./report-lab/detailed-evidence-layout";
+import { DisclosureChevron, EvidenceTools } from "./report-finding-row";
+import { VendorBrandChip } from "./vendor-brand-chip";
+
+const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
+  Informational: "neutral", "Feature not supported": "limited", Observed: "positive",
+  "Not observed": "neutral", "Review recommended": "review", "Partially assessed": "context", "Not assessed": "limited",
+};
+
+export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, platformEvidence = [], cookieEvidenceAnchor, rejectActionAvailable = false }: {
+  audit?: CmpAuditProjection;
+  vendor: string | null;
+  compact?: boolean;
+  children?: ReactNode;
+  evidenceRows?: readonly ShadowEvidenceRow[];
+  sharedEvidence?: Record<string, SharedEvidenceLink>;
+  platformEvidence?: readonly ShadowEvidenceRow[];
+  cookieEvidenceAnchor?: string;
+  rejectActionAvailable?: boolean;
+}) {
+  const rows: CmpAuditRow[] = audit?.rows ?? CMP_AUDIT_CRITERIA.map(criterion => ({
+    ...criterion, status: "Not assessed" as const, sourceIds: [],
+  }));
+  return <details id="cmp-details" className="group/cmp border-b border-r border-zinc-200 p-5">
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
+      <div>
+        <p className="text-xs font-semibold uppercase text-zinc-500">Consent management{compact ? " · Starting page" : ""}</p>
+        <h3 className="mt-1 text-lg font-semibold text-zinc-950">CMP Details</h3>
+      </div>
+      <DisclosureChevron className="shrink-0 text-zinc-400 group-open/cmp:rotate-180" />
+    </summary>
+    <div className="mt-5">
+      <VendorBrandChip label={vendor ?? "Consent platform not identified"} showMeta={false} />
+      {platformEvidence.map(row => <details id={evidenceRowAnchor(row.id)} key={row.id} className="group/platform mt-2 text-xs text-zinc-600">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">Platform identification evidence<DisclosureChevron className="text-zinc-400 group-open/platform:rotate-180" /></summary>
+        <div className="mt-3"><EvidenceTools canonicalEvidenceJson={row.canonicalEvidenceJson} evidenceJson={row.evidenceJson} evidenceRefs={row.evidenceRefs} correctionSteps={[]} showCorrections={false} /></div>
+      </details>)}
+      {audit?.inspectionSupport ? <p className="mt-2 text-xs text-zinc-600">Preference check: <span className="font-semibold">{audit.inspectionSupport.reason === "preference_budget_exhausted" ? "Inspection incomplete — timed out" : { supported: "Supported", partial: "Partially supported", unsupported: "CMP not supported by CertScore", unknown: "Support not established" }[audit.inspectionSupport.state]}</span></p> : null}
+      <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4>
+      <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">
+        {rows.map(row => {
+          const source = evidenceRows.find(source => row.sourceIds.includes(source.id) || evidenceRowAnchor(source.id) === row.evidenceAnchor);
+          const { id, label, status, detail, sourceIds, supportingEvidence } = row;
+          return <DetailedEvidenceFinding key={id} id={`cmp-criterion-${id}`} title={label} summary={detail} assessmentStatus={status}
+            sharedEvidence={sharedEvidence[id]}
+            badge={<EvidenceStatusBadge label={status === "Review recommended" ? "Review" : status} tone={statusTone[status]} showIcon={statusTone[status] !== "review"} />}
+            canonicalEvidenceJson={source?.canonicalEvidenceJson}
+            evidenceRefs={source?.evidenceRefs ?? sourceIds}
+            correctionSteps={source?.correctionSteps ?? cmpCorrectionSteps(row)}
+            evidenceJson={{ scope: audit?.scope ?? "starting_page", scanId: audit?.scanId ?? null,
+              assessmentSourceHash: audit?.assessmentSourceHash ?? null,
+              criterion: { id, label, status, detail, sourceIds, supportingEvidence } }}>
+            {supportingEvidence ? <CmpSupportingEvidence evidence={supportingEvidence} /> : null}
+            {!sharedEvidence[id] && (id === "implementation" && rejectActionAvailable ?
+              <EvidenceJumpLink targetId="post-reject-action-evidence" className="inline-block text-xs">View Reject action evidence ↓</EvidenceJumpLink> :
+              id === "reject" && row.evidenceAnchor ? <EvidenceJumpLink targetId="consent-choice-controls" className="inline-block text-xs">View consent choices ↓</EvidenceJumpLink> :
+              row.evidenceAnchor && !["implementation", "banner", "prominence", "reject"].includes(id) ? <EvidenceJumpLink targetId={row.evidenceAnchor} className="inline-block text-xs">View supporting evidence ↓</EvidenceJumpLink> : null)}
+            {id === "cookie_information" && cookieEvidenceAnchor ? <EvidenceJumpLink targetId={cookieEvidenceAnchor} className="inline-block text-xs">View cookie-disclosure availability ↓</EvidenceJumpLink> : null}
+          </DetailedEvidenceFinding>;
+        })}
+      </div>
+      {children}
+    </div>
+  </details>;
+}
+
+function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow["supportingEvidence"]> }) {
+  const comparison = evidence.prominence, cookies = evidence.cookieComparison;
+  return <div className="mt-2 space-y-3 rounded-md bg-zinc-50 p-3 text-xs leading-5 text-zinc-700">
+    {comparison ? <>
+      <table className="w-full text-left">
+        <caption className="mb-2 text-left font-semibold text-zinc-900">Accept / Reject comparison</caption>
+        <thead><tr className="border-b border-zinc-200"><th scope="col" className="py-1">Control</th><th scope="col">Size (px)</th><th scope="col">Fill contrast</th></tr></thead>
+        <tbody>{(["accept", "reject"] as const).map(role => <tr key={role}>
+          <th scope="row" className="py-1 font-medium">{role === "accept" ? "Accept" : "Reject / necessary only"}</th>
+          <td>{comparison[role].bounds[2]} × {comparison[role].bounds[3]}</td>
+          <td>{comparison[role].fillContrast.toFixed(3)}:1</td>
+        </tr>)}</tbody>
+      </table>
+      <p>Button sizes and screenshot were captured {comparison.captureSkewMs} ms apart on the starting page. Fill contrast compares button backgrounds, not text readability.</p>
+    </> : null}
+    {evidence.requests?.length ? <>
+      <p className="font-semibold text-zinc-900">Requests after confirmed Reject · {evidence.requests.length}</p>
+      <ul className="divide-y divide-zinc-200">{evidence.requests.map((request, index) => <li key={`${request.hostname}${request.path}-${index}`} className="py-2 first:pt-0 last:pb-0">
+        <p className="font-medium">{request.vendor} · {request.category} · +{request.msAfterReject} ms after confirmed refusal</p>
+        <p className="break-all font-mono text-[11px]">{request.hostname}{request.path}</p>
+      </li>)}</ul>
+      <p>These requests were recorded during the post-Reject check. The data sent by them was not assessed.</p>
+    </> : null}
+    {cookies ? <>
+      <p className="font-semibold text-zinc-900">Unmatched cookie names · {cookies.unmatchedNameCount}</p>
+      <p>{cookies.observedCookieNameCount} cookie names checked against {cookies.declarationPatternCount} CMP patterns, including wildcards.</p>
+      <ul className="flex flex-wrap gap-2" aria-label="Unmatched cookie names">{cookies.unmatchedNames.map(name => <li key={name} className="max-w-full break-all rounded bg-white px-2 py-1 font-mono text-[11px]">{name}</li>)}</ul>
+      {cookies.unmatchedNames.length < cookies.unmatchedNameCount ? <p>Showing {cookies.unmatchedNames.length} of {cookies.unmatchedNameCount} unmatched names.</p> : null}
+      <p>{cookies.allUnmatchedOnlyAfterAccept ? "These cookies were found after Accept and were not seen before consent. " : "Cookies found during the scan were compared with the CMP list. "}Names alone do not show each cookie’s purpose or consent requirements.</p>
+    </> : null}
+  </div>;
+}
+
+
+/** Review guidance for existing projected results, not additional findings. */
+function cmpCorrectionSteps(row: CmpAuditRow): string[] {
+  if (row.status !== "Review recommended" && row.status !== "Not observed") return [];
+  switch (row.id) {
+    case "prominence": return [
+      "Compare Accept and Reject on the same page.",
+      "Make Reject as easy to find and use, then check both controls in a fresh session.",
+    ];
+    case "implementation": return [
+      "Check the listed requests, their purposes and their consent categories.",
+      "For requests that require consent, update the tag or integration to respect Reject.",
+      "Retest before a choice, after Reject and after Accept. Confirm each choice and check the resulting activity.",
+    ];
+    case "found_not_declared": return [
+      "Check the unmatched names against the CMP list and confirm their purposes and consent state.",
+      "Add any confirmed omissions to the CMP list.",
+      "Repeat the comparison after updating the list.",
+    ];
+    default: return ["Check the evidence for this item before making changes."];
+  }
+}

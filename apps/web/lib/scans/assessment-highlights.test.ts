@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildAssessmentBrief } from "./assessment-brief";
-import { ASSESSMENT_HIGHLIGHTS_MAX_LENGTH, buildAssessmentHighlights } from "./assessment-highlights";
+import { ASSESSMENT_HIGHLIGHTS_MAX_LENGTH, buildAssessmentHighlights, buildAssessmentHighlightsPresentation } from "./assessment-highlights";
 const page = { kind: "page" } as const;
 const privacy = Object.freeze({ id: "regulatory_gap__gdpr_eprivacy__privacy_notice_availability", title: "Privacy policy not found", status: "Potential gap", summary: "Completed discovery did not identify a privacy policy within the scanned scope.", correctionSteps: ["Publish a privacy policy explaining the site's personal-data practices."] });
 
@@ -33,22 +33,6 @@ test("generic source boilerplate yields to the specific projected finding title"
   const copy = buildAssessmentHighlights([{ id: "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction", title: "Non-essential activity after confirmed Reject", status: "Potential gap", summary: "Potential issue based on scan evidence." }], page);
   assert.match(copy, /Non-essential activity after confirmed Reject/);
   assert.doesNotMatch(copy, /Potential issue based on scan evidence/);
-});
-
-test("partial evidence wording stays qualified without repeating a generic action", () => {
-  const summary = "Partial support from scan evidence; An obsolete EU-US Privacy Shield reference was observed. The current transfer basis was not established by this scan. Review the policy wording and the safeguards actually in use.";
-  const generic = "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.";
-  const copy = buildAssessmentHighlights([{ id: "regulatory_gap__gdpr_eprivacy__outdated_transfer_framework_reference", title: "Outdated transfer framework referenced", status: "Partial concern", summary, correctionSteps: [generic] }], { kind: "site", scannedPages: 12 }, { score: 90 });
-  assert.match(copy, /The scan provides partial support for this finding\. An obsolete EU-US Privacy Shield reference was observed/);
-  assert.match(copy, /current transfer basis was not established/);
-  assert.match(copy, /Review the policy wording/);
-  assert.doesNotMatch(copy, /Review the retained checklist evidence/);
-});
-
-test("the generic action remains when the summary has no next step", () => {
-  const generic = "Review the retained checklist evidence, confirm whether the row is applicable to the site, and address the underlying implementation or disclosure gap if confirmed.";
-  const copy = buildAssessmentHighlights([{ title: "Disclosure review", summary: "A disclosure reference needs review.", correctionSteps: [generic] }], page);
-  assert.match(copy, /Review the retained checklist evidence/);
 });
 
 test("oversized prose cannot crowd out the action or secondary findings", () => {
@@ -101,4 +85,41 @@ test("large lists retain their full source count internally without filling the 
   const copy = buildAssessmentHighlights(findings, brief.scope);
   assert.ok(copy.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
   assert.doesNotMatch(copy, /1,000 priority|Issue 4/);
+});
+
+test("incomplete checks are named and linked without inventing a manual-review requirement", () => {
+  const context = { coverage: { state: "limited" as const, limitedCount: 2,
+    items: [{ id: "privacy_notice_availability", title: "Privacy-policy discovery" }, { id: "transport_security_tls_certificate", title: "Website certificate" }] } };
+  const before = structuredClone(context);
+  const result = buildAssessmentHighlightsPresentation([], page, context);
+  assert.match(result.text, /Could not complete: “Privacy-policy discovery”, “Website certificate”/);
+  assert.deepEqual(result.links, [{ label: "“Privacy-policy discovery”", targetId: "evidence-row-privacy_notice_availability" },
+    { label: "“Website certificate”", targetId: "evidence-row-transport_security_tls_certificate" }]);
+  assert.doesNotMatch(result.text, /checklist item|technically limited|verify.*manually/);
+  assert.deepEqual(context, before);
+});
+
+test("owner-removed callouts do not return through an aggregate coverage count", () => {
+  const context = { coverage: { state: "limited" as const, limitedCount: 1, items: [] } };
+  const brief = buildAssessmentBrief([privacy], page, context);
+  assert.equal(brief.coverage.state, "limited");
+  assert.equal(brief.coverage.limitedCount, 1);
+  assert.doesNotMatch(buildAssessmentHighlights([privacy], page, context), /Decline|checklist item|Could not complete|technically limited/);
+});
+
+test("accessibility groups name existing member findings and link the shared evidence", () => {
+  const finding = { id: "accessibility_priority_group", title: "Accessibility issues", evidenceJson: {
+    presentationGroup: "accessibility", findings: [{ id: "visual_contrast_accessibility_issue", title: "Visual contrast accessibility issue", summary: "Low-contrast text was detected on one page." }] } };
+  const before = structuredClone(finding);
+  const result = buildAssessmentHighlightsPresentation([privacy, finding], page);
+  assert.match(result.text, /Also review “Low text contrast”/);
+  assert.ok(result.links.some(link => link.label === "“Low text contrast”" && link.targetId === "accessibility-evidence"));
+  assert.deepEqual(finding, before);
+});
+
+test("many incomplete checks preserve the paragraph budget and keep a shared evidence link", () => {
+  const result = buildAssessmentHighlightsPresentation([privacy], page, { coverage: { state: "limited", items:
+    Array.from({ length: 20 }, (_, i) => ({ id: `check-${i}`, title: `Check ${i}: ${"Long title ".repeat(8)}` })) } });
+  assert.ok(result.text.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
+  assert.ok(result.links.some(link => link.targetId === "evidence"));
 });

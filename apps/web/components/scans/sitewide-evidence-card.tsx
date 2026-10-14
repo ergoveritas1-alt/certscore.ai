@@ -2,7 +2,8 @@
 import { EvidenceHeaderStatus } from "./evidence-header-status";
 import { createContext, useContext, type ReactNode } from "react";
 import { sitewideEvidenceGroups, type SitewideEvidencePage } from "../../lib/scans/sitewide-evidence-index";
-import { CopyJsonButton } from "./copy-json-button";
+import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
+import { checklistRemediation } from "../../lib/scans/checklist-remediation";
 import { DisclosureChevron } from "./report-finding-row";
 import { evidenceRowAnchor } from "../../lib/scans/report-evidence-navigation";
 
@@ -35,19 +36,13 @@ export function SitewideEvidenceCard({group, children}: {group: keyof typeof sit
     </summary>
     {evidence ? <div className="mt-3 divide-y border-t">
       {evidence.limitedPages ? <p className="py-2 text-xs text-amber-800">{evidence.limitedPages} page(s) have unavailable or limited coverage.</p> : null}
-      {checks.map(check => <details id={evidenceRowAnchor(check.id)} key={check.id} className="group/check scroll-mt-6 py-3 target:rounded target:bg-sky-50/50 target:ring-2 target:ring-sky-300">
-        <summary className="flex cursor-pointer list-none items-start justify-between gap-3 [&::-webkit-details-marker]:hidden">
-          <span><span className="block text-sm font-semibold">{check.title}</span>
-          <span className="mt-1 block text-xs text-zinc-500">{check.statuses.map(([status, count]) => `${status}: ${count} ${count === 1 ? "page" : "pages"}`).join(" · ")}</span></span>
-          <DisclosureChevron className="mt-1 text-zinc-400 group-open/check:rotate-180"/>
-        </summary>
-        <div className="mt-2 space-y-2">
-          {check.summaries.map(([summary, count]) => <p key={summary} className="text-xs text-zinc-600">{summary} <span className="text-zinc-400">({count} {count === 1 ? "page" : "pages"})</span></p>)}
-          <div className="flex items-center justify-end gap-2 text-xs text-zinc-500">Evidence and source references
-            <CopyJsonButton label="Copy aggregated check evidence and page provenance" payload={JSON.stringify(check.observations, null, 2)} className="inline-flex h-8 w-8 items-center justify-center rounded-md text-sky-700 hover:bg-sky-50"/>
-          </div>
-        </div>
-      </details>)}
+      {checks.map(check => <DetailedEvidenceFinding key={check.id} id={evidenceRowAnchor(check.id)} title={check.title}
+        summary={check.statuses.map(([status, count]) => `${status}: ${count} ${count === 1 ? "page" : "pages"}`).join(" · ")}
+        badge={<EvidenceHeaderStatus rows={check.observations} />}
+        evidenceJson={{ observations: check.observations }} evidenceRefs={[...new Set(check.observations.flatMap(row => row.evidenceRefs))]}
+        correctionSteps={checklistRemediation({ rowId: check.id, status: check.needsReview ? "Review signal" : "Observed" })?.steps ?? []}>
+        <div className="space-y-2">{check.summaries.map(([summary, count]) => <p key={summary} className="text-xs leading-5 text-zinc-600">{summary} <span className="text-zinc-400">({count} {count === 1 ? "page" : "pages"})</span></p>)}</div>
+      </DetailedEvidenceFinding>)}
     </div> : <p className="mt-2 text-xs text-zinc-500">Verified sitewide evidence is not available yet.</p>}
   </details>;
 }

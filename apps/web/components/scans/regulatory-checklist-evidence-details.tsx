@@ -1217,6 +1217,11 @@ function explanationLabelClass(tone: ResultExplanationRow["tone"]) {
   }
 }
 
+export function hasRegulatoryChecklistCorrectionSteps(jsonPayload: string): boolean {
+  const guidance = getCorrectionGuidance(jsonPayload);
+  return guidance.kind === "steps" && guidance.steps.some(step => step.trim().length > 0);
+}
+
 export function RegulatoryChecklistCorrectionSteps({
   defaultOpen = false,
   jsonPayload,
@@ -1224,7 +1229,7 @@ export function RegulatoryChecklistCorrectionSteps({
   defaultOpen?: boolean;
 }) {
   const guidance = getCorrectionGuidance(jsonPayload);
-  if (guidance.steps.length === 0 && !guidance.message) {
+  if (guidance.kind === "none" || !guidance.steps.some(step => step.trim().length > 0)) {
     return null;
   }
 
@@ -1233,11 +1238,6 @@ export function RegulatoryChecklistCorrectionSteps({
       <summary className="cursor-pointer px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
         Correction steps
       </summary>
-      {guidance.kind === "none" ? (
-        <div className="max-h-[50vh] overflow-y-auto border-t border-slate-200 bg-emerald-50/40 px-2.5 py-2">
-          <p className="text-xs leading-5 text-slate-700">{guidance.message}</p>
-        </div>
-      ) : (
         <ol className="max-h-[50vh] space-y-1.5 overflow-y-auto border-t border-slate-200 bg-emerald-50/40 px-2.5 py-2">
           {guidance.steps.map((step, index) => (
             <li className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2 text-xs leading-5 text-slate-700" key={`${index}:${step}`}>
@@ -1248,7 +1248,7 @@ export function RegulatoryChecklistCorrectionSteps({
             </li>
           ))}
         </ol>
-      )}
+
     </details>
   );
 }

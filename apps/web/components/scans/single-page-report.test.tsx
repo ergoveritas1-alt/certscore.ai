@@ -22,5 +22,5 @@ test("compact single-page evidence retains actual checks without a crawl context
   assert.match(html, /Detailed evidence/);
   assert.match(html, /JSON evidence/);
   assert.doesNotMatch(html, /Sitewide assessment unavailable|Verified sitewide evidence is not available/);
-  for (const row of SHADOW_REPORT.trackingExternalRows) assert.ok(html.includes(row.title.replace(/&/g, "&amp;")));
+  for (const row of SHADOW_REPORT.trackingExternalRows) assert.ok(html.includes(`id="evidence-row-${row.id}"`));
 });

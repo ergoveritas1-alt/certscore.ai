@@ -1,17 +1,19 @@
 "use client";
 
+import { AssessmentHighlightsText } from "./assessment-highlights-text";
+
 import React, { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
 import { getGdprEprivacyPostureTone } from "../../lib/scans/regulatory-coverage-score";
 import { ScanLiveValue } from "./scan-live-value";
 import type { ScoreDeductions } from "./score-deductions";
-import { buildAssessmentHighlights, type AssessmentHighlightFinding, type AssessmentContext } from "../../lib/scans/assessment-highlights";
+import { buildAssessmentHighlights, buildAssessmentHighlightsPresentation, type AssessmentHighlightLink, type AssessmentHighlightFinding, type AssessmentContext } from "../../lib/scans/assessment-highlights";
 
 export function buildSiteAssessmentSummary(priorities: ReadonlyArray<AssessmentHighlightFinding>, scannedPages: number | null, context: AssessmentContext = {}) {
   return buildAssessmentHighlights(priorities, { kind: "site", scannedPages }, context);
 }
 
-export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageLimitedCount, inventorySummary }: {
+export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = false, scannedPages, statusLabel, actions, snapshot, homepageVerdict, homepageHighlightLinks, inventorySummary }: {
   score?: (Pick<NonNullable<FullSiteReportResponse["score"]>, "value" | "priorityReview" | "scoredPages"> & { limitedPages?: number; deductions?: ScoreDeductions }) | null;
   pending: boolean;
   loadingSavedResult?: boolean;
@@ -21,7 +23,7 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
   snapshot?: ReactNode;
   inventorySummary?: ReactNode;
   homepageVerdict?: string;
-  homepageLimitedCount?: number;
+  homepageHighlightLinks?: readonly AssessmentHighlightLink[];
 }) {
   const panesRef = useRef<HTMLDivElement>(null);
   const [collapsedHeight, setCollapsedHeight] = useState(0);
@@ -51,7 +53,8 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
   const priorities = score?.priorityReview;
   const singlePage = scannedPages === 1;
   const scoreLabel = singlePage ? "Page score" : "Site score";
-  return <section aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
+  const highlights = !singlePage && priorities ? buildAssessmentHighlightsPresentation(priorities, { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } }) : null;
+  return <section id="report-overview" aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
       <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold tracking-tight text-zinc-950">Executive overview</h2>{actions}</div>
       {pending || statusLabel ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">{pending ? statusLabel ?? "Scan in progress" : `Site assessment · ${statusLabel}`}</span> : null}
@@ -80,8 +83,8 @@ export function FullSiteExecutiveSummary({ score, pending, loadingSavedResult = 
       <div className="flex min-w-0 flex-col justify-between gap-4 md:min-h-[var(--overview-height)]">
         <div data-overview-block>
         <h3 className="text-sm font-bold tracking-tight text-zinc-900">Assessment highlights</h3>
-        {singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600">{homepageVerdict ?? "The single page assessment will appear when ready."}</p>
-          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700">{buildSiteAssessmentSummary(priorities, scannedPages ?? score?.scoredPages ?? null, { score: value, coverage: { state: score?.limitedPages || homepageLimitedCount ? "limited" : "unknown", limitedCount: homepageLimitedCount } })}</p>
+        {singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={homepageVerdict ?? "The single page assessment will appear when ready."} links={homepageHighlightLinks} /></p>
+          : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700"><AssessmentHighlightsText text={highlights!.text} links={highlights!.links} /></p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{loadingSavedResult ? "Loading the saved site assessment." : pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}
         </div>
         {inventorySummary ? <div>{inventorySummary}</div> : null}
