@@ -22,3 +22,5 @@ Regenerate and verify the public type mirrors with:
 pnpm exec tsx scripts/sync-detailed-evidence-contract.ts
 pnpm exec tsx scripts/sync-detailed-evidence-contract.ts --check
 ```
+
+The October 14 follow-up is live from `94399fef7c45f348ef27da535198f783670f61f2`, with SDK 0.2.17 and MCP 0.2.28. It adds California privacy-choice evidence to shared/full and focused policy exports, preserves typed MCP proof during compaction, and simplifies legacy display summaries without changing assessments. See [follow-up production verification](certscore-v2/releases/2026-10-14-detailed-evidence-fixes-production-verification.md).

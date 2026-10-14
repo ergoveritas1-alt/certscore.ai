@@ -1,6 +1,6 @@
 # Detailed Evidence saved-report fixes — October 14, 2026
 
-Implemented locally; no deployment, package publication or fresh scan was performed.
+Initial verification was local, with no deployment, package publication or fresh scan. The subsequent owner-authorized release is recorded in [production verification](certscore-v2/releases/2026-10-14-detailed-evidence-fixes-production-verification.md).
 
 ## Changes
 
