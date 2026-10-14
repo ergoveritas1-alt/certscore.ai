@@ -127,3 +127,38 @@ test("preference worker memory allowance stays inside the approved compute envel
   assert.equal(cmpPreferenceBudgetMs(NaN), 3600);
   assert.equal(cmpPreferenceBudgetMs(0), 3600);
 });
+
+test("OneTrust registered dialog binding opens only the existing hidden preference node without aria-controls", {timeout: 25_000}, async () => {
+  let mode = "valid", clicks = 0, saves = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    if (req.url === "/saved") { saves++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    const panel = `<section id="onetrust-pc-sdk" ${mode === "visible" ? "" : "hidden"}><label><input type="checkbox">Analytics</label><button onclick="fetch('/saved')">Save preferences</button></section>`;
+    res.end(`<div id="onetrust-banner-sdk"><button id="onetrust-pc-btn-handler">${mode === "wrong-label" ? "Accept all" : "Cookie settings"}</button></div>${mode === "missing" ? "" : panel}${mode === "duplicate" ? panel : ""}<script>
+      document.getElementById('onetrust-pc-btn-handler').onclick=()=>{fetch('/clicked');
+        const panel=document.getElementById('onetrust-pc-sdk');
+        ${mode === "replace" ? "panel.outerHTML=panel.outerHTML.replace(' hidden','');" : "panel.hidden=false;"}
+      };
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (mode of ["valid", "visible", "wrong-label", "missing", "duplicate", "replace"]) {
+      clicks = 0; saves = 0;
+      const packet = await runCmpPreferencesObserver({parentDispatchSha256: "a".repeat(64), config: {policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/`}});
+      assert.equal(saves, 0);
+      if (mode === "valid") {
+        assert.equal(packet.status, "completed", JSON.stringify(packet));
+        assert.equal(packet.support.recipeVersion, "onetrust_preferences.v1");
+        assert.equal(packet.action.count, 1); assert.equal(packet.action.opened, true);
+        assert.equal(packet.controls[0]?.kind, "category"); assert.equal(clicks, 1);
+      } else {
+        assert.equal(packet.action.opened, false, mode); assert.equal(packet.controlInventoryComplete, false, mode);
+        assert.equal(clicks, mode === "replace" ? 1 : 0, mode);
+        assert.equal(packet.controls.length, 0, mode);
+      }
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});

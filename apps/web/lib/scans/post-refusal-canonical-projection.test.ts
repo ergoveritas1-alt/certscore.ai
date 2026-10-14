@@ -656,6 +656,10 @@ test("verified generic Reject click plus tracking produces one scored review wit
   assert.equal(result.normalizedConcerns[0]?.suggestedUnifiedFindingId, "post_reject_click_tracking");
   assert.equal(result.candidates.length, 1);
   assert.equal(result.postRejectRow.assessmentStatus, "review_signal");
+  assert.equal(result.postRejectRow.label, "Tracking after Reject click");
+  assert.match(result.postRejectRow.note, /tracking request\(s\) began after the Reject control was clicked/);
+  assert.match(result.postRejectRow.note, /Refusal registration was not confirmed/);
+  assert.doesNotMatch(result.postRejectRow.note, /What tracking activity|confirmed Reject/);
   assert.match(JSON.stringify(result.postRejectRow), /tracking request\(s\) began after the Reject control was clicked/);
   assert.match(JSON.stringify(result.postRejectRow), /"refusalRegistrationStatus":"unconfirmed"/);
   const score = deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [result.postRejectRow] });

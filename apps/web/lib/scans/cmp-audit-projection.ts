@@ -139,6 +139,19 @@ export function projectCmpAudit(input: {
     }
   }
 
+  if (!prominence && assessment) {
+    const neutral = input.normalizedConcerns?.find(concern => concern.originKey === "consent.visual_comparison.observed" &&
+      concern.originType === "runtime_artifact" && concern.externalSurfacingEligibility === "eligible" && concern.promotionEligibility === "internal_only");
+    const retained = consentVisualProminenceProjectionSchema.safeParse(neutral?.evidenceBundle.rawEvidence?.consentVisualProminence);
+    if (retained.success && retained.data.assessmentSourceHash === assessment.provenance.sourceHash) {
+      const { accept, reject, captureSkewMs } = retained.data.comparison;
+      set("prominence", { label: "Accept / Reject prominence comparison", status: "Observed",
+        detail: neutral!.description,
+        supportingEvidence: { prominence: { accept, reject, captureSkewMs } }, evidenceAnchor: "consent-review-evidence",
+        sourceIds: [neutral!.originKey] });
+    }
+  }
+
   const rejectCoverage = input.checklistRows?.find(row => row.id === "post_reject_tracking_reduction");
   set("implementation", { detail: rejectCoverage?.assessmentStatus === "coverage_limitation"
     ? rejectCoverage.limitation || rejectCoverage.note

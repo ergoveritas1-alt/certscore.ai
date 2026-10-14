@@ -226,6 +226,9 @@ test("bounded consent recovery retains canonical DOM inventory and geometry evid
     assert.ok(result.consentUiObservation?.documentIdentity?.token);
     assert.deepEqual(geometry.documentIdentity, result.consentUiObservation?.documentIdentity);
     assert.equal(geometry.screenshotArtifactRef, undefined, 'fresh recovery must not borrow an earlier-session screenshot');
+    assert.deepEqual(result.domSnapshot?.documentIdentity, geometry.documentIdentity,
+      "Recovery DOM, inventory and geometry must retain the same verified loader");
+    assert.deepEqual(result.consentUiObservation?.documentIdentity, geometry.documentIdentity);
     const retained = { consentUiObservations: [result.consentUiObservation!] };
     assert.equal(await hasVerifiedRetainedStructuredConsentEvidence(retained, geometryPath), true,
       'verified structured evidence remains authoritative without an available screenshot');

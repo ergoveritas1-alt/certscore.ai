@@ -42,11 +42,12 @@
     },
     "https://fullstory.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:16:07.719Z",
-      "lastContactAt": "2026-10-09T16:16:07.719Z",
+      "cooldownUntil": "2026-11-11T18:26:43.552Z",
+      "lastContactAt": "2026-10-14T18:26:43.552Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local complementary CMP-depth verification pass, scan 09c8c608-53a7-4cb7-8ebb-f82c0d31bd1b. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://fullstory.com"
     },
@@ -72,11 +73,12 @@
     },
     "https://gatech.edu": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:57:45.057Z",
-      "lastContactAt": "2026-10-09T16:57:45.057Z",
+      "cooldownUntil": "2026-11-11T18:27:28.618Z",
+      "lastContactAt": "2026-10-14T18:27:28.618Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local complementary CMP-depth verification pass, scan 4f4844e2-d0c6-4779-8e48-dfd69218cbe1. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://gatech.edu"
     },
@@ -242,11 +244,12 @@
     },
     "https://weather.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-05T20:10:12.846Z",
-      "lastContactAt": "2026-10-08T20:10:12.846Z",
+      "cooldownUntil": "2026-11-11T18:21:32.602Z",
+      "lastContactAt": "2026-10-14T18:21:32.602Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local complementary CMP-depth initial pass, scan 9640df84-c554-450b-ae4e-96c5d392e9ab. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://weather.com"
     },
@@ -320,11 +323,12 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:16:33.777Z",
-      "lastContactAt": "2026-10-09T16:16:33.777Z",
+      "cooldownUntil": "2026-11-11T18:21:00.171Z",
+      "lastContactAt": "2026-10-14T18:21:00.171Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local complementary CMP-depth initial pass, scan 69aff51c-73d3-4b09-9cee-3c5cc35dd9c7. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://hubspot.com"
     },
@@ -503,11 +507,12 @@
     },
     "https://ikea.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-10-20T20:25:23.73+00:00",
-      "lastContactAt": "2026-09-22T20:25:23.73+00:00",
-      "lastContactSource": "scan_quality_calibration",
+      "cooldownUntil": "2026-11-11T18:27:03.456Z",
+      "lastContactAt": "2026-10-14T18:27:03.456Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local complementary CMP-depth verification pass, scan b3aa4074-6fd8-440c-84b2-2a7e6aa99b8c. Five new targets and only owner-authorized focused verification; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://ikea.com"
     },
@@ -1129,7 +1134,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T18:09:28.741Z",
+  "updatedAt": "2026-10-14T18:28:04.894Z",
   "contactOnlyUrls": [
     "https://sits.com/en/"
   ]

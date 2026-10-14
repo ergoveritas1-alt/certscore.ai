@@ -22,7 +22,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-12-test-cookie-context-v1";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-14-fullstory-endpoint-v1";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -2125,7 +2125,8 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "behavioral_analytics", "session_replay"],
     confidence: 0.95,
     hostPatterns: [/\.fullstory\.com$/i, /^rs\.fullstory\.com$/i, /^edge\.fullstory\.com$/i, /\.fullstoryedge\.com$/i],
-    urlPatterns: [/\/s\/fs\.js\b/i, /\/rec\//i, /\/s\/settings\//i],
+    urlPatterns: [/^https?:\/\/[^/?#]+\/s\/fs\.js(?:[?#]|$)/i, /^https?:\/\/[^/?#]+\/rec\//i, /^https?:\/\/[^/?#]+\/s\/settings\//i],
+    requireUrlPatternMatch: true,
     cookiePatterns: [/^fs_uid$/i],
     storageKeyPatterns: [/^fs_uid$/i, /^FS_/],
     basisLabel: "fullstory_script_endpoint_or_cookie",

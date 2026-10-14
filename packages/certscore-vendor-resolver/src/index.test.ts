@@ -3076,3 +3076,15 @@ test("reCAPTCHA Enterprise attribution requires its canonical endpoint, not a sh
   assert.ok(findCanonicalVendorMention("Facebook Social Plug-in", {vendor: "Meta", product: "Facebook Static Assets", entity: "Meta Platforms, Inc."}));
   assert.equal(findCanonicalVendorMention("Facebook Social Plug-in", {vendor: "Google", product: "Google Maps", entity: "Google LLC"}), undefined);
 });
+
+
+test("FullStory website assets are not replay endpoints; SDK, collection and storage signatures remain eligible", () => {
+  for (const url of ["https://www.fullstory.com/", "https://www.fullstory.com/images/font-stars.svg", "https://www.fullstory.com/static/NeulisSans-Regular.woff2", "https://www.fullstory.com/static/main.js", "https://www.fullstory.com/?next=/rec/page", "https://example.test/s/fs.js"]) {
+    assert.notEqual(resolveCanonicalVendor({type: "request", url}).observation?.product, "FullStory", url);
+  }
+  for (const url of ["https://rs.fullstory.com/s/fs.js", "https://edge.staging.fullstory.com/s/fs.js", "https://rs.fullstory.com/rec/page", "https://edge.fullstory.com/s/settings/o-123-na1/v1/web"]) {
+    assert.equal(resolveCanonicalVendor({type: "request", url}).observation?.product, "FullStory", url);
+  }
+  assert.equal(resolveCanonicalVendor({type: "cookie", cookieName: "fs_uid", hostname: "example.test"}).observation?.product, "FullStory");
+  assert.equal(resolveCanonicalVendor({type: "cmp_runtime", storageKey: "FS_PAGE_VISIBILITY", hostname: "example.test"}).observation?.product, "FullStory");
+});

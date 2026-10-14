@@ -67,6 +67,9 @@ export type KnownCmpDefinition = {
     controlSelector: string;
     dialogSelector: string;
   };
+  /** Registered hidden dialog binding when the Options button omits aria-controls.
+   * Only the existing node may become visible; never opens via a vendor API. */
+  preferenceDialogBinding?: { version: string; controlSelector: string; dialogSelector: string };
   /** Content-specific opt-in controls are not first-layer visitor consent choices. */
   nonFirstLayerSurfaceSelectors?: string[];
   /** Exclude actual consent dialogs from collection inventory, not blocked content. */
@@ -273,6 +276,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#onetrust-accept-btn-handler"],
     canonicalName: "OneTrust",
+    preferenceDialogBinding: { version: "onetrust_preferences.v1", controlSelector: "#onetrust-pc-btn-handler", dialogSelector: "#onetrust-pc-sdk" },
     rejectLabelBoundNecessaryOnly: {
       policyVersion: "label_bound_necessary_only_reject.v1",
       bannerSelector: "#onetrust-banner-sdk",

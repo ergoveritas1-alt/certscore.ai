@@ -293,7 +293,7 @@ function geometryInput(
 /** The verified consent lane owns its document, independently of runtime redirects.
  * URL equality alone cannot override the global document: require the retained
  * lane outcome and matching observation, DOM and geometry loader tokens. */
-function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometry: Record<string, unknown> | null | undefined): string | null {
+function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometry: Record<string, unknown> | null | undefined): { url: string; token: string } | null {
   const lane = bundle.scanLaneRuns?.find((run) => run.laneId === "consent_proof");
   const lanes = bundle.scanEvidenceLaneAssessment ?? bundle.scan_evidence_lane_assessment;
   if (lane?.executionOutcome !== "success" || lanes?.lanes.consent !== "usable") return null;
@@ -306,7 +306,7 @@ function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometr
     !["observed", "no_evidence"].includes(observation.captureStatus ?? "")) return null;
   return (bundle.domSnapshots ?? []).some((snapshot) => snapshot.consentStateAtTime === "pre_consent" &&
     normalizedDocumentId(snapshot.url) === geometryUrl && retainedDocumentToken(snapshot.documentIdentity) === geometryToken)
-    ? geometryUrl : null;
+    ? { url: geometryUrl, token: geometryToken } : null;
 }
 
 export function deriveMaterializedConsentControlAssessment(input: {
@@ -329,7 +329,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
     (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface")
   ));
   const canonicalDocumentId = normalizedDocumentId(
-    consentLaneDocument ?? input.finalUrl ??
+    consentLaneDocument?.url ?? input.finalUrl ??
     input.bundle.domSnapshots.at(-1)?.url ??
     input.bundle.normalizedUrl ??
     input.bundle.url,
@@ -348,7 +348,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
     )
     .sort((left, right) => left.capturedAtMs - right.capturedAtMs);
   const screenshots = input.bundle.screenshots ?? [];
-  const canonicalDocumentToken = retainedDocumentSnapshots
+  const canonicalDocumentToken = consentLaneDocument?.token ?? retainedDocumentSnapshots
     .filter((snapshot) => snapshot.documentId === canonicalDocumentId && snapshot.documentToken)
     .at(-1)?.documentToken ?? null;
   const geometry = geometryInput(

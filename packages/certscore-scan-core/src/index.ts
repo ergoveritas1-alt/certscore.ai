@@ -3479,6 +3479,9 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
           consentStateAtTime: "pre_consent",
         };
       }
+      // Bracket text, controls and geometry with the recovery session's existing
+      // loader checks. Never bind its DOM to the independent runtime session.
+      const recoveryDocumentBefore = await readRecoveryDocument();
       const domTextTimeoutMs = optionalTimeoutForStep(input.recoverConsentEvidence ? 600 : 2_000);
       const domText = domTextTimeoutMs === null
         ? ""
@@ -3495,7 +3498,6 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         )
         : undefined;
       const documentLanguage = await readDeclaredDocumentLanguage(page);
-      const recoveryDocumentBefore = await readRecoveryDocument();
       const consentUiTimeoutMs = optionalTimeoutForStep(input.recoverConsentEvidence ? 1_250 : 1_500);
       let consentUiObservation = consentUiTimeoutMs === null
         ? undefined
@@ -3621,6 +3623,7 @@ export async function capturePreConsentScreenshotOnlyFallback(input: {
         domSnapshot: domPath
           ? {
             artifactId: domArtifactId,
+            ...(consentRecoveryCompleted && recoveryDocumentBefore ? { documentIdentity: recoveryDocumentBefore.identity } : {}),
             capturedAtMs: Date.now() - input.scanStartedAtMs,
             path: domPath,
             url: page.url(),

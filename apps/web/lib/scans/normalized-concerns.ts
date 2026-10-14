@@ -3566,7 +3566,18 @@ function buildConsentVisualProminenceConcerns(runtimeArtifacts: Record<string, u
   domainContext?: ScanDomainContext) {
   const assessment = getConsentControlAssessmentForConcern(runtimeArtifacts);
   const projection = projectConsentVisualProminence(assessment);
-  if (!projection || !hasTypedConsentVisualProminence(projection)) return [];
+  if (!projection) return [];
+  if (!hasTypedConsentVisualProminence(projection)) {
+    const refs = ["scan_runtime_artifacts.consent_control_assessment", "ConsentControlGeometryEvidence.json",
+      `sha256:${projection.comparison.screenshotSha256}`];
+    return [buildConcernFromSharedInput({ consentControlAssessment: assessment,
+      categoryId: "privacy", domainContext, description: "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+      evidence: refs, observedValue: "comparison_observed", originKey: "consent.visual_comparison.observed",
+      originType: "runtime_artifact", severity: "low", sourceType: "signal", signalSource: "runtime_artifact_signal",
+      signalKey: "privacy.consent_visual_comparison", title: "Accept / Reject comparison",
+      rawEvidence: { consentVisualProminence: projection, runtimeEvidenceArtifacts: refs },
+    })];
+  }
   const materiality = assessConsentProminenceMateriality(projection)!;
   const comparison = projection.comparison;
   const refs = ["scan_runtime_artifacts.consent_control_assessment", "ConsentControlGeometryEvidence.json",

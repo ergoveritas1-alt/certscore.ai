@@ -1,3 +1,4 @@
+import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
 import { canonicalEvidenceVendorName as normalizeEvidenceVendorName } from "./canonical-evidence-vendor-name";
 import { projectPreconsentTrackingTiming, readPreconsentTrackingTiming } from "./preconsent-tracking-timing";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
@@ -2409,6 +2410,13 @@ function specializeChecklistRow(input: {
       input.coverageOutcome?.criticalEvidence.retainedEvidence.productionPosture === "limited_independent_reject_action") {
     return { evidenceRefs: input.evidenceRefs, explanation: input.coverageOutcome.limitation,
       label: input.definition.label, status: "Not testable" as const };
+  }
+
+  if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Review signal" &&
+      input.coverageOutcome?.criticalEvidence.retainedEvidence.rejectClickVerified === true &&
+      readRejectClickTrackingAssessment(input.coverageOutcome.criticalEvidence.retainedEvidence.rejectClickTrackingAssessment)) {
+    return { evidenceRefs: input.evidenceRefs, label: "Tracking after Reject click", status: "Review signal" as const,
+      explanation: `${input.coverageOutcome.limitation} Refusal registration was not confirmed.` };
   }
 
   if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Gap observed") {

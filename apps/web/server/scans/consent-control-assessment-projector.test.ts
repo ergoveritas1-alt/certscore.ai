@@ -1590,3 +1590,17 @@ test("malformed current same-loader control inspection cannot be hidden by a com
   assert.equal(result.controls.reject.state, "unknown");
   assert.ok(result.limitations.some(l => l.code === "structured_inspection_incomplete"));
 });
+
+
+test("verified independent consent binding is not overwritten by a later runtime DOM from the same URL", () => {
+  const {b, g} = independentConsentLaneFixture();
+  b.domSnapshots.push({...b.domSnapshots[0]!, artifactId: "runtime_dom", capturedAtMs: b.domSnapshots[0]!.capturedAtMs + 10_000,
+    documentIdentity: {source: "cdp_loader_id", token: "runtime-session-token"}});
+  const before = structuredClone(b);
+  const result = deriveMaterializedConsentControlAssessment({bundle: b, consentControlGeometryEvidence: g,
+    consentSurfaceInspection: completeInspection("actionable_surface_observed", true), noGo: false});
+  assert.equal(result.document.canonicalDocumentToken, "consent-document-token");
+  assert.equal(result.document.identityStatus, "matched");
+  assert.equal(result.controls.accept.state, "observed");
+  assert.deepEqual(b, before);
+});

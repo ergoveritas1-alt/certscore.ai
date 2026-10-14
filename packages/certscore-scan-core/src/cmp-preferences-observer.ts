@@ -123,7 +123,7 @@ export async function runCmpPreferencesObserver(input: {
       .slice(0, 16).map(link => ({ url: link.url, hitTargetBeforeAction: link.hit }));
     await binding();
     packet.checkpoints!.privacyLinks = true;
-    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"] }> = [];
+    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"] }> = [];
     const detected = new Set<string>();
     // Resolve all registered vendor scopes in one shadow-piercing locator read.
     // Serial full-document selector round trips used most of the remaining
@@ -149,7 +149,7 @@ export async function runCmpPreferencesObserver(input: {
         const result = classifyConsentControlLabel({ ...fields, hasConsentContext: true, usage: recipe ? "observation" : "action" });
         if (result.intent !== "options" || !result.contextSatisfied || result.matchStrength === "weak") continue;
         const control = controls.nth(index);
-        if (await control.isVisible() && await control.isEnabled() && await locatorHasViewportHitTarget(control)) matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.label, scope, recipe });
+        if (await control.isVisible() && await control.isEnabled() && await locatorHasViewportHitTarget(control)) matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding });
       }
     }
     if (matches.length !== 1) {
@@ -160,7 +160,12 @@ export async function runCmpPreferencesObserver(input: {
     const match = matches[0]!;
     packet.support = { state: "partial", provider: match.provider, recipeVersion: match.recipe?.version ?? CMP_PREFERENCE_POLICY_VERSION, reason: "bounded_visible_preference_inspection" };
     const controlledId = await match.control.getAttribute("aria-controls");
+    const registeredDialog = !controlledId && match.dialogBinding &&
+      await match.control.evaluate((element, selector) => element.matches(selector), match.dialogBinding.controlSelector)
+      ? match.dialogBinding : undefined;
+    if (registeredDialog) packet.support.recipeVersion = registeredDialog.version;
     const controlled = match.recipe ? page.locator(match.recipe.dialogSelector)
+      : registeredDialog ? page.locator(registeredDialog.dialogSelector)
       : controlledId && /^[A-Za-z][\w:-]{0,120}$/.test(controlledId) ? page.locator(`[id="${controlledId}"]`) : null;
     if (!controlled || await controlled.count() !== 1 || (match.recipe && await match.scope.count() !== 1)) {
       packet.limitations.push("preference_surface_binding_unavailable"); return finish();
@@ -181,6 +186,7 @@ export async function runCmpPreferencesObserver(input: {
     }
     const dialogHandle = await controlled.elementHandle();
     const beforeVisible = controlled ? await controlled.isVisible() : false;
+    if (!match.recipe && beforeVisible) { packet.limitations.push("preference_surface_binding_unavailable"); return finish(); }
     await binding();
     const dispatchFields = await match.control.evaluate(element => ({ label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls") }));
     const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe ? "observation" : "action" });
@@ -196,8 +202,9 @@ export async function runCmpPreferencesObserver(input: {
       // API opening call or arbitrary newly visible modal can establish binding.
       await match.scope.waitFor({ state: "hidden", timeout: remaining() });
       if (!beforeVisible || !dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
-    } else if (beforeVisible) { packet.limitations.push("preference_surface_binding_unavailable"); return finish(); }
+    }
     await controlled.waitFor({ state: "visible", timeout: remaining() });
+    if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
     await binding();
     packet.action.opened = true;
     packet.inspectionDiagnostic!.phase = "preference_inventory";

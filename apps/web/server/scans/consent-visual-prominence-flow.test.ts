@@ -53,7 +53,13 @@ test("typed visual evidence -> assessment -> persistence -> concern policy -> un
     const expected = false;
     assert.equal(concern?.promotionEligibility === "internal_only", styling);
     const cmp = projectCmpAudit({ scanId: assessment.scan.scanId, consentControlAssessment: assessment, normalizedConcerns: projection.concerns, unifiedFindings: projection.display });
-    assert.equal(cmp.rows.find(r => r.id === "prominence")?.status, styling ? "Observed" : "Not assessed");
+    assert.equal(cmp.rows.find(r => r.id === "prominence")?.status, "Observed");
+    if (!styling) {
+      const compared = projection.concerns.find(c => c.originKey === "consent.visual_comparison.observed");
+      assert.equal(compared?.promotionEligibility, "internal_only");
+      assert.equal(compared?.externalSurfacingEligibility, "eligible");
+      assert.equal(projection.display.some(f => f.presentationDecision.status === "surface"), false);
+    }
     if (styling) assert.deepEqual(cmp.rows.find(r => r.id === "prominence")?.supportingEvidence?.prominence?.accept, assessment.visualComparison!.accept);
     assert.equal(concern?.promotionEligibility === "eligible", expected);
     const finding = projection.display.find(f => f.unifiedFindingId === "accept_more_prominent_than_reject");
@@ -157,4 +163,21 @@ test("separated layout fixtures preserve canonical materiality and fail-closed e
     input.bundle.screenshots[0]!.documentIdentity!.token = "mismatched";
     assert.equal(assess(input).visualComparison, undefined, "separation never relaxes document proof");
   }
+});
+
+
+test("neutral visual comparison requires the exact persisted assessment and cannot create a risk finding", async () => {
+  const { deriveConcernPolicy } = await import("../../lib/scans/concern-policy");
+  const assessment = assess(await source("equal"));
+  const concern = project(assessment).concerns.find(c => c.originKey === "consent.visual_comparison.observed")!;
+  assert.ok(concern);
+  const input = {concern, consentControlAssessment: assessment, rawEvidence: concern.evidenceBundle.rawEvidence, evidenceStrengthFlags: concern.evidenceStrengthFlags};
+  assert.equal(deriveConcernPolicy(input).promotionEligibility, "internal_only");
+  assert.equal(deriveConcernPolicy({...input, consentControlAssessment: undefined}).promotionEligibility, "blocked");
+  const changed = structuredClone(input.rawEvidence)!;
+  (changed.consentVisualProminence as {assessmentSourceHash: string}).assessmentSourceHash = "fnv1a-00000000";
+  assert.equal(deriveConcernPolicy({...input, rawEvidence: changed}).promotionEligibility, "blocked");
+  const copied = structuredClone(assessment); copied.provenance.sourceHash = "fnv1a-00000000";
+  assert.equal(projectCmpAudit({scanId: assessment.scan.scanId, consentControlAssessment: copied, normalizedConcerns: [concern]}).rows.find(r => r.id === "prominence")?.status, "Not assessed");
+  assert.equal(project(assessment).display.some(f => f.presentationDecision.status === "surface"), false);
 });

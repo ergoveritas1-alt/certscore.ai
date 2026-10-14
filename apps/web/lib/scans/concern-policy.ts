@@ -2635,6 +2635,15 @@ export function deriveConcernPolicy(input: {
       regulatoryChecklistEligibility: eligible && row.status === "observed" ? "observed" : eligible && row.status === "review" ? "review_signal" : "none",
       negativeEvidenceFlags: eligible ? [] : ["canonical_consent_control_evidence_insufficient"], scoreEffects: [] };
   }
+  if (input.concern.originKey === "consent.visual_comparison.observed") {
+    const expected = projectConsentVisualProminence(input.consentControlAssessment);
+    const eligible = input.concern.originType === "runtime_artifact" && expected &&
+      !hasTypedConsentVisualProminence(expected) &&
+      JSON.stringify(expected) === JSON.stringify(input.rawEvidence?.consentVisualProminence);
+    return { allowedNarrativeTier: "weak", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
+      promotionEligibility: eligible ? "internal_only" : "blocked", regulatoryChecklistEligibility: "none",
+      negativeEvidenceFlags: eligible ? [] : ["canonical_consent_control_evidence_insufficient"], scoreEffects: [] };
+  }
   if (input.concern.originKey === "consent.visual_prominence.observed") {
     const expected = projectConsentVisualProminence(input.consentControlAssessment);
     const materiality = assessConsentProminenceMateriality(expected);
