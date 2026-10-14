@@ -1,6 +1,6 @@
 # @certscore/sdk
 
-## Unreleased
+## 0.2.17
 
 - Include typed California privacy-choice evidence in shared report exports and focused policy results. Preserve verified controls, unverified candidates, notice passages and provenance.
 

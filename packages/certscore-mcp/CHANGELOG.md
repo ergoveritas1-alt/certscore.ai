@@ -1,5 +1,10 @@
 # certscore-mcp
 
+## 0.2.28
+
+- Preserve typed full-report evidence during compaction to prevent output-schema errors; keep existing byte ceilings and explicit whole-section omissions.
+- Link privacy-choice navigation to focused policy evidence, including the shared California privacy section and retained workpaper.
+
 ## 0.2.27
 
 - Retrieve CMP audit and CMS/version sections through the existing evidence tool on OAuth and Light.
@@ -26,8 +31,6 @@
 
 ## Unreleased
 
-- Preserve typed full-report evidence during compaction to prevent output-schema errors; keep existing byte ceilings and explicit whole-section omissions.
-- Link privacy-choice navigation to focused policy evidence, including the shared California privacy section and retained workpaper.
 
 
 - Prepare Cursor integration `1.0.4` with query-first cookie, tracker, consent, GDPR, CCPA, ePrivacy, privacy-risk, and website-scanner discovery metadata while preserving the `CertScore.ai` no-auth Light endpoint.
