@@ -856,3 +856,106 @@ test("a deadline while reading the moderation response is diagnosed as a timeout
   t.mock.timers.tick(2_001);
   await assert.rejects(outcome, { failureCode: "moderation_timeout" });
 });
+
+/** Explicit synthetic image/geometry fixture for the retained IKEA pattern:
+ * same-document A/R proof, completed DOM/geometry, partial other inventory, no
+ * completed pixel metrics. Never substitutes for a historical withheld image. */
+async function structuredPairFixture(directory: string) {
+  const fixture = await pairedFixture(directory);
+  Reflect.deleteProperty(fixture.geometry, "visualComparison");
+  const rectangle = (x: number, y: number, width: number, height: number) => ({ x, y, width, height, left: x, top: y, right: x + width, bottom: y + height });
+  Object.assign(fixture.geometry, { containers: [{ layer: "first_layer", boundingBox: rectangle(10, 10, 80, 80) }] });
+  for (const candidate of fixture.geometry.candidates) Object.assign(candidate.boundingBox,
+    rectangle(candidate.boundingBox.x, candidate.boundingBox.y, candidate.boundingBox.width, candidate.boundingBox.height));
+  fixture.source.screenshots[0]!.artifactId = "screenshot_pre_consent_geometry_proof";
+  await fixture.saveGeometry();
+  return fixture;
+}
+
+test("verified structured A/R screenshot keeps two-second review grace when pixel metrics are unavailable", async () => {
+  const directory = await testDirectory("structured-pair-no-metrics");
+  try {
+    const { source } = await structuredPairFixture(directory);
+    const original = structuredClone(source);
+    let calls = 0;
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+      classifier: async () => { calls++; await new Promise(resolve => setTimeout(resolve, 200)); return { safeForDisplay: true }; } });
+    assert.equal(calls, 1, "No new review or retry");
+    assert.equal(result.screenshots[0]?.displayStatus, "available");
+    assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 2_000);
+    assert.deepEqual(result.consentUiObservations, original.consentUiObservations, "Partial controls stay partial");
+    const geometry = JSON.parse(await readFile(path.join(directory, "ConsentControlGeometryEvidence.json"), "utf8"));
+    assert.equal(geometry.visualComparison, undefined, "Safety approval cannot manufacture prominence measurements");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+for (const drift of ["document", "dimensions", "stale", "duplicate_accept", "unbound_control", "missing_observation", "malformed_metrics", "withheld"] as const) {
+  test(`structured screenshot without metrics fails closed for ${drift}`, async () => {
+    const directory = await testDirectory(`structured-drift-${drift}`);
+    try {
+      const { source, geometry, saveGeometry } = await structuredPairFixture(directory);
+      if (drift === "document") geometry.documentIdentity = { ...geometry.documentIdentity, token: "changed-loader" };
+      if (drift === "dimensions") geometry.viewport.width = 101;
+      if (drift === "stale") geometry.capturedAt = new Date(Date.parse(geometry.capturedAt) + 1000).toISOString();
+      if (drift === "duplicate_accept") geometry.candidates.push({ ...geometry.candidates[0]!, candidateId: "duplicate" });
+      if (drift === "unbound_control") geometry.candidates[1]!.screenshotArtifactRef = "another-image.png";
+      if (drift === "missing_observation") source.consentUiObservations = [];
+      if (drift === "malformed_metrics") Object.assign(geometry, { visualComparison: { version: "malformed" } });
+      if (drift === "withheld") {
+        source.homepageScreenshot = { status: "withheld", reason: "safety_check_unavailable" };
+        Object.assign(source.screenshots[0]!, { retentionStatus: "withheld", withheldReason: "safety_check_unavailable" });
+      }
+      await saveGeometry();
+      const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+        classifier: async () => new Promise(() => undefined) });
+      assert.equal(result.screenshots[0]?.displayStatus, "withheld");
+      const review = (await diagnostics(directory)).reviews[0];
+      if (review) assert.equal(review.finalization!.budgetMs, 75, "Unverified proof cannot gain review grace");
+    } finally { await rm(directory, { recursive: true, force: true }); }
+  });
+}
+
+test("structured-pair safety timeout stays bounded and late approval cannot reopen retention", async () => {
+  const directory = await testDirectory("structured-pair-late");
+  let resolve!: (value: { safeForDisplay: boolean }) => void;
+  try {
+    const { source, screenshotPath } = await structuredPairFixture(directory);
+    const started = Date.now();
+    const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
+      classifier: async () => new Promise(done => { resolve = done; }) });
+    assert.ok(Date.now() - started <= SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS + 150);
+    assert.equal(result.screenshots[0]?.displayStatus, "withheld");
+    await assert.rejects(stat(screenshotPath), /ENOENT/);
+    const before = await diagnostics(directory);
+    resolve({ safeForDisplay: true });
+    await new Promise(done => setImmediate(done));
+    assert.deepEqual(await diagnostics(directory), before);
+    assert.equal(result.screenshots[0]?.displayStatus, "withheld");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("queued geometry proof outranks settled and general screenshots without preempting or adding requests", async () => {
+  const directory = await testDirectory("geometry-priority");
+  try {
+    const filenames = ["screenshot-first.png", "screenshot-second.png", "screenshot-pre-consent-settled.png", "screenshot-pre-consent-geometry-proof.png"];
+    for (const [index, filename] of filenames.entries()) await writeFile(path.join(directory, filename), `image ${index}`);
+    const started: string[] = [], completions: (() => void)[] = [];
+    let active = 0, peak = 0;
+    const coordinator = createHomepageScreenshotSafetyReviewCoordinator({ artifactRoot: directory,
+      classifier: async ({ bytes }) => {
+        active++; peak = Math.max(peak, active); started.push(bytes.toString());
+        await new Promise<void>(resolve => completions.push(resolve)); active--;
+        return { safeForDisplay: true };
+      } });
+    const images = filenames.map(filename => ({ path: path.join(directory, filename), captureMethod: "primary_viewport_fallback" as const }));
+    coordinator.schedule(images[0]!); coordinator.schedule(images[1]!);
+    await waitUntil(() => started.length === 2);
+    coordinator.schedule(images[2]!); coordinator.schedule(images[3]!);
+    await waitUntil(() => coordinator.diagnostics().reviews.length === 4 && coordinator.diagnostics().reviews.every(row => row.queuedAtMs !== undefined));
+    assert.equal(started.length, 2, "Existing in-flight reviews are not interrupted");
+    completions[0]!(); await waitUntil(() => started.length === 3);
+    assert.equal(started[2], "image 3"); assert.equal(peak, 2);
+    coordinator.cancelPending(); completions.forEach(finish => finish());
+    assert.equal(started.length, 3, "Cancellation cannot launch another request");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});

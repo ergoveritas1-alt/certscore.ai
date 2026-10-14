@@ -456,3 +456,20 @@ test("preference binding diagnostics do not promote a limited IKEA-style pre-cli
   packet.inspectionDiagnostic!.surfaceBinding!.outcome="opened";
   assert.ok(deriveCmpAuditAssessment(input)!.rows.every(row=>row.status==="not_assessed"),"Diagnostics cannot substitute for retained controls or opening proof");
 });
+
+test("operation timeout keeps its specific cause and does not create missing-feature findings", () => {
+  const input = bundle(), packet = input.cmpPreferencesEvidence!;
+  Object.assign(packet, { status: "limited", controls: [], declarations: [], privacyLinks: [], controlInventoryComplete: false,
+    action: { count: 0, intent: "options", label: null, opened: false }, limitations: ["preference_operation_timed_out"],
+    support: { state: "partial", provider: "OneTrust", recipeVersion: "onetrust_preferences.v2", reason: "preference_operation_timed_out" } });
+  const original = structuredClone(packet);
+  const audit = deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.support.reason, "preference_operation_timed_out");
+  for (const id of ["categories", "services", "privacy_access", "cookie_information"]) {
+    const row = audit.rows.find(row => row.id === id)!;
+    assert.equal(row.status, "not_assessed");
+    assert.match(row.detail, /timed out/);
+  }
+  assert.deepEqual(packet, original);
+  assert.ok(audit.rows.every(row => !["feature_not_supported", "not_observed", "review"].includes(row.status)));
+});

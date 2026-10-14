@@ -8,6 +8,8 @@ import {
   verifyConsentControlInspection,
   type CanonicalEvidenceBundle,
 } from "@certscore/contracts";
+import { comparisonPair } from "@certscore/scan-core/consent-control-visual-comparison";
+import type { ConsentControlGeometryArtifact } from "@certscore/scan-core/consent-control-geometry";
 
 export const MAX_REVIEW_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -63,23 +65,31 @@ export async function verifiedPairedScreenshot(input: {
     if (!geometry || geometry.artifactVersion !== "consent_control_geometry.v1" ||
       geometry.sourceScanner !== "consent_control_geometry_diagnostic") return null;
     const parsed = consentControlVisualComparisonSchema.safeParse(geometry.visualComparison);
-    if (!parsed.success) return null;
-    const visual = parsed.data;
+    // Pixel sampling has its own small budget. A verified A/R screenshot must
+    // not lose safety-review time just because no pixel metrics were produced.
+    // A present but malformed comparison is still invalid, never a fallback.
+    if (geometry.visualComparison !== undefined && !parsed.success) return null;
+    const visual = parsed.success ? parsed.data : undefined;
+    const selected = visual ? undefined : comparisonPair(geometry as unknown as ConsentControlGeometryArtifact);
+    if (!visual && !selected) return null;
+    const screenshotRef = visual?.screenshotArtifactRef ?? geometry.screenshotArtifactRef;
     const identity = object(geometry.documentIdentity);
-    if (!identity?.source || identity.token !== visual.documentToken) return null;
-    const screenshot = input.bundle.screenshots.find(row => row.path === visual.screenshotArtifactRef &&
+    if (!identity?.source || !identity.token || (visual && identity.token !== visual.documentToken)) return null;
+    const screenshot = input.bundle.screenshots.find(row => row.path === screenshotRef &&
       row.url === geometry.pageUrl && row.documentIdentity?.source === identity.source &&
       row.documentIdentity?.token === identity.token && row.consentStateAtTime === "pre_consent" &&
       row.retentionStatus !== "withheld" && row.displayStatus !== "withheld" &&
-      ["primary_full_page", "primary_viewport_fallback"].includes(row.captureMethod ?? ""));
+      ["primary_full_page", "primary_viewport_fallback", "independent_visual_fallback_viewport"].includes(row.captureMethod ?? ""));
     const root = path.resolve(input.artifactRoot) + path.sep;
     if (!screenshot || !path.resolve(screenshot.path).startsWith(root) ||
       geometry.screenshotArtifactRef !== screenshot.path) return null;
     const captureSkewMs = Math.abs(Date.parse(String(geometry.capturedAt)) -
       Date.parse(input.bundle.startedAt) - screenshot.capturedAtMs);
     const viewport = object(geometry.viewport);
-    if (!Number.isFinite(captureSkewMs) || captureSkewMs !== visual.captureSkewMs ||
-      viewport?.width !== visual.imageWidth || viewport.height !== visual.imageHeight) return null;
+    if (!Number.isInteger(captureSkewMs) || captureSkewMs > 500 ||
+      !viewport || !Number.isInteger(viewport.width) || !Number.isInteger(viewport.height) ||
+      Number(viewport.width) <= 0 || Number(viewport.height) <= 0 ||
+      (visual && (captureSkewMs !== visual.captureSkewMs || viewport.width !== visual.imageWidth || viewport.height !== visual.imageHeight))) return null;
     const observation = input.bundle.consentUiObservations.find(row =>
       row.captureStatus === "observed" && row.layerInspected === "first_layer" &&
       ["partial", "complete_with_controls"].includes(row.inventoryOutcome ?? "") &&
@@ -96,7 +106,10 @@ export async function verifiedPairedScreenshot(input: {
     // geometry selectors include their container. They need not be identical.
     // Exact candidate/geometry/image binding below remains authoritative.
     const candidates = (geometry.candidates as unknown[]).map(object);
-    for (const [side, action] of [[visual.accept, "accept_all"], [visual.reject, "reject_all"]] as const) {
+    for (const [intent, action] of [["accept", "accept_all"], ["reject", "reject_all"]] as const) {
+      const measurement = visual?.[intent];
+      const side = measurement ?? selected?.[intent];
+      if (!side) return null;
       const matches = candidates.filter(row => row?.candidateId === side.candidateId);
       const candidate = matches[0];
       const frame = object(candidate?.frameContext);
@@ -107,18 +120,23 @@ export async function verifiedPairedScreenshot(input: {
         candidate.enabled !== true || candidate.intersectsViewport !== true ||
         candidate.screenshotArtifactRef !== screenshot.path || frame?.frameKind !== "main_frame" ||
         frame.frameUrl !== screenshot.url || proof?.role !== "decision" || proof.unresolvedIntents.length ||
-        !bounds || ![bounds.x, bounds.y, bounds.width, bounds.height].every((value, i) => value === side.bounds[i]) ||
+        !bounds || ![bounds.x, bounds.y, bounds.width, bounds.height].every(value => typeof value === "number" && Number.isFinite(value)) ||
+        Number(bounds.x) < 0 || Number(bounds.y) < 0 || Number(bounds.width) <= 0 || Number(bounds.height) <= 0 ||
+        Number(bounds.x) + Number(bounds.width) > Number(viewport.width) || Number(bounds.y) + Number(bounds.height) > Number(viewport.height) ||
+        (measurement && ![bounds.x, bounds.y, bounds.width, bounds.height].every((value, i) => value === measurement.bounds[i])) ||
         !observation.controls.some(row => row.actionType === action && row.visible !== false &&
           (row.layer === undefined || row.layer === "first_layer") &&
           row.tagName === candidate.tagName && normalizeConsentControlText(row.label) === normalizeConsentControlText(String(candidate.label ?? "")))) return null;
     }
     bytes = await readBoundedImage(screenshot.path);
-    if (imageDigest(bytes) !== visual.screenshotSha256) return null;
+    const sha256 = imageDigest(bytes);
+    if (visual && sha256 !== visual.screenshotSha256) return null;
     // The producer currently creates PNG screenshots. Validate their dimensions
-    // against the comparison rather than granting extra time to a mismatched file.
+    // against the retained viewport before granting time. This is not pixel
+    // analysis or permission to serve the image; the safety review must pass.
     if (bytes.length < 24 || bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
-      bytes.readUInt32BE(16) !== visual.imageWidth || bytes.readUInt32BE(20) !== visual.imageHeight) return null;
-    return { path: screenshot.path, sha256: visual.screenshotSha256 };
+      bytes.readUInt32BE(16) !== viewport.width || bytes.readUInt32BE(20) !== viewport.height) return null;
+    return { path: screenshot.path, sha256 };
   } catch {
     return null;
   } finally {

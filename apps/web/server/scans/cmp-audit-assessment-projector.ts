@@ -30,7 +30,7 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle): CmpAu
   const controlsUsable = usable || (partial && checkpoint?.controls);
   const declarationsUsable = usable || (partial && checkpoint?.declarations);
   const privacyUsable = usable || (partial && checkpoint?.privacyLinks);
-  const timeout = evidence.limitations.includes("preference_budget_exhausted");
+  const timeout = evidence.limitations.some(reason => reason === "preference_budget_exhausted" || reason === "preference_operation_timed_out");
   set("categories", "not_assessed", timeout ? "Inspection timed out before selectable category controls could be verified." : "Selectable category controls were not verified in the inspected surface.", []);
   set("services", "not_assessed", timeout && !declarationsUsable && !controlsUsable ? "Preference inspection timed out before individual-service information could be retained." : "Individual-service identities were not verified in the retained CMP evidence.", []);
   set("privacy_access", "not_assessed", timeout && !privacyUsable ? "Preference inspection timed out before pre-choice privacy-link reachability could be verified." : "A privacy-policy link was not verified as reachable before consent interaction.", []);

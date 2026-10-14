@@ -217,3 +217,96 @@ test("registered OneTrust on-demand panel stays under the same vendor root and w
     await new Promise<void>(resolve=>server.close(()=>resolve()));
   }
 });
+
+test("busy OneTrust root binding uses the shared deadline instead of abandoning Options at 300 ms", { timeout: 15_000 }, async () => {
+  const { chromium } = await import("playwright");
+  const { chromiumLaunchOptions } = await import("./playwright-runtime.js");
+  let clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<div id="onetrust-consent-sdk"><div id="onetrust-banner-sdk"><button id="onetrust-pc-btn-handler" aria-label="Cookie settings, Opens the preference center dialog">Cookie settings</button></div></div><script>
+      document.getElementById('onetrust-pc-btn-handler').onclick=()=>{fetch('/clicked');document.getElementById('onetrust-consent-sdk').insertAdjacentHTML('beforeend','<section id="onetrust-pc-sdk" role="dialog" aria-label="Cookie preferences"><label><input type="checkbox">Analytics</label><button>Save preferences</button></section>');};
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const memory = process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;
+  process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "10240";
+  const browser = await chromium.launch(chromiumLaunchOptions({ headless: true }));
+  const newContext = browser.newContext.bind(browser);
+  let legacy = true;
+  browser.newContext = async options => {
+    const context = await newContext(options), newPage = context.newPage.bind(context);
+    context.newPage = async () => {
+      const page = await newPage(), setDefaultTimeout = page.setDefaultTimeout.bind(page), locator = page.locator.bind(page);
+      page.setDefaultTimeout = ms => setDefaultTimeout(legacy ? 300 : ms);
+      let blocked = false;
+      page.locator = (selector, options) => {
+        const control = locator(selector, options);
+        if (selector === "#onetrust-consent-sdk") {
+          const elementHandle = control.elementHandle.bind(control);
+          control.elementHandle = async options => {
+            if (!blocked) {
+              blocked = true;
+              // Real browser main-thread contention after the retained count,
+              // before resolving the registered root. No external requests.
+              await page.evaluate(() => { setTimeout(() => { const until = Date.now() + 550; while (Date.now() < until) {} }, 0); });
+            }
+            return elementHandle(options);
+          };
+        }
+        return control;
+      };
+      return page;
+    };
+    return context;
+  };
+  try {
+    for (legacy of [true, false]) {
+      clicks = 0;
+      const started = Date.now();
+      const packet = await runCmpPreferencesObserver({ browser, parentDispatchSha256: "a".repeat(64), config: {
+        policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: legacy ? "legacy-300ms" : "shared-deadline", exactTargetUrl: `http://127.0.0.1:${address.port}/`,
+      } });
+      assert.equal(packet.inspectionDiagnostic?.budgetMs, 3600);
+      assert.ok(Date.now() - started < 4600);
+      if (legacy) {
+        assert.equal(packet.status, "limited", JSON.stringify(packet));
+        assert.equal(packet.action.count, 0);
+        assert.equal(packet.support.reason, "preference_operation_timed_out");
+        assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.outcome, "timed_out");
+      } else {
+        assert.equal(packet.status, "completed", JSON.stringify(packet));
+        assert.equal(packet.action.count, 1); assert.equal(packet.action.opened, true);
+        assert.equal(clicks, 1); assert.equal(packet.controls[0]?.label, "Analytics");
+      }
+    }
+  } finally {
+    await browser.close();
+    if (memory === undefined) delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = memory;
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test("parent cancellation after the single Options dispatch stays distinct from a timeout", { timeout: 6000 }, async () => {
+  const controller = new AbortController();
+  let clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; controller.abort(); res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<div id="onetrust-banner-sdk"><button id="onetrust-pc-btn-handler">Cookie settings</button></div><section id="onetrust-pc-sdk" hidden><label><input type="checkbox">Analytics</label></section><script>document.getElementById('onetrust-pc-btn-handler').onclick=()=>fetch('/clicked');</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const started = Date.now();
+  try {
+    const packet = await runCmpPreferencesObserver({ signal: controller.signal, parentDispatchSha256: "a".repeat(64), config: {
+      policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "cancel-after-options", exactTargetUrl: `http://127.0.0.1:${address.port}/`,
+    } });
+    assert.equal(packet.status, "limited"); assert.equal(packet.support.reason, "preference_inspection_cancelled");
+    assert.equal(packet.action.count, 1); assert.equal(clicks, 1); assert.equal(packet.action.opened, false);
+    assert.equal(packet.controls.length, 0); assert.equal(packet.controlInventoryComplete, false);
+    assert.ok(Date.now() - started < 2500, "Cancellation cannot consume the remaining allowance");
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});

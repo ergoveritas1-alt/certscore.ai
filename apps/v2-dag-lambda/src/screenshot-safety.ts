@@ -216,7 +216,7 @@ export function createHomepageScreenshotSafetyReviewCoordinator(input: {
   const unavailable = (): ScreenshotSafetyReviewOutcome => ({ status: "unavailable", failureCode: "temporary_file_unavailable" });
   const priorityFor = (filePath: string) => filePath === preferredPath ? 100 :
     /screenshot-pre-consent-settled\./.test(filePath) ? 20 :
-    /screenshot-pre-consent-geometry-proof\./.test(filePath) ? 10 : 0;
+    /screenshot-pre-consent-geometry-proof\./.test(filePath) ? 30 : 0;
   const pump = () => {
     if (closed || input.signal?.aborted) return;
     while (active < MAX_REVIEW_CONCURRENCY) {
@@ -625,7 +625,8 @@ export async function applyHomepageScreenshotSafetyGate(input: {
   const finalizationStartedAtMs = Date.now();
   // Start the likely comparison first when no capture-time coordinator exists.
   const ordered = [...pendingScreenshots].sort((a, b) =>
-    Number(b.artifactId === "screenshot_pre_consent_settled") - Number(a.artifactId === "screenshot_pre_consent_settled"));
+    (b.artifactId === "screenshot_pre_consent_geometry_proof" ? 2 : Number(b.artifactId === "screenshot_pre_consent_settled")) -
+    (a.artifactId === "screenshot_pre_consent_geometry_proof" ? 2 : Number(a.artifactId === "screenshot_pre_consent_settled")));
   for (const screenshot of ordered) reviewCoordinator.schedule(screenshot);
   const completedFirstLayerInventory = hasCompletedFirstLayerConsentInventory(input.bundle);
   // Start each existing deadline immediately. Local pair verification must not

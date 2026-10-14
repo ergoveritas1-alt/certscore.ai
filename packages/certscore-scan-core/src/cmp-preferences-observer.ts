@@ -49,7 +49,11 @@ export async function runCmpPreferencesObserver(input: {
     await installWebBotAuthRoute(context);
     await installPublicNetworkGuardRoute(context);
     const page = await context.newPage();
-    page.setDefaultTimeout(300);
+    // Every locator uses the same absolute inspection deadline. A blanket
+    // 300 ms operation timeout abandoned verified controls on busy pages long
+    // before that deadline. Explicit click/readiness caps below stay unchanged;
+    // the deadline timer closes this context even if a browser command stalls.
+    page.setDefaultTimeout(remaining());
     await installBorlabsDeferredDialogReveal(page, config.exactTargetUrl);
     // No redirect or popup can broaden the exact per-scan authorization.
     await context.route("**/*", async route => {
@@ -284,9 +288,12 @@ export async function runCmpPreferencesObserver(input: {
     packet.status = "limited";
     if (!packet.checkpoints?.controls) { packet.controls = []; packet.action.opened = false; }
     packet.controlInventoryComplete = false;
-    const timedOut = expired || Date.now() >= deadline || (error instanceof Error && (error.name === "TimeoutError" || error.message === "preference_budget_exhausted"));
+    const budgetExhausted = expired || Date.now() >= deadline || (error instanceof Error && error.message === "preference_budget_exhausted");
+    const operationTimedOut = error instanceof Error && error.name === "TimeoutError";
+    const timedOut = budgetExhausted || operationTimedOut;
     const bindingFailure = error instanceof Error && ["preference_surface_changed", "preference_surface_ambiguous", "preference_document_changed", "preference_control_changed"].includes(error.message) ? error.message : null;
-    const reason = timedOut ? "preference_budget_exhausted" : input.signal?.aborted ? "preference_inspection_cancelled" : bindingFailure ?? "preference_inspection_incomplete";
+    const reason = input.signal?.aborted ? "preference_inspection_cancelled" : budgetExhausted ? "preference_budget_exhausted"
+      : operationTimedOut ? "preference_operation_timed_out" : bindingFailure ?? "preference_inspection_incomplete";
     if (packet.inspectionDiagnostic?.surfaceBinding && !packet.checkpoints?.controls) {
       packet.inspectionDiagnostic.surfaceBinding.outcome = timedOut ? "timed_out" : reason === "preference_surface_ambiguous" ? "ambiguous" : "changed";
     }
