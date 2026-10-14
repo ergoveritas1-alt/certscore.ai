@@ -831,6 +831,8 @@ export async function runPostAcceptObserver(
 
     let actionabilityError: unknown;
     let useVerifiedGeometryDispatch = false;
+    const actionReadinessDeadline = Date.now() + (input.allowCanonicalAcceptDiscovery ? 3_000 : 2_500);
+    const actionReadinessRemaining = (maximumMs: number) => remainingResultBudgetMs(Math.min(maximumMs, Math.max(0, actionReadinessDeadline - Date.now())));
     try {
       await trialAcceptControl(page, control, selectedRecipe);
     } catch (error) {
@@ -849,17 +851,17 @@ export async function runPostAcceptObserver(
       }
     }
     if (actionabilityError) {
-      resolution = await waitForDeterministicRecipe(
+      resolution = actionReadinessRemaining(500) > 0 ? await waitForDeterministicRecipe(
         page,
         [selectedRecipe],
-        remainingResultBudgetMs(500),
+        actionReadinessRemaining(500),
         effectiveSignal,
         actionDiscovery,
-      );
-      if (resolution.status === "not_found" && input.allowCanonicalAcceptDiscovery) {
+      ) : { status: "not_found" };
+      if (resolution.status === "not_found" && input.allowCanonicalAcceptDiscovery && actionReadinessRemaining(500) > 0) {
         resolution = await waitForCanonicalAcceptControlRecipe(
           page,
-          remainingResultBudgetMs(500),
+          actionReadinessRemaining(500),
           effectiveSignal,
           recipes,
         );
@@ -876,7 +878,8 @@ export async function runPostAcceptObserver(
           } else {
             const actionability = await waitForLocatorVerifiedGeometry(
               control,
-              remainingResultBudgetMs(1_000),
+              actionReadinessRemaining(1_000),
+              effectiveSignal,
             );
             if (!actionability) throw new Error("Verified Accept geometry actionability timeout.");
             actionabilityError = undefined;
@@ -889,6 +892,17 @@ export async function runPostAcceptObserver(
         } catch (error) {
           actionabilityError = error;
         }
+      }
+    }
+    // A failed re-resolution must not discard its still-unused geometry slice.
+    // Final proof, target authorization and semantic registration remain required.
+    if (actionabilityError && !selectedRecipe.accessibleControl && actionReadinessRemaining(1_000) > 0 &&
+      ["actionability_timeout", "intercepted"].includes(classifyClickFailure(actionabilityError))) {
+      const actionability = await waitForLocatorVerifiedGeometry(control, actionReadinessRemaining(1_000), effectiveSignal);
+      if (actionability) {
+        actionabilityError = undefined; useVerifiedGeometryDispatch = true;
+        diagnostics.click.actionability = actionability;
+        if (!limitations.includes("action_dispatch_verified_geometry_fallback")) limitations.push("action_dispatch_verified_geometry_fallback");
       }
     }
     if (actionabilityError) {
@@ -964,7 +978,8 @@ export async function runPostAcceptObserver(
             ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
             : undefined,
         );
-        const remainingRecoveryBudgetMs = () => Math.max(0, resolverStartedAtMs + actionSearchTimeoutMs - Date.now());
+        const recoveryDeadline = Math.max(resolverStartedAtMs + actionSearchTimeoutMs, actionReadinessDeadline);
+        const remainingRecoveryBudgetMs = () => Math.max(0, recoveryDeadline - Date.now());
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
         }
@@ -973,11 +988,11 @@ export async function runPostAcceptObserver(
             selectorHint: selectedRecipe.controlSelector,
             ...(confirmationScope !== page ? {controlFrameUrl: confirmationScope.url()} : {}),
             authorizedTargetSha256: authorizedExactTargetUrl ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) : undefined,
-            deadlineAtMs: resolverStartedAtMs + actionSearchTimeoutMs, signal: effectiveSignal})) {
+            deadlineAtMs: recoveryDeadline, signal: effectiveSignal})) {
           throw new Error("transparent_consent_scope_not_ready");
         }
         // An unverified named label must not repeatedly select the same control.
-        // Spend only the remaining original budget on canonical live discovery.
+        // Use only remaining search/shared-readiness time for live discovery.
         let lateResolution: AcceptRecipeResolution = consentActionLabelNeedsRediscovery(proofResolution)
           ? { status: "not_found" }
           : await waitForDeterministicRecipe(
@@ -997,7 +1012,7 @@ export async function runPostAcceptObserver(
             actionDiscovery,
             undefined,
             recordResolverSnapshot,
-            resolverStartedAtMs + actionSearchTimeoutMs,
+            recoveryDeadline,
           );
         }
         if (lateResolution.status === "found") {

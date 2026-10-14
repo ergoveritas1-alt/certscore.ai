@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
+import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
 import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
 import { KNOWN_CMP_REGISTRY, isKnownCmpCookieName } from "@website-signal-risk-scanner/shared";
 
@@ -14,7 +14,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     const fallback = cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
       sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v8", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: outcome.limitationCode },
-      rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? "Preference evidence was not retained; this criterion could not be assessed.", evidenceRefs: [] })) });
+      rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? (id === "duration" ? "No verified CMP cookie expiry was retained." : "Preference evidence was not retained; this criterion could not be assessed."), evidenceRefs: [] })) });
     const expiries = applyClientFacts(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs }), fallback.rows, observations);
     if (expiries.length) fallback.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail, evidenceRefs: refs }), fallback.rows, observations.filter(capture => capture.networkCompleted));
@@ -209,6 +209,35 @@ function applyChoiceActivity(bundle: CanonicalEvidenceBundle, set: AuditSet, row
 }
 
 function applyActionLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditAssessment["rows"]) {
+  const failures: Array<{ action: string; detail: string; code: string }> = [];
+  for (const action of ["Accept", "Reject"] as const) {
+    const parsed = action === "Accept" ? postAcceptEvidencePacketSchema.safeParse(bundle.postAcceptEvidence) : postRefusalEvidencePacketSchema.safeParse(bundle.postRefusalEvidence);
+    if (!parsed.success || parsed.data.parentScanId !== bundle.scanId || parsed.data.normalizedUrl !== bundle.url) continue;
+    const packet = parsed.data, click = packet.interactionDiagnostics?.click;
+    if (!click || !["not_attempted", "failed_before_dispatch"].includes(click.outcome)) continue;
+    const registration = "acceptanceRegistration" in packet ? packet.acceptanceRegistration : packet.refusalRegistration;
+    if (registration.status === "unsupported") continue;
+    const reason = registration.reason ?? "";
+    const detail = reason === "transparent_consent_scope_not_ready" ? "the banner did not become ready for interaction"
+      : click.failureClass === "intercepted" ? "another element blocked the control"
+      : click.failureClass === "actionability_timeout" ? "the control did not become actionable before the deadline"
+      : reason.includes("multiple_deterministic") ? "more than one matching control was found"
+      : reason.includes("control_not_found") ? "a usable control was not found"
+      : reason.includes("abort") ? "the check was cancelled before the click"
+      : reason === "redirect_target_not_authorized" ? "the loaded page did not match the authorized target"
+      : "the control could not be verified for a safe click";
+    failures.push({ action, detail, code: `${action.toLowerCase()}_${click.failureClass ?? (reason || "control_unverified")}`.slice(0, 120) });
+  }
+  if (failures.length) {
+    const activity = failures.map(failure => `${failure.action}: ${failure.detail}.`).join(" ");
+    const hasStorageCapture = retainedChoiceCaptures(bundle).some(capture => capture.storageCompleted);
+    for (const row of rows) if (row.status === "not_assessed" && (row.id === "implementation" ||
+      (!hasStorageCapture && ["consent_record", "duration"].includes(row.id)))) Object.assign(row, { status: "incomplete",
+        detail: row.id === "implementation" ? activity : row.id === "duration"
+          ? "No CMP cookie expiry was captured; the choice checks did not complete."
+          : "No post-choice consent record was captured; the choice checks did not complete.",
+        evidenceRefs: ["CanonicalEvidenceBundle.json"], limitation: { group: "actions", code: failures[0]!.code } });
+  }
   const implementation = rows.find(row => row.id === "implementation");
   const failed = [bundle.postRefusalLaneOutcome, bundle.postAcceptLaneOutcome].find(outcome => outcome && ["timed_out", "failed", "unverifiable"].includes(outcome.status));
   if (implementation?.status === "not_assessed" && failed) Object.assign(implementation, { status: "incomplete",
@@ -242,10 +271,24 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
       typeof bounds?.width === "number" && Number.isFinite(bounds.width) && bounds.width > 0 && typeof bounds.height === "number" && Number.isFinite(bounds.height) && bounds.height > 0;
   }))) return;
   const withheld = image.retentionStatus === "withheld" || image.displayStatus === "withheld";
+  let comparisonFailure: { detail: string; code: string } | undefined;
+  for (const module of bundle.modulesRun ?? []) for (const timing of module.timingBreakdown ?? []) {
+    if (module.moduleName !== "preConsentRuntimeScanner" || timing.label !== "consent pixel comparison" || !timing.detail) continue;
+    try {
+      const diagnostic = JSON.parse(timing.detail);
+      if (diagnostic.artifactId !== image.artifactId || !["not_eligible", "no_budget", "timed_out", "unavailable"].includes(diagnostic.status)) continue;
+      const details: Record<string, string> = { capture_frames_changed: "Frames changed during the geometry/screenshot capture; the comparison was skipped.",
+        pair_not_unique: "A unique Accept/Reject pair could not be selected for pixel comparison.", image_binding_incomplete: "The screenshot and button geometry could not be verified as one paired capture.",
+        not_eligible: "The screenshot was retained, but pixel comparison was skipped because capture eligibility checks did not pass.",
+        no_budget: "The pixel-comparison allowance was exhausted before this capture.", timed_out: "Pixel comparison did not finish within its capture allowance.", unavailable: "The retained image could not produce verified pixel-comparison measurements." };
+      const key = diagnostic.status === "not_eligible" && diagnostic.reason !== undefined ? diagnostic.reason : diagnostic.status;
+      if (typeof key === "string" && Object.hasOwn(details, key)) comparisonFailure = { detail: details[key]!, code: `pixel_comparison_${key}` };
+    } catch { /* Malformed diagnostics cannot establish a capture failure. */ }
+  }
   if (withheld || geometry.visualComparison === undefined) Object.assign(row, { status: "incomplete",
-    detail: withheld ? "The paired screenshot did not complete safety review." : "Pixel-comparison measurements were not retained for the paired screenshot.",
+    detail: withheld ? "The paired screenshot did not complete safety review." : comparisonFailure?.detail ?? "Pixel-comparison measurements were not retained for the paired screenshot.",
     evidenceRefs: ["ConsentControlGeometryEvidence.json", "CanonicalEvidenceBundle.json"],
-    limitation: { group: "visual", code: withheld ? image.safetyFailureCode ?? "visual_evidence_withheld" : "visual_measurement_unavailable" } });
+    limitation: { group: "visual", code: withheld ? image.safetyFailureCode ?? "visual_evidence_withheld" : comparisonFailure?.code ?? "visual_measurement_unavailable" } });
 }
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;

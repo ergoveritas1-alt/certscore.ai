@@ -1,0 +1,40 @@
+{
+  "scanId": "92533fe5-31f7-41d6-88b4-a300899a3399",
+  "purpose": "Offline algorithm verification only; does not repair the historical capture eligibility failure or overwrite evidence",
+  "originalScreenshotSha256": "9d76eb5cc1738d1dfc418c8d871f7201b9574574768a6b4899e31c8ce774e08a",
+  "comparison": {
+    "version": "consent_control_visual_comparison.v1",
+    "documentToken": "63AEF0FD596CCC3485B748B81B62CC8A",
+    "screenshotArtifactRef": "/Users/benmasek/.codex/worktrees/cmp-evidence-canary/WC01/artifacts/local-v2-dag-lambda-simulated/92533fe5-31f7-41d6-88b4-a300899a3399/lanes/consent_proof/screenshot-pre-consent-geometry-proof.png",
+    "screenshotSha256": "9d76eb5cc1738d1dfc418c8d871f7201b9574574768a6b4899e31c8ce774e08a",
+    "imageWidth": 1366,
+    "imageHeight": 900,
+    "captureSkewMs": 71,
+    "accept": {
+      "candidateId": "candidate_0",
+      "bounds": [
+        485.55,
+        73.61,
+        115,
+        46.19
+      ],
+      "fillContrast": 16.467,
+      "outerEmphasisFraction": 0.041,
+      "backgroundUniformity": 0.647,
+      "interiorUniformity": 0.907
+    },
+    "reject": {
+      "candidateId": "candidate_1",
+      "bounds": [
+        616.55,
+        73.61,
+        115,
+        46.19
+      ],
+      "fillContrast": 16.463,
+      "outerEmphasisFraction": 0.041,
+      "backgroundUniformity": 0.622,
+      "interiorUniformity": 0.899
+    }
+  }
+}

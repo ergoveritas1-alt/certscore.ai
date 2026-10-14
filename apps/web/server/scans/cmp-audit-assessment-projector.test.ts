@@ -969,3 +969,43 @@ test("shared action reportability filters expiry visits while preserving baselin
   assert.equal(audit.rows.find(row => row.id === "duration")!.inventory!.expiries!.length, 2);
   assert.deepEqual(assessment, before);
 });
+
+function failedChoicePacket(action: "accept" | "reject") {
+  const packet: any=structuredClone(choicePacket(action));
+  delete packet.actionControlProof;
+  packet.productionProjectable=false;
+  packet.decisionEvidence={policyVersion:"semantic_consent_registration.v2",decision:"unknown",basis:"unverified"};
+  packet[action === "accept" ? "acceptanceRegistration" : "refusalRegistration"]={status:"not_attempted",witnesses:[],
+    ...(action === "accept" ? {acceptanceExercised:false} : {refusalExercised:false}),
+    reason:action === "accept" ? "deterministic_accept_control_click_failed" : "transparent_consent_scope_not_ready"};
+  packet.interactionDiagnostics={resolver:{snapshots:[],truncated:false},navigation:{outcome:"completed",documentCommitted:true,finalUrlAuthorized:true},
+    click:{outcome:action === "accept" ? "failed_before_dispatch" : "not_attempted",...(action === "accept" ? {failureClass:"actionability_timeout"} : {}),reResolvedBeforeDispatch:false,confirmationCheckedAfterError:false}};
+  packet.storage.postAction=[];
+  packet.timing.observationMs=0; delete packet.timing.observationEndedAtMs; delete packet.timing.observationExitReason;
+  return action === "accept" ? postAcceptEvidencePacketSchema.parse(packet) : postRefusalEvidencePacketSchema.parse(packet);
+}
+
+test("joined workers with explicit failed clicks retain specific action limitations through shared CMP projection",()=>{
+  const input=bundle();input.postAcceptEvidence=failedChoicePacket("accept") as any;input.postRefusalEvidence=failedChoicePacket("reject") as any;
+  const original=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  for (const id of ["implementation","consent_record","duration"]) {
+    const row=audit.rows.find(row=>row.id===id)!;
+    assert.equal(row.status,"incomplete");assert.equal(row.limitation?.group,"actions");assert.equal(row.inventory,undefined);
+  }
+  const activity=audit.rows.find(row=>row.id==='implementation')!;
+  assert.match(activity.detail,/Accept: the control did not become actionable/);
+  assert.match(activity.detail,/Reject: the banner did not become ready/);
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:withCanonicalConsentAssessmentSnapshot({},assessment),reviewFindingCandidates:[],validationFindings:[]});
+  assert.ok(concerns.filter(c=>c.originKey.startsWith('consent.cmp_audit.')).every(c=>!c.scoreEffects?.length));
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  const projected=report.rows.find(row=>row.id==='implementation')!;
+  assert.equal(projected.status,'Incomplete');assert.equal(projected.detail,activity.detail);
+  assert.ok(report.limitationGroups?.some(group=>group.criterionIds.includes('implementation') && group.criterionIds.includes('duration')));
+  assert.deepEqual(input,original);
+  input.postAcceptEvidence!.parentScanId="foreign";input.postRefusalEvidence!.parentScanId="foreign";
+  assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==='implementation')!.status,'not_assessed','Unbound failed packets cannot establish coverage conclusions');
+  input.postAcceptEvidence=failedChoicePacket('accept') as any;delete input.postRefusalEvidence;
+  input.postAcceptEvidence!.acceptanceRegistration.status='unsupported';
+  assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==='implementation')!.status,'not_assessed','Unsupported integration remains distinct from a failed supported check');
+});

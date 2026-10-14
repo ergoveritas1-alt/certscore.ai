@@ -123,6 +123,7 @@ export function comparisonPair(geometry: ConsentControlGeometryArtifact) {
 
 export type ConsentVisualComparisonDiagnostic = {
   status: "deferred" | "no_budget" | "not_eligible" | "retained" | "timed_out" | "unavailable";
+  reason?: "capture_frames_changed" | "pair_not_unique" | "image_binding_incomplete";
   artifactId?: string; allowanceMs: number; elapsedMs: number;
 };
 
@@ -148,12 +149,12 @@ export function createConsentVisualComparisonCollector(screenshots: ScreenshotAr
     const image = screenshots.find(image => image.path === geometry.screenshotArtifactRef);
     const authoritative = image &&
       ["screenshot_pre_consent_geometry_proof", "screenshot_pre_consent_packet_recovery"].includes(image.artifactId);
-    const diagnostic = (status: ConsentVisualComparisonDiagnostic["status"], allowanceMs = 0) =>
-      onDiagnostic?.({ status, artifactId: image?.artifactId, allowanceMs, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
+    const diagnostic = (status: ConsentVisualComparisonDiagnostic["status"], allowanceMs = 0, reason?: ConsentVisualComparisonDiagnostic["reason"]) =>
+      onDiagnostic?.({ status, ...(reason ? { reason } : {}), artifactId: image?.artifactId, allowanceMs, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
     if (!authoritative) { diagnostic("deferred"); return geometry; }
-    if (state?.framesStable === false || !comparisonPair(geometry) || !pairedImage(geometry, screenshots, scanStartedAtMs)) {
-      diagnostic("not_eligible"); return geometry;
-    }
+    if (state?.framesStable === false) { diagnostic("not_eligible", 0, "capture_frames_changed"); return geometry; }
+    if (!comparisonPair(geometry)) { diagnostic("not_eligible", 0, "pair_not_unique"); return geometry; }
+    if (!pairedImage(geometry, screenshots, scanStartedAtMs)) { diagnostic("not_eligible", 0, "image_binding_incomplete"); return geometry; }
     const allowanceMs = Math.min(budgetMs, remainingModuleBudgetMs());
     if (allowanceMs <= 0) { diagnostic("no_budget"); return geometry; }
     // Reserve before awaiting so overlapping or recovery callbacks cannot

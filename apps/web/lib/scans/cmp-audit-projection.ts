@@ -293,10 +293,11 @@ export function cmpLimitationGroups(rows: readonly CmpAuditRow[]): CmpLimitation
     if (!affected.length) return [];
     const code = affected[0]!.limitation!.code;
     const timeout = code.includes("time") || code.includes("deadline") || code === "preference_budget_exhausted";
+    const pixelComparison = code === "visual_measurement_unavailable" || code.startsWith("pixel_comparison_");
     const title = id === "preferences" ? timeout ? "Preference inspection timed out" : code.includes("adapter") || code.includes("unsupported") ? "Scanner support for these CMP checks is unavailable" : "Preference inspection incomplete"
       : id === "actions" ? timeout ? "Consent-action observation timed out" : "Consent-action observation incomplete"
-      : timeout ? "Screenshot review timed out" : code === "safety_check_unavailable" ? "Screenshot review incomplete"
-      : code === "visual_measurement_unavailable" ? "Button comparison incomplete" : "Screenshot evidence unavailable";
+      : pixelComparison ? timeout ? "Button comparison timed out" : "Button comparison incomplete"
+      : timeout ? "Screenshot review timed out" : code === "safety_check_unavailable" ? "Screenshot review incomplete" : "Screenshot evidence unavailable";
     return [{ id, code, title, criterionIds: affected.map(row => row.id) }];
   });
 }

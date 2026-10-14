@@ -192,3 +192,13 @@ test("report v2 applicability uses complete persisted control absence, never unk
   assert.equal(find(withReview, "prominence").status, "Review recommended");
   assert.equal(find(withReview, "implementation").status, "Review recommended");
 });
+
+test('pixel-comparison failure groups stay distinct from screenshot safety review',async()=>{
+  const {cmpLimitationGroups}=await import('./cmp-audit-projection');
+  for(const [code,title] of [['pixel_comparison_not_eligible','Button comparison incomplete'],['pixel_comparison_capture_frames_changed','Button comparison incomplete'],
+    ['pixel_comparison_timed_out','Button comparison timed out'],['moderation_timeout','Screenshot review timed out']]){
+    const row=find(projectCmpAudit({scanId:'scan-1',consentControlAssessment:observedControlAssessment}),'prominence');
+    Object.assign(row,{status:'Incomplete',limitation:{group:'visual',code}});
+    assert.equal(cmpLimitationGroups([row])[0]?.title,title);
+  }
+});

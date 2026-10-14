@@ -1,0 +1,31 @@
+{
+  "publicScans": 0,
+  "deployments": 0,
+  "modelCalls": 0,
+  "historicalReportWrites": 0,
+  "checks": {
+    "webAssessmentProjectionAndComponentTests": 73,
+    "visualAndOpacityRegressionTests": 40,
+    "existingActionRegressions": 6,
+    "newHubSpotActionReadinessTests": 9,
+    "frameArrivalIntegrationTest": 1,
+    "scanCoreBuild": "passed",
+    "scanCoreTypecheck": "passed",
+    "webTypecheck": "passed",
+    "retainedBundleManifestGeometryAndScreenshotHashes": "verified",
+    "retainedHubSpotAndFullStoryReplay": "passed"
+  },
+  "budget": {
+    "newLanes": 0,
+    "newVisits": 0,
+    "newClicksPerAction": 0,
+    "newActionWindowMs": 0,
+    "newModelCalls": 0,
+    "newTimeoutAllowanceMs": 0,
+    "sharedActionReadinessMaxMs": 3000,
+    "withoutCanonicalDiscoveryMaxMs": 2500,
+    "comparisonAllowanceMs": 80,
+    "diagnosticStorageIncreaseUsdPerMonth": "<0.01 at 100000 scans and one-year retention"
+  },
+  "historicalLimitation": "Original HubSpot diagnostic says comparison not_eligible but omits the failed predicate; no historical prominence repair or successful live verification is claimed."
+}

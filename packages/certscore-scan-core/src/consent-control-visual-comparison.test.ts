@@ -224,11 +224,13 @@ test("an unbound or unstable proof cannot spend the allowance reserved for an el
   const fixture=await consentVisualFixture();
   const image={artifactId:"screenshot_pre_consent_geometry_proof",path:"proof.png",url:fixture.geometry.pageUrl,documentIdentity:fixture.geometry.documentIdentity,capturedAtMs:1000,consentStateAtTime:"pre_consent" as const,pagePhase:"network_idle" as const};
   let calls=0;
-  const collector=createConsentVisualComparisonCollector([image],visualFixtureStartMs,()=>1000,async geometry=>{calls++;return geometry;});
+  const reasons: Array<string | undefined> = [];
+  const collector=createConsentVisualComparisonCollector([image],visualFixtureStartMs,()=>1000,async geometry=>{calls++;return geometry;},diagnostic=>reasons.push(diagnostic.reason));
   const geometry={...fixture.geometry,screenshotArtifactRef:image.path};
   await collector({...geometry,documentIdentity:{source:"cdp_loader_id",token:"wrong-loader"}});
   await collector(geometry,{framesStable:false,frameRevision:2});
   assert.equal(calls,0);
+  assert.deepEqual(reasons,["image_binding_incomplete","capture_frames_changed"]);
   await collector(geometry,{framesStable:true,frameRevision:2});
   assert.equal(calls,1);
 });

@@ -1104,6 +1104,9 @@ export async function runPostRefusalObserver(
 
     let actionabilityError: unknown;
     let useVerifiedGeometryDispatch = false;
+    // One shared trial/recovery allowance also covers an opacity transition
+    // discovered by final proof. Do not restart it after the search expires.
+    const actionReadinessDeadline = Date.now() + (input.allowCanonicalRejectDiscovery ? 3_000 : 2_500);
     try {
       await trialRejectControl(page, control, selectedRecipe);
     } catch (error) {
@@ -1112,7 +1115,7 @@ export async function runPostRefusalObserver(
     // Reuse the existing 500 ms named + 500 ms canonical + 1 s geometry
     // recovery allowance as one deadline. A transient interceptor must not
     // discard the geometry slice merely because re-resolution found nothing.
-    const actionabilityRecoveryDeadline = Date.now() + (input.allowCanonicalRejectDiscovery ? 2_000 : 1_500);
+    const actionabilityRecoveryDeadline = actionReadinessDeadline;
     const actionabilityRecoveryRemaining = () => Math.max(0, actionabilityRecoveryDeadline - Date.now());
     if (actionabilityError) {
       let reResolution: DeterministicRecipeResolution = actionabilityRecoveryRemaining() > 0 ? await waitForDeterministicRecipe(
@@ -1279,7 +1282,8 @@ export async function runPostRefusalObserver(
             ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl))
             : undefined,
         );
-        const remainingRecoveryBudgetMs = () => Math.max(0, resolverStartedAtMs + actionSearchTimeoutMs - Date.now());
+        const recoveryDeadline = Math.max(resolverStartedAtMs + actionSearchTimeoutMs, actionReadinessDeadline);
+        const remainingRecoveryBudgetMs = () => Math.max(0, recoveryDeadline - Date.now());
         if (remainingRecoveryBudgetMs() === 0) {
           throw new Error("late_control_recovery_search_budget_exhausted");
         }
@@ -1287,11 +1291,11 @@ export async function runPostRefusalObserver(
           !await waitForTransparentConsentControl({action: "reject", control, page,
             selectorHint: selectedRecipe.controlSelector, controlFrameUrl: selectedRecipe.controlFrameUrl,
             authorizedTargetSha256: authorizedExactTargetUrl ? hashValue(normalizeTargetUrl(authorizedExactTargetUrl)) : undefined,
-            deadlineAtMs: resolverStartedAtMs + actionSearchTimeoutMs, signal: effectiveSignal})) {
+            deadlineAtMs: recoveryDeadline, signal: effectiveSignal})) {
           throw new Error("transparent_consent_scope_not_ready");
         }
         // An unverified named label must not repeatedly select the same control.
-        // Spend only the remaining original budget on canonical live discovery.
+        // Use only remaining search/shared-readiness time for live discovery.
         let lateResolution: DeterministicRecipeResolution = consentActionLabelNeedsRediscovery(proofResolution)
           ? { status: "not_found" }
           : await waitForDeterministicRecipe(
@@ -1311,7 +1315,7 @@ export async function runPostRefusalObserver(
             recordResolverSnapshot,
             actionDiscovery,
             undefined,
-            resolverStartedAtMs + actionSearchTimeoutMs,
+            recoveryDeadline,
           );
         }
         if (lateResolution.status === "found") {

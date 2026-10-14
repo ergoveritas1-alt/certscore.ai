@@ -1,0 +1,274 @@
+{
+  "publicScans": 0,
+  "deployments": 0,
+  "paidCalls": 0,
+  "historicalWrites": 0,
+  "receipts": [
+    {
+      "scanId": "92533fe5-31f7-41d6-88b4-a300899a3399",
+      "originalBundleSha256": "57039079f256f45c75e30737d79f4d7e28427731fa50df7e18554b34bbde9c4a",
+      "geometrySha256": "a9a01c4317b112e7ed54e03f877a39f56f84929a4dc8b66b6124c66c9b8de27d",
+      "originalManifestSha256": "c9e439470cfaeecc9ad2e3521c1e0a8a54886ec32c83d5703287e2e10f7407e6",
+      "savedReportUnchanged": true,
+      "canonicalProjectionScoreNeutral": true,
+      "counts": {
+        "Observed": 3,
+        "Incomplete": 10
+      },
+      "rows": [
+        {
+          "id": "banner",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit."
+        },
+        {
+          "id": "reject",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control."
+        },
+        {
+          "id": "prominence",
+          "status": "Incomplete",
+          "detail": "The screenshot was retained, but pixel comparison was skipped because capture eligibility checks did not pass.",
+          "limitation": {
+            "group": "visual",
+            "code": "pixel_comparison_not_eligible"
+          }
+        },
+        {
+          "id": "categories",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_inspection_cancelled"
+          }
+        },
+        {
+          "id": "services",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_inspection_cancelled"
+          }
+        },
+        {
+          "id": "privacy_link",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page."
+        },
+        {
+          "id": "privacy_access",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_inspection_cancelled"
+          }
+        },
+        {
+          "id": "consent_record",
+          "status": "Incomplete",
+          "detail": "No post-choice consent record was captured; the choice checks did not complete.",
+          "limitation": {
+            "group": "actions",
+            "code": "accept_actionability_timeout"
+          }
+        },
+        {
+          "id": "implementation",
+          "status": "Incomplete",
+          "detail": "Accept: the control did not become actionable before the deadline. Reject: the banner did not become ready for interaction.",
+          "limitation": {
+            "group": "actions",
+            "code": "accept_actionability_timeout"
+          }
+        },
+        {
+          "id": "duration",
+          "status": "Incomplete",
+          "detail": "No CMP cookie expiry was captured; the choice checks did not complete.",
+          "limitation": {
+            "group": "actions",
+            "code": "accept_actionability_timeout"
+          }
+        },
+        {
+          "id": "declared_not_found",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_inspection_cancelled"
+          }
+        },
+        {
+          "id": "found_not_declared",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_inspection_cancelled"
+          }
+        },
+        {
+          "id": "cookie_information",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_inspection_cancelled"
+          }
+        }
+      ],
+      "limitationGroups": [
+        {
+          "id": "preferences",
+          "code": "preference_inspection_cancelled",
+          "title": "Preference inspection incomplete",
+          "criterionIds": [
+            "categories",
+            "services",
+            "privacy_access",
+            "declared_not_found",
+            "found_not_declared",
+            "cookie_information"
+          ]
+        },
+        {
+          "id": "actions",
+          "code": "accept_actionability_timeout",
+          "title": "Consent-action observation timed out",
+          "criterionIds": [
+            "consent_record",
+            "implementation",
+            "duration"
+          ]
+        },
+        {
+          "id": "visual",
+          "code": "pixel_comparison_not_eligible",
+          "title": "Button comparison incomplete",
+          "criterionIds": [
+            "prominence"
+          ]
+        }
+      ]
+    },
+    {
+      "scanId": "f7b36da6-7043-4789-8ca7-093de4d0377f",
+      "originalBundleSha256": "92c78f4a2d3667862b5df2a71cf1492c389d8d1201ae12ba9048f9a03f63a415",
+      "geometrySha256": "9e51a8148acb4e5a544e16c09454bb129df6f4bdfd64b9ffdbc3912c88ce85fc",
+      "originalManifestSha256": "4f7346d57c6a1bd5536a4a386d996563a79415e11b3a6d16c94e5ff7f3064db1",
+      "savedReportUnchanged": true,
+      "canonicalProjectionScoreNeutral": true,
+      "counts": {
+        "Observed": 5,
+        "Not assessed": 2,
+        "Incomplete": 5,
+        "Review recommended": 1
+      },
+      "rows": [
+        {
+          "id": "banner",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit."
+        },
+        {
+          "id": "reject",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control."
+        },
+        {
+          "id": "prominence",
+          "status": "Not assessed"
+        },
+        {
+          "id": "categories",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          }
+        },
+        {
+          "id": "services",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          }
+        },
+        {
+          "id": "privacy_link",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page."
+        },
+        {
+          "id": "privacy_access",
+          "status": "Not assessed",
+          "detail": "No privacy-policy link was verified as reachable before consent interaction."
+        },
+        {
+          "id": "consent_record",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept and Reject."
+        },
+        {
+          "id": "implementation",
+          "status": "Review recommended",
+          "detail": "22 tracking request(s) began after the Reject control was clicked (including Claydar, FullStory, AB Tasty); first observed 0.05s after the click. Review the recorded requests and how the Reject action controls this tracking activity. Refusal registration was not confirmed."
+        },
+        {
+          "id": "duration",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below."
+        },
+        {
+          "id": "declared_not_found",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          }
+        },
+        {
+          "id": "found_not_declared",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          }
+        },
+        {
+          "id": "cookie_information",
+          "status": "Incomplete",
+          "detail": "This check depends on the incomplete preference inspection.",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          }
+        }
+      ],
+      "limitationGroups": [
+        {
+          "id": "preferences",
+          "code": "unique_actionable_options_not_resolved",
+          "title": "Preference inspection incomplete",
+          "criterionIds": [
+            "categories",
+            "services",
+            "declared_not_found",
+            "found_not_declared",
+            "cookie_information"
+          ]
+        }
+      ]
+    }
+  ]
+}

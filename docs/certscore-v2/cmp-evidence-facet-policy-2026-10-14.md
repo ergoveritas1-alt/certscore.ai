@@ -222,3 +222,64 @@ artifact reserve; maximum compute and storage budgets remain unchanged. Incremen
 recurring capacity/request cost estimate: $0 beyond the existing approved budgets.
 No public scan or deployment was performed. Retained-source review receipt:
 `artifacts/cmp-preference-cancellation-20261014/retained-review.json`.
+
+## HubSpot action readiness, paired comparison and specific failure projection
+
+The saved HubSpot run retains a joined Accept worker that failed actionability
+before dispatch and a joined Reject worker whose final proof reports
+`transparent_consent_scope_not_ready`. Neither choice was clicked; joined worker
+transport is not completed action capture. Its screenshot was approved and
+retained, but the producer's pixel-comparison diagnostic says `not_eligible`.
+That historical diagnostic omits the failed predicate. Offline replay verifies
+the unique pair, document token, 71-ms image/geometry skew and original image hash;
+pure pixel measurement succeeds. This verifies the algorithm, not the missing
+historical capture eligibility proof. Do not overwrite or upgrade saved prominence.
+
+The producer now anchors its final frame-stability snapshot immediately before
+geometry capture, after access diagnostics. A frame arriving during the earlier
+access read no longer falsely invalidates the later geometry/screenshot pair.
+Frames changing during the actual pair still prevent measurement. Eligibility
+diagnostics separately identify frame changes, non-unique pairs and incomplete
+image binding within the same existing 80-ms comparison allowance. The exact
+historical frame event is not recoverable; the regression demonstrates this
+failure mechanism without asserting a more specific historical cause.
+
+Accept/Reject trial and recovery now share the existing maximum 3,000 ms
+(2,500 ms without canonical discovery): one 1,000-ms trial plus the existing
+named/canonical/geometry recovery slices. Final-proof opacity settling may reuse
+the unspent readiness allowance after search ends; it cannot restart that
+allowance. Accept also retains its unused geometry slice when re-resolution
+finds no actionable target, matching the bounded Reject recovery. The unchanged
+one-second opacity helper rejects hidden/inert/disabled/ambiguous controls and
+opposite labels. Full action proof, exact target, safe hit target, cancellation,
+confirmation and the existing lane/result barrier remain authoritative. No
+additional click, visit, lane, action window, model call or timeout is added.
+
+Canonical CMP materialization now recognizes validated, scan/target-bound
+pre-dispatch failures even when their worker outcome is `joined`. Missing
+post-choice activity, storage and expiry become grouped `incomplete` coverage
+with specific action failures, not absence findings. Completed storage/activity
+facets remain independently usable. Expiry no longer incorrectly blames missing
+preference evidence. Bound pixel diagnostics likewise explain comparison failure
+separately from screenshot safety review; malformed diagnostics are ignored.
+The shared CMP UI displays those projected details inside the grouped checks.
+Assessment -> normalized concern -> shared projection remains the only display
+path, with no new score effect or raw-signal UI inference.
+
+Local tests cover both choices after late opacity, persistent transparency,
+opposite labels and cancellation; transient/persistent Accept interception;
+iframe arrival during access followed by a successful bound pixel comparison;
+unstable/unbound visual rejection; explicit failed-action projection through
+normalized concerns and grouped UI; and comparison/safety-review group labels.
+Retained HubSpot replay now projects three Observed and ten Incomplete rows,
+including three specific action coverage failures. This is diagnostic clarity,
+not additional observed coverage. FullStory's Review and other findings remain
+unchanged. Original artifacts and saved report records are unchanged; canonical
+local previews and hash receipts are under
+`artifacts/hubspot-capture-repairs-20261014/`.
+
+No public rescan or deployment was performed. Existing compute/interaction
+ceilings are unchanged. Added diagnostic reason storage is estimated below
+$0.01/month at 100,000 scans with one-year retention, within the existing approved
+budget and repository's pre-approved threshold; no extra storage request or
+artifact is introduced in the scan path.

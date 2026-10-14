@@ -3430,8 +3430,6 @@ export async function preConsentRuntimeScanner(
         await settleConsentProminence(Boolean(
           (consentObservation.acceptControlObserved && consentObservation.rejectControlObserved) ||
           (pairedConsentGeometryProof?.geometry.summary.firstLayerAccept && pairedConsentGeometryProof?.geometry.summary.firstLayerReject)));
-        const geometryCaptureFrameRevision = consentFrameRevision;
-        const geometryCaptureFrames = page.frames();
         const access = await recordTiming(
           timingBreakdown,
           "consent geometry page access",
@@ -3441,6 +3439,11 @@ export async function preConsentRuntimeScanner(
             supplementalBodyText: domText,
           }),
         );
+        // Access diagnostics may observe new unrelated frames before geometry
+        // starts. Anchor stability to the actual geometry/pixel pair, not to
+        // that earlier diagnostic read. Changes during capture still fail closed.
+        const geometryCaptureFrameRevision = consentFrameRevision;
+        const geometryCaptureFrames = page.frames();
         let geometry = await recordTiming(
           timingBreakdown,
           "consent geometry DOM capture",

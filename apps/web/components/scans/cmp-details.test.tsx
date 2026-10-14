@@ -288,3 +288,16 @@ test("cookie tables distinguish possible templates and measured remaining time f
   assert.match(html, /Possible template matches are name similarities, not verified CMP matches/);
   assert.doesNotMatch(html, /aria-label="Matched"/, "A candidate template has no verified-match tick");
 });
+
+test("grouped incomplete CMP checks show their specific canonical capture failures",async()=>{
+  const {CmpDetails}=await import('./cmp-details');
+  const audit=projectCmpAudit({scanId:'scan-1',consentControlAssessment:observedControlAssessment});
+  const row=audit.rows.find(row=>row.id==='implementation')!;
+  Object.assign(row,{status:'Incomplete',detail:'Accept: the control did not become actionable before the deadline. Reject: the banner did not become ready for interaction.',
+    limitation:{group:'actions',code:'accept_actionability_timeout'}});
+  audit.limitationGroups=[{id:'actions',code:'accept_actionability_timeout',title:'Consent-choice check incomplete',criterionIds:['implementation']}];
+  const html=renderToStaticMarkup(<CmpDetails vendor="HubSpot Consent Banner" audit={audit} evidenceRows={[]} />);
+  assert.match(html,/Accept: the control did not become actionable before the deadline/);
+  assert.match(html,/Reject: the banner did not become ready for interaction/);
+  assert.match(html,/Incomplete/);
+});

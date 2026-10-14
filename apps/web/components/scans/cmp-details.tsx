@@ -45,7 +45,8 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
     const visualPreview = status === "Observed" && id === "banner" ? bannerPreview :
       status === "Observed" && id === "reject" ? rejectPreview :
       id === "prominence" && supportingEvidence?.prominence && ["Observed", "Review recommended", "Informational"].includes(status) ? prominencePreview : null;
-    return <DetailedEvidenceFinding key={id} id={`cmp-criterion-${id}`} title={label} summary={row.limitation ? undefined : detail} assessmentStatus={status}
+    return <DetailedEvidenceFinding key={id} id={`cmp-criterion-${id}`} title={label}
+      summary={row.limitation && detail === "This check depends on the incomplete preference inspection." ? undefined : detail} assessmentStatus={status}
       headerActions={visualPreview ? <ConsentBannerViewer preview={visualPreview} /> :
         id === "privacy_link" && status === "Observed" && source?.policyEvidence?.sourceUrl
           ? <PolicyLinkViewer sourceUrl={source.policyEvidence.sourceUrl} /> : null}

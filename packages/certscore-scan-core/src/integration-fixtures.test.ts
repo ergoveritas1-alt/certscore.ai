@@ -4500,3 +4500,41 @@ function pixelBody(): string {
     "base64",
   ).toString("binary");
 }
+
+test("consent visual pairing ignores frame arrivals during access diagnostics but preserves capture stability", {timeout:30_000}, async t => {
+  const server = await startStaticFixtureServer();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "consent-access-frame-arrival-"));
+  const browser = await chromium.launch({headless:true});
+  let arrivals = 0;
+  const newContext = browser.newContext.bind(browser);
+  t.mock.method(browser,"newContext",async (...args:Parameters<typeof browser.newContext>)=>{
+    const context=await newContext(...args),newPage=context.newPage.bind(context);
+    t.mock.method(context,"newPage",async()=>{
+      const page=await newPage(),frame=page.mainFrame(),evaluate=frame.evaluate.bind(frame);
+      t.mock.method(frame,"evaluate",async (...args:Parameters<typeof frame.evaluate>)=>{
+        if (typeof args[0] === "string" && args[0].includes("function collectOpenShadowText")) {
+          arrivals++;
+          await evaluate(async()=>{
+            const style=document.createElement('style');style.textContent='button{background:#123456!important;color:white!important;width:140px!important;height:44px!important;border:0!important;margin:16px!important}body{padding:32px!important;background:white!important}';document.head.append(style);
+            const iframe=document.createElement('iframe');iframe.style.display='none';iframe.srcdoc='<p>Unrelated embedded content</p>';
+            await new Promise<void>(resolve=>{iframe.onload=()=>resolve();document.body.append(iframe);});
+          });
+        }
+        return evaluate(...args);
+      });
+      return page;
+    });
+    return context;
+  });
+  try {
+    const url=server.urlFor("consent-simple-accept-reject"),artifactWriter=await createArtifactWriter(path.join(tempRoot,"out"));
+    const result=await preConsentRuntimeScanner({url,normalizedUrl:url,scanStartedAtMs:Date.now(),internalBudgetMs:25_000,
+      artifactWriter,browser,captureScope:"consent_proof",routeFulfillers,screenshotCaptureMode:"viewport_first",screenshotMode:"selective",waitMode:"fast"});
+    const geometry=JSON.parse(await readFile(path.join(tempRoot,"out","ConsentControlGeometryEvidence.json"),"utf8")) as ConsentControlGeometryArtifact;
+    assert.ok(arrivals>0,"Exercise frame arrival inside access diagnostics");
+    assert.ok(geometry.visualComparison,JSON.stringify(result.moduleRun.timingBreakdown?.filter(row=>row.label==='consent pixel comparison')));
+    assert.equal(geometry.visualComparison.documentToken,geometry.documentIdentity?.token);
+    assert.equal(geometry.visualComparison.screenshotArtifactRef,geometry.screenshotArtifactRef);
+    assert.ok(result.moduleRun.timingBreakdown?.some(row=>row.label==='consent pixel comparison' && row.outcome==='completed'));
+  } finally {t.mock.restoreAll();await browser.close();await server.close();await rm(tempRoot,{recursive:true,force:true});}
+});
