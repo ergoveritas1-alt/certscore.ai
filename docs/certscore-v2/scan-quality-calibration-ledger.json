@@ -1109,16 +1109,16 @@
     },
     "https://sits.com/en/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T16:09:54.096Z",
-      "lastContactAt": "2026-10-14T16:09:54.096Z",
+      "cooldownUntil": "2026-11-11T16:22:59.814Z",
+      "lastContactAt": "2026-10-14T16:22:59.814Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "lastOutcome": "failed",
-      "note": "One owner-authorized local diagnostic exception to capture missing CMP service names. CMP inspection completed with 11 names; full local scan failed before policy contact because OPENAI_API_KEY was missing. No retry. Global SITS hold unchanged; not a release calibration cohort.",
+      "lastOutcome": "completed",
+      "note": "One owner-authorized complete localhost review scan 58ac0b55-641b-4cd1-bdd1-6d5c7bb24613, following repair of the worktree development API-key setup. Completed in 20866 ms with CMP services and confirmed A/R evidence. Screenshots withheld: safety check unavailable. No retry or deployment. Global SITS hold unchanged; not a release calibration cohort.",
       "state": "cooldown",
       "url": "https://sits.com/en/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T16:09:54.096Z"
+  "updatedAt": "2026-10-14T16:22:59.814Z"
 }

@@ -303,6 +303,39 @@ or incremental infrastructure cost is involved.
 
 ## Fresh SITS service-name verification
 
+### Complete localhost report after environment repair
+
+The owner subsequently authorized repair of local policy-review credentials and
+exactly one complete local SITS scan, without deployment. The existing development
+`OPENAI_API_KEY` in the main checkout was missing from this worktree's
+`apps/web/.env.local`. It was copied into that ignored file with mode 0600 and
+accepted by a read-only API authentication check; no production secret was read.
+The key is not included in logs, artifacts, or Git.
+
+Local PostgreSQL and MinIO readiness checks passed; no migrations were pending.
+The web app ran this worktree's current code through the normal simulated Lambda
+dispatch, verified terminal ingestion, canonical materialization and persisted
+report projection. The one new scan is
+`58ac0b55-641b-4cd1-bdd1-6d5c7bb24613`, available at
+`http://localhost:3000/scan/58ac0b55-641b-4cd1-bdd1-6d5c7bb24613#cmp-details`.
+It completed in 20,866 ms, with 11 service names, 36 declarations, three categories,
+confirmed Accept/Reject evidence and two post-Reject HubSpot requests. This fresh
+run has 21 compared cookie names, 14 unmatched; the earlier report is unchanged.
+
+The original producer bundle hash verified, and the shared evidence export
+preserves all 13 website CMP assessments and every service name. Desktop and
+390px mobile review confirmed the tables, copy controls, logos, policy supporting
+evidence and upper-right status badges, without page overflow. CMP and policy
+sections were left expanded for review. Screenshots were withheld by the existing
+safety gate (`safety_check_unavailable`); no withheld image was served or relabeled.
+Prominence therefore remains Not assessed and image viewers are omitted. GPC
+remains indeterminate. No old evidence was mixed into the new report.
+
+Expected one-time model/API cost was disclosed as below $0.10. There is no
+recurring infrastructure change, AWS scanner invocation, production write,
+push or deployment. The contact ledger records this owner-authorized exception;
+the global SITS diagnostic hold remains unchanged and no repeat scan was run.
+
 The owner explicitly approved one fresh local SITS scan as a one-time exception
 to the existing diagnostic-contact hold. Run `sits-services-local-20261014`
 targeted `https://sits.com/en/` in one existing sharded local-parity run,
