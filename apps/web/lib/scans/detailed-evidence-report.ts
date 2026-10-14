@@ -116,7 +116,7 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
       correctionSteps: [accessibilityFindingCopy(rule, manual).correction], evidenceRefs: [rule.ruleId],
       evidenceTarget: "accessibility-evidence", source: { field, rowId: rule.ruleId },
     }));
-    sections.push({ id: "accessibility", title: EVIDENCE_SECTION_TITLES.accessibility, recap: accessibilityEvidenceRecap(a),
+    sections.push({ id: "accessibility", title: EVIDENCE_SECTION_TITLES.accessibility, recap: accessibilityEvidenceRecap(a, report.accessibilityEvidence?.limitations),
       displayStatus: issues || review ? "Review" : a.status !== "completed" ? "Limited" : null,
       counts: { checks: issues + review, review: issues + review, limited: 0, observed: 0, unsupported: 0 }, rows });
   }

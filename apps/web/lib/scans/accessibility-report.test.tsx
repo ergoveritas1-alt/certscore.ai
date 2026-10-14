@@ -17,6 +17,7 @@ import { comparePriorityReviewFindings } from "./priority-review-order";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
 import { StatusBadge } from "../../components/scans/report-finding-row";
 import { SitePriorityReview } from "../../components/scans/site-priority-review";
+import { buildDetailedEvidenceExport } from "./detailed-evidence-report";
 
 function fixture() {
   const projection = accessibilityProjectionFixture();
@@ -26,6 +27,29 @@ function fixture() {
     reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
   return { projection, observation: projection.observation, audit, packets };
 }
+
+test("frame changes have the same explicit coverage reason in the report and shared export", () => {
+  const projection = accessibilityProjectionFixture({ status: "limited", rulesEvaluated: [], violations: [], reviewItems: [], limitations: ["frames_changed"] });
+  const observation = projection.observation;
+  const audit = projectAccessibilityAuditSummary(projection)!;
+  const before = structuredClone(observation);
+  const html = renderToStaticMarkup(<AccessibilityEvidence audit={audit} observation={observation} />);
+  const snapshot = renderToStaticMarkup(<AccessibilitySnapshotContent audit={audit} observation={observation} />);
+  for (const content of [html, snapshot]) {
+    assert.match(content, /page or embedded frames changed during the audit/i);
+    assert.doesNotMatch(content, /No failures detected|0 issues/);
+  }
+  const report = structuredClone(SHADOW_REPORT);
+  report.scan.id = observation.scanId;
+  report.accessibilityAudit = audit;
+  report.accessibilityEvidence = observation;
+  const section = buildDetailedEvidenceExport(report).detailedEvidence.sections.find(s => s.id === "accessibility")!;
+  assert.equal(section.recap, "Page or frames changed during audit");
+  assert.equal(section.displayStatus, "Limited");
+  assert.equal(section.counts.checks, 0);
+  assert.deepEqual(section.rows, []);
+  assert.deepEqual(observation, before);
+});
 
 test("failed WCAG checks, affected instances and review checks remain separate", () => {
   const { audit, observation } = fixture();

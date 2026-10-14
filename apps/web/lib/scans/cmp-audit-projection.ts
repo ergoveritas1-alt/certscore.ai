@@ -81,12 +81,14 @@ export function projectCmpAudit(input: {
       set("banner", { status: "Observed", detail: "Consent surface observed on the initial visit.",
         evidenceAnchor: "consent-review-evidence", sourceIds: ["consentControlAssessment.surface"] });
     } else if (assessment.surface.status === "not_observed" && assessment.coverage.status === "complete") {
-      set("banner", { status: "Not observed", evidenceAnchor: "consent-review-evidence", sourceIds: ["consentControlAssessment.surface"] });
+      set("banner", { status: "Not observed", detail: "A cookie banner was not observed during this visit.",
+        evidenceAnchor: "consent-review-evidence", sourceIds: ["consentControlAssessment.surface"] });
     }
     const reject = assessment.controls.reject;
     if (reject.state !== "unknown" && (reject.state !== "observed" || reject.layer === "first_layer")) {
       set("reject", { status: reject.state === "observed" ? "Observed" : "Not observed",
-        detail: "First-layer Reject or equivalent refusal control.", evidenceAnchor: "consent-review-evidence",
+        detail: reject.state === "observed" ? "First-layer Reject or equivalent refusal control."
+          : "Reject or an equivalent refusal option was not observed during this visit.", evidenceAnchor: "consent-review-evidence",
         sourceIds: ["consentControlAssessment.controls.reject"] });
     }
   }
@@ -97,7 +99,8 @@ export function projectCmpAudit(input: {
   if (privacy && privacy.assessmentStatus !== "coverage_limitation" && privacy.assessmentStatus !== "not_applicable") {
     const status = privacy.status === "Observed" && privacy.evidenceState === "observed" ? "Observed"
       : privacy.assessmentStatus === "gap_observed" && privacy.evidenceState === "not_observed" ? "Not observed" : null;
-    if (status) set("privacy_link", { status, detail: "Public privacy-policy link or surface on the scanned page.",
+    if (status) set("privacy_link", { status, detail: status === "Observed" ? "Public privacy-policy link or surface on the scanned page."
+      : "A privacy-policy link or page was not observed during this visit.",
       sourceIds: [privacy.id], evidenceAnchor: evidenceRowAnchor(privacy.id) });
   }
 

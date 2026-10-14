@@ -277,11 +277,12 @@
     },
     "https://att.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-05T20:11:14.235Z",
-      "lastContactAt": "2026-10-08T20:11:14.235Z",
+      "cooldownUntil": "2026-11-11T18:07:38.654Z",
+      "lastContactAt": "2026-10-14T18:07:38.654Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local five-site evidence-diversity verification pass, scan b3a9d0db-2969-44cd-a08c-69a44d704e55. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://att.com"
     },
@@ -640,11 +641,12 @@
     },
     "https://arstechnica.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T14:05:18.873Z",
-      "lastContactAt": "2026-10-11T14:05:18.873Z",
+      "cooldownUntil": "2026-11-11T18:06:26.885Z",
+      "lastContactAt": "2026-10-14T18:06:26.885Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local five-site evidence-diversity verification pass, scan f93bab26-e522-46b5-b5f3-5435e3b5b32e. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://arstechnica.com"
     },
@@ -662,13 +664,16 @@
       "url": "https://decathlon.co.uk"
     },
     "https://patagonia.com": {
-      "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T14:09:27.876Z",
-      "lastContactAt": "2026-10-11T14:09:27.876Z",
+      "consecutiveNoGoCount": 2,
+      "cooldownUntil": "2026-11-11T18:06:50.092Z",
+      "lastContactAt": "2026-10-14T18:06:50.092Z",
       "lastContactSource": "calibration",
-      "lastNoGoReasons": [],
-      "lastOutcome": "completed",
-      "state": "cooldown",
+      "lastNoGoReasons": [
+        "maintenance_or_unavailable"
+      ],
+      "lastOutcome": "no_go",
+      "note": "Owner-requested local five-site evidence-diversity verification pass, scan a9409464-ad5d-41f0-90f3-4ff5c61fe700. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Access-limited; substantive findings withheld.",
+      "state": "do_not_calibrate",
       "url": "https://patagonia.com"
     },
     "https://amplitude.com": {
@@ -683,11 +688,12 @@
     },
     "https://sentry.io": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T14:09:58.794Z",
-      "lastContactAt": "2026-10-11T14:09:58.794Z",
+      "cooldownUntil": "2026-11-11T18:07:57.511Z",
+      "lastContactAt": "2026-10-14T18:07:57.511Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested local five-site evidence-diversity verification pass, scan bc2fd49d-13d7-48c6-b3b5-f30ca91bc688. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Canonical evidence and report projection verified.",
       "state": "cooldown",
       "url": "https://sentry.io"
     },
@@ -702,13 +708,16 @@
       "url": "https://joomla.org"
     },
     "https://drupal.org": {
-      "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T14:10:23.782Z",
-      "lastContactAt": "2026-10-11T14:10:23.782Z",
+      "consecutiveNoGoCount": 2,
+      "cooldownUntil": "2026-11-11T18:07:12.622Z",
+      "lastContactAt": "2026-10-14T18:07:12.622Z",
       "lastContactSource": "calibration",
-      "lastNoGoReasons": [],
-      "lastOutcome": "completed",
-      "state": "cooldown",
+      "lastNoGoReasons": [
+        "captcha_or_challenge"
+      ],
+      "lastOutcome": "no_go",
+      "note": "Owner-requested local five-site evidence-diversity verification pass, scan eef72482-d72b-407d-9543-ce8bd7575d96. Exactly two planned passes; no unplanned retries, region/identity switches or deployment. Access-limited; substantive findings withheld.",
+      "state": "do_not_calibrate",
       "url": "https://drupal.org"
     },
     "https://rei.com": {
@@ -1120,5 +1129,8 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T17:51:07.279Z"
+  "updatedAt": "2026-10-14T18:09:28.741Z",
+  "contactOnlyUrls": [
+    "https://sits.com/en/"
+  ]
 }

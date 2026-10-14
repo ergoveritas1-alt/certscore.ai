@@ -18,6 +18,8 @@ export type CalibrationLedgerEntry = {
 
 export type CalibrationLedger = {
   entries: Record<string, CalibrationLedgerEntry>;
+  /** Retained contacts outside the rotating inventory; never selection candidates. */
+  contactOnlyUrls?: string[];
   ledgerVersion: typeof CALIBRATION_LEDGER_VERSION;
   updatedAt: string | null;
 };
@@ -95,6 +97,7 @@ export function mergeCentralContactLedger(input: {
     };
   }
   return {
+    ...input.ledger,
     entries,
     ledgerVersion: CALIBRATION_LEDGER_VERSION,
     updatedAt: input.now.toISOString(),
@@ -111,9 +114,20 @@ export function validateCalibrationLedger(ledger: CalibrationLedger, targetUrls:
     return errors;
   }
 
+  const contactOnlyUrls = new Set<string>();
+  if (ledger.contactOnlyUrls !== undefined && !Array.isArray(ledger.contactOnlyUrls)) {
+    errors.push("Contact-only URLs must be an array");
+  } else for (const url of ledger.contactOnlyUrls ?? []) {
+    let valid = false;
+    try { const parsed = new URL(url); valid = parsed.protocol === "https:" && !parsed.username && !parsed.password && !parsed.hash; } catch { /* Invalid history fails validation. */ }
+    if (!valid || !ledger.entries[url]?.lastContactAt || targetUrls.has(url) || contactOnlyUrls.has(url)) {
+      errors.push(`Invalid contact-only history URL: ${url}`);
+    }
+    contactOnlyUrls.add(url);
+  }
   for (const [key, entry] of Object.entries(ledger.entries)) {
     if (key !== entry.url) errors.push(`Eligibility ledger key/url mismatch for ${key}`);
-    if (!targetUrls.has(entry.url)) errors.push(`Eligibility ledger contains unknown target: ${entry.url}`);
+    if (!targetUrls.has(entry.url) && !contactOnlyUrls.has(entry.url)) errors.push(`Eligibility ledger contains unknown target: ${entry.url}`);
     if (!(["eligible", "cooldown", "blocked", "do_not_calibrate"] as string[]).includes(entry.state)) {
       errors.push(`Eligibility ledger contains invalid state for ${entry.url}: ${entry.state}`);
     }
@@ -151,6 +165,10 @@ export function selectCalibrationTargets(input: {
   const excluded: CalibrationSelection["excluded"] = [];
   const overriddenCooldownUrls: string[] = [];
   const eligible = input.targets.filter((target) => {
+    if (input.ledger.contactOnlyUrls?.includes(target.url)) {
+      excluded.push({ reason: "contact_only_history", url: target.url });
+      return false;
+    }
     const entry = input.ledger.entries[target.url];
     if (!entry) return true;
     if (entry.state === "blocked" || entry.state === "do_not_calibrate") {
@@ -249,6 +267,7 @@ export function recordCalibrationOutcomes(input: {
     };
   }
   return {
+    ...input.ledger,
     entries,
     ledgerVersion: CALIBRATION_LEDGER_VERSION,
     updatedAt: input.now.toISOString(),

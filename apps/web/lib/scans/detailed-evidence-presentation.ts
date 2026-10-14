@@ -30,7 +30,14 @@ export function evidenceSectionRecap(rows: readonly EvidenceSummaryRow[]) {
   return rows.length ? `${rows.length} ${rows.length === 1 ? "check" : "checks"} · ${outcomes.join(" · ")}` : "No checks available";
 }
 
-export function accessibilityEvidenceRecap(audit: { failedRuleCount: number | null; reviewRuleCount: number | null; affectedNodeCount: number | null; status: string }) {
+export function accessibilityAuditUnavailableSummary(limitations: readonly string[] = []) {
+  return limitations.includes("frames_changed")
+    ? "The page or embedded frames changed during the audit. Results could not be verified."
+    : "The audit did not return evaluable results.";
+}
+
+export function accessibilityEvidenceRecap(audit: { failedRuleCount: number | null; reviewRuleCount: number | null; affectedNodeCount: number | null; status: string }, limitations: readonly string[] = []) {
+  if (audit.failedRuleCount === null && limitations.includes("frames_changed")) return "Page or frames changed during audit";
   const review = audit.reviewRuleCount ?? 0;
   const limited = audit.status !== "completed";
   return [audit.failedRuleCount === null ? "Not evaluated" : `${audit.failedRuleCount} ${audit.failedRuleCount === 1 ? "issue" : "issues"}`,

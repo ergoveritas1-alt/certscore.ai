@@ -170,6 +170,27 @@ test("ledger validation rejects unknown targets", () => {
   assert.match(validateCalibrationLedger(ledger, new Set(targets.map((target) => target.url))).join("\n"), /unknown target/);
 });
 
+test("explicit contact-only history survives updates without becoming selectable", () => {
+  const ledger = createEmptyCalibrationLedger();
+  const url = "https://diagnostic.example/";
+  ledger.contactOnlyUrls = [url];
+  ledger.entries[url] = { consecutiveNoGoCount: 0, lastNoGoReasons: [], state: "cooldown", url,
+    lastContactAt: "2026-07-17T00:00:00.000Z" };
+  const targetUrls = new Set(targets.map(t => t.url));
+  assert.deepEqual(validateCalibrationLedger(ledger, targetUrls), []);
+  const merged = mergeCentralContactLedger({ledger, centralRecords: [], now: new Date(), targets});
+  const updated = recordCalibrationOutcomes({ledger: merged, minimumCooldownDays: 28,
+    now: new Date(), targetUrls, summary: {results: []}});
+  assert.deepEqual(updated.contactOnlyUrls, [url]);
+  const selection = selectCalibrationTargets({ledger: updated, minimumCooldownDays: 28,
+    now: new Date(), limit: 1, rotationKey: "history", targets: [...targets, {url,role:"diagnostic",lanes:[]}],
+    cooldownOverrideReason: "Owner requested a validation pair"});
+  assert.ok(!selection.selected.some(t => t.url === url));
+  assert.ok(selection.excluded.some(t => t.url === url && t.reason === "contact_only_history"));
+  ledger.contactOnlyUrls = ["http://missing.example/"];
+  assert.match(validateCalibrationLedger(ledger, targetUrls).join("\n"), /Invalid contact-only/);
+});
+
 test("central all-channel history overrides repository eligibility", () => {
   const merged = mergeCentralContactLedger({
     centralRecords: [

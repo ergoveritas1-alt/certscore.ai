@@ -693,6 +693,37 @@ test("pre-consent scanner recaptures below-fold consent geometry before proof sc
   }
 });
 
+test("full-document consent inspection excludes a fixed privacy notice translated outside the viewport", async () => {
+  const server = await startServer(`<!doctype html><html lang="en"><head><style>
+    body { margin: 0; min-height: 3200px; }
+    #fides-banner-container { position: fixed; top: 100%; left: 50%; transform: translateY(100%); width: 680px; height: 130px; }
+  </style></head><body><h1>Publisher homepage</h1>
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+    <section id="fides-banner-container" role="region" aria-label="GPC Detected">
+      <div id="fides-banner-inner"><p>GPC Detected. We value your privacy. Your opt-out preferences have been applied.</p>
+      <button class="fides-banner-button">Close</button></div>
+    </section></body></html>`);
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-hidden-fixed-privacy-"));
+  try {
+    const artifactWriter = await createArtifactWriter(path.join(tempRoot, "out"));
+    const result = await preConsentRuntimeScanner({url: server.url, normalizedUrl: server.url,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 10_000, artifactWriter,
+      screenshotCaptureMode: "viewport_first", screenshotMode: "always", waitMode: "fast",
+      routeFulfillers: [{urlPattern: /^https:\/\/cdn\.cookielaw\.org\/scripttemplates\/otSDKStub\.js/,
+        contentType: "application/javascript", body: "window.OneTrust = {fixture: true};"}]});
+    const observation = result.consentUiObservations[0]!;
+    assert.equal(observation.controls.some(control => control.label === "Close"), false);
+    assert.equal(observation.likelyPresent, false);
+    assert.equal(observation.acceptControlObserved, false);
+    assert.equal(observation.rejectControlObserved, false);
+    assert.ok(result.moduleRun.timingBreakdown?.some(t => t.label === "consent UI supplemental screenshot recapture"),
+      "Exercise full-document recovery rather than only the initial viewport inventory");
+  } finally {
+    await closeServer(server.server);
+    await rm(tempRoot, {recursive: true, force: true});
+  }
+});
+
 test("pre-consent scanner scrolls within the same first-layer panel and retains controls from both views", async () => {
   const server = await startServer(`
     <!doctype html>

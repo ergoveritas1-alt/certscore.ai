@@ -78,6 +78,23 @@ test("public-policy discovery does not assert banner access, cookie detail or CM
   }
 });
 
+test("unobserved CMP controls and policy links never describe positive observations", () => {
+  const assessment = structuredClone(observedControlAssessment);
+  assessment.surface.status = "not_observed";
+  assessment.controls.reject.state = "not_observed";
+  assessment.coverage.status = "complete";
+  const before = structuredClone(assessment);
+  const result = projectCmpAudit({scanId: "scan-1", consentControlAssessment: assessment,
+    checklistRows: [policyRow({status: "Not observed", evidenceState: "not_observed", assessmentStatus: "gap_observed"})]});
+  for (const id of ["banner", "reject", "privacy_link"]) {
+    const row = find(result, id);
+    assert.equal(row.status, "Not observed");
+    assert.match(row.detail!, /not observed during this visit/);
+    assert.doesNotMatch(row.detail!, /was available|was found|not retained/);
+  }
+  assert.deepEqual(assessment, before);
+});
+
 test("only surfaced prominence and implementation findings can recommend review; silence is not a pass", () => {
   for (const status of ["surface", "suppress"] as const) {
     const result = projectCmpAudit({ scanId: "scan-1", unifiedFindings: [finding("accept_more_prominent_than_reject", status), finding("acceptance_signal_contradicts_action", status)] });

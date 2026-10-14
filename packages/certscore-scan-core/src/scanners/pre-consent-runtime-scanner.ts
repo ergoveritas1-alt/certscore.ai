@@ -9873,6 +9873,16 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           if (ancestor.matches("[hidden],[inert],[aria-hidden='true' i]") ||
               ancestorStyle.display === "none" || ancestorStyle.visibility === "hidden" ||
               Number.parseFloat(ancestorStyle.opacity || "1") <= 0.05) return false;
+          // Full-document inspection may include normal content below the fold.
+          // A fixed panel translated outside its viewport cannot be revealed by
+          // scrolling; its descendants must not become observed banner controls.
+          if (ancestorStyle.position === "fixed") {
+            const panel = ancestor.getBoundingClientRect();
+            // A zero-size positioning wrapper may have visible descendants.
+            if (panel.width > 0 && panel.height > 0 &&
+                (panel.bottom <= 0 || panel.top >= view.innerHeight ||
+                 panel.right <= 0 || panel.left >= view.innerWidth)) return false;
+          }
           if (ancestor.parentElement) ancestor = ancestor.parentElement;
           else {
             try { ancestor = view.frameElement; } catch { ancestor = null; }
