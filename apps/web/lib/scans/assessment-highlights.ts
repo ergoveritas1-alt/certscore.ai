@@ -29,16 +29,25 @@ export function renderAssessmentBrief(brief: AssessmentBrief) {
   if ([brief.lead, action, limitation].filter(Boolean).join(" ").length > ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) {
     action = "Review the supporting evidence and recommended fixes in Detailed evidence.";
   }
+  // Reserve room for an already-projected Reject observation even when storage
+  // leads the assessment. Keep the complete source summary and its qualifiers.
+  const behavior = brief.secondary.find(finding =>
+    finding.id === "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction" &&
+    finding.readerSummary && finding.readerSummary !== "Potential issue based on scan evidence." &&
+    finding.readerTitle.length <= 100);
+  const behaviorFact = behavior ? sentence(`“${behavior.readerTitle}”: ${behavior.readerSummary}`) : "";
+  const behaviorFits = Boolean(behaviorFact && [brief.lead, behaviorFact, action, limitation].filter(Boolean).join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
   // Preserve scope/confidence before optional secondary context. Never cut a
   // source summary at a sentence boundary that might drop its qualification.
-  if (fact && [brief.lead, sentence(fact), action, limitation].filter(Boolean).join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) {
+  if (fact && [brief.lead, sentence(fact), behaviorFits ? behaviorFact : "", action, limitation].filter(Boolean).join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) {
     const namedFact = primary && primary.readerTitle.length <= 100
       ? fact === sentence(primary.title) ? `“${primary.readerTitle}”` : `“${primary.readerTitle}”: ${fact}` : fact;
-    sentences.push(sentence([brief.lead, sentence(namedFact), action, limitation].filter(Boolean).join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH ? namedFact : fact));
+    sentences.push(sentence([brief.lead, sentence(namedFact), behaviorFits ? behaviorFact : "", action, limitation].filter(Boolean).join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH ? namedFact : fact));
   }
+  if (behaviorFits) sentences.push(behaviorFact);
   if (action) sentences.push(action);
   if (limitation) sentences.push(limitation);
-  const secondary = brief.secondary.slice(0, 2);
+  const secondary = brief.secondary.filter(finding => !behaviorFits || finding !== behavior).slice(0, 2);
   if (secondary.length && secondary.every(finding => finding.readerTitle.length <= 100)) {
     const context = `Also review ${secondary.map(finding => `“${finding.readerTitle.replace(/[.!?]$/, "")}”`).join(" and ")}.`;
     if ([...sentences, context].join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) sentences.push(context);

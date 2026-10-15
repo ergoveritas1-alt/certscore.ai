@@ -123,3 +123,25 @@ test("many incomplete checks preserve the paragraph budget and keep a shared evi
   assert.ok(result.text.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
   assert.ok(result.links.some(link => link.targetId === "evidence"));
 });
+
+test("secondary Reject observation remains concrete when a long storage finding leads the summary", () => {
+  const findings = [
+    { id: "regulatory_gap__gdpr_eprivacy__pre_consent_cookies_storage", title: "Pre-consent storage classification review",
+      summary: "Cookies or browser storage were retained before consent. First retained item: country (example.test): unknown, first observed 1.677s after scan start. Essentiality was not confirmed for every item.",
+      correctionSteps: ["Review the supporting evidence and recommended fixes in Detailed evidence."] },
+    { id: "regulatory_gap__gdpr_eprivacy__post_reject_tracking_reduction", title: "Post-choice tracking reduction",
+      summary: "Partial support from scan evidence; 2 tracking request(s) began after the Reject control was clicked (including Cloudflare); first observed 0.96s after the click. Review the recorded requests and how the Reject action controls this tracking activity." },
+    { id: "accessibility_priority_group", title: "Accessibility issues" },
+  ];
+  const saved = structuredClone(findings);
+  const context = {coverage:{state:"limited" as const,items:[{id:"tracking_before_consent",title:"Pre-consent non-essential tracking"}]}};
+  const brief = buildAssessmentBrief(findings, page, context);
+  const result = buildAssessmentHighlightsPresentation(findings, page, context);
+  assert.equal(brief.primary?.id, findings[0]!.id);
+  assert.ok(result.text.includes(findings[1]!.summary!));
+  assert.match(result.text, /Could not complete: “Pre-consent non-essential tracking”/);
+  assert.doesNotMatch(result.text, /confirmed Reject|failed to reject|ignored Reject/);
+  assert.ok(result.links.some(link => link.label === "“Post-choice tracking reduction”"));
+  assert.ok(result.text.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
+  assert.deepEqual(findings, saved);
+});

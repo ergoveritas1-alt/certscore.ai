@@ -1,3 +1,4 @@
+import { retainedRejectClickCapture } from "./retained-reject-click-capture";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { summarizePostRejectActivity } from "./post-reject-finding-copy";
 import { projectPreconsentTrackingTiming } from "./preconsent-tracking-timing";
@@ -6264,6 +6265,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
       `${clickAssessment.eligibleRequestCount} tracking request(s) began after the Reject control was clicked${vendors.length ? ` (including ${vendors.join(", ")})` : ""}; first observed ${((first - clickAssessment.actionDispatchedAtMs) / 1000).toFixed(2)}s after the click. Review the recorded requests and how the Reject action controls this tracking activity.`,
       [`Evidence: post-refusal-packet:sha256:${clickAssessment.sourcePacketSha256}`],
       { retainedEvidence: {
+        ...retainedRejectClickCapture(clickAssessment, input.runtimeArtifacts?.postRefusalEvidenceProjection),
         rejectClickTrackingAssessment: clickAssessment,
         normalizedConcernKey: clickConcern!.canonicalConcernKey,
         rejectClickVerified: true,

@@ -845,3 +845,50 @@ test("legacy opaque refusal confirmation cannot survive canonical projection as 
   assert.deepEqual(result.normalizedConcerns, []);
   assert.deepEqual(result.candidates, []);
 });
+
+test("Reject click review retains its bounded capture through policy, historical canonical read and card projection", async () => {
+  const { preserveRetainedRejectClickCapture } = await import("./retained-reject-click-capture");
+  const { getPersistedCanonicalReportProjection } = await import("../../server/scans/persisted-canonical-report-projection");
+  const { buildExecutiveRejectPathProjection } = await import("../../components/scans/shared-scan-detail-view");
+  const result = projectCanonical(unverifiedRejectClickPacket());
+  const original = structuredClone(result);
+  const retained = result.postRejectRow.criticalEvidence.retainedEvidence;
+  assert.deepEqual(retained.afterActionCapture, result.reportProjection.afterActionCapture);
+  assert.equal(retained.sourcePacketSha256, result.reportProjection.packetSha256);
+  assert.deepEqual(retained.execution, result.reportProjection.execution);
+  assert.equal(result.reportProjection.execution?.consentConfirmed, false);
+  const historicalRow = structuredClone(result.postRejectRow);
+  for (const key of ["afterActionCapture", "sourcePacketSha256", "execution", "resolverMethod", "reportEvidenceProjectionPolicy"]) {
+    delete historicalRow.criticalEvidence.retainedEvidence[key];
+  }
+  const savedHistoricalRow = structuredClone(historicalRow);
+  const record = { scan: { id: "scan-1" }, runtimeArtifacts: {
+    ...result.runtimeArtifacts, consentControlAssessment: observedControlAssessment,
+  }, canonicalReportProjection: { artifactVersion: "persisted-canonical-report-projection-v2",
+    checklistRows: [historicalRow], derivedContext: {}, globalUnifiedFindings: [],
+    legacyScoreAssessmentInput: { scanId: "scan-1" }, normalizedConcerns: result.normalizedConcerns,
+    ownerUnifiedFindings: [], topFindingIds: [],
+  } } as any;
+  const canonical = getPersistedCanonicalReportProjection(record)!;
+  assert.ok(canonical);
+  const repaired = canonical.checklistRows[0]!;
+  assert.deepEqual({ ...repaired, criticalEvidence: historicalRow.criticalEvidence }, historicalRow,
+    "Only retained capture metadata may change; finding status, wording and identity remain historical");
+  assert.deepEqual(historicalRow, savedHistoricalRow);
+  const card = buildExecutiveRejectPathProjection(repaired)!;
+  assert.equal(card.afterClickCoverage, "complete");
+  assert.equal(card.execution?.clickCompleted, true);
+  assert.equal(card.registrationConfirmed, false);
+  assert.equal(card.state, "review_signal");
+  assert.match(card.note!, /tracking request\(s\) began after the Reject control was clicked/);
+  assert.match(card.note!, /after-click observation/);
+  assert.equal(deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[repaired]}).score,
+    deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[historicalRow]}).score);
+  assert.deepEqual(result, original);
+  for (const invalid of [undefined, {}, { ...result.reportProjection, packetSha256: "f".repeat(64) },
+    { ...result.reportProjection, afterActionCapture: undefined },
+    { ...result.reportProjection, afterActionCapture: { ...result.reportProjection.afterActionCapture!, action: "accept" } },
+    { ...result.reportProjection, afterActionRequests: [] }]) {
+    assert.deepEqual(preserveRetainedRejectClickCapture([historicalRow], invalid), [historicalRow]);
+  }
+});

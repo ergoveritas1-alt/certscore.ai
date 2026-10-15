@@ -1450,7 +1450,11 @@ export function buildExecutiveRejectPathProjection(
   const execution = parsedExecution.success ? parsedExecution.data : undefined;
   const registrationConfirmed = execution?.consentConfirmed ?? retained.rejectInteractionConfirmed === true;
   const afterClickNote = afterClickSummary(retained, "reject");
-  const customerFacingNote = omitScoreMechanicsFromCustomerCopy(item.note) + afterClickNote;
+  const customerFacingNote = omitScoreMechanicsFromCustomerCopy(
+    item.status === "Review signal" && retained.rejectClickVerified === true
+      ? item.criticalEvidence.statusBasis
+      : item.note,
+  ) + afterClickNote;
   const timelineEvents = activityRows
     .map(formatRejectTimelineEvent)
     .filter((event): event is NonNullable<typeof event> => Boolean(event))
