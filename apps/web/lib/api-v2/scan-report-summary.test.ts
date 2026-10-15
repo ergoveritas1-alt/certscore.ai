@@ -79,6 +79,24 @@ function fixture(): ScanDetailResponse {
   } as unknown as ScanDetailResponse;
 }
 
+test("canonical accessibility example coverage no longer breaks report or status responses", () => {
+  const scan = fixture();
+  const audit = accessibilityProjectionFixture({ scanId: scan.scan.id });
+  const rows = [...audit.observation.violations, ...audit.observation.reviewItems];
+  const observedNodeCount = rows.reduce((total, row) => total + row.nodeCount, 0);
+  const retainedNodeCount = rows.reduce((total, row) => total + row.representativeNodes.length, 0);
+  audit.observation.exampleCoverage = { version: "breadth_before_detail.v1", observedNodeCount,
+    retainedNodeCount, omittedNodeCount: observedNodeCount - retainedNodeCount, byteBudgetLimited: false };
+  scan.runtimeArtifacts = { ...scan.runtimeArtifacts, accessibilityAudit: audit };
+  const before = JSON.stringify(scan);
+  const api = buildApiV2ScanResource(scan);
+  const status = buildApiV2ScanStatus(scan);
+  assert.deepEqual(api.accessibilityAudit?.exampleCoverage, audit.observation.exampleCoverage);
+  assert.deepEqual(status.accessibilityAudit, api.accessibilityAudit);
+  assert.equal(status.score, api.score);
+  assert.equal(JSON.stringify(scan), before);
+});
+
 test("report and API share the 85 score, Reject deduction and both After-Accept forms", () => {
   const scan = fixture();
   const api = buildApiV2ScanResource(scan);

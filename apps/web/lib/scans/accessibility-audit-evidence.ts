@@ -7,7 +7,7 @@ export function readAccessibilityAudit(value: unknown, scanId?: string): Accessi
 }
 
 /** Bounded public status. A zero failure count describes this automated run only. */
-export function projectAccessibilityAuditSummary(value: unknown, scanId?: string): (ApiAccessibilityAuditSummary & Pick<AccessibilityAuditObservation, "exampleCoverage">) | null {
+export function projectAccessibilityAuditSummary(value: unknown, scanId?: string): ApiAccessibilityAuditSummary | null {
   if (value === undefined || value === null) return null;
   const projection = readAccessibilityAudit(value, scanId);
   if (!projection) return { status: "limited" as const, required: true as const, scope: "starting_page_rendered_content" as const,

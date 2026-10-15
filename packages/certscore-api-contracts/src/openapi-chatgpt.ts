@@ -1,4 +1,5 @@
 import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
+import { accessibilityAuditEvidenceOpenApiProperties } from "./accessibility-audit.js";
 import { PULSE_CAPABILITIES, PULSE_PURPOSE_STATEMENT, PULSE_SCHEMA_VERSION, PULSE_STANDARD_DISCLAIMER } from "./pulse-v1.js";
 
 const pulseErrorResponses = {
@@ -211,6 +212,7 @@ export function buildPulseChatGptOpenApiDocument() {
               type: ["object", "null"], additionalProperties: false,
               description: "Required automated WCAG starting-page audit status and bounded counts. Limited or unavailable results are not clean results. Retrieve rule and element evidence through API v2 report-evidence?section=accessibility.",
               properties: {
+                ...accessibilityAuditEvidenceOpenApiProperties,
                 status: { type: "string", enum: ["completed", "limited", "failed", "not_testable"] }, required: { type: "boolean", enum: [true] },
                 scope: { type: "string", enum: ["starting_page_rendered_content"] }, engine: { type: "string", enum: ["axe-core"] },
                 engineVersion: { type: ["string", "null"] }, durationMs: { type: ["integer", "null"] },

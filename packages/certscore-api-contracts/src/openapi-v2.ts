@@ -1,4 +1,5 @@
 import { scanReportSummaryOpenApi } from "./scan-report-summary-openapi.js";
+import { accessibilityAuditEvidenceOpenApiProperties } from "./accessibility-audit.js";
 import { reportEvidencePageOpenApi } from "./report-page-openapi.js";
 import { detailedEvidenceOpenApiSchemas } from "./detailed-evidence-openapi.js";
 import { gpcBoundedObservationOpenApi } from "./gpc-bounded-observation-openapi.js";
@@ -1143,6 +1144,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           description: "Required automated WCAG A/AA audit of starting-page rendered content. Limited, failed and not_testable are not clean results. Retained rules and affected elements are available through report-evidence?section=accessibility. Historical scans may omit this field.",
           required: ["status", "required", "scope", "engine", "engineVersion", "durationMs", "failedRuleCount", "affectedNodeCount", "reviewRuleCount"],
           properties: {
+            ...accessibilityAuditEvidenceOpenApiProperties,
             status: { type: "string", enum: ["completed", "limited", "failed", "not_testable"] },
             required: { type: "boolean", const: true }, scope: { type: "string", const: "starting_page_rendered_content" },
             engine: { type: "string", const: "axe-core" }, engineVersion: { type: ["string", "null"] },
