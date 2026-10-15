@@ -595,6 +595,106 @@ export function resolveCanonicalCookieKnowledge(
   };
 }
 
+export const COOKIE_PURPOSE_CANDIDATE_VERSION = "certscore.cookie-purpose-candidate.v1";
+
+export type CanonicalCookiePurposeCandidate = {
+  artifactVersion: typeof COOKIE_PURPOSE_CANDIDATE_VERSION;
+  mode: "local_review";
+  productionProjectable: false;
+  scoreEffect: "none";
+  ruleId: string;
+  sourceRefs: string[];
+  current: CanonicalCookieKnowledge;
+  proposed: CanonicalCookieKnowledge;
+};
+
+// Candidate rules live with the canonical knowledge base, but are deliberately
+// excluded from the production resolver. Purpose is separate from essentiality:
+// these documented identities do not prove a site-specific consent exemption.
+const COOKIE_PURPOSE_CANDIDATE_RULES: readonly (CookieKnowledgeRule & {
+  ruleId: string;
+  sourceRefs: readonly string[];
+})[] = [
+  {
+    pattern: /^aws-waf-token$/,
+    ruleId: "aws_waf_challenge_token",
+    category: "security",
+    dataTypes: ["security token", "browser and interaction signals"],
+    description: "AWS WAF browser-challenge and threat-mitigation token. Its security purpose does not by itself establish that this site's use is exempt from consent.",
+    essentiality: "unknown",
+    vendor: "Amazon Web Services",
+    sourceRefs: ["https://docs.aws.amazon.com/waf/latest/developerguide/waf-tokens-details.html"],
+  },
+  {
+    pattern: /^cookieyes-consent$/,
+    ruleId: "cookieyes_consent_preferences",
+    category: "consent_management",
+    dataTypes: ["consent preferences"],
+    description: "CookieYes preference cookie used to retain a visitor's cookie choices. Presence alone does not establish acceptance or refusal.",
+    essentiality: "unknown",
+    vendor: "CookieYes",
+    sourceRefs: ["https://www.cookieyes.com/documentation/subdomain-consent-sharing/"],
+  },
+  {
+    pattern: /^axeptio_cookies$/,
+    ruleId: "axeptio_consent_record",
+    category: "consent_management",
+    dataTypes: ["consent state", "consent timestamp", "consent-record identifier"],
+    description: "Axeptio cookie retaining a consent record and its metadata. Presence alone does not establish a particular visitor decision.",
+    essentiality: "unknown",
+    vendor: "Axeptio",
+    sourceRefs: ["https://support.axeptio.eu/en/articles/274085-does-axeptio-place-cookies"],
+  },
+  {
+    pattern: /^axeptio_all_vendors$/,
+    ruleId: "axeptio_declared_vendor_list",
+    category: "consent_management",
+    dataTypes: ["declared consent-widget vendors"],
+    description: "Axeptio cookie listing entries declared in its consent widget. The list is not evidence that all listed vendors were accepted or loaded.",
+    essentiality: "unknown",
+    vendor: "Axeptio",
+    sourceRefs: ["https://support.axeptio.eu/en/articles/274085-does-axeptio-place-cookies"],
+  },
+  {
+    pattern: /^axeptio_authorized_vendors$/,
+    ruleId: "axeptio_selected_vendor_list",
+    category: "consent_management",
+    dataTypes: ["vendor consent preferences"],
+    description: "Axeptio cookie retaining selected vendor preferences. Its name or presence alone does not verify the current consent decision or runtime behavior.",
+    essentiality: "unknown",
+    vendor: "Axeptio",
+    sourceRefs: ["https://support.axeptio.eu/en/articles/274085-does-axeptio-place-cookies"],
+  },
+];
+
+/** Local evidence review only. Never replaces a persisted classification. */
+export function resolveCanonicalCookiePurposeCandidate(
+  cookieName: string | null | undefined,
+  context: CanonicalCookieContext = {},
+): CanonicalCookiePurposeCandidate | null {
+  const current = resolveCanonicalCookieKnowledge(cookieName, context);
+  if (current.category !== "unknown") return null;
+  const rule = COOKIE_PURPOSE_CANDIDATE_RULES.find((candidate) => candidate.pattern.test(current.name));
+  if (!rule) return null;
+  return {
+    artifactVersion: COOKIE_PURPOSE_CANDIDATE_VERSION,
+    mode: "local_review",
+    productionProjectable: false,
+    scoreEffect: "none",
+    ruleId: rule.ruleId,
+    sourceRefs: [...rule.sourceRefs],
+    current,
+    proposed: {
+      name: current.name,
+      category: rule.category,
+      dataTypes: [...rule.dataTypes],
+      description: rule.description,
+      essentiality: rule.essentiality,
+      vendor: rule.vendor,
+    },
+  };
+}
+
 function canonicalCookieContextHosts(context: CanonicalCookieContext): string[] {
   const values = [
     context.cookieDomain,

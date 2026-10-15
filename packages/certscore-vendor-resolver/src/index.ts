@@ -12,10 +12,13 @@ import type {
 export {
   isCanonicalIdSyncEndpoint,
   resolveCanonicalCookieKnowledge,
+  resolveCanonicalCookiePurposeCandidate,
+  COOKIE_PURPOSE_CANDIDATE_VERSION,
   resolveCanonicalVendorLegalContext,
   type CanonicalCookieCategory,
   type CanonicalCookieContext,
   type CanonicalCookieKnowledge,
+  type CanonicalCookiePurposeCandidate,
   type CanonicalVendorLegalContext,
   type TransferMechanism,
 } from "./cookie-knowledge-base";
