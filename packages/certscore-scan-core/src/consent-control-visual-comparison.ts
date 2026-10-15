@@ -63,19 +63,32 @@ const luminance = (rgb: Rgb) => rgb.map(v => v / 255).map(v => v <= 0.04045 ? v 
  * Map/string implementation. Fixed integer histograms avoid per-pixel keys
  * and sorting without changing sampling, thresholds or evidence. */
 export function dominantQuantizedRgb(pixels: Rgb[]) {
-  const counts = new Uint32Array(4096), sums = new Uint32Array(4096 * 3), order: number[] = [];
-  for (const rgb of pixels) {
-    const key = (rgb[0] >> 4) * 256 + (rgb[1] >> 4) * 16 + (rgb[2] >> 4);
-    if (counts[key] === 0) order.push(key);
-    counts[key]!++;
-    sums[key * 3]! += rgb[0]; sums[key * 3 + 1]! += rgb[1]; sums[key * 3 + 2]! += rgb[2];
-  }
+  const histogram = createRgbHistogram();
+  for (const rgb of pixels) addHistogramPixel(histogram, rgb[0], rgb[1], rgb[2]);
+  return dominantHistogramRgb(histogram);
+}
+
+function createRgbHistogram() {
+  return {counts: new Uint32Array(4096), sums: new Uint32Array(4096 * 3), order: [] as number[], total: 0};
+}
+
+function addHistogramPixel(histogram: ReturnType<typeof createRgbHistogram>, red: number, green: number, blue: number) {
+  const key = (red >> 4) * 256 + (green >> 4) * 16 + (blue >> 4);
+  if (histogram.counts[key] === 0) histogram.order.push(key);
+  histogram.counts[key]!++;
+  histogram.sums[key * 3]! += red;
+  histogram.sums[key * 3 + 1]! += green;
+  histogram.sums[key * 3 + 2]! += blue;
+  histogram.total++;
+}
+
+function dominantHistogramRgb({counts, sums, order, total}: ReturnType<typeof createRgbHistogram>) {
   let winner: number | undefined;
   for (const key of order) if (winner === undefined || counts[key]! > counts[winner]!) winner = key;
   if (winner === undefined) return undefined;
   const count = counts[winner]!;
   return {rgb: [sums[winner * 3]! / count, sums[winner * 3 + 1]! / count, sums[winner * 3 + 2]! / count] as Rgb,
-    fraction: count / pixels.length};
+    fraction: count / total};
 }
 
 
@@ -161,41 +174,58 @@ export async function measureConsentControlVisualComparison(input: {
   const pair = comparisonPair(geometry);
   if (!pair) return undefined;
   try {
-    const { data, info } = await sharp(screenshotBytes, { limitInputPixels: 4_000_000 }).removeAlpha().toColourspace("srgb").raw().toBuffer({ resolveWithObject: true });
     // Full-page, clipped, scaled and device-pixel-ratio captures need a separately
     // verified transform. Do not guess one from image dimensions.
-    if (info.width !== geometry.viewport.width || info.height !== geometry.viewport.height || info.channels !== 3 ||
+    const decoder = sharp(screenshotBytes, { limitInputPixels: 4_000_000 });
+    const metadata = await decoder.metadata();
+    if (metadata.width !== geometry.viewport.width || metadata.height !== geometry.viewport.height ||
         Date.now() >= (input.deadlineAtMs ?? Infinity)) return undefined;
-    const pixel = (x: number, y: number): Rgb => {
-      const at = (y * info.width + x) * 3;
-      return [data[at]!, data[at + 1]!, data[at + 2]!];
-    };
+    const boxes = [pair.accept.boundingBox, pair.reject.boundingBox];
+    if (boxes.some(({x, y, width, height}) => x < 12 || y < 12 ||
+        x + width + 12 > metadata.width! || y + height + 12 > metadata.height! ||
+        width < 24 || height < 16 || width * height > 150_000)) return undefined;
+    // Decode one exact analysis rectangle containing every original sample,
+    // including the full surrounding ring. No resize, resampling, extra decode
+    // or cropped artifact. The original full image remains retained and hashed.
+    const left = Math.floor(Math.min(...boxes.map(box => box.x))) - 12;
+    const top = Math.floor(Math.min(...boxes.map(box => box.y))) - 12;
+    const crop = {left, top,
+      width: Math.ceil(Math.max(...boxes.map(box => box.x + box.width))) + 12 - left,
+      height: Math.ceil(Math.max(...boxes.map(box => box.y + box.height))) + 12 - top};
+    const { data, info } = await decoder.extract(crop).removeAlpha().toColourspace("srgb").raw().toBuffer({ resolveWithObject: true });
+    if (info.width !== crop.width || info.height !== crop.height || info.channels !== 3 ||
+        Date.now() >= (input.deadlineAtMs ?? Infinity)) return undefined;
     const measure = (candidate: ConsentControlCandidateEvidence) => {
       const { x, y, width, height } = candidate.boundingBox;
-      if (x < 12 || y < 12 || x + width + 12 > info.width || y + height + 12 > info.height || width < 24 || height < 16 || width * height > 150_000) return undefined;
       const left = Math.floor(x), top = Math.floor(y), right = Math.ceil(x + width), bottom = Math.ceil(y + height);
-      const interior: Rgb[] = [], background: Rgb[] = [], emphasis: Rgb[] = [];
+      const interior = createRgbHistogram(), background = createRgbHistogram();
+      const emphasisOffsets: number[] = [];
       // Subsample large interiors; per-control work stays under 40k pixels.
       const stride = Math.max(1, Math.ceil(Math.sqrt(width * height / 20_000)));
       for (let py = top - 12; py < bottom + 12; py++) for (let px = left - 12; px < right + 12; px++) {
+        const at = ((py - crop.top) * info.width + px - crop.left) * 3;
         if (px >= left + 4 && px < right - 4 && py >= top + 4 && py < bottom - 4) {
-          if ((px - left) % stride === 0 && (py - top) % stride === 0) interior.push(pixel(px, py));
-        } else if (px < left - 9 || px >= right + 9 || py < top - 9 || py >= bottom + 9) background.push(pixel(px, py));
-        else if (px < left || px >= right || py < top || py >= bottom) emphasis.push(pixel(px, py));
+          if ((px - left) % stride === 0 && (py - top) % stride === 0)
+            addHistogramPixel(interior, data[at]!, data[at + 1]!, data[at + 2]!);
+        } else if (px < left - 9 || px >= right + 9 || py < top - 9 || py >= bottom + 9)
+          addHistogramPixel(background, data[at]!, data[at + 1]!, data[at + 2]!);
+        else if (px < left || px >= right || py < top || py >= bottom) emphasisOffsets.push(at);
       }
-      const fill = dominantQuantizedRgb(interior), surrounding = dominantQuantizedRgb(background);
-      if (!fill || !surrounding || fill.fraction < 0.6 || surrounding.fraction < 0.6 || !emphasis.length) return undefined;
+      const fill = dominantHistogramRgb(interior), surrounding = dominantHistogramRgb(background);
+      if (!fill || !surrounding || fill.fraction < 0.6 || surrounding.fraction < 0.6 || !emphasisOffsets.length) return undefined;
       const a = luminance(fill.rgb), b = luminance(surrounding.rgb);
-      const changed = emphasis.filter(rgb => Math.hypot(...rgb.map((v, i) => v - surrounding.rgb[i]!)) >= 60).length;
+      let changed = 0;
+      for (const at of emphasisOffsets) if (Math.hypot(data[at]! - surrounding.rgb[0],
+        data[at + 1]! - surrounding.rgb[1], data[at + 2]! - surrounding.rgb[2]) >= 60) changed++;
       return { candidateId: candidate.candidateId, bounds: [x, y, width, height] as [number, number, number, number],
         fillContrast: round((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)),
-        outerEmphasisFraction: round(changed / emphasis.length), backgroundUniformity: round(surrounding.fraction), interiorUniformity: round(fill.fraction) };
+        outerEmphasisFraction: round(changed / emphasisOffsets.length), backgroundUniformity: round(surrounding.fraction), interiorUniformity: round(fill.fraction) };
     };
     const accept = measure(pair.accept), reject = measure(pair.reject);
     if (!accept || !reject || Date.now() >= (input.deadlineAtMs ?? Infinity)) return undefined;
     const parsed = consentControlVisualComparisonSchema.safeParse({ version: CONSENT_VISUAL_COMPARISON_VERSION,
       documentToken: geometry.documentIdentity.token, screenshotArtifactRef: geometry.screenshotArtifactRef,
-      screenshotSha256: createHash("sha256").update(screenshotBytes).digest("hex"), imageWidth: info.width, imageHeight: info.height, captureSkewMs, accept, reject });
+      screenshotSha256: createHash("sha256").update(screenshotBytes).digest("hex"), imageWidth: metadata.width, imageHeight: metadata.height, captureSkewMs, accept, reject });
     return parsed.success ? parsed.data : undefined;
   } catch { return undefined; }
 }

@@ -1,0 +1,354 @@
+{
+  "recordVersion": "cmp_exact_pixel_sampling_local.v1",
+  "createdAt": "2026-10-15T23:11:00.533555+00:00",
+  "sourceCommit": "42d21ac8",
+  "scope": "Local canonical pixel-analysis optimization and one fresh EU-Ireland Cookiebot scan. No deployment, push, historical report rewrite or score-policy change.",
+  "policy": "docs/certscore-v2/consent-exact-pixel-sampling-policy.md",
+  "outputRoot": "/Users/benmasek/WC01/outputs/cmp-pixel-analysis-local-2026-10-15",
+  "changes": [
+    "Verify original full-image dimensions, then decode one exact analysis rectangle containing both controls and all original surrounding sample pixels. Preserve original screenshot, coordinates, full viewport dimensions, byte hash and all sampling/eligibility constraints.",
+    "Stream interior and background samples into equivalent histograms; retain emphasis offsets instead of per-pixel RGB arrays. Preserve four-bit bins, sample order, sums, averages, ties, luminance, distance calculations and all thresholds.",
+    "Keep one shared 80 ms allowance and one pixel decode. Do not credit expired results or infer prominence from screenshots alone."
+  ],
+  "qualityAssessment": {
+    "originalScreenshotUnchanged": true,
+    "noSavedCrop": true,
+    "noResizeOrNewSubsampling": true,
+    "originalFullImageDimensionsVerified": true,
+    "originalControlCoordinatesAndSourceHashPreserved": true,
+    "same12PixelSurroundingRings": true,
+    "parityFixtures": [
+      "horizontal controls",
+      "vertical controls",
+      "fractional coordinates",
+      "viewport edges",
+      "textured pixels",
+      "nonuniform pixels",
+      "large controls with existing stride",
+      "transparent PNG",
+      "JPEG"
+    ],
+    "retainedReplay": {
+      "generatedAt": "2026-10-15T23:09:06.504067+00:00",
+      "scope": "Read-only retained safe-image replay; no historical score, geometry, report or safety decision rewritten. Timings are local replay observations, not a production benchmark.",
+      "rows": [
+        {
+          "site": "cookiebot",
+          "scanId": "cmp-visual-binding-local-cookiebot-d687f8ff-a9a3-4829-ba32-177dd84d5314",
+          "baselineMedianMs": 8.547,
+          "optimizedMedianMs": 3.997,
+          "reductionPercent": 53.2,
+          "exactMetricsMatch": true,
+          "boundedReplayCount": 10,
+          "boundedReplaySuccesses": 10
+        },
+        {
+          "site": "trustarc",
+          "scanId": "cmp-visual-binding-local-trustarc-47e4ac74-8498-43bd-9d8f-efc147d724d0",
+          "baselineMedianMs": 5.394500000000001,
+          "optimizedMedianMs": 4.5365,
+          "reductionPercent": 15.9,
+          "exactMetricsMatch": true,
+          "boundedReplayCount": 10,
+          "boundedReplaySuccesses": 10
+        },
+        {
+          "site": "cookiebot",
+          "scanId": "cmp-visual-binding-local-cookiebot-8b98d863-9ef3-4294-9fa4-6d956af28e50",
+          "baselineMedianMs": 8.029,
+          "optimizedMedianMs": 3.8265000000000002,
+          "reductionPercent": 52.3,
+          "exactMetricsMatch": true,
+          "boundedReplayCount": 10,
+          "boundedReplaySuccesses": 10
+        }
+      ]
+    },
+    "replayDoesNotUpgradeHistoricalReports": true
+  },
+  "freshVerification": {
+    "scanId": "cmp-pixel-local-cookiebot-f4e60d5a-a932-4f1e-9be3-074ebbdde3dd",
+    "targetUrl": "https://www.cookiebot.com/",
+    "country": {
+      "browserIp": "63.33.9.201",
+      "httpIp": "63.33.9.201",
+      "country": "IE",
+      "awsRegion": "eu-west-1",
+      "verifiedAt": "2026-10-15T23:08:28.721Z"
+    },
+    "status": "completed",
+    "homepageScreenshot": {
+      "status": "available"
+    },
+    "visualComparison": {
+      "version": "consent_control_visual_comparison.v1",
+      "documentToken": "1D0ED260C8909B69543BBE6DE2426DBA",
+      "screenshotArtifactRef": "/Users/benmasek/WC01/outputs/cmp-pixel-analysis-local-2026-10-15/fresh/cookiebot/cmp-pixel-local-cookiebot-f4e60d5a-a932-4f1e-9be3-074ebbdde3dd/lanes/consent_proof/screenshot-pre-consent-geometry-proof.png",
+      "screenshotSha256": "8806295274919b571b0b0c3ccd7ec4735b8e59f8ce06f40891f15cea29e7fa94",
+      "imageWidth": 1366,
+      "imageHeight": 900,
+      "captureSkewMs": 94,
+      "accept": {
+        "candidateId": "candidate_1",
+        "bounds": [
+          830.5,
+          558.5,
+          280,
+          58
+        ],
+        "fillContrast": 2.759,
+        "outerEmphasisFraction": 0.018,
+        "backgroundUniformity": 0.924,
+        "interiorUniformity": 0.971
+      },
+      "reject": {
+        "candidateId": "candidate_0",
+        "bounds": [
+          255.5,
+          558.5,
+          280,
+          58
+        ],
+        "fillContrast": 2.759,
+        "outerEmphasisFraction": 0.018,
+        "backgroundUniformity": 0.924,
+        "interiorUniformity": 0.981
+      }
+    },
+    "pixelDiagnostics": [
+      {
+        "label": "consent pixel comparison",
+        "durationMs": 0,
+        "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent_cmp_controls\",\"allowanceMs\":0,\"elapsedMs\":0}",
+        "outcome": "skipped"
+      },
+      {
+        "label": "consent pixel comparison",
+        "durationMs": 44,
+        "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"retained\",\"artifactId\":\"screenshot_pre_consent_geometry_proof\",\"allowanceMs\":80,\"elapsedMs\":44}",
+        "outcome": "completed"
+      }
+    ],
+    "cmpComparison": {
+      "scope": "Fresh local sharded scans through verified Ireland egress. Canonical local materialization, concern policy, unified finding/checklist and CMP projection. No deployed or historical report changes.",
+      "generatedAt": "2026-10-15T23:09:18.755Z",
+      "baselineUnresolved": 7,
+      "resolved": 1,
+      "remainingOriginal": 6,
+      "newlyUnresolved": 0,
+      "freshUnresolved": 6,
+      "sites": [
+        {
+          "site": "cookiebot",
+          "oldScanId": "cmp-visual-binding-local-cookiebot-8b98d863-9ef3-4294-9fa4-6d956af28e50",
+          "newScanId": "cmp-pixel-local-cookiebot-f4e60d5a-a932-4f1e-9be3-074ebbdde3dd",
+          "baselineUnresolved": 7,
+          "resolved": 1,
+          "remainingOriginal": 6,
+          "newlyUnresolved": 0,
+          "totalFreshUnresolved": 6,
+          "rows": [
+            {
+              "id": "banner",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Consent surface observed on the initial visit.",
+              "sourceIds": [
+                "consentControlAssessment.surface"
+              ]
+            },
+            {
+              "id": "reject",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "First-layer Reject or equivalent refusal control.",
+              "sourceIds": [
+                "consentControlAssessment.controls.reject"
+              ]
+            },
+            {
+              "id": "prominence",
+              "before": "Incomplete",
+              "after": "Observed",
+              "wasUnresolved": true,
+              "resolved": true,
+              "newlyUnresolved": false,
+              "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+              "sourceIds": [
+                "consent.visual_comparison.observed"
+              ]
+            },
+            {
+              "id": "categories",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Selectable category controls were not verified in the inspected surface.",
+              "sourceIds": []
+            },
+            {
+              "id": "services",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Service names were not captured; deeper preference sections were not inspected.",
+              "sourceIds": []
+            },
+            {
+              "id": "privacy_link",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Public privacy-policy link or surface on the scanned page.",
+              "sourceIds": [
+                "privacy_notice_availability"
+              ]
+            },
+            {
+              "id": "privacy_access",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "consent_record",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Browser consent records were stored or updated after Accept.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "implementation",
+              "before": "Partially assessed",
+              "after": "Partially assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Accept: 2.92-second activity check completed.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "duration",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "declared_not_found",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+              "sourceIds": []
+            },
+            {
+              "id": "found_not_declared",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+              "sourceIds": []
+            },
+            {
+              "id": "cookie_information",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Cookie purpose and duration information was not retained.",
+              "sourceIds": []
+            }
+          ]
+        }
+      ]
+    },
+    "sourceHashes": {
+      "CanonicalEvidenceBundle.json": "b35ae9d7fd8d70ca21184c335fb5c790e96d57c05744b58db56726eb76b8e799",
+      "ConsentControlGeometryEvidence.json": "37d66db2cff663526f92ce9dbbaf391ed0b3e25937b5a7f1892af3f2fdbc00a1",
+      "CmpPreferencesEvidencePacket.json": "24c31256b308e1bd42eea4ee59a39727bfc85448a6bf0b9b69f86213f085b53f"
+    },
+    "allPriorReportsPreserved": {
+      "verifiedAt": "2026-10-15T23:10:02.730396+00:00",
+      "fileCount": 52,
+      "allOriginalFilesUnchanged": true
+    },
+    "targetedDiagnosticOnly": true,
+    "freshRunCount": 1
+  },
+  "tests": {
+    "regressions": {
+      "passed": 126,
+      "failed": 0,
+      "scope": "Pixel comparison, retained visual packet, screenshot binding, Lambda safety and canonical CMP projection."
+    },
+    "additionalParity": {
+      "passed": 15,
+      "failed": 0,
+      "scope": "Final parity test includes all nine pixel/layout/format cases."
+    },
+    "typechecks": [
+      "scan-core passed",
+      "Lambda passed"
+    ],
+    "registry": "100 rotating targets, six stable lanes, ten-site default sample passed.",
+    "rawLogsDirectory": "/Users/benmasek/WC01/outputs/cmp-pixel-analysis-local-2026-10-15/checks"
+  },
+  "operations": {
+    "proxyCleanup": {
+      "temporaryRuleRemoved": true,
+      "sshStopped": true,
+      "finishedAt": 1792105759.774884
+    },
+    "centralContactRunKey": "cmp-pixel-analysis-local-20261015",
+    "manualLedger": "One contact-only Cookiebot entry updated; other targets preserved.",
+    "contactCount": 1
+  },
+  "cost": {
+    "oneTimeVerificationEstimateUsd": "Below $1 total using existing Ireland proxy; no new standing capacity.",
+    "compute": "Expected lower CPU and raw-buffer work; no added request, decode attempt, model call, retry or wait.",
+    "normalRecoveredMetadataEstimateUsdPerMonth": "Below $0.01 at 100,000 scans/month and 30-day retention."
+  },
+  "limitations": [
+    "An 80 ms deadline remains a bounded coverage limit and can still expire under future resource contention. Preserve unknown states when it does.",
+    "The fresh scan still has six incomplete/unassessed CMP checks; resolving prominence does not invent deeper category, service or cookie inventory evidence.",
+    "This targeted scan is not the scanner release acceptance cohort. No production rollout authorized."
+  ],
+  "deployed": false,
+  "historicalReportsChanged": false
+}

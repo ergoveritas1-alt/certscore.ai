@@ -270,3 +270,70 @@ test("fixed histogram preserves the original colour-bin averages, fractions and 
   const varied: Array<[number,number,number]>=Array.from({length:40000},(_,i)=>[i%256,(i*7)%256,(i*31)%256]);
   for (const pixels of [[],tie,tie.toReversed(),uniform,varied]) assert.deepEqual(dominantQuantizedRgb(pixels),reference(pixels));
 });
+
+test("exact analysis rectangle and streaming samples match full-frame measurements without losing surrounding pixels", async () => {
+  const reference = async (fixture: Awaited<ReturnType<typeof consentVisualFixture>>) => {
+    const {data, info} = await sharp(fixture.screenshotBytes).removeAlpha().toColourspace("srgb").raw().toBuffer({resolveWithObject: true});
+    const round = (n: number) => Math.round(n * 1000) / 1000;
+    const luminance = (rgb: number[]) => rgb.map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i]!, 0);
+    const pixel = (x: number, y: number): [number, number, number] => {
+      const at = (y * info.width + x) * 3; return [data[at]!, data[at + 1]!, data[at + 2]!];
+    };
+    const measure = (index: number) => {
+      const candidate = fixture.geometry.candidates[index]!;
+      const {x, y, width, height} = candidate.boundingBox;
+      const left = Math.floor(x), top = Math.floor(y), right = Math.ceil(x + width), bottom = Math.ceil(y + height);
+      const interior: Array<[number, number, number]> = [], background: Array<[number, number, number]> = [], emphasis: Array<[number, number, number]> = [];
+      const stride = Math.max(1, Math.ceil(Math.sqrt(width * height / 20_000)));
+      for (let py = top - 12; py < bottom + 12; py++) for (let px = left - 12; px < right + 12; px++) {
+        if (px >= left + 4 && px < right - 4 && py >= top + 4 && py < bottom - 4) {
+          if ((px - left) % stride === 0 && (py - top) % stride === 0) interior.push(pixel(px, py));
+        } else if (px < left - 9 || px >= right + 9 || py < top - 9 || py >= bottom + 9) background.push(pixel(px, py));
+        else if (px < left || px >= right || py < top || py >= bottom) emphasis.push(pixel(px, py));
+      }
+      const fill = dominantQuantizedRgb(interior), surrounding = dominantQuantizedRgb(background);
+      if (!fill || !surrounding || fill.fraction < 0.6 || surrounding.fraction < 0.6 || !emphasis.length) return undefined;
+      const a = luminance(fill.rgb), b = luminance(surrounding.rgb);
+      const changed = emphasis.filter(rgb => Math.hypot(...rgb.map((v, i) => v - surrounding.rgb[i]!)) >= 60).length;
+      return {candidateId: candidate.candidateId, bounds: [x, y, width, height],
+        fillContrast: round((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)), outerEmphasisFraction: round(changed / emphasis.length),
+        backgroundUniformity: round(surrounding.fraction), interiorUniformity: round(fill.fraction)};
+    };
+    return {accept: measure(0), reject: measure(1)};
+  };
+  for (const mode of ["row", "stacked", "fractional", "edge", "textured", "nonuniform", "large", "rgba", "jpeg"]) {
+    const fixture = await consentVisualFixture("outline", mode === "stacked");
+    if (mode === "fractional" || mode === "edge") {
+      for (const [index, candidate] of fixture.geometry.candidates.slice(0, 2).entries()) {
+        const b = candidate.boundingBox;
+        const x = mode === "edge" ? 12 + index * 220 : b.x + 0.35, y = mode === "edge" ? 12 : b.y + 0.6;
+        Object.assign(b, {x, y, left: x, top: y, right: x + b.width, bottom: y + b.height});
+      }
+      if (mode === "edge") Object.assign(fixture.geometry.containers[0]!.boundingBox, {x: 0, y: 0, left: 0, top: 0, right: 640, bottom: 300, width: 640, height: 300});
+    }
+    if (mode === "textured" || mode === "nonuniform") {
+      const {data, info} = await sharp(fixture.screenshotBytes).removeAlpha().raw().toBuffer({resolveWithObject: true});
+      for (let i = 0; i < data.length; i++) if (mode === "nonuniform" || i % 7 === 0) data[i] = mode === "nonuniform" ? (i * 31) % 256 : Math.min(255, data[i]! + i % 8);
+      fixture.screenshotBytes = await sharp(data, {raw: {width: info.width, height: info.height, channels: 3}}).png().toBuffer();
+    }
+    if (mode === "large") {
+      for (const [index, candidate] of fixture.geometry.candidates.slice(0, 2).entries()) {
+        const b = candidate.boundingBox, x = index === 0 ? 60 : 380, width = index === 0 ? 300 : 220;
+        Object.assign(b, {x, left: x, width, height: 80, right: x + width, bottom: b.y + 80});
+      }
+    }
+    if (mode === "rgba") fixture.screenshotBytes = await sharp(fixture.screenshotBytes).ensureAlpha(0.4).png().toBuffer();
+    if (mode === "jpeg") fixture.screenshotBytes = await sharp(fixture.screenshotBytes).jpeg({quality: 90, chromaSubsampling: "4:4:4"}).toBuffer();
+    const expected = await reference(fixture);
+    const actual = await measureConsentControlVisualComparison(fixture);
+    if (!expected.accept || !expected.reject) assert.equal(actual, undefined, mode);
+    else {
+      assert.ok(actual, mode);
+      assert.deepEqual(actual.accept, expected.accept, mode);
+      assert.deepEqual(actual.reject, expected.reject, mode);
+      assert.equal(actual.imageWidth, fixture.geometry.viewport.width, "report original full-image dimensions");
+      assert.equal(actual.imageHeight, fixture.geometry.viewport.height);
+    }
+  }
+});
