@@ -80,6 +80,7 @@ import type { ArtifactWriter } from "../artifact-writer.js";
 import { consentGeometryProofCdpBudget, consentProminenceSettleBudgetMs } from "../consent-geometry-proof-budget.js";
 import { isPairedConsentGeometryReady } from "../consent-paired-geometry-readiness.js";
 import { bindConsentGeometryScreenshot, preferredPreConsentScreenshotRef } from "../consent-geometry-screenshot-binding.js";
+import { bindAccessibilityNodesToDom } from "../consent-accessibility-dom-binding.js";
 import { createConsentVisualComparisonCollector } from "../consent-control-visual-comparison.js";
 import { captureDocumentBoundValue, sameDocumentCaptureBinding, type DocumentBoundCapture } from "../document-bound-capture.js";
 import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
@@ -1726,6 +1727,7 @@ export async function preConsentRuntimeScanner(
         "Dedicated consent-proof lane does not duplicate runtime transport capture.",
       );
     }
+    let evidenceQuietCompleted = false;
     const evidenceQuietPromise = recordTiming(
       timingBreakdown,
       "passive evidence quiet wait",
@@ -1738,16 +1740,16 @@ export async function preConsentRuntimeScanner(
         tracker: passiveEvidenceActivity,
       }),
       (result) => result.status === "timed_out" ? "timed_out" : "completed",
-    );
+    ).then(result => { evidenceQuietCompleted = true; return result; });
     let preScreenshotConsentObservation: ConsentUiObservation | undefined;
     if (screenshotMode === "always") {
       if (earlyScreenshotCapturePromise) await earlyScreenshotCapturePromise;
-      // Both lanes started immediately. Await them together before later
-      // recovery work so neither visual nor structured evidence is discarded.
-      [preScreenshotConsentObservation] = await Promise.all([
-        consentUiObservationPromise,
-        evidenceQuietPromise,
-      ]);
+      // The passive request gate must still finish before final evidence is
+      // frozen. An independent consent-proof session can prepare its existing
+      // positive packet while that gate runs, giving safety review useful
+      // overlap instead of starting it immediately before finalization.
+      preScreenshotConsentObservation = await consentUiObservationPromise;
+      if (captureScope !== "consent_proof") await evidenceQuietPromise;
       const earlyConsentGeometry = await earlyConsentGeometryPromise;
       if (
         earlyConsentGeometry &&
@@ -1895,14 +1897,14 @@ export async function preConsentRuntimeScanner(
         }
       }
     }
-    if (screenshotMode !== "always") {
+    const positiveConsentCaptureCanOverlapQuiet = captureScope === "consent_proof" && screenshotMode === "always" &&
+      preScreenshotConsentObservation?.documentReadyState === "complete" &&
+      preScreenshotConsentObservation.acceptControlObserved && preScreenshotConsentObservation.rejectControlObserved &&
+      preScreenshotConsentObservation.managePreferencesControlObserved;
+    if (!positiveConsentCaptureCanOverlapQuiet) {
       await evidenceQuietPromise;
+      evidenceQuietCompleted = true;
     }
-    recordInstantTiming(
-      timingBreakdown,
-      "network capture",
-      `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation and the bounded evidence-aware quiet window.`,
-    );
 
     await revealDeferredDialog();
 
@@ -1994,7 +1996,7 @@ export async function preConsentRuntimeScanner(
           path: settledScreenshotPath,
           url: page.url(),
           documentIdentity: settledDocumentIdentity,
-          pagePhase: "network_idle",
+          pagePhase: evidenceQuietCompleted ? "network_idle" : "dom_content_loaded",
           consentStateAtTime: "pre_consent",
         };
         screenshots.unshift(settledScreenshot);
@@ -2070,7 +2072,9 @@ export async function preConsentRuntimeScanner(
               pairedGeometry.geometry.summary.confidence > 0 &&
               pairedGeometry.geometry.pageUrl !== "about:blank" &&
               pairedGeometry.geometry.viewport.width > 0 &&
-              pairedGeometry.geometry.viewport.height > 0;
+              pairedGeometry.geometry.viewport.height > 0 &&
+              (evidenceQuietCompleted || (pairedGeometry.geometry.summary.firstLayerAccept &&
+                pairedGeometry.geometry.summary.firstLayerReject && pairedGeometry.geometry.summary.firstLayerOptions));
             const geometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
               "ConsentControlGeometryEvidence.json",
               {
@@ -2151,6 +2155,14 @@ export async function preConsentRuntimeScanner(
 
       }
     }
+
+    await evidenceQuietPromise;
+    evidenceQuietCompleted = true;
+    recordInstantTiming(timingBreakdown, "network capture",
+      `Captured ${networkEvents.length} request events and ${networkResponseEvents.length} response events during navigation and the bounded evidence-aware quiet window.`);
+    if (positiveConsentCaptureCanOverlapQuiet) recordInstantTiming(timingBreakdown,
+      "positive consent capture overlapped quiet wait",
+      "Existing positive A/R/O, screenshot and geometry capture overlapped the unchanged passive request gate. The gate completed before final evidence freeze; no absence conclusion used the early window.");
 
     const lateAccessibilityRetryEligible = captureConsentEvidence &&
       earlyScreenshotCaptured &&
@@ -9330,6 +9342,7 @@ type AccessibilityNodeValue = {
 };
 
 export type ConsentAccessibilityTreeNode = {
+  domBinding?: ConsentUiObservation["controls"][number]["domBinding"];
   visibilityEvidence?: "box_model_verified" | "unverified";
   backendDOMNodeId?: number;
   properties?: Array<{ name: string; value?: AccessibilityNodeValue }>;
@@ -9361,6 +9374,7 @@ async function readAccessibilityConsentInventory(page: Page, timeoutMs = 6_000):
     (async () => {
       const client = await page.context().newCDPSession(page);
       clientRef.current = client;
+      const documentBefore = {url: page.url(), identity: currentBrowserDocumentIdentity(page)};
       const result = await client.send("Accessibility.getFullAXTree", {} as never) as {
         nodes?: ConsentAccessibilityTreeNode[];
       };
@@ -9369,8 +9383,12 @@ async function readAccessibilityConsentInventory(page: Page, timeoutMs = 6_000):
         result.nodes ?? [],
         page.viewportSize(),
       );
+      const boundNodes = await bindAccessibilityNodesToDom(client, firstLayerNodes, documentBefore);
+      const documentAfter = currentBrowserDocumentIdentity(page);
+      if (page.url() !== documentBefore.url || documentBefore.identity?.source !== documentAfter?.source ||
+          documentBefore.identity?.token !== documentAfter?.token) throw new Error("Accessibility document changed during capture.");
       return {
-        ...consentControlsFromAccessibilityTree(firstLayerNodes, page.url()),
+        ...consentControlsFromAccessibilityTree(boundNodes, page.url()),
         captureStatus: "completed" as const,
       };
     })(),
@@ -9654,7 +9672,8 @@ export function consentControlsFromAccessibilityTree(
       label,
       role,
       selectorHint: `ax:${node.nodeId}`,
-      tagName: "ax-node",
+      tagName: node.domBinding?.tagName ?? "ax-node",
+      domBinding: node.domBinding,
       visible: node.visibilityEvidence === "box_model_verified",
       visibilityEvidence: node.visibilityEvidence ?? "unverified",
       consentContextEvidence: "local_surface",

@@ -12,10 +12,11 @@ import { imageDigest, MAX_REVIEW_IMAGE_BYTES, readBoundedImage, verifiedPairedSc
 export const DEFAULT_SCREENSHOT_SAFETY_MODEL = "omni-moderation-latest";
 export const DEFAULT_SCREENSHOT_SAFETY_TIMEOUT_MS = 8_000;
 export const CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 2_000;
-export const SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS = 2_100;
+export const VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 4_000;
+export const SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS = 4_100;
 // General images receive 75 ms of finalization grace; representative consent
-// imagery receives 2 seconds, leaving 100 ms inside the existing latency ceiling
-// for fail-closed cleanup and canonical projection.
+// imagery receives 2 seconds. Owner-approved verified paired images may reuse
+// their existing review for 4 seconds, with 100 ms for fail-closed cleanup.
 export const SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS = 75;
 
 type ScreenshotMimeType = "image/jpeg" | "image/png" | "image/webp";
@@ -650,7 +651,7 @@ export async function applyHomepageScreenshotSafetyGate(input: {
   const reviewed = await Promise.all(reviews.map(async ({ screenshot, outcome, budgetMs }) => {
     let result = await outcome;
     const pairedImage = screenshot.path === paired?.path;
-    const finalizationBudgetMs = pairedImage ? CONSENT_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS : budgetMs;
+    const finalizationBudgetMs = pairedImage ? VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS : budgetMs;
     if (pairedImage && paired && (result.status === "safe" ||
       (result.status === "unavailable" && result.failureCode === "finalization_deadline_exceeded"))) {
       // Reuse the same review, with an absolute deadline and expected byte hash.

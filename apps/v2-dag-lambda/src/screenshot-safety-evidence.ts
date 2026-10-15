@@ -4,6 +4,7 @@ import { open, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   consentControlVisualComparisonSchema,
+  consentAccessibilityDomBindingSchema,
   normalizeConsentControlText,
   verifyConsentControlInspection,
   type CanonicalEvidenceBundle,
@@ -127,6 +128,13 @@ export async function verifiedPairedScreenshot(input: {
         (measurement && ![bounds.x, bounds.y, bounds.width, bounds.height].every((value, i) => value === measurement.bounds[i])) ||
         !observation.controls.some(row => row.actionType === action && row.visible !== false &&
           (row.layer === undefined || row.layer === "first_layer") &&
+          (!row.selectorHint?.startsWith("ax:") || (() => {
+            const binding = consentAccessibilityDomBindingSchema.safeParse(row.domBinding);
+            return binding.success && row.selectorHint === `ax:${binding.data.axNodeId}` &&
+              row.tagName === binding.data.tagName && binding.data.documentUrl === screenshot.url &&
+              binding.data.documentIdentity.source === identity.source && binding.data.documentIdentity.token === identity.token &&
+              row.visibilityEvidence === "box_model_verified" && row.consentContextEvidence === "local_surface";
+          })()) &&
           row.tagName === candidate.tagName && normalizeConsentControlText(row.label) === normalizeConsentControlText(String(candidate.label ?? "")))) return null;
     }
     bytes = await readBoundedImage(screenshot.path);

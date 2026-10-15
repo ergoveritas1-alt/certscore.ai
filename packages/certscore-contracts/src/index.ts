@@ -1,4 +1,6 @@
 import { cookieClassificationSchema } from "./cookie-classification";
+import { consentAccessibilityDomBindingSchema } from "./consent-accessibility-dom-binding";
+export * from "./consent-accessibility-dom-binding";
 export * from "./cookie-classification";
 export * from "./cookie-disclosure-column";
 import { googleConsentModeObservationSchema } from "./google-consent-mode";
@@ -756,6 +758,7 @@ export const consentUiObservationSchema = z.object({
     label: z.string().max(120),
     actionType: z.enum(["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"]),
     tagName: z.string().max(32).optional(),
+    domBinding: consentAccessibilityDomBindingSchema.optional(),
     role: z.string().max(64).optional(),
     presentationType: z.enum(["dedicated_button", "inline_link", "persistent_link", "unknown"]).optional(),
     placementType: z.enum(["action_cluster", "first_layer_body", "persistent_surface", "unknown"]).optional(),
@@ -779,6 +782,11 @@ export const consentUiObservationSchema = z.object({
       version: z.literal("adjacent_text_node.v1"),
       text: z.string().max(320),
     }).optional(),
+  }).superRefine((control, ctx) => {
+    if (control.domBinding && (control.tagName !== control.domBinding.tagName ||
+        control.selectorHint !== `ax:${control.domBinding.axNodeId}` ||
+        control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface"))
+      ctx.addIssue({code: z.ZodIssueCode.custom, message: "Native AX binding must match its exact observed control."});
   })).default([]),
   impliedConsentLanguageObserved: z.boolean().default(false).optional(),
   impliedConsentLanguageEvidence: z.array(z.object({
@@ -808,6 +816,12 @@ export const consentUiObservationSchema = z.object({
   }).optional(),
   evidenceRefs: z.array(evidenceRefSchema).default([]),
   confidence: confidenceSchema,
+}).superRefine((observation, ctx) => {
+  if (observation.controls.some(control => control.domBinding && (
+      control.domBinding.documentUrl !== observation.documentUrl ||
+      control.domBinding.documentIdentity.source !== observation.documentIdentity?.source ||
+      control.domBinding.documentIdentity.token !== observation.documentIdentity?.token)))
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Native AX binding must retain the observed document identity."});
 });
 
 export const collectionSurfaceObservationSchema = z.object({

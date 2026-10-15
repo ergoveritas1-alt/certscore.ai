@@ -14,6 +14,27 @@ test("consent evidence retains a long committed document URL within the canonica
   assert.equal(parsed.documentUrl, documentUrl);
 });
 
+test("native AX proof survives typed persistence only when control and document bindings agree", () => {
+  const original = baseInput().consentUiObservations![0]!;
+  const legacy = {...original, controls: [{label: "Accept all", actionType: "accept_all", tagName: "ax-node", selectorHint: "ax:42"}]};
+  const old = consentUiObservationSchema.parse(legacy);
+  assert.equal(old.controls[0]!.domBinding, undefined, "historical AX records never gain native proof on read");
+  const proof = {version: "ax_backend_dom_binding.v1", axNodeId: "42", backendNodeId: 10, nodeType: 1,
+    tagName: "button", documentUrl: "https://example.test/", documentIdentity: {source: "cdp_loader_id", token: "loader-1"}};
+  const observation = {...original, documentUrl: proof.documentUrl, documentIdentity: {...proof.documentIdentity},
+    controls: [{...legacy.controls[0], tagName: "button", visibilityEvidence: "box_model_verified", consentContextEvidence: "local_surface", domBinding: proof}]};
+  assert.deepEqual(consentUiObservationSchema.parse(observation).controls[0]!.domBinding, proof);
+  for (const drift of ["tag", "node", "visibility", "document", "malformed"]) {
+    const bad = structuredClone(observation);
+    if (drift === "tag") bad.controls[0]!.tagName = "a";
+    if (drift === "node") bad.controls[0]!.selectorHint = "ax:43";
+    if (drift === "visibility") bad.controls[0]!.visibilityEvidence = "unverified";
+    if (drift === "document") bad.controls[0]!.domBinding.documentIdentity.token = "other-loader";
+    if (drift === "malformed") bad.controls[0]!.domBinding.backendNodeId = 0;
+    assert.equal(consentUiObservationSchema.safeParse(bad).success, false, drift);
+  }
+});
+
 function baseInput(): Parameters<typeof deriveConsentSurfaceInspectionOutcome>[0] {
   return {
     cmpRuntimeObservations: [],

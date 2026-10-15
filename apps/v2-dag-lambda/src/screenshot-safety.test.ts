@@ -23,6 +23,7 @@ import {
   createHomepageScreenshotSafetyReviewCoordinator,
   createOpenAiScreenshotSafetyClassifier,
   SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS,
+  VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS,
   SCREENSHOT_SAFETY_MAX_ADDED_LATENCY_MS,
 } from "./screenshot-safety.js";
 
@@ -605,6 +606,51 @@ async function diagnostics(directory: string) {
   return coordinators.get(directory)!.diagnostics();
 }
 
+test("a verified AX/native pair reuses one slow review inside the approved four-second allowance", async () => {
+  const directory = await testDirectory("native-ax-slow-review");
+  try {
+    const {source, geometry} = await pairedFixture(directory);
+    for (const [index, control] of source.consentUiObservations[0]!.controls.entries()) {
+      control.selectorHint = `ax:${index + 1}`;
+      control.visibilityEvidence = "box_model_verified";
+      control.consentContextEvidence = "local_surface";
+      control.domBinding = {version: "ax_backend_dom_binding.v1", axNodeId: String(index + 1), backendNodeId: index + 1,
+        nodeType: 1, tagName: "button", documentUrl: source.url, documentIdentity: geometry.documentIdentity};
+    }
+    let calls = 0;
+    const result = await applyHomepageScreenshotSafetyGate({artifactRoot: directory, bundle: source,
+      classifier: async () => {calls++; await new Promise(resolve => setTimeout(resolve, 2_200)); return {safeForDisplay: true};}});
+    assert.equal(calls, 1);
+    assert.equal(result.screenshots[0]!.displayStatus, "available");
+    assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 4_000);
+    assert.deepEqual(result.consentUiObservations, source.consentUiObservations);
+  } finally { await rm(directory, {recursive: true, force: true}); }
+});
+
+for (const drift of ["missing", "tag", "document", "node", "visibility"] as const) {
+  test(`AX/native ${drift} drift cannot extend paired-image review`, async () => {
+    const directory = await testDirectory(`native-ax-${drift}`);
+    try {
+      const {source, geometry} = await pairedFixture(directory);
+      for (const [index, control] of source.consentUiObservations[0]!.controls.entries()) {
+        control.selectorHint = `ax:${index + 1}`;
+        control.visibilityEvidence = "box_model_verified";
+        control.consentContextEvidence = "local_surface";
+        control.domBinding = {version: "ax_backend_dom_binding.v1", axNodeId: String(index + 1), backendNodeId: index + 1,
+          nodeType: 1, tagName: "button", documentUrl: source.url, documentIdentity: {...geometry.documentIdentity}};
+      }
+      const control = source.consentUiObservations[0]!.controls[0]!;
+      if (drift === "missing") delete control.domBinding;
+      if (drift === "tag") control.domBinding!.tagName = "a";
+      if (drift === "document") control.domBinding!.documentIdentity.token = "other-loader";
+      if (drift === "node") control.domBinding!.axNodeId = "another-node";
+      if (drift === "visibility") control.visibilityEvidence = "unverified";
+      await applyHomepageScreenshotSafetyGate({artifactRoot: directory, bundle: source, classifier: async () => new Promise(() => undefined)});
+      assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 75);
+    } finally { await rm(directory, {recursive: true, force: true}); }
+  });
+}
+
 test("a verified A/R pair gets the existing allowance while unrelated inventory stays partial", async () => {
   const directory = await testDirectory("partial-pair");
   try {
@@ -615,7 +661,7 @@ test("a verified A/R pair gets the existing allowance while unrelated inventory 
     assert.equal(result.screenshots[0]?.displayStatus, "available");
     assert.deepEqual(result.consentUiObservations, before);
     const diagnostic = await diagnostics(directory);
-    assert.equal(diagnostic.reviews[0]!.finalization!.budgetMs, 2_000);
+    assert.equal(diagnostic.reviews[0]!.finalization!.budgetMs, VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
     assert.equal(diagnostic.reviews[0]!.finalization!.outcome.status, "safe");
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -835,7 +881,7 @@ test("unrelated AX inventory timeout does not shorten a verified DOM/geometry pa
     const result = await applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source,
       classifier: async () => { await new Promise(resolve => setTimeout(resolve, 150)); return { safeForDisplay: true }; } });
     assert.equal(result.screenshots[0]?.displayStatus, "available");
-    assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 2_000);
+    assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
     assert.deepEqual(result.consentUiObservations, before);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
@@ -872,7 +918,7 @@ async function structuredPairFixture(directory: string) {
   return fixture;
 }
 
-test("verified structured A/R screenshot keeps two-second review grace when pixel metrics are unavailable", async () => {
+test("verified structured A/R screenshot keeps the approved review grace when pixel metrics are unavailable", async () => {
   const directory = await testDirectory("structured-pair-no-metrics");
   try {
     const { source } = await structuredPairFixture(directory);
@@ -882,7 +928,7 @@ test("verified structured A/R screenshot keeps two-second review grace when pixe
       classifier: async () => { calls++; await new Promise(resolve => setTimeout(resolve, 200)); return { safeForDisplay: true }; } });
     assert.equal(calls, 1, "No new review or retry");
     assert.equal(result.screenshots[0]?.displayStatus, "available");
-    assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, 2_000);
+    assert.equal((await diagnostics(directory)).reviews[0]!.finalization!.budgetMs, VERIFIED_PAIR_SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS);
     assert.deepEqual(result.consentUiObservations, original.consentUiObservations, "Partial controls stay partial");
     const geometry = JSON.parse(await readFile(path.join(directory, "ConsentControlGeometryEvidence.json"), "utf8"));
     assert.equal(geometry.visualComparison, undefined, "Safety approval cannot manufacture prominence measurements");

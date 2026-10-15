@@ -1,0 +1,1407 @@
+{
+  "recordVersion": "cmp_visual_binding_followup_local.v1",
+  "createdAt": "2026-10-15T23:00:19.517792+00:00",
+  "sourceCommit": "dc9b04d9",
+  "scope": "Local fixes for verified paired-image review reliability and native AX/DOM identity. No deploy, push or historical report rewrite.",
+  "policy": "docs/certscore-v2/consent-visual-review-reliability-policy.md",
+  "outputRoot": "/Users/benmasek/WC01/outputs/cmp-visual-binding-followup-local-2026-10-15",
+  "ownerApproval": {
+    "approved": true,
+    "approval": "Approve up to $15/month",
+    "localOnly": true,
+    "planningVolumePerMonth": 100000,
+    "workerMemoryGiB": 4,
+    "maximumIncrementalMonthlyBudgetUsd": 15,
+    "verifiedPairedImageFinalizationMs": 4000,
+    "otherRepresentativeImageFinalizationMs": 2000,
+    "ordinaryImageFinalizationMs": 75,
+    "noExtraModelCallOrRetry": true
+  },
+  "changes": [
+    {
+      "component": "Canonical native AX evidence",
+      "version": "ax_backend_dom_binding.v1",
+      "details": "At most 12 exact CDP backend-node reads, inside a shared 50 ms optional allowance and unchanged outer AX capture deadline. Retain bounded native tag/source/document proof, preserve completed partial reads, ignore unavailable/late evidence. Typed persistence and image verifier reject binding drift. No native tag guessed from an AX role."
+    },
+    {
+      "component": "Verified paired-image review",
+      "details": "Only exact verified paired consent images can reuse their existing safety review through the owner-approved four-second absolute finalization allowance. All original-byte, geometry, document, loader, frame, dimensions and capture-skew checks remain mandatory. Late or failed approval cannot reopen a packet."
+    },
+    {
+      "component": "Positive capture scheduling",
+      "details": "Prepare existing positive A/R/O image and geometry while unchanged passive quiet gate runs. Require a complete document and observed Accept/Reject/Options; no absence conclusion uses this early window. Await the original passive gate before final evidence freeze. Preserve capture phase and actual clocks."
+    }
+  ],
+  "retainedReplay": {
+    "scope": "Fresh local sharded scans through verified Ireland egress. Canonical local materialization, concern policy, unified finding/checklist and CMP projection. No deployed or historical report changes.",
+    "generatedAt": "2026-10-15T22:46:10.697Z",
+    "baselineUnresolved": 12,
+    "resolved": 0,
+    "remainingOriginal": 12,
+    "newlyUnresolved": 0,
+    "freshUnresolved": 12,
+    "sites": [
+      {
+        "site": "trustarc",
+        "oldScanId": "cmp-inventory-local-trustarc-2239000c-c7a0-48db-98e5-d1aee1fe8f38",
+        "newScanId": "cmp-inventory-local-trustarc-2239000c-c7a0-48db-98e5-d1aee1fe8f38",
+        "baselineUnresolved": 5,
+        "resolved": 0,
+        "remainingOriginal": 5,
+        "newlyUnresolved": 0,
+        "totalFreshUnresolved": 5,
+        "rows": [
+          {
+            "id": "banner",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Consent surface observed on the initial visit.",
+            "sourceIds": [
+              "consentControlAssessment.surface"
+            ]
+          },
+          {
+            "id": "reject",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "First-layer Reject or equivalent refusal control.",
+            "sourceIds": [
+              "consentControlAssessment.controls.reject"
+            ]
+          },
+          {
+            "id": "prominence",
+            "before": "Incomplete",
+            "after": "Incomplete",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "The paired screenshot did not complete safety review.",
+            "sourceIds": [
+              "ConsentControlGeometryEvidence.json",
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "categories",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "2 categories were available.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "services",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Service names were not captured; deeper preference sections were not inspected.",
+            "sourceIds": []
+          },
+          {
+            "id": "privacy_link",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Public privacy-policy link or surface on the scanned page.",
+            "sourceIds": [
+              "privacy_notice_availability"
+            ]
+          },
+          {
+            "id": "privacy_access",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "consent_record",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Browser consent records were stored or updated after Accept and Reject.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "implementation",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "duration",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "declared_not_found",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+            "sourceIds": []
+          },
+          {
+            "id": "found_not_declared",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+            "sourceIds": []
+          },
+          {
+            "id": "cookie_information",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Cookie purpose and duration information was not retained.",
+            "sourceIds": []
+          }
+        ]
+      },
+      {
+        "site": "cookiebot",
+        "oldScanId": "cmp-inventory-local-cookiebot-3ed7d496-1b9f-475e-8086-c902a1fc5c24",
+        "newScanId": "cmp-inventory-local-cookiebot-3ed7d496-1b9f-475e-8086-c902a1fc5c24",
+        "baselineUnresolved": 7,
+        "resolved": 0,
+        "remainingOriginal": 7,
+        "newlyUnresolved": 0,
+        "totalFreshUnresolved": 7,
+        "rows": [
+          {
+            "id": "banner",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Consent surface observed on the initial visit.",
+            "sourceIds": [
+              "consentControlAssessment.surface"
+            ]
+          },
+          {
+            "id": "reject",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "First-layer Reject or equivalent refusal control.",
+            "sourceIds": [
+              "consentControlAssessment.controls.reject"
+            ]
+          },
+          {
+            "id": "prominence",
+            "before": "Incomplete",
+            "after": "Incomplete",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "The paired screenshot did not complete safety review.",
+            "sourceIds": [
+              "ConsentControlGeometryEvidence.json",
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "categories",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Selectable category controls were not verified in the inspected surface.",
+            "sourceIds": []
+          },
+          {
+            "id": "services",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Service names were not captured; deeper preference sections were not inspected.",
+            "sourceIds": []
+          },
+          {
+            "id": "privacy_link",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Public privacy-policy link or surface on the scanned page.",
+            "sourceIds": [
+              "privacy_notice_availability"
+            ]
+          },
+          {
+            "id": "privacy_access",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "consent_record",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Browser consent records were stored or updated after Accept.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "implementation",
+            "before": "Partially assessed",
+            "after": "Partially assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Accept: 0.649-second activity check completed.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "duration",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "declared_not_found",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+            "sourceIds": []
+          },
+          {
+            "id": "found_not_declared",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+            "sourceIds": []
+          },
+          {
+            "id": "cookie_information",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Cookie purpose and duration information was not retained.",
+            "sourceIds": []
+          }
+        ]
+      }
+    ]
+  },
+  "freshVerification": {
+    "egress": {
+      "browserIp": "63.33.9.201",
+      "httpIp": "63.33.9.201",
+      "country": "IE",
+      "awsRegion": "eu-west-1",
+      "verifiedAt": "2026-10-15T22:47:35.016Z"
+    },
+    "allFourVisits": [
+      {
+        "round": "fresh",
+        "site": "trustarc",
+        "scanId": "cmp-visual-binding-local-trustarc-be5bda2c-b186-4f59-a7f7-85eb54a4a370",
+        "artifactRoot": "/Users/benmasek/WC01/outputs/cmp-visual-binding-followup-local-2026-10-15/fresh/trustarc/cmp-visual-binding-local-trustarc-be5bda2c-b186-4f59-a7f7-85eb54a4a370",
+        "status": "completed",
+        "homepageScreenshot": {
+          "status": "withheld",
+          "reason": "safety_check_unavailable",
+          "failureCode": "finalization_deadline_exceeded"
+        },
+        "pairedImage": {
+          "artifactId": "screenshot_pre_consent_settled",
+          "retentionStatus": "withheld",
+          "displayStatus": "withheld",
+          "failureCode": "finalization_deadline_exceeded",
+          "captureSkewMs": 20.0,
+          "pixelMetricsRetained": true
+        },
+        "nativeAccessibilityBindings": [],
+        "preferencePacketStatus": "completed",
+        "preferencePanelOpened": true,
+        "pixelDiagnostics": [
+          {
+            "label": "consent pixel comparison",
+            "durationMs": 14,
+            "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"retained\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":80,\"elapsedMs\":14}",
+            "outcome": "completed"
+          }
+        ],
+        "captureOverlapDiagnostics": [],
+        "safetyReviewDiagnostics": {
+          "version": "screenshot_safety_review_diagnostics.v1",
+          "maxConcurrency": 2,
+          "reviews": [
+            {
+              "reviewId": 1,
+              "artifactId": "screenshot_pre_consent",
+              "priority": 0,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104466160,
+              "scheduledAtMs": 1792104460968,
+              "readStartedAtMs": 1792104460968,
+              "queuedAtMs": 1792104460975,
+              "executionStartedAtMs": 1792104460975,
+              "requestStartedAtMs": 1792104460975,
+              "responseHeadersAtMs": 1792104466155,
+              "responseBodyAtMs": 1792104466155,
+              "completedAtMs": 1792104466155,
+              "finalization": {
+                "startedAtMs": 1792104463782,
+                "budgetMs": 75,
+                "completedAtMs": 1792104464006,
+                "outcome": {
+                  "failureCode": "finalization_deadline_exceeded",
+                  "status": "unavailable"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 2,
+              "artifactId": "screenshot_pre_consent_settled",
+              "priority": 100,
+              "sharedIdenticalBytes": false,
+              "scheduledAtMs": 1792104463603,
+              "readStartedAtMs": 1792104463603,
+              "queuedAtMs": 1792104463606,
+              "executionStartedAtMs": 1792104463606,
+              "requestStartedAtMs": 1792104463606,
+              "finalization": {
+                "startedAtMs": 1792104463782,
+                "budgetMs": 4000,
+                "completedAtMs": 1792104467784,
+                "outcome": {
+                  "failureCode": "finalization_deadline_exceeded",
+                  "status": "unavailable"
+                }
+              }
+            }
+          ]
+        },
+        "sourceHashes": {
+          "CanonicalEvidenceBundle.json": "e7f48642db0c24a61847e220c0f497f2264bd6a63d3e3bf30760551ee393fccf",
+          "ConsentControlGeometryEvidence.json": "f8ced7621de6f87eb431b7ab7c35fef297804bdeb00b8d8cbd402b0ce4599f80",
+          "CmpPreferencesEvidencePacket.json": "f35cbe0b4b1a15a1f7473a15a64ba04e3138467f78032b19723f094061c94ea3"
+        }
+      },
+      {
+        "round": "fresh",
+        "site": "cookiebot",
+        "scanId": "cmp-visual-binding-local-cookiebot-d687f8ff-a9a3-4829-ba32-177dd84d5314",
+        "artifactRoot": "/Users/benmasek/WC01/outputs/cmp-visual-binding-followup-local-2026-10-15/fresh/cookiebot/cmp-visual-binding-local-cookiebot-d687f8ff-a9a3-4829-ba32-177dd84d5314",
+        "status": "completed",
+        "homepageScreenshot": {
+          "status": "available"
+        },
+        "pairedImage": {
+          "artifactId": "screenshot_pre_consent_geometry_proof",
+          "retentionStatus": "available",
+          "displayStatus": "available",
+          "failureCode": null,
+          "captureSkewMs": 61.0,
+          "pixelMetricsRetained": true
+        },
+        "nativeAccessibilityBindings": [
+          {
+            "label": "Deny",
+            "tagName": "button",
+            "proof": {
+              "version": "ax_backend_dom_binding.v1",
+              "axNodeId": "2066",
+              "backendNodeId": 2066,
+              "nodeType": 1,
+              "tagName": "button",
+              "documentUrl": "https://www.cookiebot.com/",
+              "documentIdentity": {
+                "source": "cdp_loader_id",
+                "token": "3AD92FF552EF35F97248A8C3AE8757B2"
+              }
+            }
+          },
+          {
+            "label": "Customize",
+            "tagName": "button",
+            "proof": {
+              "version": "ax_backend_dom_binding.v1",
+              "axNodeId": "2068",
+              "backendNodeId": 2068,
+              "nodeType": 1,
+              "tagName": "button",
+              "documentUrl": "https://www.cookiebot.com/",
+              "documentIdentity": {
+                "source": "cdp_loader_id",
+                "token": "3AD92FF552EF35F97248A8C3AE8757B2"
+              }
+            }
+          },
+          {
+            "label": "Allow all",
+            "tagName": "button",
+            "proof": {
+              "version": "ax_backend_dom_binding.v1",
+              "axNodeId": "2070",
+              "backendNodeId": 2070,
+              "nodeType": 1,
+              "tagName": "button",
+              "documentUrl": "https://www.cookiebot.com/",
+              "documentIdentity": {
+                "source": "cdp_loader_id",
+                "token": "3AD92FF552EF35F97248A8C3AE8757B2"
+              }
+            }
+          }
+        ],
+        "preferencePacketStatus": "completed",
+        "preferencePanelOpened": true,
+        "pixelDiagnostics": [
+          {
+            "label": "consent pixel comparison",
+            "durationMs": 0,
+            "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"not_eligible\",\"reason\":\"pair_not_unique\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":0,\"elapsedMs\":0}",
+            "outcome": "skipped"
+          },
+          {
+            "label": "consent pixel comparison",
+            "durationMs": 0,
+            "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent_cmp_controls\",\"allowanceMs\":0,\"elapsedMs\":0}",
+            "outcome": "skipped"
+          },
+          {
+            "label": "consent pixel comparison",
+            "durationMs": 60,
+            "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"retained\",\"artifactId\":\"screenshot_pre_consent_geometry_proof\",\"allowanceMs\":80,\"elapsedMs\":60}",
+            "outcome": "completed"
+          }
+        ],
+        "captureOverlapDiagnostics": [],
+        "safetyReviewDiagnostics": {
+          "version": "screenshot_safety_review_diagnostics.v1",
+          "maxConcurrency": 2,
+          "reviews": [
+            {
+              "reviewId": 1,
+              "artifactId": "screenshot_pre_consent",
+              "priority": 0,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104493142,
+              "scheduledAtMs": 1792104482013,
+              "readStartedAtMs": 1792104482013,
+              "queuedAtMs": 1792104482210,
+              "executionStartedAtMs": 1792104482211,
+              "requestStartedAtMs": 1792104482211,
+              "responseHeadersAtMs": 1792104488457,
+              "responseBodyAtMs": 1792104488458,
+              "completedAtMs": 1792104488458,
+              "finalization": {
+                "startedAtMs": 1792104493130,
+                "budgetMs": 75,
+                "completedAtMs": 1792104493145,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 2,
+              "artifactId": "screenshot_pre_consent_settled",
+              "priority": 20,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104493143,
+              "scheduledAtMs": 1792104483880,
+              "readStartedAtMs": 1792104483880,
+              "queuedAtMs": 1792104483882,
+              "executionStartedAtMs": 1792104483882,
+              "requestStartedAtMs": 1792104483882,
+              "responseHeadersAtMs": 1792104489417,
+              "responseBodyAtMs": 1792104489417,
+              "completedAtMs": 1792104489417,
+              "finalization": {
+                "startedAtMs": 1792104493130,
+                "budgetMs": 75,
+                "completedAtMs": 1792104493145,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 3,
+              "artifactId": "screenshot_pre_consent_full_page",
+              "priority": 0,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104493241,
+              "scheduledAtMs": 1792104490139,
+              "readStartedAtMs": 1792104490139,
+              "queuedAtMs": 1792104490144,
+              "executionStartedAtMs": 1792104490144,
+              "requestStartedAtMs": 1792104490144,
+              "responseHeadersAtMs": 1792104493241,
+              "responseBodyAtMs": 1792104493241,
+              "completedAtMs": 1792104493241,
+              "finalization": {
+                "startedAtMs": 1792104493130,
+                "budgetMs": 75,
+                "completedAtMs": 1792104493205,
+                "outcome": {
+                  "failureCode": "finalization_deadline_exceeded",
+                  "status": "unavailable"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 4,
+              "artifactId": "screenshot_pre_consent_cmp_controls",
+              "priority": 100,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104493944,
+              "scheduledAtMs": 1792104492246,
+              "readStartedAtMs": 1792104492246,
+              "queuedAtMs": 1792104492249,
+              "executionStartedAtMs": 1792104492249,
+              "requestStartedAtMs": 1792104492249,
+              "responseHeadersAtMs": 1792104493925,
+              "responseBodyAtMs": 1792104493925,
+              "completedAtMs": 1792104493925,
+              "finalization": {
+                "startedAtMs": 1792104493130,
+                "budgetMs": 75,
+                "completedAtMs": 1792104493205,
+                "outcome": {
+                  "failureCode": "finalization_deadline_exceeded",
+                  "status": "unavailable"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 5,
+              "artifactId": "screenshot_pre_consent_geometry_proof",
+              "priority": 100,
+              "sharedIdenticalBytes": true,
+              "bytesVerifiedAtMs": 1792104493944,
+              "scheduledAtMs": 1792104492683,
+              "readStartedAtMs": 1792104492683,
+              "queuedAtMs": 1792104492249,
+              "executionStartedAtMs": 1792104492249,
+              "requestStartedAtMs": 1792104492249,
+              "responseHeadersAtMs": 1792104493925,
+              "responseBodyAtMs": 1792104493925,
+              "completedAtMs": 1792104493925,
+              "finalization": {
+                "startedAtMs": 1792104493130,
+                "budgetMs": 4000,
+                "completedAtMs": 1792104493944,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            }
+          ]
+        },
+        "sourceHashes": {
+          "CanonicalEvidenceBundle.json": "85c91bce71a9fc2df850f2f476d115516a5aa853cd872ecccd265ae06cc575ac",
+          "ConsentControlGeometryEvidence.json": "e7206de3195d9fc606eca62b2f56ee7313ff2f1be046b1b71347787c110461de",
+          "CmpPreferencesEvidencePacket.json": "2e294a073ac0abdd7f53aa777ea5eef3ff006ecc7510b4a66c098f06a42dd135"
+        }
+      },
+      {
+        "round": "fresh-round2",
+        "site": "trustarc",
+        "scanId": "cmp-visual-binding-local-trustarc-47e4ac74-8498-43bd-9d8f-efc147d724d0",
+        "artifactRoot": "/Users/benmasek/WC01/outputs/cmp-visual-binding-followup-local-2026-10-15/fresh-round2/trustarc/cmp-visual-binding-local-trustarc-47e4ac74-8498-43bd-9d8f-efc147d724d0",
+        "status": "completed",
+        "homepageScreenshot": {
+          "status": "available"
+        },
+        "pairedImage": {
+          "artifactId": "screenshot_pre_consent_settled",
+          "retentionStatus": "available",
+          "displayStatus": "available",
+          "failureCode": null,
+          "captureSkewMs": 18.0,
+          "pixelMetricsRetained": true
+        },
+        "nativeAccessibilityBindings": [],
+        "preferencePacketStatus": "completed",
+        "preferencePanelOpened": true,
+        "pixelDiagnostics": [
+          {
+            "label": "consent pixel comparison",
+            "durationMs": 13,
+            "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"retained\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":80,\"elapsedMs\":13}",
+            "outcome": "completed"
+          }
+        ],
+        "captureOverlapDiagnostics": [
+          {
+            "label": "positive consent capture overlapped quiet wait",
+            "durationMs": 0,
+            "detail": "Existing positive A/R/O, screenshot and geometry capture overlapped the unchanged passive request gate. The gate completed before final evidence freeze; no absence conclusion used the early window.",
+            "outcome": "completed"
+          }
+        ],
+        "safetyReviewDiagnostics": {
+          "version": "screenshot_safety_review_diagnostics.v1",
+          "maxConcurrency": 2,
+          "reviews": [
+            {
+              "reviewId": 1,
+              "artifactId": "screenshot_pre_consent",
+              "priority": 0,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104854350,
+              "scheduledAtMs": 1792104850473,
+              "readStartedAtMs": 1792104850473,
+              "queuedAtMs": 1792104850554,
+              "executionStartedAtMs": 1792104850554,
+              "requestStartedAtMs": 1792104850554,
+              "responseHeadersAtMs": 1792104853764,
+              "responseBodyAtMs": 1792104853764,
+              "completedAtMs": 1792104853764,
+              "finalization": {
+                "startedAtMs": 1792104854349,
+                "budgetMs": 75,
+                "completedAtMs": 1792104854352,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 2,
+              "artifactId": "screenshot_pre_consent_settled",
+              "priority": 100,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104854482,
+              "scheduledAtMs": 1792104851019,
+              "readStartedAtMs": 1792104851019,
+              "queuedAtMs": 1792104851021,
+              "executionStartedAtMs": 1792104851021,
+              "requestStartedAtMs": 1792104851021,
+              "responseHeadersAtMs": 1792104854481,
+              "responseBodyAtMs": 1792104854481,
+              "completedAtMs": 1792104854481,
+              "finalization": {
+                "startedAtMs": 1792104854349,
+                "budgetMs": 4000,
+                "completedAtMs": 1792104854482,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            }
+          ]
+        },
+        "sourceHashes": {
+          "CanonicalEvidenceBundle.json": "13e6447b9bc3c9109d459175d2e1f826c9dfc4f81ba22bcdbde9b14bfab87407",
+          "ConsentControlGeometryEvidence.json": "09e2ab45a414a2e3f5421401df3d406c182dc889608b4e42a5f2099aa2a7508b",
+          "CmpPreferencesEvidencePacket.json": "19c34ee2b5276988f158013322519bcf3630ccbbd80162df6f6525220f1d7f1b"
+        }
+      },
+      {
+        "round": "fresh-final-cookiebot",
+        "site": "cookiebot",
+        "scanId": "cmp-visual-binding-local-cookiebot-8b98d863-9ef3-4294-9fa4-6d956af28e50",
+        "artifactRoot": "/Users/benmasek/WC01/outputs/cmp-visual-binding-followup-local-2026-10-15/fresh-final-cookiebot/cookiebot/cmp-visual-binding-local-cookiebot-8b98d863-9ef3-4294-9fa4-6d956af28e50",
+        "status": "completed",
+        "homepageScreenshot": {
+          "status": "available"
+        },
+        "pairedImage": {
+          "artifactId": "screenshot_pre_consent_geometry_proof",
+          "retentionStatus": "available",
+          "displayStatus": "available",
+          "failureCode": null,
+          "captureSkewMs": 40.0,
+          "pixelMetricsRetained": false
+        },
+        "nativeAccessibilityBindings": [
+          {
+            "label": "Deny",
+            "tagName": "button",
+            "proof": {
+              "version": "ax_backend_dom_binding.v1",
+              "axNodeId": "2062",
+              "backendNodeId": 2062,
+              "nodeType": 1,
+              "tagName": "button",
+              "documentUrl": "https://www.cookiebot.com/",
+              "documentIdentity": {
+                "source": "cdp_loader_id",
+                "token": "054192E9B58F82DEB41F9E621A69E2C4"
+              }
+            }
+          },
+          {
+            "label": "Customize",
+            "tagName": "button",
+            "proof": {
+              "version": "ax_backend_dom_binding.v1",
+              "axNodeId": "2064",
+              "backendNodeId": 2064,
+              "nodeType": 1,
+              "tagName": "button",
+              "documentUrl": "https://www.cookiebot.com/",
+              "documentIdentity": {
+                "source": "cdp_loader_id",
+                "token": "054192E9B58F82DEB41F9E621A69E2C4"
+              }
+            }
+          },
+          {
+            "label": "Allow all",
+            "tagName": "button",
+            "proof": {
+              "version": "ax_backend_dom_binding.v1",
+              "axNodeId": "2066",
+              "backendNodeId": 2066,
+              "nodeType": 1,
+              "tagName": "button",
+              "documentUrl": "https://www.cookiebot.com/",
+              "documentIdentity": {
+                "source": "cdp_loader_id",
+                "token": "054192E9B58F82DEB41F9E621A69E2C4"
+              }
+            }
+          }
+        ],
+        "preferencePacketStatus": "completed",
+        "preferencePanelOpened": true,
+        "pixelDiagnostics": [
+          {
+            "label": "consent pixel comparison",
+            "durationMs": 0,
+            "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent_cmp_controls\",\"allowanceMs\":0,\"elapsedMs\":0}",
+            "outcome": "skipped"
+          },
+          {
+            "label": "consent pixel comparison",
+            "durationMs": 81,
+            "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"timed_out\",\"artifactId\":\"screenshot_pre_consent_geometry_proof\",\"allowanceMs\":80,\"elapsedMs\":81}",
+            "outcome": "timed_out"
+          }
+        ],
+        "captureOverlapDiagnostics": [],
+        "safetyReviewDiagnostics": {
+          "version": "screenshot_safety_review_diagnostics.v1",
+          "maxConcurrency": 2,
+          "reviews": [
+            {
+              "reviewId": 1,
+              "artifactId": "screenshot_pre_consent",
+              "priority": 0,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104920385,
+              "scheduledAtMs": 1792104910541,
+              "readStartedAtMs": 1792104910541,
+              "queuedAtMs": 1792104910663,
+              "executionStartedAtMs": 1792104910663,
+              "requestStartedAtMs": 1792104910663,
+              "responseHeadersAtMs": 1792104916224,
+              "responseBodyAtMs": 1792104916224,
+              "completedAtMs": 1792104916224,
+              "finalization": {
+                "startedAtMs": 1792104920380,
+                "budgetMs": 75,
+                "completedAtMs": 1792104920387,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 2,
+              "artifactId": "screenshot_pre_consent_settled",
+              "priority": 20,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104920385,
+              "scheduledAtMs": 1792104911740,
+              "readStartedAtMs": 1792104911740,
+              "queuedAtMs": 1792104911741,
+              "executionStartedAtMs": 1792104911741,
+              "requestStartedAtMs": 1792104911742,
+              "responseHeadersAtMs": 1792104917799,
+              "responseBodyAtMs": 1792104917799,
+              "completedAtMs": 1792104917799,
+              "finalization": {
+                "startedAtMs": 1792104920380,
+                "budgetMs": 75,
+                "completedAtMs": 1792104920387,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 3,
+              "artifactId": "screenshot_pre_consent_full_page",
+              "priority": 0,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104920385,
+              "scheduledAtMs": 1792104918137,
+              "readStartedAtMs": 1792104918137,
+              "queuedAtMs": 1792104918138,
+              "executionStartedAtMs": 1792104918138,
+              "requestStartedAtMs": 1792104918138,
+              "responseHeadersAtMs": 1792104920363,
+              "responseBodyAtMs": 1792104920363,
+              "completedAtMs": 1792104920363,
+              "finalization": {
+                "startedAtMs": 1792104920380,
+                "budgetMs": 75,
+                "completedAtMs": 1792104920387,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 4,
+              "artifactId": "screenshot_pre_consent_cmp_controls",
+              "priority": 100,
+              "sharedIdenticalBytes": false,
+              "bytesVerifiedAtMs": 1792104921483,
+              "scheduledAtMs": 1792104919635,
+              "readStartedAtMs": 1792104919635,
+              "queuedAtMs": 1792104919637,
+              "executionStartedAtMs": 1792104919637,
+              "requestStartedAtMs": 1792104919637,
+              "responseHeadersAtMs": 1792104921482,
+              "responseBodyAtMs": 1792104921482,
+              "completedAtMs": 1792104921482,
+              "finalization": {
+                "startedAtMs": 1792104920380,
+                "budgetMs": 75,
+                "completedAtMs": 1792104920455,
+                "outcome": {
+                  "failureCode": "finalization_deadline_exceeded",
+                  "status": "unavailable"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            },
+            {
+              "reviewId": 5,
+              "artifactId": "screenshot_pre_consent_geometry_proof",
+              "priority": 100,
+              "sharedIdenticalBytes": true,
+              "bytesVerifiedAtMs": 1792104921483,
+              "scheduledAtMs": 1792104919924,
+              "readStartedAtMs": 1792104919924,
+              "queuedAtMs": 1792104919637,
+              "executionStartedAtMs": 1792104919637,
+              "requestStartedAtMs": 1792104919637,
+              "responseHeadersAtMs": 1792104921482,
+              "responseBodyAtMs": 1792104921482,
+              "completedAtMs": 1792104921482,
+              "finalization": {
+                "startedAtMs": 1792104920380,
+                "budgetMs": 4000,
+                "completedAtMs": 1792104921483,
+                "outcome": {
+                  "status": "safe"
+                }
+              },
+              "reviewOutcome": {
+                "status": "safe"
+              }
+            }
+          ]
+        },
+        "sourceHashes": {
+          "CanonicalEvidenceBundle.json": "1ea80fa5963718409de096839598e38c82a33bf61a1e022a816411e869a27107",
+          "ConsentControlGeometryEvidence.json": "eb6cd721e67721ee16d8acedd55ce60aa128341d00fd303b625323beb32bb02b",
+          "CmpPreferencesEvidencePacket.json": "8202e1ab8d83dd8bedf7f52ab384098b40ab8bc97f294cbd7f9b6be3351078e7"
+        }
+      }
+    ],
+    "finalComparison": {
+      "scope": "Fresh local sharded scans through verified Ireland egress. Canonical local materialization, concern policy, unified finding/checklist and CMP projection. No deployed or historical report changes.",
+      "generatedAt": "2026-10-15T22:56:23.255Z",
+      "baselineUnresolved": 12,
+      "resolved": 1,
+      "remainingOriginal": 11,
+      "newlyUnresolved": 0,
+      "freshUnresolved": 11,
+      "sites": [
+        {
+          "site": "trustarc",
+          "oldScanId": "cmp-inventory-local-trustarc-2239000c-c7a0-48db-98e5-d1aee1fe8f38",
+          "newScanId": "cmp-visual-binding-local-trustarc-47e4ac74-8498-43bd-9d8f-efc147d724d0",
+          "baselineUnresolved": 5,
+          "resolved": 1,
+          "remainingOriginal": 4,
+          "newlyUnresolved": 0,
+          "totalFreshUnresolved": 4,
+          "rows": [
+            {
+              "id": "banner",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Consent surface observed on the initial visit.",
+              "sourceIds": [
+                "consentControlAssessment.surface"
+              ]
+            },
+            {
+              "id": "reject",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "First-layer Reject or equivalent refusal control.",
+              "sourceIds": [
+                "consentControlAssessment.controls.reject"
+              ]
+            },
+            {
+              "id": "prominence",
+              "before": "Incomplete",
+              "after": "Observed",
+              "wasUnresolved": true,
+              "resolved": true,
+              "newlyUnresolved": false,
+              "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+              "sourceIds": [
+                "consent.visual_comparison.observed"
+              ]
+            },
+            {
+              "id": "categories",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "2 categories were available.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "services",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Service names were not captured; deeper preference sections were not inspected.",
+              "sourceIds": []
+            },
+            {
+              "id": "privacy_link",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Public privacy-policy link or surface on the scanned page.",
+              "sourceIds": [
+                "privacy_notice_availability"
+              ]
+            },
+            {
+              "id": "privacy_access",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "consent_record",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Browser consent records were stored or updated after Accept and Reject.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "implementation",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "duration",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "declared_not_found",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+              "sourceIds": []
+            },
+            {
+              "id": "found_not_declared",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+              "sourceIds": []
+            },
+            {
+              "id": "cookie_information",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Cookie purpose and duration information was not retained.",
+              "sourceIds": []
+            }
+          ]
+        },
+        {
+          "site": "cookiebot",
+          "oldScanId": "cmp-inventory-local-cookiebot-3ed7d496-1b9f-475e-8086-c902a1fc5c24",
+          "newScanId": "cmp-visual-binding-local-cookiebot-8b98d863-9ef3-4294-9fa4-6d956af28e50",
+          "baselineUnresolved": 7,
+          "resolved": 0,
+          "remainingOriginal": 7,
+          "newlyUnresolved": 0,
+          "totalFreshUnresolved": 7,
+          "rows": [
+            {
+              "id": "banner",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Consent surface observed on the initial visit.",
+              "sourceIds": [
+                "consentControlAssessment.surface"
+              ]
+            },
+            {
+              "id": "reject",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "First-layer Reject or equivalent refusal control.",
+              "sourceIds": [
+                "consentControlAssessment.controls.reject"
+              ]
+            },
+            {
+              "id": "prominence",
+              "before": "Incomplete",
+              "after": "Incomplete",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Pixel comparison did not finish within its capture allowance.",
+              "sourceIds": [
+                "ConsentControlGeometryEvidence.json",
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "categories",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Selectable category controls were not verified in the inspected surface.",
+              "sourceIds": []
+            },
+            {
+              "id": "services",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Service names were not captured; deeper preference sections were not inspected.",
+              "sourceIds": []
+            },
+            {
+              "id": "privacy_link",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Public privacy-policy link or surface on the scanned page.",
+              "sourceIds": [
+                "privacy_notice_availability"
+              ]
+            },
+            {
+              "id": "privacy_access",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "consent_record",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Browser consent records were stored or updated after Accept.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "implementation",
+              "before": "Partially assessed",
+              "after": "Partially assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Accept: 2.639-second activity check completed.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "duration",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "declared_not_found",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+              "sourceIds": []
+            },
+            {
+              "id": "found_not_declared",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+              "sourceIds": []
+            },
+            {
+              "id": "cookie_information",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Cookie purpose and duration information was not retained.",
+              "sourceIds": []
+            }
+          ]
+        }
+      ]
+    },
+    "latestScans": [
+      {
+        "site": "trustarc",
+        "scanId": "cmp-visual-binding-local-trustarc-47e4ac74-8498-43bd-9d8f-efc147d724d0"
+      },
+      {
+        "site": "cookiebot",
+        "scanId": "cmp-visual-binding-local-cookiebot-8b98d863-9ef3-4294-9fa4-6d956af28e50"
+      }
+    ],
+    "limitations": [
+      "First TrustArc round still timed out inside the four-second paired-image allowance. The subsequent source change overlaps positive capture with the unchanged quiet wait; its fresh TrustArc packet retained both safe images.",
+      "Cookiebot first round had valid native bindings, safe paired image and pixel metrics. Its final combined-source scan again verified native bindings and retained the paired image, but the independent pixel analysis took 81 ms against its unchanged 80 ms allowance. Final prominence remains incomplete; use the latest 12-to-11 unresolved-check total, not the earlier better Cookiebot count.",
+      "These are owner-selected targeted diagnostics, not a rotating release-acceptance cohort. Production rollout remains unauthorized."
+    ]
+  },
+  "preservation": {
+    "verifiedAt": "2026-10-15T22:58:04.996525+00:00",
+    "fileCount": 40,
+    "allOriginalFilesUnchanged": true
+  },
+  "proxyCleanup": {
+    "temporaryRuleRemoved": true,
+    "sshStopped": true,
+    "finishedAt": 1792104983.575798
+  },
+  "contactAccounting": {
+    "visitCount": 4,
+    "centralRunKey": "cmp-visual-binding-followup-local-20261015",
+    "manualLedger": "Two contact-only entries updated; other target entries retained.",
+    "receipt": "/Users/benmasek/WC01/outputs/cmp-visual-binding-followup-local-2026-10-15/checks/cmp-followup-contact-persist.log"
+  },
+  "verification": {
+    "finalFocusedTests": {
+      "passed": 84,
+      "failed": 0
+    },
+    "additionalRegressionCoverage": "Prior affected boundary suite passed 175/176; its sole new fixture used aliased objects and was corrected, with all 32 contract tests then passing. Prior overlap suite passed 22/23; its new fixture used the wrong result property and was corrected. Final loading/overlap recheck and typechecks are retained separately.",
+    "typechecks": "Contracts, scan-core, Lambda and web passed.",
+    "checksDirectory": "/Users/benmasek/WC01/outputs/cmp-visual-binding-followup-local-2026-10-15/checks"
+  },
+  "cost": {
+    "oneTimeDiagnosticsEstimateUsd": "Below $1 total, using existing Ireland proxy with no standing capacity.",
+    "incrementalComputePlanningEstimateUsdPerMonth": 13.34,
+    "nativeBindingUpperPlanningEstimateUsdPerMonth": 0.34,
+    "retention": "Bounded proof metadata and typical recovered viewport images at 30-day retention; separately verify actual retained image volume before any future production rollout.",
+    "approvedMonthlyBudgetUsd": 15
+  },
+  "deployed": false,
+  "productionReportsChanged": false
+}
