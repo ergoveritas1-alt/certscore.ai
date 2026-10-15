@@ -1,3 +1,4 @@
+import { highRiskAfterRejectAssessment } from "../../lib/scans/test-fixtures/after-reject-scoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { UnifiedFindingDisplayPacket } from "../../lib/scans/unified-findings";
@@ -55,7 +56,7 @@ test("canonical overall score rejects malformed or differently valued GPC score 
 
 test("canonical explanations preserve family caps and independently approved overall deductions", () => {
   const postReject = { id: "post_reject_tracking_reduction", assessmentStatus: "gap_observed", status: "Gap observed",
-    evidenceState: "observed", criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true } } } as unknown as GdprEprivacyCoverageChecklistItem;
+    evidenceState: "observed", criticalEvidence: { retainedEvidence: { afterRejectScoringAssessment: highRiskAfterRejectAssessment(), rejectInteractionConfirmed: true } } } as unknown as GdprEprivacyCoverageChecklistItem;
   const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null },
     checklistRows: [...checkedChecklist, postReject, postReject], unifiedFindings: [gpcFinding(15), gpcFinding(15)] })!;
   assert.equal(explanation.score, 70);

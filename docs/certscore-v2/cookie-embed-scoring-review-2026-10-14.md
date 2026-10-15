@@ -22,7 +22,7 @@ New scoring versions are `gdpr-eprivacy-posture.v19`, `overall-posture.v9` and `
 
 ## Isolated policy simulations
 
-These hold all other original deductions fixed. They use exported report evidence and local policy fixtures, not new verified producer captures. They must not replace a report or leaderboard value.
+These hold all other original deductions fixed, including the earlier after-Reject weights. They do not estimate scores under the subsequent v20 tier policy. They use exported report evidence and local policy fixtures, not new verified producer captures. They must not replace a report or leaderboard value.
 
 | Website | Original score | Isolated simulation | Reason |
 | --- | ---: | ---: | --- |
@@ -34,7 +34,9 @@ These hold all other original deductions fixed. They use exported report evidenc
 
 New EU-Ireland scans with verified producer evidence are required before publishing replacement scores. Cohere's separate independent visit also observed Marketo requests before consent; a future scan could differ from this isolated arithmetic. Setter attempts alone do not establish stored cookies. Do not retrofit those later observations into the original report.
 
-## Proposed after-Reject policy, not implemented
+## Original after-Reject proposal
+
+The owner subsequently approved local implementation of the 15/5/0 tiers. See [the implemented policy](after-reject-measurement-tiers-policy.md). The text below records the original proposal; it does not authorize the separate pre-consent calibration.
 
 Replace the single 15-point treatment with purpose-specific evidence tiers for future scans. Keep the maximum family deduction at 15; do not add charges for each request or count OPTIONS preflights as separate measurement events.
 
@@ -45,13 +47,13 @@ Replace the single 15-point treatment with purpose-specific evidence tiers for f
 | Verified page-performance-only RUM with request-level purpose proof, no advertising/replay purpose, no observed persistent identifier transmission and complete bounded storage coverage | 0 | Retain a factual performance-measurement observation and coverage limits. Do not exempt a whole vendor or host. |
 | Unconfirmed refusal, unknown purpose, incomplete capture or missing identifier/storage proof | 0 for a new purpose-specific enforcement claim | Retain factual after-click observations and an explicit review/coverage state. Never assert that nothing happened or that refusal was honored. |
 
-This proposal would supersede the separately owner-approved `reject_click_tracking.v1` 15-point unconfirmed-click review rule for new assessments only. Until approved and implemented, that existing rule and all historical scores remain unchanged.
+This proposal would supersede the separately owner-approved `reject_click_tracking.v1` 15-point unconfirmed-click review rule for new assessments only. The separately approved implementation now applies the new tiers to v20 assessments; historical weights remain unchanged.
 
 Do not exempt a request merely because it carries `gcs=G100`, `gcd`, `npa=1` or a supplier's privacy claim. Retain bounded request-bound mode and purpose information, identifier-presence classifications, semantic decision proof, source accounting and storage coverage through the existing typed evidence contract. Never retain raw identifier values to implement this policy. Ambiguous or missing evidence must remain review, not a clean result.
 
 For consistency, separately calibrate pre-consent denied-storage analytics to the same five-point measurement tier. Do not give Mistral or Cohere a site-specific exemption. Disclosure improves interpretation but does not erase observed measurement. Do not change the existing eight-point pre-consent vendor rule as part of the current implementation.
 
-Implement this proposal only after owner approval of the weights and evidence requirements. Add exact endpoint/purpose calibration cases for Cloudflare RUM, Google denied-storage measurement, identifier-bearing analytics, advertising, mixed-purpose payloads and incomplete captures. Use existing lanes, budgets and capture windows, with no new public run, model call or automatic interaction.
+The after-Reject weights and evidence requirements have been approved for local implementation. Separate pre-consent calibration still requires its own decision. Add exact endpoint/purpose calibration cases for Cloudflare RUM, Google denied-storage measurement, identifier-bearing analytics, advertising, mixed-purpose payloads and incomplete captures. Use existing lanes, budgets and capture windows, with no new public run, model call or automatic interaction.
 
 ## Primary sources
 

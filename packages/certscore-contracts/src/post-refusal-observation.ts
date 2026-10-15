@@ -1,3 +1,4 @@
+import { measurementRequestEvidenceSchema, readBoundMeasurementRequestEvidence } from "./measurement-request-evidence";
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
@@ -123,6 +124,10 @@ export const postRefusalRegistrationSchema = z.object({
 });
 
 export const postRefusalNetworkRequestSchema = z.object({
+  responseCookieNamesSet: z.array(z.string().max(180)).max(96).optional(),
+  measurementEvidence: measurementRequestEvidenceSchema.optional(),
+  method: z.string().min(1).max(16).optional(),
+  rootStartedAtMs: z.number().int().nonnegative().optional(),
   requestId: z.string().min(1).max(120),
   sanitizedUrl: z.string().max(500),
   hostname: z.string().max(255).optional(),
@@ -148,7 +153,13 @@ export const postRefusalNetworkRequestSchema = z.object({
   googleConsentMode: googleConsentModeObservationSchema.optional(),
 });
 
+const actionStoragePurposeAssessmentSchema = z.object({
+  version: z.literal("action_storage_purpose.v1"),
+  essentiality: z.enum(["essential", "non_essential", "unknown"]),
+}).strict();
+
 export const postRefusalStorageItemSchema = z.object({
+  purposeAssessment: actionStoragePurposeAssessmentSchema.optional(),
   expiresAtEpochSeconds: z.number().finite().min(-1).optional(),
   capturedAtEpochSeconds: z.number().finite().positive().optional(),
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
@@ -195,6 +206,7 @@ export const postRefusalStorageItemSchema = z.object({
 });
 
 export const postRefusalStorageWriteBaseSchema = z.object({
+  purposeAssessment: actionStoragePurposeAssessmentSchema.optional(),
   storageType: z.enum(["cookie", "local_storage", "session_storage"]),
   name: actionStorageNameSchema,
   hostname: z.string().max(255).optional(),
@@ -517,6 +529,12 @@ const postRefusalEvidencePacketBaseSchema = z.object({
   )) context.addIssue({ code: z.ZodIssueCode.custom, path: ["timing", "observationEndedAtMs"], message: "Observation end must retain the action and result clock binding." });
   validateTerminalConsentDecision(packet.terminalDecisionEvidence, packet.afterActionCapture, packet.actionControlProof, "reject", context);
   validateOriginDomStorageObservation(packet.storage.originDomStorageObservation, packet.startedAt, packet.completedAt, context);
+  for (const request of packet.network.requests) {
+    if (request.measurementEvidence && !readBoundMeasurementRequestEvidence(request.measurementEvidence, request))
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["network", "requests"], message: "Measurement metadata must match its original request." });
+    if (request.rootStartedAtMs !== undefined && request.rootStartedAtMs > request.startedAtMs)
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ["network", "requests"], message: "Request ancestry cannot start after its child." });
+  }
   const writeCoverage = packet.storage.mainDocumentWriteCoverage;
   validateObservedActionSourceProof(packet.observedActionSourceProof, context, {
     scanId: packet.scanId, navigationAuthorized: packet.interactionDiagnostics?.navigation.documentCommitted === true && packet.interactionDiagnostics.navigation.finalUrlAuthorized === true,
@@ -1158,7 +1176,19 @@ const postRefusalReportPersistedStorageRowSchema = z.object({
   vendor: z.string().max(160).optional(),
 }).superRefine(validateActionStorageName);
 
+const postRejectScoringEvidenceSchema = z.object({
+  version: z.literal("post_reject_scoring_evidence.v1"),
+  actionDispatchedAtMs: z.number().int().nonnegative().optional(),
+  preActionCapturedAtMs: z.number().int().nonnegative().optional(),
+  postActionCapturedAtMs: z.number().int().nonnegative().optional(),
+  requests: z.array(postRefusalNetworkRequestSchema).max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
+  storageWrites: z.array(postRefusalStorageWriteSchema).max(48),
+  preActionStorage: z.array(postRefusalStorageItemSchema).max(96),
+  postActionStorage: z.array(postRefusalStorageItemSchema).max(96),
+}).strict();
+
 export const postRefusalReportProjectionSchema = z.object({
+  scoringEvidence: postRejectScoringEvidenceSchema.optional(),
   interactionDiagnostics: postRefusalInteractionDiagnosticsSchema.optional(),
   retainedActionTiming: retainedActionTimingSchema.optional(),
   storageCollectionDiagnostics: actionStoragePhaseDiagnosticsSchema.optional(),
@@ -1257,7 +1287,7 @@ export function projectPostRefusalEvidenceForReport(input: {
     ? [
         ...packet.network.postRefusalNonEssentialRequests
           .filter((request) =>
-            request.nonEssential &&
+            request.nonEssential && request.method !== "OPTIONS" &&
             !request.inFlightAtRefusalRegistration &&
             typeof request.msOffsetFromRefusal === "number" &&
             request.msOffsetFromRefusal >= 0
@@ -1325,6 +1355,16 @@ export function projectPostRefusalEvidenceForReport(input: {
       observationEndedAtMs: packet.timing.observationEndedAtMs ?? packet.afterActionCapture?.captureEndedAtMs, requests: packet.network.requests });
 
   const projection = postRefusalReportProjectionSchema.parse({
+    scoringEvidence: {
+      version: "post_reject_scoring_evidence.v1",
+      actionDispatchedAtMs: packet.refusalRegistration.actionDispatchedAtMs,
+      preActionCapturedAtMs: packet.storage.preActionCapturedAtMs,
+      postActionCapturedAtMs: packet.storage.postActionCapturedAtMs,
+      requests: packet.network.requests.filter(row => packet.refusalRegistration.actionDispatchedAtMs !== undefined && row.startedAtMs >= packet.refusalRegistration.actionDispatchedAtMs),
+      storageWrites: packet.storage.writesAfterRefusal,
+      preActionStorage: packet.storage.preAction,
+      postActionStorage: packet.storage.postAction,
+    },
     ...(packet.interactionDiagnostics ? { interactionDiagnostics: packet.interactionDiagnostics } : {}),
     ...(retainedActionTiming ? { retainedActionTiming } : {}),
     registeredObservationCompletion: retainRegisteredObservationCompletion({

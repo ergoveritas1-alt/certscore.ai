@@ -1,3 +1,4 @@
+import { afterRejectScoringNarrative, readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type FormDestinationProjection } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityProjection } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID, siteIntegrityProjectionSchema, type SiteIntegrityProjection } from "@certscore/contracts";
@@ -254,6 +255,7 @@ export type UnifiedFindingPacket = {
   scoreEffects?: NormalizedConcernScoreEffect[];
   details?: UnifiedFindingDetails;
   concernContext?: {
+    afterRejectScoringAssessment?: AfterRejectScoringAssessment;
     assertionLevels: NormalizedConcernAssertionLevel[];
     evidenceStrengthFlags: NormalizedConcernEvidenceStrengthFlag[];
     externalSurfacingEligibilities: NormalizedConcernExternalSurfacingEligibility[];
@@ -6196,6 +6198,11 @@ function buildPresentationCopy(
       whyThisMatters: `If key-page discovery stays unresolved, the scan cannot confidently confirm whether the ${pageLabel} is actually reachable.`
     };
   }
+  if (["post_refusal_non_essential_activity", "post_reject_click_tracking"].includes(packet.unifiedFindingId)) {
+    const narrative = afterRejectScoringNarrative(readAfterRejectScoringAssessment(packet.concernContext?.afterRejectScoringAssessment));
+    if (narrative) return { ...base, suggestedFix: narrative.suggestedFix, whyThisMatters: narrative.whyThisMatters,
+      ...(packet.unifiedFindingId === "post_refusal_non_essential_activity" ? { findingName: narrative.title } : {}) };
+  }
   const override = UNIFIED_FINDING_PRESENTATION_COPY_OVERRIDES[packet.unifiedFindingId];
   return override ? { ...base, ...override } : base;
 }
@@ -6882,7 +6889,9 @@ function createInitialUnifiedFindingPacket(
 ): UnifiedFindingPacket {
   return {
     unifiedFindingId: definition.id,
-    title: definition.label,
+    title: definition.id === "post_refusal_non_essential_activity"
+      ? afterRejectScoringNarrative(readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment))?.title ?? definition.label
+      : definition.label,
     severity: candidate.severity,
     summary: candidate.description,
     confidenceBand: "low",
@@ -6963,7 +6972,12 @@ function mergeConcernContext(
       )
     : nextNegativeEvidenceFlags;
 
+  const scoring = readAfterRejectScoringAssessment(candidate.normalizedConcern?.evidenceBundle.rawEvidence?.afterRejectScoringAssessment);
+  const retainedScoring = existing?.afterRejectScoringAssessment;
+  const selectedScoring = scoring && (!retainedScoring || scoring.deductionPoints > retainedScoring.deductionPoints ||
+    scoring.deductionPoints === retainedScoring.deductionPoints && scoring.tier === "review") ? scoring : retainedScoring;
   return {
+    ...(selectedScoring ? { afterRejectScoringAssessment: selectedScoring } : {}),
     assertionLevels: uniqueConcernFlags([
       ...(existing?.assertionLevels ?? []),
       ...(candidate.normalizedConcern ? [candidate.normalizedConcern.allowedNarrativeTier] : [])

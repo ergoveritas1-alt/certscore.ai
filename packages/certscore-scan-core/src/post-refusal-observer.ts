@@ -27,7 +27,7 @@ import {
   type PostRefusalStorageWrite,
   type PostRefusalTcfState,
 } from "@certscore/contracts";
-import { captureGoogleConsentModeRequest, resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import { resolveCanonicalActionStoragePurpose, inspectMeasurementRequest, captureGoogleConsentModeRequest, resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import {
   detectKnownCmps,
   KNOWN_CMP_REGISTRY,
@@ -244,6 +244,8 @@ type CapturedRequest = {
   startedAtEpochMs: number;
   completedAtEpochMs?: number;
   responseCookieNamesSet?: string[];
+  rootStartedAtEpochMs?: number;
+  measurementEvidence?: import("@certscore/contracts").MeasurementRequestEvidence;
   inFlightAtRefusalRegistration: boolean;
 };
 
@@ -664,6 +666,7 @@ export async function runPostRefusalObserver(
       });
     }
 
+    let measurementInspections = 0;
     let mainNavigationRequestCount = 0;
     page.on("framenavigated", frame => { if (actionDispatched && frame === page?.mainFrame()) sourceDocumentChanged = true; });
     page.on("request", (request) => {
@@ -703,6 +706,7 @@ export async function runPostRefusalObserver(
         : undefined;
       const captured: CapturedRequest = {
         request, requestId, startedAtEpochMs,
+        rootStartedAtEpochMs: requestStartedAtEpochMs.get(request),
         inFlightAtRefusalRegistration: inheritedInFlightAtRegistration ||
           redirectedFrom?.inFlightAtRefusalRegistration === true,
       };
@@ -713,6 +717,22 @@ export async function runPostRefusalObserver(
         if (selection.evicted) activeRequestIds.delete(selection.evicted.requestId);
         if (!selection.retained) return;
       } else bucket.push(captured);
+      if (measurementInspections < 48) {
+        try {
+          const body = request.postData();
+          const observation = { url: request.url(), method: request.method(), requestId,
+            timestampMs: elapsed(parentScanStartedAtMs, startedAtEpochMs), body: body && body.length > 32768 ? body.slice(0, 32769) : body };
+          captured.measurementEvidence = inspectMeasurementRequest(observation);
+          if (captured.measurementEvidence) {
+            measurementInspections += 1;
+            // Observe already-issued request metadata inside the existing window.
+            // Pending/failed header reads stay unknown; never await them at publication.
+            void request.allHeaders().then(headers => {
+              captured.measurementEvidence = inspectMeasurementRequest({ ...observation, headers });
+            }).catch(() => undefined);
+          }
+        } catch { /* Opaque requests retain ordinary facts and no measurement exemption. */ }
+      }
       requestIds.set(request, requestId);
       activeRequestIds.add(requestId);
     });
@@ -1665,7 +1685,7 @@ export async function runPostRefusalObserver(
     );
     const postRefusalNonEssentialRequests = allRequests
       .filter((request) =>
-        request.nonEssential &&
+        request.nonEssential && request.method !== "OPTIONS" &&
         !request.inFlightAtRefusalRegistration &&
         typeof request.msOffsetFromRefusal === "number" &&
         request.msOffsetFromRefusal > 0
@@ -1827,11 +1847,16 @@ function classifyRequests(
     const vendor = vendorFor({ type: "request", url: requestUrl });
     const startedAtMs = elapsed(scanStartedAtMs, captured.startedAtEpochMs);
     const googleConsentMode = captureGoogleConsentModeRequest({ url: requestUrl, requestId: captured.requestId, timestampMs: startedAtMs });
+    const rootStartedAtMs = !captured.request.redirectedFrom() ? startedAtMs
+      : captured.rootStartedAtEpochMs === undefined ? undefined : elapsed(scanStartedAtMs, captured.rootStartedAtEpochMs);
     const msOffsetFromRefusal = refusalRegisteredAtEpochMs === undefined
       ? undefined
       : elapsed(scanStartedAtMs, captured.startedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs);
     return {
       requestId: captured.requestId,
+      method: captured.request.method(),
+      ...(rootStartedAtMs === undefined || rootStartedAtMs > startedAtMs ? {} : { rootStartedAtMs }),
+      ...(captured.measurementEvidence ? { measurementEvidence: { ...captured.measurementEvidence, timestampMs: startedAtMs } } : {}),
       sanitizedUrl: sanitizeUrl(requestUrl),
       ...(googleConsentMode ? { googleConsentMode } : {}),
       ...(hostnameFromUrl(requestUrl) ? { hostname: hostnameFromUrl(requestUrl) } : {}),
@@ -1840,8 +1865,8 @@ function classifyRequests(
       ...(captured.completedAtEpochMs === undefined
         ? {}
         : { completedAtMs: elapsed(scanStartedAtMs, captured.completedAtEpochMs) }),
-      ...(captured.responseCookieNamesSet?.length
-        ? { responseCookieNamesSet: captured.responseCookieNamesSet }
+      ...(captured.responseCookieNamesSet !== undefined
+        ? { responseCookieNamesSet: captured.responseCookieNamesSet.slice(0, 96) }
         : {}),
       inFlightAtRefusalRegistration: captured.inFlightAtRefusalRegistration,
       ...(msOffsetFromRefusal === undefined ? {} : { msOffsetFromRefusal }),
@@ -1989,9 +2014,7 @@ function classifyStorageItem(input: {
   identityBasis: NonNullable<PostRefusalStorageItem["identityBasis"]>;
   identityHash: string;
 }): PostRefusalStorageItem {
-  const vendor = input.storageType === "cookie"
-    ? vendorFor({ type: "cookie", cookieName: input.name, hostname: input.hostname })
-    : vendorFor({ type: "cmp_runtime", storageKey: input.name, hostname: input.hostname });
+  const purpose = resolveCanonicalActionStoragePurpose(input);
   return {
     ...(input.expiresAtEpochSeconds !== undefined ? { expiresAtEpochSeconds: input.expiresAtEpochSeconds, capturedAtEpochSeconds: input.capturedAtEpochSeconds } : {}),
     storageType: input.storageType,
@@ -2000,8 +2023,7 @@ function classifyStorageItem(input: {
     identityBasis: input.identityBasis,
     identityHash: input.identityHash,
     valueHash: hashValue(input.value),
-    ...(vendor ? { vendor: vendor.vendor, purpose: vendor.purpose } : {}),
-    nonEssential: vendor ? NON_ESSENTIAL_PURPOSES.has(vendor.purpose) : false,
+    ...purpose,
   };
 }
 
@@ -2015,9 +2037,7 @@ function classifyStorageWrite(
   if (!write.name) return undefined;
   if (write.storageType === "cookie" && (write.deletion || write.value === "")) return undefined;
   const hostname = new URL(targetUrl).hostname;
-  const vendor = write.storageType === "cookie"
-    ? vendorFor({ type: "cookie", cookieName: write.name, hostname })
-    : vendorFor({ type: "cmp_runtime", storageKey: write.name, hostname });
+  const purpose = resolveCanonicalActionStoragePurpose({ storageType: write.storageType, name: write.name, hostname });
   const exactIdentity = resolveInstrumentedWriteStorageIdentity({
     hostname,
     name: write.name,
@@ -2031,8 +2051,7 @@ function classifyStorageWrite(
     ...(exactIdentity ? { storageIdentityHash: exactIdentity.identityHash } : {}),
     observedAtMs: elapsed(scanStartedAtMs, write.observedAtEpochMs),
     msOffsetFromRefusal: Math.max(0, elapsed(scanStartedAtMs, write.observedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs)),
-    ...(vendor ? { vendor: vendor.vendor, purpose: vendor.purpose } : {}),
-    nonEssential: vendor ? NON_ESSENTIAL_PURPOSES.has(vendor.purpose) : false,
+    ...purpose,
   };
 }
 

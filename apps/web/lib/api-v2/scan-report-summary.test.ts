@@ -1,3 +1,6 @@
+import { buildPostRefusalRuntimeProjection } from "../scans/post-refusal-runtime-projection";
+import { buildNormalizedConcerns } from "../scans/normalized-concerns";
+import { afterRejectProjection, highRiskAfterRejectAssessment } from "../scans/test-fixtures/after-reject-scoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -58,7 +61,7 @@ function fixture(): ScanDetailResponse {
   const row = { id: "post_reject_tracking_reduction", label: "Post-choice tracking reduction", status: "Gap observed",
     assessmentStatus: "gap_observed", evidenceState: "observed", tone: "warning", note: "Direct post-refusal requests retained.",
     explanation: "Direct post-refusal requests retained.", subchecks: [], evidenceRefs: [],
-    criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true, refusalExercised: true,
+    criticalEvidence: { retainedEvidence: { afterRejectScoringAssessment: highRiskAfterRejectAssessment(), rejectInteractionConfirmed: true, refusalExercised: true,
       scoreEffect: "canonical_post_refusal_policy" }, projectedFindings: [], missingOrIncompleteSourceSignals: [] } };
   return { scan: { id: scanId, domainHostname: "sits.example", status: "completed", scanType: "full", pagesScanned: 1,
     pagesRequested: 1, scanFromValue: "eu_ie", scanConfigJson: { normalizedUrl: pageUrl },
@@ -323,4 +326,47 @@ test("historical v8 score explanations retain their v18 policy and original amou
   assert.deepEqual(scan, original);
   scan.snapshot!.score_version = "overall-posture.future";
   assert.equal(projectScanScoreExplanation(scan, 85), null);
+});
+
+
+test("historical v9 explanation keeps the prior fifteen-point Reject policy", () => {
+  const scan = fixture(); scan.snapshot!.score_version = "overall-posture.v9";
+  const row = getPersistedCanonicalReportProjection(scan)!.checklistRows[0]!;
+  delete row.criticalEvidence.retainedEvidence.afterRejectScoringAssessment;
+  const explanation = projectScanScoreExplanation(scan, 85);
+  assert.equal(explanation?.scoreVersion, "overall-posture.v9");
+  assert.equal(explanation?.policyVersion, "gdpr-eprivacy-posture.v19");
+  assert.equal(explanation?.totalPolicyDeductionPoints, 15);
+});
+
+
+test("new measurement and performance tiers agree across report, API, status and exported evidence", () => {
+  for (const [profile, score] of [["measurement", 95], ["performance", 100]] as const) {
+    const scan = fixture();
+    const runtimeArtifacts = buildPostRefusalRuntimeProjection(afterRejectProjection(profile));
+    scan.runtimeArtifacts = { ...runtimeArtifacts, consentControlAssessment: observedControlAssessment };
+    const normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
+    const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ runtimeArtifacts, normalizedConcerns, scanCompleted: true, coverageLimited: false });
+    const checklist = deriveGdprEprivacyCoverageChecklist({ coverageOutcomes, projectedFindings: [], unifiedFindings: [], scanCompleted: true, coverageLimited: false });
+    const canonical = getPersistedCanonicalReportProjection(scan)!;
+    canonical.checklistRows = checklist.filter(row => row.id === "post_reject_tracking_reduction");
+    canonical.normalizedConcerns = normalizedConcerns;
+    canonical.globalUnifiedFindings = buildUnifiedFindingDisplayPackets({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+    canonical.ownerUnifiedFindings = canonical.globalUnifiedFindings;
+    Object.assign(scan, { canonicalReportProjection: canonical });
+    scan.snapshot!.certscore_overall = score;
+    const api = buildApiV2ScanResource(scan), status = buildApiV2ScanStatus(scan, { canonicalScan: api });
+    const report = buildTimelineReportModel(scan);
+    assert.equal(api.score, score);
+    assert.equal(status.score, score);
+    assert.equal(report.score.value, score);
+    assert.ok("scoreExplanation" in report);
+    assert.deepEqual(api.scoreExplanation, report.scoreExplanation);
+    assert.deepEqual(status.scoreExplanation, api.scoreExplanation);
+    assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints, 100 - score);
+    assert.deepEqual((buildReportDisplayExport(report as unknown as Record<string, unknown>) as unknown as { scoreExplanation: unknown }).scoreExplanation, api.scoreExplanation);
+    const finding = canonical.globalUnifiedFindings.find(row => row.unifiedFindingId === "post_refusal_non_essential_activity");
+    assert.match(finding?.presentation.findingName ?? "", profile === "performance" ? /Performance measurement/ : /Analytics measurement/);
+    assert.doesNotMatch(finding?.presentation.suggestedFix ?? "", /Update the reject path so confirmed refusal suppresses/);
+  }
 });

@@ -486,7 +486,16 @@ Coverage failure, legacy capture without ancestry, pre-click redirect chains,
 essential/CMP traffic, and storage presence alone remain neutral. The versioned
 GDPR/ePrivacy posture policy uses the existing post-Reject activity deduction,
 with only the strongest effect in that family; confirmed refusal/contradiction
-must not be double-charged. Accept comparison and other independent deductions
+must not be double-charged.
+The October 14 owner-approved local `after_reject_measurement_tiers.v1` policy
+supersedes that fixed deduction for new v20 assessments: verified optional
+tracking/contradiction deducts 15, qualified storage-denied measurement deducts 5,
+and verified performance-only or insufficient-evidence review deducts 0. Require
+the source-bound typed assessment through the canonical concern and checklist
+path. Unconfirmed registration is review-only in v20; historical v18/v19 amounts
+remain unchanged. A zero deduction is not proof of successful refusal or legal
+compliance. See `docs/certscore-v2/after-reject-measurement-tiers-policy.md`.
+Production deployment requires separate authorization. Accept comparison and other independent deductions
 are unchanged. This adds no waiting or invocations; bounded ancestry/provenance
 metadata is estimated below $1/month at 100,000 scans/month and 30-day retention.
 

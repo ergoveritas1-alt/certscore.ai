@@ -1957,3 +1957,42 @@ test("Osano Reject reuses the unspent geometry slice after a transient intercept
     }
   } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 });
+
+
+test("fresh Reject capture retains bounded measurement and identifier inspection through the typed packet", async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<!doctype html><div id="certscore-fixture-consent-banner"><button data-certscore-consent-action="reject">Reject all</button><button>Accept all</button></div><script>
+      document.querySelector('[data-certscore-consent-action="reject"]').onclick = () => {
+        localStorage.setItem('certscore_fixture_consent','rejected');
+        document.querySelector('#certscore-fixture-consent-banner').hidden = true;
+        setTimeout(() => {
+          fetch('https://www.google-analytics.com/g/collect?v=2&tid=G-FIXTURE&gcs=G100&en=page_view',{method:'POST'}).catch(()=>{});
+          fetch('https://cloudflareinsights.com/cdn-cgi/rum',{method:'POST',body:JSON.stringify({eventType:1,firstContentfulPaint:100})}).catch(()=>{});
+          fetch('https://www.google-analytics.com/g/collect?v=2&tid=G-FIXTURE&gcs=G100&en=page_view&uid=private-fixture-user',{method:'POST'}).catch(()=>{});
+        },80);
+      };
+    </script>`);
+  });
+  const url = await listenHttpServer(server);
+  try {
+    const packet = await observe(url, { observationWindowMs: 500 });
+    assert.equal(packet.refusalRegistration.status, "confirmed");
+    const inspected = packet.network.requests.filter(row => row.measurementEvidence && row.method === "POST");
+    assert.equal(inspected.length, 3);
+    assert.ok(inspected.some(row => row.measurementEvidence!.profile === "cloudflare_rum.v1" && row.measurementEvidence!.payloadInspection === "complete"));
+    assert.ok(inspected.some(row => row.measurementEvidence!.identifierEvidence === "persistent_observed"));
+    for (const row of inspected) {
+      assert.equal(row.measurementEvidence!.requestId, row.requestId);
+      assert.equal(row.measurementEvidence!.timestampMs, row.startedAtMs);
+      assert.equal(row.measurementEvidence!.cookieHeader, "absent");
+      assert.deepEqual(row.responseCookieNamesSet, []);
+      assert.ok(row.rootStartedAtMs! > packet.refusalRegistration.refusalRegisteredAtMs!);
+    }
+    const projection = projectPostRefusalEvidenceForReport({ packet, packetSha256: "b".repeat(64) });
+    assert.equal(projection.scoringEvidence?.requests.filter(row => row.measurementEvidence && row.method === "POST").length, 3);
+    assert.doesNotMatch(JSON.stringify(projection), /private-fixture-user/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});

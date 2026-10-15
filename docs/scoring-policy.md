@@ -5,8 +5,8 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Local versions: `gdpr-eprivacy-posture.v19`, `overall-posture.v9`, and
-`full-site-distinct-findings.v8`. These changes have not been deployed. The California GPC evidence policy remains v1;
+Local versions: `gdpr-eprivacy-posture.v20`, `overall-posture.v10`, and
+`full-site-distinct-findings.v9`. These changes have not been deployed. The California GPC evidence policy remains v1;
 its existing eligible 15-point effect is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
@@ -36,9 +36,14 @@ cap. Replay identities use canonical vendor/product names; fingerprinting uses
 hosts. Storage retains exact storage identity; tracking uses canonical vendors.
 
 Decline/Reject deducts 12, within the 22-point consent-control cap. Eligible
-post-Reject activity deducts 15, including the already-authorized click-tracking
-review and confirmed contradiction paths; only the strongest effect applies.
-The evidence and registration requirements are unchanged. Legacy privacy-checklist accessibility, choice-quality, withdrawal and
+post-Reject activity uses the owner-approved local 15/5/0 tiers. Verified optional
+advertising, identifier-based tracking, replay, writes or a consent contradiction
+receive 15; qualified storage-denied analytics measurement receives 5; verified
+performance-only measurement and insufficient-evidence review receive 0. Only
+the strongest supported effect applies within the existing 15-point family cap.
+The new version requires a source-bound typed assessment; raw status flags cannot
+create a deduction. Historical v18/v19 click-tracking weights remain unchanged.
+See [after-Reject evidence and scoring](certscore-v2/after-reject-measurement-tiers-policy.md). Legacy privacy-checklist accessibility, choice-quality, withdrawal and
 cross-border rows have no direct deduction;
 the underlying findings/checklist evidence remains available.
 
@@ -49,7 +54,7 @@ group does not attract another category charge. Canonical pixels remain tracking
 evidence without an additional embed charge; different resource paths or content
 purposes remain distinct. Historical rows without this projection keep the prior
 calculation. See the [local cookie/embed review and after-Reject proposal](certscore-v2/cookie-embed-scoring-review-2026-10-14.md).
-The proposed after-Reject tiers are not implemented. Privacy-notice
+The after-Reject tiers are implemented locally under the separately versioned policy linked above. Privacy-notice
 availability deducts 9 (owner-approved October 11, 2026), shown as
 “Privacy policy not found: −9 points” when
 the canonical deduction applies. The report attribution uses the same capped

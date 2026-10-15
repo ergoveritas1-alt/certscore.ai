@@ -1,3 +1,4 @@
+import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { buildEmbedScoringEvidence, type EmbedScoringEvidence } from "./embed-scoring-evidence";
 import { retainedRejectClickCapture } from "./retained-reject-click-capture";
@@ -6270,6 +6271,28 @@ function hasConcretePostRejectNonEssentialDetail(row: Record<string, unknown>) {
 }
 
 function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
+  const outcome = derivePostRejectOutcomeFromEvidence(input);
+  if (!outcome) return outcome;
+  const assessment = (input.normalizedConcerns ?? []).filter(concern =>
+    concern.originType === "runtime_artifact" && concern.promotionEligibility === "eligible" &&
+    [REJECT_CLICK_TRACKING_SIGNAL, "privacy.post_refusal_non_essential_activity", "privacy.refusal_signal_contradicts_action", "privacy.pre_consent_storage_not_cleared"].includes(concern.originKey ?? "") &&
+    concern.externalSurfacingEligibility === "eligible").map(concern =>
+      readAfterRejectScoringAssessment(concern.evidenceBundle.rawEvidence?.afterRejectScoringAssessment)).find(Boolean);
+  if (!assessment) return outcome;
+  const limitation = assessment.tier === "measurement"
+    ? "Analytics measurement requests were retained after Reject with denied-storage declarations and no observed persistent identifier transmission in the inspected requests."
+    : assessment.tier === "performance_only"
+      ? "Page-performance requests were retained after Reject. The inspected requests and bounded storage snapshots supported performance-only measurement."
+      : assessment.tier === "review"
+        ? `${outcome.limitation} The retained evidence did not support a purpose-specific after-Reject deduction.` : outcome.limitation;
+  const status = outcome.status === "Gap observed" && assessment.deductionPoints < 15 ? "Review signal" : outcome.status;
+  return makeOutcome(outcome.rowId, status, limitation, outcome.evidenceRefs, {
+    missingOrIncompleteSourceSignals: outcome.criticalEvidence.missingOrIncompleteSourceSignals,
+    retainedEvidence: { ...outcome.criticalEvidence.retainedEvidence, afterRejectScoringAssessment: assessment },
+  });
+}
+
+function derivePostRejectOutcomeFromEvidence(input: GdprEprivacyCoveragePolicyInput) {
   // A separately verified action session may differ from the passive inventory.
   // Only the already eligible canonical concern can select this scored review.
   const clickConcern = (input.normalizedConcerns ?? []).find((concern) =>

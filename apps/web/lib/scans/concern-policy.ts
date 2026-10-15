@@ -1,3 +1,4 @@
+import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { cmpAuditRowsEqual } from "@certscore/contracts";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
@@ -3018,12 +3019,13 @@ export function deriveConcernPolicy(input: {
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
     if (hasProductionProjectablePostRefusalEvidence(input.rawEvidence)) {
+      const scoring = readAfterRejectScoringAssessment(input.rawEvidence?.afterRejectScoringAssessment);
       return {
-        allowedNarrativeTier: "strong",
+        allowedNarrativeTier: scoring && scoring.deductionPoints < 15 ? "moderate" : "strong",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: [...negativeEvidenceFlags],
         promotionEligibility: "eligible",
-        regulatoryChecklistEligibility: isStoredIdentifierPersistenceConcern(input.concern)
+        regulatoryChecklistEligibility: isStoredIdentifierPersistenceConcern(input.concern) || scoring && scoring.deductionPoints < 15
           ? "review_signal"
           : "gap_observed"
       };
@@ -3418,12 +3420,13 @@ export function deriveConcernPolicy(input: {
 
   if (isRejectTrackingPersistenceConcern(input.concern)) {
     if (hasProductionProjectablePostRefusalEvidence(input.rawEvidence)) {
+      const scoring = readAfterRejectScoringAssessment(input.rawEvidence?.afterRejectScoringAssessment);
       return {
-        allowedNarrativeTier: "strong",
+        allowedNarrativeTier: scoring && scoring.deductionPoints < 15 ? "moderate" : "strong",
         externalSurfacingEligibility: "eligible",
         negativeEvidenceFlags: [...negativeEvidenceFlags],
         promotionEligibility: "eligible",
-        regulatoryChecklistEligibility: isStoredIdentifierPersistenceConcern(input.concern)
+        regulatoryChecklistEligibility: isStoredIdentifierPersistenceConcern(input.concern) || scoring && scoring.deductionPoints < 15
           ? "review_signal"
           : "gap_observed"
       };

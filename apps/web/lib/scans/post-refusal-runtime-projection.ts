@@ -1,3 +1,4 @@
+import { assessAfterRejectScoring } from "./after-reject-scoring-policy";
 import { readChoicePathExecution } from "./choice-path-execution";
 import type {
   PostRefusalLaneOutcome,
@@ -135,6 +136,7 @@ export function buildPostRefusalRuntimeProjection(
           post_refusal_observation_coverage: coverageProjection,
         }
       : {}),
+    afterRejectScoringAssessment: assessAfterRejectScoring(projection),
     postRefusalEvidenceProjection: projection,
     rejectClickTrackingAssessment: !laneOutcome || (laneOutcome.status === "joined" && laneOutcome.evidenceJoined)
       ? assessRejectClickTracking(projection) : null,

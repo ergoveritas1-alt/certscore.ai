@@ -6123,3 +6123,6 @@ function stableObservationId(
 }
 
 export { resolveDocumentedServiceRegion, documentedServiceRegions, SERVICE_REGION_REFERENCES, SERVICE_REGION_REFERENCE_VERSION, type ServiceRegionReference } from "./service-regions";
+
+export { inspectMeasurementRequest } from "./measurement-request-inspection";
+export { resolveCanonicalActionStoragePurpose } from "./action-storage-purpose";

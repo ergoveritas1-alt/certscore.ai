@@ -63,6 +63,7 @@ export function assessRejectClickTracking(value: unknown): RejectClickTrackingAs
     !capture || capture.policyVersion !== "bounded_after_action_capture.v2" || capture.action !== "reject" ||
     capture.activationStatus !== "completed" || capture.stopReason !== "window_elapsed" || capture.requestsDropped !== 0) return null;
   const requests = (projection.afterActionRequests ?? []).flatMap((row) => {
+    if (row.method === "OPTIONS") return [];
     const ancestor = capture.requestAncestry?.find((entry) => entry.requestId === row.requestId);
     const request = trackingRequestSchema.safeParse({
       requestId: row.requestId, url: row.sanitizedUrl, vendor: row.vendor, category: row.purpose,

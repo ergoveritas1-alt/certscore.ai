@@ -1,6 +1,7 @@
+import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { EMBED_SCORE_ROW_IDS, readEmbedScoringGroups } from "./embed-scoring-evidence";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
-import { SCORING_POLICY_VERSION, SCORING_RULE_BY_ID, SCORING_FAMILIES, SCORE_FLOOR, SCORE_BASE } from "./scoring-policy";
+import { SCORING_POLICY_VERSION, type GdprEprivacyScoringPolicyVersion, SCORING_RULE_BY_ID, SCORING_FAMILIES, SCORE_FLOOR, SCORE_BASE } from "./scoring-policy";
 import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
 
 type RegulatoryCoverageFramework = "california" | "gdpr_eprivacy";
@@ -318,7 +319,7 @@ function getFingerprintingHostCount(retained: Record<string, unknown>) {
   ).size;
 }
 
-export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVersion: typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v18" = SCORING_POLICY_VERSION) {
+export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVersion: GdprEprivacyScoringPolicyVersion = SCORING_POLICY_VERSION) {
   if (isExcludedFromDenominator(row) || isCoverageLimited(row)) return 0;
   const policy = GDPR_EPRIVACY_POSTURE_POLICIES[row.id];
   if (!policy) return 0;
@@ -380,6 +381,10 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
     return 0;
   }
   if (row.id === "post_reject_tracking_reduction") {
+    if (policyVersion === SCORING_POLICY_VERSION) {
+      const assessment = readAfterRejectScoringAssessment(retained.afterRejectScoringAssessment);
+      return ["gap_observed", "review_signal"].includes(row.assessmentStatus) ? assessment?.deductionPoints ?? 0 : 0;
+    }
     if (hasConfirmedPostRefusalContradiction(row)) {
       return policy.confirmedContradictionDeduction ?? policy.gapDeduction;
     }
@@ -391,7 +396,7 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
     return 0;
   }
 
-  if (policyVersion === SCORING_POLICY_VERSION && EMBED_SCORE_ROW_IDS.some(id => id === row.id) && readEmbedScoringGroups(retained)?.length === 0) return 0;
+  if (policyVersion !== "gdpr-eprivacy-posture.v18" && EMBED_SCORE_ROW_IDS.some(id => id === row.id) && readEmbedScoringGroups(retained)?.length === 0) return 0;
 
   if (row.assessmentStatus === "gap_observed") {
     return policy.gapDeduction;
@@ -407,7 +412,7 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVe
 }
 
 /** The score and its explanation consume this same capped policy calculation. */
-export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow[], policyVersion: typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v18" = SCORING_POLICY_VERSION) {
+export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow[], policyVersion: GdprEprivacyScoringPolicyVersion = SCORING_POLICY_VERSION) {
   const familyDeductions = new Map<GdprEprivacyRiskFamily, number>();
   const familyRules = new Map<GdprEprivacyRiskFamily, Array<{ ruleId: string; label: string;
     policyDeductionPoints: number; decisionVerification: "confirmed" | "unconfirmed" | "not_applicable" | "unknown" }>>();
@@ -420,7 +425,7 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
   const scoredFlatRows = new Set<string>();
   const chargedEmbedGroups = new Set<string>();
   // Stable precedence retains the most concrete attribution independent of input order.
-  const orderedRows = policyVersion !== SCORING_POLICY_VERSION ? rows : [...rows].sort((a, b) => {
+  const orderedRows = policyVersion === "gdpr-eprivacy-posture.v18" ? rows : [...rows].sort((a, b) => {
     const priority = (id: string) => { const index = EMBED_SCORE_ROW_IDS.findIndex(value => value === id); return index < 0 ? -1 : index; };
     return priority(a.id) - priority(b.id);
   });
@@ -433,7 +438,7 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
     }
     const deduction = getGdprEprivacyRowDeduction(row, policyVersion);
     if (deduction <= 0) continue;
-    if (policyVersion === SCORING_POLICY_VERSION && EMBED_SCORE_ROW_IDS.some(id => id === row.id)) {
+    if (policyVersion !== "gdpr-eprivacy-posture.v18" && EMBED_SCORE_ROW_IDS.some(id => id === row.id)) {
       const groups = readEmbedScoringGroups(getRetainedEvidence(row));
       if (groups !== undefined) {
         if (!groups.some(group => !chargedEmbedGroups.has(group))) continue;

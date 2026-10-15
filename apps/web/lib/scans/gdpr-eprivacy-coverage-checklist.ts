@@ -1,3 +1,4 @@
+import { afterRejectScoringNarrative, readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
 import { canonicalEvidenceVendorName as normalizeEvidenceVendorName } from "./canonical-evidence-vendor-name";
 import { projectPreconsentTrackingTiming, readPreconsentTrackingTiming } from "./preconsent-tracking-timing";
@@ -2417,6 +2418,13 @@ function specializeChecklistRow(input: {
       readRejectClickTrackingAssessment(input.coverageOutcome.criticalEvidence.retainedEvidence.rejectClickTrackingAssessment)) {
     return { evidenceRefs: input.evidenceRefs, label: "Tracking after Reject click", status: "Review signal" as const,
       explanation: `${input.coverageOutcome.limitation} Refusal registration was not confirmed.` };
+  }
+
+  if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Review signal") {
+    const assessment = readAfterRejectScoringAssessment(input.coverageOutcome?.criticalEvidence.retainedEvidence.afterRejectScoringAssessment);
+    const narrative = afterRejectScoringNarrative(assessment);
+    if (narrative) return { evidenceRefs: input.evidenceRefs, explanation: input.coverageOutcome!.limitation,
+      label: narrative.title, status: "Review signal" as const };
   }
 
   if (input.definition.id === "post_reject_tracking_reduction" && input.status === "Gap observed") {

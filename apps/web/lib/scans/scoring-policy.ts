@@ -1,8 +1,10 @@
 import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS } from "./california-gpc-response-policy";
 
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v19";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v8";
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v20";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v9";
+export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
+export const POST_REJECT_SCORING_TIERS = { high_risk: 15, measurement: 5, performance_only: 0, review: 0 } as const;
 export const SCORE_FLOOR = 0;
 export const SCORE_BASE = 100;
 export const SCORING_FAMILIES = {
@@ -22,6 +24,7 @@ export const SCORING_FAMILIES = {
 export type ScoringRule = {
   id: string; anchor: string; label: string; family: keyof typeof SCORING_FAMILIES;
   siteWide: boolean; points: number;
+  tiers?: typeof POST_REJECT_SCORING_TIERS;
   identity?: { first: number; second: number; subsequentEach: number; unit: string };
 };
 export const SCORING_RULES: readonly ScoringRule[] = [
@@ -29,7 +32,7 @@ export const SCORING_RULES: readonly ScoringRule[] = [
   {"id": "pre_consent_cookies_storage", "anchor": "storage", "label": "Pre-consent cookies / storage", "family": "pre_consent_storage", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "identity"}},
   {"id": "pre_consent_third_party_tracking", "anchor": "tracking", "label": "Pre-consent tracking", "family": "pre_consent_tracking", "siteWide": true, "points": 8, "identity": {"first": 8, "second": 4, "subsequentEach": 2, "unit": "vendor"}},
   {"id": "reject_all_path_availability", "anchor": "decline", "label": "Decline / Reject path", "family": "consent_controls", "siteWide": false, "points": 12},
-  {"id": "post_reject_tracking_reduction", "anchor": "post-reject", "label": "Post-Reject activity", "family": "post_refusal_enforcement", "siteWide": false, "points": 15},
+  {"id": "post_reject_tracking_reduction", "anchor": "post-reject", "label": "Post-Reject activity", "family": "post_refusal_enforcement", "siteWide": false, "points": 15, tiers: POST_REJECT_SCORING_TIERS},
   {"id": "session_replay_fingerprinting_review", "anchor": "replay", "label": "Session replay", "family": "sensitive_runtime", "siteWide": true, "points": 6, "identity": {"first": 6, "second": 4, "subsequentEach": 1, "unit": "identity"}},
   {"id": "sensitive_surfaces_third_party_tracking", "anchor": "sensitive", "label": "Sensitive surfaces with third-party tracking", "family": "sensitive_runtime", "siteWide": true, "points": 12},
   {"id": "device_identification_fingerprinting_signal_observed", "anchor": "fingerprinting", "label": "Fingerprinting", "family": "tracking_technology", "siteWide": true, "points": 6, "identity": {"first": 6, "second": 4, "subsequentEach": 1, "unit": "identity"}},
@@ -53,6 +56,7 @@ export const SCORING_RULES: readonly ScoringRule[] = [
  ];
 export const SCORING_RULE_BY_ID = new Map(SCORING_RULES.map(rule => [rule.id, rule]));
 export function scoringRuleDescription(rule: ScoringRule) {
+  if (rule.tiers) return `Optional tracking: ${rule.tiers.high_risk} · storage-denied measurement: ${rule.tiers.measurement} · verified performance or unresolved review: ${rule.tiers.performance_only}`;
   const identity = rule.identity;
   return identity ? `First ${identity.unit}: ${identity.first} · second: ${identity.second} · each additional: ${identity.subsequentEach}` : String(rule.points);
 }

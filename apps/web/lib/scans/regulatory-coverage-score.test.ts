@@ -1,3 +1,4 @@
+import { highRiskAfterRejectAssessment } from "./test-fixtures/after-reject-scoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getGdprEprivacyCoverageChecklistRowIds } from "./gdpr-eprivacy-coverage-checklist";
@@ -529,7 +530,7 @@ test("coverage limitations reduce confidence without changing posture", () => {
 test("confirmed post-refusal enforcement failure has a fifteen-point family effect", () => {
   const row = {
     assessmentStatus: "gap_observed",
-    criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true } },
+    criticalEvidence: { retainedEvidence: { afterRejectScoringAssessment: highRiskAfterRejectAssessment(), rejectInteractionConfirmed: true } },
     evidenceState: "observed",
     id: "post_reject_tracking_reduction",
     status: "Gap observed"
@@ -588,6 +589,7 @@ test("passive persistence cannot suppress a separately retained post-refusal con
       criticalEvidence: {
         retainedEvidence: {
           preConsentStorageNotClearedCount: 1,
+          afterRejectScoringAssessment: highRiskAfterRejectAssessment(),
           refusalSignalContradictsAction: true,
           rejectInteractionConfirmed: true,
           scoreEffect: "none"
@@ -670,7 +672,7 @@ test("pre-consent, refusal-path, and post-refusal failures combine without a sys
       },
       {
         assessmentStatus: "gap_observed",
-        criticalEvidence: { retainedEvidence: { rejectInteractionConfirmed: true } },
+        criticalEvidence: { retainedEvidence: { afterRejectScoringAssessment: highRiskAfterRejectAssessment(), rejectInteractionConfirmed: true } },
         evidenceState: "observed",
         id: "post_reject_tracking_reduction",
         status: "Gap observed"

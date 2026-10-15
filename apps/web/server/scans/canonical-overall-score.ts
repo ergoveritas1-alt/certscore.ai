@@ -1,7 +1,7 @@
 import { siteIntegrityDeduction } from "../../lib/scans/site-integrity-score-policy";
 import { accessibilityDeductionBreakdown } from "../../lib/scans/accessibility-score-policy";
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
-import { SCORE_FLOOR, SCORE_BASE, SCORING_POLICY_VERSION, SCORING_RULE_BY_ID, SCORING_FAMILIES } from "../../lib/scans/scoring-policy";
+import { SCORE_FLOOR, SCORE_BASE, SCORING_POLICY_VERSION, type GdprEprivacyScoringPolicyVersion, SCORING_RULE_BY_ID, SCORING_FAMILIES } from "../../lib/scans/scoring-policy";
 import { projectScanReportNoGo, type ScanReportAccessContext } from "../../lib/scans/scan-report-disposition";
 import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import type { GdprEprivacyCoverageChecklistItem } from "../../lib/scans/gdpr-eprivacy-coverage-checklist";
@@ -35,7 +35,7 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
   scanRecord: ScanReportAccessContext;
   checklistRows: GdprEprivacyCoverageChecklistItem[];
   unifiedFindings: UnifiedFindingDisplayPacket[];
-  scorePolicyVersion?: typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v18";
+  scorePolicyVersion?: GdprEprivacyScoringPolicyVersion;
 }) {
   if (projectScanReportNoGo(input.scanRecord)) return null;
   const postureScore = deriveRegulatoryCoverageScore({
@@ -64,7 +64,7 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
   const score = resolveScanReportScore(input.scanRecord, Math.max(SCORE_FLOOR, SCORE_BASE - totalPolicyDeductionPoints));
   if (score === null) return null;
   return { score, baseScore: SCORE_BASE, scoreFloor: SCORE_FLOOR, totalPolicyDeductionPoints,
-    scoreVersion: input.scorePolicyVersion === "gdpr-eprivacy-posture.v18" ? "overall-posture.v8" : CANONICAL_OVERALL_SCORE_VERSION,
+    scoreVersion: input.scorePolicyVersion === "gdpr-eprivacy-posture.v18" ? "overall-posture.v8" : input.scorePolicyVersion === "gdpr-eprivacy-posture.v19" ? "overall-posture.v9" : CANONICAL_OVERALL_SCORE_VERSION,
     policyVersion: input.scorePolicyVersion ?? SCORING_POLICY_VERSION, deductions };
 }
 

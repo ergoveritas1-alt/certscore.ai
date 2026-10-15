@@ -1,3 +1,4 @@
+import { afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { readAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
@@ -4070,6 +4071,7 @@ function buildRejectClickTrackingConcerns(
     originKey: REJECT_CLICK_TRACKING_SIGNAL,
     originType: "runtime_artifact",
     rawEvidence: {
+      afterRejectScoringAssessment: retainedAfterRejectScoringAssessment(runtimeArtifacts),
       rejectClickTrackingAssessment: assessment,
       runtimeEvidenceArtifacts: [`post-refusal-packet:sha256:${assessment.sourcePacketSha256}`, ...urls],
       runtimeRequestUrls: urls,
@@ -4113,7 +4115,10 @@ function buildPostRefusalObservationConcerns(
     ...activityRows.map((row) => getStringValue(row.vendor)),
     ...persistedStorageRows.map((row) => getStringValue(row.vendor))
   ]);
+  const scoringAssessment = retainedAfterRejectScoringAssessment(runtimeArtifacts);
+  const narrative = afterRejectScoringNarrative(scoringAssessment);
   const commonEvidence = {
+    afterRejectScoringAssessment: scoringAssessment,
     directPostRefusalRuntimeEvidence: activityRows.length > 0 || contradictionObserved,
     exactUnchangedStoragePersistenceEvidence:
       persistedStorageRows.length > 0 &&
@@ -4139,7 +4144,7 @@ function buildPostRefusalObservationConcerns(
     ...(activityRows.length > 0
       ? [buildConcernFromSharedInput({
           categoryId: "enforcement_outcomes_after_user_choice",
-          description:
+          description: narrative?.description ??
             "A confirmed reject action was followed by classified non-essential network or storage-write activity in the retained post-refusal window.",
           domainContext,
           evidence: runtimeRequestUrls,
@@ -4151,12 +4156,12 @@ function buildPostRefusalObservationConcerns(
             postRefusalNonEssentialActivity: activityRows,
             post_refusal_non_essential_activity: activityRows
           },
-          severity: "high",
+          severity: scoringAssessment?.deductionPoints === 0 ? "low" : scoringAssessment?.deductionPoints === 5 ? "medium" : "high",
           signalKey: "privacy.post_refusal_non_essential_activity",
           signalLabel: "Non-essential activity after refusal",
           signalSource: "runtime_artifact_signal",
           sourceType: "signal",
-          title: "Non-essential activity continued after refusal"
+          title: narrative?.title ?? "Non-essential activity continued after refusal"
         })]
       : []),
     ...(persistedStorageRows.length > 0
