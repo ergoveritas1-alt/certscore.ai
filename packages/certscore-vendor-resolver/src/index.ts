@@ -1,3 +1,5 @@
+import { cookieClassificationSchema, type CookieClassification } from "@certscore/contracts";
+import { COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext } from "./cookie-knowledge-base";
 import type {
   EndpointGeographyPrecision,
   EndpointGeographyStatus,
@@ -17,6 +19,7 @@ export {
   COOKIE_PURPOSE_CANDIDATE_VERSION,
   AXEPTIO_COOKIE_PURPOSE_POLICY,
   COOKIE_PURPOSE_POLICY,
+  LEGACY_COOKIE_PURPOSE_POLICY,
   retainedCookiePurposePolicy,
   resolveCanonicalVendorLegalContext,
   type CanonicalCookieCategory,
@@ -30,6 +33,7 @@ export {
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
 export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-14-fullstory-endpoint-v1";
+export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-15-v3";
 
 export type VendorResolverEvidenceType =
   | "request"
@@ -40,6 +44,7 @@ export type VendorResolverEvidenceType =
   | "cmp_runtime";
 
 export interface VendorResolverInput {
+  cookiePurposePolicyVersion?: string;
   evidenceId?: string;
   type: VendorResolverEvidenceType;
   url?: string;
@@ -5194,7 +5199,8 @@ export function getCanonicalVendorRegistryManifest() {
   return {
     contractVersion: "vendor-registry-manifest-v1" as const,
     resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
-    rules: rules.map(rule => ({
+    cookieProviderResolverVersion: COOKIE_PROVIDER_RESOLVER_VERSION,
+    rules: [...rules, ...auditedCookieProviderRules].map(rule => ({
       ruleId: rule.basisLabel,
       ...rule.identity,
       entity: rule.entity,
@@ -5524,7 +5530,7 @@ export function resolveVendorObservations(
     const storageKey = input.storageKey;
     const domSelector = input.domSelector;
 
-    for (const rule of rules) {
+    for (const rule of input.type === "cookie" && input.cookiePurposePolicyVersion === COOKIE_PURPOSE_POLICY ? [...rules, ...auditedCookieProviderRules] : rules) {
       const matchedHost = hostname
         ? matchesAny(hostname, rule.hostPatterns) && !matchesAny(hostname, rule.excludeHostPatterns)
         : false;
@@ -5589,7 +5595,8 @@ export function resolveVendorObservations(
             : matchedCookie ? "cookie_name" : "hostname";
       const registryAttribution: VendorRegistryAttribution = {
         contractVersion: "vendor-registry-attribution-v1",
-        resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
+        resolverVersion: input.type === "cookie" && input.cookiePurposePolicyVersion === COOKIE_PURPOSE_POLICY
+          ? COOKIE_PROVIDER_RESOLVER_VERSION : CANONICAL_VENDOR_RESOLVER_VERSION,
         ...rule.identity,
         ruleIds: [rule.basisLabel],
         matchKind,
@@ -6126,3 +6133,45 @@ export { resolveDocumentedServiceRegion, documentedServiceRegions, SERVICE_REGIO
 
 export { inspectMeasurementRequest } from "./measurement-request-inspection";
 export { resolveCanonicalActionStoragePurpose } from "./action-storage-purpose";
+
+// Version-gated cookie identity rules. These identify providers only, never purpose or consent.
+const auditedCookieProviderRules: VendorRule[] = [
+  {
+    identity: {"entityId": "ent_7509263a9ab6", "vendorId": "ven_e408c48d1f67", "serviceId": "svc_f72a2fb5efd7"},
+    entity: "Google LLC", vendor: "YouTube", product: "YouTube Cookie Storage",
+    purpose: "unknown", servicePurpose: "Unknown", regulatoryRelevance: [], confidence: 0.98,
+    cookiePatterns: [/^(?:VISITOR_INFO1_LIVE|__Secure-YNID|__Secure-YEC|YSC|__Secure-ROLLOUT_TOKEN|VISITOR_PRIVACY_METADATA|__Secure-BUCKET)$/i], hostPatterns: [/(?:^|\.)youtube\.com$/i], requireHostPatternForCookieMatch: true,
+    basisLabel: "cookie_provider_youtube_v3",
+    review: { reviewedAt: "2026-10-15", reviewer: "Astra source audit", sourceUrls: ["https://policies.google.com/technologies/cookies"] },
+  },
+  {
+    identity: {"entityId": "ent_4de26ead61ae", "vendorId": "ven_c473fdd76516", "serviceId": "svc_ce75f83ce98b"},
+    entity: "Amazon Web Services, Inc.", vendor: "AWS WAF", product: "AWS WAF Token",
+    purpose: "unknown", servicePurpose: "Unknown", regulatoryRelevance: [], confidence: 0.98,
+    cookiePatterns: [/^aws-waf-token$/],
+    basisLabel: "cookie_provider_aws_waf_v3",
+    review: { reviewedAt: "2026-10-15", reviewer: "Astra source audit", sourceUrls: ["https://docs.aws.amazon.com/waf/latest/developerguide/waf-tokens-details.html"] },
+  },
+  {
+    identity: {"entityId": "ent_edd52442cfaa", "vendorId": "ven_edd52442cfaa", "serviceId": "svc_a7c7dab03bd5"},
+    entity: "Axeptio", vendor: "Axeptio", product: "Axeptio Consent Storage",
+    purpose: "unknown", servicePurpose: "Unknown", regulatoryRelevance: [], confidence: 0.98,
+    cookiePatterns: [/^axeptio_(?:cookies|all_vendors|authorized_vendors)$/],
+    basisLabel: "cookie_provider_axeptio_v3",
+    review: { reviewedAt: "2026-10-15", reviewer: "Astra source audit", sourceUrls: ["https://support.axeptio.eu/en/articles/274085-does-axeptio-place-cookies"] },
+  },
+];
+
+export function resolveCanonicalCookieClassification(name: string, context: Pick<CanonicalCookieContext, "cookieDomain"> = {}): CookieClassification {
+  const knowledge = cookieKnowledge(name, { ...context, purposePolicyVersion: COOKIE_PURPOSE_POLICY });
+  const domain = context.cookieDomain?.replace(/^\.+/, "").toLowerCase() || null;
+  const resolution = resolveCanonicalVendor({ type: "cookie", cookieName: name, hostname: domain ?? undefined, cookiePurposePolicyVersion: COOKIE_PURPOSE_POLICY });
+  const owner = resolution.observation;
+  // A rejected/ambiguous purpose context must not be restored through an unrelated name signature.
+  const provider = knowledge.vendor && owner?.registryAttribution ? {
+    vendor: owner.vendor, product: owner.product ?? owner.vendor, entity: owner.entity, registryAttribution: owner.registryAttribution,
+  } : null;
+  return cookieClassificationSchema.parse({ version: COOKIE_PURPOSE_POLICY, cookieName: name, cookieDomain: domain,
+    category: knowledge.category, essentiality: knowledge.essentiality, documentedPurposes: knowledge.documentedPurposes ?? [],
+    ruleId: knowledge.ruleId ?? "unresolved", provider });
+}

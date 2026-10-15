@@ -1,3 +1,4 @@
+import { readCookieClassification, COOKIE_CLASSIFICATION_VERSION, type CookieClassification } from "@certscore/contracts";
 import { verifiedCookieInventoryIdentity } from "./retained-cookie-inventory-identity";
 import { retainedCookiePurposePolicy, resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
@@ -8,6 +9,9 @@ import {
 } from "./runtime-vendor-ownership";
 
 export type RuntimeCookieEvidenceRow = {
+  cookiePurposePolicyVersion?: string;
+  providerAttributionConflict?: boolean;
+  cookieClassification?: CookieClassification | null;
   exactStorageIdentity?: string;
   category: string;
   cookieName: string;
@@ -520,6 +524,7 @@ function inferCookieSourceProviderFromHost(host: string | null | undefined) {
 }
 
 export function getRuntimeCookiePrimaryProvider(row: RuntimeCookieEvidenceRow) {
+  if (row.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION) return row.cookieClassification?.provider?.vendor ?? "Unknown";
   const inferredCookieProvider = inferCookieProvider(row.cookieName, row.domain);
   if (inferredCookieProvider) {
     return inferredCookieProvider;
@@ -654,8 +659,13 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   }
   const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain)?.replace(/^\.+/, "") ?? null;
   const purposeCodes = getStringArray(row.essentialityReasonCodes ?? row.cookieEssentialityReasonCodes);
+  const usesNewClassification = row.cookieClassification !== undefined || purposeCodes.includes(`cookie_purpose_policy:${COOKIE_CLASSIFICATION_VERSION}`);
+  const parsedClassification = readCookieClassification(row.cookieClassification, cookieName, domain);
+  const classification = retainedCookiePurposePolicy(purposeCodes) === COOKIE_CLASSIFICATION_VERSION &&
+    parsedClassification?.category === (row.category ?? row.cookiePurpose) &&
+    parsedClassification?.essentiality === (row.essentiality ?? row.cookieEssentiality) ? parsedClassification : null;
   const knowledge = resolveCanonicalCookieKnowledge(cookieName, {
-    purposePolicyVersion: retainedCookiePurposePolicy(purposeCodes),
+    purposePolicyVersion: usesNewClassification ? undefined : retainedCookiePurposePolicy(purposeCodes),
     cookieDomain: domain,
     hostname: getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
     initiatorChain: getStringArray(row.initiatorChain ?? row.initiator_chain),
@@ -845,7 +855,16 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
       ? "before_consent_cookie_write"
       : snapshot
         ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
-        : "unknown"
+        : "unknown",
+    ...(usesNewClassification ? {
+      cookiePurposePolicyVersion: COOKIE_CLASSIFICATION_VERSION, cookieClassification: classification,
+      category: classification?.category ?? "unknown", essentiality: classification?.essentiality ?? "unknown",
+      nonEssential: classification?.essentiality === "non_essential",
+      essentialitySource: classification ? "canonical_registry" as const : "unknown" as const,
+      essentialityConfidence: classification ? getNumber(row.essentialityConfidence ?? row.cookieEssentialityConfidence) : null,
+      description: classification ? getString(row.description) ?? "Purpose retained in canonical cookie evidence." : "Cookie classification evidence is unavailable or inconsistent.",
+      dataTypes: classification ? getStringArray(row.dataTypes) : [],
+    } : {}),
   };
 }
 
@@ -909,6 +928,7 @@ export function getRuntimeCookieEvidenceIdentity(row: RuntimeCookieEvidenceRow) 
 }
 
 function essentialitySourceWeight(row: RuntimeCookieEvidenceRow) {
+  if (row.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION) return 100;
   return {
     canonical_registry: 4,
     deterministic_classifier: 3,
@@ -933,6 +953,11 @@ function mergeRuntimeCookieObservations(
   const categoryConflict = existing.category !== candidate.category;
   const essentialityConflict = (existing.essentiality ?? "unknown") !== (candidate.essentiality ?? "unknown");
   const equallyAuthoritativeConflict = existingWeight === candidateWeight && (categoryConflict || essentialityConflict);
+  const providerConflict = existing.providerAttributionConflict || candidate.providerAttributionConflict ||
+    existing.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION &&
+    candidate.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION &&
+    (existing.cookieClassification?.provider?.registryAttribution.serviceId ?? null) !==
+      (candidate.cookieClassification?.provider?.registryAttribution.serviceId ?? null);
   const conflictLabels = uniqueStrings([
     ...(existing.classificationConflicts ?? []),
     ...(candidate.classificationConflicts ?? []),
@@ -949,6 +974,11 @@ function mergeRuntimeCookieObservations(
   return {
     ...alternate,
     ...preferred,
+    ...(preferred.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION ? {
+      providerAttributionConflict: Boolean(providerConflict),
+      cookieClassification: equallyAuthoritativeConflict ? null : providerConflict && preferred.cookieClassification
+        ? { ...preferred.cookieClassification, provider: null } : preferred.cookieClassification,
+    } : {}),
     category: equallyAuthoritativeConflict ? "unknown" : preferred.category,
     essentiality: equallyAuthoritativeConflict ? "unknown" as const : preferred.essentiality,
     essentialitySource: equallyAuthoritativeConflict ? "unknown" as const : preferred.essentialitySource,
@@ -985,7 +1015,7 @@ export function buildRuntimeCookieInventory(input: {
     .filter((row) => Boolean(row)) as RuntimeCookieEvidenceRow[];
   const initialCookieNames = getStringArray(runtimeArtifacts?.initial_cookie_names ?? runtimeArtifacts?.initialCookieNames);
   const initialCookieDomains = getStringArray(runtimeArtifacts?.initial_cookie_domains ?? runtimeArtifacts?.initialCookieDomains);
-  const initialRows = initialCookieNames.map((cookieName, index) => normalizeInitialCookieRow(cookieName, initialCookieDomains[index] ?? null));
+  const initialRows = [...cookieWriteRows, ...explicitPreconsentRows].some(row => row.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION) ? [] : initialCookieNames.map((cookieName, index) => normalizeInitialCookieRow(cookieName, initialCookieDomains[index] ?? null));
   const rowsByKey = new Map<string, RuntimeCookieEvidenceRow>();
   for (const row of [...cookieWriteRows, ...explicitPreconsentRows, ...initialRows]) {
     if (!row.domain) {

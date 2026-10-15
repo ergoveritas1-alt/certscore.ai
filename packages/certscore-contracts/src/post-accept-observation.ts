@@ -19,6 +19,7 @@ import {
   postRefusalResolverSchema,
   postRefusalStorageItemSchema,
   postRefusalStorageWriteBaseSchema,
+  validateActionCookieClassification,
   postRefusalTcfStateSchema,
 } from "./post-refusal-observation";
 import { consentActionControlProofSchema } from "./consent-action-control-proof";
@@ -150,6 +151,7 @@ export const postAcceptStorageWriteSchema = postRefusalStorageWriteBaseSchema.om
   msOffsetFromAccept: z.number().int().nonnegative(),
 }).superRefine((write, context) => {
   validateActionStorageName(write, context);
+  validateActionCookieClassification(write, context);
   if (write.identityHash !== undefined && write.storageIdentityHash !== undefined && write.identityHash !== write.storageIdentityHash) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["storageIdentityHash"],
       message: "Retained Accept storage identity fields must agree." });

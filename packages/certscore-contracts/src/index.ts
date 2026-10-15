@@ -1,3 +1,5 @@
+import { cookieClassificationSchema } from "./cookie-classification";
+export * from "./cookie-classification";
 export * from "./cookie-disclosure-column";
 import { googleConsentModeObservationSchema } from "./google-consent-mode";
 export * from "./google-consent-mode";
@@ -605,6 +607,7 @@ export const cookieEventSchema = runtimeEvidenceEventSchema.extend({
   cookieEssentialityConfidence: z.number().min(0).max(1).optional(),
   cookieEssentialityReasonCodes: z.array(z.string().max(120)).max(12).default([]),
   cookieClassificationBasis: z.array(z.string()).default([]),
+  cookieClassification: cookieClassificationSchema.optional(),
   operation: z.enum(["set_cookie_header", "browser_snapshot"]),
   valueRedacted: z.boolean().default(true),
 });

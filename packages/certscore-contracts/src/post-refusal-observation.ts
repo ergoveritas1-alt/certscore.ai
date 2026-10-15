@@ -1,3 +1,4 @@
+import { cookieClassificationSchema } from "./cookie-classification";
 import { measurementRequestEvidenceSchema, readBoundMeasurementRequestEvidence } from "./measurement-request-evidence";
 import { observedActionSourceProofSchema, validateObservedActionSourceProof } from "./observed-action-source-proof";
 import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionTiming } from "./retained-action-timing";
@@ -140,6 +141,8 @@ export const postRefusalNetworkRequestSchema = z.object({
   purpose: z.enum([
     "analytics",
     "advertising",
+    "marketing",
+    "personalization",
     "session_replay",
     "consent_management",
     "tag_management",
@@ -153,10 +156,28 @@ export const postRefusalNetworkRequestSchema = z.object({
   googleConsentMode: googleConsentModeObservationSchema.optional(),
 });
 
-const actionStoragePurposeAssessmentSchema = z.object({
+const actionStoragePurposeAssessmentSchema = z.union([z.object({
   version: z.literal("action_storage_purpose.v1"),
   essentiality: z.enum(["essential", "non_essential", "unknown"]),
-}).strict();
+}).strict(), z.object({
+  version: z.literal("action_storage_purpose.v2"),
+  essentiality: z.enum(["essential", "non_essential", "unknown"]),
+  cookieClassification: cookieClassificationSchema,
+}).strict().refine(value => value.essentiality === value.cookieClassification.essentiality, "Inconsistent cookie essentiality")]);
+
+export function validateActionCookieClassification(item: {
+  storageType: string; name: string; hostname?: string; purpose?: string; nonEssential: boolean;
+  purposeAssessment?: z.infer<typeof actionStoragePurposeAssessmentSchema>;
+}, context: z.RefinementCtx) {
+  if (item.purposeAssessment?.version !== "action_storage_purpose.v2") return;
+  const proof = item.purposeAssessment.cookieClassification;
+  if (item.storageType !== "cookie" || proof.cookieName !== item.name ||
+      proof.cookieDomain !== (item.hostname?.replace(/^\.+/, "").toLowerCase() || null) ||
+      proof.category !== item.purpose || (proof.essentiality === "non_essential") !== item.nonEssential) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["purposeAssessment"],
+      message: "Cookie classification must match the exact storage observation and purpose." });
+  }
+}
 
 export const postRefusalStorageItemSchema = z.object({
   purposeAssessment: actionStoragePurposeAssessmentSchema.optional(),
@@ -176,6 +197,7 @@ export const postRefusalStorageItemSchema = z.object({
   nonEssential: z.boolean(),
 }).superRefine((item, context) => {
   validateActionStorageName(item, context);
+  validateActionCookieClassification(item, context);
   if ((item.identityBasis === undefined) !== (item.identityHash === undefined)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -219,7 +241,10 @@ export const postRefusalStorageWriteBaseSchema = z.object({
   nonEssential: z.boolean(),
 });
 
-export const postRefusalStorageWriteSchema = postRefusalStorageWriteBaseSchema.superRefine(validateActionStorageName);
+export const postRefusalStorageWriteSchema = postRefusalStorageWriteBaseSchema.superRefine((item, context) => {
+  validateActionStorageName(item, context);
+  validateActionCookieClassification(item, context);
+});
 
 export const postRefusalTcfStateSchema = z.object({
   observedAtMs: z.number().int().nonnegative(),

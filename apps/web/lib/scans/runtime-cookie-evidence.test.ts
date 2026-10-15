@@ -18,7 +18,7 @@ import {
   buildRuntimeCookiePriorityGroups,
   getRuntimeCookieReviewPriority
 } from "./runtime-cookie-priority";
-import { AXEPTIO_COOKIE_PURPOSE_POLICY, COOKIE_PURPOSE_POLICY } from "@certscore/vendor-resolver";
+import { AXEPTIO_COOKIE_PURPOSE_POLICY, LEGACY_COOKIE_PURPOSE_POLICY as COOKIE_PURPOSE_POLICY } from "@certscore/vendor-resolver";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";

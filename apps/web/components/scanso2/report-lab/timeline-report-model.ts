@@ -654,7 +654,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse): Timeli
   const inventory = inventoryProjection.ungroupedRows.map((row) => ({
     category: row.macroCategory,
     confidence: row.confidence.replace(/_/g, " "),
-    controllingEntity: row.canonicalEntity ?? row.vendor,
+    controllingEntity: row.controllerEntity === undefined ? row.canonicalEntity ?? row.vendor : row.controllerEntity ?? "Unknown",
     domains: row.domains.join(", ") || "Not retained",
     evidence: classifyInventoryEvidence(row),
     evidenceJson: {

@@ -1,3 +1,4 @@
+import { COOKIE_CLASSIFICATION_VERSION } from "@certscore/contracts";
 import { getPersistedCanonicalReportProjection } from "../../server/scans/persisted-canonical-report-projection";
 import { preConsentBrowserStorageProjectionSchema } from "@certscore/contracts";
 import { INVENTORY_METRIC_LABELS, inventoryMetricFamily } from "./inventory-resource-semantics";
@@ -147,6 +148,8 @@ export type TrackerInventoryGroupRow = {
 };
 
 export type InventoryGroupRow = {
+  /** Cookie provider ownership does not establish the controller of site processing. */
+  controllerEntity?: string | null;
   attributionEvidence?: RuntimeVendorAttributionEvidence | null;
   attributionSignatures: string[];
   canonicalEntity: string | null;
@@ -1516,14 +1519,19 @@ export function buildRuntimeInventoryGroupRows(input: {
   );
   const candidates: InventoryGroupRow[] = [
     ...groupedCookieRows.map((row): InventoryGroupRow => {
-      const owner = row.cookieDetails
+      const newClassification = row.cookieDetails.some(detail => detail.cookiePurposePolicyVersion === COOKIE_CLASSIFICATION_VERSION);
+      const providers = row.cookieDetails.map(detail => detail.cookieClassification?.provider).filter(Boolean);
+      const uniqueProviders = new Map(providers.map(provider => [provider!.registryAttribution.serviceId, provider!]));
+      const retainedProvider = uniqueProviders.size === 1 && providers.length === row.cookieDetails.length ? [...uniqueProviders.values()][0] : null;
+      const owner = newClassification ? (retainedProvider ? { ...retainedProvider, regulatoryRelevance: [] } : null) : row.cookieDetails
         .map((detail) => findRuntimeCookieOwner(detail.cookieName, detail.domain))
         .find((candidate) => candidate !== null) ??
         findRuntimeVendorLabelOwner(row.vendor) ??
         row.domains.map(findRuntimeEntityOwner).find((candidate) => candidate !== null);
       return {
         ...row,
-        attributionSignatures: row.attributionEvidence?.signatureId ? [row.attributionEvidence.signatureId] : [],
+        ...(newClassification ? { controllerEntity: null } : {}),
+        attributionSignatures: newClassification ? retainedProvider?.registryAttribution.ruleIds ?? [] : row.attributionEvidence?.signatureId ? [row.attributionEvidence.signatureId] : [],
         canonicalEntity: owner?.entity ?? null,
         dataFlows: inventoryEndpointFlows(input.dataFlows ?? [], row.domains),
         observedRecordCount: row.cookieDetails.length,

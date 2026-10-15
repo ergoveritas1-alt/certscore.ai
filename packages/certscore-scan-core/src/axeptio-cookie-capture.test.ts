@@ -31,6 +31,8 @@ test("runtime producer retains exact preference-cookie policy through journey cl
       for (const event of retained) {
         assert.equal(cookieEventSchema.parse(event).cookiePurpose, "consent_management");
         assert.equal(event.cookieEssentiality, "essential");
+        assert.equal(event.cookieClassification?.version, COOKIE_PURPOSE_POLICY);
+        assert.equal(event.cookieClassification?.cookieName, name);
         assert.ok(event.cookieEssentialityReasonCodes?.includes(`cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`));
       }
     }
@@ -44,8 +46,17 @@ test("runtime producer retains exact preference-cookie policy through journey cl
       assert.equal(event.cookieEssentiality, essentiality);
       assert.ok(event.cookieEssentialityReasonCodes?.includes(`cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`));
     }
+    const ga = events.find(event => event.cookieName === "_ga")!;
+    const corrupt = classifyCookieEvents([{ ...ga, cookiePurpose: "unknown" }], [])[0]!;
+    assert.equal(corrupt.cookiePurpose, "unknown");
+    assert.equal(corrupt.cookieEssentiality, "unknown");
+    const unrelated = { observationId: "other-domain", matchedEvidenceIds: ["other-event"],
+      matchedCookieNames: [ga.cookieName], purpose: "analytics", vendor: "Other provider" } as never;
+    const unbound = classifyCookieEvents([{ ...ga, cookieClassification: undefined }], [unrelated])[0]!;
+    assert.equal(unbound.cookiePurpose, "unknown");
+    assert.equal(unbound.vendorAssociated, false, "a same-name cookie cannot borrow another event's provider");
     const legacy = events.filter(event => names.includes(event.cookieName)).map(event => ({ ...event,
-      cookiePurpose: "unknown" as const, cookieEssentiality: "unknown" as const, cookieEssentialityReasonCodes: [] }));
+      cookieClassification: undefined, cookiePurpose: "unknown" as const, cookieEssentiality: "unknown" as const, cookieEssentialityReasonCodes: [] }));
     assert.ok(classifyCookieEvents(legacy, []).every(event => event.cookiePurpose === "unknown"));
   } finally {
     server.closeAllConnections();

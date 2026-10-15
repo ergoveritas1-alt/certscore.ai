@@ -1,3 +1,4 @@
+import { readCookieClassification, COOKIE_CLASSIFICATION_VERSION } from "@certscore/contracts";
 import type {
   CookieEvent,
   CookieSnapshot,
@@ -41,11 +42,26 @@ const meaningfulNonTrackerPurposes = new Set<NormalizedVendorObservation["purpos
   "customer_support",
 ]);
 
+function usesCookieClassificationV3(event: RuntimeEvidenceEvent) {
+  return ("cookieClassification" in event && event.cookieClassification !== undefined) ||
+    ("cookieEssentialityReasonCodes" in event && Array.isArray(event.cookieEssentialityReasonCodes) &&
+      event.cookieEssentialityReasonCodes.includes(`cookie_purpose_policy:${COOKIE_CLASSIFICATION_VERSION}`));
+}
+
 export function classifyCookieEvents(
   cookieEvents: CookieEvent[],
   vendors: NormalizedVendorObservation[],
 ): CookieEvent[] {
   return cookieEvents.map((event) => {
+    if (usesCookieClassificationV3(event)) {
+      const retained = readCookieClassification(event.cookieClassification, event.cookieName, event.cookieDomain ?? event.hostname);
+      const classification = retainedCookiePurposePolicy(event.cookieEssentialityReasonCodes) === COOKIE_CLASSIFICATION_VERSION &&
+        retained?.category === event.cookiePurpose && retained?.essentiality === event.cookieEssentiality ? retained : null;
+      const matches = vendors.filter(vendor => vendor.matchedEvidenceIds.includes(event.eventId));
+      const related = matches.length === 1 ? matches[0] : undefined;
+      return { ...event, cookiePurpose: classification?.category ?? "unknown",
+        cookieEssentiality: classification?.essentiality ?? "unknown", vendorAssociated: Boolean(related), associatedVendorRef: related?.observationId };
+    }
     const relatedVendor = vendorsForCookie(event.cookieName, vendors)[0];
     const cookieParty =
       event.thirdParty === true
@@ -173,7 +189,7 @@ export function buildObservedJourneys(
       continue;
     }
     const refs = [eventRef(cookieEvent, "cookie_set", cookieEvent.cookieName)];
-    const relatedVendors = vendorsForCookie(cookieEvent.cookieName, input.normalizedVendorObservations);
+    const relatedVendors = usesCookieClassificationV3(cookieEvent) ? input.normalizedVendorObservations.filter(vendor => vendor.matchedEvidenceIds.includes(cookieEvent.eventId)) : vendorsForCookie(cookieEvent.cookieName, input.normalizedVendorObservations);
     journeys.push(
       journeyFromRefs({
         journeyType: "cookie",
@@ -425,6 +441,9 @@ function eventMatchesAnyVendor(
   event: RuntimeEvidenceEvent,
   vendors: NormalizedVendorObservation[],
 ): boolean {
+  if (event.eventType === "cookie" && usesCookieClassificationV3(event)) {
+    return vendors.some(vendor => vendor.matchedEvidenceIds.includes(event.eventId));
+  }
   const url = urlForEvent(event);
   return vendors.some((vendor) => {
     const urlMatch = url ? vendor.matchedUrls.includes(url) : false;

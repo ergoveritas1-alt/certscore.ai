@@ -19,17 +19,20 @@ export type CanonicalCookieKnowledge = {
   essentiality: "essential" | "non_essential" | "unknown";
   name: string;
   vendor: string | null;
+  documentedPurposes?: CanonicalCookieCategory[];
+  ruleId?: string;
 };
 
 export const AXEPTIO_COOKIE_PURPOSE_POLICY = "axeptio_consent_preferences.v1" as const;
-export const COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v2" as const;
+export const LEGACY_COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v2" as const;
+export const COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v3" as const;
 export function retainedCookiePurposePolicy(codes: readonly string[] | undefined) {
   const markers = codes?.filter(code => code.startsWith("cookie_purpose_policy:")) ?? [];
   if (markers.length !== 1) return undefined;
-  return [COOKIE_PURPOSE_POLICY, AXEPTIO_COOKIE_PURPOSE_POLICY].find(version => markers[0] === `cookie_purpose_policy:${version}`);
+  return [COOKIE_PURPOSE_POLICY, LEGACY_COOKIE_PURPOSE_POLICY, AXEPTIO_COOKIE_PURPOSE_POLICY].find(version => markers[0] === `cookie_purpose_policy:${version}`);
 }
 export type CanonicalCookieContext = {
-  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY | typeof COOKIE_PURPOSE_POLICY;
+  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY | typeof LEGACY_COOKIE_PURPOSE_POLICY | typeof COOKIE_PURPOSE_POLICY;
   cookieDomain?: string | null;
   hostname?: string | null;
   initiatorChain?: readonly string[] | null;
@@ -594,13 +597,14 @@ export function resolveCanonicalCookieKnowledge(
   context: CanonicalCookieContext = {},
 ): CanonicalCookieKnowledge {
   const name = cookieName?.trim() ?? "";
+  if (context.purposePolicyVersion === COOKIE_PURPOSE_POLICY) return resolveAuditedCookieKnowledge(name, context);
   const contextHosts = canonicalCookieContextHosts(context);
-  const axeptioRule = (context.purposePolicyVersion === AXEPTIO_COOKIE_PURPOSE_POLICY || context.purposePolicyVersion === COOKIE_PURPOSE_POLICY)
+  const axeptioRule = (context.purposePolicyVersion === AXEPTIO_COOKIE_PURPOSE_POLICY || context.purposePolicyVersion === LEGACY_COOKIE_PURPOSE_POLICY)
     ? COOKIE_PURPOSE_CANDIDATE_RULES.find(rule => rule.vendor === "Axeptio" && rule.pattern.test(name)) : undefined;
   // Exact documented consent-preference identities only; no prefix exemption.
   if (axeptioRule) return { name, category: axeptioRule.category, vendor: axeptioRule.vendor,
     dataTypes: [...axeptioRule.dataTypes], description: axeptioRule.description, essentiality: "essential" };
-  const documentedRule = context.purposePolicyVersion === COOKIE_PURPOSE_POLICY
+  const documentedRule = context.purposePolicyVersion === LEGACY_COOKIE_PURPOSE_POLICY
     ? DOCUMENTED_SERVICE_COOKIE_RULES.find(candidate => candidate.pattern.test(name) &&
       (!candidate.contextHostPatterns || candidate.contextHostPatterns.some(pattern =>
         pattern.test((context.cookieDomain ?? "").replace(/^\.+/, "").toLowerCase())))) : undefined;
@@ -631,6 +635,83 @@ export function resolveCanonicalCookieKnowledge(
 }
 
 export const COOKIE_PURPOSE_CANDIDATE_VERSION = "certscore.cookie-purpose-candidate.v1";
+
+/** New captures opt in. The unversioned/v1/v2 tables above are frozen for historical reads. */
+function resolveAuditedCookieKnowledge(name: string, context: CanonicalCookieContext): CanonicalCookieKnowledge {
+  // Current captures do not prove a direct setter from an initiator/ancestor URL.
+  // Keep those provenance fields separate until a typed setter proof is available.
+  const boundContext = { cookieDomain: context.cookieDomain };
+  const legacy = resolveCanonicalCookieKnowledge(name, { ...boundContext, purposePolicyVersion: LEGACY_COOKIE_PURPOSE_POLICY });
+  const hosts = canonicalCookieContextHosts(boundContext);
+  const inContext = (pattern: RegExp) => hosts.some(host => pattern.test(host));
+  const result = (ruleId: string, changes: Partial<CanonicalCookieKnowledge>): CanonicalCookieKnowledge => ({
+    ...legacy, ruleId, documentedPurposes: legacy.category === "unknown" ? [] : [legacy.category], ...changes,
+  });
+  const unresolved = (ruleId: string) => result(ruleId, { category: "unknown", essentiality: "unknown", vendor: null,
+    documentedPurposes: [], dataTypes: [], description: "Cookie purpose is unresolved without verified service context." });
+
+  // Google documents possible uses, not the active use in this observation.
+  // https://policies.google.com/technologies/cookies
+  if (/^(?:VISITOR_INFO1_LIVE|__Secure-YNID|__Secure-YEC|YSC|__Secure-ROLLOUT_TOKEN|VISITOR_PRIVACY_METADATA|__Secure-BUCKET)$/i.test(name)) {
+    if (!inContext(/(?:^|\.)youtube\.com$/i)) return unresolved("youtube_context_required");
+    if (/^(?:VISITOR_INFO1_LIVE|__Secure-YNID)$/i.test(name)) return result("youtube_visitor_mixed.v1", {
+      category: "unknown", essentiality: "unknown", vendor: "YouTube",
+      documentedPurposes: ["infrastructure", "analytics", "advertising", "personalization"],
+      dataTypes: ["visitor identifier"],
+      description: "YouTube visitor cookie with documented functionality, analytics and settings-dependent advertising or personalization uses. Active purpose was not established.",
+    });
+    if (/^__Secure-YEC$/i.test(name)) return result("youtube_yec_mixed.v1", {
+      category: "unknown", essentiality: "unknown", vendor: "YouTube", documentedPurposes: ["security", "analytics"],
+      dataTypes: ["service state"], description: "YouTube cookie with documented security and analytics uses. Active purpose was not established.",
+    });
+    return result(`youtube_${name.toLowerCase()}.v1`, { vendor: "YouTube" });
+  }
+  if (/^(?:MUID|ANONCHK|MR|SM)$/i.test(name)) {
+    if (!inContext(/(?:^|\.)(?:bing\.com|clarity\.ms)$/i)) return unresolved("microsoft_context_required");
+    const roles: Record<string, string> = { MUID: "browser identifier", ANONCHK: "identifier-transfer flag", MR: "identifier-refresh flag", SM: "identifier-synchronization flag" };
+    return result(`microsoft_${name.toLowerCase()}_mixed.v1`, { category: "unknown", essentiality: "unknown",
+      documentedPurposes: ["analytics", "advertising", "infrastructure"], dataTypes: [roles[name.toUpperCase()]!],
+      description: `Microsoft ${roles[name.toUpperCase()]}. Presence does not establish advertising use or an identifier transfer.` });
+  }
+  // https://docs.datadoghq.com/real_user_monitoring/guide/browser-sdk-upgrade/
+  if (/^_dd_s(?:_v2)?$/i.test(name)) return result("datadog_rum_session.v1", {
+    category: "unknown", essentiality: "unknown", vendor: inContext(/(?:^|\.)(?:datadoghq\.com|datadoghq-browser-agent\.com|browser-intake-datadoghq\.com)$/i) ? "Datadog" : null,
+    documentedPurposes: ["analytics"], dataTypes: ["RUM session state"],
+    description: "Documented Datadog RUM session-cookie identity. Site-specific collection, configuration and necessity remain unresolved; this is not a blanket security exemption.",
+  });
+  if (/^(?:uid|ubid(?:-.*)?|sailthru(?:_.*)?|akaas_.+|_pk_hm(?:[._-].*)?)$/i.test(name)) return unresolved("ambiguous_or_unsupported_identity.v1");
+  if (/^lidc$/i.test(name)) return inContext(/(?:^|\.)linkedin\.com$/i)
+    ? result("linkedin_routing.v1", { category: "infrastructure", dataTypes: ["data-center routing"], documentedPurposes: ["infrastructure"], description: "LinkedIn cookie used for data-center selection and routing." })
+    : unresolved("linkedin_context_required");
+  if (/^_lr_geo_location$/i.test(name)) return result("liveramp_country.v1", {
+    category: "unknown", essentiality: "unknown", documentedPurposes: ["infrastructure"],
+    dataTypes: ["country of call"], description: "LiveRamp ATS documents a country-of-call value. This cookie alone does not establish an audience identifier or advertising use.",
+  });
+  if (/^utag_main_.+/i.test(name) && !/^utag_main_(?:v_id|ses_id|_sn|_ss|_st|_pn|_se)$/i.test(name)) return unresolved("tealium_custom_key.v1");
+  if (/^(?:id5|3pi|callback)$/i.test(name) && legacy.vendor === "ID5") {
+    const role = /^id5$/i.test(name) ? "advertising identifier" : /^3pi$/i.test(name) ? "partner-match state" : "cascade callback URL state";
+    return result(`id5_${name.toLowerCase()}.v1`, { dataTypes: [role], description: `ID5 ${role}; interpreted only in the documented ID5 cookie-domain context.` });
+  }
+  if (/^OptanonAlertBoxClosed$/i.test(name)) return result("onetrust_notice_receipt.v1", {
+    dataTypes: ["notice interaction receipt"], description: "OneTrust notice-interaction receipt. Presence does not establish acceptance, refusal or consent registration.",
+  });
+  if (/^(?:s_cc|at_check|test_cookie)$/i.test(name) && legacy.category !== "unknown") return result("cookie_capability_flag.v1", {
+    dataTypes: ["cookie capability flag"], description: "Cookie capability flag for the identified service; not a unique visitor identifier.",
+  });
+  // https://github.com/PostHog/posthog.com/blob/master/contents/docs/libraries/js/_snippets/persistence-info.mdx
+  if (/^ph_phc_[A-Za-z0-9]+_posthog$/.test(name)) return result("posthog_project_persistence.v1", {
+    category: "analytics", essentiality: "non_essential", vendor: "PostHog", documentedPurposes: ["analytics"],
+    dataTypes: ["visitor identifier", "session identifier"], description: "PostHog project-scoped identity and session persistence cookie.",
+  });
+  const candidate = COOKIE_PURPOSE_CANDIDATE_RULES.find(rule => rule.vendor === "Axeptio" && rule.pattern.test(name));
+  if (candidate) return result(candidate.ruleId, {});
+  const documentedIndex = DOCUMENTED_SERVICE_COOKIE_RULES.findIndex(rule => rule.pattern.test(name) &&
+    (!rule.contextHostPatterns || rule.contextHostPatterns.some(pattern => pattern.test((context.cookieDomain ?? "").replace(/^\.+/, "").toLowerCase()))));
+  if (documentedIndex >= 0) return result(`documented_v2_${documentedIndex + 1}`, {});
+  const baseIndex = COOKIE_KNOWLEDGE_RULES.findIndex(rule => rule.pattern.test(name) &&
+    (!rule.contextHostPatterns || rule.contextHostPatterns.some(pattern => hosts.some(host => pattern.test(host)))));
+  return result(baseIndex >= 0 ? `frozen_base_${baseIndex + 1}` : "unresolved.v1", {});
+}
 
 export type CanonicalCookiePurposeCandidate = {
   artifactVersion: typeof COOKIE_PURPOSE_CANDIDATE_VERSION;

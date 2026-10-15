@@ -61,6 +61,7 @@ import { installRuntimeGraphCapture, type RuntimeGraphCaptureInput } from "../ru
 import {
   isCanonicalIdSyncEndpoint,
   resolveCanonicalCookieKnowledge,
+  resolveCanonicalCookieClassification,
   COOKIE_PURPOSE_POLICY,
   resolveEndpointGeography,
   resolveVendorObservations,
@@ -511,10 +512,7 @@ export function applyFinalDocumentPartyClassification(input: {
   for (const event of input.cookieEvents) {
     const knowledge = resolveCanonicalCookieKnowledge(event.cookieName, {
       purposePolicyVersion: COOKIE_PURPOSE_POLICY,
-      cookieDomain: event.cookieDomain,
-      hostname: event.hostname,
-      initiatorChain: event.initiatorChain,
-      setterScriptUrl: event.setterScriptUrl,
+      cookieDomain: event.cookieDomain ?? event.hostname,
     });
     const hostname = getHostname(event.cookieDomain ?? event.hostname);
     const party = classifyCookieParty(event.cookieDomain ?? hostname, firstPartyHostname);
@@ -523,15 +521,14 @@ export function applyFinalDocumentPartyClassification(input: {
     event.firstParty = party === "first_party";
     event.thirdParty = party === "third_party";
     event.cookieParty = party;
-    if (knowledge.category !== "unknown") {
-      event.cookiePurpose = canonicalCookiePurpose(knowledge.category);
-    }
+    event.cookiePurpose = canonicalCookiePurpose(knowledge.category);
+    event.cookieClassification = resolveCanonicalCookieClassification(event.cookieName, { cookieDomain: event.cookieDomain ?? event.hostname });
     event.description = knowledge.description;
     event.dataTypes = knowledge.dataTypes;
     event.cookieEssentiality = knowledge.essentiality;
     event.cookieEssentialityConfidence = knowledge.essentiality === "unknown" ? undefined : 0.98;
     event.cookieEssentialityReasonCodes = knowledge.category === "unknown"
-      ? ["canonical_cookie_knowledge_no_match", `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`]
+      ? [knowledge.documentedPurposes?.length ? "canonical_cookie_purpose_unresolved" : "canonical_cookie_knowledge_no_match", `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`]
       : [`canonical_cookie_kb:${knowledge.category}`, `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`];
     event.cookieClassificationBasis = unique([
       ...event.cookieClassificationBasis.filter((basis) =>
@@ -2525,9 +2522,6 @@ export async function preConsentRuntimeScanner(
       const knowledge = resolveCanonicalCookieKnowledge(cookie.name, {
         purposePolicyVersion: COOKIE_PURPOSE_POLICY,
         cookieDomain: cookie.domain,
-        hostname: cookieHostname,
-        initiatorChain,
-        setterScriptUrl,
       });
       const snapshotCookieEvent: CookieEvent = {
         eventId: nextId("cookie"),
@@ -2568,11 +2562,12 @@ export async function preConsentRuntimeScanner(
         dataTypes: knowledge.dataTypes,
         cookieParty,
         vendorAssociated: false,
-        cookiePurpose: knowledge.category === "unknown" ? classifyKnownCookiePurpose(cookie.name) : canonicalCookiePurpose(knowledge.category),
+        cookiePurpose: canonicalCookiePurpose(knowledge.category),
+        cookieClassification: resolveCanonicalCookieClassification(cookie.name, { cookieDomain: cookie.domain }),
         cookieEssentiality: knowledge.essentiality,
         cookieEssentialityConfidence: knowledge.essentiality === "unknown" ? undefined : 0.98,
         cookieEssentialityReasonCodes: knowledge.category === "unknown"
-          ? ["canonical_cookie_knowledge_no_match", `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`]
+          ? [knowledge.documentedPurposes?.length ? "canonical_cookie_purpose_unresolved" : "canonical_cookie_knowledge_no_match", `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`]
           : [`canonical_cookie_kb:${knowledge.category}`, `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`],
         cookieClassificationBasis: [cookieParty, "browser_snapshot", `canonical_cookie_kb:${knowledge.category}`],
         operation: "browser_snapshot",
@@ -4587,10 +4582,7 @@ export async function preConsentRuntimeScanner(
         initiatorChain.find((value) => /^https?:\/\//i.test(value));
       const knowledge = resolveCanonicalCookieKnowledge(cookieMetadata.name, {
         purposePolicyVersion: COOKIE_PURPOSE_POLICY,
-        cookieDomain: cookieMetadata.domain,
-        hostname,
-        initiatorChain,
-        setterScriptUrl,
+        cookieDomain: cookieMetadata.domain ?? hostname,
       });
       const cookieParty = classifyCookieParty(cookieMetadata.domain ?? hostname, firstPartyHostname);
       const cookieEvent: CookieEvent = {
@@ -4631,11 +4623,12 @@ export async function preConsentRuntimeScanner(
         dataTypes: knowledge.dataTypes,
         cookieParty,
         vendorAssociated: false,
-        cookiePurpose: knowledge.category === "unknown" ? classifyKnownCookiePurpose(cookieMetadata.name) : canonicalCookiePurpose(knowledge.category),
+        cookiePurpose: canonicalCookiePurpose(knowledge.category),
+        cookieClassification: resolveCanonicalCookieClassification(cookieMetadata.name, { cookieDomain: cookieMetadata.domain ?? hostname }),
         cookieEssentiality: knowledge.essentiality,
         cookieEssentialityConfidence: knowledge.essentiality === "unknown" ? undefined : 0.98,
         cookieEssentialityReasonCodes: knowledge.category === "unknown"
-          ? ["canonical_cookie_knowledge_no_match", `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`]
+          ? [knowledge.documentedPurposes?.length ? "canonical_cookie_purpose_unresolved" : "canonical_cookie_knowledge_no_match", `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`]
           : [`canonical_cookie_kb:${knowledge.category}`, `cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`],
         cookieClassificationBasis: ["set_cookie_header", `canonical_cookie_kb:${knowledge.category}`],
         operation: "set_cookie_header",

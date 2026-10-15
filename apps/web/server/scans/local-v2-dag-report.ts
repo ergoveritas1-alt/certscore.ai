@@ -5355,6 +5355,73 @@ export function buildLocalV2NoGoSnapshotFields(reasonCode: string, pageState: st
   } as const;
 }
 
+/** Shared retained-cookie projection used by materialization and read-only purpose replays. */
+export function projectRetainedCookieObservations(
+  cookieEvents: CanonicalEvidenceBundle["cookieEvents"],
+  cookieSnapshots: CanonicalEvidenceBundle["cookieSnapshots"],
+  findObservedVendor: (event: CanonicalEvidenceBundle["cookieEvents"][number]) =>
+    Pick<ReturnType<typeof buildVendorEvidence>[number], "matchedHostnames" | "vendorName"> | null = () => null,
+) {
+  return cookieEvents.map((event) => {
+    const matchedVendor = findObservedVendor(event);
+    const snapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(event.operation ?? "");
+    const initialSnapshot = /^initial_cookie_snapshot$/i.test(event.operation ?? "") ||
+      /^browser_snapshot$/i.test(event.operation ?? "") && minimumNumber(event.timestampMs) === null;
+    const eventHost = hostnameFromUrl(event.url) ?? event.hostname ?? event.cookieDomain ?? null;
+    const matchedVendorHostAligned = Boolean(matchedVendor && eventHost && matchedVendor.matchedHostnames.some((matchedHost) =>
+      eventHost === matchedHost || eventHost.endsWith(`.${matchedHost}`) || matchedHost.endsWith(`.${eventHost}`)
+    ));
+    // Cookie purpose is a property of the retained cookie observation. A vendor
+    // match can describe attribution, but it must not lend its broad category to
+    // an otherwise unclassified cookie (for example, a session or WAF cookie on
+    // an advertising-capable first-party domain).
+    const category = event.cookiePurpose && event.cookiePurpose !== "unknown"
+      ? event.cookiePurpose
+      : "unknown";
+    const essentiality = event.cookieEssentiality ?? "unknown";
+    const initiatorUrl = event.setterScriptUrl ?? event.initiatorChain?.[0] ?? event.initiatorUrl ?? null;
+    const initiatorDomain = hostnameFromUrl(initiatorUrl) ?? null;
+    return {
+      beforeConsent: event.consentStateAtTime === "pre_consent",
+      category,
+      cookieName: event.cookieName,
+      cookieClassification: event.cookieClassification,
+      cookiePath: event.cookiePath ?? "/",
+      exactStorageIdentity: retainedCookieInventoryIdentity(event, cookieSnapshots),
+      partitionKey: event.partitionKey,
+      partitionContext: "unpartitioned_or_unknown",
+      evidenceRefs: [event.eventId],
+      domain: (event.cookieDomain ?? event.hostname)?.replace(/^\.+/, ""),
+      expiresAt: event.expires ?? null,
+      firstObservedAtMs: event.timestampMs,
+      initiatorChain: event.initiatorChain ?? [],
+      initiatorDomain,
+      initiatorUrl,
+      initiatorVendor: snapshot || !matchedVendorHostAligned ? null : matchedVendor?.vendorName ?? null,
+      lifespanSeconds: event.lifespanSeconds ?? null,
+      lifespanSource: event.lifespanSource ?? null,
+      description: event.description ?? null,
+      dataTypes: event.dataTypes ?? [],
+      essentiality,
+      essentialityConfidence: event.cookieEssentialityConfidence ?? null,
+      essentialityReasonCodes: event.cookieEssentialityReasonCodes ?? [],
+      essentialitySource: essentiality === "unknown" ? "unknown" : "canonical_registry",
+      nonEssential: essentiality === "non_essential",
+      party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
+      setByThirdPartyScript: event.setByThirdPartyScript === true,
+      set_by_third_party_script: event.setByThirdPartyScript === true,
+      setterScriptUrl: event.setterScriptUrl ?? null,
+      setAtMs: snapshot ? null : event.timestampMs,
+      setMethod: event.operation ?? "cookie_event",
+      thirdParty: event.thirdParty === true || event.cookieParty === "third_party",
+      timestampMs: event.timestampMs,
+      timingEvidence: snapshot
+        ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
+        : event.consentStateAtTime === "pre_consent" ? "before_consent_cookie_write" : "observed_cookie_write"
+    };
+  });
+}
+
 function buildMaterializedLocalV2Detail(
   scanRecord: ScanDetailResponse,
   bundle: CanonicalEvidenceBundle,
@@ -5885,63 +5952,8 @@ function buildMaterializedLocalV2Detail(
     retainedRequestPurposeRowCount: boundedRequestPurposeRows.length,
     runtimeBehaviorArtifactCount: policyRuntimeComparison.runtimeBehaviorArtifacts.length,
   }));
-  const cookieWriteObservations = cookieEvents.map((event) => {
-    const matchedVendor = findObservedVendor(event, inventoryVendorRows);
-    const snapshot = /^(?:browser_snapshot|periodic_cookie_snapshot|initial_cookie_snapshot)$/i.test(event.operation ?? "");
-    const initialSnapshot = /^initial_cookie_snapshot$/i.test(event.operation ?? "") ||
-      /^browser_snapshot$/i.test(event.operation ?? "") && minimumNumber(event.timestampMs) === null;
-    const eventHost = hostnameFromUrl(event.url) ?? event.hostname ?? event.cookieDomain ?? null;
-    const matchedVendorHostAligned = Boolean(matchedVendor && eventHost && matchedVendor.matchedHostnames.some((matchedHost) =>
-      eventHost === matchedHost || eventHost.endsWith(`.${matchedHost}`) || matchedHost.endsWith(`.${eventHost}`)
-    ));
-    // Cookie purpose is a property of the retained cookie observation. A vendor
-    // match can describe attribution, but it must not lend its broad category to
-    // an otherwise unclassified cookie (for example, a session or WAF cookie on
-    // an advertising-capable first-party domain).
-    const category = event.cookiePurpose && event.cookiePurpose !== "unknown"
-      ? event.cookiePurpose
-      : "unknown";
-    const essentiality = event.cookieEssentiality ?? "unknown";
-    const initiatorUrl = event.setterScriptUrl ?? event.initiatorChain?.[0] ?? event.initiatorUrl ?? null;
-    const initiatorDomain = hostnameFromUrl(initiatorUrl) ?? null;
-    return {
-      beforeConsent: event.consentStateAtTime === "pre_consent",
-      category,
-      cookieName: event.cookieName,
-      cookiePath: event.cookiePath ?? "/",
-      exactStorageIdentity: retainedCookieInventoryIdentity(event, bundle.cookieSnapshots),
-      partitionKey: event.partitionKey,
-      partitionContext: "unpartitioned_or_unknown",
-      evidenceRefs: [event.eventId],
-      domain: (event.cookieDomain ?? event.hostname)?.replace(/^\.+/, ""),
-      expiresAt: event.expires ?? null,
-      firstObservedAtMs: event.timestampMs,
-      initiatorChain: event.initiatorChain ?? [],
-      initiatorDomain,
-      initiatorUrl,
-      initiatorVendor: snapshot || !matchedVendorHostAligned ? null : matchedVendor?.vendorName ?? null,
-      lifespanSeconds: event.lifespanSeconds ?? null,
-      lifespanSource: event.lifespanSource ?? null,
-      description: event.description ?? null,
-      dataTypes: event.dataTypes ?? [],
-      essentiality,
-      essentialityConfidence: event.cookieEssentialityConfidence ?? null,
-      essentialityReasonCodes: event.cookieEssentialityReasonCodes ?? [],
-      essentialitySource: essentiality === "unknown" ? "unknown" : "canonical_registry",
-      nonEssential: essentiality === "non_essential",
-      party: event.cookieParty ?? (event.thirdParty ? "third_party" : "first_party"),
-      setByThirdPartyScript: event.setByThirdPartyScript === true,
-      set_by_third_party_script: event.setByThirdPartyScript === true,
-      setterScriptUrl: event.setterScriptUrl ?? null,
-      setAtMs: snapshot ? null : event.timestampMs,
-      setMethod: event.operation ?? "cookie_event",
-      thirdParty: event.thirdParty === true || event.cookieParty === "third_party",
-      timestampMs: event.timestampMs,
-      timingEvidence: snapshot
-        ? initialSnapshot ? "initial_cookie_snapshot" : "periodic_cookie_snapshot"
-        : event.consentStateAtTime === "pre_consent" ? "before_consent_cookie_write" : "observed_cookie_write"
-    };
-  });
+  const cookieWriteObservations = projectRetainedCookieObservations(cookieEvents, bundle.cookieSnapshots,
+    event => findObservedVendor(event, inventoryVendorRows));
   const hybridRuntimeEvidence = {
     consentControlAssessment,
     consent_control_assessment: consentControlAssessment,
