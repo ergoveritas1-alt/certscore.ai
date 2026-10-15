@@ -8,7 +8,7 @@ import {
   verifyConsentControlInspection,
   type CanonicalEvidenceBundle,
 } from "@certscore/contracts";
-import { comparisonPair } from "@certscore/scan-core/consent-control-visual-comparison";
+import { comparisonPair } from "@certscore/scan-core/consent-control-comparison-pair";
 import type { ConsentControlGeometryArtifact } from "@certscore/scan-core/consent-control-geometry";
 
 export const MAX_REVIEW_IMAGE_BYTES = 8 * 1024 * 1024;
