@@ -5,7 +5,7 @@ import { KNOWN_CMP_REGISTRY, type KnownCmpDefinition } from "@website-signal-ris
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
 import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
-import { dispatchLocatorClickWithVerifiedGeometry, locatorHasViewportHitTarget } from "./cmp-control-actionability.js";
+import { dispatchLocatorClickWithVerifiedGeometry } from "./cmp-control-actionability.js";
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
 import { cookieDisclosureColumn } from "@certscore/contracts";
 import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
@@ -13,6 +13,7 @@ import { readCmpScopeInventory } from "./cmp-scope-inventory.js";
 import { verifyDeferredPreferencePanel } from "./cmp-preference-panel-binding.js";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "./evidence-work-budget.js";
 import { readPrivacyLinkAccess } from "./privacy-link-access.js";
+import { readCmpOptionsInventory } from "./cmp-options-inventory.js";
 
 /** A single isolated Options action. No preference changes, save, second click,
  * page retry, policy navigation, model call, or interaction in another lane. */
@@ -126,7 +127,7 @@ export async function runCmpPreferencesObserver(input: {
       .slice(0, 16).map(({url, hitTargetBeforeAction, access}) => ({url, hitTargetBeforeAction, access}));
     await binding();
     packet.checkpoints!.privacyLinks = true;
-    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"] }> = [];
+    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"]; observedOptionsLabel?: boolean }> = [];
     const detected = new Set<string>();
     // Resolve all registered vendor scopes in one shadow-piercing locator read.
     // Serial full-document selector round trips used most of the remaining
@@ -188,20 +189,26 @@ export async function runCmpPreferencesObserver(input: {
       packet.limitations.push("preference_readiness_incomplete");
       return finish();
     }
+    const optionsResolution = { version: "cmp_options_resolution.v1" as const,
+      counts: { actionable: 0, hidden: 0, disabled: 0, outside_viewport: 0, covered: 0, unavailable: 0 }, overflow: false };
+    packet.inspectionDiagnostic!.optionsResolution = optionsResolution;
     for (const definitionIndex of scopeInventory.indices) {
       remaining();
       const definition = definitions[definitionIndex]!;
       const recipe = definition.preferenceInspection;
       const scope = page.locator(scopeSelectors[definitionIndex]!);
       const controls = scope.locator(recipe?.controlSelector ?? ['button, [role="button"], input[type="button"]', definition.preferenceDialogBinding?.controlSelector].filter(Boolean).join(","));
-      const inventory = await controls.evaluateAll(nodes => ({ overflow: nodes.length > 100,
-        fields: nodes.slice(0, 100).map(element => ({ label: (element.textContent ?? "").trim().slice(0, 240), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value })) }));
-      if (inventory.overflow) { packet.limitations.push("control_inventory_overflow"); continue; }
+      const inventory = await controls.evaluateAll(readCmpOptionsInventory, { registeredSelector: definition.preferenceDialogBinding?.controlSelector });
+      if (inventory.overflow) { optionsResolution.overflow = true; packet.limitations.push("control_inventory_overflow"); continue; }
       for (const [index, fields] of inventory.fields.entries()) {
-        const result = classifyConsentControlLabel({ ...fields, hasConsentContext: true, usage: recipe ? "observation" : "action" });
+        // Observation-only labels are actionable only on the exact registered
+        // named-CMP Options target; never widen Accept/Reject or generic labels.
+        const observedOptionsLabel = definition.preferenceDialogBinding?.allowObservedOptionsLabel === true && fields.registered;
+        const result = classifyConsentControlLabel({ ...fields, hasConsentContext: true, usage: recipe || observedOptionsLabel ? "observation" : "action" });
         if (result.intent !== "options" || !result.contextSatisfied || result.matchStrength === "weak") continue;
+        optionsResolution.counts[fields.access]++;
         const control = controls.nth(index);
-        if (await control.isVisible() && await control.isEnabled() && await locatorHasViewportHitTarget(control)) matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding });
+        if (fields.access === "actionable") matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding, observedOptionsLabel });
       }
     }
     if (matches.length !== 1) {
@@ -212,7 +219,7 @@ export async function runCmpPreferencesObserver(input: {
     const match = matches[0]!;
     packet.support = { state: "partial", provider: match.provider, recipeVersion: match.recipe?.version ?? CMP_PREFERENCE_POLICY_VERSION, reason: "bounded_visible_preference_inspection" };
     const controlledId = await match.control.getAttribute("aria-controls");
-    const registeredDialog = !controlledId && match.dialogBinding &&
+    const registeredDialog = (!controlledId || match.observedOptionsLabel) && match.dialogBinding &&
       await match.control.evaluate((element, selector) => element.matches(selector), match.dialogBinding.controlSelector)
       ? match.dialogBinding : undefined;
     if (registeredDialog) packet.support.recipeVersion = registeredDialog.version;
@@ -234,9 +241,11 @@ export async function runCmpPreferencesObserver(input: {
     }
     // A registered OneTrust button may create its panel on opening. Bind that
     // transition to the exact existing vendor root, never to a guessed new modal.
-    const deferredRoot = priorMatches === 0 && registeredDialog?.deferredRootSelector
+    const deferredRoot = (priorMatches === 0 || match.observedOptionsLabel) && registeredDialog?.deferredRootSelector
       ? page.locator(registeredDialog.deferredRootSelector) : undefined;
     const deferredRootHandle = deferredRoot && await deferredRoot.count() === 1 ? await deferredRoot.elementHandle() : null;
+    if (match.observedOptionsLabel && (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle)))
+      return stopBinding("parent_unbound", "preference_parent_binding_unavailable");
     if (priorMatches === 0) {
       if (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle)) {
         return stopBinding(deferredRoot ? "parent_unbound" : "missing", deferredRoot ? "preference_parent_binding_unavailable" : "preference_surface_missing");
@@ -249,12 +258,23 @@ export async function runCmpPreferencesObserver(input: {
     if (!match.recipe && beforeVisible) return stopBinding("already_visible", "preference_surface_already_visible");
     surfaceBinding.outcome = "ready";
     await binding();
-    const dispatchFields = await match.control.evaluate((element, expected) => ({ label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls"),
-      registered: !expected.selector || element.matches(expected.selector),
-      parentBound: !expected.root || Boolean(expected.root.isConnected && expected.root.contains(element)),
-    }), { selector: registeredDialog?.controlSelector, root: deferredRootHandle });
-    const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe ? "observation" : "action" });
-    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound) throw new Error("preference_control_changed");
+    const dispatchFields = await match.control.evaluate((element, expected) => {
+      const fields = { label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls"),
+        registered: !expected.selector || element.matches(expected.selector),
+        parentBound: !expected.root || Boolean(expected.root.isConnected && expected.root.contains(element)) };
+      let ancestor: Element | null = element, accessible = true;
+      const deadline = performance.now() + 50;
+      for (let depth = 0; ancestor && depth < 64; depth++) {
+        const style = getComputedStyle(ancestor);
+        if (performance.now() >= deadline || style.display === "none" || style.visibility !== "visible" || style.opacity === "0" ||
+            ancestor.matches('[hidden], [aria-hidden="true" i], [inert]') || ancestor === element && style.pointerEvents === "none") { accessible = false; break; }
+        const root = ancestor.getRootNode();
+        ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+      }
+      return { ...fields, accessible: accessible && !ancestor };
+    }, { selector: match.observedOptionsLabel ? match.dialogBinding?.controlSelector : registeredDialog?.controlSelector, root: deferredRootHandle });
+    const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe || match.observedOptionsLabel && dispatchFields.registered ? "observation" : "action" });
+    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound || !dispatchFields.accessible) throw new Error("preference_control_changed");
     // Opening is optional depth, not permission to consume the entire lane.
     // Share one cap across dispatch, visibility and accessible-name hydration,
     // leaving room to inspect a verified panel and retain earlier checkpoints.
@@ -297,6 +317,8 @@ export async function runCmpPreferencesObserver(input: {
         ["role_not_ready", "name_not_ready"].includes(surfaceBinding.verification.result)
           ? "preference_opening_budget_exhausted" : "preference_surface_changed");
     } else if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
+    if (match.observedOptionsLabel && (!deferredRoot || !deferredRootHandle || await deferredRoot.count() !== 1 ||
+        !await controlled.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle))) throw new Error("preference_surface_changed");
     await binding();
     surfaceBinding.outcome = "opened";
     packet.action.opened = true;

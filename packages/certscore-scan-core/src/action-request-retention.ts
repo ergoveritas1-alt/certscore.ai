@@ -1,26 +1,30 @@
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { CONSENT_ACTION_RETENTION_OVERFLOW_EVALUATION_LIMIT } from "@certscore/contracts";
 
-export const ACTION_REQUEST_RETENTION_POLICY = "priority_bounded_action_requests.v1" as const;
+export const ACTION_REQUEST_RETENTION_POLICY = "priority_bounded_action_requests.v2" as const;
 export type ActionRequestRetentionClass = "delivery_asset" | "known_other" | "unknown" | "tracking" | "consent" | "document";
-type Classification = { kind: ActionRequestRetentionClass; group: string; priority: number };
+type Classification = { kind: ActionRequestRetentionClass; group: string; priority: number; endpoint?: string };
 const trackingPurposes = new Set(["advertising", "analytics", "performance_monitoring", "session_replay", "tag_management"]);
 const assetTypes = new Set(["image", "font", "media", "stylesheet"]);
 
 /** Selection priority only: CDN attribution never proves necessity or safety. */
 export function classifyActionRequestRetention(url: string, resourceType: string): Classification {
-  let hostname: string;
-  try { hostname = new URL(url).hostname; } catch { return { kind: "unknown", group: "unknown", priority: 2 }; }
+  let hostname: string, parsed: URL;
+  try { parsed = new URL(url); hostname = parsed.hostname; } catch { return { kind: "unknown", group: "unknown", priority: 2 }; }
   if (resourceType === "document") return { kind: "document", group: hostname, priority: 2 };
   const vendor = resolveCanonicalVendor({ type: "request", url }).observation;
   if (!vendor) return { kind: "unknown", group: hostname, priority: 2 };
-  if (trackingPurposes.has(vendor.purpose)) return { kind: "tracking", group: hostname, priority: 2 };
+  // Query values never form endpoint identities. Overlong paths remain
+  // ungrouped rather than merging different endpoints by a truncated prefix.
+  const path = parsed.pathname;
+  const endpoint = path.length <= 512 ? `${hostname}|${resourceType}|${vendor.purpose}|${path}` : undefined;
+  if (trackingPurposes.has(vendor.purpose)) return { kind: "tracking", group: hostname, priority: 2, endpoint };
   if (vendor.purpose === "consent_management") return { kind: "consent", group: hostname, priority: 2 };
   if (vendor.purpose === "infrastructure" && ["CDN", "Content delivery", "Font delivery", "Media delivery"].includes(vendor.servicePurpose ?? "")) {
     return { kind: assetTypes.has(resourceType) ? "delivery_asset" : "known_other", group: hostname,
       priority: assetTypes.has(resourceType) ? 0 : 1 };
   }
-  return { kind: "known_other", group: hostname, priority: 2 };
+  return { kind: "known_other", group: hostname, priority: 2, endpoint };
 }
 
 /** Fixed capacity, lazy classification on overflow, and exact omission accounting.
@@ -53,6 +57,30 @@ export function createActionRequestRetention<T extends { request: { url(): strin
       for (let i = rows.length - 1; i >= 0; i--) {
         if (inventory[i]!.priority < incoming.priority &&
           (selected < 0 || inventory[i]!.priority < inventory[selected]!.priority)) selected = i;
+      }
+      // Preserve a distinct tracking endpoint before another copy of a known
+      // endpoint. Never evict unknown traffic, unique endpoints, or the first
+      // retained request in a group. CPU and row caps stay unchanged.
+      if (selected < 0 && incoming.kind === "tracking" && incoming.endpoint &&
+          !inventory.some(item => item.endpoint === incoming.endpoint)) {
+        const counts = new Map<string,number>();
+        for (const item of inventory) if (item.endpoint && ["tracking", "known_other"].includes(item.kind))
+          counts.set(item.endpoint, (counts.get(item.endpoint) ?? 0) + 1);
+        let largest = 1;
+        const latestTracking = new Set<string>();
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const item = inventory[i]!;
+          // Preserve a later tracking example as well as the first: its time
+          // or ancestry can matter to post-choice eligibility. Only a middle
+          // duplicate is expendable for endpoint diversity.
+          if (item.kind === "tracking" && item.endpoint) {
+            if (!latestTracking.has(item.endpoint)) { latestTracking.add(item.endpoint); continue; }
+            if ((counts.get(item.endpoint) ?? 0) < 3) continue;
+          }
+          if (item.endpoint && ["tracking", "known_other"].includes(item.kind) && (counts.get(item.endpoint) ?? 0) > largest) {
+            selected = i; largest = counts.get(item.endpoint)!;
+          }
+        }
       }
       // Do not let a repeated known tracker consume every protected slot.
       if (selected < 0 && incoming.priority === 2 &&

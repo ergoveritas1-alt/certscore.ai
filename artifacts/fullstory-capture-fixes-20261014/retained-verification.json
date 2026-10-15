@@ -1,0 +1,47 @@
+{
+  "newScans": 0,
+  "deployments": 0,
+  "paidCalls": 0,
+  "limits": {
+    "requestRows": 192,
+    "overflowEvaluations": 256,
+    "visualDecodeMs": 80,
+    "preferenceDeadlineMs": 17000
+  },
+  "omittedRequestsRecovered": false,
+  "receipts": [
+    {
+      "scanId": "f7b36da6-7043-4789-8ca7-093de4d0377f",
+      "sourceSha256": "92c78f4a2d3667862b5df2a71cf1492c389d8d1201ae12ba9048f9a03f63a415",
+      "bundleManifestGeometryAndImageVerified": true,
+      "savedReportUnchanged": true,
+      "newObservedChecks": 0,
+      "statusDeltas": [
+        {
+          "id": "prominence",
+          "before": "not_assessed",
+          "after": "incomplete"
+        }
+      ],
+      "optionsReasonInvented": false
+    },
+    {
+      "scanId": "257741ec-9e2f-40e2-a912-b98fccedaf90",
+      "sourceSha256": "8ed8ec09818c8e4300d840dd10af3334007f30424484db11ca1f4510177d508e",
+      "bundleManifestGeometryAndImageVerified": true,
+      "savedReportUnchanged": true,
+      "newObservedChecks": 0,
+      "statusDeltas": [],
+      "optionsReasonInvented": false
+    },
+    {
+      "scanId": "3e99f256-8aae-4abd-a2fb-03060ba64447",
+      "sourceSha256": "38ba54880d4b0940af843dc95ebb74bab58f36ba1e0c6dad75d65957c8d1724c",
+      "bundleManifestGeometryAndImageVerified": true,
+      "savedReportUnchanged": true,
+      "newObservedChecks": 0,
+      "statusDeltas": [],
+      "optionsReasonInvented": false
+    }
+  ]
+}

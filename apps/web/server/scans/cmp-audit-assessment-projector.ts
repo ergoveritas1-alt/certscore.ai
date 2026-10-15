@@ -63,12 +63,26 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     const checkpointMissing = row.id === "categories" ? !controlsUsable : row.id === "privacy_access" ? !privacyUsable
       : ["services", "declared_not_found", "found_not_declared", "cookie_information"].includes(row.id) ? !declarationsUsable && !controlsUsable : false;
     if (row.status === "not_assessed" && checkpointMissing) Object.assign(row, { status: "incomplete",
-      detail: "This check depends on the incomplete preference inspection.", evidenceRefs: ["CmpPreferencesEvidencePacket.json"],
+      detail: preferenceInspectionDetail(evidence), evidenceRefs: ["CmpPreferencesEvidencePacket.json"],
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
     sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v8", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
+}
+
+function preferenceInspectionDetail(evidence: CmpPreferencesEvidence): string {
+  const diagnostic = evidence.inspectionDiagnostic?.optionsResolution;
+  if (evidence.support.reason !== "unique_actionable_options_not_resolved" || !diagnostic || diagnostic.overflow)
+    return "This check depends on the incomplete preference inspection.";
+  const counts = diagnostic.counts;
+  if (counts.actionable > 1) return "More than one actionable Options control was found; no preference control was clicked.";
+  if (counts.unavailable) return "Options-control inspection did not complete; deeper preferences were not inspected.";
+  const states = Object.entries(counts).filter(([, count]) => count > 0).map(([state]) => state);
+  if (!states.length) return "No Options control was identified in the inspected CMP view; deeper preferences were not inspected.";
+  if (states.length !== 1 || counts.actionable) return "Options controls were identified but none was uniquely actionable; their inspection states are retained in supporting evidence.";
+  const reasons: Record<string,string> = { hidden: "was hidden", disabled: "was inactive", outside_viewport: "was outside the viewport", covered: "was covered by another element" };
+  return `The CMP's Options control ${reasons[states[0]!]}; deeper preferences were not inspected.`;
 }
 
 function boundedCookieNames(names: string[]): string[] {
@@ -263,13 +277,15 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
   const image = images?.length === 1 ? images[0] : undefined;
   if (identity?.source !== "cdp_loader_id" || !identity.token || !image || !bundle.consentUiObservations?.some(observation => observation.documentUrl === bundle.url && observation.documentIdentity?.source === identity.source && observation.documentIdentity?.token === identity.token)) return;
   const candidates = Array.isArray(geometry.candidates) ? geometry.candidates as Record<string, unknown>[] : [];
-  if (!["accept_all", "reject_all"].every(action => candidates.some(candidate => {
+  const usableCandidates = candidates.filter(candidate => {
     const frame = candidate.frameContext as Record<string, unknown> | undefined;
     const bounds = candidate.boundingBox as Record<string, unknown> | undefined;
-    return candidate.actionType === action && candidate.layer === "first_layer" && candidate.decisionStatus === "confirmed_visible" &&
+    return ["accept_all", "reject_all"].includes(String(candidate.actionType)) && candidate.layer === "first_layer" && ["confirmed_visible", "covered"].includes(String(candidate.decisionStatus)) &&
       candidate.enabled === true && candidate.screenshotArtifactRef === geometry.screenshotArtifactRef && frame?.frameKind === "main_frame" && frame.frameUrl === bundle.url &&
       typeof bounds?.width === "number" && Number.isFinite(bounds.width) && bounds.width > 0 && typeof bounds.height === "number" && Number.isFinite(bounds.height) && bounds.height > 0;
-  }))) return;
+  });
+  if (!["accept_all", "reject_all"].every(action => usableCandidates.filter(candidate => candidate.actionType === action).length === 1)) return;
+  const occludedPair = usableCandidates.some(candidate => candidate.decisionStatus === "covered");
   const withheld = image.retentionStatus === "withheld" || image.displayStatus === "withheld";
   let comparisonFailure: { detail: string; code: string } | undefined;
   for (const module of bundle.modulesRun ?? []) for (const timing of module.timingBreakdown ?? []) {
@@ -278,6 +294,7 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
       const diagnostic = JSON.parse(timing.detail);
       if (diagnostic.artifactId !== image.artifactId || !["not_eligible", "no_budget", "timed_out", "unavailable"].includes(diagnostic.status)) continue;
       const details: Record<string, string> = { capture_frames_changed: "Frames changed during the geometry/screenshot capture; the comparison was skipped.",
+        pair_occluded: "Another element covered an Accept or Reject control in the paired capture; prominence could not be compared.",
         pair_not_unique: "A unique Accept/Reject pair could not be selected for pixel comparison.", image_binding_incomplete: "The screenshot and button geometry could not be verified as one paired capture.",
         not_eligible: "The screenshot was retained, but pixel comparison was skipped because capture eligibility checks did not pass.",
         no_budget: "The pixel-comparison allowance was exhausted before this capture.", timed_out: "Pixel comparison did not finish within its capture allowance.", unavailable: "The retained image could not produce verified pixel-comparison measurements." };
@@ -286,9 +303,9 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
     } catch { /* Malformed diagnostics cannot establish a capture failure. */ }
   }
   if (withheld || geometry.visualComparison === undefined) Object.assign(row, { status: "incomplete",
-    detail: withheld ? "The paired screenshot did not complete safety review." : comparisonFailure?.detail ?? "Pixel-comparison measurements were not retained for the paired screenshot.",
+    detail: withheld ? "The paired screenshot did not complete safety review." : occludedPair ? "Another element covered an Accept or Reject control in the paired capture; prominence could not be compared." : comparisonFailure?.detail ?? "Pixel-comparison measurements were not retained for the paired screenshot.",
     evidenceRefs: ["ConsentControlGeometryEvidence.json", "CanonicalEvidenceBundle.json"],
-    limitation: { group: "visual", code: withheld ? image.safetyFailureCode ?? "visual_evidence_withheld" : comparisonFailure?.code ?? "visual_measurement_unavailable" } });
+    limitation: { group: "visual", code: withheld ? image.safetyFailureCode ?? "visual_evidence_withheld" : occludedPair ? "pixel_comparison_pair_occluded" : comparisonFailure?.code ?? "visual_measurement_unavailable" } });
 }
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;

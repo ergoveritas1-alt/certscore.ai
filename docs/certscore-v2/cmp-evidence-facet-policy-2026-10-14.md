@@ -362,3 +362,78 @@ explicit historical wording. Verification receipts are under
 occurred. Existing capture budgets are unchanged; additive diagnostic storage is
 estimated below $0.05/month at 100,000 scans with one-year retention, as disclosed
 before implementation (below the repository's $1/month approval threshold).
+
+## FullStory / Osano capture repairs, retained-first verification
+
+The owner authorized local Options, prominence and request-retention repairs
+within the existing latency/cost envelope, with no deployment or fresh public
+scan. Osano's named registry binding is now `osano_preferences.v2`, covering both
+the banner Manage button and its documented `button.osano-cm-window__widget`.
+The canonical observation-only “Cookie Preferences” label is eligible for the
+single isolated Options action only when the exact named, registered target
+matches. The existing final metadata read rechecks composed-ancestor visibility,
+opacity and inactivity before dispatch. Generic observation-only labels remain
+non-actionable; Accept/Reject
+classification and semantic confirmation are unchanged. Existing/deferred panels
+must bind to the same unique `.osano-cm-window` and the registered preference
+panel; foreign aria-controls, outside/replaced panels, ambiguous roots, hidden,
+transparent, inactive and covered controls cannot establish opening proof. No
+Osano API opener, custom footer-link guess, extra interaction or fetch was added.
+
+Official selector/behavior references:
+- https://docs.osano.com/en-US/osano/article/8cMRoKpv-common-css-changes
+- https://docs.osano.com/en-US/osano/article/Vku5EG_U-hiding-the-cookie-widget-cookie-icon
+- https://docs.osano.com/en-US/osano/article/dxTRCPqZ-first-layer-categories-manage-preferences
+
+The existing bounded Options inventory read now returns access states atomically
+instead of performing repeated locator visibility/enabled/hit reads. Shared
+50-ms browser work, 100-candidate bounds and canonical label filtering retain
+`cmp_options_resolution.v1` counts. Counts explain incomplete preference rows
+through typed assessment -> source hash -> normalized concern -> concern policy
+-> shared CMP projection. Missing historical counts are never reconstructed from
+an independent lane or a later visit; no feature-unsupported assertion is made.
+
+`terminal_pair_first.v2` moves protected settled geometry immediately after its
+existing screenshot, before duplicate rapid inventory. A fully document/image-
+bound, complete, stable settled pair may consume the existing single 80-ms pixel
+allowance and become the terminal consent packet. Successful pairing skips the
+redundant inventory/late screenshot. Ineligible captures retain existing recovery;
+interim frames cannot spend that allowance, and covered controls never produce a
+visual comparison. Exact geometry/image/document/frame/skew and safety-review
+checks remain in place; no extra capture, decode, wait, model call or publication
+is added. New canonical materializations explain verified paired-control
+occlusion as an incomplete comparison, not unequal prominence or a scoring gap.
+
+`priority_bounded_action_requests.v2` preserves all original capture/retention
+bounds (192 post-click rows, 256 overflow evaluations) and omission accounting.
+On overflow, a distinct canonical tracking endpoint (host/path/resource type/
+purpose) can displace a duplicate known tracking/support endpoint before another
+copy consumes the slot. Query values do not define identities; overlong paths
+are not collapsed by truncation. The earliest example of an endpoint and unknown
+traffic remain protected, alongside existing new-host diversity. Endpoint
+replacement also preserves the latest tracking example; only a middle tracking
+duplicate is expendable, protecting useful post-choice timing/ancestry coverage. Selection does
+not change attribution, eligibility, scoring policy, observed counts, source completeness
+or represent an omitted request as retained. Historical v1 summaries stay v1.
+
+Retained FullStory `f7b36da6-7043-4789-8ca7-093de4d0377f`, HubSpot
+`257741ec-9e2f-40e2-a912-b98fccedaf90` and IKEA
+`3e99f256-8aae-4abd-a2fb-03060ba64447` pass original bundle/manifest/geometry/image
+SHA verification and persisted local report immutability. FullStory's current
+canonical replay can explain the two covered controls as Incomplete instead of
+Not assessed; this is diagnostic coverage only, with no new Observed checks.
+Its saved report is unchanged and its shared post-Reject Review still cites 22
+tracking requests. The old Accept capture omitted 88 requests, including 18
+tracking requests; these cannot be recovered or used to claim full v2 live
+retention coverage. The old Options failure retains no new candidate counts.
+
+Local coverage includes registered existing/deferred Osano widgets, inaccessible
+and ambiguous controls, unrelated/replaced panels, the full protected settled
+capture, frame stability, canonical diagnostic projection and source rejection,
+endpoint diversity, unknown protection, exact historical/zero-loss/overflow
+accounting and the unchanged CPU cap. Receipts are under
+`artifacts/fullstory-capture-fixes-20261014/`. Builds and web/core typechecks pass.
+No public scan, deployment, quota change or historical rewrite occurred. No
+recurring compute capacity or maximum allowance increase is introduced; bounded
+additional diagnostic storage is estimated below $0.01/month at 100,000 scans
+with one-year retention, as disclosed before verification.

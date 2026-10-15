@@ -7,7 +7,7 @@ import { consentControlVisualComparisonSchema, CONSENT_VISUAL_COMPARISON_VERSION
   type ConsentControlVisualComparison, type ScreenshotArtifact } from "@certscore/contracts";
 import type { ConsentControlGeometryArtifact, ConsentControlCandidateEvidence } from "./consent-control-geometry.js";
 
-export type ConsentVisualCaptureState = { frameRevision: number; framesStable: boolean };
+export type ConsentVisualCaptureState = { frameRevision: number; framesStable: boolean; terminalPair?: boolean };
 
 function geometryFacts(geometry: ConsentControlGeometryArtifact) {
   const { capturedAt: _time, screenshotArtifactRef: _image, visualComparison: _visual, ...facts } = geometry;
@@ -123,7 +123,7 @@ export function comparisonPair(geometry: ConsentControlGeometryArtifact) {
 
 export type ConsentVisualComparisonDiagnostic = {
   status: "deferred" | "no_budget" | "not_eligible" | "retained" | "timed_out" | "unavailable";
-  reason?: "capture_frames_changed" | "pair_not_unique" | "image_binding_incomplete";
+  reason?: "capture_frames_changed" | "pair_not_unique" | "pair_occluded" | "image_binding_incomplete";
   artifactId?: string; allowanceMs: number; elapsedMs: number;
 };
 
@@ -136,10 +136,10 @@ function pairedImage(geometry: ConsentControlGeometryArtifact, screenshots: Scre
   return Number.isInteger(skew) && skew <= 500 ? image : undefined;
 }
 
-/** Spend the existing shared 80ms once, on the authoritative paired capture.
- * Interim image decoding can overrun its timer under event-loop contention and
- * consume the final image's reserve. Deferring that work avoids duplicate
- * decodes and keeps the final pair's full allowance without extending it. */
+/** Spend the existing shared 80ms once, on a complete terminal pair. The
+ * protected settled capture can be terminal when explicitly committed by the
+ * caller; all other interim images stay deferred. Never decode twice or
+ * extend the allowance when a later capture becomes eligible. */
 export function createConsentVisualComparisonCollector(screenshots: ScreenshotArtifact[], scanStartedAtMs: number,
   remainingModuleBudgetMs: () => number, measure = withConsentControlVisualComparison,
   onDiagnostic?: (value: ConsentVisualComparisonDiagnostic) => void) {
@@ -147,13 +147,17 @@ export function createConsentVisualComparisonCollector(screenshots: ScreenshotAr
   return async (geometry: ConsentControlGeometryArtifact, state?: ConsentVisualCaptureState) => {
     const startedAtMs = Date.now();
     const image = screenshots.find(image => image.path === geometry.screenshotArtifactRef);
-    const authoritative = image &&
-      ["screenshot_pre_consent_geometry_proof", "screenshot_pre_consent_packet_recovery"].includes(image.artifactId);
+    const authoritative = image && (
+      ["screenshot_pre_consent_geometry_proof", "screenshot_pre_consent_packet_recovery"].includes(image.artifactId) ||
+      image.artifactId === "screenshot_pre_consent_settled" && state?.terminalPair === true && state.framesStable === true);
     const diagnostic = (status: ConsentVisualComparisonDiagnostic["status"], allowanceMs = 0, reason?: ConsentVisualComparisonDiagnostic["reason"]) =>
       onDiagnostic?.({ status, ...(reason ? { reason } : {}), artifactId: image?.artifactId, allowanceMs, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
     if (!authoritative) { diagnostic("deferred"); return geometry; }
     if (state?.framesStable === false) { diagnostic("not_eligible", 0, "capture_frames_changed"); return geometry; }
-    if (!comparisonPair(geometry)) { diagnostic("not_eligible", 0, "pair_not_unique"); return geometry; }
+    if (!comparisonPair(geometry)) {
+      const occluded = ["accept_all", "reject_all"].some(action => geometry.candidates.some(c => c.actionType === action && c.layer === "first_layer" && c.decisionStatus === "covered"));
+      diagnostic("not_eligible", 0, occluded ? "pair_occluded" : "pair_not_unique"); return geometry;
+    }
     if (!pairedImage(geometry, screenshots, scanStartedAtMs)) { diagnostic("not_eligible", 0, "image_binding_incomplete"); return geometry; }
     const allowanceMs = Math.min(budgetMs, remainingModuleBudgetMs());
     if (allowanceMs <= 0) { diagnostic("no_budget"); return geometry; }

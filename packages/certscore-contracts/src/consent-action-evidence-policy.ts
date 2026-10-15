@@ -79,7 +79,7 @@ export type ActionCaptureCoverage = {
   requestsDroppedBeforeAction: number;
   requestsDroppedAfterAction: number;
   postActionRetention?: {
-    policyVersion: "priority_bounded_action_requests.v1";
+    policyVersion: "priority_bounded_action_requests.v1" | "priority_bounded_action_requests.v2";
     requestsObserved: number; requestsRetained: number; replacements: number; priorityEvaluations: number;
     omitted: { delivery_asset: number; known_other: number; unknown: number; tracking: number; consent: number; document: number; unclassified: number };
   };
@@ -91,7 +91,7 @@ export const actionCaptureCoverageSchema: z.ZodType<ActionCaptureCoverage> = z.o
   // Diagnostic accounting only. Summaries do not replace omitted evidence or
   // relax any existing completeness, finding or score eligibility gate.
   postActionRetention: z.object({
-    policyVersion: z.literal("priority_bounded_action_requests.v1"),
+    policyVersion: z.enum(["priority_bounded_action_requests.v1", "priority_bounded_action_requests.v2"]),
     requestsObserved: z.number().int().nonnegative(),
     requestsRetained: z.number().int().nonnegative().max(CONSENT_ACTION_POST_CLICK_REQUEST_LIMIT),
     replacements: z.number().int().nonnegative(),

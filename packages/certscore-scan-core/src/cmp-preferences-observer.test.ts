@@ -511,3 +511,29 @@ for (const variant of ["missing_panel", "missing_role", "missing_name"] as const
     } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
   });
 }
+
+
+test("Osano registered widget opens exactly once; hidden, covered, inactive and ambiguous widgets stay neutral", {timeout:20000}, async () => {
+  let mode="widget", clicks=0;
+  const server=createServer((req,res)=>{
+    if(req.url==="/clicked"){clicks++;res.end();return;}
+    res.setHeader("content-type","text/html");
+    const widget=`<button class="${mode==='unregistered'?'custom-cookie-trigger':'osano-cm-window__widget'}" aria-label="Cookie Preferences" style="${mode==='hidden'?'display:none':mode==='transparent'?'opacity:0':mode==='offscreen'?'position:fixed;left:5000px':''}" ${mode==='disabled'?'disabled':''} ${mode==='foreign-aria'?'aria-controls="foreign"':''}>Cookie Preferences</button>`;
+    const panel='<section class="osano-cm-info-dialog" role="dialog" aria-label="Storage Preferences"><label><input type="checkbox">Analytics</label><button onclick="fetch(\'/unexpected-save\')">Save</button></section>';
+    res.end(`<div class="osano-cm-window"><div class="osano-cm-dialog">Cookie consent <button>Accept</button></div>${widget}${mode==='ambiguous'?widget:''}${['deferred','outside-panel'].includes(mode)?'':panel.replace('<section','<section hidden')}</div>${mode==='outside-panel'?panel.replace('<section','<section hidden'):''}${mode==='duplicate-root'?'<div class="osano-cm-window"></div>':''}<section id="foreign" hidden>Other settings</section>${mode==='covered'?'<div style="position:fixed;inset:0;z-index:10"></div>':''}<script>${mode==='drift-transparent'?"const original=Element.prototype.getAttribute;Element.prototype.getAttribute=function(name){if(name==='aria-controls'&&this.matches('.osano-cm-window__widget'))this.style.opacity='0';return original.call(this,name);};":''}document.querySelectorAll('.osano-cm-window__widget').forEach(b=>b.onclick=()=>{fetch('/clicked');${mode==='deferred'?"document.querySelector('.osano-cm-window').insertAdjacentHTML('beforeend',"+JSON.stringify(panel)+");":mode==='outside-panel'?"document.querySelector('.osano-cm-info-dialog').hidden=false;":mode==='foreign-aria'?"document.querySelector('#foreign').hidden=false;":"document.querySelector('.osano-cm-info-dialog').hidden=false;"}})</script>`);
+  });
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));const address=server.address();assert.ok(address&&typeof address!=="string");
+  try {
+    for(mode of ["widget","deferred","hidden","transparent","offscreen","covered","disabled","ambiguous","outside-panel","foreign-aria","unregistered","duplicate-root","drift-transparent"]){
+      clicks=0;
+      const packet=await runCmpPreferencesObserver({parentDispatchSha256:"a".repeat(64),config:{policyVersion:"bounded_cmp_preferences.v1",enabled:true,scanId:mode,exactTargetUrl:`http://127.0.0.1:${address.port}/`}});
+      const success=["widget","deferred"].includes(mode);
+      assert.equal(clicks,success||["foreign-aria","outside-panel"].includes(mode)?1:0,JSON.stringify(packet));assert.equal(packet.action.opened,success,JSON.stringify(packet));
+      if(success){assert.equal(packet.controls[0]?.label,"Analytics");assert.equal(packet.support.recipeVersion,"osano_preferences.v2");}
+      else if(mode==="unregistered") assert.equal(packet.inspectionDiagnostic!.optionsResolution!.counts.actionable,0);
+      else if(mode==="duplicate-root") assert.equal(packet.inspectionDiagnostic!.surfaceBinding!.outcome,"parent_unbound");
+      else if(mode==="drift-transparent") assert.ok(packet.limitations.includes("preference_control_changed"));
+      else if(!["outside-panel","foreign-aria","duplicate-root","unregistered"].includes(mode)) {const counts=packet.inspectionDiagnostic!.optionsResolution!.counts;assert.equal(counts[mode==='transparent'?'hidden':mode==='offscreen'?'outside_viewport':mode==='ambiguous'?'actionable':mode as 'hidden'|'covered'|'disabled'],mode==='ambiguous'?2:1,JSON.stringify(packet));assert.equal(packet.controlInventoryComplete,false);}
+    }
+  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});

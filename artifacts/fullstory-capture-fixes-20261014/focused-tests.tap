@@ -1,0 +1,496 @@
+TAP version 13
+# Subtest: verified preferences persist and reach checklist results only through concern policy, without scoring
+ok 1 - verified preferences persist and reach checklist results only through concern policy, without scoring
+  ---
+  duration_ms: 20.437666
+  type: 'test'
+  ...
+# Subtest: partial, failed, foreign and historical evidence cannot establish feature absence
+ok 2 - partial, failed, foreign and historical evidence cannot establish feature absence
+  ---
+  duration_ms: 0.656875
+  type: 'test'
+  ...
+# Subtest: retained timeout projects an inspection outcome without inventing vendor unsupported or feature absence
+ok 3 - retained timeout projects an inspection outcome without inventing vendor unsupported or feature absence
+  ---
+  duration_ms: 0.226542
+  type: 'test'
+  ...
+# Subtest: coordinator timeout without a worker packet remains a score-neutral coverage outcome
+ok 4 - coordinator timeout without a worker packet remains a score-neutral coverage outcome
+  ---
+  duration_ms: 0.4465
+  type: 'test'
+  ...
+# Subtest: new document-bound checkpoints survive a later timeout; historical and drifted packets do not
+ok 5 - new document-bound checkpoints survive a later timeout; historical and drifted packets do not
+  ---
+  duration_ms: 0.678292
+  type: 'test'
+  ...
+# Subtest: complete configured declarations compare bounded globs to observed cookies without requiring an Accept click
+ok 6 - complete configured declarations compare bounded globs to observed cookies without requiring an Accept click
+  ---
+  duration_ms: 1.506333
+  type: 'test'
+  ...
+# Subtest: v2 narrow facts stay informational, source-bound and neutral when proof is missing
+ok 7 - v2 narrow facts stay informational, source-bound and neutral when proof is missing
+  ---
+  duration_ms: 4.342333
+  type: 'test'
+  ...
+# Subtest: v4 privacy reachability is independent of document retrieval through canonical concern projection
+ok 8 - v4 privacy reachability is independent of document retrieval through canonical concern projection
+  ---
+  duration_ms: 12.359041
+  type: 'test'
+  ...
+# Subtest: preference readiness timeout explains unassessed reachability even when the policy was retrieved
+ok 9 - preference readiness timeout explains unassessed reachability even when the policy was retrieved
+  ---
+  duration_ms: 0.315292
+  type: 'test'
+  ...
+# Subtest: v3 identifies configured services through retained source accounting, persistence and concern policy
+ok 10 - v3 identifies configured services through retained source accounting, persistence and concern policy
+  ---
+  duration_ms: 2.011875
+  type: 'test'
+  ...
+# Subtest: service identification cannot be inferred from cookie declarations, categories or incomplete accounting
+ok 11 - service identification cannot be inferred from cookie declarations, categories or incomplete accounting
+  ---
+  duration_ms: 0.635167
+  type: 'test'
+  ...
+# Subtest: retained service identities survive unrelated timeout; labelled service controls also identify services
+ok 12 - retained service identities survive unrelated timeout; labelled service controls also identify services
+  ---
+  duration_ms: 0.233833
+  type: 'test'
+  ...
+# Subtest: v4 partial action coverage persists through concern policy; review still takes precedence
+ok 13 - v4 partial action coverage persists through concern policy; review still takes precedence
+  ---
+  duration_ms: 18.12075
+  type: 'test'
+  ...
+# Subtest: missing completion, malformed, foreign and unconfirmed actions do not create partial coverage
+ok 14 - missing completion, malformed, foreign and unconfirmed actions do not create partial coverage
+  ---
+  duration_ms: 1.325292
+  type: 'test'
+  ...
+# Subtest: cookie omission review matches exact names and globs without claiming missing services or pre-consent use
+ok 15 - cookie omission review matches exact names and globs without claiming missing services or pre-consent use
+  ---
+  duration_ms: 10.105375
+  type: 'test'
+  ...
+# Subtest: inventory tables preserve canonical names, wildcard matches and capture scope through policy
+ok 16 - inventory tables preserve canonical names, wildcard matches and capture scope through policy
+  ---
+  duration_ms: 3.113166
+  type: 'test'
+  ...
+# Subtest: category table retains selectable controls and captured settings through canonical policy
+ok 17 - category table retains selectable controls and captured settings through canonical policy
+  ---
+  duration_ms: 4.383833
+  type: 'test'
+  ...
+# Subtest: expiry tables preserve timestamp precision through policy without claiming original storage life
+ok 18 - expiry tables preserve timestamp precision through policy without claiming original storage life
+  ---
+  duration_ms: 7.05875
+  type: 'test'
+  ...
+# Subtest: expiry evidence rejects inconsistent arithmetic and nonpersistent timestamps
+ok 19 - expiry evidence rejects inconsistent arithmetic and nonpersistent timestamps
+  ---
+  duration_ms: 0.114125
+  type: 'test'
+  ...
+# Subtest: preference binding diagnostics do not promote a limited IKEA-style pre-click packet
+ok 20 - preference binding diagnostics do not promote a limited IKEA-style pre-click packet
+  ---
+  duration_ms: 0.329625
+  type: 'test'
+  ...
+# Subtest: operation timeout keeps its specific cause and does not create missing-feature findings
+ok 21 - operation timeout keeps its specific cause and does not create missing-feature findings
+  ---
+  duration_ms: 0.308292
+  type: 'test'
+  ...
+# Subtest: v5 baseline CMP expiry survives preference/action failure with exact identity, timing and source hash
+ok 22 - v5 baseline CMP expiry survives preference/action failure with exact identity, timing and source hash
+  ---
+  duration_ms: 1.871333
+  type: 'test'
+  ...
+# Subtest: v5 partial inventories retain named services, incomplete details and neutral matches through policy
+ok 23 - v5 partial inventories retain named services, incomplete details and neutral matches through policy
+  ---
+  duration_ms: 3.14725
+  type: 'test'
+  ...
+# Subtest: v5 completed after-click capture is assessable without claiming registered consent
+ok 24 - v5 completed after-click capture is assessable without claiming registered consent
+  ---
+  duration_ms: 2.489083
+  type: 'test'
+  ...
+# Subtest: v5 paired-image limitations require verified source and loader binding, independently of other available images
+ok 25 - v5 paired-image limitations require verified source and loader binding, independently of other available images
+  ---
+  duration_ms: 30.496417
+  type: 'test'
+  ...
+# Subtest: scanner adapter absence stays separate from failed inspection and CMP feature absence
+ok 26 - scanner adapter absence stays separate from failed inspection and CMP feature absence
+  ---
+  duration_ms: 0.132708
+  type: 'test'
+  ...
+# Subtest: v3 basic checkpoints retain verified page facts when CMP readiness cannot complete
+ok 27 - v3 basic checkpoints retain verified page facts when CMP readiness cannot complete
+  ---
+  duration_ms: 1.308625
+  type: 'test'
+  ...
+# Subtest: required-lane basics survive a cancelled optional inspection through persisted concern projection
+ok 28 - required-lane basics survive a cancelled optional inspection through persisted concern projection
+  ---
+  duration_ms: 2.649583
+  type: 'test'
+  ...
+# Subtest: v6 retains v1 after-click facts and hashed consent storage without upgrading registration
+ok 29 - v6 retains v1 after-click facts and hashed consent storage without upgrading registration
+  ---
+  duration_ms: 6.883042
+  type: 'test'
+  ...
+# Subtest: v6 inferred purposes remain separate from missing CMP disclosures and never establish services
+ok 30 - v6 inferred purposes remain separate from missing CMP disclosures and never establish services
+  ---
+  duration_ms: 0.211042
+  type: 'test'
+  ...
+# Subtest: v6 CMP tables preserve shared first-layer reportability for an independent action
+ok 31 - v6 CMP tables preserve shared first-layer reportability for an independent action
+  ---
+  duration_ms: 2.757167
+  type: 'test'
+  ...
+# Subtest: OneTrust service names reach the canonical assessment and report from one bounded local Options visit
+ok 32 - OneTrust service names reach the canonical assessment and report from one bounded local Options visit
+  ---
+  duration_ms: 870.924
+  type: 'test'
+  ...
+# Subtest: literal CMP partner identities are assessed without manufacturing configured inventory or tested controls
+ok 33 - literal CMP partner identities are assessed without manufacturing configured inventory or tested controls
+  ---
+  duration_ms: 5.213375
+  type: 'test'
+  ...
+# Subtest: partial cookie comparison adds completed click snapshots without changing confirmation, Review eligibility or CMP retention
+ok 34 - partial cookie comparison adds completed click snapshots without changing confirmation, Review eligibility or CMP retention
+  ---
+  duration_ms: 3.054709
+  type: 'test'
+  ...
+# Subtest: cookie enrichments reject incomplete/foreign captures and ambiguous or invalid expiry while preserving partial assessments
+ok 35 - cookie enrichments reject incomplete/foreign captures and ambiguous or invalid expiry while preserving partial assessments
+  ---
+  duration_ms: 2.415292
+  type: 'test'
+  ...
+# Subtest: shared reportability withholds after-Accept cookie details without discarding the retained assessment
+ok 36 - shared reportability withholds after-Accept cookie details without discarding the retained assessment
+  ---
+  duration_ms: 1.871167
+  type: 'test'
+  ...
+# Subtest: template counts preserve full captured totals while table rows remain bounded
+ok 37 - template counts preserve full captured totals while table rows remain bounded
+  ---
+  duration_ms: 0.420583
+  type: 'test'
+  ...
+# Subtest: unnamed and overlong action cookies retain source identity and explicit comparison accounting
+ok 38 - unnamed and overlong action cookies retain source identity and explicit comparison accounting
+  ---
+  duration_ms: 0.731292
+  type: 'test'
+  ...
+# Subtest: completed storage snapshots survive network overflow without claiming complete activity or registered consent
+ok 39 - completed storage snapshots survive network overflow without claiming complete activity or registered consent
+  ---
+  duration_ms: 3.584917
+  type: 'test'
+  ...
+# Subtest: configured consent-cookie identities require typed provider/document binding and do not become global aliases
+ok 40 - configured consent-cookie identities require typed provider/document binding and do not become global aliases
+  ---
+  duration_ms: 1.6645
+  type: 'test'
+  ...
+# Subtest: shared action reportability filters expiry visits while preserving baseline expiry and retained proof
+ok 41 - shared action reportability filters expiry visits while preserving baseline expiry and retained proof
+  ---
+  duration_ms: 2.334458
+  type: 'test'
+  ...
+# Subtest: joined workers with explicit failed clicks retain specific action limitations through shared CMP projection
+ok 42 - joined workers with explicit failed clicks retain specific action limitations through shared CMP projection
+  ---
+  duration_ms: 2.12375
+  type: 'test'
+  ...
+# Subtest: privacy link diagnostics remain score-neutral and source-bound through canonical projection
+ok 43 - privacy link diagnostics remain score-neutral and source-bound through canonical projection
+  ---
+  duration_ms: 9.427458
+  type: 'test'
+  ...
+# Subtest: typed Options failures explain dependent checks through policy without asserting unsupported CMP features
+ok 44 - typed Options failures explain dependent checks through policy without asserting unsupported CMP features
+  ---
+  duration_ms: 7.209791
+  type: 'test'
+  ...
+# Subtest: document-bound occluded controls explain incomplete prominence without creating a styling finding
+ok 45 - document-bound occluded controls explain incomplete prominence without creating a styling finding
+  ---
+  duration_ms: 4.513417
+  type: 'test'
+  ...
+# Subtest: preference binding diagnostics preserve historical packets and never create opening proof
+ok 46 - preference binding diagnostics preserve historical packets and never create opening proof
+  ---
+  duration_ms: 2.442666
+  type: 'test'
+  ...
+# Subtest: preference binding diagnostics reject unbounded or unrecognized values
+ok 47 - preference binding diagnostics reject unbounded or unrecognized values
+  ---
+  duration_ms: 0.536708
+  type: 'test'
+  ...
+# Subtest: v5 scopes cannot silently upgrade historical assessments or label partial matches as Review
+ok 48 - v5 scopes cannot silently upgrade historical assessments or label partial matches as Review
+  ---
+  duration_ms: 5.132208
+  type: 'test'
+  ...
+# Subtest: v6 scopes protect historical conclusions and bound independent activity facts
+ok 49 - v6 scopes protect historical conclusions and bound independent activity facts
+  ---
+  duration_ms: 1.449708
+  type: 'test'
+  ...
+# Subtest: OneTrust named-service configuration keeps its capture revision distinct from historical packets
+ok 50 - OneTrust named-service configuration keeps its capture revision distinct from historical packets
+  ---
+  duration_ms: 0.275459
+  type: 'test'
+  ...
+# Subtest: cookie template candidates and expiry evidence cannot become verified matches or guessed retention
+ok 51 - cookie template candidates and expiry evidence cannot become verified matches or guessed retention
+  ---
+  duration_ms: 0.633875
+  type: 'test'
+  ...
+# Subtest: configured cookie identities require a bounded provider-bound checkpoint without upgrading historical packets
+ok 52 - configured cookie identities require a bounded provider-bound checkpoint without upgrading historical packets
+  ---
+  duration_ms: 0.514125
+  type: 'test'
+  ...
+# Subtest: deferred-panel verification diagnostics remain bounded and do not create opening proof
+ok 53 - deferred-panel verification diagnostics remain bounded and do not create opening proof
+  ---
+  duration_ms: 0.198959
+  type: 'test'
+  ...
+# Subtest: privacy-link diagnostics are optional for history, strict and consistent with hit testing
+ok 54 - privacy-link diagnostics are optional for history, strict and consistent with hit testing
+  ---
+  duration_ms: 0.41975
+  type: 'test'
+  ...
+# Subtest: Options diagnostics are bounded, versioned and cannot manufacture opening proof
+ok 55 - Options diagnostics are bounded, versioned and cannot manufacture opening proof
+  ---
+  duration_ms: 0.388459
+  type: 'test'
+  ...
+# Subtest: priority uses canonical attribution rather than image type or file extension
+ok 56 - priority uses canonical attribution rather than image type or file extension
+  ---
+  duration_ms: 22.818833
+  type: 'test'
+  ...
+# Subtest: late tracking pixel and unknown request displace known CDN assets within the same cap
+ok 57 - late tracking pixel and unknown request displace known CDN assets within the same cap
+  ---
+  duration_ms: 1.727542
+  type: 'test'
+  ...
+# Subtest: unknown images are never evicted for same-priority or lower-priority arrivals
+ok 58 - unknown images are never evicted for same-priority or lower-priority arrivals
+  ---
+  duration_ms: 0.487916
+  type: 'test'
+  ...
+# Subtest: a new tracking host displaces a repeated tracker, preserving the earliest request
+ok 59 - a new tracking host displaces a repeated tracker, preserving the earliest request
+  ---
+  duration_ms: 0.461417
+  type: 'test'
+  ...
+# Subtest: new unknown host gets a sample before repeated known tracker traffic
+ok 60 - new unknown host gets a sample before repeated known tracker traffic
+  ---
+  duration_ms: 0.37525
+  type: 'test'
+  ...
+# Subtest: without overflow selection is unchanged and exact zero-loss accounting is retained
+ok 61 - without overflow selection is unchanged and exact zero-loss accounting is retained
+  ---
+  duration_ms: 0.187583
+  type: 'test'
+  ...
+# Subtest: an empty offered-event inventory is explicit and its returned snapshot stays frozen
+ok 62 - an empty offered-event inventory is explicit and its returned snapshot stays frozen
+  ---
+  duration_ms: 0.205333
+  type: 'test'
+  ...
+# Subtest: summary cannot conceal loss, inflate observed count or exceed the existing cap
+ok 63 - summary cannot conceal loss, inflate observed count or exceed the existing cap
+  ---
+  duration_ms: 0.410084
+  type: 'test'
+  ...
+# Subtest: a full unknown inventory remains protected; a late tracker is explicitly omitted
+ok 64 - a full unknown inventory remains protected; a late tracker is explicitly omitted
+  ---
+  duration_ms: 10.9135
+  type: 'test'
+  ...
+# Subtest: priority CPU work stops at its fixed bound without concealing further loss
+ok 65 - priority CPU work stops at its fixed bound without concealing further loss
+  ---
+  duration_ms: 21.697875
+  type: 'test'
+  ...
+# Subtest: same-host distinct tracking endpoints displace duplicate events but preserve their earliest request
+ok 66 - same-host distinct tracking endpoints displace duplicate events but preserve their earliest request
+  ---
+  duration_ms: 0.446125
+  type: 'test'
+  ...
+# Subtest: query variants share a duplicate group; unique endpoints and unknowns stay protected
+ok 67 - query variants share a duplicate group; unique endpoints and unknowns stay protected
+  ---
+  duration_ms: 0.352291
+  type: 'test'
+  ...
+# Subtest: new tracking endpoints can replace duplicated known support traffic without evicting unknowns or its first request
+ok 68 - new tracking endpoints can replace duplicated known support traffic without evicting unknowns or its first request
+  ---
+  duration_ms: 0.462
+  type: 'test'
+  ...
+# Subtest: later duplicate inspection preserves the complete early pair without relabeling its timing or references
+ok 69 - later duplicate inspection preserves the complete early pair without relabeling its timing or references
+  ---
+  duration_ms: 21.836583
+  type: 'test'
+  ...
+# Subtest: frame drift, changed controls, incomplete inspection and withheld early visuals forbid pair retention
+ok 70 - frame drift, changed controls, incomplete inspection and withheld early visuals forbid pair retention
+  ---
+  duration_ms: 11.498
+  type: 'test'
+  ...
+# Subtest: retained pixels distinguish fill and outline emphasis from equal or Reject-emphasized controls
+ok 71 - retained pixels distinguish fill and outline emphasis from equal or Reject-emphasized controls
+  ---
+  duration_ms: 27.241834
+  type: 'test'
+  ...
+# Subtest: ambiguous pairs, incomplete inventory, child frames, stale or scaled images cannot create visual evidence
+ok 72 - ambiguous pairs, incomplete inventory, child frames, stale or scaled images cannot create visual evidence
+  ---
+  duration_ms: 5.2995
+  type: 'test'
+  ...
+# Subtest: comparison contract rejects missing surrounding coverage, nonfinite metrics and unbounded evidence
+ok 73 - comparison contract rejects missing surrounding coverage, nonfinite metrics and unbounded evidence
+  ---
+  duration_ms: 13.398083
+  type: 'test'
+  ...
+# Subtest: producer file binding rejects stale, withheld and document-mismatched images without changing geometry
+ok 74 - producer file binding rejects stale, withheld and document-mismatched images without changing geometry
+  ---
+  duration_ms: 9.519625
+  type: 'test'
+  ...
+# Subtest: stacked Accept/Reject controls retain measured prominence with the same ambiguity and coverage gates
+ok 75 - stacked Accept/Reject controls retain measured prominence with the same ambiguity and coverage gates
+  ---
+  duration_ms: 18.745667
+  type: 'test'
+  ...
+# Subtest: separated Streamable, Witt and Qobuz layouts pair without weakening image/inspection gates
+ok 76 - separated Streamable, Witt and Qobuz layouts pair without weakening image/inspection gates
+  ---
+  duration_ms: 249.977375
+  type: 'test'
+  ...
+# Subtest: separated pairing excludes scoped, ambiguous, cross-surface, dismiss and container candidates
+ok 77 - separated pairing excludes scoped, ambiguous, cross-surface, dismiss and container candidates
+  ---
+  duration_ms: 129.682
+  type: 'test'
+  ...
+# Subtest: interim images never consume the single authoritative 80 ms allowance
+ok 78 - interim images never consume the single authoritative 80 ms allowance
+  ---
+  duration_ms: 3.586375
+  type: 'test'
+  ...
+# Subtest: authoritative-only analysis avoids an interim timer overrun and cannot publish late or duplicate results
+ok 79 - authoritative-only analysis avoids an interim timer overrun and cannot publish late or duplicate results
+  ---
+  duration_ms: 2.856417
+  type: 'test'
+  ...
+# Subtest: an unbound or unstable proof cannot spend the allowance reserved for an eligible recovery
+ok 80 - an unbound or unstable proof cannot spend the allowance reserved for an eligible recovery
+  ---
+  duration_ms: 2.054333
+  type: 'test'
+  ...
+# Subtest: a terminal settled pair gets the existing single allowance; ineligible settled images cannot consume it
+ok 81 - a terminal settled pair gets the existing single allowance; ineligible settled images cannot consume it
+  ---
+  duration_ms: 2.040833
+  type: 'test'
+  ...
+1..81
+# tests 81
+# suites 0
+# pass 81
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1629.687208

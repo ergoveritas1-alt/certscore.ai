@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: isolated preference inspection opens Options once, retains categories and inventory, and never saves a choice
+ok 1 - isolated preference inspection opens Options once, retains categories and inventory, and never saves a choice
+  ---
+  duration_ms: 724.606583
+  type: 'test'
+  ...
+# Subtest: CMP integration unavailability cannot stand in for unsupported product capability
+ok 2 - CMP integration unavailability cannot stand in for unsupported product capability
+  ---
+  duration_ms: 0.692833
+  type: 'test'
+  ...
+# Subtest: ambiguous Options, unidentified CMPs, hidden sections and explicit service groups stay distinct
+ok 3 - ambiguous Options, unidentified CMPs, hidden sections and explicit service groups stay distinct
+  ---
+  duration_ms: 17174.685709
+  type: 'test'
+  ...
+# Subtest: Borlabs delayed entrance opens once without ARIA controls; choices and API declarations stay evidence-bound
+ok 4 - Borlabs delayed entrance opens once without ARIA controls; choices and API declarations stay evidence-bound
+  ---
+  duration_ms: 1987.63375
+  type: 'test'
+  ...
+# Subtest: preference worker memory allowance stays inside the approved compute envelope
+ok 5 - preference worker memory allowance stays inside the approved compute envelope
+  ---
+  duration_ms: 0.141875
+  type: 'test'
+  ...
+# Subtest: OneTrust registered dialog binding opens only the existing hidden preference node without aria-controls
+ok 6 - OneTrust registered dialog binding opens only the existing hidden preference node without aria-controls
+  ---
+  duration_ms: 921.451584
+  type: 'test'
+  ...
+# Subtest: registered OneTrust on-demand panel stays under the same vendor root and within the original budget
+ok 7 - registered OneTrust on-demand panel stays under the same vendor root and within the original budget
+  ---
+  duration_ms: 6023.542875
+  type: 'test'
+  ...
+# Subtest: busy OneTrust root binding uses the shared deadline instead of abandoning Options at 300 ms
+ok 8 - busy OneTrust root binding uses the shared deadline instead of abandoning Options at 300 ms
+  ---
+  duration_ms: 1104.575417
+  type: 'test'
+  ...
+# Subtest: parent cancellation after the single Options dispatch stays distinct from a timeout
+ok 9 - parent cancellation after the single Options dispatch stays distinct from a timeout
+  ---
+  duration_ms: 152.335209
+  type: 'test'
+  ...
+# Subtest: early OneTrust declarations and visible native label targets survive bounded deeper inspection
+ok 10 - early OneTrust declarations and visible native label targets survive bounded deeper inspection
+  ---
+  duration_ms: 305.636583
+  type: 'test'
+  ...
+# Subtest: visible first-layer choices survive absent Options without any interaction
+ok 11 - visible first-layer choices survive absent Options without any interaction
+  ---
+  duration_ms: 141.076667
+  type: 'test'
+  ...
+# Subtest: privacy-link reachability uses bounded real hit targets rather than only the bounding-box center
+ok 12 - privacy-link reachability uses bounded real hit targets rather than only the bounding-box center
+  ---
+  duration_ms: 395.430458
+  type: 'test'
+  ...
+# Subtest: a missing ready CMP cannot consume the basic-evidence reserve
+ok 13 - a missing ready CMP cannot consume the basic-evidence reserve
+  ---
+  duration_ms: 2636.670875
+  type: 'test'
+  ...
+# Subtest: registered HubSpot, Didomi and Osano panels bind one Options action and reject replacements and ambiguity
+ok 14 - registered HubSpot, Didomi and Osano panels bind one Options action and reject replacements and ambiguity
+  ---
+  duration_ms: 9257.144042
+  type: 'test'
+  ...
+# Subtest: configured Drupal cookie identity is bounded, own-data-only and document-bound
+ok 15 - configured Drupal cookie identity is bounded, own-data-only and document-bound
+  ---
+  duration_ms: 755.956833
+  type: 'test'
+  ...
+# Subtest: HubSpot deferred alertdialog finishes accessible-name hydration before inspection without a second click
+ok 16 - HubSpot deferred alertdialog finishes accessible-name hydration before inspection without a second click
+  ---
+  duration_ms: 318.387375
+  type: 'test'
+  ...
+# Subtest: HubSpot opening cap retains privacy checkpoint before a slow report barrier: missing_panel
+ok 17 - HubSpot opening cap retains privacy checkpoint before a slow report barrier: missing_panel
+  ---
+  duration_ms: 1150.582667
+  type: 'test'
+  ...
+# Subtest: HubSpot opening cap retains privacy checkpoint before a slow report barrier: missing_role
+ok 18 - HubSpot opening cap retains privacy checkpoint before a slow report barrier: missing_role
+  ---
+  duration_ms: 1131.875167
+  type: 'test'
+  ...
+# Subtest: HubSpot opening cap retains privacy checkpoint before a slow report barrier: missing_name
+ok 19 - HubSpot opening cap retains privacy checkpoint before a slow report barrier: missing_name
+  ---
+  duration_ms: 1127.297958
+  type: 'test'
+  ...
+# Subtest: Osano registered widget opens exactly once; hidden, covered, inactive and ambiguous widgets stay neutral
+ok 20 - Osano registered widget opens exactly once; hidden, covered, inactive and ambiguous widgets stay neutral
+  ---
+  duration_ms: 4138.9435
+  type: 'test'
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 50152.981875

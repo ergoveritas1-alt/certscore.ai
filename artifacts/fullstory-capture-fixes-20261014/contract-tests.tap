@@ -1,0 +1,70 @@
+TAP version 13
+# Subtest: preference binding diagnostics preserve historical packets and never create opening proof
+ok 1 - preference binding diagnostics preserve historical packets and never create opening proof
+  ---
+  duration_ms: 2.570125
+  type: 'test'
+  ...
+# Subtest: preference binding diagnostics reject unbounded or unrecognized values
+ok 2 - preference binding diagnostics reject unbounded or unrecognized values
+  ---
+  duration_ms: 0.56925
+  type: 'test'
+  ...
+# Subtest: v5 scopes cannot silently upgrade historical assessments or label partial matches as Review
+ok 3 - v5 scopes cannot silently upgrade historical assessments or label partial matches as Review
+  ---
+  duration_ms: 8.334292
+  type: 'test'
+  ...
+# Subtest: v6 scopes protect historical conclusions and bound independent activity facts
+ok 4 - v6 scopes protect historical conclusions and bound independent activity facts
+  ---
+  duration_ms: 1.264708
+  type: 'test'
+  ...
+# Subtest: OneTrust named-service configuration keeps its capture revision distinct from historical packets
+ok 5 - OneTrust named-service configuration keeps its capture revision distinct from historical packets
+  ---
+  duration_ms: 0.301167
+  type: 'test'
+  ...
+# Subtest: cookie template candidates and expiry evidence cannot become verified matches or guessed retention
+ok 6 - cookie template candidates and expiry evidence cannot become verified matches or guessed retention
+  ---
+  duration_ms: 0.625833
+  type: 'test'
+  ...
+# Subtest: configured cookie identities require a bounded provider-bound checkpoint without upgrading historical packets
+ok 7 - configured cookie identities require a bounded provider-bound checkpoint without upgrading historical packets
+  ---
+  duration_ms: 0.541333
+  type: 'test'
+  ...
+# Subtest: deferred-panel verification diagnostics remain bounded and do not create opening proof
+ok 8 - deferred-panel verification diagnostics remain bounded and do not create opening proof
+  ---
+  duration_ms: 0.21275
+  type: 'test'
+  ...
+# Subtest: privacy-link diagnostics are optional for history, strict and consistent with hit testing
+ok 9 - privacy-link diagnostics are optional for history, strict and consistent with hit testing
+  ---
+  duration_ms: 0.471666
+  type: 'test'
+  ...
+# Subtest: Options diagnostics are bounded, versioned and cannot manufacture opening proof
+ok 10 - Options diagnostics are bounded, versioned and cannot manufacture opening proof
+  ---
+  duration_ms: 0.470875
+  type: 'test'
+  ...
+1..10
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 295.768458

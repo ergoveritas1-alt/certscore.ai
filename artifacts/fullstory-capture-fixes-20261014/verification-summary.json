@@ -1,0 +1,61 @@
+{
+  "newPublicScans": 0,
+  "deployments": 0,
+  "quotaChanges": 0,
+  "savedReportsRewritten": 0,
+  "retainedReportsVerified": 3,
+  "tests": {
+    "focused-tests": {
+      "passed": 81,
+      "failed": 0
+    },
+    "preferences-tests": {
+      "passed": 20,
+      "failed": 0
+    },
+    "osano-boundaries": {
+      "passed": 1,
+      "failed": 0
+    },
+    "endpoint-tests": {
+      "passed": 13,
+      "failed": 0
+    },
+    "settled-capture-tests": {
+      "passed": 1,
+      "failed": 0
+    },
+    "frame-regression": {
+      "passed": 1,
+      "failed": 0
+    },
+    "action-overflow-tests": {
+      "passed": 6,
+      "failed": 0
+    },
+    "contract-tests": {
+      "passed": 10,
+      "failed": 0
+    }
+  },
+  "contractsBuild": "passed",
+  "scanCoreBuild": "passed",
+  "scanCoreTypecheck": "passed",
+  "webTypecheck": "passed",
+  "diffCheck": "passed",
+  "limitsUnchanged": {
+    "preferenceDeadlineMs": 17000,
+    "optionsActionsPerVisit": 1,
+    "panelOpeningMs": 1000,
+    "postClickRequestRows": 192,
+    "overflowEvaluations": 256,
+    "visualDecodeMs": 80
+  },
+  "extraBrowserSessions": 0,
+  "extraScreenshots": 0,
+  "extraModelCalls": 0,
+  "extraWaits": 0,
+  "omittedHistoricalRequestsRecovered": false,
+  "liveFullStorySuccessClaimed": false,
+  "estimatedAdditionalDiagnosticStorageUsdPerMonthAt100kScans": "<0.01"
+}

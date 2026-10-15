@@ -1,0 +1,88 @@
+TAP version 13
+# Subtest: priority uses canonical attribution rather than image type or file extension
+ok 1 - priority uses canonical attribution rather than image type or file extension
+  ---
+  duration_ms: 21.061875
+  type: 'test'
+  ...
+# Subtest: late tracking pixel and unknown request displace known CDN assets within the same cap
+ok 2 - late tracking pixel and unknown request displace known CDN assets within the same cap
+  ---
+  duration_ms: 1.55875
+  type: 'test'
+  ...
+# Subtest: unknown images are never evicted for same-priority or lower-priority arrivals
+ok 3 - unknown images are never evicted for same-priority or lower-priority arrivals
+  ---
+  duration_ms: 0.453667
+  type: 'test'
+  ...
+# Subtest: a new tracking host displaces a repeated tracker, preserving the earliest request
+ok 4 - a new tracking host displaces a repeated tracker, preserving the earliest request
+  ---
+  duration_ms: 0.448625
+  type: 'test'
+  ...
+# Subtest: new unknown host gets a sample before repeated known tracker traffic
+ok 5 - new unknown host gets a sample before repeated known tracker traffic
+  ---
+  duration_ms: 0.370416
+  type: 'test'
+  ...
+# Subtest: without overflow selection is unchanged and exact zero-loss accounting is retained
+ok 6 - without overflow selection is unchanged and exact zero-loss accounting is retained
+  ---
+  duration_ms: 0.180625
+  type: 'test'
+  ...
+# Subtest: an empty offered-event inventory is explicit and its returned snapshot stays frozen
+ok 7 - an empty offered-event inventory is explicit and its returned snapshot stays frozen
+  ---
+  duration_ms: 0.187208
+  type: 'test'
+  ...
+# Subtest: summary cannot conceal loss, inflate observed count or exceed the existing cap
+ok 8 - summary cannot conceal loss, inflate observed count or exceed the existing cap
+  ---
+  duration_ms: 0.391666
+  type: 'test'
+  ...
+# Subtest: a full unknown inventory remains protected; a late tracker is explicitly omitted
+ok 9 - a full unknown inventory remains protected; a late tracker is explicitly omitted
+  ---
+  duration_ms: 11.451792
+  type: 'test'
+  ...
+# Subtest: priority CPU work stops at its fixed bound without concealing further loss
+ok 10 - priority CPU work stops at its fixed bound without concealing further loss
+  ---
+  duration_ms: 18.774333
+  type: 'test'
+  ...
+# Subtest: same-host distinct tracking endpoints displace duplicate events but preserve their earliest request
+ok 11 - same-host distinct tracking endpoints displace duplicate events but preserve their earliest request
+  ---
+  duration_ms: 0.38175
+  type: 'test'
+  ...
+# Subtest: query variants share a duplicate group; unique endpoints and unknowns stay protected
+ok 12 - query variants share a duplicate group; unique endpoints and unknowns stay protected
+  ---
+  duration_ms: 0.298375
+  type: 'test'
+  ...
+# Subtest: new tracking endpoints can replace duplicated known support traffic without evicting unknowns or its first request
+ok 13 - new tracking endpoints can replace duplicated known support traffic without evicting unknowns or its first request
+  ---
+  duration_ms: 0.415875
+  type: 'test'
+  ...
+1..13
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 379.299083

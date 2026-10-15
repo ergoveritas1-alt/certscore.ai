@@ -1,0 +1,46 @@
+TAP version 13
+# Subtest: accept: post-action overflow beyond the new bound stays explicitly incomplete
+ok 1 - accept: post-action overflow beyond the new bound stays explicitly incomplete
+  ---
+  duration_ms: 1808.578209
+  type: 'test'
+  ...
+# Subtest: accept: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: false)
+ok 2 - accept: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: false)
+  ---
+  duration_ms: 2221.293375
+  type: 'test'
+  ...
+# Subtest: accept: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: true)
+ok 3 - accept: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: true)
+  ---
+  duration_ms: 664.594458
+  type: 'test'
+  ...
+# Subtest: reject: post-action overflow beyond the new bound stays explicitly incomplete
+ok 4 - reject: post-action overflow beyond the new bound stays explicitly incomplete
+  ---
+  duration_ms: 1380.84325
+  type: 'test'
+  ...
+# Subtest: reject: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: false)
+ok 5 - reject: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: false)
+  ---
+  duration_ms: 2290.448209
+  type: 'test'
+  ...
+# Subtest: reject: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: true)
+ok 6 - reject: CDN flood preserves late unknown/redirected tracking evidence and stays Limited (confirmed: true)
+  ---
+  duration_ms: 656.656083
+  type: 'test'
+  ...
+1..6
+# tests 6
+# suites 0
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 9792.448416

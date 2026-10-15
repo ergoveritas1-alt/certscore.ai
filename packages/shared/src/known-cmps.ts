@@ -70,7 +70,7 @@ export type KnownCmpDefinition = {
   /** Named-CMP Options binding when aria-controls is absent. An on-demand
    * panel must appear under the same pre-existing registered vendor root.
    * Never opens via a vendor API or accepts an arbitrary new modal. */
-  preferenceDialogBinding?: { version: string; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[] };
+  preferenceDialogBinding?: { version: string; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[]; allowObservedOptionsLabel?: boolean };
   /** Factual cookie identity from an already-loaded, own-data configuration.
    * Never a semantic consent witness or a global cookie-name alias. */
   configuredConsentCookiePath?: string;
@@ -849,7 +849,9 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
     aliases: ["Osano CMP"],
     canonicalName: "Osano",
-    preferenceDialogBinding: { version: "osano_preferences.v1", controlSelector: ".osano-cm-dialog .osano-cm-button--type_manage", dialogSelector: ".osano-cm-info-dialog" },
+    preferenceDialogBinding: { version: "osano_preferences.v2",
+      controlSelector: ".osano-cm-dialog .osano-cm-button--type_manage, .osano-cm-window button.osano-cm-window__widget",
+      dialogSelector: ".osano-cm-window .osano-cm-info-dialog", deferredRootSelector: ".osano-cm-window", allowObservedOptionsLabel: true },
     acceptConfirmation: {
       kind: "cmp_api_consent_state_changed",
       provider: "osano",

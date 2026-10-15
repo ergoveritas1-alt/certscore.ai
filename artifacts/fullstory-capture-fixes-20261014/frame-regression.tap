@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: consent visual pairing ignores frame arrivals during access diagnostics but preserves capture stability
+ok 1 - consent visual pairing ignores frame arrivals during access diagnostics but preserves capture stability
+  ---
+  duration_ms: 917.880292
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1852.890875

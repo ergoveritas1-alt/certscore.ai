@@ -20,7 +20,7 @@ test("late tracking pixel and unknown request displace known CDN assets within t
   assert.equal(rows.length, 3);
   assert.ok(rows.some(x => x.id.includes("google-analytics")));
   assert.ok(rows.some(x => x.id.includes("unknown.test")));
-  assert.deepEqual(capture.summary(), { policyVersion: "priority_bounded_action_requests.v1", requestsObserved: 5,
+  assert.deepEqual(capture.summary(), { policyVersion: "priority_bounded_action_requests.v2", requestsObserved: 5,
     requestsRetained: 3, replacements: 2, priorityEvaluations: 2, omitted: { delivery_asset: 2, known_other: 0, unknown: 0, tracking: 0, consent: 0, document: 0, unclassified: 0 } });
   assert.ok(actionCaptureCoverageSchema.safeParse({ requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 2,
     postActionRetention: capture.summary() }).success);
@@ -40,8 +40,8 @@ test("a new tracking host displaces a repeated tracker, preserving the earliest 
   for (let i = 0; i < 3; i++) capture.offer(row("https://www.google-analytics.com/collect", "ping", String(i)));
   const incoming = row("https://bat.bing.com/action/0", "image");
   const result = capture.offer(incoming);
-  assert.equal(result.evicted?.id, "2");
-  assert.deepEqual(rows.map(x => x.id), ["0", "1", incoming.id]);
+  assert.equal(result.evicted?.id, "1");
+  assert.deepEqual(rows.map(x => x.id), ["0", "2", incoming.id]);
   assert.equal(capture.summary()?.omitted.tracking, 1);
 });
 
@@ -57,7 +57,7 @@ test("without overflow selection is unchanged and exact zero-loss accounting is 
   const rows: ReturnType<typeof row>[] = [], capture = createActionRequestRetention(rows, 192);
   const first = row("https://unknown.test/a"); capture.offer(first);
   assert.equal(rows[0], first);
-  assert.deepEqual(capture.summary(), { policyVersion: "priority_bounded_action_requests.v1", requestsObserved: 1,
+  assert.deepEqual(capture.summary(), { policyVersion: "priority_bounded_action_requests.v2", requestsObserved: 1,
     requestsRetained: 1, replacements: 0, priorityEvaluations: 0,
     omitted: { delivery_asset: 0, known_other: 0, unknown: 0, tracking: 0, consent: 0, document: 0, unclassified: 0 } });
   assert.ok(actionCaptureCoverageSchema.safeParse({ requestsDroppedBeforeAction: 0,
@@ -104,4 +104,38 @@ test("priority CPU work stops at its fixed bound without concealing further loss
   assert.equal(capture.summary()?.omitted.unclassified, 552);
   assert.equal(capture.summary()?.requestsObserved, 1000);
   assert.ok(actionCaptureCoverageSchema.safeParse({ requestsDroppedBeforeAction: 0, requestsDroppedAfterAction: 808, postActionRetention: capture.summary() }).success);
+});
+
+
+test("same-host distinct tracking endpoints displace duplicate events but preserve their earliest request", () => {
+  const rows: ReturnType<typeof row>[] = [], capture = createActionRequestRetention(rows,3);
+  for (const id of ["first", "second", "third"]) capture.offer(row("https://www.google-analytics.com/collect?nonce="+id,"ping",id));
+  const offered = capture.offer(row("https://www.google-analytics.com/g/collect","ping","new-endpoint"));
+  assert.equal(offered.evicted?.id,"second");
+  assert.deepEqual(rows.map(r=>r.id),["first","third","new-endpoint"]);
+  assert.equal(capture.summary().omitted.tracking,1);
+  assert.equal(capture.summary().requestsObserved,4);
+  const old = {...capture.summary(),policyVersion:"priority_bounded_action_requests.v1"};
+  assert.ok(actionCaptureCoverageSchema.safeParse({requestsDroppedBeforeAction:0,requestsDroppedAfterAction:1,postActionRetention:old}).success);
+});
+
+test("query variants share a duplicate group; unique endpoints and unknowns stay protected", () => {
+  const rows: ReturnType<typeof row>[] = [], capture=createActionRequestRetention(rows,3);
+  capture.offer(row("https://www.google-analytics.com/collect?a=1","ping","first"));
+  capture.offer(row("https://www.google-analytics.com/g/collect","ping","unique"));
+  capture.offer(row("https://unknown.test/x","fetch","unknown"));
+  assert.equal(capture.offer(row("https://www.google-analytics.com/collect?a=2","ping","duplicate")).retained,false);
+  assert.deepEqual(rows.map(r=>r.id),["first","unique","unknown"]);
+});
+
+
+test("new tracking endpoints can replace duplicated known support traffic without evicting unknowns or its first request",()=>{
+ const rows:ReturnType<typeof row>[]=[],capture=createActionRequestRetention(rows,3);
+ capture.offer(row("https://app.qualified.com/cdn-cgi/rum?x=1","fetch","support-first"));
+ capture.offer(row("https://app.qualified.com/cdn-cgi/rum?x=2","fetch","support-duplicate"));
+ capture.offer(row("https://unknown.test/pixel.gif","image","unknown"));
+ assert.equal(classifyActionRequestRetention(rows[0]!.request.url(),"fetch").kind,"known_other");
+ assert.equal(capture.offer(row("https://www.google-analytics.com/collect","ping","tracker")).evicted?.id,"support-duplicate");
+ assert.deepEqual(rows.map(r=>r.id),["support-first","unknown","tracker"]);
+ assert.equal(capture.summary().omitted.known_other,1);
 });

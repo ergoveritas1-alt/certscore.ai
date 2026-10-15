@@ -135,3 +135,13 @@ test("privacy-link diagnostics are optional for history, strict and consistent w
   const input = { ...packet(), privacyLinks: [{ ...link, access: { version: "privacy_link_access.v1", outcome: "outside_viewport" } }] };
   assert.deepEqual(cmpPreferencesEvidenceSchema.parse(input).privacyLinks, input.privacyLinks);
 });
+
+
+test("Options diagnostics are bounded, versioned and cannot manufacture opening proof",()=>{
+ const counts={actionable:0,hidden:1,disabled:0,outside_viewport:0,covered:0,unavailable:0};
+ const input={...packet(),inspectionDiagnostic:{...packet().inspectionDiagnostic,optionsResolution:{version:"cmp_options_resolution.v1",counts,overflow:false}}};
+ assert.equal(cmpPreferencesEvidenceSchema.parse(input).action.opened,false);
+ assert.equal(cmpPreferencesEvidenceSchema.safeParse({...input,action:{count:1,intent:"options",label:"Cookie Preferences",opened:true}}).success,false);
+ for(const change of [{...counts,hidden:101},{...counts,hidden:100,covered:1},{...counts,hidden:-1}])
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse({...input,inspectionDiagnostic:{...input.inspectionDiagnostic,optionsResolution:{...input.inspectionDiagnostic.optionsResolution,counts:change}}}).success,false);
+});

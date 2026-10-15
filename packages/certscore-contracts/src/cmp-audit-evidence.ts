@@ -132,6 +132,12 @@ export const cmpPreferencesEvidenceSchema = z.object({
       groupCount: z.number().int().min(0).max(10000).optional(), retainedCookieCount: z.number().int().min(0).max(100).optional(), truncated: z.boolean().optional(),
     }).strict().optional(),
     phase: z.enum(["browser_start", "navigation", "cmp_readiness", "control_inventory", "surface_binding", "opening", "preference_inventory", "completed"]),
+    optionsResolution: z.object({
+      version: z.literal("cmp_options_resolution.v1"),
+      counts: z.object({ actionable: z.number().int().min(0).max(100), hidden: z.number().int().min(0).max(100), disabled: z.number().int().min(0).max(100), outside_viewport: z.number().int().min(0).max(100), covered: z.number().int().min(0).max(100), unavailable: z.number().int().min(0).max(100) }).strict()
+        .refine(counts => Object.values(counts).reduce((sum, n) => sum + n, 0) <= 100, "Options diagnostics exceed the bounded candidate inventory."),
+      overflow: z.boolean(),
+    }).strict().optional(),
     surfaceBinding: z.object({
       version: z.literal("cmp_surface_binding.v1"),
       mode: z.enum(["aria_controls", "registered_existing", "registered_deferred", "borlabs"]),
@@ -146,6 +152,8 @@ export const cmpPreferencesEvidenceSchema = z.object({
 }).superRefine((packet, ctx) => {
   if (packet.status === "completed" && (!packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });
+  if (packet.action.opened && packet.inspectionDiagnostic?.optionsResolution && (packet.inspectionDiagnostic.optionsResolution.overflow || packet.inspectionDiagnostic.optionsResolution.counts.actionable !== 1))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Options diagnostics must agree with unique opening proof." });
   if ((packet.controls.length || packet.controlInventoryComplete) && !packet.action.opened && !(packet.checkpoints?.controls && packet.checkpoints.controlsSurface === "first_layer")) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Preference controls require a verified opened surface." });
   if (packet.checkpoints && (!packet.documentToken || packet.checkpoints.documentToken !== packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Partial checkpoints require exact document binding." });
   if (packet.configuredConsentCookies?.length && (!packet.checkpoints || !packet.support.provider)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Configured cookie identity requires a provider-bound document checkpoint." });

@@ -234,3 +234,20 @@ test("an unbound or unstable proof cannot spend the allowance reserved for an el
   await collector(geometry,{framesStable:true,frameRevision:2});
   assert.equal(calls,1);
 });
+
+
+test("a terminal settled pair gets the existing single allowance; ineligible settled images cannot consume it",async()=>{
+  const {createConsentVisualComparisonCollector}=await import("./consent-control-visual-comparison.js");
+  const fixture=await consentVisualFixture();
+  const image={artifactId:"screenshot_pre_consent_settled",path:"settled.png",url:fixture.geometry.pageUrl,documentIdentity:fixture.geometry.documentIdentity,capturedAtMs:1000,consentStateAtTime:"pre_consent" as const,pagePhase:"network_idle" as const};
+  let calls=0;
+  const reasons:Array<string|undefined>=[];
+  const collector=createConsentVisualComparisonCollector([image],visualFixtureStartMs,()=>1000,async geometry=>{calls++;return geometry;},d=>reasons.push(d.reason));
+  const geometry={...fixture.geometry,screenshotArtifactRef:image.path};
+  await collector(geometry);assert.equal(calls,0,"An interim settled frame remains deferred");
+  const covered=structuredClone(geometry);covered.candidates[1]!.decisionStatus="covered";
+  await collector(covered,{terminalPair:true,framesStable:true,frameRevision:1});assert.equal(calls,0);assert.ok(reasons.includes("pair_occluded"));
+  await collector(geometry,{terminalPair:true,framesStable:false,frameRevision:1});assert.equal(calls,0);
+  await collector(geometry,{terminalPair:true,framesStable:true,frameRevision:1});assert.equal(calls,1);
+  await collector(geometry,{terminalPair:true,framesStable:true,frameRevision:1});assert.equal(calls,1);
+});

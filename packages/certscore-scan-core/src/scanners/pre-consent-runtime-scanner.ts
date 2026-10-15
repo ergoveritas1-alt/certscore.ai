@@ -1022,7 +1022,7 @@ export async function preConsentRuntimeScanner(
   const measureVisualComparison = createConsentVisualComparisonCollector(screenshots, input.scanStartedAtMs, remainingModuleBudgetMs, undefined,
     diagnostic => timingBreakdown.push({ label: "consent pixel comparison", durationMs: diagnostic.elapsedMs,
       outcome: diagnostic.status === "retained" ? "completed" : diagnostic.status === "timed_out" ? "timed_out" : "skipped",
-      detail: JSON.stringify({ policy: "authoritative_pair_first.v1", ...diagnostic }) }));
+      detail: JSON.stringify({ policy: "terminal_pair_first.v2", ...diagnostic }) }));
   const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;
@@ -1969,7 +1969,7 @@ export async function preConsentRuntimeScanner(
       const settledCapture = await recordTiming(
         timingBreakdown,
         "protected settled consent screenshot",
-        "Protected passive viewport checkpoint after the render wait and canonical post-settle inventory, before lower-priority consolidated page extraction.",
+        "Protected passive viewport checkpoint followed immediately by geometry, before duplicate inventory and lower-priority page extraction.",
         () => capturePreConsentScreenshot(page, settledScreenshotPath, {
           captureMode: "viewport_first",
           screenshotErrors,
@@ -2015,43 +2015,6 @@ export async function preConsentRuntimeScanner(
           ]),
         };
 
-        const pairedObservation = await recordBoundedTiming(
-          timingBreakdown,
-          "paired settled-frame consent inventory",
-          "Immediate canonical typed control inventory paired to the protected settled visual frame; remains read-only and does not infer from screenshot pixels.",
-          settledVisualCheckpointInventoryMaxMs,
-          () => readRapidFirstLayerConsentUiObservation(
-            page,
-            input.scanStartedAtMs,
-            settledVisualCheckpointInventoryMaxMs,
-            "retry",
-          ),
-          () => annotateConsentUiObservation(
-            emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
-            "recapture:paired_settled_frame_inventory_incomplete",
-          ),
-        );
-        const pairedResolution = reconcileConsentUiRecapture({
-          current: preScreenshotConsentObservation,
-          candidate: pairedObservation,
-          strongerBasis: "recapture:paired_settled_frame_typed_controls",
-          completedWithoutControlsBasis: "recapture:paired_settled_frame_completed_without_first_layer_controls",
-        });
-        if (pairedResolution.strongerEvidenceRetained || pairedResolution.completedNegativeRetained) {
-          preScreenshotConsentObservation = pairedResolution.observation;
-        } else if (isIncompleteConsentUiCapture(pairedObservation)) {
-          preScreenshotConsentObservation = annotateConsentUiObservation(
-            preScreenshotConsentObservation,
-            "recapture:paired_settled_frame_inventory_incomplete",
-          );
-        } else {
-          preScreenshotConsentObservation = annotateConsentUiObservation(
-            preScreenshotConsentObservation,
-            "inventory:paired_settled_frame_completed",
-          );
-        }
-        retainedConsentUiObservation = preScreenshotConsentObservation;
-
         // Complete the consent-proof packet while the settled screenshot and
         // its paired typed inventory still describe the same untouched page.
         // This capture is deliberately before optional CMP recaptures so a
@@ -2096,6 +2059,7 @@ export async function preConsentRuntimeScanner(
           );
           if (pairedGeometry) {
             pairedGeometry.geometry = await measureVisualComparison(pairedGeometry.geometry, {
+              terminalPair: true,
               frameRevision: pairedGeometry.frameRevision,
               framesStable: pairedGeometry.access.status === "loaded" && consentFrameRevision === pairedGeometry.frameRevision &&
                 page.frames().length === pairedGeometry.frames.length && pairedGeometry.frames.every(frame => page.frames().includes(frame)),
@@ -2117,12 +2081,11 @@ export async function preConsentRuntimeScanner(
             );
             consentGeometryArtifactRetained = true;
             if (geometryComplete) {
-              // A completed empty geometry packet is sufficient for the
-              // negative path. Positive geometry still proceeds through the
-              // established late diagnostic so it can retain its dedicated
-              // proof screenshot and bounded scroll recovery.
+              // An eligible measured pair completes the existing protected
+              // packet now. Avoid a later duplicate screenshot after chat or
+              // other UI has appeared. Ineligible pairs retain normal recovery.
               consentGeometryDiagnosticWritten =
-                !hasConfirmedFirstLayerGeometryControls(pairedGeometry.geometry);
+                Boolean(pairedGeometry.geometry.visualComparison) || !hasConfirmedFirstLayerGeometryControls(pairedGeometry.geometry);
               preScreenshotConsentObservation = reconcileConsentUiObservationWithCompletedGeometry({
                 artifactPath: geometryArtifactPath,
                 current: preScreenshotConsentObservation,
@@ -2137,6 +2100,53 @@ export async function preConsentRuntimeScanner(
             }
           }
         }
+        // Complete typed geometry already owns this measured view. A second
+        // DOM inventory can race later overlays and is unnecessary once the
+        // protected packet is terminal; keep the existing inventory recovery
+        // for captures without a verified comparison.
+        if (!pairedConsentGeometryProof?.geometry.visualComparison) {
+          const pairedObservation = await recordBoundedTiming(
+            timingBreakdown,
+            "paired settled-frame consent inventory",
+            "Immediate canonical typed control inventory paired to the protected settled visual frame; remains read-only and does not infer from screenshot pixels.",
+            settledVisualCheckpointInventoryMaxMs,
+            () => readRapidFirstLayerConsentUiObservation(
+              page,
+              input.scanStartedAtMs,
+              settledVisualCheckpointInventoryMaxMs,
+              "retry",
+            ),
+            () => annotateConsentUiObservation(
+              emptyConsentUiObservation(input.scanStartedAtMs, page.url()),
+              "recapture:paired_settled_frame_inventory_incomplete",
+            ),
+          );
+          const pairedResolution = reconcileConsentUiRecapture({
+            current: preScreenshotConsentObservation,
+            candidate: pairedObservation,
+            strongerBasis: "recapture:paired_settled_frame_typed_controls",
+            completedWithoutControlsBasis: "recapture:paired_settled_frame_completed_without_first_layer_controls",
+          });
+          if (pairedResolution.strongerEvidenceRetained || pairedResolution.completedNegativeRetained) {
+            preScreenshotConsentObservation = pairedResolution.observation;
+          } else if (isIncompleteConsentUiCapture(pairedObservation)) {
+            preScreenshotConsentObservation = annotateConsentUiObservation(
+              preScreenshotConsentObservation,
+              "recapture:paired_settled_frame_inventory_incomplete",
+            );
+          } else {
+            preScreenshotConsentObservation = annotateConsentUiObservation(
+              preScreenshotConsentObservation,
+              "inventory:paired_settled_frame_completed",
+            );
+          }
+          retainedConsentUiObservation = preScreenshotConsentObservation;
+
+        } else {
+          recordInstantTiming(timingBreakdown, "paired settled-frame inventory skipped",
+            "Completed typed geometry and its measured screenshot already retain the first-layer inventory.");
+        }
+
       }
     }
 

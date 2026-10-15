@@ -1035,3 +1035,38 @@ test("privacy link diagnostics remain score-neutral and source-bound through can
   assert.match(deriveCmpAuditAssessment(legacy)!.rows.find(row => row.id === "privacy_access")!.detail, /did not record why/);
   assert.equal(JSON.stringify(legacy), before);
 });
+
+
+test("typed Options failures explain dependent checks through policy without asserting unsupported CMP features",()=>{
+ for(const access of ["hidden","disabled","outside_viewport","covered","unavailable","actionable","missing"] as const){
+  const input=bundle(),packet=input.cmpPreferencesEvidence!;
+  Object.assign(packet,{status:"limited",action:{count:0,intent:"options",label:null,opened:false},controls:[],declarations:[],controlInventoryComplete:false,declarationInventoryComplete:false,support:{...packet.support,reason:"unique_actionable_options_not_resolved"},limitations:["unique_actionable_options_not_resolved"],checkpoints:{version:"cmp_partial_capture.v1",documentToken:packet.documentToken,privacyLinks:true,controls:false,declarations:false,controlsSurface:"first_layer"}});
+  const counts={actionable:0,hidden:0,disabled:0,outside_viewport:0,covered:0,unavailable:0};if(access!=="missing")counts[access]=access==="actionable"?2:1;
+  packet.inspectionDiagnostic={revision:"cmp_preferences.v3",budgetMs:17000,phase:"control_inventory",optionsResolution:{version:"cmp_options_resolution.v1",counts,overflow:false}};
+  const audit=deriveCmpAuditAssessment(input)!;
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:assessment},reviewFindingCandidates:[],validationFindings:[]});
+  const row=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns}).rows.find(row=>row.id==="categories")!;
+  assert.equal(row.status,"Incomplete");assert.ok(!row.deductionPoints);assert.ok(!row.detail?.includes("unsupported"));
+  assert.match(row.detail!,access==="missing"?/No Options/:access==="actionable"?/More than one/:access==="unavailable"?/did not complete/:access==="disabled"?/inactive/:access==="outside_viewport"?/outside the viewport/:new RegExp(access));
+ }
+});
+
+
+test("document-bound occluded controls explain incomplete prominence without creating a styling finding",async()=>{
+ const {consentVisualFixture}=await import("../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison");
+ const {geometry}=await consentVisualFixture();const input=bundle();
+ geometry.pageUrl=input.url;geometry.candidates.forEach(candidate=>candidate.frameContext.frameUrl=input.url);
+ const reject=geometry.candidates.find(c=>c.actionType==="reject_all")!;reject.decisionStatus="covered";reject.occlusion.center=false;
+ geometry.controlInspection!.candidates=geometry.controlInspection!.candidates.filter(c=>c.candidateId!==reject.candidateId);
+ input.startedAt=new Date(Date.parse(geometry.capturedAt)-1000).toISOString();
+ input.consentUiObservations=[{documentUrl:input.url,documentIdentity:geometry.documentIdentity}] as CanonicalEvidenceBundle["consentUiObservations"];
+ input.screenshots=[{artifactId:"paired",capturedAtMs:1000,path:geometry.screenshotArtifactRef!,url:input.url,documentIdentity:geometry.documentIdentity,consentStateAtTime:"pre_consent",retentionStatus:"available",displayStatus:"available"}] as CanonicalEvidenceBundle["screenshots"];
+ const audit=deriveCmpAuditAssessment(input,geometry as unknown as Record<string,unknown>)!;
+ const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+ const concerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:assessment},reviewFindingCandidates:[],validationFindings:[]});
+ const row=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns}).rows.find(row=>row.id==="prominence")!;
+ assert.equal(row.status,"Incomplete");assert.match(row.detail!,/covered/);assert.ok(!row.deductionPoints);
+ const foreign=structuredClone(geometry);foreign.documentIdentity!.token="wrong-loader";
+ assert.equal(deriveCmpAuditAssessment(input,foreign as unknown as Record<string,unknown>)!.rows.find(row=>row.id==="prominence")!.status,"not_assessed");
+});
