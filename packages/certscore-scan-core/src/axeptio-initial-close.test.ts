@@ -13,6 +13,7 @@ test.after(async () => { await browser?.close(); });
 // cookie values or interactions are needed to exercise the passive recipe.
 const panel = `<style>section{position:fixed;bottom:20px;left:20px;background:white;padding:24px;width:420px}label{display:block}input{width:20px;height:20px}button{padding:12px;margin:4px}</style>
 <section data-testid="widget-container" role="dialog" aria-label="Cookie preferences"><p>We use cookies for analytics. Choose your cookie preferences.</p>
+<input type="hidden" name="axeptio_cookies_fixture_value">
 <label>Toggle all<input type="checkbox"></label><label>Google Analytics 4<input type="checkbox"></label><label>Hubspot<input type="checkbox"></label>
 <input id="axeptio_consent_checkbox" type="checkbox" hidden>
 <button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button>
@@ -65,6 +66,14 @@ test("the initial panel inventory excludes a separate floating-widget checkbox",
   assert.equal(geometry.summary.firstLayerReject, true);
 });
 
+test("registered hidden consent-record metadata is excluded without reading its value", async () => {
+  const geometry = await capture();
+  const close = geometry.candidates.find(candidate => candidate.label === "Close")!;
+  assert.equal(close.initialSelection?.categories.length, 3);
+  assert.equal(close.initialSelection?.complete, true);
+  assert.equal(geometry.summary.firstLayerReject, true);
+});
+
 test("an incomplete initial category inspection cannot prove that Reject is absent", async () => {
   const geometry = await capture(html => html.replace('<label>', '<label style="display:none">'));
   const close = geometry.candidates.find(candidate => candidate.label === "Close")!;
@@ -80,6 +89,8 @@ for (const [name, change, shadow] of [
   ["checked optional input", (html: string) => html.replace('type="checkbox"', 'type="checkbox" checked'), true],
   ["disabled optional input", (html: string) => html.replace('type="checkbox"', 'type="checkbox" disabled'), true],
   ["unexpected radio input", (html: string) => html.replace('type="checkbox"', 'type="radio"'), true],
+  ["unregistered hidden field", (html: string) => html.replace('axeptio_cookies_fixture_value', 'unrelated_metadata'), true],
+  ["checkbox disguised as metadata", (html: string) => html.replace('type="hidden" name="axeptio_cookies_fixture_value"', 'type="checkbox" hidden name="axeptio_cookies_fixture_value"'), true],
   ["hidden optional category", (html: string) => html.replace('<label>', '<label style="display:none">'), true],
   ["explicitly hidden optional input", (html: string) => html.replace('type="checkbox"', 'type="checkbox" hidden'), true],
   ["missing labels", (html: string) => html.replaceAll("<label>", "<div>").replaceAll("</label>", "</div>"), true],

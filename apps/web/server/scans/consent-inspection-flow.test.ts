@@ -48,6 +48,7 @@ const banner = (controls: string) => `<section id="cookie-banner" role="dialog">
 test("Axeptio initial panel and incomplete categories preserve canonical refusal scoring", async () => {
   const markup = `<div><template shadowrootmode="open"><style>section{position:fixed;bottom:20px;left:20px;background:white;padding:24px;width:420px}label{display:block}input{width:20px;height:20px}button{padding:12px;margin:4px}</style>
     <section data-testid="widget-container" role="dialog"><p>We use cookies for analytics. Choose your cookie preferences.</p>
+    <input type="hidden" name="axeptio_cookies_fixture_value">
     <label>Toggle all<input type="checkbox"></label><label>Google Analytics 4<input type="checkbox"></label><label>Hubspot<input type="checkbox"></label>
     <button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button>
     <button id="axeptio_btn_acceptAllAndNext">Accept all</button><button id="axeptio_btn_next">Next</button></section>

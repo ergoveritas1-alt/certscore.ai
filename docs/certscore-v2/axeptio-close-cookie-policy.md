@@ -1,6 +1,7 @@
 # Axeptio initial Close and preference-cookie classification
 
-Local implementation requested by the owner on October 14, 2026. Not deployed.
+Policy requested by the owner on October 14, 2026. The base policy was deployed
+on October 15. This document also describes the scoped category-capture corrections.
 
 ## Evidence and scope
 
@@ -32,8 +33,12 @@ initial panel containing Close, Accept and Next, rather than the entire shadow
 root. The separate floating widget's checkbox is outside this category inventory.
 Every
 retained category input must be a unique, enabled, unchecked checkbox associated
-with a visible labelled category. The hidden auxiliary
-`#axeptio_consent_checkbox` is excluded by exact identity. Unexpected inputs,
+with a visible labelled category. The auxiliary
+`#axeptio_consent_checkbox` is excluded by exact identity. Within the registered
+panel, the non-interactive `input[type="hidden"]` field whose name starts with
+`axeptio_cookies_` and ends with `_value` is consent-record metadata, not a user
+choice. The registry excludes that exact field pattern without reading its value.
+Checkboxes with the same name, unrelated hidden fields and unexpected inputs,
 hidden categories, incomplete or duplicate controls, checked switches and
 unbound/stale evidence fail closed. Custom checkbox paint does not invalidate a
 visible wrapping label. Generic Close buttons do not qualify.
@@ -54,8 +59,10 @@ finding. Complete checked or disabled optional categories still cannot qualify
 as a necessary-only equivalent. Historical captures retain their original proof.
 
 The October 15 production follow-up `c270d0de-ede0-480c-85d5-65a2a55680ee`
-retained three visible initial-panel switches, four shadow-root checkboxes and an
-incomplete Close selection proof. Its 70-point report remains intact. The panel
+retained three visible initial-panel switches, four candidate category inputs and
+an incomplete Close selection proof. An independent passive Ireland visit
+identified the extra candidate as the hidden consent-record metadata field.
+Its 70-point report remains intact. The panel
 scope correction is a producer fix to this same observation recipe, not a new
 scoring weight, action recipe, lane, capture window or report repair.
 

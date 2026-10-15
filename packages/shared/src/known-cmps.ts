@@ -197,7 +197,9 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       categoryContainerSelector: '[data-testid="widget-container"]',
       widgetSelector: '#axeptio_main_button[aria-label="Close the widget without accepting cookie settings"]',
       acceptSelector: "#axeptio_btn_acceptAllAndNext", nextSelector: "#axeptio_btn_next",
-      inputSelector: 'input:not(#axeptio_consent_checkbox),select,textarea,[role="switch"]',
+      // Non-interactive consent-record metadata is not an optional category.
+      // Hidden checkbox choices and unrelated fields remain in the inspection.
+      inputSelector: 'input:not(#axeptio_consent_checkbox):not([type="hidden"][name^="axeptio_cookies_"][name$="_value"]),select,textarea,[role="switch"]',
     },
     // Passive all-off recognition does not authorize a Close action. Registration
     // requires its own separately verified action recipe and semantic witness.
