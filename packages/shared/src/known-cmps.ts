@@ -59,6 +59,8 @@ export type KnownCmpActionCapability = {
 };
 
 export type KnownCmpDefinition = {
+  /** Explicit documented tenant/site cookie variants; identity only. */
+  cookieNameVariants?: Array<{ canonicalName: string; pattern: RegExp }>;
   initialOptionalOffCloseObservation?: {
     recipe: "axeptio.initial_optional_off_close.v1";
     submitSelector: '#axeptio_btn_close[aria-label="Close cookie settings"]';
@@ -1003,6 +1005,9 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     preferenceCategoryInventory: { version: "iubenda_purpose_categories.v1", dialogSelector: "#purposes-content-container",
       categorySelector: ".purposes-item", titleSelector: ".purposes-item-title label", toggleSelector: '.purposes-checkbox input[type="checkbox"]' },
     cookieNames: ["_iub_cs"],
+    // Official manual-tagging guidance names site-ID and cookie-policy-ID cookies.
+    // Keep matching bounded to numeric IDs; unrelated _iub names stay excluded.
+    cookieNameVariants: [{canonicalName: "_iub_cs", pattern: /^_iub_cs-(?:s)?[0-9]{1,16}$/i}],
     domains: ["iubenda.com", "cdn.iubenda.com", "cs.iubenda.com"],
     domSelectors: ["[id*='iubenda' i]", "[class*='iubenda' i]"],
     evidenceTreatment: "cmp_infrastructure",
@@ -1240,7 +1245,7 @@ function collectSignalsForDefinition(definition: KnownCmpDefinition, input: Know
   }
 
   for (const cookieName of uniqueStrings(input.cookieNames ?? [])) {
-    if ((definition.cookieNames ?? []).some((knownName) => {
+    if ((definition.cookieNameVariants ?? []).some(variant => textMatches(cookieName, variant.pattern)) || (definition.cookieNames ?? []).some((knownName) => {
       const normalizedCookieName = cookieName.toLowerCase();
       const normalizedKnownName = knownName.toLowerCase();
       const prefixName = normalizedKnownName.endsWith("*") ? normalizedKnownName.slice(0, -1) : null;
@@ -1455,4 +1460,10 @@ export function knownCmpObservationRecipe(controlSelector: string, containerSele
     if (recipe) return recipe.recipeId;
   }
   return undefined;
+}
+
+/** Canonical variant identity, independent of semantic consent registration. */
+export function matchesKnownCmpCookieVariant(actualName: string, canonicalName: string) {
+  return KNOWN_CMP_REGISTRY.some(definition => definition.cookieNameVariants?.some(variant =>
+    variant.canonicalName === canonicalName && textMatches(actualName, variant.pattern)));
 }

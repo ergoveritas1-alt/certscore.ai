@@ -57,7 +57,7 @@ export const publicCmpAuditSchema = z.object({
 
         expiries: z.array(observedCookieExpirySchema).max(4).optional(),
         categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
-        services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure"]) }).strict()).max(100).optional(),
+        services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure", "cmp_visible_inventory"]), sourceRef: z.string().max(120).optional() }).strict()).max(100).optional(),
         serviceDisclosures: z.array(z.object({ version: z.literal("cmp_named_partner_disclosure.v1"), excerpt: z.string().min(1).max(600), names: z.array(z.string().min(1).max(80)).min(1).max(20) }).strict()).max(1).optional(),
         declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional(), observedExpiry: observedCookieExpirySchema.optional() }).strict().refine(row => !row.observedExpiry || (row.observedExpiry.name === row.name && row.observedExpiry.visit === "Accept"), "Observed expiry requires an exact cookie-name and capture match")).max(100).optional(),
         cookies: z.array(z.object({ name: z.string().min(1).max(160), matchedPattern: z.string().min(1).max(160).nullable(), observedIn: z.array(z.enum(["before_choice", "after_accept"])).min(1).max(2),

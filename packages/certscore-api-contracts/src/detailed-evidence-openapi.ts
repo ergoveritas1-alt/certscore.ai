@@ -1162,8 +1162,13 @@ export const detailedEvidenceOpenApiSchemas = {
                             "enum": [
                               "cmp_api_inventory",
                               "labelled_control",
-                              "cmp_named_disclosure"
+                              "cmp_named_disclosure",
+                              "cmp_visible_inventory"
                             ]
+                          },
+                          "sourceRef": {
+                            "type": "string",
+                            "maxLength": 120
                           }
                         }
                       },

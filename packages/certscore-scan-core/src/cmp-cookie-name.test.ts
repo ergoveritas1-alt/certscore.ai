@@ -21,3 +21,9 @@ test("canonical CMP cookie matching rejects unrelated consent-like names", () =>
   assert.equal(matchesCanonicalCmpCookieName("site_cmpconsent", "__cmpconsent"), false);
   assert.equal(matchesCanonicalCmpCookieName("__cmpchoice23129", "__cmpconsent"), false);
 });
+
+
+test("Iubenda action cookie identity uses the same bounded canonical variants", () => {
+  for (const name of ["_iub_cs-s1", "_iub_cs-252372"]) assert.equal(matchesCanonicalCmpCookieName(name, "_iub_cs"), true);
+  for (const name of ["_iub_cs-other", "_iub_cs-", "_iub_cs-s1-extra", "_iub_previous_preference_id"]) assert.equal(matchesCanonicalCmpCookieName(name, "_iub_cs"), false);
+});

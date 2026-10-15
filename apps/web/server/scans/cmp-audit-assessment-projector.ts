@@ -1,3 +1,4 @@
+import { projectVisibleCmpInventory } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
 import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
@@ -12,7 +13,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (!outcome || outcome.status !== "limited" || !outcome.limitationCode) return undefined;
     // Coordinator outcomes are coverage telemetry, never substituted browser evidence.
     const fallback = cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v10", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
+      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v11", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: outcome.limitationCode },
       rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? (id === "duration" ? "No verified CMP cookie expiry was retained." : "Preference evidence was not retained; this criterion could not be assessed."), evidenceRefs: [] })) });
     const expiries = applyClientFacts(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs }), fallback.rows, observations);
@@ -67,7 +68,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v10", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v11", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -316,7 +317,7 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
 }
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;
-type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints">;
+type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints" | "visibleInventory">;
 
 /** A document-settling limitation does not erase an already retained cookie
  * snapshot. It permits a partial name comparison only, never complete coverage,
@@ -400,6 +401,14 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     const services = names?.length ? names.map(name => ({ name, source: "cmp_api_inventory" as const }))
       : labelled.map(name => ({ name, source: "labelled_control" as const }));
     if (services.length) rows.find(row => row.id === "services")!.inventory = { services };
+  }
+  const visibleServices = declarationsUsable && evidence.visibleInventory ? projectVisibleCmpInventory(evidence.visibleInventory).services : [];
+  if (visibleServices.length) {
+    const row = rows.find(row => row.id === "services")!;
+    const services = [...(row.inventory?.services ?? [])];
+    for (const service of visibleServices) if (!services.some(existing => existing.name === service.name) && services.length < 100) services.push(service);
+    set("services", "observed", `${services.length} services were explicitly named in the inspected CMP inventory. This is a bounded sample; service controls and complete inventory coverage were not tested.`);
+    row.inventory = {...row.inventory, services};
   }
   const disclosed = declarationsUsable ? [...new Set(evidence.serviceDisclosures?.flatMap(disclosure => disclosure.names) ?? [])] : [];
   if (disclosed.length) {

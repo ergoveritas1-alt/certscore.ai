@@ -172,3 +172,21 @@ test("registered portal diagnostics require v8 verified opening and preserve his
   assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success, false);
   assert.deepEqual(cmpPreferencesEvidenceSchema.parse(packet()).inspectionDiagnostic, packet().inspectionDiagnostic);
 });
+
+
+test("visible inventory retains exact labelled sources without manufacturing opening or complete coverage", async () => {
+  const input: any = packet();
+  const inventory = {version: "cmp_visible_inventory.v1",records:[{ref:"definition_list:0/row:0",fields:[
+    {column:"cookieName",label:"Cookie name",value:"_ga"},{column:"provider",label:"Provider",value:"Google Analytics"},
+    {column:"purpose",label:"Purpose",value:"Audience measurement"},{column:"duration",label:"Duration",value:"2 years"}]}],truncated:false,unresolvedRecords:0};
+  input.visibleInventory=inventory;input.inspectionDiagnostic.revision="cmp_preferences.v9";
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success,false);
+  input.action={count:1,intent:"options",label:"Preferences",opened:true};
+  input.checkpoints={version:"cmp_partial_capture.v1",documentToken:"loader",controls:true,controlsSurface:"preferences",privacyLinks:false,declarations:true};
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success,false,"Retained record must agree with declaration projection");
+  input.declarations=[{name:"_ga",purpose:"Audience measurement",duration:"2 years",source:"cmp_visible_inventory"}];
+  const parsed=cmpPreferencesEvidenceSchema.parse(input);
+  assert.deepEqual(parsed.visibleInventory,inventory);assert.equal(parsed.declarationInventoryComplete,false);
+  input.visibleInventory.records[0].fields[0].label="Category";
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success,false);
+});

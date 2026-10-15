@@ -1176,8 +1176,8 @@
     },
     "https://www.cookiebot.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-12T20:44:15.335Z",
-      "lastContactAt": "2026-10-15T20:44:15.335Z",
+      "cooldownUntil": "2026-11-12T21:58:19.252Z",
+      "lastContactAt": "2026-10-15T21:58:19.252Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1226,8 +1226,8 @@
     },
     "https://trustarc.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-12T21:36:29.883Z",
-      "lastContactAt": "2026-10-15T21:36:29.883Z",
+      "cooldownUntil": "2026-11-12T21:57:55.220Z",
+      "lastContactAt": "2026-10-15T21:57:55.220Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1236,8 +1236,8 @@
     },
     "https://www.iubenda.com/en/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-12T21:34:15.958Z",
-      "lastContactAt": "2026-10-15T21:34:15.958Z",
+      "cooldownUntil": "2026-11-12T21:57:32.282Z",
+      "lastContactAt": "2026-10-15T21:57:32.282Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1256,7 +1256,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-15T21:38:33.260Z",
+  "updatedAt": "2026-10-15T22:01:24.975Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",

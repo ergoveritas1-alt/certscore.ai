@@ -1,3 +1,5 @@
+import { readVisibleCmpInventory } from "./cmp-visible-inventory.js";
+import { projectVisibleCmpInventory } from "@certscore/contracts";
 import { preparePreferencePortal, verifyPreferencePortal } from "./cmp-preference-portal.js";
 import { classifyConsentGeometryAccess } from "./consent-geometry-access.js";
 import { waitForConsentDocumentReady } from "./consent-document-readiness.js";
@@ -9,7 +11,6 @@ import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 import { dispatchLocatorClickWithVerifiedGeometry } from "./cmp-control-actionability.js";
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
-import { cookieDisclosureColumn } from "@certscore/contracts";
 import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
 import { readCookieYesPreferenceInventory } from "./cookieyes-preference-inventory.js";
 import { cmpInventoryScopeSelector, readCmpScopeInventory } from "./cmp-scope-inventory.js";
@@ -36,7 +37,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v8", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v9", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -98,7 +99,7 @@ export async function runCmpPreferencesObserver(input: {
     session.on("Page.frameNavigated", ({ frame }) => {
       if (!frame.parentId && frame.loaderId !== packet.documentToken) {
         packet.checkpoints = undefined; packet.configuredConsentCookies = undefined; packet.controls = []; packet.privacyLinks = [];
-        packet.declarations = []; packet.serviceNames = undefined; packet.serviceDisclosures = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
+        packet.declarations = []; packet.visibleInventory = undefined; packet.serviceNames = undefined; packet.serviceDisclosures = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
         packet.controlInventoryComplete = false; packet.action.opened = false;
         packet.documentToken = null; packet.limitations.push("preference_document_changed");
       }
@@ -458,21 +459,15 @@ export async function runCmpPreferencesObserver(input: {
     if (!documentReady) packet.limitations.push("preference_document_loading");
     packet.controlInventoryComplete = documentReady && !match.recipe && !raw.overflow && incompleteSections === 0 && raw.controls.every(control => control.visible) && packet.controls.every(control => control.kind !== "unclassified");
     if (!packet.controlInventoryComplete) packet.limitations.push(raw.overflow ? "control_inventory_overflow" : match.recipe ? "bounded_vendor_preference_inventory" : "deeper_preference_sections_not_opened");
-    const tables = borlabs ? [] : await controlled.locator("table:visible").evaluateAll(nodes => nodes.slice(0, 8).map(table => ({
-      headers: [...table.querySelectorAll("thead th")].map(th => (th.textContent ?? "").trim().slice(0, 120)),
-      overflow: table.querySelectorAll("tbody tr").length > 100,
-      rows: [...table.querySelectorAll("tbody tr")].slice(0, 100).map(row => [...row.querySelectorAll("td")].map(cell => ({ text: (cell.textContent ?? "").trim().slice(0, 240), code: cell.querySelector("code")?.textContent?.trim().slice(0, 160) }))),
-    })));
-    for (const table of tables) {
-      const columns = table.headers.map(cookieDisclosureColumn);
-      const nameIndex = columns.indexOf("cookieName"), durationIndex = columns.indexOf("duration"), purposeIndex = columns.indexOf("purpose");
-      if (nameIndex < 0) continue;
-      for (const row of table.rows) {
-        const name = row[nameIndex]?.code ?? row[nameIndex]?.text;
-        if (!name || !/^[A-Za-z0-9_.$:#*+\-\[\]]{1,160}$/.test(name)) { packet.limitations.push("unresolved_cookie_inventory_name"); continue; }
-        packet.declarations.push({ name, purpose: row[purposeIndex]?.text ?? "", duration: row[durationIndex]?.text ?? "", source: "cmp_visible_inventory" });
-      }
-      if (table.overflow) packet.limitations.push("cookie_inventory_overflow");
+    if (!borlabs) {
+      const visibleInventory = await readVisibleCmpInventory(controlled);
+      await binding();
+      if (portal && (!portalPanel || !await verifyPreferencePortal(page, controlled, portal, portalPanel))) throw new Error("preference_document_changed");
+      packet.visibleInventory = visibleInventory;
+      for (const row of projectVisibleCmpInventory(visibleInventory).declarations)
+        if (!packet.declarations.some(existing => existing.name === row.name && existing.purpose === row.purpose && existing.duration === row.duration && existing.source === row.source)) packet.declarations.push(row);
+      if (visibleInventory.truncated) packet.limitations.push("cookie_inventory_overflow");
+      if (visibleInventory.unresolvedRecords) packet.limitations.push("visible_inventory_records_unresolved");
     }
 
     if (packet.declarations.length > 100) { packet.declarations = packet.declarations.slice(0, 100); packet.declarationInventoryComplete = false; packet.limitations.push("cookie_inventory_overflow"); }
@@ -489,6 +484,7 @@ export async function runCmpPreferencesObserver(input: {
     packet.status = "limited";
     if (!packet.checkpoints?.controls) { packet.controls = []; packet.action.opened = false; }
     packet.controlInventoryComplete = false;
+    if (!packet.checkpoints?.declarations) packet.visibleInventory = undefined;
     const budgetExhausted = expired || Date.now() >= deadline || (error instanceof Error && error.message === "preference_budget_exhausted");
     const operationTimedOut = error instanceof Error && error.name === "TimeoutError";
     const openingTimedOut = error instanceof Error && error.message === "preference_opening_budget_exhausted";

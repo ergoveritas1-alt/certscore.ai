@@ -1,4 +1,4 @@
-import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
+import { KNOWN_CMP_REGISTRY, matchesKnownCmpCookieVariant } from "@website-signal-risk-scanner/shared";
 
 function boundedCookieName(value: string) {
   return value.trim().slice(0, 180);
@@ -29,7 +29,7 @@ export function matchesCanonicalCmpCookieName(actualName: string, expectedName: 
     }
   }
 
-  return [...patterns].some((pattern) =>
+  return matchesKnownCmpCookieVariant(actual, expected) || [...patterns].some((pattern) =>
     pattern.endsWith("*")
       ? actual.startsWith(pattern.slice(0, -1))
       : actual === pattern

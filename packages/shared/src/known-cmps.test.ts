@@ -400,3 +400,9 @@ test("DataGrail preference recognition does not authorize Accept/Reject or guess
   assert.equal(definition.rejectConfirmation, undefined);
   assert.equal(definition.cookieNames, undefined);
 });
+
+
+test("Iubenda numeric policy and site cookie variants share canonical identity without broad prefix matching", () => {
+  for (const name of ["_iub_cs", "_iub_cs-252372", "_iub_cs-s1", "_iub_cs-s123"]) assert.equal(getKnownCmpVendorName({cookieNames:[name]}), "Iubenda", name);
+  for (const name of ["_iub_cs-", "_iub_cs-s", "_iub_cs-other", "_iub_cs-s1-extra", "_iub_cs_cons-252372", "_iub_previous_preference_id", "prefix_iub_cs-s1"]) assert.equal(getKnownCmpVendorName({cookieNames:[name]}), null, name);
+});

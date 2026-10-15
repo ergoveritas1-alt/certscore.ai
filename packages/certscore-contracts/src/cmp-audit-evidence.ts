@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cmpVisibleInventorySchema, projectVisibleCmpInventory } from "./cmp-visible-inventory";
 import { parseNamedCmpPartnerDisclosure } from "./cmp-named-disclosure";
 import { possibleCmpCookieTemplate } from "./cmp-cookie-template";
 export { possibleCmpCookieTemplate } from "./cmp-cookie-template";
@@ -76,7 +77,7 @@ export const cmpInventoryTablesSchema = z.object({
 
   expiries: z.array(cmpCookieExpiryEvidenceSchema).max(4).optional(),
   categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
-  services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure"]) }).strict()).max(100).optional(),
+  services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure", "cmp_visible_inventory"]), sourceRef: z.string().max(120).optional() }).strict()).max(100).optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]), inferredPurpose: z.object({ category: z.string().min(1).max(80), basis: z.literal("canonical_cookie_registry.v1") }).strict().optional(),
     observedExpiry: cmpCookieExpiryEvidenceSchema.optional(),
@@ -110,6 +111,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   privacyLinks: z.array(cmpPrivacyLinkSchema).max(16),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory"]) })).max(100),
   declarationInventoryComplete: z.boolean(),
+  visibleInventory: cmpVisibleInventorySchema.optional(),
   serviceNames: z.array(z.string().min(1).max(240)).max(100).optional(),
   configuredConsentCookies: configuredConsentCookiesSchema.optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
@@ -130,7 +132,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
     truncated: z.boolean(),
   }).optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
     identityScopes: z.object({ version: z.literal("cmp_scope_activity.v1"),
       providers: z.array(z.object({ provider: z.string().min(1).max(120), state: z.enum(["visible", "inactive", "unverified"]) }).strict()).max(40),
     }).strict().optional(),
@@ -158,9 +160,15 @@ export const cmpPreferencesEvidenceSchema = z.object({
     }).strict().optional(),
   }).optional(),
 }).superRefine((packet, ctx) => {
+  if (packet.visibleInventory) {
+    const projected = projectVisibleCmpInventory(packet.visibleInventory);
+    if (packet.inspectionDiagnostic?.revision !== "cmp_preferences.v9" || !packet.action.opened || !packet.checkpoints?.declarations || projected.declarations.some(row =>
+        !packet.declarations.some(declared => declared.name === row.name && declared.purpose === row.purpose && declared.duration === row.duration && declared.source === row.source)))
+      ctx.addIssue({code: z.ZodIssueCode.custom, message: "Visible inventory requires versioned exact declaration projection"});
+  }
   if (packet.status === "completed" && (!packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
   if (packet.inspectionDiagnostic?.surfaceBinding?.mode === "registered_portal" &&
-      (packet.inspectionDiagnostic.revision !== "cmp_preferences.v8" || packet.action.opened &&
+      (!["cmp_preferences.v8", "cmp_preferences.v9"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
        packet.inspectionDiagnostic.surfaceBinding.verification?.result !== "verified"))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Registered portal opening requires versioned verified binding." });
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });

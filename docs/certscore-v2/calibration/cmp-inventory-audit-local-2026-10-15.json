@@ -1,0 +1,179 @@
+{
+  "version": "certscore.cmp-inventory-audit.local.v1",
+  "date": "2026-10-15",
+  "baseCommit": "be4063a8",
+  "deployed": false,
+  "originalReportsModified": false,
+  "scoringRulesChanged": false,
+  "scope": "Owner-authorized retained-evidence audit, canonical Iubenda cookie identity fix, shared labelled inventory extraction, local replay and targeted fresh EU-Ireland scans.",
+  "retainedAudit": {
+    "providers": 10,
+    "historicalUnresolvedChecks": 61,
+    "artifact": "/Users/benmasek/WC01/outputs/cmp-inventory-audit-local-2026-10-15/retained-audit.json",
+    "note": "Root-cause triage distinguishes missing capture/contract data, retained evidence awaiting assessment/completion verification, and criterion/coverage questions. Historical packets are not enriched from screenshots, website changes or other sessions."
+  },
+  "canonicalFixes": [
+    {
+      "area": "Iubenda identity",
+      "change": "Canonical registry explicitly recognizes numeric policy/site variants such as _iub_cs-252372 and _iub_cs-s1. The same registry supplies shared cookie detection and action-cookie matching. Unrelated suffixes and _iub names remain excluded. Cookie presence alone does not confirm a semantic decision.",
+      "sources": [
+        "https://www.iubenda.com/en/help/1229-manual-tagging-blocking-cookies/",
+        "https://www.iubenda.com/en/help/46731-how-to-retrieve-proof-of-a-cookie-preferences-for-specific-users/"
+      ]
+    },
+    {
+      "area": "Shared visible inventory",
+      "change": "One bounded read of an already verified preference panel supports native tables with or without thead, explicit definition-list records/cards, and ARIA tables across open shadow roots. Exact code-labelled cookie names survive annotated cells. Long purpose text retains a bounded excerpt and truncation marker."
+    },
+    {
+      "area": "Evidence and assessment",
+      "change": "cmp_visible_inventory.v1 retains literal field labels, values and unique record references in cmp_preferences.v9. Explicit named providers may reach the services criterion through typed assessment, normalized concerns and policy. Domains, category labels, hidden records, duplicate fields, spanned cells and unlabelled text do not become named services. A visible sample never establishes complete configured inventory."
+    },
+    {
+      "area": "Public contract parity",
+      "change": "Canonical service evidence includes cmp_visible_inventory source and sourceRef. API schema, generated OpenAPI and SDK types agree; no display-only findings were added."
+    }
+  ],
+  "replay": {
+    "scope": "Artifact-only replay of retained two-site bundles through complete canonical materialization, concerns, policy, unified findings/checklist and CMP projection. No new browser visit, persistence or historical report write.",
+    "baselineUnresolved": 11,
+    "afterUnresolved": 9,
+    "resolved": 2,
+    "newlyUnresolved": 0,
+    "changes": [
+      {
+        "site": "iubenda",
+        "changes": [
+          {
+            "id": "consent_record",
+            "before": "Not assessed",
+            "after": "Observed"
+          },
+          {
+            "id": "duration",
+            "before": "Not assessed",
+            "after": "Observed"
+          }
+        ]
+      },
+      {
+        "site": "trustarc",
+        "changes": []
+      }
+    ],
+    "registrationPreserved": "Original Iubenda Accept and Reject packets remain unconfirmed. Replay does not change those packets or infer acceptance/refusal.",
+    "artifact": "/Users/benmasek/WC01/outputs/cmp-inventory-audit-local-2026-10-15/replay-comparison.json"
+  },
+  "offlineDomReplay": {
+    "networkBlocked": true,
+    "newServiceOrCookieRecordsFound": 0,
+    "sites": [
+      "iubenda",
+      "trustarc"
+    ],
+    "observedReadMs": [
+      14.01425,
+      11.486917
+    ],
+    "note": "Saved panel DOM contains category descriptions but no extractable explicit cookie/service records under the supported structures. Category prose is not per-cookie purpose evidence.",
+    "artifact": "/Users/benmasek/WC01/outputs/cmp-inventory-audit-local-2026-10-15/offline-dom-replay.json"
+  },
+  "freshScans": {
+    "region": "eu-west-1",
+    "egress": {
+      "browserIp": "63.33.9.201",
+      "httpIp": "63.33.9.201",
+      "country": "IE",
+      "awsRegion": "eu-west-1",
+      "verifiedAt": "2026-10-15T21:57:13.242Z"
+    },
+    "baselineUnresolved": 18,
+    "afterUnresolved": 19,
+    "resolvedOldChecks": 2,
+    "newlyUnresolved": 3,
+    "netReduction": -1,
+    "sites": [
+      {
+        "site": "iubenda",
+        "oldScanId": "cmp-local-iubenda-27f0378f-6b04-4f62-8c29-d99974c1584e",
+        "newScanId": "cmp-inventory-local-iubenda-1b668111-2370-451b-a8de-d4a303604b8b",
+        "before": 7,
+        "after": 6,
+        "resolved": 2,
+        "newlyUnresolved": 1
+      },
+      {
+        "site": "trustarc",
+        "oldScanId": "cmp-local-trustarc-52955e16-ad79-49cd-86a0-933c38fc0b41",
+        "newScanId": "cmp-inventory-local-trustarc-ff0f0e89-a85a-4fdd-b689-9db7e0d86f26",
+        "before": 4,
+        "after": 6,
+        "resolved": 0,
+        "newlyUnresolved": 2
+      },
+      {
+        "site": "cookiebot",
+        "oldScanId": "99f35a9c-dd46-4bb9-8216-c833c37dc90d",
+        "newScanId": "cmp-inventory-local-cookiebot-feb08d0d-36d5-4b33-aa66-7338f555b2fe",
+        "before": 7,
+        "after": 7,
+        "resolved": 0,
+        "newlyUnresolved": 0
+      }
+    ],
+    "interpretation": "Fresh Iubenda confirms the consent-record/expiry improvements. Iubenda screenshot review was incomplete; TrustArc did not retain a prominence pair and its preference panel opening timed out; Cookiebot panel binding was unavailable. These capture failures remain unresolved. No live inventory coverage gain is claimed. Cookiebot baseline is its historical provider spot check; the other two baselines are the latest local panel-verification reports. This is targeted diagnostic evidence, not a representative acceptance cohort.",
+    "artifact": "/Users/benmasek/WC01/outputs/cmp-inventory-audit-local-2026-10-15/comparison.json"
+  },
+  "remainingPriorities": [
+    "TrustArc panel readiness within existing bounded worker limits",
+    "Cookiebot exact preference-panel binding",
+    "Reliable verified same-capture prominence evidence",
+    "Read-only vendor-specific loaded inventories only after their structure and site membership are verified; deeper panels require separately bounded navigation support"
+  ],
+  "verification": {
+    "distinctFocusedTestsPassed": 172,
+    "typechecks": [
+      "@certscore/contracts",
+      "@website-signal-risk-scanner/shared",
+      "@certscore/scan-core",
+      "@certscore/api-contracts",
+      "@certscore/sdk",
+      "web"
+    ],
+    "generatedContractsCheckPassed": true,
+    "registryCheckPassed": true,
+    "historicalSourceHashVerification": true,
+    "negativeCoverage": [
+      "Unrelated Iubenda cookie names",
+      "Hidden, transparent and aria-hidden inventories",
+      "Missing or duplicate labels",
+      "Merged cells and malformed field mappings",
+      "Bare-host provider values",
+      "Text/record cap overflow",
+      "Document drift",
+      "Missing opening/checkpoint proof",
+      "Partial inventory cannot establish missing declarations or scoring"
+    ]
+  },
+  "cost": {
+    "localVerificationEstimatedUsd": "below $1 total",
+    "expectedIncrementalProductionUsdPerMonth": "below $1 at 100000 scans, estimate only",
+    "basis": "Existing browser invocation and wall-clock limits, replacing the prior table read. Empty-panel retained replays took about 11-14 ms; output is capped at 100 records and 16000 retained label/value characters. No new lane, navigation, model call, retention period or standing capacity. Production latency/storage cost has not been measured."
+  },
+  "operations": {
+    "centralContactRunKey": "cmp-inventory-audit-local-20261015",
+    "contactsPersisted": 3,
+    "ownerTargetedCooldownException": true,
+    "repositoryLedgerUpdatedTargets": [
+      "https://trustarc.com/",
+      "https://www.iubenda.com/en/",
+      "https://www.cookiebot.com/"
+    ],
+    "tunnelCleanup": {
+      "temporaryRuleRemoved": true,
+      "sshStopped": true,
+      "finishedAt": 1792101689.201362
+    }
+  },
+  "artifacts": "/Users/benmasek/WC01/outputs/cmp-inventory-audit-local-2026-10-15"
+}

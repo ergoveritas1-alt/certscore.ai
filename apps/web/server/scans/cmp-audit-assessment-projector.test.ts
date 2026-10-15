@@ -1259,3 +1259,26 @@ test("verified sibling-panel categories follow canonical assessment, persistence
     assert.notEqual(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "categories")?.status, "observed");
   }
 });
+
+
+test("literal visible inventory reaches persisted concerns and public service evidence without inferring completeness or scoring", () => {
+  const input=bundle(),packet=input.cmpPreferencesEvidence!;
+  packet.inspectionDiagnostic={revision:"cmp_preferences.v9",budgetMs:17000,phase:"completed"};
+  packet.checkpoints={version:"cmp_partial_capture.v1",documentToken:"loader-1",privacyLinks:true,declarations:true,controls:true,controlsSurface:"preferences"};
+  packet.visibleInventory={version:"cmp_visible_inventory.v1",records:[{ref:"table:0/row:0",fields:[{column:"cookieName",label:"Cookie name",value:"_ga"},
+    {column:"provider",label:"Provider",value:"Google Analytics"},{column:"purpose",label:"Purpose",value:"Audience measurement"},{column:"duration",label:"Duration",value:"1 day"}]}],truncated:true,unresolvedRecords:1};
+  input.cmpPreferencesEvidence=cmpPreferencesEvidenceSchema.parse(packet);
+  const original=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const persisted=withPersistedFirstLayerConsentEvidence({}, {consent_control_assessment:assessment})!;
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:persisted,reviewFindingCandidates:[],validationFindings:[]});
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(report.rows.find(row=>row.id==="services")?.status,"Observed");
+  assert.deepEqual(report.rows.find(row=>row.id==="services")?.supportingEvidence?.inventory?.services,[{name:"Google Analytics",source:"cmp_visible_inventory",sourceRef:"table:0/row:0"}]);
+  assert.equal(report.rows.find(row=>row.id==="cookie_information")?.status,"Observed");
+  assert.notEqual(report.rows.find(row=>row.id==="found_not_declared")?.status,"Review recommended");
+  assert.ok(concerns.filter(c=>c.originKey.startsWith("consent.cmp_audit.")).every(c=>!c.scoreEffects?.length));
+  assert.deepEqual(input,original);
+  input.cmpPreferencesEvidence!.limitations.push("preference_document_changed");
+  assert.notEqual(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="services")?.status,"observed");
+});
