@@ -3,6 +3,9 @@ import { getEditorialDates } from "../lib/marketing/editorial-metadata";
 import { getFindingReferenceItems } from "../lib/marketing/finding-atlas";
 import { getPublishedReleases, releasePath } from "../lib/releases";
 import { SITE_URL } from "../lib/seo";
+import type { InsightPage } from "../lib/insights/contract";
+
+export const dynamic = "force-dynamic";
 
 const staticPaths = [
   "",
@@ -80,19 +83,25 @@ const staticPaths = [
   "/guides/website-privacy-policy-requirements",
   "/guides/website-signal-check",
   "/insights",
+  "/insights/ai-lab-privacy-leaderboard-2026",
   "/insights/session-replay-study-2026",
   "/insights/common-cookie-consent-issues",
   "/insights/common-privacy-policy-gaps"
 ];
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export function buildSitemap(published: Pick<InsightPage, "path" | "dateModified">[] = []): MetadataRoute.Sitemap {
   const findingPaths = getFindingReferenceItems().map((finding) => `/findings/${finding.id}`);
   const releasePaths = getPublishedReleases().map(releasePath);
 
-  return [...new Set([...staticPaths, ...releasePaths, ...findingPaths])].map((path) => {
+  return [...new Set([...staticPaths, ...releasePaths, ...findingPaths, ...published.map((page) => page.path)])].map((path) => {
     const editorial = getEditorialDates(path);
     const release = getPublishedReleases().find((item) => releasePath(item) === path);
-    const lastModified = editorial?.dateModified ?? release?.modifiedDate ?? release?.publicationDate;
+    const lastModified = published.find((page) => page.path === path)?.dateModified ?? editorial?.dateModified ?? release?.modifiedDate ?? release?.publicationDate;
     return { url: `${SITE_URL}${path}`, ...(lastModified ? { lastModified } : {}) };
   });
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const { getPublishedInsightPages } = await import("../server/insights/store");
+  return buildSitemap(await getPublishedInsightPages());
 }

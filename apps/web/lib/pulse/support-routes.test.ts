@@ -4,7 +4,7 @@ import test from "node:test";
 import { hasDatabaseEnv } from "@website-signal-risk-scanner/db";
 import { GET as aiDiscoveryGET } from "../../app/.well-known/certscore-ai.json/route";
 import { GET as discoveryGET } from "../../app/.well-known/certscore-pulse/route";
-import sitemap from "../../app/sitemap";
+import { buildSitemap as sitemap } from "../../app/sitemap";
 import { GET as chatGptOpenApiGET } from "../../app/api/v1/openapi.chatgpt.json/route";
 import { GET as openApiGET } from "../../app/api/v1/openapi.json/route";
 import { GET as pulseHealthGET } from "../../app/api/v1/pulse-health/route";

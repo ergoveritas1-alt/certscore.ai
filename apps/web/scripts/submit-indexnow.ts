@@ -1,8 +1,7 @@
-import sitemap from "../app/sitemap";
+import { buildSitemap } from "../app/sitemap";
 import { INDEXNOW_ENDPOINT, INDEXNOW_KEY, INDEXNOW_KEY_LOCATION } from "../lib/indexnow";
 import { SITE_URL } from "../lib/seo";
 
-const urls = sitemap().map((entry) => entry.url);
 const chunkSize = 100;
 
 async function submitChunk(urlList: string[]) {
@@ -27,6 +26,10 @@ async function submitChunk(urlList: string[]) {
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
+  const response = await fetch(`${SITE_URL}/sitemap.xml`, { signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error(`Public sitemap returned ${response.status}`);
+  const publishedUrls = [...(await response.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]!);
+  const urls = [...new Set([...buildSitemap().map((entry) => entry.url), ...publishedUrls])];
   const chunks: string[][] = [];
 
   for (let index = 0; index < urls.length; index += chunkSize) {

@@ -7,6 +7,7 @@ export const EDITORIAL_AUTHOR = {
 
 type EditorialDates = { datePublished?: string; dateModified: string };
 const dates: Record<string, EditorialDates> = {
+  "/insights/ai-lab-privacy-leaderboard-2026": { datePublished: "2026-10-12", dateModified: "2026-10-14" },
   "/insights/session-replay-study-2026": { datePublished: "2026-10-03", dateModified: "2026-10-04" },
   "/guides/session-replay-risk": { dateModified: "2026-10-04" },
   "/guides/website-form-scanning": { datePublished: "2026-09-21", dateModified: "2026-09-21" },

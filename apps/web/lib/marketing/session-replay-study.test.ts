@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import data from "./session-replay-study-data.json";
 import { getPublishedRelease, createReleaseMetadata } from "../releases";
 import { createPageMetadata, createPublicArticleSchema } from "../seo";
-import sitemap from "../../app/sitemap";
+import { buildSitemap as sitemap } from "../../app/sitemap";
 
 const path = "/insights/session-replay-study-2026";
 

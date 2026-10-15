@@ -249,6 +249,11 @@ export default async function MarketingHomePage() {
                 variant="secondary"
               />
             </div>
+            <p className="mt-5 text-sm text-slate-200">
+              <Link href="/insights/ai-lab-privacy-leaderboard-2026" className="text-sky-200 underline decoration-sky-400 underline-offset-4 hover:text-white">
+                Research: Privacy signals on 10 AI companies&apos; websites
+              </Link>
+            </p>
           </div>
         </div>
       </section>
