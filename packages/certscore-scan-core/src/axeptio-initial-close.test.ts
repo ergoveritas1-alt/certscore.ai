@@ -12,13 +12,14 @@ test.after(async () => { await browser?.close(); });
 // Structure retained from the independent Ireland visit. No live site requests,
 // cookie values or interactions are needed to exercise the passive recipe.
 const panel = `<style>section{position:fixed;bottom:20px;left:20px;background:white;padding:24px;width:420px}label{display:block}input{width:20px;height:20px}button{padding:12px;margin:4px}</style>
-<section role="dialog" aria-label="Cookie preferences"><p>We use cookies for analytics. Choose your cookie preferences.</p>
+<section data-testid="widget-container" role="dialog" aria-label="Cookie preferences"><p>We use cookies for analytics. Choose your cookie preferences.</p>
 <label>Toggle all<input type="checkbox"></label><label>Google Analytics 4<input type="checkbox"></label><label>Hubspot<input type="checkbox"></label>
 <input id="axeptio_consent_checkbox" type="checkbox" hidden>
 <button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button>
 <button id="axeptio_btn_acceptAllAndNext">OK, accept all</button>
 <button id="axeptio_btn_next" aria-label="Go to the next cookie settings page">Next</button>
-<button id="axeptio_main_button" aria-label="Close the widget without accepting cookie settings">Cookies</button></section>`;
+</section><label style="display:none">Axeptio consent<input type="checkbox"></label>
+<button id="axeptio_main_button" aria-label="Close the widget without accepting cookie settings">Cookies</button>`;
 
 async function capture(change: (html: string) => string = html => html, shadow = true) {
   const page = await browser.newPage();
@@ -56,6 +57,25 @@ test("custom checkbox paint does not hide its visible labelled Axeptio category"
   assert.equal(geometry.summary.firstLayerReject, true);
 });
 
+test("the initial panel inventory excludes a separate floating-widget checkbox", async () => {
+  const geometry = await capture(html => html.replace('Axeptio consent<input type="checkbox">', 'Axeptio consent<input type="checkbox" checked disabled>'));
+  const close = geometry.candidates.find(candidate => candidate.label === "Close")!;
+  assert.equal(close.initialSelection?.categories.length, 3);
+  assert.equal(close.initialSelection?.complete, true);
+  assert.equal(geometry.summary.firstLayerReject, true);
+});
+
+test("an incomplete initial category inspection cannot prove that Reject is absent", async () => {
+  const geometry = await capture(html => html.replace('<label>', '<label style="display:none">'));
+  const close = geometry.candidates.find(candidate => candidate.label === "Close")!;
+  assert.equal(close.initialSelection?.complete, false);
+  assert.equal(close.actionType, "save_preferences");
+  const proof = verifyConsentControlInspection(geometry.controlInspection, geometry.candidates)!;
+  assert.ok(proof);
+  assert.ok(proof.candidates.find(candidate => candidate.candidateId === close.candidateId)?.unresolvedIntents.includes("reject"));
+  assert.ok(close.classifierReasonCodes?.includes("observation_only_label"));
+});
+
 for (const [name, change, shadow] of [
   ["checked optional input", (html: string) => html.replace('type="checkbox"', 'type="checkbox" checked'), true],
   ["disabled optional input", (html: string) => html.replace('type="checkbox"', 'type="checkbox" disabled'), true],
@@ -66,6 +86,8 @@ for (const [name, change, shadow] of [
   ["duplicate Close", (html: string) => html.replace("</section>", '<button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button></section>'), true],
   ["wrong accessible label", (html: string) => html.replace("Close cookie settings", "Close dialog"), true],
   ["missing registered widget", (html: string) => html.replace("axeptio_main_button", "unrelated_widget"), true],
+  ["missing initial panel", (html: string) => html.replace('data-testid="widget-container"', 'data-testid="unrelated"'), true],
+  ["duplicate initial panel", (html: string) => html + '<section data-testid="widget-container"></section>', true],
   ["ordinary document Close", (html: string) => html, false],
 ] as const) {
   test(`Axeptio Close fails closed with ${name}`, async () => {

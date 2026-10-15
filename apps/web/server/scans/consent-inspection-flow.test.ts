@@ -44,6 +44,27 @@ function project(assessment: ReturnType<typeof materialize>) {
   return { findings, checklist, normalizedConcerns, runtimeArtifacts };
 }
 const banner = (controls: string) => `<section id="cookie-banner" role="dialog"><p>We use optional cookies for analytics and advertising. Choose your consent preferences.</p>${controls}</section>`;
+
+test("Axeptio initial panel and incomplete categories preserve canonical refusal scoring", async () => {
+  const markup = `<div><template shadowrootmode="open"><style>section{position:fixed;bottom:20px;left:20px;background:white;padding:24px;width:420px}label{display:block}input{width:20px;height:20px}button{padding:12px;margin:4px}</style>
+    <section data-testid="widget-container" role="dialog"><p>We use cookies for analytics. Choose your cookie preferences.</p>
+    <label>Toggle all<input type="checkbox"></label><label>Google Analytics 4<input type="checkbox"></label><label>Hubspot<input type="checkbox"></label>
+    <button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button>
+    <button id="axeptio_btn_acceptAllAndNext">Accept all</button><button id="axeptio_btn_next">Next</button></section>
+    <label style="display:none">Axeptio consent<input type="checkbox" checked disabled></label>
+    <button id="axeptio_main_button" aria-label="Close the widget without accepting cookie settings">Cookies</button>
+    </template></div>`;
+  for (const incomplete of [false, true]) {
+    const geometry = await capture(incomplete ? markup.replace('<label>Google', '<label style="display:none">Google') : markup);
+    const assessment = materialize(geometry);
+    assert.equal(assessment.controls.accept.state, "observed");
+    assert.equal(assessment.controls.reject.state, incomplete ? "unknown" : "observed");
+    const result = project(assessment);
+    assert.equal(getGdprEprivacyRowDeduction(result.checklist.find(row => row.id === "reject_all_path_availability")!), 0);
+    assert.equal(result.findings.some(finding => finding.normalizedConcern.suggestedUnifiedFindingId === "reject_button_missing"), false);
+  }
+});
+
 test("browser -> assessment -> persistence -> concern policy -> checklist/score preserves Reject-specific absence", async () => {
   const geometry = await capture(banner('<button>Accept all</button><button>More information</button>'));
   assert.equal(geometry.controlInspection?.structuralCoverage, "complete");
@@ -119,7 +140,7 @@ test("Axeptio Close carries optional-off proof through persistence, concerns and
     await page.route("**/*", route => route.fulfill({ contentType: "text/html", body: "<!doctype html><div id='host'></div>" }));
     await page.goto(url);
     await page.evaluate(() => {
-      document.querySelector("#host")!.attachShadow({ mode: "open" }).innerHTML = `<section role="dialog" style="position:fixed;bottom:20px;background:white;padding:20px"><p>We use cookies for analytics. Choose your cookie preferences.</p>
+      document.querySelector("#host")!.attachShadow({ mode: "open" }).innerHTML = `<section data-testid="widget-container" role="dialog" style="position:fixed;bottom:20px;background:white;padding:20px"><p>We use cookies for analytics. Choose your cookie preferences.</p>
         <label>Toggle all<input type="checkbox"></label><label>Google Analytics 4<input type="checkbox"></label><label>Hubspot<input type="checkbox"></label>
         <input id="axeptio_consent_checkbox" type="checkbox" hidden>
         <button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button><button id="axeptio_btn_acceptAllAndNext">OK, accept all</button>

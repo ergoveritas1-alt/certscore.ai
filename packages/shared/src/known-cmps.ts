@@ -62,6 +62,7 @@ export type KnownCmpDefinition = {
   initialOptionalOffCloseObservation?: {
     recipe: "axeptio.initial_optional_off_close.v1";
     submitSelector: '#axeptio_btn_close[aria-label="Close cookie settings"]';
+    categoryContainerSelector: '[data-testid="widget-container"]';
     widgetSelector: string; acceptSelector: string; nextSelector: string; inputSelector: string;
   };
   /** One read-only preference visit; never shared with Accept/Reject recipes. */
@@ -193,6 +194,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     initialOptionalOffCloseObservation: {
       recipe: "axeptio.initial_optional_off_close.v1",
       submitSelector: '#axeptio_btn_close[aria-label="Close cookie settings"]',
+      categoryContainerSelector: '[data-testid="widget-container"]',
       widgetSelector: '#axeptio_main_button[aria-label="Close the widget without accepting cookie settings"]',
       acceptSelector: "#axeptio_btn_acceptAllAndNext", nextSelector: "#axeptio_btn_next",
       inputSelector: 'input:not(#axeptio_consent_checkbox),select,textarea,[role="switch"]',

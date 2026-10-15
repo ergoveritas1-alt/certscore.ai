@@ -869,7 +869,11 @@ function buildCandidateEvidence(
       ? { intent: "reject", semanticRole: "necessary_only", confidence: 0.95, contextSatisfied: true,
           registryVersion: baseClassification.registryVersion, matchStrength: "equivalent",
           reasonCodes: ["initial_necessary_only_selection_observed", "observation_only_label", "variant_necessary_only"] }
-      : baseClassification;
+      : candidate.initialSelection?.recipe === "axeptio.initial_optional_off_close.v1" &&
+          candidate.initialSelection.complete === false && baseClassification.intent === "options"
+        ? { ...baseClassification, variant: "save_preferences",
+            reasonCodes: [...baseClassification.reasonCodes, "initial_selection_inspection_incomplete", "observation_only_label"] }
+        : baseClassification;
   const actionType = actionTypeForClassification(classification, candidate);
   const diagnosticClassifications = diagnosticClassificationsForCandidate(candidate);
   const reasons: string[] = [];
@@ -1624,7 +1628,7 @@ function collectConsentGeometryInPage(input: {
   // hidden or ambiguous inputs fail closed; they never authorize a click.
   function initialSelectionFor(element: Element): InitialConsentSelection | undefined {
     // Reviewed Axeptio first-layer all-off Close variant. Every optional input
-    // must have a visible label and be enabled and unchecked in this shadow root.
+    // must have a visible label and be enabled and unchecked in the initial panel.
     // Generic Close buttons and the floating dismiss widget are never promoted.
     const root = element.getRootNode();
     const recipe = input.initialOptionalOffCloseRecipes.find(recipe => element.matches(recipe.submitSelector));
@@ -1634,7 +1638,12 @@ function collectConsentGeometryInPage(input: {
       root.querySelectorAll(axeptioSubmit).length === 1 &&
       root.querySelectorAll(recipe.widgetSelector).length === 1 &&
       root.querySelectorAll(recipe.acceptSelector).length === 1 && root.querySelectorAll(recipe.nextSelector).length === 1) {
-      const inputs = Array.from(root.querySelectorAll(recipe.inputSelector));
+      const panel = element.closest(recipe.categoryContainerSelector);
+      if (!panel || root.querySelectorAll(recipe.categoryContainerSelector).length !== 1 ||
+        panel.querySelectorAll(recipe.acceptSelector).length !== 1 || panel.querySelectorAll(recipe.nextSelector).length !== 1) return undefined;
+      // The shadow root also contains Axeptio's separate floating widget toggle.
+      // It is not a vendor choice and must not limit the initial panel inventory.
+      const inputs = Array.from(panel.querySelectorAll(recipe.inputSelector));
       if (inputs.length < 2 || inputs.length > 24) return undefined;
       const categories = inputs.map((item, index) => ({ id: `optional_${index}`, inputType: "checkbox" as const,
         checked: (item as HTMLInputElement).checked, disabled: (item as HTMLInputElement).disabled }));
@@ -1643,7 +1652,7 @@ function collectConsentGeometryInPage(input: {
           // Axeptio renders custom switches around native checkbox inputs.
           // Bind visibility to their wrapping labels, not the native input paint.
           const label = item.closest("label");
-          if (!label) return false;
+          if (!label || !panel.contains(label)) return false;
           const box = rectFor(label), style = window.getComputedStyle(label);
           return item instanceof HTMLInputElement && item.type === "checkbox" &&
             !item.hidden && Boolean(label.textContent?.trim()) && label.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&

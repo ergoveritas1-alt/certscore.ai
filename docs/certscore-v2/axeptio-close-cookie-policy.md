@@ -26,7 +26,11 @@ report and retained evidence are not rewritten or persisted as a new scan.
 
 The shared CMP registry owns `axeptio.initial_optional_off_close.v1`. It requires
 one exact `#axeptio_btn_close[aria-label="Close cookie settings"]` button in an
-open shadow root with the registered widget, Accept and Next controls. Every
+open shadow root with the registered widget, Accept and Next controls. Category
+inspection is bound to the unique registered `[data-testid="widget-container"]`
+initial panel containing Close, Accept and Next, rather than the entire shadow
+root. The separate floating widget's checkbox is outside this category inventory.
+Every
 retained category input must be a unique, enabled, unchecked checkbox associated
 with a visible labelled category. The hidden auxiliary
 `#axeptio_consent_checkbox` is excluded by exact identity. Unexpected inputs,
@@ -41,8 +45,19 @@ and must not turn it into an unqualified Reject observation.
 
 This is an observation recipe, not an action recipe. It performs no Close click,
 adds no action authorization, and does not claim semantic refusal registration.
-Axeptio automatic Accept/Reject remains unsupported. The independent Close visit
-is not imported as a production After Reject artifact.
+This observation does not authorize an automatic Close click. The independent
+Close visit is not imported as a production After Reject artifact.
+
+An incomplete initial category inspection retains the existing selection-submit
+role with unresolved Reject intent. It cannot supply a verified missing-Reject
+finding. Complete checked or disabled optional categories still cannot qualify
+as a necessary-only equivalent. Historical captures retain their original proof.
+
+The October 15 production follow-up `c270d0de-ede0-480c-85d5-65a2a55680ee`
+retained three visible initial-panel switches, four shadow-root checkboxes and an
+incomplete Close selection proof. Its 70-point report remains intact. The panel
+scope correction is a producer fix to this same observation recipe, not a new
+scoring weight, action recipe, lane, capture window or report repair.
 
 ## Exact preference-cookie policy
 
