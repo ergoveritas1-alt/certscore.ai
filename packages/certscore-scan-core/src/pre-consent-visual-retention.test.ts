@@ -33,15 +33,18 @@ test("scanner measures the authoritative pair once and defers interim decoding",
           return writer.writeJsonArtifact(name, value);
         } } });
     assert.equal(result.moduleRun.status, "completed");
-    const paired = writes.find(row => row.visualComparison && row.screenshotArtifactRef?.endsWith("screenshot-pre-consent-geometry-proof.png"));
+    const paired = writes.find(row => row.visualComparison && row.screenshotArtifactRef);
     assert.ok(paired, "the authoritative capture must produce valid pixel measurements");
     const final = JSON.parse(await readFile(join(directory, "ConsentControlGeometryEvidence.json"), "utf8"));
     assert.deepEqual(final.visualComparison, paired.visualComparison);
     assert.equal(final.capturedAt, paired.capturedAt, "keep the measured geometry timestamp");
     assert.equal(final.screenshotArtifactRef, paired.screenshotArtifactRef);
     assert.ok(hasMaterialAcceptVisualProminence(final.visualComparison));
-    assert.ok(result.screenshots.some(row => row.artifactId === "screenshot_pre_consent_geometry_proof"), "later evidence capture remains enabled");
-    assert.ok(result.moduleRun.timingBreakdown?.some(row => row.label === "consent geometry DOM capture"));
+    assert.ok(result.screenshots.some(row => row.path === paired.screenshotArtifactRef), "the measured image remains retained");
+    assert.ok(paired.visualComparison!.captureSkewMs <= 500, "retain the original image pairing bound");
+    assert.equal(paired.captureTiming?.mainFrameCompletedAt, paired.capturedAt);
+    assert.ok(result.moduleRun.timingBreakdown?.some(row =>
+      row.label === "consent geometry DOM capture" || row.label === "paired settled-frame consent geometry"));
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(directory, { recursive: true, force: true });

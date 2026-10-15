@@ -2,9 +2,22 @@ import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { classifyConsentControlLabel, normalizeConsentControlText } from "@certscore/contracts";
 import type { ConsentControlGeometryArtifact, ConsentControlCandidateEvidence } from "./consent-control-geometry.js";
 
+/** New capture clocks must agree with the actual main-frame read. Historical
+ * packets have no timing witness and retain their original validation rules. */
+export function geometryCaptureTimingValid(geometry: Pick<ConsentControlGeometryArtifact, "capturedAt" | "captureTiming">) {
+  const timing = geometry.captureTiming;
+  if (timing === undefined) return true;
+  if (!timing || typeof timing !== "object") return false;
+  return timing.version === "consent_geometry_capture_timing.v1" &&
+    typeof timing.mainFrameCompletedAt === "string" && typeof timing.completedAt === "string" &&
+    timing.mainFrameCompletedAt === geometry.capturedAt && Number.isFinite(Date.parse(timing.mainFrameCompletedAt)) &&
+    Number.isFinite(Date.parse(timing.completedAt)) && Date.parse(timing.completedAt) >= Date.parse(timing.mainFrameCompletedAt);
+}
+
 /** Pure selection over retained observations. Does not establish inventory completeness,
  * screenshot binding, action authorization, or a prominence finding. */
 export function comparisonPair(geometry: ConsentControlGeometryArtifact) {
+  if (!geometryCaptureTimingValid(geometry)) return undefined;
   const eligible = geometry.candidates.filter(c => c.layer === "first_layer" && c.decisionStatus === "confirmed_visible" &&
     c.enabled && c.frameContext.frameKind === "main_frame" && c.frameContext.frameUrl === geometry.pageUrl &&
     !c.actionableControlCandidateId);

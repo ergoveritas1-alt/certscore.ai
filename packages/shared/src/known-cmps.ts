@@ -84,7 +84,7 @@ export type KnownCmpDefinition = {
   preferenceDeferredAriaBinding?: { version: string; rootSelector: string };
   /** Reviewed sibling portal, bound to the original root/control and SDK. */
   preferencePortalBinding?: { version: string; kind: "iubenda_portal" | "trustarc_portal";
-    rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; sdkPath: string[] };
+    rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; shadowContentSelector?: string; sdkPath: string[] };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
   /** Read-only category identity inside a verified preference dialog.
@@ -103,7 +103,7 @@ export type KnownCmpDefinition = {
   /** Named-CMP Options binding when aria-controls is absent. An on-demand
    * panel must appear under the same pre-existing registered vendor root.
    * Never opens via a vendor API or accepts an arbitrary new modal. */
-  preferenceDialogBinding?: { version: string; openingBudgetMs?: number; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[]; allowObservedOptionsLabel?: boolean; layerTransitionSelector?: string };
+  preferenceDialogBinding?: { version: string; openingBudgetMs?: number; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[]; allowObservedOptionsLabel?: boolean; layerTransitionSelector?: string; tabSelector?: string };
   /** Factual cookie identity from an already-loaded, own-data configuration.
    * Never a semantic consent witness or a global cookie-name alias. */
   configuredConsentCookiePath?: string;
@@ -458,8 +458,8 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     acceptControlSelectors: [".trustarc-acceptall-btn"],
     canonicalName: "TrustArc",
     preferenceScopeSelector: "#truste-consent-track",
-    preferencePortalBinding: { version: "trustarc_preferences_portal.v1", kind: "trustarc_portal", rootSelector: "#truste-consent-track", controlSelector: "#truste-show-consent",
-      panelSelector: '.truste_box_overlay_inner[role="dialog"]', contentReadySelector: 'div[name="trustarc_cm"] .gdprAccessiblePrefPanel', sdkPath: ["truste", "eu"] },
+    preferencePortalBinding: { version: "trustarc_preferences_portal.v2", kind: "trustarc_portal", rootSelector: "#truste-consent-track", controlSelector: "#truste-show-consent",
+      panelSelector: '.truste_box_overlay_inner[role="dialog"]', contentReadySelector: '.gdprAccessiblePrefPanel', shadowContentSelector: 'div[name="trustarc_cm"].trustarc_newcm_container.truste_popframe', sdkPath: ["truste", "eu"] },
     preferenceCategoryInventory: { version: "trustarc_radio_categories.v1", dialogSelector: ".gdprAccessiblePrefPanel", categorySelector: ".categoryPanelAccessible",
       titleSelector: ".accessibleCategoryHeadingName h2", toggleSelector: '[role="radiogroup"].accessibleSwitch', radioGroupSelector: '[role="radiogroup"].accessibleSwitch' },
     cookieNames: ["notice_behavior", "TAsessionID", "notice_preferences", "notice_gdpr_prefs"],
@@ -555,6 +555,9 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "#CybotCookiebotDialogBodyButtonAccept",
     ],
     canonicalName: "Cookiebot",
+    preferenceDialogBinding: {version: "cookiebot_customize_tab.v1", controlSelector: "#CybotCookiebotDialogBodyLevelButtonCustomize",
+      dialogSelector: '#CybotCookiebotDialog #CybotCookiebotDialogTabContentDetails[role="tabpanel"]', deferredRootSelector: "#CybotCookiebotDialog",
+      dialogRoles: ["tabpanel"], tabSelector: "#CybotCookiebotDialogNavDetails"},
     preferenceDeferredAriaBinding: { version: "cookiebot_aria_preferences.v1", rootSelector: "#CybotCookiebotDialog" },
     observationControlRecipes: [{
       recipeId: "Cookiebot.options.v1",

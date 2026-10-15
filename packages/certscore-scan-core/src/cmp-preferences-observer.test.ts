@@ -893,3 +893,29 @@ test("TrustArc radio categories require visible consistent pairs and never infer
     }
   } finally { await browser.close(); }
 });
+
+test("Cookiebot Customize binds the original Details tab panel and never saves a choice", {timeout:20000}, async () => {
+  let mode="valid",clicks=0,saves=0;
+  const server=createServer((req,res)=>{
+    if(req.url==="/opened"){clicks++;res.end();return;}
+    if(req.url==="/save"){saves++;res.end();return;}
+    res.setHeader("Content-Type","text/html");res.end(`<section id="CybotCookiebotDialog" role="region" aria-label="Cookie choices">
+    <p>We use cookies</p><button id="CybotCookiebotDialogBodyLevelButtonCustomize">Customize</button>
+    <a id="CybotCookiebotDialogNavDetails" role="tab" aria-controls="${mode==='wrong-controls'?'wrong':'CybotCookiebotDialogTabContentDetails'}" aria-selected="false">Details</a>
+    <div id="CybotCookiebotDialogTabContentDetails" role="tabpanel" ${mode==='unnamed'?'':'aria-labelledby="CybotCookiebotDialogNavDetails"'} ${mode==='previsible'?'':'hidden'}><label><input type="checkbox">Analytics</label><button onclick="fetch('/save')">Save</button></div>
+    </section><script>const root=document.querySelector('section'),button=root.querySelector('button'),panel=root.querySelector('[role=tabpanel]'),tab=root.querySelector('[role=tab]');
+    ${mode==='duplicate'?'button.after(button.cloneNode(true));':''}
+    button.onclick=()=>{fetch('/opened');${mode==='replace-root'?'const replacement=root.cloneNode(false);root.replaceWith(replacement);replacement.append(button,panel,tab);':''}
+      panel.hidden=false;${mode==='unselected'?'':'tab.setAttribute("aria-selected","true");'}
+      ${mode==='replace-tab'?'tab.replaceWith(tab.cloneNode(true));':''}
+    };</script>`);
+  });
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));const address=server.address();assert.ok(address&&typeof address!=="string");
+  try{for(mode of ["valid","wrong-controls","duplicate","previsible","unselected","unnamed","replace-root","replace-tab"]){
+    clicks=saves=0;
+    const packet=await runCmpPreferencesObserver({parentDispatchSha256:"a".repeat(64),config:{policyVersion:"bounded_cmp_preferences.v1",enabled:true,scanId:"cookiebot-"+mode,exactTargetUrl:`http://127.0.0.1:${address.port}/`}});
+    assert.equal(saves,0);assert.equal(packet.action.opened,mode==="valid",JSON.stringify({mode,packet}));
+    if(mode==="valid"){assert.equal(clicks,1);assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.verification?.result,"verified");assert.ok(packet.controls.some(c=>c.kind==="category"));}
+    else assert.equal(packet.controlInventoryComplete,false,mode);
+  }}finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});

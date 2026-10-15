@@ -6,13 +6,13 @@ import { consentControlVisualComparisonSchema, CONSENT_VISUAL_COMPARISON_VERSION
   type ConsentControlVisualComparison, type ScreenshotArtifact } from "@certscore/contracts";
 import type { ConsentControlGeometryArtifact, ConsentControlCandidateEvidence } from "./consent-control-geometry.js";
 
-import { comparisonPair } from "./consent-control-comparison-pair.js";
+import { comparisonPair, geometryCaptureTimingValid } from "./consent-control-comparison-pair.js";
 export { comparisonPair } from "./consent-control-comparison-pair.js";
 
 export type ConsentVisualCaptureState = { frameRevision: number; framesStable: boolean; terminalPair?: boolean };
 
 function geometryFacts(geometry: ConsentControlGeometryArtifact) {
-  const { capturedAt: _time, screenshotArtifactRef: _image, visualComparison: _visual, ...facts } = geometry;
+  const { capturedAt: _time, captureTiming: _timing, screenshotArtifactRef: _image, visualComparison: _visual, ...facts } = geometry;
   return { ...facts, candidates: geometry.candidates.map(candidate => {
     const { screenshotArtifactRef: _reference, ...control } = candidate;
     return control;
@@ -27,6 +27,7 @@ export function retainPairedConsentVisualCapture(input: {
   previousState: ConsentVisualCaptureState; currentState: ConsentVisualCaptureState;
 }): ConsentControlGeometryArtifact {
   const { previous, current } = input;
+  if (!geometryCaptureTimingValid(previous) || !geometryCaptureTimingValid(current)) return current;
   if (!input.previousState.framesStable || !input.currentState.framesStable ||
       !Number.isInteger(input.previousState.frameRevision) || input.previousState.frameRevision < 0 ||
       input.previousState.frameRevision !== input.currentState.frameRevision || current.visualComparison ||
@@ -56,6 +57,26 @@ type Rgb = [number, number, number];
 const round = (n: number) => Math.round(n * 1000) / 1000;
 const luminance = (rgb: Rgb) => rgb.map(v => v / 255).map(v => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
   .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i]!, 0);
+
+
+/** Same 4-bit colour bins, pixels and first-seen tie rule as the original
+ * Map/string implementation. Fixed integer histograms avoid per-pixel keys
+ * and sorting without changing sampling, thresholds or evidence. */
+export function dominantQuantizedRgb(pixels: Rgb[]) {
+  const counts = new Uint32Array(4096), sums = new Uint32Array(4096 * 3), order: number[] = [];
+  for (const rgb of pixels) {
+    const key = (rgb[0] >> 4) * 256 + (rgb[1] >> 4) * 16 + (rgb[2] >> 4);
+    if (counts[key] === 0) order.push(key);
+    counts[key]!++;
+    sums[key * 3]! += rgb[0]; sums[key * 3 + 1]! += rgb[1]; sums[key * 3 + 2]! += rgb[2];
+  }
+  let winner: number | undefined;
+  for (const key of order) if (winner === undefined || counts[key]! > counts[winner]!) winner = key;
+  if (winner === undefined) return undefined;
+  const count = counts[winner]!;
+  return {rgb: [sums[winner * 3]! / count, sums[winner * 3 + 1]! / count, sums[winner * 3 + 2]! / count] as Rgb,
+    fraction: count / pixels.length};
+}
 
 
 export type ConsentVisualComparisonDiagnostic = {
@@ -149,16 +170,6 @@ export async function measureConsentControlVisualComparison(input: {
       const at = (y * info.width + x) * 3;
       return [data[at]!, data[at + 1]!, data[at + 2]!];
     };
-    const mode = (pixels: Rgb[]) => {
-      const groups = new Map<string, { count: number; sum: Rgb }>();
-      for (const rgb of pixels) {
-        const key = rgb.map(v => Math.floor(v / 16)).join(":");
-        const group = groups.get(key) ?? { count: 0, sum: [0, 0, 0] };
-        group.count++; rgb.forEach((v, i) => { group.sum[i]! += v; }); groups.set(key, group);
-      }
-      const winner = [...groups.values()].sort((a, b) => b.count - a.count)[0];
-      return winner ? { rgb: winner.sum.map(v => v / winner.count) as Rgb, fraction: winner.count / pixels.length } : undefined;
-    };
     const measure = (candidate: ConsentControlCandidateEvidence) => {
       const { x, y, width, height } = candidate.boundingBox;
       if (x < 12 || y < 12 || x + width + 12 > info.width || y + height + 12 > info.height || width < 24 || height < 16 || width * height > 150_000) return undefined;
@@ -172,7 +183,7 @@ export async function measureConsentControlVisualComparison(input: {
         } else if (px < left - 9 || px >= right + 9 || py < top - 9 || py >= bottom + 9) background.push(pixel(px, py));
         else if (px < left || px >= right || py < top || py >= bottom) emphasis.push(pixel(px, py));
       }
-      const fill = mode(interior), surrounding = mode(background);
+      const fill = dominantQuantizedRgb(interior), surrounding = dominantQuantizedRgb(background);
       if (!fill || !surrounding || fill.fraction < 0.6 || surrounding.fraction < 0.6 || !emphasis.length) return undefined;
       const a = luminance(fill.rgb), b = luminance(surrounding.rgb);
       const changed = emphasis.filter(rgb => Math.hypot(...rgb.map((v, i) => v - surrounding.rgb[i]!)) >= 60).length;

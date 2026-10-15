@@ -198,6 +198,7 @@ export interface ConsentControlGeometryArtifact {
   pageUrl: string;
   documentIdentity?: BrowserDocumentIdentity;
   capturedAt: string;
+  captureTiming?: {version: "consent_geometry_capture_timing.v1"; mainFrameCompletedAt: string; completedAt: string};
   viewport: {
     width: number;
     height: number;
@@ -392,15 +393,16 @@ export async function captureConsentControlGeometry(
       const result = frameTimeoutMs
         ? await promiseWithTimeout(capture, frameTimeoutMs)
         : await capture;
-      return result ? { capture: result, frameIndex } : undefined;
+      return result ? { capture: result, frameIndex, completedAtMs: Date.now() } : undefined;
     } catch {
       return undefined;
     }
   })), cookieNamesPromise]).finally(() => page.off("framenavigated", onNavigation));
   const successfulCaptures = captureResults.filter(
-    (result): result is { capture: RawGeometryCapture; frameIndex: number } => Boolean(result),
+    (result): result is { capture: RawGeometryCapture; frameIndex: number; completedAtMs: number } => Boolean(result),
   );
-  const mainFrameCapture = successfulCaptures.find((result) => result.frameIndex === 0)?.capture;
+  const mainFrameResult = successfulCaptures.find((result) => result.frameIndex === 0);
+  const mainFrameCapture = mainFrameResult?.capture;
   const captures = successfulCaptures.map((result) => result.capture);
   const expectedPageUrl = page.url();
   const raw = mergeRawGeometryCaptures(captures, expectedPageUrl, frameInput);
@@ -464,7 +466,11 @@ export async function captureConsentControlGeometry(
     // child frame must not replace the document identity of the scan.
     pageUrl: expectedPageUrl,
     ...(options.documentIdentity ? { documentIdentity: options.documentIdentity } : {}),
-    capturedAt: new Date().toISOString(),
+    // Pixels describe the main frame. Child-frame waits and classification
+    // work must not relabel when that actual main-frame geometry was read.
+    capturedAt: new Date(mainFrameResult?.completedAtMs ?? Date.now()).toISOString(),
+    ...(mainFrameResult ? {captureTiming: {version: "consent_geometry_capture_timing.v1" as const,
+      mainFrameCompletedAt: new Date(mainFrameResult.completedAtMs).toISOString(), completedAt: new Date().toISOString()}} : {}),
     viewport: mainFrameCapture?.viewport ?? { width: 0, height: 0 },
     screenshotArtifactRef: options.screenshotArtifactRef,
     cmp,

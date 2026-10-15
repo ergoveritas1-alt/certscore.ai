@@ -1626,3 +1626,20 @@ test("nested Borlabs wrappers do not imply lost inventory; separate omitted surf
   const separate = await captureFixture(Array.from({ length: 20 }, () => `<div class="brlbs-wrapper">We use cookies${controls}</div>`).join(""));
   assert.equal(separate.controlInspection?.captureCoverage.inventoryTruncated, true);
 });
+
+test("main-frame geometry keeps its actual read time when an unrelated child frame finishes later", async () => {
+  const page=await browser!.newPage();
+  await page.route('https://geometry.test/**',route=>route.fulfill({status:200,contentType:'text/html',body:route.request().url().endsWith('/frame')?'<p>Unrelated frame</p>':'<section id="cookie-banner" role="dialog" aria-label="Cookie consent"><p>We use cookies</p><button>Accept all</button><button>Reject all</button></section><iframe src="/frame"></iframe>'}));
+  try{
+    await page.goto('https://geometry.test/');
+    const child=page.frames().find(frame=>frame!==page.mainFrame())!;
+    const original=child.evaluate.bind(child);
+    child.evaluate=(async(...args:any[])=>{const value=await (original as any)(...args);await new Promise(resolve=>setTimeout(resolve,700));return value;}) as typeof child.evaluate;
+    const artifact=await captureConsentControlGeometry(page,{timeoutMs:1500});
+    assert.equal(artifact.controlInspection?.structuralCoverage,"complete");
+    assert.equal(artifact.controlInspection?.captureCoverage.capturedFrameCount,2);
+    assert.equal(artifact.capturedAt,artifact.captureTiming?.mainFrameCompletedAt);
+    assert.ok(Date.parse(artifact.captureTiming!.completedAt)-Date.parse(artifact.capturedAt)>=500);
+    assert.equal(artifact.summary.firstLayerAccept,true);assert.equal(artifact.summary.firstLayerReject,true);
+  }finally{await page.close();}
+});

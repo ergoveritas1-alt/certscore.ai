@@ -1,0 +1,687 @@
+{
+  "recordVersion": "cmp_capture_reliability_local.v1",
+  "createdAt": "2026-10-15T22:35:33.660566+00:00",
+  "scope": "Local canonical capture reliability repairs and fresh EU-Ireland verification. No deploy, no push, no historical report rewrite.",
+  "sourceCommit": "88e98625",
+  "outputRoot": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15",
+  "changes": [
+    {
+      "area": "TrustArc panel loading",
+      "policy": "trustarc_preferences_portal.v2",
+      "description": "One fixed-cadence readiness wait inside the existing 3000 ms opening cap. Exact registered content host supports light DOM and open shadow DOM, followed by unchanged original root, trigger, SDK and generated panel identity verification."
+    },
+    {
+      "area": "Cookiebot panel binding",
+      "policy": "cookiebot_customize_tab.v1",
+      "description": "One Customize action may reveal the exact existing hidden Details tab panel. Original root/panel/tab identities, unique trigger, role, aria-controls, aria-selected false-to-true and named panel checks are required. No Save or consent decision."
+    },
+    {
+      "area": "Visual capture timing",
+      "policy": "consent_geometry_capture_timing.v1",
+      "description": "Record actual Node-side main-frame read completion separately from whole packet completion. Await all frame captures; keep historical clocks and packets unchanged. Invalid present timing fails closed."
+    },
+    {
+      "area": "Pixel computation",
+      "description": "Replace per-pixel string keys and sorting with an equivalent fixed integer histogram. Preserve all sampled pixels, quantization, averages, first-seen ties, thresholds and existing 80 ms budget."
+    },
+    {
+      "area": "Proof screenshot scheduling",
+      "description": "Schedule the existing bounded proof screenshot before the full geometry read when typed A/R controls are already observed. Begin existing safety review earlier. Preserve exact document, image bytes, hash and geometry pairing checks."
+    },
+    {
+      "area": "Diagnostics",
+      "policy": "cmp_preferences.v10",
+      "description": "Retain bounded opening stage and timestamps. Preserve older v8/v9 packets and eligibility."
+    }
+  ],
+  "verification": {
+    "egress": {
+      "browserIp": "63.33.9.201",
+      "httpIp": "63.33.9.201",
+      "country": "IE",
+      "awsRegion": "eu-west-1",
+      "verifiedAt": "2026-10-15T22:26:09.974Z"
+    },
+    "comparison": {
+      "scope": "Fresh local sharded scans through verified Ireland egress. Canonical local materialization, concern policy, unified finding/checklist and CMP projection. No deployed or historical report changes.",
+      "generatedAt": "2026-10-15T22:29:42.142Z",
+      "baselineUnresolved": 19,
+      "resolved": 2,
+      "remainingOriginal": 17,
+      "newlyUnresolved": 0,
+      "freshUnresolved": 17,
+      "sites": [
+        {
+          "site": "iubenda",
+          "oldScanId": "cmp-inventory-local-iubenda-1b668111-2370-451b-a8de-d4a303604b8b",
+          "newScanId": "cmp-inventory-local-iubenda-2f51c689-3a06-4e73-9867-739a67c08946",
+          "baselineUnresolved": 6,
+          "resolved": 1,
+          "remainingOriginal": 5,
+          "newlyUnresolved": 0,
+          "totalFreshUnresolved": 5,
+          "rows": [
+            {
+              "id": "banner",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Consent surface observed on the initial visit.",
+              "sourceIds": [
+                "consentControlAssessment.surface"
+              ]
+            },
+            {
+              "id": "reject",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "First-layer Reject or equivalent refusal control.",
+              "sourceIds": [
+                "consentControlAssessment.controls.reject"
+              ]
+            },
+            {
+              "id": "prominence",
+              "before": "Incomplete",
+              "after": "Observed",
+              "wasUnresolved": true,
+              "resolved": true,
+              "newlyUnresolved": false,
+              "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+              "sourceIds": [
+                "consent.visual_comparison.observed"
+              ]
+            },
+            {
+              "id": "categories",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "4 categories were available.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "services",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Service names were not captured; deeper preference sections were not inspected.",
+              "sourceIds": []
+            },
+            {
+              "id": "privacy_link",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Public privacy-policy link or surface on the scanned page.",
+              "sourceIds": [
+                "privacy_notice_availability"
+              ]
+            },
+            {
+              "id": "privacy_access",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Privacy-policy links were found, but none was verified as reachable before consent. Individual inspection reasons are retained in the supporting evidence.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "consent_record",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Browser consent records were stored or updated after Accept and Reject.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "implementation",
+              "before": "Review recommended",
+              "after": "Review recommended",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "17 tracking request(s) began after the Reject control was clicked (including RudderStack); first observed 0.03s after the click. Review the recorded requests and how the Reject action controls this tracking activity. The retained evidence did not support a purpose-specific after-Reject deduction. Refusal registration was not confirmed.",
+              "sourceIds": [
+                "post_reject_tracking_reduction"
+              ]
+            },
+            {
+              "id": "duration",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "declared_not_found",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+              "sourceIds": []
+            },
+            {
+              "id": "found_not_declared",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+              "sourceIds": []
+            },
+            {
+              "id": "cookie_information",
+              "before": "Not assessed",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Cookie purpose and duration information was not retained.",
+              "sourceIds": []
+            }
+          ]
+        },
+        {
+          "site": "trustarc",
+          "oldScanId": "cmp-inventory-local-trustarc-ff0f0e89-a85a-4fdd-b689-9db7e0d86f26",
+          "newScanId": "cmp-inventory-local-trustarc-2239000c-c7a0-48db-98e5-d1aee1fe8f38",
+          "baselineUnresolved": 6,
+          "resolved": 1,
+          "remainingOriginal": 5,
+          "newlyUnresolved": 0,
+          "totalFreshUnresolved": 5,
+          "rows": [
+            {
+              "id": "banner",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Consent surface observed on the initial visit.",
+              "sourceIds": [
+                "consentControlAssessment.surface"
+              ]
+            },
+            {
+              "id": "reject",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "First-layer Reject or equivalent refusal control.",
+              "sourceIds": [
+                "consentControlAssessment.controls.reject"
+              ]
+            },
+            {
+              "id": "prominence",
+              "before": "Not assessed",
+              "after": "Incomplete",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The paired screenshot did not complete safety review.",
+              "sourceIds": [
+                "ConsentControlGeometryEvidence.json",
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "categories",
+              "before": "Incomplete",
+              "after": "Observed",
+              "wasUnresolved": true,
+              "resolved": true,
+              "newlyUnresolved": false,
+              "detail": "2 categories were available.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "services",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Service names were not captured; deeper preference sections were not inspected.",
+              "sourceIds": []
+            },
+            {
+              "id": "privacy_link",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Public privacy-policy link or surface on the scanned page.",
+              "sourceIds": [
+                "privacy_notice_availability"
+              ]
+            },
+            {
+              "id": "privacy_access",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "consent_record",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Browser consent records were stored or updated after Accept and Reject.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "implementation",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "duration",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "declared_not_found",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+              "sourceIds": []
+            },
+            {
+              "id": "found_not_declared",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+              "sourceIds": []
+            },
+            {
+              "id": "cookie_information",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Cookie purpose and duration information was not retained.",
+              "sourceIds": []
+            }
+          ]
+        },
+        {
+          "site": "cookiebot",
+          "oldScanId": "cmp-inventory-local-cookiebot-feb08d0d-36d5-4b33-aa66-7338f555b2fe",
+          "newScanId": "cmp-inventory-local-cookiebot-3ed7d496-1b9f-475e-8086-c902a1fc5c24",
+          "baselineUnresolved": 7,
+          "resolved": 0,
+          "remainingOriginal": 7,
+          "newlyUnresolved": 0,
+          "totalFreshUnresolved": 7,
+          "rows": [
+            {
+              "id": "banner",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Consent surface observed on the initial visit.",
+              "sourceIds": [
+                "consentControlAssessment.surface"
+              ]
+            },
+            {
+              "id": "reject",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "First-layer Reject or equivalent refusal control.",
+              "sourceIds": [
+                "consentControlAssessment.controls.reject"
+              ]
+            },
+            {
+              "id": "prominence",
+              "before": "Not assessed",
+              "after": "Incomplete",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The paired screenshot did not complete safety review.",
+              "sourceIds": [
+                "ConsentControlGeometryEvidence.json",
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "categories",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Selectable category controls were not verified in the inspected surface.",
+              "sourceIds": []
+            },
+            {
+              "id": "services",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Service names were not captured; deeper preference sections were not inspected.",
+              "sourceIds": []
+            },
+            {
+              "id": "privacy_link",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Public privacy-policy link or surface on the scanned page.",
+              "sourceIds": [
+                "privacy_notice_availability"
+              ]
+            },
+            {
+              "id": "privacy_access",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+              "sourceIds": [
+                "CmpPreferencesEvidencePacket.json"
+              ]
+            },
+            {
+              "id": "consent_record",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Browser consent records were stored or updated after Accept.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "implementation",
+              "before": "Partially assessed",
+              "after": "Partially assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Accept: 0.649-second activity check completed.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "duration",
+              "before": "Observed",
+              "after": "Observed",
+              "wasUnresolved": false,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+              "sourceIds": [
+                "CanonicalEvidenceBundle.json"
+              ]
+            },
+            {
+              "id": "declared_not_found",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+              "sourceIds": []
+            },
+            {
+              "id": "found_not_declared",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+              "sourceIds": []
+            },
+            {
+              "id": "cookie_information",
+              "before": "Incomplete",
+              "after": "Not assessed",
+              "wasUnresolved": true,
+              "resolved": false,
+              "newlyUnresolved": false,
+              "detail": "Cookie purpose and duration information was not retained.",
+              "sourceIds": []
+            }
+          ]
+        }
+      ]
+    },
+    "visuals": [
+      {
+        "site": "iubenda",
+        "scanId": "cmp-inventory-local-iubenda-2f51c689-3a06-4e73-9867-739a67c08946",
+        "homepageScreenshot": {
+          "status": "available"
+        },
+        "pairedImageRetention": "available",
+        "pairedImageFailureCode": null,
+        "captureSkewMs": 22,
+        "captureTiming": {
+          "version": "consent_geometry_capture_timing.v1",
+          "mainFrameCompletedAt": "2026-10-15T22:26:16.444Z",
+          "completedAt": "2026-10-15T22:26:16.484Z"
+        },
+        "pixelMetricsRetained": true,
+        "preferenceStatus": "completed",
+        "preferenceOpened": true,
+        "recipeVersion": "iubenda_purpose_categories.v1",
+        "openingTiming": {
+          "startedAtMs": 4818,
+          "dispatchedAtMs": 4829,
+          "clickCompletedAtMs": 4848,
+          "panelVisibleAtMs": 5234,
+          "contentReadyAtMs": 5234
+        },
+        "safetyDiagnosticsSource": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15/fresh/iubenda/cmp-inventory-local-iubenda-2f51c689-3a06-4e73-9867-739a67c08946/lanes/consent_proof/LocalV2DagLambdaManifest.json",
+        "packetSource": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15/fresh/iubenda/cmp-inventory-local-iubenda-2f51c689-3a06-4e73-9867-739a67c08946/CmpPreferencesEvidencePacket.json"
+      },
+      {
+        "site": "trustarc",
+        "scanId": "cmp-inventory-local-trustarc-2239000c-c7a0-48db-98e5-d1aee1fe8f38",
+        "homepageScreenshot": {
+          "status": "withheld",
+          "reason": "safety_check_unavailable",
+          "failureCode": "finalization_deadline_exceeded"
+        },
+        "pairedImageRetention": "withheld",
+        "pairedImageFailureCode": "finalization_deadline_exceeded",
+        "captureSkewMs": 19,
+        "captureTiming": {
+          "version": "consent_geometry_capture_timing.v1",
+          "mainFrameCompletedAt": "2026-10-15T22:26:39.533Z",
+          "completedAt": "2026-10-15T22:26:39.578Z"
+        },
+        "pixelMetricsRetained": true,
+        "preferenceStatus": "completed",
+        "preferenceOpened": true,
+        "recipeVersion": "trustarc_radio_categories.v1",
+        "openingTiming": {
+          "startedAtMs": 7796,
+          "dispatchedAtMs": 7816,
+          "clickCompletedAtMs": 7835,
+          "panelVisibleAtMs": 10372,
+          "contentReadyAtMs": 10372
+        },
+        "safetyDiagnosticsSource": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15/fresh/trustarc/cmp-inventory-local-trustarc-2239000c-c7a0-48db-98e5-d1aee1fe8f38/lanes/consent_proof/LocalV2DagLambdaManifest.json",
+        "packetSource": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15/fresh/trustarc/cmp-inventory-local-trustarc-2239000c-c7a0-48db-98e5-d1aee1fe8f38/CmpPreferencesEvidencePacket.json"
+      },
+      {
+        "site": "cookiebot",
+        "scanId": "cmp-inventory-local-cookiebot-3ed7d496-1b9f-475e-8086-c902a1fc5c24",
+        "homepageScreenshot": {
+          "status": "available"
+        },
+        "pairedImageRetention": "withheld",
+        "pairedImageFailureCode": "finalization_deadline_exceeded",
+        "captureSkewMs": 41,
+        "captureTiming": {
+          "version": "consent_geometry_capture_timing.v1",
+          "mainFrameCompletedAt": "2026-10-15T22:27:05.678Z",
+          "completedAt": "2026-10-15T22:27:05.723Z"
+        },
+        "pixelMetricsRetained": true,
+        "preferenceStatus": "completed",
+        "preferenceOpened": true,
+        "recipeVersion": "cookiebot_customize_tab.v1",
+        "openingTiming": {
+          "startedAtMs": 13173,
+          "dispatchedAtMs": 13199,
+          "clickCompletedAtMs": 13213,
+          "panelVisibleAtMs": 13216
+        },
+        "safetyDiagnosticsSource": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15/fresh/cookiebot/cmp-inventory-local-cookiebot-3ed7d496-1b9f-475e-8086-c902a1fc5c24/lanes/consent_proof/LocalV2DagLambdaManifest.json",
+        "packetSource": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15/fresh/cookiebot/cmp-inventory-local-cookiebot-3ed7d496-1b9f-475e-8086-c902a1fc5c24/CmpPreferencesEvidencePacket.json"
+      }
+    ],
+    "freshScanCount": 3,
+    "totalTargetVisits": 7,
+    "originalPreservation": {
+      "verifiedAt": "2026-10-15T22:31:31.245568+00:00",
+      "allOriginalFilesUnchanged": true,
+      "fileCount": 31,
+      "source": "/Users/benmasek/WC01/outputs/cmp-capture-reliability-local-2026-10-15/preservation.json"
+    },
+    "contactLedger": "Seven contacts persisted through canonical AWS ECS SQL helper; three existing contact-only manual ledger entries updated.",
+    "proxyCleanup": {
+      "temporaryRuleRemoved": true,
+      "sshStopped": true,
+      "finishedAt": 1792103528.149699
+    },
+    "testLogs": {
+      "initialAffectedSuite": "/tmp/cmp-capture-regressions.log",
+      "correctedVisualSuite": "/tmp/cmp-capture-final-visual.log",
+      "projectionAndVisualBoundaries": "/tmp/cmp-capture-final-boundaries.log",
+      "portalReadiness": "/tmp/cmp-capture-portal-readiness.log",
+      "registry": "/tmp/cmp-capture-final-registry.log",
+      "typechecks": [
+        "/tmp/cmp-capture-types-final.log",
+        "/tmp/cmp-capture-core-types-final.log",
+        "/tmp/cmp-capture-lambda-types.log",
+        "/tmp/cmp-capture-web-types.log"
+      ]
+    },
+    "testCorrection": "The visual-retention fixture now accepts a valid authoritative settled image as well as a late proof image, still checking retained image identity, full comparison preservation, capture timing, pairing bound and expected prominence.",
+    "testResults": {
+      "initialAffectedSuite": {
+        "passed": 224,
+        "failed": 1,
+        "failure": "Fixture expected a late proof image, while valid settled paired evidence is now sufficient."
+      },
+      "correctedVisualSuite": {
+        "passed": 57,
+        "failed": 0
+      },
+      "projectionAndVisualBoundaries": {
+        "passed": 68,
+        "failed": 0
+      },
+      "portalReadiness": {
+        "passed": 1,
+        "failed": 0
+      },
+      "typechecks": "Shared, contracts, scan-core, Lambda and web passed. The initial incorrect Lambda filter was corrected and the actual Lambda package checked separately.",
+      "registry": "100 rotating targets, 6 stable lanes, 10-site default sample passed."
+    }
+  },
+  "limitations": [
+    "TrustArc paired pixels were captured within 19 ms, but the safety review did not finish within the existing finalization cap; the image remains withheld and prominence remains incomplete.",
+    "Cookiebot paired pixels were captured within 41 ms, but the AX observation tag ax-node does not satisfy the exact native DOM tag requirement for extended paired-image safety review. The late paired image remains withheld. No guard was relaxed.",
+    "Cookiebot Details panel binding now succeeds, but category switches were not observed in that inspected panel. Hidden category/service lists are not promoted into visible inventory.",
+    "Opening a panel is a capture reliability improvement, not proof that deeper categories, services and cookie declarations were completely inspected.",
+    "No timeout increase, lane, retry, deployment, scoring-policy change or extra model-review allowance introduced."
+  ],
+  "cost": {
+    "targetedVerificationEstimateUsd": "Below $1 total using existing Ireland proxy; no new standing capacity.",
+    "recurringCost": "Existing capture, review, lane and wait caps unchanged. Small bounded timing metadata only, estimated below $1/month at 100,000 scans/month; CPU histogram optimization reduces work.",
+    "disclosed": true
+  },
+  "productionChanged": false,
+  "existingReportsChanged": false
+}

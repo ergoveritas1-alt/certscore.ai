@@ -1,6 +1,6 @@
 import { readVisibleCmpInventory } from "./cmp-visible-inventory.js";
 import { projectVisibleCmpInventory } from "@certscore/contracts";
-import { preparePreferencePortal, verifyPreferencePortal } from "./cmp-preference-portal.js";
+import { preparePreferencePortal, verifyPreferencePortal, waitForPreferencePortalContent } from "./cmp-preference-portal.js";
 import { classifyConsentGeometryAccess } from "./consent-geometry-access.js";
 import { waitForConsentDocumentReady } from "./consent-document-readiness.js";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
@@ -37,7 +37,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v9", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v10", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -316,9 +316,21 @@ export async function runCmpPreferencesObserver(input: {
     // A registered CMP button may create its panel on opening. Bind that
     // transition to the exact existing vendor root, never to a guessed new modal.
     const deferredRootSelector = registeredDialog?.deferredRootSelector ?? (!match.recipe && controlledId ? match.deferredAriaBinding?.rootSelector : undefined);
-    const deferredRoot = (priorMatches === 0 || match.observedOptionsLabel) && deferredRootSelector
+    const deferredRoot = (priorMatches === 0 || match.observedOptionsLabel || registeredDialog?.deferredRootSelector) && deferredRootSelector
       ? page.locator(deferredRootSelector) : undefined;
     const deferredRootHandle = deferredRoot && await deferredRoot.count() === 1 ? await deferredRoot.elementHandle() : null;
+    let boundTab: Awaited<ReturnType<Locator["elementHandle"]>> = null;
+    if (registeredDialog?.tabSelector) {
+      if (priorMatches !== 1) return stopBinding("missing", "preference_surface_missing");
+      const tab = page.locator(registeredDialog.tabSelector);
+      boundTab = await tab.count() === 1 ? await tab.elementHandle() : null;
+      if (!deferredRootHandle || !boundTab || !await match.control.evaluate((element, root) => root?.isConnected && root.contains(element), deferredRootHandle) ||
+          !await boundTab.evaluate((element, expected) => expected.root?.isConnected && expected.root.contains(element) &&
+            element.getAttribute("role") === "tab" && element.getAttribute("aria-selected") === "false" &&
+            element.getAttribute("aria-controls") === expected.panelId,
+            {root:deferredRootHandle,panelId:await controlled.getAttribute("id")}))
+        return stopBinding("parent_unbound", "preference_parent_binding_unavailable");
+    }
     if (match.observedOptionsLabel && (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle)))
       return stopBinding("parent_unbound", "preference_parent_binding_unavailable");
     if (priorMatches === 0) {
@@ -388,6 +400,7 @@ export async function runCmpPreferencesObserver(input: {
         EVIDENCE_WORK_POLICY.preferences.registeredLazyPanelOpeningBudgetMs),
       requiredReserveMs: EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs });
     if (!openingAllowance) return stopBinding("timed_out", "preference_budget_exhausted");
+    packet.inspectionDiagnostic!.openingTiming = {startedAtMs: Date.now() - started};
     const openingDeadline = Date.now() + openingAllowance;
     const openingRemaining = () => {
       remaining();
@@ -395,11 +408,15 @@ export async function runCmpPreferencesObserver(input: {
       return Math.max(1, openingDeadline - Date.now());
     };
     packet.inspectionDiagnostic!.phase = "opening";
+    packet.inspectionDiagnostic!.openingStage = "dispatch";
     await dispatchLocatorClickWithVerifiedGeometry(match.control, Math.min(500, openingRemaining()), () => {
       remaining();
       if (page.url() !== config.exactTargetUrl || packet.action.count !== 0) throw new Error("preference_action_not_authorized");
+      packet.inspectionDiagnostic!.openingTiming!.dispatchedAtMs = Date.now() - started;
       packet.action.count = 1; packet.action.label = match.label.slice(0, 160);
     });
+    packet.inspectionDiagnostic!.openingTiming!.clickCompletedAtMs = Date.now() - started;
+    packet.inspectionDiagnostic!.openingStage = "panel_visibility";
     if (layerSelector && layerControl) {
       // The original Options node must disappear, and the registered category
       // container must appear inside the exact same retained dialog. No Save,
@@ -416,15 +433,22 @@ export async function runCmpPreferencesObserver(input: {
     }
     // Waiting on presence does not select a panel for inspection. Recheck exact
     // uniqueness before accepting any opening or reading preference evidence.
-    await controlled.first().waitFor({ state: "visible", timeout: openingRemaining() });
-    if (await controlled.count() !== 1) throw new Error("preference_surface_ambiguous");
     let portalPanel: Awaited<ReturnType<Locator["elementHandle"]>> = null;
     if (portal) {
+      packet.inspectionDiagnostic!.openingStage = "content_ready";
+      await waitForPreferencePortalContent(page, portal.recipe, openingRemaining());
+      packet.inspectionDiagnostic!.openingTiming!.panelVisibleAtMs = Date.now() - started;
+      packet.inspectionDiagnostic!.openingTiming!.contentReadyAtMs = Date.now() - started;
       portalPanel = await controlled.elementHandle();
-      await controlled.locator(portal.recipe.contentReadySelector).waitFor({ state: "visible", timeout: openingRemaining() });
+      packet.inspectionDiagnostic!.openingStage = "binding_verification";
       if (!portalPanel || !await verifyPreferencePortal(page, controlled, portal, portalPanel)) throw new Error("preference_surface_changed");
       surfaceBinding.verification = { version: "cmp_panel_verification.v1", result: "verified", role: await controlled.getAttribute("role") };
-    } else if (surfaceBinding.mode === "registered_deferred") {
+    } else {
+      await controlled.first().waitFor({ state: "visible", timeout: openingRemaining() });
+      if (await controlled.count() !== 1) throw new Error("preference_surface_ambiguous");
+      packet.inspectionDiagnostic!.openingTiming!.panelVisibleAtMs = Date.now() - started;
+    }
+    if (!portal && surfaceBinding.mode === "registered_deferred") {
       if (!deferredRoot || !deferredRootHandle) throw new Error("preference_surface_changed");
       surfaceBinding.verification = await verifyDeferredPreferencePanel({ panel: controlled, parent: deferredRootHandle,
         roles: registeredDialog?.dialogRoles ?? (match.deferredAriaBinding ? ["dialog", "region", "tabpanel"] : ["dialog", "region"]), remainingMs: Math.max(0, openingRemaining() - 25) });
@@ -436,10 +460,21 @@ export async function runCmpPreferencesObserver(input: {
       if (surfaceBinding.verification.result !== "verified") throw new Error(
         ["role_not_ready", "name_not_ready"].includes(surfaceBinding.verification.result)
           ? "preference_opening_budget_exhausted" : "preference_surface_changed");
-    } else if (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
+    } else if (!portal && (!dialogHandle || !await controlled.evaluate((element, previous) => element === previous && element.isConnected, dialogHandle))) throw new Error("preference_surface_changed");
+    if (boundTab && registeredDialog && deferredRoot && deferredRootHandle) {
+      if (await deferredRoot.count() !== 1 || !await deferredRoot.evaluate((element, previous) => element === previous && element.isConnected, deferredRootHandle) ||
+          !await boundTab.evaluate((element, expected) => element.isConnected && expected.root.contains(element) &&
+            element.getAttribute("aria-selected") === "true" && element.getAttribute("aria-controls") === expected.panel.id &&
+            expected.panel.getAttribute("aria-labelledby") === element.id,
+            {root:deferredRootHandle,panel:dialogHandle!})) throw new Error("preference_surface_changed");
+      surfaceBinding.verification = await verifyDeferredPreferencePanel({panel:controlled,parent:deferredRootHandle,
+        roles:registeredDialog.dialogRoles ?? ["tabpanel"],remainingMs:Math.max(0,openingRemaining()-25)});
+      if (surfaceBinding.verification.result !== "verified") throw new Error("preference_surface_changed");
+    }
     if (match.observedOptionsLabel && (!deferredRoot || !deferredRootHandle || await deferredRoot.count() !== 1 ||
         !await controlled.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle))) throw new Error("preference_surface_changed");
     await binding();
+    packet.inspectionDiagnostic!.openingStage = "completed";
     surfaceBinding.outcome = "opened";
     packet.action.opened = true;
     packet.inspectionDiagnostic!.phase = "preference_inventory";

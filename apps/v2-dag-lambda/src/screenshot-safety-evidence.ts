@@ -8,7 +8,7 @@ import {
   verifyConsentControlInspection,
   type CanonicalEvidenceBundle,
 } from "@certscore/contracts";
-import { comparisonPair } from "@certscore/scan-core/consent-control-comparison-pair";
+import { comparisonPair, geometryCaptureTimingValid } from "@certscore/scan-core/consent-control-comparison-pair";
 import type { ConsentControlGeometryArtifact } from "@certscore/scan-core/consent-control-geometry";
 
 export const MAX_REVIEW_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -64,6 +64,7 @@ export async function verifiedPairedScreenshot(input: {
     const geometry = object(JSON.parse(geometryBytes.toString("utf8")));
     if (!geometry || geometry.artifactVersion !== "consent_control_geometry.v1" ||
       geometry.sourceScanner !== "consent_control_geometry_diagnostic") return null;
+    if (!geometryCaptureTimingValid(geometry as unknown as ConsentControlGeometryArtifact)) return null;
     const parsed = consentControlVisualComparisonSchema.safeParse(geometry.visualComparison);
     // Pixel sampling has its own small budget. A verified A/R screenshot must
     // not lose safety-review time just because no pixel metrics were produced.

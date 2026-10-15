@@ -3455,6 +3455,19 @@ export async function preConsentRuntimeScanner(
         // that earlier diagnostic read. Changes during capture still fail closed.
         const geometryCaptureFrameRevision = consentFrameRevision;
         const geometryCaptureFrames = page.frames();
+        // Move the existing proof capture before geometry when typed A/R
+        // controls already justify it. This starts safety review earlier and
+        // pairs the next actual main-frame read with fresh pixels, rather than
+        // binding an old geometry packet to a later slow screenshot.
+        if (input.captureScope === "consent_proof" && screenshotMode !== "never" &&
+            consentObservation.acceptControlObserved && consentObservation.rejectControlObserved &&
+            !screenshots.some(screenshot => screenshot.artifactId === "screenshot_pre_consent_geometry_proof")) {
+          const proof = await recordTiming(timingBreakdown, "consent geometry proof screenshot",
+            "Existing same-session proof screenshot scheduled immediately before geometry so review and child-frame work can overlap.",
+            () => captureConsentGeometryProofScreenshot(page, input, {screenshotErrors,
+              timeoutMs: input.waitMode === "fast" ? 4_000 : 5_000}));
+          if (proof) { screenshots.unshift(proof); notifyScreenshotCaptured(input, proof); }
+        }
         let geometry = await recordTiming(
           timingBreakdown,
           "consent geometry DOM capture",

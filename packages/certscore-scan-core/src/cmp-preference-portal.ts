@@ -66,3 +66,36 @@ export async function verifyPreferencePortal(page: Page, panel: Locator, proof: 
     return true;
   }, { sdk: proof.sdk, root: proof.rootHandle, control: proof.controlHandle, recipe: proof.recipe, panel: panelHandle });
 }
+
+
+/** One bounded, fixed-cadence readiness wait. Serial selector waits with
+ * increasing polling intervals could spend the entire cap on the outer shell
+ * and then time out before inspecting an already-rendered shadow panel. */
+export async function waitForPreferencePortalContent(page: Page, recipe: Recipe, timeoutMs: number) {
+  const ready = await page.waitForFunction(recipe => {
+    const panels = document.querySelectorAll(recipe.panelSelector);
+    if (panels.length !== 1) return false;
+    const panel = panels[0]!;
+    let root: Element | ShadowRoot = panel;
+    if (recipe.shadowContentSelector) {
+      const hosts = panel.querySelectorAll(recipe.shadowContentSelector);
+      if (hosts.length !== 1) return false;
+      root = hosts[0]!.shadowRoot ?? hosts[0]!;
+    }
+    const candidates = root.querySelectorAll(recipe.contentReadySelector);
+    if (candidates.length !== 1) return false;
+    let element: Element | null = candidates[0]!;
+    const bounds = element.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return false;
+    for (let depth = 0; element && depth < 64; depth++) {
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.visibility !== "visible" || style.opacity === "0" ||
+          element.matches('[hidden], [aria-hidden="true" i], [inert]')) return false;
+      if (element === panel) return true;
+      const tree = element.getRootNode();
+      element = element.parentElement ?? (tree instanceof ShadowRoot ? tree.host : null);
+    }
+    return false;
+  }, recipe, {timeout: timeoutMs, polling: 50});
+  await ready.dispose();
+}

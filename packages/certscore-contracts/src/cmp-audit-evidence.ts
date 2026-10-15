@@ -132,7 +132,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
     truncated: z.boolean(),
   }).optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
     identityScopes: z.object({ version: z.literal("cmp_scope_activity.v1"),
       providers: z.array(z.object({ provider: z.string().min(1).max(120), state: z.enum(["visible", "inactive", "unverified"]) }).strict()).max(40),
     }).strict().optional(),
@@ -141,6 +141,9 @@ export const cmpPreferencesEvidenceSchema = z.object({
     configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2", "onetrust_loaded_configuration.v3", "cookieyes_loaded_configuration.v1"]), status: z.enum(["available", "unavailable"]),
       groupCount: z.number().int().min(0).max(10000).optional(), retainedCookieCount: z.number().int().min(0).max(100).optional(), truncated: z.boolean().optional(),
     }).strict().optional(),
+    openingStage: z.enum(["dispatch", "panel_visibility", "content_ready", "binding_verification", "completed"]).optional(),
+    openingTiming: z.object({startedAtMs:z.number().int().nonnegative(), dispatchedAtMs:z.number().int().nonnegative().optional(),
+      clickCompletedAtMs:z.number().int().nonnegative().optional(), panelVisibleAtMs:z.number().int().nonnegative().optional(), contentReadyAtMs:z.number().int().nonnegative().optional()}).strict().optional(),
     phase: z.enum(["browser_start", "navigation", "cmp_readiness", "control_inventory", "surface_binding", "opening", "preference_inventory", "completed"]),
     optionsResolution: z.object({
       version: z.literal("cmp_options_resolution.v1"),
@@ -162,13 +165,13 @@ export const cmpPreferencesEvidenceSchema = z.object({
 }).superRefine((packet, ctx) => {
   if (packet.visibleInventory) {
     const projected = projectVisibleCmpInventory(packet.visibleInventory);
-    if (packet.inspectionDiagnostic?.revision !== "cmp_preferences.v9" || !packet.action.opened || !packet.checkpoints?.declarations || projected.declarations.some(row =>
+    if (!["cmp_preferences.v9", "cmp_preferences.v10"].includes(packet.inspectionDiagnostic?.revision ?? "") || !packet.action.opened || !packet.checkpoints?.declarations || projected.declarations.some(row =>
         !packet.declarations.some(declared => declared.name === row.name && declared.purpose === row.purpose && declared.duration === row.duration && declared.source === row.source)))
       ctx.addIssue({code: z.ZodIssueCode.custom, message: "Visible inventory requires versioned exact declaration projection"});
   }
   if (packet.status === "completed" && (!packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
   if (packet.inspectionDiagnostic?.surfaceBinding?.mode === "registered_portal" &&
-      (!["cmp_preferences.v8", "cmp_preferences.v9"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
+      (!["cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
        packet.inspectionDiagnostic.surfaceBinding.verification?.result !== "verified"))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Registered portal opening requires versioned verified binding." });
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });

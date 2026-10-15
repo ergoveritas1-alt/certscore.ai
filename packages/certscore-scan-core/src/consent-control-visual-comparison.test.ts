@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
 import { hasMaterialAcceptVisualProminence, consentControlVisualComparisonSchema } from "@certscore/contracts";
-import { comparisonPair, measureConsentControlVisualComparison, retainPairedConsentVisualCapture } from "./consent-control-visual-comparison.js";
+import { dominantQuantizedRgb, comparisonPair, measureConsentControlVisualComparison, retainPairedConsentVisualCapture } from "./consent-control-visual-comparison.js";
 import { consentVisualFixture, separatedConsentVisualFixture, visualFixtureStartMs } from "./test-fixtures/consent-visual-comparison.js";
 
 async function retentionFixture() {
@@ -72,6 +72,8 @@ test("ambiguous pairs, incomplete inventory, child frames, stale or scaled image
   for (const mutate of [
     (g: typeof fixture.geometry) => { g.controlInspection!.structuralCoverage = "limited"; },
     (g: typeof fixture.geometry) => { g.documentIdentity = undefined; },
+    (g: typeof fixture.geometry) => { (g as unknown as {captureTiming: unknown}).captureTiming = null; },
+    (g: typeof fixture.geometry) => { g.captureTiming = {version:"consent_geometry_capture_timing.v1",mainFrameCompletedAt:"2026-01-01T00:00:00.000Z",completedAt:g.capturedAt}; },
     (g: typeof fixture.geometry) => { g.candidates[1]!.enabled = false; },
     (g: typeof fixture.geometry) => { g.candidates[1]!.frameContext.frameKind = "child_frame"; },
     (g: typeof fixture.geometry) => { g.candidates[0]!.boundingBox.x = 0; },
@@ -250,4 +252,21 @@ test("a terminal settled pair gets the existing single allowance; ineligible set
   await collector(geometry,{terminalPair:true,framesStable:false,frameRevision:1});assert.equal(calls,0);
   await collector(geometry,{terminalPair:true,framesStable:true,frameRevision:1});assert.equal(calls,1);
   await collector(geometry,{terminalPair:true,framesStable:true,frameRevision:1});assert.equal(calls,1);
+});
+
+
+test("fixed histogram preserves the original colour-bin averages, fractions and first-seen tie decisions", () => {
+  const reference = (pixels: Array<[number,number,number]>) => {
+    const groups = new Map<string,{count:number;sum:[number,number,number]}>();
+    for (const rgb of pixels) {
+      const key=rgb.map(v=>Math.floor(v/16)).join(":");const group=groups.get(key)??{count:0,sum:[0,0,0]};
+      group.count++;rgb.forEach((v,i)=>{group.sum[i]!+=v});groups.set(key,group);
+    }
+    const winner=[...groups.values()].sort((a,b)=>b.count-a.count)[0];
+    return winner?{rgb:winner.sum.map(v=>v/winner.count),fraction:winner.count/pixels.length}:undefined;
+  };
+  const tie: Array<[number,number,number]>=[[255,255,255],[0,0,0],[254,253,252],[1,2,3]];
+  const uniform: Array<[number,number,number]>=Array.from({length:20000},(_,i)=>[240+i%16,240+(i*3)%16,240+(i*7)%16]);
+  const varied: Array<[number,number,number]>=Array.from({length:40000},(_,i)=>[i%256,(i*7)%256,(i*31)%256]);
+  for (const pixels of [[],tie,tie.toReversed(),uniform,varied]) assert.deepEqual(dominantQuantizedRgb(pixels),reference(pixels));
 });
