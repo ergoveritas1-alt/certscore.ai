@@ -390,3 +390,13 @@ test("action capability matrix qualifies every target CMP for bounded Accept and
     assert.equal(getKnownCmpActionCapability(canonicalName, "reject")?.recipeAvailable, true);
   }
 });
+
+test("DataGrail preference recognition does not authorize Accept/Reject or guess consent cookie identities", () => {
+  const definition = KNOWN_CMP_REGISTRY.find(entry => entry.canonicalName === "DataGrail")!;
+  assert.deepEqual(definition.domSelectors, [".dg-consent-banner"]);
+  assert.equal(definition.preferenceDialogBinding?.layerTransitionSelector, ".dg-main-content-policies");
+  assert.equal(getKnownCmpVendorForHost("api.consentjs.datagrail.io"), "DataGrail");
+  assert.equal(definition.acceptConfirmation, undefined);
+  assert.equal(definition.rejectConfirmation, undefined);
+  assert.equal(definition.cookieNames, undefined);
+});

@@ -1,6 +1,7 @@
 import { deriveCmpAuditAssessment } from "./cmp-audit-assessment-projector";
 import {
   deriveConsentControlAssessment,
+  deriveConsentSurfaceInspectionOutcome,
   classifyConsentControlLabel,
   consentControlVisualComparisonSchema,
   verifyConsentControlInspection,
@@ -294,9 +295,16 @@ function geometryInput(
  * URL equality alone cannot override the global document: require the retained
  * lane outcome and matching observation, DOM and geometry loader tokens. */
 function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometry: Record<string, unknown> | null | undefined): { url: string; token: string } | null {
+  if (consentSessionAccessLimited(bundle, rawGeometry)) return null;
   const lane = bundle.scanLaneRuns?.find((run) => run.laneId === "consent_proof");
   const lanes = bundle.scanEvidenceLaneAssessment ?? bundle.scan_evidence_lane_assessment;
-  if (lane?.executionOutcome !== "success" || lanes?.lanes.consent !== "usable") return null;
+  if (lane?.executionOutcome !== "success") return null;
+  const access = rawGeometry?.access as { status?: string; httpStatus?: number } | undefined;
+  const latest = [...(bundle.consentUiObservations ?? [])].sort((a, b) => b.observedAtMs - a.observedAtMs)[0];
+  const retainedPositive = latest?.captureStatus === "observed" && latest.controls.some(control => control.visible === true && ["accept_all", "reject_all", "manage_preferences"].includes(control.actionType) &&
+    (control.tagName !== "ax-node" || control.visibilityEvidence === "box_model_verified" && control.consentContextEvidence === "local_surface"));
+  if (lanes?.lanes.consent !== "usable" && !(lanes?.lanes.consent === "limited" && retainedPositive &&
+    access?.status === "loaded" && typeof access.httpStatus === "number" && access.httpStatus < 400)) return null;
   const geometryUrl = normalizedDocumentId(typeof rawGeometry?.pageUrl === "string" ? rawGeometry.pageUrl : null);
   const geometryToken = retainedDocumentToken(rawGeometry?.documentIdentity);
   if (!geometryUrl || !geometryToken || !["https:", "http:"].includes(new URL(geometryUrl).protocol)) return null;
@@ -307,6 +315,26 @@ function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometr
   return (bundle.domSnapshots ?? []).some((snapshot) => snapshot.consentStateAtTime === "pre_consent" &&
     normalizedDocumentId(snapshot.url) === geometryUrl && retainedDocumentToken(snapshot.documentIdentity) === geometryToken)
     ? { url: geometryUrl, token: geometryToken } : null;
+}
+
+/** Scope inspection coverage to the independently verified consent document.
+ * A runtime-lane 403 or challenge is not evidence that the consent session was
+ * blocked. Missing bindings and the consent session's own access failures still
+ * use the fail-closed fallback. No stored assessment is repaired on read. */
+export function deriveLaneOwnedConsentSurfaceInspection(
+  bundle: CanonicalEvidenceBundle, geometry: Record<string, unknown> | null | undefined,
+  fallback: Parameters<typeof deriveConsentSurfaceInspectionOutcome>[0],
+) {
+  const document = verifiedConsentLaneDocument(bundle, geometry);
+  const access = geometry?.access as {status?: string; httpStatus?: number} | undefined;
+  if (!document || access?.status !== "loaded" || typeof access.httpStatus !== "number" ||
+      access.httpStatus >= 400 || consentSessionAccessLimited(bundle, geometry))
+    return deriveConsentSurfaceInspectionOutcome(fallback);
+  return deriveConsentSurfaceInspectionOutcome({ ...fallback,
+    domSnapshots: (bundle.domSnapshots ?? []).filter(snapshot =>
+      normalizedDocumentId(snapshot.url) === document.url && retainedDocumentToken(snapshot.documentIdentity) === document.token),
+    runtimeCoverage: undefined, scanNoGoDecision: undefined,
+  });
 }
 
 export function deriveMaterializedConsentControlAssessment(input: {
@@ -783,7 +811,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
       finalUrl: canonicalDocumentId,
       scanStatus: "completed",
       noGo: consentNoGo,
-      noGoReasonCodes: input.noGoReasonCodes,
+      noGoReasonCodes: consentLaneDocument && !accessLimited ? [] : input.noGoReasonCodes,
     },
     document: {
       canonicalDocumentId,

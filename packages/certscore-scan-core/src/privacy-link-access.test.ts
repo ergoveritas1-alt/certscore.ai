@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
-import { readPrivacyLinkAccess } from "./privacy-link-access.js";
+import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
 
 test("existing link read diagnoses reachability without clicks, scrolling or navigation", async () => {
   const browser = await chromium.launch({ headless: true });
@@ -38,4 +38,36 @@ test("existing link read diagnoses reachability without clicks, scrolling or nav
     await page.evaluate("{ let time = 0; Object.defineProperty(performance, 'now', { value: () => time += 100 }); }");
     assert.equal((await page.locator("a[href]").evaluateAll(readPrivacyLinkAccess, {}))[0]?.access.outcome, "inspection_incomplete");
   } finally { await browser.close(); }
+});
+
+test("optional footer verification scrolls once, restores the view, and never treats a covered link as reachable", async () => {
+  const browser = await chromium.launch({headless:true});
+  try {
+    const page = await browser.newPage({viewport:{width:800,height:600}});
+    for (const mode of ["reachable", "covered", "inert", "changed"]) {
+      await page.setContent(`<div style="height:2000px"></div><footer ${mode === "inert" ? "inert" : ""}><a href="https://example.test/privacy">Privacy policy</a></footer>
+        ${mode === "covered" ? '<div style="position:fixed;inset:0;z-index:99"></div>' : ''}
+        <script>window.clicks=0;document.addEventListener('click',()=>window.clicks++);</script>`);
+      const candidates=[{index:0,url:mode === "changed" ? "https://example.test/changed" : "https://example.test/privacy",label:"Privacy policy"}];
+      const rows=await page.locator('a[href]').evaluateAll(readPrivacyLinkAccess,{candidates,allowOneDocumentScroll:true});
+      assert.equal(await page.evaluate(()=>scrollY),0);
+      assert.equal(await page.evaluate(()=>(window as any).clicks),0);
+      if(mode === "changed") {assert.deepEqual(rows,[]);continue;}
+      assert.equal(rows[0]?.hitTargetBeforeAction,mode === "reachable",mode);
+      if(mode !== "inert") {
+        assert.equal(rows[0]?.access.version,"privacy_link_access.v2");
+        assert.equal(rows[0]?.access.scroll?.restored,true);
+        assert.ok((rows[0]?.access.scroll?.inspectedY ?? 0)>0);
+      }
+    }
+  } finally {await browser.close();}
+});
+
+
+test("bounded privacy verification prefers an explicit policy over a general privacy portal",()=>{
+ const candidates=privacyPolicyLinkCandidates([
+  {index:0,url:'https://example.test/privacy-portal',label:'Privacy'},
+  {index:1,url:'https://example.test/legal/privacy-policy',label:'Privacy policy'},
+ ]);
+ assert.equal(candidates[0]?.index,1);
 });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cmpPreferencesEvidenceSchema, deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
-import { deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
+import { deriveLaneOwnedConsentSurfaceInspection, deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 
 function bundle(
   controls: Array<Record<string, unknown>>,
@@ -1630,4 +1630,26 @@ test("v3 preference diagnostics survive full consent materialization independent
   const malformed = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g, noGo: false });
   assert.equal(malformed.cmpAudit, undefined, "Unverifiable diagnostics cannot supply CMP facts");
   assert.deepEqual(malformed.controls, initial.controls);
+});
+
+
+test("runtime blocking does not erase a verified consent lane, but its own blocking and drift remain limited", () => {
+  for (const mode of ["usable", "limited-positive", "blocked", "drift", "missing-lane"] as const) {
+    const {b,g}=independentConsentLaneFixture();
+    b.consentUiObservations[0]!.basis=["settled_control_inventory_completed"];
+    const geometry={...g,access:{status:mode === "blocked" ? "access_no_go" : "loaded",httpStatus:mode === "blocked" ? 403 : 200}};
+    if(mode === "limited-positive") b.scanEvidenceLaneAssessment!.lanes.consent="limited";
+    if(mode === "drift") geometry.documentIdentity={source:"cdp_loader_id",token:"other"};
+    if(mode === "missing-lane") b.scanLaneRuns=[];
+    b.runtimeCoverage={coverageStatus:"limited_none",limitationKeys:["access_denied_or_forbidden_page","scan_no_go_corroborated"],notes:[],silentEmpty:false,fallbackModesUsed:[],observationCounts:{networkEvents:0,thirdPartyRequests:0,cookieEvents:0,cookiesBeforeConsent:0,normalizedVendors:0,observedJourneys:0}};
+    const before=structuredClone(b);
+    const inspection=deriveLaneOwnedConsentSurfaceInspection(b,geometry,{...b,scanNoGoDecision:"no_go"});
+    assert.equal(inspection.limitationKeys.includes("access_denied_or_forbidden_page"),!["usable","limited-positive"].includes(mode),mode);
+    const result=deriveMaterializedConsentControlAssessment({bundle:b,consentControlGeometryEvidence:geometry,consentSurfaceInspection:inspection,noGo:true});
+    if(["usable","limited-positive"].includes(mode)) {
+      assert.equal(result.controls.accept.state,"observed",mode);
+      assert.equal(result.scan.noGo,false,mode);
+    } else assert.equal(result.controls.accept.state,"unknown",mode);
+    assert.deepEqual(b,before,"input evidence is not rewritten");
+  }
 });

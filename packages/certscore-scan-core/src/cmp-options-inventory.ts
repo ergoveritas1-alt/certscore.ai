@@ -31,6 +31,6 @@ export function readCmpOptionsInventory(nodes: Element[], input: { registeredSel
         }
       }
     }
-    return { label, ariaLabel, value, access, registered: Boolean(input.registeredSelector && element.matches(input.registeredSelector)) };
+    return { label, ariaLabel, title: element.getAttribute("title"), value, access, registered: Boolean(input.registeredSelector && element.matches(input.registeredSelector)) };
   }) };
 }

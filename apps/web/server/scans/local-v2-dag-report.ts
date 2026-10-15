@@ -90,7 +90,7 @@ import { guessPrimaryLanguage } from "../../lib/scans/primary-language";
 import { BoundedPromiseCache } from "../performance/bounded-promise-cache";
 import { withServerTiming } from "../performance/log-server-timing";
 import type { ScanDetailResponse } from "./get-scan-by-id";
-import { deriveMaterializedConsentControlAssessment } from "./consent-control-assessment-projector";
+import { deriveMaterializedConsentControlAssessment, deriveLaneOwnedConsentSurfaceInspection } from "./consent-control-assessment-projector";
 import {
   LOCAL_V2_DAG_LAMBDA_AWS_REGION,
   isLocalV2DagLambdaAwsRegion,
@@ -5568,7 +5568,7 @@ function buildMaterializedLocalV2Detail(
   const consentSurfaceInspection = reconcileConsentSurfaceInspectionWithGeometry(
     bundle,
     options.consentControlGeometryEvidence,
-    deriveConsentSurfaceInspectionOutcome({
+    deriveLaneOwnedConsentSurfaceInspection(bundle, options.consentControlGeometryEvidence, {
       cmpRuntimeObservations: bundle.cmpRuntimeObservations,
       consentUiObservations: bundle.consentUiObservations,
       domSnapshots: bundle.domSnapshots,

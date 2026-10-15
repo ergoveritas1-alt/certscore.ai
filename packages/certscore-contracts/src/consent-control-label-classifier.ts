@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v15";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v16";
 
 export type ConsentControlIntent =
   | "accept"
@@ -201,6 +201,8 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
   { locale: "en", phrase: "use website with required cookies only (revocation) →", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "required cookies only", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, observationOnly: true },
   { locale: "en", phrase: "cookie preferences", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "en", phrase: "cookies manage your preferences about cookies", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "en", phrase: "manage your preferences about cookies", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "open privacy settings", intent: "options", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "zh", phrase: "接受並關閉", intent: "accept", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   // Full, reviewed observation phrases. Do not broaden action recipes.

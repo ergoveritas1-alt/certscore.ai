@@ -43,9 +43,13 @@ export type CmpPreferenceDispatch = z.infer<typeof cmpPreferenceDispatchSchema>;
 
 export const cmpPrivacyLinkSchema = z.object({
   url: z.string().url().max(2000), hitTargetBeforeAction: z.boolean(),
-  access: z.object({ version: z.literal("privacy_link_access.v1"),
+  access: z.object({ version: z.enum(["privacy_link_access.v1", "privacy_link_access.v2"]),
     outcome: z.enum(["reachable", "outside_viewport", "not_rendered", "hidden", "transparent", "inactive", "pointer_disabled", "hit_target_missed", "inspection_incomplete"]),
-  }).strict().optional(),
+    scroll: z.object({ version: z.literal("privacy_link_scroll.v1"), initialOutcome: z.literal("outside_viewport"),
+      beforeY: z.number().finite(), inspectedY: z.number().finite(), restored: z.boolean() }).strict().optional(),
+  }).strict().refine(access => access.version === "privacy_link_access.v1" ? !access.scroll :
+    Boolean(access.scroll && (access.scroll.restored || access.outcome === "inspection_incomplete")),
+    "Scrolled link evidence requires a restoration witness; legacy reads cannot claim a scroll.").optional(),
 }).refine(link => !link.access || link.hitTargetBeforeAction === (link.access.outcome === "reachable"),
   "Link accessibility diagnostics must agree with the retained click-target result.");
 
@@ -126,9 +130,10 @@ export const cmpPreferencesEvidenceSchema = z.object({
     truncated: z.boolean(),
   }).optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    navigationHttpStatus: z.number().int().min(100).max(599).optional(),
     basicCaptureReserveMs: z.number().int().min(0).max(1000).optional(),
-    configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2", "onetrust_loaded_configuration.v3"]), status: z.enum(["available", "unavailable"]),
+    configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2", "onetrust_loaded_configuration.v3", "cookieyes_loaded_configuration.v1"]), status: z.enum(["available", "unavailable"]),
       groupCount: z.number().int().min(0).max(10000).optional(), retainedCookieCount: z.number().int().min(0).max(100).optional(), truncated: z.boolean().optional(),
     }).strict().optional(),
     phase: z.enum(["browser_start", "navigation", "cmp_readiness", "control_inventory", "surface_binding", "opening", "preference_inventory", "completed"]),
@@ -140,7 +145,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
     }).strict().optional(),
     surfaceBinding: z.object({
       version: z.literal("cmp_surface_binding.v1"),
-      mode: z.enum(["aria_controls", "registered_existing", "registered_deferred", "borlabs"]),
+      mode: z.enum(["aria_controls", "registered_existing", "registered_deferred", "registered_layer", "borlabs"]),
       priorMatches: z.number().int().min(0).max(1000), priorVisible: z.boolean().optional(),
       outcome: z.enum(["checking", "ready", "opened", "missing", "ambiguous", "already_visible", "parent_unbound", "changed", "timed_out"]),
       verification: z.object({ version: z.literal("cmp_panel_verification.v1"),

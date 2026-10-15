@@ -1,22 +1,52 @@
+import {classifyPrivacySurface} from "@certscore/contracts";
+
+/** Prefer explicit policy labels over broad privacy portals when the bounded
+ * hit-test has room for only one document scroll. Classification stays canonical. */
+export function privacyPolicyLinkCandidates<T extends {index:number;url:string;label:string}>(links:T[]):T[] {
+  return links.map(link=>({link,classification:classifyPrivacySurface({linkText:link.label,url:link.url})}))
+    .filter(({link,classification:c})=>link.url.length<=2000 && /^https?:/.test(link.url) &&
+      (c.surfaceType === "privacy_policy" || c.variant === "combined_privacy_cookie_surface"))
+    .sort((a,b)=>b.classification.confidence-a.classification.confidence)
+    .slice(0,16).map(({link})=>link);
+}
+
 /** Self-contained browser callback, reused inside the existing link reads.
- * No click, scroll, fetch, retry or second inspection. A miss is not evidence
+ * Optional single document scroll is bounded by the same read slice and restored.
+ * No click, fetch, retry or navigation. A miss is not evidence
  * that a banner caused it. Geometry/style/hit work shares a bounded read slice. */
 export function readPrivacyLinkAccess(nodes: Element[], input: {
   candidates?: Array<{index: number; url: string; label: string}>;
+  allowOneDocumentScroll?: boolean;
 }) {
   const deadline = performance.now() + 50;
   const candidates = input.candidates ?? nodes.slice(0, 300).map((node, index) => ({
     index, url: (node as HTMLAnchorElement).href,
     label: (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 160),
   }));
+  let scrollUsed = false;
   return candidates.flatMap(candidate => {
     const a = nodes[candidate.index] as HTMLAnchorElement | undefined;
     // A changed identity cannot inherit the earlier link's diagnostic.
     if (!a?.isConnected || a.href !== candidate.url ||
       (a.getAttribute("aria-label") ?? a.textContent ?? "").trim().slice(0, 160) !== candidate.label) return [];
     let outcome: "reachable" | "outside_viewport" | "not_rendered" | "hidden" | "transparent" | "inactive" | "pointer_disabled" | "hit_target_missed" | "inspection_incomplete" = "inspection_incomplete";
+    let scroll: { version: "privacy_link_scroll.v1"; initialOutcome: "outside_viewport"; beforeY: number; inspectedY: number; restored: boolean } | undefined;
+    const beforeX = scrollX, beforeY = scrollY;
+    try {
     if (performance.now() < deadline) {
-      const boxes = a.getClientRects();
+      let boxes = a.getClientRects();
+      // One offscreen candidate, never a hidden/inert link or a nested scroller.
+      // A fresh geometry/hit test below must establish reachability; scrolling
+      // alone proves nothing. Restore the viewport before returning to CMP work.
+      if (input.allowOneDocumentScroll && !scrollUsed && boxes.length > 0 && boxes.length <= 3 &&
+          (boxes[0]!.bottom <= 0 || boxes[0]!.top >= innerHeight) &&
+          getComputedStyle(a).visibility === "visible" && !a.closest('[hidden],[inert],[aria-hidden="true" i]') &&
+          performance.now() < deadline) {
+        scrollUsed = true;
+        window.scrollBy({ top: boxes[0]!.top + boxes[0]!.height / 2 - innerHeight / 2, behavior: "instant" });
+        scroll = { version: "privacy_link_scroll.v1", initialOutcome: "outside_viewport", beforeY, inspectedY: scrollY, restored: false };
+        boxes = a.getClientRects();
+      }
       const visibleBoxes: Array<{left:number;right:number;top:number;bottom:number}> = [];
       for (let index = 0; index < Math.min(3, boxes.length); index++) {
         const box = boxes[index]!;
@@ -52,6 +82,15 @@ export function readPrivacyLinkAccess(nodes: Element[], input: {
         }
       }
     }
-    return [{...candidate,hitTargetBeforeAction:outcome==="reachable",access:{version:"privacy_link_access.v1" as const,outcome}}];
+    } finally {
+      if (scroll) {
+        window.scrollTo({ left: beforeX, top: beforeY, behavior: "instant" });
+        scroll.restored = scrollX === beforeX && scrollY === beforeY;
+        if (!scroll.restored) outcome = "inspection_incomplete";
+      }
+    }
+    if (!a.isConnected || a.href !== candidate.url ||
+      (a.getAttribute("aria-label") ?? a.textContent ?? "").trim().slice(0, 160) !== candidate.label) return [];
+    return [{...candidate,hitTargetBeforeAction:outcome==="reachable",access:{version:scroll ? "privacy_link_access.v2" as const : "privacy_link_access.v1" as const,outcome,...(scroll ? {scroll} : {})}}];
   });
 }

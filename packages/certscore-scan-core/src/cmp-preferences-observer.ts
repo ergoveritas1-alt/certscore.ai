@@ -1,6 +1,7 @@
+import { classifyConsentGeometryAccess } from "./consent-geometry-access.js";
 import { waitForConsentDocumentReady } from "./consent-document-readiness.js";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
-import { cmpPreferenceBudgetMs, CMP_PREFERENCE_POLICY_VERSION, classifyConsentControlLabel, classifyConsentPreferenceControl, classifyPrivacySurface, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, type CmpPreferenceDispatch, type CmpPreferencesEvidence } from "@certscore/contracts";
+import { cmpPreferenceBudgetMs, CMP_PREFERENCE_POLICY_VERSION, classifyConsentControlLabel, classifyConsentPreferenceControl, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, type CmpPreferenceDispatch, type CmpPreferencesEvidence } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY, type KnownCmpDefinition } from "@website-signal-risk-scanner/shared";
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
 import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
@@ -9,10 +10,11 @@ import { dispatchLocatorClickWithVerifiedGeometry } from "./cmp-control-actionab
 import { installBorlabsDeferredDialogReveal, revealBorlabsDeferredDialog } from "./borlabs-passive-dialog-reveal.js";
 import { cookieDisclosureColumn } from "@certscore/contracts";
 import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
-import { readCmpScopeInventory } from "./cmp-scope-inventory.js";
+import { readCookieYesPreferenceInventory } from "./cookieyes-preference-inventory.js";
+import { cmpInventoryScopeSelector, readCmpScopeInventory } from "./cmp-scope-inventory.js";
 import { verifyDeferredPreferencePanel } from "./cmp-preference-panel-binding.js";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "./evidence-work-budget.js";
-import { readPrivacyLinkAccess } from "./privacy-link-access.js";
+import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
 import { readCmpOptionsInventory } from "./cmp-options-inventory.js";
 
 /** A single isolated Options action. No preference changes, save, second click,
@@ -33,7 +35,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v3", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v6", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -68,7 +70,19 @@ export async function runCmpPreferencesObserver(input: {
       else await route.fallback();
     });
     packet.inspectionDiagnostic!.phase = "navigation";
-    await page.goto(config.exactTargetUrl, { waitUntil: "commit", timeout: remaining() });
+    const navigation = await page.goto(config.exactTargetUrl, { waitUntil: "commit", timeout: remaining() });
+    const httpStatus = navigation?.status();
+    if (httpStatus) packet.inspectionDiagnostic!.navigationHttpStatus = httpStatus;
+    // Classify the main navigation response before reading mutable document
+    // state. An error-page challenge can replace its URL during commit; that
+    // must not hide its HTTP failure or retain transient challenge tokens.
+    // No document/control evidence is accepted on this terminal path.
+    const access = classifyConsentGeometryAccess({ httpStatus });
+    if (access.status !== "loaded" && access.status !== "unknown") {
+      packet.support.reason = "preference_page_access_limited";
+      packet.limitations.push("preference_page_access_limited", ...access.reasonCodes);
+      return finish();
+    }
     const session = await context.newCDPSession(page);
     const initialFrame = (await session.send("Page.getFrameTree")).frameTree.frame;
     packet.finalUrl = page.url();
@@ -92,24 +106,54 @@ export async function runCmpPreferencesObserver(input: {
     packet.checkpoints = { version: "cmp_partial_capture.v1", documentToken: packet.documentToken!, privacyLinks: false, declarations: false, controls: false, controlsSurface: "first_layer" };
     // Readiness, navigation, inventory and opening share one wall-clock budget.
     // Waiting for the first visible vendor surface avoids racing delayed CMP init.
-    const definitions = KNOWN_CMP_REGISTRY.filter(definition => definition.domSelectors?.length);
+    const definitions = KNOWN_CMP_REGISTRY.filter(definition => definition.domSelectors?.length || definition.preferenceScopeSelector);
     packet.inspectionDiagnostic!.phase = "cmp_readiness";
-    // Avoid repeated shadow-piercing all-vendor queries while the parser and
-    // blocking CMP bootstrap scripts are still initializing. This consumes the
-    // same absolute preference deadline, never an additional wait allowance.
+    // A rendered CMP may be ready while unrelated page scripts still delay
+    // DOMContentLoaded. Race positive registered control visibility against
+    // document readiness within the same deadline; neither authorizes a click.
     const readinessDeadline = deadline - packet.inspectionDiagnostic!.basicCaptureReserveMs!;
-    let cmpReady = await waitForConsentDocumentReady(page, readinessDeadline, input.signal);
-    await binding();
     const readySelectors = definitions.flatMap(definition => definition.preferenceInspection
       ? [`${definition.preferenceInspection.entranceSelector} ${definition.preferenceInspection.controlSelector}`]
-      : [...definition.domSelectors!.flatMap(selector => [`${selector} button`, `${selector} [role="button"]`, `${selector} input[type="button"]`]),
+      : [...(definition.preferenceScopeSelector ? [definition.preferenceScopeSelector] : definition.domSelectors!).flatMap(selector => [`:is(${selector}):is(button, [role="button"], input[type="button"])`, `:is(${selector}) :is(button, [role="button"], input[type="button"])`]),
           ...(definition.preferenceDialogBinding ? [definition.preferenceDialogBinding.controlSelector] : [])]);
     // Playwright's CSS locator traverses open shadow roots (Borlabs v3).
     const readyControl = page.locator(readySelectors.map(selector => `${selector}:visible`).join(",")).first();
+    let cmpReady = await Promise.race([
+      waitForConsentDocumentReady(page, readinessDeadline, input.signal),
+      readyControl.waitFor({ state: "visible", timeout: Math.max(1, readinessDeadline - Date.now()) })
+        .then(() => !input.signal?.aborted && Date.now() < readinessDeadline, () => false),
+    ]);
+    await binding();
+    const privacyScope = page.locator("a[href]");
+    const links = await privacyScope.evaluateAll(nodes => nodes.slice(0, 300).map((node, index) => ({
+      index, url: (node as HTMLAnchorElement).href,
+      label: (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 160),
+    })));
+    const privacyCandidates = privacyPolicyLinkCandidates(links);
+    // Spend the existing hit-test allowance on privacy surfaces, not unrelated
+    // navigation links. The browser callback rechecks each exact link identity.
+    packet.privacyLinks = (await privacyScope.evaluateAll(readPrivacyLinkAccess, { candidates: privacyCandidates, allowOneDocumentScroll: true }))
+      .map(({url, hitTargetBeforeAction, access}) => ({url, hitTargetBeforeAction, access}));
+    await binding();
+    packet.checkpoints!.privacyLinks = true;
     let revealed = false;
+    let unidentifiedScopeChecked = false;
     while (cmpReady && !await readyControl.isVisible()) {
       remaining();
       if (Date.now() >= readinessDeadline) { cmpReady = false; break; }
+      // Retain completed basic checkpoints instead of losing the whole optional
+      // packet at a fast passive barrier. A known registered scope keeps its
+      // full search allowance. An unidentified surface remains unknown, never absent.
+      if (!unidentifiedScopeChecked && Date.now() - started >= 8000) {
+        unidentifiedScopeChecked = true;
+        const scopes = await readCmpScopeInventory(page, definitions);
+        await binding();
+        if (!scopes.overflow && !scopes.runtimeIdentified && scopes.indices.length === 0) {
+          packet.support.reason = "cmp_not_identified_after_bounded_readiness";
+          packet.limitations.push(packet.support.reason);
+          return finish();
+        }
+      }
       // Reuse the registered passive one-pixel scroll only when Borlabs' own
       // configuration explicitly defers its dialog until visitor interaction.
       if (!revealed) revealed = await revealBorlabsDeferredDialog(page);
@@ -119,20 +163,12 @@ export async function runCmpPreferencesObserver(input: {
     }
     await binding();
     packet.inspectionDiagnostic!.phase = "control_inventory";
-    const links = await page.locator("a[href]").evaluateAll(readPrivacyLinkAccess, {});
-    packet.privacyLinks = links.filter(link => {
-      const classification = classifyPrivacySurface({ linkText: link.label, url: link.url });
-      return link.url.length <= 2000 && /^https?:/.test(link.url) && (classification.surfaceType === "privacy_policy" || classification.variant === "combined_privacy_cookie_surface");
-    })
-      .slice(0, 16).map(({url, hitTargetBeforeAction, access}) => ({url, hitTargetBeforeAction, access}));
-    await binding();
-    packet.checkpoints!.privacyLinks = true;
     const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"]; observedOptionsLabel?: boolean }> = [];
     const detected = new Set<string>();
     // Resolve all registered vendor scopes in one shadow-piercing locator read.
     // Serial full-document selector round trips used most of the remaining
     // budget on busy pages, before we could retain their already-visible CMP.
-    const scopeSelectors = definitions.map(definition => definition.preferenceInspection?.entranceSelector ?? definition.domSelectors!.join(","));
+    const scopeSelectors = definitions.map(cmpInventoryScopeSelector);
     const scopeInventory = await readCmpScopeInventory(page, definitions);
     packet.inspectionDiagnostic!.passiveDialogReveal = revealed || scopeInventory.revealed;
     if (scopeInventory.overflow) { packet.limitations.push("control_inventory_overflow"); return finish(); }
@@ -165,6 +201,20 @@ export async function runCmpPreferencesObserver(input: {
       if (oneTrust.truncated) packet.limitations.push("cmp_inventory_bounded");
     }
     const detectedIndex = detected.size === 1 ? scopeInventory.indices.find(index => definitions[index]?.canonicalName === [...detected][0]) : undefined;
+    if (detectedIndex !== undefined && definitions[detectedIndex]?.preferenceInventory === "cookieyes_loaded_configuration.v1" && remaining() > 250) {
+      const loaded = await readCookieYesPreferenceInventory(page);
+      await binding();
+      packet.inspectionDiagnostic!.configuration = { version: "cookieyes_loaded_configuration.v1", status: loaded ? "available" : "unavailable",
+        ...(loaded ? { groupCount: loaded.groupCount, retainedCookieCount: loaded.declarations.length, truncated: loaded.truncated } : {}) };
+      if (loaded) {
+        packet.declarations = loaded.declarations;
+        packet.declarationInventoryComplete = false;
+        packet.checkpoints!.declarations = true;
+        packet.limitations.push("loaded_configuration_not_visibility_proof");
+        if (loaded.truncated) packet.limitations.push("cmp_inventory_bounded");
+        if (loaded.unresolved) packet.limitations.push("cmp_inventory_detail_unresolved");
+      }
+    }
     const borlabs = detectedIndex !== undefined && definitions[detectedIndex]?.preferenceInspection?.kind === "borlabs_v3" && remaining() > 250
       ? await readBorlabsPreferenceInventory(page) : undefined;
     if (borlabs) {
@@ -177,8 +227,14 @@ export async function runCmpPreferencesObserver(input: {
     }
     // Basic visible choices are valuable even when no unique Options control
     // exists. Preserve their own checkpoint before optional deeper inspection.
+    if (detectedIndex !== undefined && definitions[detectedIndex]!.initialOptionalOffCloseObservation &&
+        await page.locator(scopeSelectors[detectedIndex]!).count() !== 1) {
+      packet.support.reason = "cmp_identity_ambiguous";
+      packet.limitations.push("cmp_identity_ambiguous");
+      return finish();
+    }
     if (detectedIndex !== undefined && remaining() > 250) {
-      const initial = await readPreferenceControls(page.locator(scopeSelectors[detectedIndex]!));
+      const initial = await readPreferenceControls(page.locator(scopeSelectors[detectedIndex]!), definitions[detectedIndex]!.preferenceCategoryInventory, definitions[detectedIndex]!.initialOptionalOffCloseObservation?.inputSelector);
       await binding();
       packet.controls = classifyControls(initial.controls, borlabs ?? oneTrust);
       packet.checkpoints!.controls = packet.controls.length > 0;
@@ -195,9 +251,14 @@ export async function runCmpPreferencesObserver(input: {
     for (const definitionIndex of scopeInventory.indices) {
       remaining();
       const definition = definitions[definitionIndex]!;
+      // A passive Close/category recipe is not an Options action recipe. Its
+      // aria-label may contain "cookie settings"; never promote that substring
+      // into permission to close the widget or advance its Next control.
+      if (definition.initialOptionalOffCloseObservation && !definition.preferenceInspection && !definition.preferenceDialogBinding) continue;
       const recipe = definition.preferenceInspection;
       const scope = page.locator(scopeSelectors[definitionIndex]!);
-      const controls = scope.locator(recipe?.controlSelector ?? ['button, [role="button"], input[type="button"]', definition.preferenceDialogBinding?.controlSelector].filter(Boolean).join(","));
+      const controlSelector = recipe?.controlSelector ?? (definition.initialOptionalOffCloseObservation ? definition.preferenceDialogBinding!.controlSelector : undefined) ?? ['button, [role="button"], input[type="button"]', definition.preferenceDialogBinding?.controlSelector].filter(Boolean).join(",");
+      const controls = scope.locator(controlSelector);
       const inventory = await controls.evaluateAll(readCmpOptionsInventory, { registeredSelector: definition.preferenceDialogBinding?.controlSelector });
       if (inventory.overflow) { optionsResolution.overflow = true; packet.limitations.push("control_inventory_overflow"); continue; }
       for (const [index, fields] of inventory.fields.entries()) {
@@ -208,7 +269,7 @@ export async function runCmpPreferencesObserver(input: {
         if (result.intent !== "options" || !result.contextSatisfied || result.matchStrength === "weak") continue;
         optionsResolution.counts[fields.access]++;
         const control = controls.nth(index);
-        if (fields.access === "actionable") matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding, observedOptionsLabel });
+        if (fields.access === "actionable") matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.title ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding, observedOptionsLabel });
       }
     }
     if (matches.length !== 1) {
@@ -255,13 +316,25 @@ export async function runCmpPreferencesObserver(input: {
     const dialogHandle = priorMatches === 1 ? await controlled.elementHandle() : null;
     const beforeVisible = priorMatches === 1 && await controlled.isVisible();
     surfaceBinding.priorVisible = beforeVisible;
-    if (!match.recipe && beforeVisible) return stopBinding("already_visible", "preference_surface_already_visible");
+    const layerSelector = registeredDialog?.layerTransitionSelector;
+    let layerControl: Awaited<ReturnType<Locator["elementHandle"]>> = null;
+    if (layerSelector) {
+      // Bind an already-visible named-CMP dialog before its content transition.
+      // Existing category content is not proof that this action opened it.
+      if (!beforeVisible || !dialogHandle || await controlled.locator(layerSelector).count() !== 0)
+        return stopBinding("already_visible", "preference_surface_already_visible");
+      layerControl = await match.control.elementHandle();
+      if (!layerControl || !await layerControl.evaluate((element, dialog) => Boolean(dialog?.isConnected && dialog.contains(element)), dialogHandle))
+        return stopBinding("parent_unbound", "preference_parent_binding_unavailable");
+      surfaceBinding.mode = "registered_layer";
+    } else if (!match.recipe && beforeVisible) return stopBinding("already_visible", "preference_surface_already_visible");
     surfaceBinding.outcome = "ready";
     await binding();
     const dispatchFields = await match.control.evaluate((element, expected) => {
-      const fields = { label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls"),
+      const fields = { label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), title: element.getAttribute("title"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls"),
         registered: !expected.selector || element.matches(expected.selector),
-        parentBound: !expected.root || Boolean(expected.root.isConnected && expected.root.contains(element)) };
+        parentBound: !expected.root || Boolean(expected.root.isConnected && expected.root.contains(element)),
+        layerBound: !expected.layerControl || Boolean(element === expected.layerControl && expected.layerDialog?.isConnected && expected.layerDialog.contains(element)) };
       let ancestor: Element | null = element, accessible = true;
       const deadline = performance.now() + 50;
       for (let depth = 0; ancestor && depth < 64; depth++) {
@@ -272,14 +345,15 @@ export async function runCmpPreferencesObserver(input: {
         ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
       }
       return { ...fields, accessible: accessible && !ancestor };
-    }, { selector: match.observedOptionsLabel ? match.dialogBinding?.controlSelector : registeredDialog?.controlSelector, root: deferredRootHandle });
+    }, { selector: match.observedOptionsLabel ? match.dialogBinding?.controlSelector : registeredDialog?.controlSelector, root: deferredRootHandle, layerControl, layerDialog: layerControl ? dialogHandle : null });
     const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe || match.observedOptionsLabel && dispatchFields.registered ? "observation" : "action" });
-    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound || !dispatchFields.accessible) throw new Error("preference_control_changed");
+    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound || !dispatchFields.layerBound || !dispatchFields.accessible) throw new Error("preference_control_changed");
     // Opening is optional depth, not permission to consume the entire lane.
     // Share one cap across dispatch, visibility and accessible-name hydration,
     // leaving room to inspect a verified panel and retain earlier checkpoints.
     const openingAllowance = optionalEvidenceAllowance({ remainingMs: remaining(),
-      maximumMs: EVIDENCE_WORK_POLICY.preferences.panelOpeningBudgetMs,
+      maximumMs: Math.min(registeredDialog?.openingBudgetMs ?? EVIDENCE_WORK_POLICY.preferences.panelOpeningBudgetMs,
+        EVIDENCE_WORK_POLICY.preferences.registeredLazyPanelOpeningBudgetMs),
       requiredReserveMs: EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs });
     if (!openingAllowance) return stopBinding("timed_out", "preference_budget_exhausted");
     const openingDeadline = Date.now() + openingAllowance;
@@ -294,6 +368,14 @@ export async function runCmpPreferencesObserver(input: {
       if (page.url() !== config.exactTargetUrl || packet.action.count !== 0) throw new Error("preference_action_not_authorized");
       packet.action.count = 1; packet.action.label = match.label.slice(0, 160);
     });
+    if (layerSelector && layerControl) {
+      // The original Options node must disappear, and the registered category
+      // container must appear inside the exact same retained dialog. No Save,
+      // Accept, Reject, second click, or arbitrary replacement panel is allowed.
+      await layerControl.waitForElementState("hidden", { timeout: openingRemaining() });
+      await controlled.locator(layerSelector).first().waitFor({ state: "visible", timeout: openingRemaining() });
+      if (await controlled.locator(layerSelector).count() !== 1) throw new Error("preference_surface_ambiguous");
+    }
     if (match.recipe) {
       // Borlabs replaces the entrance inside the same dialog. No second click,
       // API opening call or arbitrary newly visible modal can establish binding.
@@ -323,7 +405,10 @@ export async function runCmpPreferencesObserver(input: {
     surfaceBinding.outcome = "opened";
     packet.action.opened = true;
     packet.inspectionDiagnostic!.phase = "preference_inventory";
-    const raw = await readPreferenceControls(controlled);
+    const inventoryDefinition = definitions.find(definition => definition.canonicalName === match.provider);
+    const categoryRecipe = inventoryDefinition?.preferenceCategoryInventory;
+    const raw = await readPreferenceControls(controlled, categoryRecipe, inventoryDefinition?.initialOptionalOffCloseObservation?.inputSelector);
+    if (raw.controls.some(control => control.registeredCategory || control.registeredService)) packet.support.recipeVersion = categoryRecipe!.version;
     await binding();
     packet.controls = classifyControls(raw.controls, borlabs ?? oneTrust);
     packet.checkpoints!.controls = true;
@@ -331,7 +416,9 @@ export async function runCmpPreferencesObserver(input: {
     // Visible toggles establish presence, not completeness of collapsed tabs,
     // lazy service lists, closed shadow roots, or inaccessible frames.
     const incompleteSections = match.recipe ? 1 : await controlled.locator('iframe, [aria-expanded="false"], details:not([open]), [hidden], [role="tab"][aria-selected="false"]').count();
-    packet.controlInventoryComplete = !match.recipe && !raw.overflow && incompleteSections === 0 && raw.controls.every(control => control.visible) && packet.controls.every(control => control.kind !== "unclassified");
+    const documentReady = await page.evaluate(() => document.readyState !== "loading");
+    if (!documentReady) packet.limitations.push("preference_document_loading");
+    packet.controlInventoryComplete = documentReady && !match.recipe && !raw.overflow && incompleteSections === 0 && raw.controls.every(control => control.visible) && packet.controls.every(control => control.kind !== "unclassified");
     if (!packet.controlInventoryComplete) packet.limitations.push(raw.overflow ? "control_inventory_overflow" : match.recipe ? "bounded_vendor_preference_inventory" : "deeper_preference_sections_not_opened");
     const tables = borlabs ? [] : await controlled.locator("table:visible").evaluateAll(nodes => nodes.slice(0, 8).map(table => ({
       headers: [...table.querySelectorAll("thead th")].map(th => (th.textContent ?? "").trim().slice(0, 120)),
@@ -430,8 +517,9 @@ export async function readBorlabsPreferenceInventory(page: Page) {
   });
 }
 
-export async function readPreferenceControls(controlled: Locator) {
-  return await controlled.locator('input[type="checkbox"], [role="switch"], [role="checkbox"]').evaluateAll(nodes => ({
+export async function readPreferenceControls(controlled: Locator, recipe?: KnownCmpDefinition["preferenceCategoryInventory"], inputSelector?: string) {
+  const selector = 'input[type="checkbox"], [role="switch"], [role="checkbox"]';
+  return await controlled.locator(inputSelector ? `:is(${selector}):is(${inputSelector})` : selector).evaluateAll((nodes, recipe) => ({
       overflow: nodes.length > 100,
       controls: nodes.slice(0, 100).map(node => {
         const input = node as HTMLInputElement;
@@ -459,18 +547,38 @@ export async function readPreferenceControls(controlled: Locator) {
         });
         const group = node.closest("fieldset, [role=group]");
         const groupLabel = group?.getAttribute("aria-label") ?? group?.querySelector("legend")?.textContent ?? "";
+        // A named-CMP structural association is stronger than guessing from
+        // labels such as "Enable Others". Require one category title and one
+        // switch within the same category and verified dialog scope.
+        const dialog = recipe ? node.closest(recipe.dialogSelector) : null;
+        const category = recipe ? node.closest(recipe.categorySelector) : null;
+        const titles = category && recipe ? category.querySelectorAll(recipe.titleSelector) : [];
+        const toggles = category && recipe ? category.querySelectorAll(recipe.toggleSelector) : [];
+        const registeredControl = Boolean(recipe && dialog && category && dialog.contains(category) &&
+          node.matches(recipe.toggleSelector) && titles.length === 1 && titles[0]!.textContent?.trim() &&
+          titles[0]!.getBoundingClientRect().width > 0 && getComputedStyle(titles[0]!).visibility === "visible" &&
+          toggles.length === 1 && toggles[0] === node);
+        const serviceLinks = category && recipe?.serviceLinkSelector ? category.querySelectorAll(recipe.serviceLinkSelector) : [];
+        const registeredService = Boolean(registeredControl && recipe?.kind === "service" && serviceLinks.length === 1 &&
+          serviceLinks[0]!.getAttribute("aria-label") === titles[0]!.textContent!.trim() + recipe.serviceLinkLabelSuffix &&
+          /^https?:/.test((serviceLinks[0] as HTMLAnchorElement).href));
+        const registeredCategory = registeredControl && recipe?.kind !== "service";
         const style = getComputedStyle(node);
-        return { label, groupLabel: groupLabel.trim().slice(0, 160), visible: labelledTargetVisible || box.width > 0 && box.height > 0 && style.visibility !== "hidden" && Number(style.opacity) > 0,
+        return { registeredCategory, registeredService, label: registeredService ? titles[0]!.textContent!.trim().slice(0, 240) : label || (registeredCategory ? titles[0]!.textContent!.trim().slice(0, 240) : ""), groupLabel: groupLabel.trim().slice(0, 160), visible: labelledTargetVisible || box.width > 0 && box.height > 0 && style.visibility !== "hidden" && Number(style.opacity) > 0,
           enabled: !node.matches(":disabled") && node.getAttribute("aria-disabled") !== "true", checked: node instanceof HTMLInputElement ? input.checked : node.getAttribute("aria-checked") === "true" };
       }),
-    }));
+    }), recipe);
 }
 
 export function classifyControls(controls: Awaited<ReturnType<typeof readPreferenceControls>>["controls"], inventory?: { categories: string[]; services: string[] }) {
-  return controls.filter(control => control.visible).map(({ label, groupLabel, enabled, checked }) => ({
-    label, enabled, checked,
-    kind: inventory?.categories.includes(label) && !inventory.services.includes(label) ? "category" as const
-      : inventory?.services.includes(label) && !inventory.categories.includes(label) ? "service" as const
-      : classifyConsentPreferenceControl({ label, groupLabel }),
-  }));
+  return controls.filter(control => control.visible).map(({ label, groupLabel, enabled, checked, registeredCategory, registeredService }) => {
+    const classified = classifyConsentPreferenceControl({ label, groupLabel });
+    return {
+      label, enabled, checked,
+      kind: registeredService ? "service" as const : registeredCategory && classified !== "service" ? "category" as const
+        : inventory?.categories.includes(label) && !inventory.services.includes(label) ? "category" as const
+        : inventory?.services.includes(label) && !inventory.categories.includes(label) ? "service" as const
+        : classified,
+    };
+  });
 }

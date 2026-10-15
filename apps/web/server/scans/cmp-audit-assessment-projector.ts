@@ -12,7 +12,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (!outcome || outcome.status !== "limited" || !outcome.limitationCode) return undefined;
     // Coordinator outcomes are coverage telemetry, never substituted browser evidence.
     const fallback = cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v8", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
+      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v9", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: outcome.limitationCode },
       rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? (id === "duration" ? "No verified CMP cookie expiry was retained." : "Preference evidence was not retained; this criterion could not be assessed."), evidenceRefs: [] })) });
     const expiries = applyClientFacts(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs }), fallback.rows, observations);
@@ -40,7 +40,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   const privacyUsable = usable || (partial && checkpoint?.privacyLinks);
   const timeout = evidence.limitations.some(reason => reason === "preference_budget_exhausted" || reason === "preference_operation_timed_out");
   set("categories", "not_assessed", timeout ? "Inspection timed out before selectable category controls could be verified." : "Selectable category controls were not verified in the inspected surface.", []);
-  set("services", "not_assessed", timeout && !declarationsUsable && !controlsUsable ? "Preference inspection timed out before individual-service information could be retained." : evidence.limitations.includes("deeper_preference_sections_not_opened") ? "Service names were not captured. Cookie names were retained, but deeper service sections were not inspected." : "No individual service names were retained by this CMP inspection.", []);
+  set("services", "not_assessed", timeout && !declarationsUsable && !controlsUsable ? "Preference inspection timed out before individual-service information could be retained." : evidence.limitations.includes("deeper_preference_sections_not_opened") ? "Service names were not captured; deeper preference sections were not inspected." : "No individual service names were retained by this CMP inspection.", []);
   set("privacy_access", "not_assessed", timeout && !privacyUsable ? "Preference inspection timed out before pre-choice privacy-link reachability could be verified." : "A privacy-policy link was not verified as reachable before consent interaction.", []);
   set("consent_record", "not_assessed", "No browser consent record was retained after a completed choice check.", []);
   set("duration", "not_assessed", "A bound consent-cookie expiry was not captured.", []);
@@ -67,11 +67,15 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v8", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v9", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
 function preferenceInspectionDetail(evidence: CmpPreferencesEvidence): string {
+  if (evidence.support.reason === "preference_page_access_limited") {
+    const status = evidence.inspectionDiagnostic?.navigationHttpStatus;
+    return `The preference visit received${status ? ` HTTP ${status}` : " an access error"}; CMP preferences could not be inspected.`;
+  }
   const diagnostic = evidence.inspectionDiagnostic?.optionsResolution;
   if (evidence.support.reason !== "unique_actionable_options_not_resolved" || !diagnostic || diagnostic.overflow)
     return "This check depends on the incomplete preference inspection.";
@@ -310,6 +314,23 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;
 type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints">;
+
+/** A document-settling limitation does not erase an already retained cookie
+ * snapshot. It permits a partial name comparison only, never complete coverage,
+ * a missing-declaration finding or a score effect. Other failures stay closed. */
+function partialCookieSnapshot(bundle: CanonicalEvidenceBundle) {
+  const coverage=bundle.runtimeCoverage, lane=bundle.scanLaneRuns?.find(run=>run.laneId==="runtime_evidence");
+  if (coverage?.coverageStatus!=="limited_partial" ||
+      !coverage.limitationKeys.includes("runtime_page_inventory_document_unsettled") ||
+      coverage.limitationKeys.some(key=>!["pre_consent_runtime_partial","runtime_page_inventory_document_unsettled"].includes(key)) ||
+      lane?.accessOutcome!=="representative_page" || lane.challengeDetected ||
+      !["success","degraded"].includes(lane.executionOutcome) || lane.firstEffectiveUrl!==bundle.url ||
+      typeof lane.firstHttpStatus!=="number" || lane.firstHttpStatus>=400 || lane.firstHttpStatus<200) return undefined;
+  const end=Date.parse(bundle.completedAt)-Date.parse(bundle.startedAt);
+  const snapshots=(bundle.cookieSnapshots??[]).filter(snapshot=>snapshot.consentStateAtTime==="pre_consent" &&
+    Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs>=0 && snapshot.capturedAtMs<=end);
+  return snapshots.length ? snapshots : undefined;
+}
 // Only typed, document-bound inspection reasons explain failure. A hit-test
 // miss does not identify what covered the link or establish vendor support.
 function privacyLinkAccessDetail(links: NonNullable<CanonicalEvidenceBundle["cmpPreferencesEvidence"]>["privacyLinks"]): string {
@@ -389,7 +410,9 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
   if (privacyUsable) {
     const reachable = evidence.privacyLinks.some(link => link.hitTargetBeforeAction);
     set("privacy_access", reachable ? "observed" : "not_assessed", reachable
-      ? "A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion."
+      ? evidence.privacyLinks.some(link => link.hitTargetBeforeAction && link.access?.scroll)
+        ? "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion."
+        : "A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion."
       : privacyLinkAccessDetail(evidence.privacyLinks), ["CmpPreferencesEvidencePacket.json"]);
   }
   if (declarationsUsable) {
@@ -418,6 +441,17 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     const captured = new Set([...(bundle.cookieEvents ?? []).map(cookie => cookie.cookieName), ...acceptedCookies.map(item => item.name)]);
     const comparable = comparablePatterns.length > 0;
     const snapshots = bundle.cookieSnapshots?.filter(snapshot => snapshot.consentStateAtTime === "pre_consent");
+    const partialSnapshots = partialCookieSnapshot(bundle);
+    if (comparable && partialSnapshots) {
+      const names=[...new Set(partialSnapshots.flatMap(snapshot=>snapshot.cookies.map(cookie=>cookie.name)))];
+      const patterns=[...new Set(comparablePatterns.map(row=>row.name))];
+      const matched=patterns.filter(pattern=>names.some(name=>matchesCookieDeclaration(pattern,name)));
+      set("declared_not_found","partially_assessed",`${matched.length} of ${patterns.length} retained declaration patterns matched the saved pre-consent cookie snapshot. Page loading did not settle; a complete comparison was not assessed.`,["CmpPreferencesEvidencePacket.json","CanonicalEvidenceBundle.json"]);
+      if (names.length) {
+        set("found_not_declared","partially_assessed","Captured cookie names were compared with the retained declaration sample. Page loading did not settle; this does not establish missing declarations.",["CmpPreferencesEvidencePacket.json","CanonicalEvidenceBundle.json"]);
+        rows.find(row=>row.id==="found_not_declared")!.inventory={cookies:names.slice(0,100).map(name=>({name,matchedPattern:comparablePatterns.find(row=>matchesCookieDeclaration(row.name,name))?.name??null,observedIn:["before_choice" as const]}))};
+      }
+    }
     if (comparable && snapshots?.length && bundle.runtimeCoverage?.coverageStatus === "usable") {
       const before = new Set(snapshots.flatMap(snapshot => snapshot.cookies.map(cookie => cookie.name)));
       const patterns = [...new Set(comparablePatterns.map(row => row.name))];
@@ -502,6 +536,6 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, assign, assessment.rows, observations.filter(capture => capture.networkCompleted)); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v4", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v5", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

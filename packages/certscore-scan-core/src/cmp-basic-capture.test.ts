@@ -70,3 +70,55 @@ test("passive Drupal identity uses the existing scope read and rejects getters a
     assert.equal(await captureCmpBasicEvidence({ ...input, readBinding: () => ({ url: page.url(), token: ++reads === 1 ? "loader-1" : "loader-2" }) }), undefined);
   } finally { await browser.close(); }
 });
+
+
+test("passive inventory shares registered category identities and preserves ambiguous labels", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const input = { page, scanId: "category-fixture", targetUrl: "https://example.test/", scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
+    for (const ambiguous of [false, true]) {
+      await page.setContent(`<div class="cky-consent-container"><section class="cky-preference-center" data-cky-tag="detail" role="dialog"><div class="cky-accordion">
+        <h3 data-cky-tag="detail-category-title">Others</h3>${ambiguous ? '<h3 data-cky-tag="detail-category-title">Another category</h3>' : ''}
+        <div data-cky-tag="detail-category-toggle"><input type="checkbox" role="switch" aria-label="Enable Others"></div>
+      </div></section></div>`);
+      const packet = await captureCmpBasicEvidence(input);
+      assert.equal(packet?.provider, "CookieYes");
+      assert.equal(packet?.controls[0]?.kind, ambiguous ? "unclassified" : "category");
+      assert.equal(packet?.controls[0]?.checked, false);
+      assert.deepEqual(packet?.declarations, []);
+      assert.ok(packet?.limitations.includes("declaration_inventory_not_complete"));
+    }
+  } finally { await browser.close(); }
+});
+
+test("passive Axeptio inventory uses its exact registered widget without treating service labels as categories", async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const panel = `<section data-testid="widget-container"><label>Google Analytics 4<input type="checkbox"></label><button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button><a href="https://example.test/privacy">Privacy policy</a></section>`;
+    const input = { page, scanId: "axeptio-fixture", targetUrl: "https://example.test/", scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
+    await page.setContent(panel);
+    const packet = await captureCmpBasicEvidence(input);
+    assert.equal(packet?.provider, "Axeptio");
+    assert.deepEqual(packet?.controls, [{ label: "Google Analytics 4", kind: "unclassified", enabled: true, checked: false }]);
+    assert.equal(packet?.privacyLinks[0]?.hitTargetBeforeAction, true);
+    await page.setContent(panel + panel);
+    assert.equal(await captureCmpBasicEvidence(input), undefined, "duplicate widget binding stays unknown");
+    await page.setContent(panel.replace('aria-label="Close cookie settings"', 'aria-label="Unrelated Close"'));
+    assert.equal(await captureCmpBasicEvidence(input), undefined, "wrong Close label cannot bind the widget");
+  } finally { await browser.close(); }
+});
+
+
+test("a known SDK without a mounted CMP keeps readiness but never supplies an actionable scope", async()=>{
+  const {readCmpScopeInventory}=await import("./cmp-scope-inventory.js");
+  const {KNOWN_CMP_REGISTRY}=await import("@website-signal-risk-scanner/shared");
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();await page.route("https://static.axept.io/**",r=>r.fulfill({body:"",contentType:"application/javascript"}));
+    await page.setContent('<script src="https://static.axept.io/sdk.js"></script><main>Public page</main>');
+    const result=await readCmpScopeInventory(page,KNOWN_CMP_REGISTRY.filter(d=>d.domSelectors?.length||d.preferenceScopeSelector));
+    assert.equal(result.runtimeIdentified,true);assert.deepEqual(result.indices,[]);
+  }finally{await browser.close();}
+});

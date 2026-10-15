@@ -537,3 +537,196 @@ test("Osano registered widget opens exactly once; hidden, covered, inactive and 
     }
   }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });
+
+test("CookieYes category structure recognizes labelled switches without inventing cookie declarations or service identity", { timeout: 30_000 }, async () => {
+  let mode = "valid";
+  const actions: string[] = [];
+  const server = createServer((req, res) => {
+    if (req.url?.startsWith("/action/")) { actions.push(req.url); res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    const categories = ["Functional", "Analytics", "Advertisement", "Others"].map((name, index) => `<div class="cky-accordion">
+      <button data-cky-tag="detail-category-title" aria-expanded="false">${name}</button>
+      ${mode === "ambiguous" ? '<button data-cky-tag="detail-category-title">Duplicate</button>' : ''}
+      <div data-cky-tag="detail-category-toggle" ${mode === "hidden" ? 'hidden' : ''}><input type="checkbox" role="switch" aria-label="Enable ${name}" id="switch${index}"></div>
+      <div class="cky-accordion-body"></div></div>`).join("");
+    res.end(`<div class="cky-consent-container"><button id="settings" aria-controls="preferences">Settings</button></div>
+      <section id="preferences" class="cky-preference-center" data-cky-tag="detail" role="dialog" hidden>${categories}
+      <fieldset><legend>Individual services</legend><label><input type="checkbox">Google Analytics</label></fieldset>
+      <button onclick="fetch('/action/save')">Save my preferences</button><button onclick="fetch('/action/accept')">Accept all</button><button onclick="fetch('/action/reject')">Reject optional</button></section>
+      <script>settings.onclick=()=>{fetch('/action/options');preferences.hidden=false;};</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (mode of ["valid", "ambiguous", "hidden"]) {
+      actions.length = 0;
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: `cookieyes-${mode}`, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.equal(packet.status, "completed", JSON.stringify(packet));
+      assert.deepEqual(actions, ["/action/options"]);
+      assert.equal(packet.controls.filter(row => row.kind === "category").length, mode === "valid" ? 4 : 0);
+      assert.equal(packet.controls.filter(row => row.kind === "service").length, 1);
+      assert.ok(packet.controls.every(row => row.checked === false));
+      assert.deepEqual(packet.declarations, []);
+      assert.equal(packet.declarationInventoryComplete, false);
+      assert.equal(packet.controlInventoryComplete, false);
+      if (mode === "valid") assert.equal(packet.support.recipeVersion, "cookieyes_preference_categories.v1");
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("visible verified preferences do not wait for unrelated parser-blocking scripts", { timeout: 10_000 }, async () => {
+  const actions: string[] = [];
+  const server = createServer((req, res) => {
+    if (req.url === "/slow.js") return; // Deliberately never reaches DOMContentLoaded.
+    if (req.url?.startsWith("/action/")) { actions.push(req.url); res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<div id="onetrust-banner-sdk"><button id="settings" aria-controls="preferences">Cookie settings</button></div>
+      <section id="preferences" hidden><label><input type="checkbox">Analytics</label><button onclick="fetch('/action/save')">Save preferences</button></section>
+      <script>settings.onclick=()=>{fetch('/action/options');preferences.hidden=false;};</script><script src="/slow.js"></script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const memory = process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;
+  process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "10240";
+  try {
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "loading-cmp", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.equal(packet.status, "completed", JSON.stringify(packet));
+    assert.equal(packet.action.opened, true); assert.deepEqual(actions, ["/action/options"]);
+    assert.equal(packet.controls[0]?.kind, "category");
+    assert.equal(packet.controlInventoryComplete, false, "loading documents cannot prove inventory completeness");
+    assert.ok(packet.limitations.includes("preference_document_loading"));
+  } finally {
+    if (memory === undefined) delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = memory;
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test("HTTP access denials retain their status and never inspect or click a CMP-looking error page", { timeout: 10_000 }, async () => {
+  let status = 403; const actions: string[] = [];
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { actions.push(req.url); res.end(); return; }
+    res.statusCode = status; res.setHeader("Content-Type", "text/html");
+    res.end('<div id="onetrust-banner-sdk"><button aria-controls="prefs" onclick="fetch(\'/clicked\')">Cookie settings</button></div><section id="prefs"><label><input type="checkbox">Analytics</label></section>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (status of [403, 429, 503]) {
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: `access-${status}`, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.equal(packet.status, "limited"); assert.equal(packet.support.reason, "preference_page_access_limited");
+      assert.equal(packet.inspectionDiagnostic?.navigationHttpStatus, status);
+      assert.equal(packet.action.count, 0); assert.deepEqual(packet.controls, []); assert.deepEqual(packet.declarations, []);
+      assert.equal(packet.controlInventoryComplete, false); assert.equal(packet.declarationInventoryComplete, false);
+    }
+    assert.deepEqual(actions, []);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("challenge URL changes cannot mask the initial HTTP denial or retain challenge tokens", { timeout: 10_000 }, async () => {
+  let status = 403; const actions: string[] = [];
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { actions.push(req.url); res.end(); return; }
+    res.statusCode = status; res.setHeader("Content-Type", "text/html");
+    res.end(`<script>history.replaceState(null,'','/?__cf_chl_rt_tk=private-fixture-token');</script>
+      <div id="onetrust-banner-sdk"><button aria-controls="prefs" onclick="fetch('/clicked')">Cookie settings</button></div><section id="prefs" hidden><label><input type="checkbox">Analytics</label></section>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (status of [403, 429]) {
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: `challenge-${status}`, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.equal(packet.status, "limited"); assert.equal(packet.support.reason, "preference_page_access_limited");
+      assert.equal(packet.inspectionDiagnostic?.navigationHttpStatus, status);
+      assert.equal(packet.finalUrl, null); assert.equal(packet.documentToken, null);
+      assert.equal(packet.checkpoints, undefined); assert.deepEqual(packet.controls, []); assert.equal(packet.action.count, 0);
+      assert.ok(!JSON.stringify(packet).includes("private-fixture-token"));
+    }
+    assert.deepEqual(actions, []);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("DataGrail opens one category layer inside the same shadow dialog without changing consent", { timeout: 20_000 }, async () => {
+  let mode = "valid"; const actions: string[] = [];
+  const server = createServer((req, res) => {
+    if (req.url?.startsWith('/action/')) { actions.push(req.url); res.end(); return; }
+    res.setHeader('Content-Type', 'text/html');
+    const categories = `<div class="dg-main-content-policies">${['Necessary','Functional','Analytics','Marketing'].map((name, i) => `<div class="dg-main-content-policy-option"><div class="dg-main-content-policy-option-heading"><strong>${name} Cookies</strong><span class="dg-main-content-policy-option-input"><input type="checkbox" aria-label="${name} Cookies" ${i === 0 ? 'disabled checked' : ''}></span></div><button aria-expanded="false">Details</button></div>`).join('')}</div>`;
+    res.end(`<aside class="dg-consent-banner"></aside><script>
+      const root=document.querySelector('aside').attachShadow({mode:'open'});
+      root.innerHTML='<div class="dg-app" role="dialog" aria-label="Cookie preferences"><button class="dg-button open_layer">${mode === 'wrong-label' ? 'Accept All' : 'Customize My Choices'}</button></div>';
+      const panel=root.querySelector('.dg-app');
+      const options=panel.querySelector('button');
+      ${mode === 'duplicate' ? "panel.append(options.cloneNode(true));" : ''}
+      options.onclick=()=>{fetch('/action/options');${mode === 'no-transition' ? '' : mode === 'replacement' ? `panel.outerHTML=${JSON.stringify(`<div class="dg-app" role="dialog">${categories}</div>`)};` : `panel.innerHTML=${JSON.stringify(categories+'<button class="dg-button custom">Save My Choices</button><button>Accept All</button><button>Reject All</button>')};panel.querySelectorAll('button').forEach(b=>b.onclick=()=>fetch('/action/unexpected'));`}};
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address=server.address(); assert.ok(address && typeof address !== 'string');
+  try {
+    for (mode of ['valid','replacement','duplicate','wrong-label','no-transition']) {
+      actions.length=0;
+      const packet=await runCmpPreferencesObserver({parentDispatchSha256:'a'.repeat(64),config:{policyVersion:'bounded_cmp_preferences.v1',enabled:true,scanId:`datagrail-${mode}`,exactTargetUrl:`http://127.0.0.1:${address.port}/`}});
+      assert.equal(packet.support.provider,'DataGrail');
+      if (mode==='valid') {
+        assert.equal(packet.status,'completed',JSON.stringify(packet)); assert.equal(packet.action.opened,true);
+        assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.mode,'registered_layer');
+        assert.equal(packet.support.recipeVersion,'datagrail_preference_categories.v1');
+        assert.equal(packet.controls.filter(c=>c.kind==='category' && c.enabled).length,3);
+        assert.equal(packet.controls.filter(c=>c.kind==='category' && !c.enabled && c.checked).length,1);
+        assert.ok(packet.controls.filter(c=>c.enabled).every(c=>c.checked===false));
+        assert.deepEqual(packet.declarations,[]); assert.equal(packet.declarationInventoryComplete,false);
+        assert.equal(packet.controlInventoryComplete,false);
+      } else { assert.equal(packet.action.opened,false); assert.equal(packet.controls.length,0); }
+      assert.deepEqual(actions,['duplicate','wrong-label'].includes(mode)?[]:['/action/options']);
+    }
+  } finally { await new Promise<void>(resolve => server.close(()=>resolve())); }
+});
+
+
+test("registered CMP root buttons establish readiness without authorizing Close or Next", { timeout: 12_000 }, async () => {
+  let ambiguous = false;
+  const server = createServer((_req, res) => {
+    res.setHeader("content-type", "text/html");
+    const panel = `<section data-testid="widget-container"><label>Google Analytics 4<input type="checkbox"></label><button id="axeptio_btn_close" aria-label="Close cookie settings" aria-controls="preferences">Close</button><button id="axeptio_btn_next">Next</button></section>`;
+    res.end(panel + (ambiguous ? panel : "") + '<section id="preferences" hidden><label>Analytics<input type="checkbox"></label></section>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  const memory = process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;
+  process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = "10240";
+  try {
+    for (ambiguous of [false, true]) {
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "root-control", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      assert.equal(packet.action.count, 0);
+      assert.equal(packet.support.provider, "Axeptio");
+      assert.equal(packet.support.reason, ambiguous ? "cmp_identity_ambiguous" : "unique_actionable_options_not_resolved");
+      assert.equal(packet.controls.length, ambiguous ? 0 : 1);
+      if (!ambiguous) assert.equal(packet.controls[0]?.kind, "unclassified", "service label is not a category declaration");
+      assert.equal(packet.controlInventoryComplete, false);
+    }
+  } finally {
+    if (memory === undefined) delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE; else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE = memory;
+    server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
+test("preference privacy hit tests skip unrelated navigation links", { timeout: 10_000 }, async () => {
+  const server = createServer((_req, res) => {
+    res.setHeader("content-type", "text/html");
+    res.end(`${Array.from({length: 200}, (_, i) => `<a href="/nav${i}">Navigation ${i}</a>`).join('')}
+      <section id="onetrust-banner-sdk"><button>Accept all</button><a style="position:fixed;top:10px;right:10px;z-index:10;background:white" href="/privacy">Privacy policy</a></section>
+      <script>
+      // Deterministic proof that geometry is never spent on unrelated links.
+      document.querySelectorAll('a').forEach(a=>{if(a.textContent.startsWith('Navigation'))a.getClientRects=()=>{throw Error('Unrelated geometry read');};});
+      </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "privacy-priority", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.equal(packet.checkpoints?.privacyLinks, true);
+    assert.equal(packet.privacyLinks.length, 1);
+    assert.equal(packet.privacyLinks[0]?.access?.outcome, "reachable");
+    assert.equal(packet.action.count, 0);
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
+});

@@ -16,6 +16,62 @@ function bundle() {
   } as unknown as CanonicalEvidenceBundle;
 }
 
+test("passive CookieYes configuration survives preference cancellation without inventing purposes, services or completeness", () => {
+  const input=bundle();delete input.cmpPreferencesEvidence;
+  input.completedAt="2026-10-13T00:00:12.000Z";
+  input.cmpPreferenceLaneOutcome={status:"limited",startedAt:input.startedAt,completedAt:input.completedAt,limitationCode:"preference_inspection_cancelled"};
+  input.domSnapshots=[{url:input.url,capturedAtMs:100,consentStateAtTime:"pre_consent",documentIdentity:{token:"basic-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+  input.cookieSnapshots=[{consentStateAtTime:"pre_consent",cookies:[{name:"_ga"}]}] as CanonicalEvidenceBundle["cookieSnapshots"];
+  input.cookieEvents=[{cookieName:"_ga"},{cookieName:"unlisted"}] as CanonicalEvidenceBundle["cookieEvents"];
+  input.cmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v1",sourceLane:"consent_proof",scanId:input.scanId,targetUrl:input.url,documentUrl:input.url,documentToken:"basic-loader",capturedAtMs:100,provider:"CookieYes",controls:[],privacyLinks:[],serviceNames:[],
+    declarations:[{name:"_ga",purpose:"Audience measurement",duration:"2 years",source:"cmp_api_inventory"},{name:"unknown",purpose:"",duration:"",source:"cmp_api_inventory"}],
+    limitations:["passive_first_layer_only","declaration_inventory_not_complete","cookieyes_loaded_configuration.v1","loaded_configuration_not_visibility_proof"]};
+  const before=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row=>row.id==="declared_not_found")?.status,"observed");
+  assert.equal(audit.rows.find(row=>row.id==="cookie_information")?.status,"partially_assessed");
+  assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.status,"partially_assessed");
+  assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.cookieComparison?.declarationInventoryComplete,false);
+  assert.ok(audit.rows.find(row=>row.id==="services")?.status!=="observed");
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:assessment},reviewFindingCandidates:[],validationFindings:[]});
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(report.rows.find(row=>row.id==="declared_not_found")?.status,"Observed");
+  assert.equal(report.rows.find(row=>row.id==="cookie_information")?.supportingEvidence?.inventory?.declarations?.[1]?.purpose,"");
+  assert.ok(concerns.filter(c=>c.originKey.startsWith("consent.cmp_audit.")).every(c=>!c.scoreEffects?.length));
+  assert.deepEqual(input,before);
+  input.cmpBasicEvidence.documentToken="stale";
+  assert.equal(deriveCmpAuditAssessment(input)?.rows.find(row=>row.id==="declared_not_found")?.status,"incomplete");
+});
+
+test("document-unsettled snapshots support only partial CMP comparison, with access and capture failures closed", () => {
+  const input=bundle();input.completedAt="2026-10-13T00:00:10.000Z";
+  input.runtimeCoverage={...input.runtimeCoverage!,coverageStatus:"limited_partial",limitationKeys:["pre_consent_runtime_partial","runtime_page_inventory_document_unsettled"]};
+  input.scanLaneRuns=[{laneId:"runtime_evidence",accessOutcome:"representative_page",executionOutcome:"degraded",challengeDetected:false,firstHttpStatus:200,firstEffectiveUrl:input.url}] as CanonicalEvidenceBundle["scanLaneRuns"];
+  input.cookieSnapshots=[{capturedAtMs:5000,consentStateAtTime:"pre_consent",cookies:[{name:"_ga"},{name:"other"}]}] as CanonicalEvidenceBundle["cookieSnapshots"];
+  const before=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  for(const id of ["declared_not_found","found_not_declared"])assert.equal(audit.rows.find(row=>row.id===id)?.status,"partially_assessed");
+  assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.cookieComparison,undefined,"No complete-inventory review eligibility");
+  assert.deepEqual(audit.rows.find(row=>row.id==="found_not_declared")?.inventory?.cookies,[{name:"_ga",matchedPattern:"_ga",observedIn:["before_choice"]},{name:"other",matchedPattern:null,observedIn:["before_choice"]}]);
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:assessment},reviewFindingCandidates:[],validationFindings:[]});
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(report.rows.find(row=>row.id==="declared_not_found")?.status,"Partially assessed");
+  assert.ok(concerns.filter(c=>c.originKey.startsWith("consent.cmp_audit.")).every(c=>!c.scoreEffects?.length));
+  assert.deepEqual(input,before);
+  for(const mutate of [
+    (b:CanonicalEvidenceBundle)=>{b.runtimeCoverage!.limitationKeys.push("navigation_failed")},
+    (b:CanonicalEvidenceBundle)=>{b.scanLaneRuns![0]!.firstHttpStatus=403},
+    (b:CanonicalEvidenceBundle)=>{b.scanLaneRuns![0]!.challengeDetected=true},
+    (b:CanonicalEvidenceBundle)=>{b.scanLaneRuns![0]!.firstEffectiveUrl="https://other.test/"},
+    (b:CanonicalEvidenceBundle)=>{b.scanLaneRuns=[]},
+    (b:CanonicalEvidenceBundle)=>{b.cookieSnapshots![0]!.capturedAtMs=11000},
+    (b:CanonicalEvidenceBundle)=>{b.cookieSnapshots=[]},
+  ]){
+    const failed=structuredClone(input);mutate(failed);
+    assert.equal(deriveCmpAuditAssessment(failed)!.rows.find(row=>row.id==="declared_not_found")?.status,"not_assessed");
+  }
+});
+
 test("verified preferences persist and reach checklist results only through concern policy, without scoring", () => {
   const audit = deriveCmpAuditAssessment(bundle())!;
   assert.equal(audit.rows.find(row => row.id === "categories")?.status, "observed");
@@ -1069,4 +1125,64 @@ test("document-bound occluded controls explain incomplete prominence without cre
  assert.equal(row.status,"Incomplete");assert.match(row.detail!,/covered/);assert.ok(!row.deductionPoints);
  const foreign=structuredClone(geometry);foreign.documentIdentity!.token="wrong-loader";
  assert.equal(deriveCmpAuditAssessment(input,foreign as unknown as Record<string,unknown>)!.rows.find(row=>row.id==="prominence")!.status,"not_assessed");
+});
+
+test("CookieYes structural categories survive canonical projection without completing an empty declaration inventory", () => {
+  const input = bundle();
+  const packet = input.cmpPreferencesEvidence!;
+  packet.support = { state: "partial", provider: "CookieYes", recipeVersion: "cookieyes_preference_categories.v1", reason: "bounded_visible_preference_inspection" };
+  packet.controls = ["Functional", "Analytics", "Advertisement", "Others"].map(name => ({ label: `Enable ${name}`, kind: "category", enabled: true, checked: false }));
+  packet.controlInventoryComplete = false;
+  packet.declarations = [];
+  packet.declarationInventoryComplete = false;
+  packet.limitations = ["deeper_preference_sections_not_opened"];
+  const audit = deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row => row.id === "categories")?.status, "observed");
+  for (const id of ["services", "cookie_information", "declared_not_found", "found_not_declared"])
+    assert.equal(audit.rows.find(row => row.id === id)?.status, "not_assessed");
+  assert.ok(!audit.rows.find(row => row.id === "services")!.detail.includes("Cookie names were retained"));
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const artifacts = withPersistedFirstLayerConsentEvidence({ consentControlAssessment: assessment }, { consent_control_assessment: assessment })!;
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: artifacts, reviewFindingCandidates: [], validationFindings: [] });
+  const result = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  assert.equal(result.rows.find(row => row.id === "categories")?.status, "Observed");
+  assert.ok(concerns.filter(row => row.originKey.startsWith("consent.cmp_audit.")).every(row => !row.scoreEffects?.length));
+});
+
+test("access-denied preference evidence remains an explicit score-neutral limitation through projection", () => {
+  const input = bundle(), packet = input.cmpPreferencesEvidence!;
+  Object.assign(packet, { status: "limited", finalUrl: null, documentToken: null, controls: [], declarations: [], privacyLinks: [], controlInventoryComplete: false, declarationInventoryComplete: false,
+    action: { count: 0, intent: "options", label: null, opened: false },
+    support: { state: "unknown", provider: null, recipeVersion: null, reason: "preference_page_access_limited" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v4", budgetMs: 17000, phase: "navigation", navigationHttpStatus: 403 },
+    limitations: ["preference_page_access_limited", "http_status_403"] });
+  const audit = deriveCmpAuditAssessment(input)!;
+  const row = audit.rows.find(row => row.id === "categories")!;
+  assert.equal(row.status, "incomplete"); assert.match(row.detail, /HTTP 403/);
+  assert.ok(audit.rows.every(row => !["not_observed", "feature_not_supported"].includes(row.status)));
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consent_control_assessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
+  const result = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });
+  assert.equal(result.rows.find(row => row.id === "categories")?.status, "Incomplete");
+  assert.match(result.rows.find(row => row.id === "categories")!.detail!, /HTTP 403/);
+  assert.ok(concerns.filter(row => row.originKey.startsWith("consent.cmp_audit.")).every(row => !row.scoreEffects?.length));
+});
+
+test("scrolled privacy evidence remains factual, source-bound and score-neutral through canonical projection", () => {
+  const input = bundle();
+  input.cmpPreferencesEvidence!.privacyLinks = [{ url: 'https://example.com/privacy', hitTargetBeforeAction: true,
+    access: {version:'privacy_link_access.v2',outcome:'reachable',scroll:{version:'privacy_link_scroll.v1',initialOutcome:'outside_viewport',beforeY:0,inspectedY:1800,restored:true}} }];
+  const audit = deriveCmpAuditAssessment(input)!;
+  const assessment = consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const artifacts=withPersistedFirstLayerConsentEvidence({consentControlAssessment:assessment},{consent_control_assessment:assessment})!;
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:artifacts,reviewFindingCandidates:[],validationFindings:[]});
+  const result=projectCmpAudit({scanId:'scan-1',consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(result.rows.find(row=>row.id==='privacy_access')?.status,'Observed');
+  assert.match(result.rows.find(row=>row.id==='privacy_access')!.detail!,/after scrolling/);
+  assert.ok(concerns.filter(c=>c.originKey.startsWith('consent.cmp_audit.')).every(c=>!c.scoreEffects?.length));
+  const invalid=structuredClone(input.cmpPreferencesEvidence!);
+  invalid.privacyLinks[0]!.access!.scroll!.restored=false;
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(invalid).success,false);
+  invalid.privacyLinks[0]!.access!.version='privacy_link_access.v1';
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(invalid).success,false);
 });

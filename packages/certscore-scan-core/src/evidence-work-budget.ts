@@ -5,7 +5,9 @@ import { MAX_COLLECTION_SURFACE_CONTROL_INDEX } from "@certscore/contracts";
 export const EVIDENCE_WORK_POLICY = {
   version: "breadth_before_detail.v1",
   finalizationReserveMs: 250,
-  preferences: { basicCaptureReserveMs: 1_000, panelOpeningBudgetMs: 1_000 },
+  // Spend a bounded portion of the existing preference deadline on lazy panel
+  // hydration. The protected capture reserve and overall compute envelope remain fixed.
+  preferences: { basicCaptureReserveMs: 1_000, panelOpeningBudgetMs: 1_000, registeredLazyPanelOpeningBudgetMs: 3_000 },
   runtimeSnapshot: {
     storageBudgetMs: 100,
     storageKeysPerArea: 10_000,

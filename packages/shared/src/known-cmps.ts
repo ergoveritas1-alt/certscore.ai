@@ -73,10 +73,26 @@ export type KnownCmpDefinition = {
     controlSelector: string;
     dialogSelector: string;
   };
+  /** Preference-only vendor scope. Does not register Accept/Reject controls. */
+  preferenceScopeSelector?: string;
+  /** Read-only inventory adapter for already-loaded vendor configuration. */
+  preferenceInventory?: "cookieyes_loaded_configuration.v1";
+  /** Read-only category identity inside a verified preference dialog.
+   * Identifies control type only, never cookie purpose or consent state. */
+  preferenceCategoryInventory?: {
+    version: string;
+    kind?: "category" | "service";
+    serviceLinkSelector?: string;
+    serviceLinkLabelSuffix?: string;
+    dialogSelector: string;
+    categorySelector: string;
+    titleSelector: string;
+    toggleSelector: string;
+  };
   /** Named-CMP Options binding when aria-controls is absent. An on-demand
    * panel must appear under the same pre-existing registered vendor root.
    * Never opens via a vendor API or accepts an arbitrary new modal. */
-  preferenceDialogBinding?: { version: string; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[]; allowObservedOptionsLabel?: boolean };
+  preferenceDialogBinding?: { version: string; openingBudgetMs?: number; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[]; allowObservedOptionsLabel?: boolean; layerTransitionSelector?: string };
   /** Factual cookie identity from an already-loaded, own-data configuration.
    * Never a semantic consent witness or a global cookie-name alias. */
   configuredConsentCookiePath?: string;
@@ -183,6 +199,15 @@ export type KnownCmpDetectionInput = {
 
 export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   {
+    preferenceScopeSelector: '.ax-website-overlay, [data-testid="widget-container"]:has(#axeptio_btn_close[aria-label="Close cookie settings"]):not(.ax-website-overlay *)',
+    preferenceDialogBinding: { version: "axeptio_preferences.v1", openingBudgetMs: 3_000,
+      controlSelector: '#axeptio_main_button[title="Manage your preferences about cookies"]',
+      dialogSelector: '.ax-website-overlay [data-testid="widget-container"]',
+      deferredRootSelector: '.ax-website-overlay', allowObservedOptionsLabel: true },
+    preferenceCategoryInventory: { version: "axeptio_preference_services.v1", kind: "service",
+      dialogSelector: '.axeptio_widget', categorySelector: 'li:has(> div > a[aria-label][href])',
+      titleSelector: 'label > div > span[dir="auto"]:first-child', toggleSelector: 'label input[type="checkbox"]',
+      serviceLinkSelector: 'a[aria-label][href]', serviceLinkLabelSuffix: ': More information about this cookie' },
     canonicalName: "Axeptio", aliases: ["Axeptio CMP"],
     domains: ["axept.io", "axeptio.eu"],
     cookieNames: ["axeptio_cookies", "axeptio_all_vendors", "axeptio_authorized_vendors"],
@@ -204,6 +229,37 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     // Passive all-off recognition does not authorize a Close action. Registration
     // requires its own separately verified action recipe and semantic witness.
     interactionDocumentationUrls: ["https://support.axeptio.eu/en/articles/274085-does-axeptio-place-cookies"],
+  },
+  {
+    canonicalName: "DataGrail", aliases: ["DataGrail Consent"],
+    domains: ["consentjs.datagrail.io"], domSelectors: [".dg-consent-banner"],
+    globalNames: ["DG_BANNER_API"],
+    preferenceCategoryInventory: {
+      version: "datagrail_preference_categories.v1", dialogSelector: '.dg-app[role="dialog"]',
+      categorySelector: ".dg-main-content-policy-option",
+      titleSelector: ".dg-main-content-policy-option-heading strong",
+      toggleSelector: '.dg-main-content-policy-option-input input[type="checkbox"]',
+    },
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    preferenceDialogBinding: {
+      version: "datagrail_preferences.v1", controlSelector: "button.dg-button.open_layer",
+      dialogSelector: '.dg-consent-banner .dg-app[role="dialog"]',
+      layerTransitionSelector: ".dg-main-content-policies",
+    },
+    interactionDocumentationUrls: ["https://docs.datagrail.io/docs/consent/banner/css-customization/", "https://docs.datagrail.io/docs/consent/banner/layouts-overview/"],
+  },
+  {
+    canonicalName: "Anthropic first-party preferences", aliases: [], domains: [],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform", standards: [],
+    // The public cookie-policy link binds these otherwise generic IDs to the
+    // vendor's actual panel. This scope is exclusive to preference inspection.
+    preferenceScopeSelector: 'dialog#consent-container:has(#consent-description a[href="https://www.anthropic.com/legal/cookies"])',
+    preferenceDialogBinding: { version: "anthropic_preferences.v1",
+      controlSelector: '#customize-btn', dialogSelector: 'dialog#consent-container #detailed-options' },
+    preferenceCategoryInventory: { version: "anthropic_preference_categories.v1",
+      dialogSelector: '#detailed-options', categorySelector: '#consent-form > div',
+      titleSelector: 'h6', toggleSelector: 'input[type="checkbox"]' },
+    interactionDocumentationUrls: ["https://www.anthropic.com/legal/cookies"],
   },
   {
     aliases: [
@@ -515,6 +571,14 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: [".cky-consent-container .cky-btn-accept"],
     canonicalName: "CookieYes",
+    preferenceInventory: "cookieyes_loaded_configuration.v1",
+    preferenceCategoryInventory: {
+      version: "cookieyes_preference_categories.v1",
+      dialogSelector: '.cky-preference-center[data-cky-tag="detail"][role="dialog"]',
+      categorySelector: '.cky-accordion',
+      titleSelector: '[data-cky-tag="detail-category-title"]',
+      toggleSelector: '[data-cky-tag="detail-category-toggle"] input[type="checkbox"][role="switch"]',
+    },
     cookieNames: ["cookieyes-consent", "cookielawinfo-checkbox-*", "viewed_cookie_policy"],
     domains: ["cookieyes.com", "cdn-cookieyes.com", "log.cookieyes.com"],
     domSelectors: [
