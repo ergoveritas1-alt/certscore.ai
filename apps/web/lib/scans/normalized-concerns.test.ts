@@ -43,6 +43,7 @@ function makeValidationFinding(
 }
 
 function makeMissingBridgePolicyRuntimeEvidence(runtimeOverride: Record<string, unknown> = {}) {
+  const snippet = "Before you make a cookie choice, we use only necessary cookies. We use optional analytics and advertising cookies only after you make a cookie choice, and you can control or reject non-essential cookies in our preference center.";
   return {
     policyClaimCandidates: [
       {
@@ -51,13 +52,12 @@ function makeMissingBridgePolicyRuntimeEvidence(runtimeOverride: Record<string, 
         sourceUrl: "https://example.com/privacy",
         documentType: "privacy_policy",
         extractionStatus: "fetched",
-        snippet:
-          "We use optional analytics and advertising cookies only after you make a cookie choice, and you can control or reject non-essential cookies in our preference center.",
+        snippet,
         snippetHash: "snippet-1",
         sectionPath: "Cookies and tracking",
         headingPath: "Cookies and tracking",
         charStart: 42,
-        charEnd: 210,
+        charEnd: 42 + snippet.length,
         confidence: 0.91,
         extractedBy: "ws01.policy_extractor",
         extractionVersion: "ws01-policy-runtime:v1"
@@ -1753,6 +1753,7 @@ test("policy behavior candidates with strong anchors but missing bridge assemble
   assert.ok(concerns[0]?.negativeEvidenceFlags.includes("missing_bridge_provenance"));
   assert.ok(!concerns[0]?.negativeEvidenceFlags.includes("missing_policy_side_evidence"));
   assert.ok(!concerns[0]?.negativeEvidenceFlags.includes("missing_runtime_anchor"));
+  assert.ok(!concerns[0]?.negativeEvidenceFlags.includes("weak_policy_anchor"));
 
   const candidates = buildUnifiedFindingCandidatesFromConcerns(concerns);
   assert.equal(candidates.length, 1);
@@ -1783,6 +1784,36 @@ test("policy behavior candidates with strong anchors but missing bridge assemble
 
   const executive = projectExecutiveFindingsFromUnifiedPackets(packets);
   assert.equal(executive.findings.some((finding) => finding.id === "policy_behavior_contradiction_detected"), false);
+});
+
+test("missing-bridge review rejects a policy excerpt that does not support its declared promise", () => {
+  const fallbackEvidence = makeMissingBridgePolicyRuntimeEvidence();
+  // Choice disclosure alone does not support the stricter declared claim that
+  // only necessary cookies are used before a choice. Keep that guard intact.
+  const snippet = "We use optional analytics and advertising cookies only after you make a cookie choice, and you can control or reject non-essential cookies in our preference center.";
+  fallbackEvidence.policyClaimCandidates[0]!.snippet = snippet;
+  fallbackEvidence.policyClaimCandidates[0]!.charEnd = 42 + snippet.length;
+  const reviewFindingCandidates = [{
+    description: "Retained policy wording does not establish the declared necessary-only promise.",
+    fallbackEvidence: { ...fallbackEvidence, unifiedFindingId: "policy_behavior_conflict" },
+    observedValue: "Mismatched claim and excerpt",
+    severity: "high" as const,
+    signalKey: "context.policy_behavior_conflict_detected",
+    signalLabel: "Policy/behavior conflict detected",
+    signalSource: "runtime_artifact_signal" as const,
+    sourceType: "signal" as const,
+    title: "Policy/behavior conflict detected"
+  }];
+  const concerns = buildNormalizedConcerns({ reviewFindingCandidates, validationFindings: [] });
+  assert.ok(concerns[0]?.negativeEvidenceFlags.includes("weak_policy_anchor"));
+  assert.ok(concerns[0]?.negativeEvidenceFlags.includes("missing_bridge_provenance"));
+  assert.equal(concerns[0]?.promotionEligibility, "internal_only");
+  assert.equal(buildUnifiedFindingCandidatesFromConcerns(concerns).length, 0);
+  const packets = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates,
+    validationFindings: [], validationFindingLookup: new Map() });
+  assert.equal(packets.some(packet => packet.unifiedFindingId === "policy_behavior_conflict"), false);
+  assert.equal(projectExecutiveFindingsFromUnifiedPackets(packets).findings.some(
+    finding => finding.id === "policy_behavior_contradiction_detected"), false);
 });
 
 test("policy behavior missing-bridge lane does not assemble from vendor-only runtime anchors", () => {
