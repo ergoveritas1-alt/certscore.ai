@@ -35,6 +35,7 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
   scanRecord: ScanReportAccessContext;
   checklistRows: GdprEprivacyCoverageChecklistItem[];
   unifiedFindings: UnifiedFindingDisplayPacket[];
+  scorePolicyVersion?: typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v18";
 }) {
   if (projectScanReportNoGo(input.scanRecord)) return null;
   const postureScore = deriveRegulatoryCoverageScore({
@@ -45,7 +46,7 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
   const integrityEffects = input.unifiedFindings
     .filter(finding => finding.unifiedFindingId === SITE_INTEGRITY_FINDING_ID)
     .flatMap(finding => finding.scoreEffects ?? []);
-  const deductions = deriveGdprEprivacyDeductionBreakdown(input.checklistRows);
+  const deductions = deriveGdprEprivacyDeductionBreakdown(input.checklistRows, input.scorePolicyVersion);
   const accessibility = accessibilityDeductionBreakdown(input.unifiedFindings.flatMap(finding => (finding.scoreEffects ?? []).filter(effect =>
     effect.policyKey === `accessibility.${finding.unifiedFindingId}` ||
     (finding.unifiedFindingId === "focus_management_issue" && effect.reasonCode === "verified_reproduced_focus_barrier"))));
@@ -63,7 +64,8 @@ export function deriveCanonicalOverallScoreExplanationForReport(input: {
   const score = resolveScanReportScore(input.scanRecord, Math.max(SCORE_FLOOR, SCORE_BASE - totalPolicyDeductionPoints));
   if (score === null) return null;
   return { score, baseScore: SCORE_BASE, scoreFloor: SCORE_FLOOR, totalPolicyDeductionPoints,
-    scoreVersion: CANONICAL_OVERALL_SCORE_VERSION, policyVersion: SCORING_POLICY_VERSION, deductions };
+    scoreVersion: input.scorePolicyVersion === "gdpr-eprivacy-posture.v18" ? "overall-posture.v8" : CANONICAL_OVERALL_SCORE_VERSION,
+    policyVersion: input.scorePolicyVersion ?? SCORING_POLICY_VERSION, deductions };
 }
 
 export function deriveCanonicalOverallScoreForReport(input: Parameters<typeof deriveCanonicalOverallScoreExplanationForReport>[0]) {

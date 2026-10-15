@@ -1,3 +1,4 @@
+import { EMBED_SCORE_ROW_IDS, mergeEmbedScoringEvidence } from "../../lib/scans/embed-scoring-evidence";
 import { orderedEvidencePrefetch } from "./ordered-evidence-prefetch";
 import { projectAdditionalPageSiteIntegrity } from "./site-integrity-projection";
 import { projectAdditionalPageAccessibilityAudit } from "./accessibility-audit-projection";
@@ -32,10 +33,9 @@ import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
-const PREVIOUS_VERSION = "full-site-distinct-findings.v6";
-const PREVIOUS_POSTURE_VERSION = "gdpr-eprivacy-posture.v17";
+const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
 const persistedScoreSchema = z.object({
-  version: z.enum([VERSION, PREVIOUS_VERSION]), value: z.number().int().min(0).max(100).nullable(),
+  version: z.enum([VERSION, "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
   priorityReview: z.array(sitePriorityFindingSchema),
   deductions: z.array(z.object({
@@ -99,13 +99,17 @@ export function mergeSiteChecklistRows(home: GdprEprivacyCoverageChecklistItem[]
         [field]: { ...(strongest.criticalEvidence.retainedEvidence[field] as Record<string, unknown>), [key]: [...identities] },
       } } };
     }
-    if (row.id === "third_party_iframe_pre_consent") {
+    if (EMBED_SCORE_ROW_IDS.some(id => id === row.id)) {
+      const embedScoringEvidence = mergeEmbedScoringEvidence(sources.map(source => source.criticalEvidence.retainedEvidence));
+      const retained = { ...sources[0]!.criticalEvidence.retainedEvidence };
+      delete retained.embedScoringEvidence;
+      if (embedScoringEvidence) retained.embedScoringEvidence = embedScoringEvidence;
       const embeddedFrameSources = [...new Set(sources.flatMap(source => {
         const values = source.criticalEvidence.retainedEvidence.embeddedFrameSources;
         return Array.isArray(values) ? values.filter((value): value is string => typeof value === "string") : [];
       }))];
       return { ...sources[0]!, evidenceRefs: refs, criticalEvidence: { ...sources[0]!.criticalEvidence,
-        retainedEvidence: { ...sources[0]!.criticalEvidence.retainedEvidence, embeddedFrameSources } } };
+        retainedEvidence: { ...retained, ...(row.id === "third_party_iframe_pre_consent" ? { embeddedFrameSources } : {}) } } };
     }
     // Flat runtime categories apply once across the site, retaining the strongest eligible projection.
     if (!["pre_consent_cookies_storage", "pre_consent_third_party_tracking"].includes(row.id)) return { ...sources[0]!, evidenceRefs: refs };
@@ -157,13 +161,13 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
     crawl.configuration_hash, pages.map(p => [p.id, p.status, p.observation?.sourceHash]),
   ])).digest("hex");
   const key = scoreKey(VERSION, GDPR_EPRIVACY_EVIDENCE_SCORE_VERSION);
-  const previousKey = scoreKey(PREVIOUS_VERSION, PREVIOUS_POSTURE_VERSION);
+  const historicalKeys = new Map(HISTORICAL_VERSIONS.map(([version, posture]) => [version as string, scoreKey(version, posture)]));
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
-  if (saved.success && [key, previousKey].includes(saved.data.fullSiteScore.sourceHash)) {
+  if (saved.success && [key, ...historicalKeys.values()].includes(saved.data.fullSiteScore.sourceHash)) {
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
-    if (parsed.success && saved.data.fullSiteScore.sourceHash === (parsed.data.version === VERSION ? key : previousKey)) {
+    if (parsed.success && saved.data.fullSiteScore.sourceHash === (parsed.data.version === VERSION ? key : historicalKeys.get(parsed.data.version))) {
       // Preserve the source-bound historical amount when a scoring weight changes.
-      if (parsed.data.version === PREVIOUS_VERSION) return groupStoredReportScorePriorities(parsed.data);
+      if (parsed.data.version !== VERSION) return groupStoredReportScorePriorities(parsed.data);
       const homeScore = deriveCanonicalOverallScoreForReport({
         scanRecord: home,
         checklistRows: canonical.checklistRows,

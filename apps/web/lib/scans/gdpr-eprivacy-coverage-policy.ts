@@ -1,3 +1,5 @@
+import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import { buildEmbedScoringEvidence, type EmbedScoringEvidence } from "./embed-scoring-evidence";
 import { retainedRejectClickCapture } from "./retained-reject-click-capture";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { summarizePostRejectActivity } from "./post-reject-finding-copy";
@@ -4021,6 +4023,21 @@ function formatSocialMediaEmbedEvidencePhrase(input: {
   return providers || timing ? `${providers}${timing}.` : "";
 }
 
+function retainedEmbedScoringEvidence(rows: Record<string, unknown>[]) {
+  return buildEmbedScoringEvidence(rows.flatMap(row => {
+    const host = getRuntimeObservationHost(row);
+    const url = getRuntimeObservationUrl(row);
+    const resource = boundedRuntimeEvidenceUrl(url);
+    const purpose = classifyEmbeddedContentPurpose(host, url);
+    const service = resolveCanonicalVendor({ type: "request", url: url ?? undefined, hostname: host ?? undefined }).observation;
+    const canonicalPixel = service && ["advertising", "analytics"].includes(service.purpose) && /pixel/i.test(service.product ?? "");
+    // Pixels remain tracking evidence. Their presence does not establish an
+    // additional embedded-content exposure. No tracker deduction is suppressed.
+    if (!host || !resource || canonicalPixel || row.providerCategory === "social_pixel" || rowHasSocialMediaPixelPurpose(row) || purpose === "fontStaticResource") return [];
+    return [{ host: new URL(resource).hostname.toLowerCase(), resource, purpose: purpose as EmbedScoringEvidence["groups"][number]["purpose"] }];
+  }));
+}
+
 function deriveSocialMediaEmbedPreConsentOutcome(input: GdprEprivacyCoveragePolicyInput) {
   const evidence = getSocialMediaEmbedPreConsentEvidence(input);
   const evidencePhrase = formatSocialMediaEmbedEvidencePhrase(evidence);
@@ -4050,6 +4067,7 @@ function deriveSocialMediaEmbedPreConsentOutcome(input: GdprEprivacyCoveragePoli
       {
         retainedEvidence: {
           ...retainedEvidence,
+          embedScoringEvidence: retainedEmbedScoringEvidence(evidence.strongObservations),
           placeholderIneffective: evidence.placeholderDetected
         }
       }
@@ -4142,6 +4160,7 @@ function deriveEmbeddedThirdPartyContentPreConsentOutcome(input: GdprEprivacyCov
           embeddedContentObservedMs: compactArray(observedMs, 6),
           embeddedContentObservationCount:
             Math.max(embeddedRows.length, eligibleSummaryObservations.length),
+          embedScoringEvidence: retainedEmbedScoringEvidence([...embeddedRows, ...eligibleSummaryObservations]),
           embeddedContentPurposeBuckets: purposeBuckets,
           firstEmbeddedContentObservedMs: observedMs[0] ?? null,
           observedRuntimeSignalOnly: true
@@ -4214,6 +4233,7 @@ function deriveThirdPartyIframePreConsentOutcome(input: GdprEprivacyCoveragePoli
           // Query-free source URLs give a conservative distinct-embed lower bound.
           // Only rows already admitted by this concern policy participate.
           embeddedFrameSources: compactArray(uniqueStrings(evidence.embeddedRows.map(row => boundedRuntimeEvidenceUrl(getString(row, ["frameUrl", "frame_url", "url"])))), 8),
+          embedScoringEvidence: retainedEmbedScoringEvidence(evidence.embeddedRows),
           iframeObservationCount: observedCount,
           preConsentIframeCount: evidence.preConsentIframeCount ?? observedCount
         }

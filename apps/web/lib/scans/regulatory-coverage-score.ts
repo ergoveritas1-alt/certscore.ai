@@ -1,3 +1,4 @@
+import { EMBED_SCORE_ROW_IDS, readEmbedScoringGroups } from "./embed-scoring-evidence";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { SCORING_POLICY_VERSION, SCORING_RULE_BY_ID, SCORING_FAMILIES, SCORE_FLOOR, SCORE_BASE } from "./scoring-policy";
 import { readRejectClickTrackingAssessment } from "./reject-click-tracking-policy";
@@ -317,7 +318,7 @@ function getFingerprintingHostCount(retained: Record<string, unknown>) {
   ).size;
 }
 
-export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
+export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow, policyVersion: typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v18" = SCORING_POLICY_VERSION) {
   if (isExcludedFromDenominator(row) || isCoverageLimited(row)) return 0;
   const policy = GDPR_EPRIVACY_POSTURE_POLICIES[row.id];
   if (!policy) return 0;
@@ -390,6 +391,8 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
     return 0;
   }
 
+  if (policyVersion === SCORING_POLICY_VERSION && EMBED_SCORE_ROW_IDS.some(id => id === row.id) && readEmbedScoringGroups(retained)?.length === 0) return 0;
+
   if (row.assessmentStatus === "gap_observed") {
     return policy.gapDeduction;
   }
@@ -404,7 +407,7 @@ export function getGdprEprivacyRowDeduction(row: RegulatoryCoverageRow) {
 }
 
 /** The score and its explanation consume this same capped policy calculation. */
-export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow[]) {
+export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow[], policyVersion: typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v18" = SCORING_POLICY_VERSION) {
   const familyDeductions = new Map<GdprEprivacyRiskFamily, number>();
   const familyRules = new Map<GdprEprivacyRiskFamily, Array<{ ruleId: string; label: string;
     policyDeductionPoints: number; decisionVerification: "confirmed" | "unconfirmed" | "not_applicable" | "unknown" }>>();
@@ -415,15 +418,28 @@ export function deriveGdprEprivacyDeductionBreakdown(rows: RegulatoryCoverageRow
   ));
 
   const scoredFlatRows = new Set<string>();
-  for (const row of rows) {
+  const chargedEmbedGroups = new Set<string>();
+  // Stable precedence retains the most concrete attribution independent of input order.
+  const orderedRows = policyVersion !== SCORING_POLICY_VERSION ? rows : [...rows].sort((a, b) => {
+    const priority = (id: string) => { const index = EMBED_SCORE_ROW_IDS.findIndex(value => value === id); return index < 0 ? -1 : index; };
+    return priority(a.id) - priority(b.id);
+  });
+  for (const row of orderedRows) {
     const config = GDPR_EPRIVACY_ROW_WEIGHTS[row.id];
     // Legacy/bare references remain entirely neutral, including coverage weighting.
     if (row.id === "outdated_transfer_framework_reference" && getGdprEprivacyRowDeduction(row) === 0) continue;
     if (!config || "scoreEffect" in config || isExcludedFromDenominator(row)) {
       continue;
     }
-    const deduction = getGdprEprivacyRowDeduction(row);
+    const deduction = getGdprEprivacyRowDeduction(row, policyVersion);
     if (deduction <= 0) continue;
+    if (policyVersion === SCORING_POLICY_VERSION && EMBED_SCORE_ROW_IDS.some(id => id === row.id)) {
+      const groups = readEmbedScoringGroups(getRetainedEvidence(row));
+      if (groups !== undefined) {
+        if (!groups.some(group => !chargedEmbedGroups.has(group))) continue;
+        groups.forEach(group => chargedEmbedGroups.add(group));
+      }
+    }
     if (row.id === "outdated_transfer_framework_reference") {
       if (scoredFlatRows.has(row.id)) continue;
       scoredFlatRows.add(row.id);

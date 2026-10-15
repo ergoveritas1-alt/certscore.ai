@@ -22,8 +22,14 @@ export type CanonicalCookieKnowledge = {
 };
 
 export const AXEPTIO_COOKIE_PURPOSE_POLICY = "axeptio_consent_preferences.v1" as const;
+export const COOKIE_PURPOSE_POLICY = "certscore.cookie-purpose.v2" as const;
+export function retainedCookiePurposePolicy(codes: readonly string[] | undefined) {
+  const markers = codes?.filter(code => code.startsWith("cookie_purpose_policy:")) ?? [];
+  if (markers.length !== 1) return undefined;
+  return [COOKIE_PURPOSE_POLICY, AXEPTIO_COOKIE_PURPOSE_POLICY].find(version => markers[0] === `cookie_purpose_policy:${version}`);
+}
 export type CanonicalCookieContext = {
-  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY;
+  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY | typeof COOKIE_PURPOSE_POLICY;
   cookieDomain?: string | null;
   hostname?: string | null;
   initiatorChain?: readonly string[] | null;
@@ -565,18 +571,40 @@ const COOKIE_KNOWLEDGE_RULES: readonly CookieKnowledgeRule[] = [
   },
 ] as const;
 
+// New captures opt into these reviewed exact identities. This registry describes
+// technical purpose for posture scoring, never a legal consent exemption.
+// Primary sources and scoring boundaries: docs/certscore-v2/cookie-embed-scoring-review-2026-10-14.md.
+const DOCUMENTED_SERVICE_COOKIE_RULES: readonly CookieKnowledgeRule[] = [
+  { pattern: /^cookieyes-consent$/, category: "consent_management", essentiality: "essential", vendor: "CookieYes",
+    dataTypes: ["consent preferences", "consent record identifier"],
+    description: "CookieYes cookie retaining consent preferences and the consent record identifier." },
+  { pattern: /^aws-waf-token$/, category: "security", essentiality: "essential", vendor: "AWS WAF",
+    dataTypes: ["security challenge token"],
+    description: "AWS WAF security token used for bot and challenge management." },
+  { pattern: /^(?:country|locale|oai-did)$/, contextHostPatterns: [/^openai\.com$/],
+    category: "infrastructure", essentiality: "essential", vendor: "OpenAI", dataTypes: ["service functionality"],
+    description: "Exact OpenAI service-functionality cookie documented for openai.com." },
+  { pattern: /^GCLB$/, category: "infrastructure", essentiality: "unknown", vendor: "Google Cloud Load Balancing",
+    dataTypes: ["load-balancer session affinity"],
+    description: "Documented Google Cloud affinity-cookie name; deployment binding and site-specific necessity remain unverified." },
+];
+
 export function resolveCanonicalCookieKnowledge(
   cookieName: string | null | undefined,
   context: CanonicalCookieContext = {},
 ): CanonicalCookieKnowledge {
   const name = cookieName?.trim() ?? "";
   const contextHosts = canonicalCookieContextHosts(context);
-  const axeptioRule = context.purposePolicyVersion === AXEPTIO_COOKIE_PURPOSE_POLICY
+  const axeptioRule = (context.purposePolicyVersion === AXEPTIO_COOKIE_PURPOSE_POLICY || context.purposePolicyVersion === COOKIE_PURPOSE_POLICY)
     ? COOKIE_PURPOSE_CANDIDATE_RULES.find(rule => rule.vendor === "Axeptio" && rule.pattern.test(name)) : undefined;
   // Exact documented consent-preference identities only; no prefix exemption.
   if (axeptioRule) return { name, category: axeptioRule.category, vendor: axeptioRule.vendor,
     dataTypes: [...axeptioRule.dataTypes], description: axeptioRule.description, essentiality: "essential" };
-  const rule = COOKIE_KNOWLEDGE_RULES.find((candidate) =>
+  const documentedRule = context.purposePolicyVersion === COOKIE_PURPOSE_POLICY
+    ? DOCUMENTED_SERVICE_COOKIE_RULES.find(candidate => candidate.pattern.test(name) &&
+      (!candidate.contextHostPatterns || candidate.contextHostPatterns.some(pattern =>
+        pattern.test((context.cookieDomain ?? "").replace(/^\.+/, "").toLowerCase())))) : undefined;
+  const rule = documentedRule ?? COOKIE_KNOWLEDGE_RULES.find((candidate) =>
     candidate.pattern.test(name) &&
     (!candidate.contextHostPatterns || candidate.contextHostPatterns.some((pattern) =>
       contextHosts.some((hostname) => pattern.test(hostname))

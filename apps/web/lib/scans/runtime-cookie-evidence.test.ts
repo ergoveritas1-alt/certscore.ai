@@ -18,7 +18,7 @@ import {
   buildRuntimeCookiePriorityGroups,
   getRuntimeCookieReviewPriority
 } from "./runtime-cookie-priority";
-import { AXEPTIO_COOKIE_PURPOSE_POLICY } from "@certscore/vendor-resolver";
+import { AXEPTIO_COOKIE_PURPOSE_POLICY, COOKIE_PURPOSE_POLICY } from "@certscore/vendor-resolver";
 import { buildNormalizedConcerns } from "./normalized-concerns";
 import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
 import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
@@ -1373,4 +1373,28 @@ test("hydrates unmatched cookies from generic runtime policy reconciliation evid
   assert.deepEqual(inventory.unmatchedCookieNames, ["_fbp"]);
   assert.equal(inventory.unmatchedRows[0]?.cookieName, "_fbp");
   assert.equal(inventory.unmatchedRows[0]?.party, "third_party");
+});
+
+
+test("documented service classification flows through normalized concerns and scoring only for new captures", () => {
+  const deduction = (names: string[], domain: string, versioned: boolean) => {
+    const hybridRuntimeEvidence = { storageSummary: { distinctPreConsentCookieCount: names.length },
+      cookieWriteObservations: names.map(cookieName => ({ cookieName, domain, beforeConsent: true,
+        category: "unknown", essentiality: "unknown", setMethod: "browser_snapshot",
+        essentialityReasonCodes: versioned ? [`cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`] : [] })) };
+    const runtimeArtifacts = { hybridRuntimeEvidence };
+    const normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
+    const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ runtimeArtifacts, normalizedConcerns, scanCompleted: true, coverageLimited: false });
+    const rows = deriveGdprEprivacyCoverageChecklist({ coverageOutcomes, scanCompleted: true, coverageLimited: false,
+      projectedFindings: [], unifiedFindings: [] });
+    return getGdprEprivacyRowDeduction(rows.find(row => row.id === "pre_consent_cookies_storage")!);
+  };
+  for (const [names, domain] of [[["cookieyes-consent"], "cohere.com"], [["aws-waf-token"], "huggingface.co"],
+    [["country", "locale", "oai-did"], "openai.com"]] as const) {
+    assert.equal(deduction([...names], domain, false), 8);
+    assert.equal(deduction([...names], domain, true), 0);
+  }
+  assert.equal(deduction(["country", "locale", "oai-did"], "example.com", true), 8);
+  assert.equal(deduction(["country", "locale", "oai-did", "GCLB"], "openai.com", true), 8, "unverified load-balancer necessity remains a review");
+  assert.equal(deduction(["cookieyes-consent", "_ga"], "cohere.com", true), 8);
 });

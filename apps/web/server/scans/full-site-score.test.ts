@@ -1,3 +1,4 @@
+import { buildEmbedScoringEvidence } from "../../lib/scans/embed-scoring-evidence";
 import { projectSitewideEvidencePage, sitewideEvidencePageSchema } from "../../lib/scans/sitewide-evidence-index";
 import { buildSitePriorityReview } from "../../lib/scans/full-site-priority-review";
 import assert from "node:assert/strict";
@@ -236,4 +237,28 @@ test("embed counts merge admitted source identities across pages without multipl
   assert.equal(score(merged),score(home));
   const review=buildSitePriorityReview(merged,[{id:"home",url:"https://example.test",homepage:true,findingIds:["third_party_iframe_pre_consent"]},{id:"other",url:"https://example.test/other",homepage:false,findingIds:["third_party_iframe_pre_consent"]}]);
   assert.match(review.find(row=>row.id.endsWith("third_party_iframe_pre_consent"))!.summary,/At least 2 distinct third-party embeds.*across 2 pages/);
+});
+
+
+test("site scoring unions versioned embed groups across pages without multiplying shared labels", () => {
+  const embeds = (host: string) => baseline().map(row => !["third_party_iframe_pre_consent", "social_media_embed_pre_consent", "embedded_content_pre_consent"].includes(row.id) ? row : ({
+    ...row, assessmentStatus: "gap_observed" as const, evidenceState: "observed" as const, status: "Gap observed" as const,
+    criticalEvidence: { ...row.criticalEvidence, missingOrIncompleteSourceSignals: [], retainedEvidence: {
+      embedScoringEvidence: buildEmbedScoringEvidence([{ host, purpose: "mediaEmbed", resource: `https://${host}/embed/example` }]),
+    } },
+  }));
+  const home = embeds("www.youtube.com");
+  const merged = mergeSiteChecklistRows(home, [...home, ...embeds("player.vimeo.com")]);
+  assert.equal(score(merged), 95, "existing flat category weight applies once to the combined exposure set");
+  for (const row of merged.filter(row => row.id.includes("embed") || row.id.includes("iframe"))) {
+    assert.equal((row.criticalEvidence.retainedEvidence.embedScoringEvidence as { groups: unknown[] }).groups.length, 2);
+  }
+  assert.equal(score(home), 95);
+  const distinctWidget = baseline().map(row => row.id !== "embedded_content_pre_consent" ? row : ({
+    ...row, assessmentStatus: "gap_observed" as const, evidenceState: "observed" as const, status: "Gap observed" as const,
+    criticalEvidence: { ...row.criticalEvidence, missingOrIncompleteSourceSignals: [], retainedEvidence: {
+      embedScoringEvidence: buildEmbedScoringEvidence([{ host: "chat.example.test", purpose: "formOrChatWidget", resource: "https://chat.example.test/widget" }]),
+    } },
+  }));
+  assert.equal(score(mergeSiteChecklistRows(home, distinctWidget)), 90, "a separate widget still adds its existing category deduction");
 });

@@ -37,12 +37,14 @@ export function projectScanFormsSummary(scan: ScanDetailResponse) {
 }
 
 export function projectScanScoreExplanation(scan: ScanDetailResponse, score: number | null) {
+  const persistedScoreVersion = scan.snapshot?.score_version;
   if (score === null || scan.scan.status !== "completed" || projectScanReportNoGo(scan) ||
-    scan.snapshot?.score_version !== CANONICAL_OVERALL_SCORE_VERSION) return null;
+    typeof persistedScoreVersion !== "string" || ![CANONICAL_OVERALL_SCORE_VERSION, "overall-posture.v8"].includes(persistedScoreVersion)) return null;
   const canonical = getPersistedCanonicalReportProjection(scan);
   if (!canonical) return null;
   const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: scan,
-    checklistRows: canonical.checklistRows, unifiedFindings: canonical.globalUnifiedFindings });
+    checklistRows: canonical.checklistRows, unifiedFindings: canonical.globalUnifiedFindings,
+    ...(persistedScoreVersion === "overall-posture.v8" ? { scorePolicyVersion: "gdpr-eprivacy-posture.v18" as const } : {}) });
   // Never reinterpret a historical score with a different current policy.
   if (!explanation || explanation.score !== score) return null;
   const checklistFindings = buildChecklistConcernTopFindings(canonical.checklistRows);

@@ -1,5 +1,5 @@
 import { verifiedCookieInventoryIdentity } from "./retained-cookie-inventory-identity";
-import { AXEPTIO_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
+import { retainedCookiePurposePolicy, resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
 import {
   findRuntimeCookieOwner,
@@ -655,7 +655,7 @@ function normalizeCookieWriteRow(row: Record<string, unknown>, hybrid: Record<st
   const domain = getString(row.domain ?? row.cookieDomain ?? row.cookie_domain)?.replace(/^\.+/, "") ?? null;
   const purposeCodes = getStringArray(row.essentialityReasonCodes ?? row.cookieEssentialityReasonCodes);
   const knowledge = resolveCanonicalCookieKnowledge(cookieName, {
-    ...(purposeCodes.includes(`cookie_purpose_policy:${AXEPTIO_COOKIE_PURPOSE_POLICY}`) ? { purposePolicyVersion: AXEPTIO_COOKIE_PURPOSE_POLICY } : {}),
+    purposePolicyVersion: retainedCookiePurposePolicy(purposeCodes),
     cookieDomain: domain,
     hostname: getString(row.initiatorDomain ?? row.initiator_domain ?? row.cookieInitiatorDomain ?? row.cookie_initiator_domain),
     initiatorChain: getStringArray(row.initiatorChain ?? row.initiator_chain),

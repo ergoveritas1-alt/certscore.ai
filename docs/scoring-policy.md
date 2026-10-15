@@ -5,8 +5,8 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Versions: `gdpr-eprivacy-posture.v18`, `overall-posture.v8`, and
-`full-site-distinct-findings.v7`. The California GPC evidence policy remains v1;
+Local versions: `gdpr-eprivacy-posture.v19`, `overall-posture.v9`, and
+`full-site-distinct-findings.v8`. These changes have not been deployed. The California GPC evidence policy remains v1;
 its existing eligible 15-point effect is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
@@ -43,7 +43,13 @@ cross-border rows have no direct deduction;
 the underlying findings/checklist evidence remains available.
 
 Sensitive-surface tracking deducts 12. Each of embedded content, social embeds,
-and third-party iframes deducts 5, sharing the 20-point embed cap. Privacy-notice
+and third-party iframes deducts 5, sharing the 20-point embed cap. Under the new
+`distinct_embed_exposure.v1` projection, an already-charged host/purpose/resource
+group does not attract another category charge. Canonical pixels remain tracking
+evidence without an additional embed charge; different resource paths or content
+purposes remain distinct. Historical rows without this projection keep the prior
+calculation. See the [local cookie/embed review and after-Reject proposal](certscore-v2/cookie-embed-scoring-review-2026-10-14.md).
+The proposed after-Reject tiers are not implemented. Privacy-notice
 availability deducts 9 (owner-approved October 11, 2026), shown as
 “Privacy policy not found: −9 points” when
 the canonical deduction applies. The report attribution uses the same capped

@@ -309,3 +309,18 @@ test("fresh accessibility scoring agrees across report, API status and evidence 
   assert.equal(api.scoreExplanation?.deductions.find(row => row.family === "accessibility")?.deductionPoints, 10);
   assert.equal(JSON.stringify(scan), original);
 });
+
+
+test("historical v8 score explanations retain their v18 policy and original amounts", () => {
+  const scan = fixture();
+  scan.snapshot!.score_version = "overall-posture.v8";
+  const original = structuredClone(scan);
+  const explanation = projectScanScoreExplanation(scan, 85);
+  assert.equal(explanation?.scoreVersion, "overall-posture.v8");
+  assert.equal(explanation?.policyVersion, "gdpr-eprivacy-posture.v18");
+  assert.equal(explanation?.score, 85);
+  assert.equal(explanation?.deductions[0]?.deductionPoints, 15);
+  assert.deepEqual(scan, original);
+  scan.snapshot!.score_version = "overall-posture.future";
+  assert.equal(projectScanScoreExplanation(scan, 85), null);
+});

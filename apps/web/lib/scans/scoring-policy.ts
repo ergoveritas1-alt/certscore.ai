@@ -1,8 +1,8 @@
 import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS } from "./california-gpc-response-policy";
 
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v18";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v7";
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v19";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v8";
 export const SCORE_FLOOR = 0;
 export const SCORE_BASE = 100;
 export const SCORING_FAMILIES = {

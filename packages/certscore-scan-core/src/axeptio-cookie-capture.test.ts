@@ -5,16 +5,16 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { cookieEventSchema } from "@certscore/contracts";
-import { AXEPTIO_COOKIE_PURPOSE_POLICY } from "@certscore/vendor-resolver";
+import { COOKIE_PURPOSE_POLICY } from "@certscore/vendor-resolver";
 import { createArtifactWriter } from "./artifact-writer";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner";
 import { classifyCookieEvents } from "./journey-builder";
 
 test("runtime producer retains exact preference-cookie policy through journey classification", async () => {
-  const names = ["axeptio_cookies", "axeptio_all_vendors", "axeptio_authorized_vendors"];
+  const names = ["axeptio_cookies", "axeptio_all_vendors", "axeptio_authorized_vendors", "cookieyes-consent"];
   const server = createServer((_request, response) => {
     response.setHeader("content-type", "text/html");
-    response.setHeader("set-cookie", [...names, "axeptio_unknown", "_ga"].map(name => `${name}=fixture; Path=/; SameSite=Lax`));
+    response.setHeader("set-cookie", [...names, "axeptio_unknown", "_ga", "aws-waf-token", "GCLB", "country"].map(name => `${name}=fixture; Path=/; SameSite=Lax`));
     response.end("<!doctype html><title>Cookie capture fixture</title><p>Public website</p>");
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -31,11 +31,19 @@ test("runtime producer retains exact preference-cookie policy through journey cl
       for (const event of retained) {
         assert.equal(cookieEventSchema.parse(event).cookiePurpose, "consent_management");
         assert.equal(event.cookieEssentiality, "essential");
-        assert.ok(event.cookieEssentialityReasonCodes?.includes(`cookie_purpose_policy:${AXEPTIO_COOKIE_PURPOSE_POLICY}`));
+        assert.ok(event.cookieEssentialityReasonCodes?.includes(`cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`));
       }
     }
     assert.equal(events.find(event => event.cookieName === "_ga")?.cookieEssentiality, "non_essential");
     assert.equal(events.find(event => event.cookieName === "axeptio_unknown")?.cookieEssentiality, "unknown");
+    assert.equal(events.find(event => event.cookieName === "country")?.cookieEssentiality, "unknown", "a local fixture cannot claim the documented OpenAI cookie domain");
+    for (const [name, purpose, essentiality] of [["aws-waf-token", "security", "essential"], ["GCLB", "infrastructure", "unknown"]]) {
+      const event = events.find(event => event.cookieName === name);
+      assert.ok(event);
+      assert.equal(cookieEventSchema.parse(event).cookiePurpose, purpose);
+      assert.equal(event.cookieEssentiality, essentiality);
+      assert.ok(event.cookieEssentialityReasonCodes?.includes(`cookie_purpose_policy:${COOKIE_PURPOSE_POLICY}`));
+    }
     const legacy = events.filter(event => names.includes(event.cookieName)).map(event => ({ ...event,
       cookiePurpose: "unknown" as const, cookieEssentiality: "unknown" as const, cookieEssentialityReasonCodes: [] }));
     assert.ok(classifyCookieEvents(legacy, []).every(event => event.cookiePurpose === "unknown"));
