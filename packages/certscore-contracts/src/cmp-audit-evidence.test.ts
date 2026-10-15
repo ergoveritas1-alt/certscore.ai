@@ -157,3 +157,18 @@ test("v7 scope activity diagnostics are bounded and do not supply action or inve
     assert.equal(cmpPreferencesEvidenceSchema.safeParse({...input, inspectionDiagnostic: {...input.inspectionDiagnostic, identityScopes: {...input.inspectionDiagnostic.identityScopes, providers}}}).success, false);
   }
 });
+
+
+test("registered portal diagnostics require v8 verified opening and preserve historical packets", () => {
+  const input: any = packet();
+  input.inspectionDiagnostic.revision = "cmp_preferences.v8";
+  input.inspectionDiagnostic.surfaceBinding.mode = "registered_portal";
+  assert.equal(cmpPreferencesEvidenceSchema.parse(input).action.opened, false);
+  input.action = {count: 1, intent: "options", label: "Preferences", opened: true};
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success, false);
+  input.inspectionDiagnostic.surfaceBinding.verification = {version: "cmp_panel_verification.v1", result: "verified", role: "dialog"};
+  assert.equal(cmpPreferencesEvidenceSchema.parse(input).action.opened, true);
+  input.inspectionDiagnostic.revision = "cmp_preferences.v7";
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(input).success, false);
+  assert.deepEqual(cmpPreferencesEvidenceSchema.parse(packet()).inspectionDiagnostic, packet().inspectionDiagnostic);
+});

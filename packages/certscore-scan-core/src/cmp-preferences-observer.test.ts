@@ -821,3 +821,75 @@ test("legacy Termly banners without a primary action area retain unique existing
     assert.ok(packet.controls.some(c => c.label === "Analytics"));
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test("reviewed sibling portals require unique original controls, unchanged SDK ownership and exact panel structure", {timeout: 60_000}, async () => {
+  let provider = "Iubenda", mode = "valid", clicks = 0, choices = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/opened") { clicks++; res.end(); return; }
+    if (req.url === "/choice") { choices++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    const iubenda = provider === "Iubenda";
+    const banner = iubenda ? '<tb-banner-wrapper></tb-banner-wrapper>' : '<section id="truste-consent-track"><button id="truste-show-consent">Manage Settings</button></section>';
+    const panel = iubenda ? `<div id="iubenda-iframe"><section id="iubenda-iframe-popup" role="alertdialog" ${mode === "unnamed" ? '' : 'aria-label="Your Privacy Choices"'}><div id="purposes-content-container"><div class="purposes-body"><div class="purposes-item"><div class="purposes-item-title"><label for="purpose-4">Measurement</label></div><div class="purposes-checkbox"><input id="purpose-4" type="checkbox"></div></div><button onclick="fetch('/choice')">Save preferences</button></div></div></section></div>`
+      : `<section class="truste_box_overlay_inner" id="pop-div3123" role="dialog" ${mode === "unnamed" ? '' : 'aria-label="Cookie preferences"'}><div id="pop-frame123" name="trustarc_cm" class="trustarc_newcm_container truste_popframe"></div></section>`;
+    const trustContent = '<section class="gdprAccessiblePrefPanel"><div class="categoryPanelAccessible"><div class="accessibleCategoryHeadingName"><h2>Functional Cookies</h2></div><div role="radiogroup" class="accessibleSwitch"><button role="radio" aria-checked="false" onclick="fetch(\'/choice\')">No</button><button role="radio" aria-checked="false" onclick="fetch(\'/choice\')">Yes</button></div></div></section>';
+    res.end(`${banner}<script>
+      window._iub={cs:{}};window.truste={eu:{}};
+      ${mode === "getter-sdk" ? "Object.defineProperty(window.truste,'eu',{get(){throw Error('getter must not run')}});Object.defineProperty(window._iub,'cs',{get(){throw Error('getter must not run')}});" : ''}
+      ${iubenda ? "const root=document.querySelector('tb-banner-wrapper').attachShadow({mode:'open'});root.innerHTML='<section><button class=\"tb-banner-tab-button inactive\">Preferences</button><div hidden><button class=\"tb-banner-tab-button inactive\">Preferences</button></div></section>';" : 'const root=document;'}
+      const button=root.querySelector('button');
+      ${mode === "duplicate" ? "button.parentElement.append(button.cloneNode(true));" : ''}
+      ${mode === "preexisting" ? 'document.body.insertAdjacentHTML("beforeend",'+JSON.stringify(panel)+');' : ''}
+      button.onclick=()=>{fetch('/opened');${mode === "replace-root" ? "button.getRootNode().host ? button.getRootNode().host.remove() : document.querySelector('#truste-consent-track').remove();" : ''}
+        ${mode === "sdk-change" ? "window._iub.cs={};window.truste.eu={};" : ''}
+        document.body.insertAdjacentHTML('beforeend',${JSON.stringify(panel)});
+        ${iubenda ? '' : `window.truste.eu.popdiv3='${mode === "wrong-id" ? 'pop-div3999' : 'pop-div3123'}';window.truste.eu.popframe='pop-frame123';document.querySelector('[name="trustarc_cm"]').attachShadow({mode:'open'}).innerHTML=${JSON.stringify(trustContent)};`}
+      };
+    </script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (provider of ["Iubenda", "TrustArc"]) for (mode of ["valid", "duplicate", "preexisting", "getter-sdk", "replace-root", "sdk-change", "unnamed", ...(provider === "TrustArc" ? ["wrong-id"] : [])]) {
+      clicks = choices = 0;
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: `${provider}-${mode}`, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      const detail = `${provider}/${mode} ${JSON.stringify(packet)}`;
+      assert.equal(choices, 0, detail);
+      assert.equal(clicks, ["duplicate", "preexisting", "getter-sdk"].includes(mode) ? 0 : 1, detail);
+      assert.equal(packet.action.opened, mode === "valid", detail);
+      if (mode === "valid") {
+        assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.mode, "registered_portal", detail);
+        assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.verification?.result, "verified", detail);
+        assert.equal(packet.controls[0]?.kind, "category", detail);
+        if (provider === "TrustArc") assert.equal(packet.controls[0]?.checked, null, "radio choices were observed but no choice state is inferred");
+      } else assert.equal(packet.controlInventoryComplete, false, detail);
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+
+test("TrustArc radio categories require visible consistent pairs and never infer a saved choice", async () => {
+  const {chromium} = await import("playwright");
+  const {readPreferenceControls, classifyControls} = await import("./cmp-preferences-observer.js");
+  const {KNOWN_CMP_REGISTRY} = await import("@website-signal-risk-scanner/shared");
+  const recipe = KNOWN_CMP_REGISTRY.find(c => c.canonicalName === "TrustArc")!.preferenceCategoryInventory!;
+  const browser = await chromium.launch({headless:true});
+  try {
+    const page = await browser.newPage();
+    for (const mode of ["unselected", "selected", "both-selected", "missing-state", "extra-choice", "transparent", "aria-hidden", "disabled"]) {
+      await page.setContent(`<section id="panel"><div class="gdprAccessiblePrefPanel"><div class="categoryPanelAccessible" ${mode === "transparent" ? 'style="opacity:0"' : mode === "aria-hidden" ? 'aria-hidden="true"' : ''}>
+      <div class="accessibleCategoryHeadingName"><h2>Functional Cookies</h2></div><div role="radiogroup" class="accessibleSwitch">
+      <button role="radio" aria-checked="${mode === "both-selected" ? 'true' : 'false'}" ${mode === "disabled" ? 'disabled' : ''}>No</button>
+      <button role="radio" ${mode === "missing-state" ? '' : `aria-checked="${["selected","both-selected"].includes(mode) ? 'true' : 'false'}"`} ${mode === "disabled" ? 'disabled' : ''}>Yes</button>
+      ${mode === "extra-choice" ? '<button role="radio" aria-checked="false">Other</button>' : ''}</div></div></div></section>`);
+      const raw = await readPreferenceControls(page.locator("#panel"), recipe);
+      const controls = classifyControls(raw.controls);
+      if (["transparent", "aria-hidden"].includes(mode)) assert.deepEqual(controls, [], mode);
+      else {
+        assert.equal(controls[0]?.checked, null, mode);
+        assert.equal(controls[0]?.enabled, ["unselected", "selected"].includes(mode), mode);
+        assert.equal(raw.controls[0]?.registeredCategory, ["unselected", "selected", "disabled"].includes(mode), mode);
+      }
+    }
+  } finally { await browser.close(); }
+});

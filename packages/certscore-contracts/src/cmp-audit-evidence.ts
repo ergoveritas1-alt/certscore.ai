@@ -130,7 +130,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
     truncated: z.boolean(),
   }).optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
     identityScopes: z.object({ version: z.literal("cmp_scope_activity.v1"),
       providers: z.array(z.object({ provider: z.string().min(1).max(120), state: z.enum(["visible", "inactive", "unverified"]) }).strict()).max(40),
     }).strict().optional(),
@@ -148,7 +148,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
     }).strict().optional(),
     surfaceBinding: z.object({
       version: z.literal("cmp_surface_binding.v1"),
-      mode: z.enum(["aria_controls", "registered_existing", "registered_deferred", "registered_layer", "borlabs"]),
+      mode: z.enum(["aria_controls", "registered_existing", "registered_deferred", "registered_layer", "registered_portal", "borlabs"]),
       priorMatches: z.number().int().min(0).max(1000), priorVisible: z.boolean().optional(),
       outcome: z.enum(["checking", "ready", "opened", "missing", "ambiguous", "already_visible", "parent_unbound", "changed", "timed_out"]),
       verification: z.object({ version: z.literal("cmp_panel_verification.v1"),
@@ -159,6 +159,10 @@ export const cmpPreferencesEvidenceSchema = z.object({
   }).optional(),
 }).superRefine((packet, ctx) => {
   if (packet.status === "completed" && (!packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
+  if (packet.inspectionDiagnostic?.surfaceBinding?.mode === "registered_portal" &&
+      (packet.inspectionDiagnostic.revision !== "cmp_preferences.v8" || packet.action.opened &&
+       packet.inspectionDiagnostic.surfaceBinding.verification?.result !== "verified"))
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Registered portal opening requires versioned verified binding." });
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });
   if (packet.action.opened && packet.inspectionDiagnostic?.optionsResolution && (packet.inspectionDiagnostic.optionsResolution.overflow || packet.inspectionDiagnostic.optionsResolution.counts.actionable !== 1))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Options diagnostics must agree with unique opening proof." });

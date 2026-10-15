@@ -80,6 +80,9 @@ export type KnownCmpDefinition = {
   /** Permit an exact aria-controls target to appear under this retained root.
    * The target still requires a named dialog/region and one Options action. */
   preferenceDeferredAriaBinding?: { version: string; rootSelector: string };
+  /** Reviewed sibling portal, bound to the original root/control and SDK. */
+  preferencePortalBinding?: { version: string; kind: "iubenda_portal" | "trustarc_portal";
+    rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; sdkPath: string[] };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
   /** Read-only category identity inside a verified preference dialog.
@@ -91,6 +94,7 @@ export type KnownCmpDefinition = {
     serviceLinkLabelSuffix?: string;
     dialogSelector: string;
     categorySelector: string;
+    radioGroupSelector?: string;
     titleSelector: string;
     toggleSelector: string;
   };
@@ -451,6 +455,11 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: [".trustarc-acceptall-btn"],
     canonicalName: "TrustArc",
+    preferenceScopeSelector: "#truste-consent-track",
+    preferencePortalBinding: { version: "trustarc_preferences_portal.v1", kind: "trustarc_portal", rootSelector: "#truste-consent-track", controlSelector: "#truste-show-consent",
+      panelSelector: '.truste_box_overlay_inner[role="dialog"]', contentReadySelector: 'div[name="trustarc_cm"] .gdprAccessiblePrefPanel', sdkPath: ["truste", "eu"] },
+    preferenceCategoryInventory: { version: "trustarc_radio_categories.v1", dialogSelector: ".gdprAccessiblePrefPanel", categorySelector: ".categoryPanelAccessible",
+      titleSelector: ".accessibleCategoryHeadingName h2", toggleSelector: '[role="radiogroup"].accessibleSwitch', radioGroupSelector: '[role="radiogroup"].accessibleSwitch' },
     cookieNames: ["notice_behavior", "TAsessionID", "notice_preferences", "notice_gdpr_prefs"],
     domains: ["trustarc.com", "truste.com", "consent.trustarc.com", "form-renderer.trustarc.com", "privacy-policy.truste.com", "preferences.trustarc.com"],
     domSelectors: ["#truste-consent-track", "[id*='truste' i]", "[id*='trustarc' i]"],
@@ -989,6 +998,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     // Official getBanner() binds the legacy banner or the UI-v2 shadow host.
     // Broad product/marketing classes identify the SDK, not an actionable CMP.
     preferenceScopeSelector: "#iubenda-cs-banner, tb-banner-wrapper",
+    preferencePortalBinding: { version: "iubenda_preferences_portal.v1", kind: "iubenda_portal", rootSelector: "tb-banner-wrapper", controlSelector: "button.tb-banner-tab-button.inactive",
+      panelSelector: '#iubenda-iframe > #iubenda-iframe-popup[role="alertdialog"]', contentReadySelector: "#purposes-content-container .purposes-body", sdkPath: ["_iub", "cs"] },
+    preferenceCategoryInventory: { version: "iubenda_purpose_categories.v1", dialogSelector: "#purposes-content-container",
+      categorySelector: ".purposes-item", titleSelector: ".purposes-item-title label", toggleSelector: '.purposes-checkbox input[type="checkbox"]' },
     cookieNames: ["_iub_cs"],
     domains: ["iubenda.com", "cdn.iubenda.com", "cs.iubenda.com"],
     domSelectors: ["[id*='iubenda' i]", "[class*='iubenda' i]"],

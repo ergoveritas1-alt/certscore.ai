@@ -1,0 +1,517 @@
+{
+  "version": "certscore.cmp-panel-fixes.local.v1",
+  "date": "2026-10-15",
+  "baseCommit": "6bf353a3",
+  "deployed": false,
+  "existingReportsModified": false,
+  "scoringRulesChanged": false,
+  "scope": "Owner-requested Iubenda and TrustArc panel fixes and fresh EU-Ireland local verification. Targeted diagnostic evidence, not a production acceptance cohort or provider-wide reliability claim.",
+  "fixes": [
+    "Canonical registry recipes bind the original unique Options control, original CMP root, unchanged SDK object, exact named portal structure and document. TrustArc also verifies SDK-owned generated panel/content IDs.",
+    "Iubenda UI-v2 nested shadow banner opens the sibling Your Privacy Choices portal. Exact purpose-label and checkbox structure identifies Functionality, Experience, Measurement and Marketing as available category controls.",
+    "TrustArc Manage Settings opens the SDK-owned shadow preference panel. Structural category/radio pairs identify Functional and Advertising controls. A radio pair does not imply a registered or saved choice; checked remains null.",
+    "New diagnostic revision cmp_preferences.v8 retains registered_portal verification. Invalid or changed binding fails closed. Duplicate, pre-existing, unnamed, wrong-ID or replaced panels and SDK getter/replacement cases are covered.",
+    "Radio categories reject inconsistent pairs, hidden/transparent/inert ancestors, missing state and extra choices. No Accept/Reject recipe or score rule was changed."
+  ],
+  "bounds": {
+    "optionsActionsPerVisit": 1,
+    "preferenceBudgetMs": 17000,
+    "panelOpeningCapMs": 3000,
+    "newLanes": 0,
+    "newModelCallsInScanner": 0,
+    "newTimeoutIncrease": false,
+    "deeperPreferenceNavigation": false,
+    "preferenceChoicesSaved": false
+  },
+  "verification": {
+    "distinctFocusedTestsPassed": 162,
+    "typechecks": [
+      "@certscore/contracts",
+      "@website-signal-risk-scanner/shared",
+      "@certscore/scan-core"
+    ],
+    "offlineRetainedTrustArcReplayMatches": true,
+    "canonicalProjection": "Verified retained bundle -> typed assessment -> persisted projection -> normalized concerns -> policy -> CMP report",
+    "registryCheck": "100 rotating targets, 6 stable lanes passed",
+    "egress": {
+      "browserIp": "63.33.9.201",
+      "httpIp": "63.33.9.201",
+      "country": "IE",
+      "awsRegion": "eu-west-1",
+      "verifiedAt": "2026-10-15T21:33:56.891Z"
+    },
+    "historicalReportPreservation": {
+      "originalReports": [
+        {
+          "site": "iubenda",
+          "sha256": "c78a4f7cfd577efa544e172f780a4cb648747bbee0254dc6694d9bfb91b69042",
+          "unchanged": true
+        },
+        {
+          "site": "trustarc",
+          "sha256": "c7167396ffa72322c3741e2db580e737b646fd0272a2b1a5faeb7a6e4173573c",
+          "unchanged": true
+        }
+      ],
+      "productionReportWrites": 0,
+      "deployed": false
+    }
+  },
+  "results": {
+    "baselineUnresolved": 15,
+    "finalUnresolved": 11,
+    "resolved": 4,
+    "newlyUnresolved": 0,
+    "categoryChecksResolvedByPanelFix": 2,
+    "otherFreshEvidenceImprovements": [
+      "TrustArc prominence",
+      "TrustArc privacy-link access"
+    ],
+    "incompleteToNotAssessedCountedAsResolved": false,
+    "sites": [
+      {
+        "site": "iubenda",
+        "oldScanId": "97e773d4-cb63-43ed-bb33-da6e4b64ac49",
+        "newScanId": "cmp-local-iubenda-27f0378f-6b04-4f62-8c29-d99974c1584e",
+        "baselineUnresolved": 8,
+        "resolved": 1,
+        "remainingOriginal": 7,
+        "newlyUnresolved": 0,
+        "totalFreshUnresolved": 7,
+        "rows": [
+          {
+            "id": "banner",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Consent surface observed on the initial visit.",
+            "sourceIds": [
+              "consentControlAssessment.surface"
+            ]
+          },
+          {
+            "id": "reject",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "First-layer Reject or equivalent refusal control.",
+            "sourceIds": [
+              "consentControlAssessment.controls.reject"
+            ]
+          },
+          {
+            "id": "prominence",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+            "sourceIds": [
+              "consent.visual_comparison.observed"
+            ]
+          },
+          {
+            "id": "categories",
+            "before": "Incomplete",
+            "after": "Observed",
+            "wasUnresolved": true,
+            "resolved": true,
+            "newlyUnresolved": false,
+            "detail": "4 categories were available.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "services",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Service names were not captured; deeper preference sections were not inspected.",
+            "sourceIds": []
+          },
+          {
+            "id": "privacy_link",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Public privacy-policy link or surface on the scanned page.",
+            "sourceIds": [
+              "privacy_notice_availability"
+            ]
+          },
+          {
+            "id": "privacy_access",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Privacy-policy links were found, but none was verified as reachable before consent. Individual inspection reasons are retained in the supporting evidence.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "consent_record",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "No browser consent record was retained after a completed choice check.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "implementation",
+            "before": "Review recommended",
+            "after": "Review recommended",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "18 tracking request(s) began after the Reject control was clicked (including RudderStack); first observed 0.04s after the click. Review the recorded requests and how the Reject action controls this tracking activity. The retained evidence did not support a purpose-specific after-Reject deduction. Refusal registration was not confirmed.",
+            "sourceIds": [
+              "post_reject_tracking_reduction"
+            ]
+          },
+          {
+            "id": "duration",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "A bound consent-cookie expiry was not captured.",
+            "sourceIds": []
+          },
+          {
+            "id": "declared_not_found",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+            "sourceIds": []
+          },
+          {
+            "id": "found_not_declared",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+            "sourceIds": []
+          },
+          {
+            "id": "cookie_information",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Cookie purpose and duration information was not retained.",
+            "sourceIds": []
+          }
+        ],
+        "target": "https://www.iubenda.com/en/",
+        "panelOpened": true,
+        "capturedControls": [
+          {
+            "label": "Necessary",
+            "kind": "category",
+            "enabled": false,
+            "checked": true
+          },
+          {
+            "label": "Functionality",
+            "kind": "category",
+            "enabled": true,
+            "checked": false
+          },
+          {
+            "label": "Experience",
+            "kind": "category",
+            "enabled": true,
+            "checked": false
+          },
+          {
+            "label": "Measurement",
+            "kind": "category",
+            "enabled": true,
+            "checked": false
+          },
+          {
+            "label": "Marketing",
+            "kind": "category",
+            "enabled": true,
+            "checked": false
+          }
+        ],
+        "evidence": [
+          {
+            "path": "/Users/benmasek/WC01/outputs/cmp-panel-verification-2026-10-15/fresh-verified/iubenda/cmp-local-iubenda-27f0378f-6b04-4f62-8c29-d99974c1584e/CanonicalEvidenceBundle.json",
+            "sha256": "13caa2a1612f111797a00f53b1fcf06d47d5d5dde0ae163090d90bbda430e4b6"
+          },
+          {
+            "path": "/Users/benmasek/WC01/outputs/cmp-panel-verification-2026-10-15/fresh-verified/iubenda/cmp-local-iubenda-27f0378f-6b04-4f62-8c29-d99974c1584e/CmpPreferencesEvidencePacket.json",
+            "sha256": "e47ec558af812833f22e02d31209bf8a773f10dec0a1f6baaed9247d9c91f066"
+          },
+          {
+            "path": "/Users/benmasek/WC01/outputs/cmp-panel-verification-2026-10-15/fresh-verified/iubenda/cmp-local-iubenda-27f0378f-6b04-4f62-8c29-d99974c1584e/LocalV2DagLambdaManifest.json",
+            "sha256": "d1da71e72616bfbe8f05a8fbb1fce258a7f7b0e243455e718b38d7f3b398527b"
+          }
+        ]
+      },
+      {
+        "site": "trustarc",
+        "oldScanId": "40ea16e3-3f65-4b32-ab11-cba05bda8d2f",
+        "newScanId": "cmp-local-trustarc-52955e16-ad79-49cd-86a0-933c38fc0b41",
+        "baselineUnresolved": 7,
+        "resolved": 3,
+        "remainingOriginal": 4,
+        "newlyUnresolved": 0,
+        "totalFreshUnresolved": 4,
+        "rows": [
+          {
+            "id": "banner",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Consent surface observed on the initial visit.",
+            "sourceIds": [
+              "consentControlAssessment.surface"
+            ]
+          },
+          {
+            "id": "reject",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "First-layer Reject or equivalent refusal control.",
+            "sourceIds": [
+              "consentControlAssessment.controls.reject"
+            ]
+          },
+          {
+            "id": "prominence",
+            "before": "Not assessed",
+            "after": "Observed",
+            "wasUnresolved": true,
+            "resolved": true,
+            "newlyUnresolved": false,
+            "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+            "sourceIds": [
+              "consent.visual_comparison.observed"
+            ]
+          },
+          {
+            "id": "categories",
+            "before": "Incomplete",
+            "after": "Observed",
+            "wasUnresolved": true,
+            "resolved": true,
+            "newlyUnresolved": false,
+            "detail": "2 categories were available.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "services",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Service names were not captured; deeper preference sections were not inspected.",
+            "sourceIds": []
+          },
+          {
+            "id": "privacy_link",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Public privacy-policy link or surface on the scanned page.",
+            "sourceIds": [
+              "privacy_notice_availability"
+            ]
+          },
+          {
+            "id": "privacy_access",
+            "before": "Not assessed",
+            "after": "Observed",
+            "wasUnresolved": true,
+            "resolved": true,
+            "newlyUnresolved": false,
+            "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "consent_record",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Browser consent records were stored or updated after Accept and Reject.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "implementation",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "duration",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "declared_not_found",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+            "sourceIds": []
+          },
+          {
+            "id": "found_not_declared",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+            "sourceIds": []
+          },
+          {
+            "id": "cookie_information",
+            "before": "Incomplete",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Cookie purpose and duration information was not retained.",
+            "sourceIds": []
+          }
+        ],
+        "target": "https://trustarc.com/",
+        "panelOpened": true,
+        "capturedControls": [
+          {
+            "label": "Functional Cookies",
+            "kind": "category",
+            "enabled": true,
+            "checked": null
+          },
+          {
+            "label": "Advertising Cookies",
+            "kind": "category",
+            "enabled": true,
+            "checked": null
+          }
+        ],
+        "evidence": [
+          {
+            "path": "/Users/benmasek/WC01/outputs/cmp-panel-verification-2026-10-15/trustarc-confirmation/trustarc/cmp-local-trustarc-52955e16-ad79-49cd-86a0-933c38fc0b41/CanonicalEvidenceBundle.json",
+            "sha256": "442cc6ec8fc9d2573b7689ad946dfc62d28130053bb4265d54078f304039479b"
+          },
+          {
+            "path": "/Users/benmasek/WC01/outputs/cmp-panel-verification-2026-10-15/trustarc-confirmation/trustarc/cmp-local-trustarc-52955e16-ad79-49cd-86a0-933c38fc0b41/CmpPreferencesEvidencePacket.json",
+            "sha256": "611603b00b5ac327403d8f6861d672cad775dcf6bcbd2d5b6e3cd4c6e1b16f30"
+          },
+          {
+            "path": "/Users/benmasek/WC01/outputs/cmp-panel-verification-2026-10-15/trustarc-confirmation/trustarc/cmp-local-trustarc-52955e16-ad79-49cd-86a0-933c38fc0b41/LocalV2DagLambdaManifest.json",
+            "sha256": "9c96e2ff4b9f9881ee5d52ddeca25684a41792f4e4b4fb34b87e483e93d5ef47"
+          }
+        ]
+      }
+    ]
+  },
+  "repeatability": {
+    "initialFreshComparisonUnresolved": 12,
+    "trustarcInitialPanelOutcome": "preference_operation_timed_out",
+    "trustarcStandaloneDiagnosticOpened": true,
+    "trustarcFreshConfirmationOpened": true,
+    "note": "The earlier timeout is retained and counted in attempted visits. No longer timeout or production retry was added. Final counts use complete, independent fresh scan bundles, not combined evidence from different visits."
+  },
+  "remaining": {
+    "iubenda": [
+      "service identities",
+      "privacy-link reachability",
+      "consent record after choice",
+      "consent-cookie duration",
+      "declared-cookie comparison",
+      "undeclared-cookie comparison",
+      "cookie purpose/duration disclosures"
+    ],
+    "trustarc": [
+      "service identities",
+      "declared-cookie comparison",
+      "undeclared-cookie comparison",
+      "cookie purpose/duration disclosures"
+    ],
+    "reason": "Deeper service/cookie disclosure sections were not inspected. Missing retained evidence remains unresolved; it does not establish absence."
+  },
+  "cost": {
+    "localVerificationEstimatedUsdUpperBound": 1,
+    "standingInfrastructureAdded": false,
+    "productionRollout": false,
+    "note": "Targeted scans, existing Ireland proxy and contact-history ECS helpers only. Bounded panel opening stays inside existing worker limits. This local result is not a production cost or latency measurement."
+  },
+  "contactHistory": {
+    "attemptedVisits": 10,
+    "centralRunKey": "cmp-panels-local-20261015",
+    "centralPersistenceConfirmed": true,
+    "repositoryLedgerUpdatedTargets": [
+      "https://www.iubenda.com/en/",
+      "https://trustarc.com/"
+    ],
+    "ownerCooldownException": true,
+    "tunnelCleanup": {
+      "temporaryRuleRemoved": true,
+      "sshStopped": true,
+      "finishedAt": 1792100349.7226539
+    }
+  },
+  "artifacts": "/Users/benmasek/WC01/outputs/cmp-panel-verification-2026-10-15"
+}

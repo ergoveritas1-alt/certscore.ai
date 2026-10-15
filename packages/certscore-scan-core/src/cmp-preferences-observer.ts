@@ -1,3 +1,4 @@
+import { preparePreferencePortal, verifyPreferencePortal } from "./cmp-preference-portal.js";
 import { classifyConsentGeometryAccess } from "./consent-geometry-access.js";
 import { waitForConsentDocumentReady } from "./consent-document-readiness.js";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
@@ -35,7 +36,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v7", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v8", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -163,7 +164,7 @@ export async function runCmpPreferencesObserver(input: {
     }
     await binding();
     packet.inspectionDiagnostic!.phase = "control_inventory";
-    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"]; observedOptionsLabel?: boolean; deferredAriaBinding?: KnownCmpDefinition["preferenceDeferredAriaBinding"]; controlScopeSelector?: string }> = [];
+    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"]; observedOptionsLabel?: boolean; deferredAriaBinding?: KnownCmpDefinition["preferenceDeferredAriaBinding"]; controlScopeSelector?: string; portalRecipe?: KnownCmpDefinition["preferencePortalBinding"] }> = [];
     const detected = new Set<string>();
     // Resolve all registered vendor scopes in one shadow-piercing locator read.
     // Serial full-document selector round trips used most of the remaining
@@ -276,7 +277,7 @@ export async function runCmpPreferencesObserver(input: {
         if (result.intent !== "options" || !result.contextSatisfied || result.matchStrength === "weak") continue;
         optionsResolution.counts[fields.access]++;
         const control = controls.nth(index);
-        if (fields.access === "actionable") matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.title ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding, observedOptionsLabel, deferredAriaBinding: definition.preferenceDeferredAriaBinding, controlScopeSelector });
+        if (fields.access === "actionable") matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.title ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding, observedOptionsLabel, deferredAriaBinding: definition.preferenceDeferredAriaBinding, controlScopeSelector, portalRecipe: definition.preferencePortalBinding });
       }
     }
     if (matches.length !== 1) {
@@ -291,7 +292,11 @@ export async function runCmpPreferencesObserver(input: {
       await match.control.evaluate((element, selector) => element.matches(selector), match.dialogBinding.controlSelector)
       ? match.dialogBinding : undefined;
     if (registeredDialog) packet.support.recipeVersion = registeredDialog.version;
-    const controlled = match.recipe ? page.locator(match.recipe.dialogSelector)
+    const portalRecipe = match.portalRecipe && await match.control.evaluate((e, selector) => e.matches(selector), match.portalRecipe.controlSelector) ? match.portalRecipe : undefined;
+    const portal = portalRecipe ? await preparePreferencePortal(page, match.control, portalRecipe) : null;
+    if (portalRecipe && !portal) { packet.limitations.push("preference_portal_binding_unavailable"); packet.support.reason = "preference_portal_binding_unavailable"; return finish(); }
+    if (portal) packet.support.recipeVersion = portal.recipe.version;
+    const controlled = portal ? page.locator(portal.recipe.panelSelector) : match.recipe ? page.locator(match.recipe.dialogSelector)
       : registeredDialog ? page.locator(registeredDialog.dialogSelector)
       : controlledId && /^[A-Za-z][\w:-]{0,120}$/.test(controlledId) ? page.locator(`[id="${controlledId}"]`) : null;
     packet.inspectionDiagnostic!.phase = "surface_binding";
@@ -316,10 +321,10 @@ export async function runCmpPreferencesObserver(input: {
     if (match.observedOptionsLabel && (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle)))
       return stopBinding("parent_unbound", "preference_parent_binding_unavailable");
     if (priorMatches === 0) {
-      if (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle)) {
+      if (!portal && (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle))) {
         return stopBinding(deferredRoot ? "parent_unbound" : "missing", deferredRoot ? "preference_parent_binding_unavailable" : "preference_surface_missing");
       }
-      surfaceBinding.mode = "registered_deferred";
+      surfaceBinding.mode = portal ? "registered_portal" : "registered_deferred";
       if (!registeredDialog && match.deferredAriaBinding) packet.support.recipeVersion = match.deferredAriaBinding.version;
     }
     const dialogHandle = priorMatches === 1 ? await controlled.elementHandle() : null;
@@ -340,6 +345,23 @@ export async function runCmpPreferencesObserver(input: {
     surfaceBinding.outcome = "ready";
     await binding();
     const dispatchFields = await match.control.evaluate((element, expected) => {
+      let portalBound = true;
+      if (expected.portal) {
+        let sdk: unknown = window;
+        for (const key of expected.portal.path) {
+          if (!sdk || !["object", "function"].includes(typeof sdk)) { portalBound = false; break; }
+          const descriptor = Object.getOwnPropertyDescriptor(sdk, key);
+          sdk = descriptor && "value" in descriptor ? descriptor.value : null;
+        }
+        let ancestor: Element | null = element;
+        for (let depth = 0; ancestor && ancestor !== expected.portal.root && depth < 32; depth++) {
+          const tree = ancestor.getRootNode();
+          ancestor = ancestor.parentElement ?? (tree instanceof ShadowRoot ? tree.host : null);
+        }
+        portalBound = portalBound && sdk === expected.portal.sdk && element === expected.portal.control &&
+          expected.portal.root.isConnected && ancestor === expected.portal.root &&
+          document.querySelector(expected.portal.rootSelector) === expected.portal.root;
+      }
       const fields = { label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), title: element.getAttribute("title"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls"),
         registered: (!expected.selector || element.matches(expected.selector)) && (!expected.controlScopeSelector || Boolean(element.closest(expected.controlScopeSelector))),
         parentBound: !expected.root || Boolean(expected.root.isConnected && expected.root.contains(element)),
@@ -353,15 +375,15 @@ export async function runCmpPreferencesObserver(input: {
         const root = ancestor.getRootNode();
         ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
       }
-      return { ...fields, accessible: accessible && !ancestor };
-    }, { selector: match.observedOptionsLabel ? match.dialogBinding?.controlSelector : registeredDialog?.controlSelector, root: deferredRootHandle, controlScopeSelector: match.controlScopeSelector, layerControl, layerDialog: layerControl ? dialogHandle : null });
+      return { ...fields, portalBound, accessible: accessible && !ancestor };
+    }, { selector: match.observedOptionsLabel ? match.dialogBinding?.controlSelector : registeredDialog?.controlSelector, root: deferredRootHandle, controlScopeSelector: match.controlScopeSelector, layerControl, layerDialog: layerControl ? dialogHandle : null, portal: portal ? { path: portal.recipe.sdkPath, sdk: portal.sdk, root: portal.rootHandle, control: portal.controlHandle, rootSelector: portal.recipe.rootSelector } : null });
     const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe || match.observedOptionsLabel && dispatchFields.registered ? "observation" : "action" });
-    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound || !dispatchFields.layerBound || !dispatchFields.accessible) throw new Error("preference_control_changed");
+    if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound || !dispatchFields.layerBound || !dispatchFields.portalBound || !dispatchFields.accessible) throw new Error("preference_control_changed");
     // Opening is optional depth, not permission to consume the entire lane.
     // Share one cap across dispatch, visibility and accessible-name hydration,
     // leaving room to inspect a verified panel and retain earlier checkpoints.
     const openingAllowance = optionalEvidenceAllowance({ remainingMs: remaining(),
-      maximumMs: Math.min(registeredDialog?.openingBudgetMs ?? EVIDENCE_WORK_POLICY.preferences.panelOpeningBudgetMs,
+      maximumMs: Math.min(registeredDialog?.openingBudgetMs ?? (portal ? EVIDENCE_WORK_POLICY.preferences.registeredLazyPanelOpeningBudgetMs : EVIDENCE_WORK_POLICY.preferences.panelOpeningBudgetMs),
         EVIDENCE_WORK_POLICY.preferences.registeredLazyPanelOpeningBudgetMs),
       requiredReserveMs: EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs });
     if (!openingAllowance) return stopBinding("timed_out", "preference_budget_exhausted");
@@ -395,7 +417,13 @@ export async function runCmpPreferencesObserver(input: {
     // uniqueness before accepting any opening or reading preference evidence.
     await controlled.first().waitFor({ state: "visible", timeout: openingRemaining() });
     if (await controlled.count() !== 1) throw new Error("preference_surface_ambiguous");
-    if (surfaceBinding.mode === "registered_deferred") {
+    let portalPanel: Awaited<ReturnType<Locator["elementHandle"]>> = null;
+    if (portal) {
+      portalPanel = await controlled.elementHandle();
+      await controlled.locator(portal.recipe.contentReadySelector).waitFor({ state: "visible", timeout: openingRemaining() });
+      if (!portalPanel || !await verifyPreferencePortal(page, controlled, portal, portalPanel)) throw new Error("preference_surface_changed");
+      surfaceBinding.verification = { version: "cmp_panel_verification.v1", result: "verified", role: await controlled.getAttribute("role") };
+    } else if (surfaceBinding.mode === "registered_deferred") {
       if (!deferredRoot || !deferredRootHandle) throw new Error("preference_surface_changed");
       surfaceBinding.verification = await verifyDeferredPreferencePanel({ panel: controlled, parent: deferredRootHandle,
         roles: registeredDialog?.dialogRoles ?? (match.deferredAriaBinding ? ["dialog", "region", "tabpanel"] : ["dialog", "region"]), remainingMs: Math.max(0, openingRemaining() - 25) });
@@ -419,6 +447,7 @@ export async function runCmpPreferencesObserver(input: {
     const raw = await readPreferenceControls(controlled, categoryRecipe, inventoryDefinition?.initialOptionalOffCloseObservation?.inputSelector);
     if (raw.controls.some(control => control.registeredCategory || control.registeredService)) packet.support.recipeVersion = categoryRecipe!.version;
     await binding();
+    if (portal && (!portalPanel || !await verifyPreferencePortal(page, controlled, portal, portalPanel))) throw new Error("preference_document_changed");
     packet.controls = classifyControls(raw.controls, borlabs ?? oneTrust);
     packet.checkpoints!.controls = true;
     packet.checkpoints!.controlsSurface = "preferences";
@@ -451,6 +480,7 @@ export async function runCmpPreferencesObserver(input: {
     // sample is not proof of the CMP's entire dynamic inventory.
     if (!borlabs) packet.declarationInventoryComplete = false;
     await binding();
+    if (portal && (!portalPanel || !await verifyPreferencePortal(page, controlled, portal, portalPanel))) throw new Error("preference_document_changed");
     packet.checkpoints!.declarations = true;
     packet.status = "completed";
     packet.inspectionDiagnostic!.phase = "completed";
@@ -535,7 +565,7 @@ export async function readBorlabsPreferenceInventory(page: Page) {
 }
 
 export async function readPreferenceControls(controlled: Locator, recipe?: KnownCmpDefinition["preferenceCategoryInventory"], inputSelector?: string) {
-  const selector = 'input[type="checkbox"], [role="switch"], [role="checkbox"]';
+  const selector = 'input[type="checkbox"], [role="switch"], [role="checkbox"]' + (recipe?.radioGroupSelector ? `, ${recipe.radioGroupSelector}` : "");
   return await controlled.locator(inputSelector ? `:is(${selector}):is(${inputSelector})` : selector).evaluateAll((nodes, recipe) => ({
       overflow: nodes.length > 100,
       controls: nodes.slice(0, 100).map(node => {
@@ -571,7 +601,25 @@ export async function readPreferenceControls(controlled: Locator, recipe?: Known
         const category = recipe ? node.closest(recipe.categorySelector) : null;
         const titles = category && recipe ? category.querySelectorAll(recipe.titleSelector) : [];
         const toggles = category && recipe ? category.querySelectorAll(recipe.toggleSelector) : [];
-        const registeredControl = Boolean(recipe && dialog && category && dialog.contains(category) &&
+        const radio = Boolean(recipe?.radioGroupSelector && node.matches(recipe.radioGroupSelector));
+        const choices = radio ? [...node.querySelectorAll('[role="radio"]')] : [];
+        const radioVisible = !radio || choices.every(choice => {
+          const box = choice.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0) return false;
+          let ancestor: Element | null = choice;
+          for (let depth = 0; ancestor && depth < 64; depth++) {
+            const style = getComputedStyle(ancestor);
+            if (style.display === "none" || style.visibility !== "visible" || style.opacity === "0" ||
+                ancestor.matches('[hidden], [aria-hidden="true" i], [inert]')) return false;
+            const tree = ancestor.getRootNode();
+            ancestor = ancestor.parentElement ?? (tree instanceof ShadowRoot ? tree.host : null);
+          }
+          return !ancestor;
+        });
+        const radioValid = !radio || radioVisible && choices.length === 2 &&
+          choices.every(choice => ["true", "false"].includes(choice.getAttribute("aria-checked") ?? "")) &&
+          choices.filter(choice => choice.getAttribute("aria-checked") === "true").length <= 1;
+        const registeredControl = Boolean(radioValid && recipe && dialog && category && dialog.contains(category) &&
           node.matches(recipe.toggleSelector) && titles.length === 1 && titles[0]!.textContent?.trim() &&
           titles[0]!.getBoundingClientRect().width > 0 && getComputedStyle(titles[0]!).visibility === "visible" &&
           toggles.length === 1 && toggles[0] === node);
@@ -581,8 +629,8 @@ export async function readPreferenceControls(controlled: Locator, recipe?: Known
           /^https?:/.test((serviceLinks[0] as HTMLAnchorElement).href));
         const registeredCategory = registeredControl && recipe?.kind !== "service";
         const style = getComputedStyle(node);
-        return { registeredCategory, registeredService, label: registeredService ? titles[0]!.textContent!.trim().slice(0, 240) : label || (registeredCategory ? titles[0]!.textContent!.trim().slice(0, 240) : ""), groupLabel: groupLabel.trim().slice(0, 160), visible: labelledTargetVisible || box.width > 0 && box.height > 0 && style.visibility !== "hidden" && Number(style.opacity) > 0,
-          enabled: !node.matches(":disabled") && node.getAttribute("aria-disabled") !== "true", checked: node instanceof HTMLInputElement ? input.checked : node.getAttribute("aria-checked") === "true" };
+        return { registeredCategory, registeredService, label: registeredService ? titles[0]!.textContent!.trim().slice(0, 240) : label || (registeredCategory ? titles[0]!.textContent!.trim().slice(0, 240) : ""), groupLabel: groupLabel.trim().slice(0, 160), visible: radioVisible && (labelledTargetVisible || box.width > 0 && box.height > 0 && style.visibility !== "hidden" && Number(style.opacity) > 0),
+          enabled: radio ? radioValid && choices.some(choice => !choice.matches(':disabled, [aria-disabled="true"]')) : !node.matches(":disabled") && node.getAttribute("aria-disabled") !== "true", checked: radio ? null : node instanceof HTMLInputElement ? input.checked : node.getAttribute("aria-checked") === "true" };
       }),
     }), recipe);
 }

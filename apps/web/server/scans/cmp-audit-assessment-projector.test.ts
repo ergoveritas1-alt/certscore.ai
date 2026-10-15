@@ -1229,3 +1229,33 @@ test("prominence explains missing evidence and retained deferral without inventi
   input.modulesRun[0]!.timingBreakdown![0]!.detail = JSON.stringify({ artifactId: "unrelated", status: "deferred" });
   assert.equal(deriveCmpAuditAssessment(input, geometry as any)!.rows.find(row => row.id === "prominence")!.limitation?.code, "visual_measurement_unavailable");
 });
+
+test("verified sibling-panel categories follow canonical assessment, persistence and policy without scoring", () => {
+  for (const provider of ["Iubenda", "TrustArc"]) {
+    const input = bundle(), packet = input.cmpPreferencesEvidence!;
+    packet.support = {state: "partial", provider, recipeVersion: provider === "Iubenda" ? "iubenda_purpose_categories.v1" : "trustarc_radio_categories.v1", reason: "bounded_visible_preference_inspection"};
+    packet.controls = [{label: provider === "Iubenda" ? "Measurement" : "Functional Cookies", kind: "category", enabled: true, checked: provider === "TrustArc" ? null : false}];
+    packet.controlInventoryComplete = false;
+    packet.limitations = ["deeper_preference_sections_not_opened"];
+    packet.declarations = [];
+    packet.inspectionDiagnostic = {revision: "cmp_preferences.v8", budgetMs: 17000, phase: "completed",
+      surfaceBinding: {version: "cmp_surface_binding.v1", mode: "registered_portal", priorMatches: 0, priorVisible: false, outcome: "opened",
+        verification: {version: "cmp_panel_verification.v1", result: "verified", role: "dialog"}}};
+    const retained = structuredClone(input);
+    input.cmpPreferencesEvidence = cmpPreferencesEvidenceSchema.parse(packet);
+    const audit = deriveCmpAuditAssessment(input)!;
+    const assessment = consentControlAssessmentSchema.parse({...observedControlAssessment, cmpAudit: audit});
+    const persisted = withPersistedFirstLayerConsentEvidence({}, {consent_control_assessment: assessment})!;
+    const concerns = buildNormalizedConcerns({runtimeArtifacts: persisted, reviewFindingCandidates: [], validationFindings: []});
+    const report = projectCmpAudit({scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns});
+    const category = report.rows.find(row => row.id === "categories")!;
+    assert.equal(category.status, "Observed", provider);
+    assert.equal(category.supportingEvidence?.inventory?.categories?.[0]?.checked, packet.controls[0]!.checked);
+    assert.equal(report.rows.find(row => row.id === "services")?.status, "Not assessed");
+    assert.equal(report.rows.find(row => row.id === "found_not_declared")?.status, "Not assessed");
+    assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
+    assert.deepEqual(input, retained);
+    input.cmpPreferencesEvidence!.limitations.push("preference_document_changed");
+    assert.notEqual(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "categories")?.status, "observed");
+  }
+});
