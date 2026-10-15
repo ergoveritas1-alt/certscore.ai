@@ -1,0 +1,93 @@
+{
+  "version": "certscore.cmp-provider-priority-fixes.local.v1",
+  "date": "2026-10-15",
+  "baseCommit": "27cb53ca",
+  "deployed": false,
+  "existingReportsModified": false,
+  "scoringRulesChanged": false,
+  "articleModified": false,
+  "newPublicScans": 0,
+  "baseline": {
+    "sites": 10,
+    "criteria": 130,
+    "unresolved": 61,
+    "note": "Historical report counts. No new live coverage reduction is claimed."
+  },
+  "fixes": [
+    {
+      "area": "CMP identity",
+      "implementation": "Bounded activity inspection distinguishes visible, provably inactive and unverified registered scopes. A single visible provider can be selected only when every competing matched scope is inactive. Didomi is scoped to its host/notice, not marketing classes. Ambiguous and zero-size cases remain unresolved."
+    },
+    {
+      "area": "Preference entry",
+      "implementation": "Canonical exact contextual Manage Settings label; Termly primary action-area selection with legacy fallback; versioned Cookiebot and Termly exact aria-controls deferred panel bindings. One Options action, unique original root, accessible named panel and document binding remain mandatory."
+    },
+    {
+      "area": "Iubenda",
+      "implementation": "Preference inspection uses the legacy banner or official UI-v2 shadow host, excluding marketing navigation. No arbitrary popup or new cross-root action recipe was introduced."
+    },
+    {
+      "area": "Service inventory",
+      "implementation": "Borlabs service accounting is independent of malformed, unavailable or truncated cookie declarations. Verified service names survive; incomplete cookie inventories cannot establish missing declarations."
+    },
+    {
+      "area": "Prominence",
+      "implementation": "Canonical materialization retains a missing-evidence explanation and interprets existing paired-capture deferral diagnostics. Pixel allowance, scheduling and visual-finding eligibility are unchanged."
+    }
+  ],
+  "verification": {
+    "distinctFocusedTestsPassed": 215,
+    "typechecks": [
+      "@certscore/scan-core",
+      "@certscore/contracts",
+      "@website-signal-risk-scanner/shared"
+    ],
+    "retainedReplaySites": 10,
+    "retainedReplayAssessmentStatusChanges": 0,
+    "historicalEvidenceUnchanged": true,
+    "negativeFixtures": [
+      "ambiguous Options",
+      "duplicate or replaced root",
+      "panel outside retained root",
+      "missing accessible panel name",
+      "hidden or unverified competing SDK",
+      "inherited visibility override",
+      "marketing Preferences link",
+      "malformed cookie",
+      "partial service accounting",
+      "foreign visual artifact"
+    ],
+    "logs": [
+      "/tmp/cmp-priorities-final-tests.log",
+      "/tmp/cmp-priorities-compat-tests.log",
+      "/tmp/cmp-priorities-scope-test.log"
+    ]
+  },
+  "remaining": [
+    "Fresh EU-Ireland captures are required to measure coverage gains; the previous public sample remains on its contact cooldown.",
+    "Iubenda UI-v2 popup transition and TrustArc preference-panel binding need retained structural proof before additional navigation can be authorized.",
+    "Didomi may still have no actionable first-layer visitor CMP, even after installed-SDK ambiguity is separated.",
+    "Partial cookie inventories, unavailable declaration purposes and unmeasured prominence remain explicitly incomplete or unassessed."
+  ],
+  "cost": {
+    "estimatedIncrementalUsdPerMonth": "below 1 at 100000 scans",
+    "basis": "Bounded DOM reads and small diagnostics inside existing lane deadlines. No new lane, invocation, model call, retention policy or standing capacity. Estimate is not a production measurement."
+  },
+  "sources": [
+    {
+      "url": "https://support.termly.io/hc/en-us/articles/49692200680465-Styling-the-consent-banner-data-termly-attributes",
+      "use": "Stable consent-banner and banner-actions attributes"
+    },
+    {
+      "url": "https://cdn.iubenda.com/cookie_solution/iubenda_cs/1.109.0/core-en.js",
+      "sha256": "1a3e4a064776bb342107f7e22231deb4d6b146906faf159d5247a9d5733d7bd6",
+      "use": "getBanner chooses #iubenda-cs-banner or tb-banner-wrapper"
+    },
+    {
+      "url": "https://cdn.iubenda.com/ui-v2/versions/latest/ui-v2.iife.js",
+      "sha256": "c85c71c43d423478546d0894de8a727eeedf889e45fd0f7f1cdb24b79ad2fd30",
+      "use": "UI-v2 shadow banner and Preferences event; insufficient by itself to authorize an arbitrary popup"
+    }
+  ],
+  "retainedReplayArtifact": "/Users/benmasek/WC01/outputs/cmp-fixes-2026-10-15/retained-replay.json"
+}

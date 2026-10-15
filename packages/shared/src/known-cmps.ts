@@ -75,6 +75,11 @@ export type KnownCmpDefinition = {
   };
   /** Preference-only vendor scope. Does not register Accept/Reject controls. */
   preferenceScopeSelector?: string;
+  /** Registered primary Options area; excludes duplicate explanatory links. */
+  preferenceControlScopeSelector?: string;
+  /** Permit an exact aria-controls target to appear under this retained root.
+   * The target still requires a named dialog/region and one Options action. */
+  preferenceDeferredAriaBinding?: { version: string; rootSelector: string };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
   /** Read-only category identity inside a verified preference dialog.
@@ -539,6 +544,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "#CybotCookiebotDialogBodyButtonAccept",
     ],
     canonicalName: "Cookiebot",
+    preferenceDeferredAriaBinding: { version: "cookiebot_aria_preferences.v1", rootSelector: "#CybotCookiebotDialog" },
     observationControlRecipes: [{
       recipeId: "Cookiebot.options.v1",
       controlSelector: "#CybotCookiebotDialogBodyEdgeMoreDetailsLink",
@@ -765,6 +771,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#didomi-notice-agree-button"],
     canonicalName: "Didomi",
+    preferenceScopeSelector: "#didomi-host, #didomi-notice",
     preferenceDialogBinding: { version: "didomi_preferences.v1", controlSelector: "#didomi-notice-learn-more-button", dialogSelector: "#didomi-consent-popup", deferredRootSelector: "#didomi-host" },
     cookieNames: ["didomi_token", "euconsent-v2"],
     domains: ["didomi.io", "sdk.privacy-center.org", "privacy-center.org"],
@@ -916,9 +923,11 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       resolution: "scoped_accessible_control",
     }],
     canonicalName: "Termly",
+    preferenceControlScopeSelector: '[data-termly-part="banner-actions"]',
+    preferenceDeferredAriaBinding: { version: "termly_aria_preferences.v1", rootSelector: '[data-termly-part="consent-banner"]' },
     cookieNames: ["TERMLY_API_CACHE", "termly_gtm_template_default_consents"],
     domains: ["termly.io", "app.termly.io"],
-    domSelectors: ["[id*='termly' i]"],
+    domSelectors: ['[data-termly-part="consent-banner"]', "[id*='termly' i]"],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["Termly"],
     interactionDocumentationUrls: [
@@ -977,6 +986,9 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: [".iubenda-cs-accept-btn"],
     canonicalName: "Iubenda",
+    // Official getBanner() binds the legacy banner or the UI-v2 shadow host.
+    // Broad product/marketing classes identify the SDK, not an actionable CMP.
+    preferenceScopeSelector: "#iubenda-cs-banner, tb-banner-wrapper",
     cookieNames: ["_iub_cs"],
     domains: ["iubenda.com", "cdn.iubenda.com", "cs.iubenda.com"],
     domSelectors: ["[id*='iubenda' i]", "[class*='iubenda' i]"],

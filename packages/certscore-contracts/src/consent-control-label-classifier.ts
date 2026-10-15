@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v16";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v17";
 
 export type ConsentControlIntent =
   | "accept"
@@ -394,6 +394,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("options", "manage preferences"),
     ...direct("options", "manage cookies"),
     ...direct("options", "manage options"),
+    { ...contextual("options", "manage settings", { requiresConsentContext: true }), exactLabelOnly: true },
     ...direct("options", "manage choices"),
     ...direct("options", "manage my choices"),
     ...direct("options", "set cookie options"),

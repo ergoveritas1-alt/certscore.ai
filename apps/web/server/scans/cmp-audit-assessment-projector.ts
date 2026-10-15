@@ -12,7 +12,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (!outcome || outcome.status !== "limited" || !outcome.limitationCode) return undefined;
     // Coordinator outcomes are coverage telemetry, never substituted browser evidence.
     const fallback = cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v9", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
+      sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", inventoryEvidencePolicy: "cmp_inventory_tables.v10", scanId: bundle.scanId, url: bundle.url, outcome, accept: bundle.postAcceptEvidence, reject: bundle.postRefusalEvidence })).digest("hex"),
       support: { state: "unknown", provider: null, recipeVersion: null, reason: outcome.limitationCode },
       rows: ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: independentAuditDetails(bundle)[id] ?? (id === "duration" ? "No verified CMP cookie expiry was retained." : "Preference evidence was not retained; this criterion could not be assessed."), evidenceRefs: [] })) });
     const expiries = applyClientFacts(bundle, (id, status, detail, refs = []) => Object.assign(fallback.rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs }), fallback.rows, observations);
@@ -67,7 +67,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v9", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v10", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -267,7 +267,9 @@ function applyActionLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
  * availability. Called only during canonical materialization, never by UI. */
 function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditAssessment["rows"], geometry?: Record<string, unknown> | null) {
   const row = rows.find(row => row.id === "prominence");
-  if (!row || !geometry || geometry.artifactVersion !== "consent_control_geometry.v1" || geometry.sourceScanner !== "consent_control_geometry_diagnostic" || geometry.pageUrl !== bundle.url) return;
+  if (!row) return;
+  if (row.status === "not_assessed" && !row.detail) row.detail = "A same-capture Accept/Reject pair with verified visual measurements was not retained; relative prominence could not be assessed.";
+  if (!geometry || geometry.artifactVersion !== "consent_control_geometry.v1" || geometry.sourceScanner !== "consent_control_geometry_diagnostic" || geometry.pageUrl !== bundle.url) return;
   if (verifyConsentControlInspection(geometry.controlInspection, geometry.candidates)?.structuralCoverage !== "complete") return;
   const identity = geometry.documentIdentity as { source?: string; token?: string } | undefined;
   // The coordinator mirrors lane files into the parent artifact prefix. Match
@@ -296,11 +298,12 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
     if (module.moduleName !== "preConsentRuntimeScanner" || timing.label !== "consent pixel comparison" || !timing.detail) continue;
     try {
       const diagnostic = JSON.parse(timing.detail);
-      if (diagnostic.artifactId !== image.artifactId || !["not_eligible", "no_budget", "timed_out", "unavailable"].includes(diagnostic.status)) continue;
+      if (diagnostic.artifactId !== image.artifactId || !["deferred", "not_eligible", "no_budget", "timed_out", "unavailable"].includes(diagnostic.status)) continue;
       const details: Record<string, string> = { capture_frames_changed: "Frames changed during the geometry/screenshot capture; the comparison was skipped.",
         pair_occluded: "Another element covered an Accept or Reject control in the paired capture; prominence could not be compared.",
         pair_not_unique: "A unique Accept/Reject pair could not be selected for pixel comparison.", image_binding_incomplete: "The screenshot and button geometry could not be verified as one paired capture.",
         not_eligible: "The screenshot was retained, but pixel comparison was skipped because capture eligibility checks did not pass.",
+        deferred: "Pixel comparison was deferred for this interim capture; no verified terminal comparison was retained.",
         no_budget: "The pixel-comparison allowance was exhausted before this capture.", timed_out: "Pixel comparison did not finish within its capture allowance.", unavailable: "The retained image could not produce verified pixel-comparison measurements." };
       const key = diagnostic.status === "not_eligible" && diagnostic.reason !== undefined ? diagnostic.reason : diagnostic.status;
       if (typeof key === "string" && Object.hasOwn(details, key)) comparisonFailure = { detail: details[key]!, code: `pixel_comparison_${key}` };

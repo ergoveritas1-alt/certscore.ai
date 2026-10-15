@@ -122,3 +122,24 @@ test("a known SDK without a mounted CMP keeps readiness but never supplies an ac
     assert.equal(result.runtimeIdentified,true);assert.deepEqual(result.indices,[]);
   }finally{await browser.close();}
 });
+
+test("scope inventory separates provably inactive SDK roots from visible consent UI without erasing ambiguity", async () => {
+  const { readCmpScopeInventory } = await import("./cmp-scope-inventory.js");
+  const { KNOWN_CMP_REGISTRY } = await import("@website-signal-risk-scanner/shared");
+  const definitions = KNOWN_CMP_REGISTRY.filter(d => ["Didomi", "HubSpot Consent Banner"].includes(d.canonicalName));
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    for (const mode of ["hidden", "visible", "zero-size", "shadow-hidden", "aria-hidden", "inert", "visibility-override"]) {
+      await page.setContent(`<div id="didomi-host"><button>Manage cookies</button></div><div id="parent" ${mode === "hidden" ? 'style="display:none"' : mode === "aria-hidden" ? 'aria-hidden="true"' : mode === "inert" ? 'inert' : mode === "visibility-override" ? 'style="visibility:hidden"' : ''}><div id="hs-eu-cookie-confirmation" ${mode === "visibility-override" ? 'style="visibility:visible"' : ''}>${mode === "zero-size" ? '' : '<button>Manage cookies</button>'}</div></div>`);
+      if (mode === "shadow-hidden") await page.evaluate(() => {
+        const host = document.createElement("div"); host.hidden = true; document.body.append(host);
+        host.attachShadow({ mode: "open" }).append(document.querySelector("#parent")!);
+      });
+      const result = await readCmpScopeInventory(page, definitions);
+      const inactive = ["hidden", "shadow-hidden", "aria-hidden", "inert"].includes(mode);
+      assert.deepEqual(result.indices.map(i => definitions[i]!.canonicalName), inactive ? ["Didomi"] : definitions.map(d => d.canonicalName), mode);
+      assert.equal(result.scopeStates.find(s => definitions[s.index]!.canonicalName === "HubSpot Consent Banner")!.state, inactive ? "inactive" : ["zero-size", "visibility-override"].includes(mode) ? "unverified" : "visible", mode);
+    }
+  } finally { await browser.close(); }
+});

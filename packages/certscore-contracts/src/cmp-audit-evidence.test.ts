@@ -145,3 +145,15 @@ test("Options diagnostics are bounded, versioned and cannot manufacture opening 
  for(const change of [{...counts,hidden:101},{...counts,hidden:100,covered:1},{...counts,hidden:-1}])
   assert.equal(cmpPreferencesEvidenceSchema.safeParse({...input,inspectionDiagnostic:{...input.inspectionDiagnostic,optionsResolution:{...input.inspectionDiagnostic.optionsResolution,counts:change}}}).success,false);
 });
+
+test("v7 scope activity diagnostics are bounded and do not supply action or inventory evidence", () => {
+  const input = { ...packet(), inspectionDiagnostic: { revision: "cmp_preferences.v7", budgetMs: 17000, phase: "control_inventory",
+    identityScopes: { version: "cmp_scope_activity.v1", providers: [{ provider: "Didomi", state: "visible" }, {provider: "HubSpot Consent Banner", state: "inactive"}] } } };
+  const parsed = cmpPreferencesEvidenceSchema.parse(input);
+  assert.deepEqual(parsed.inspectionDiagnostic, input.inspectionDiagnostic);
+  assert.equal(parsed.status, "limited"); assert.equal(parsed.action.count, 0); assert.equal(parsed.action.opened, false);
+  assert.deepEqual(parsed.controls, []); assert.equal(parsed.controlInventoryComplete, false);
+  for (const providers of [[{provider: "Didomi", state: "assumed_visible"}], [{provider: "x".repeat(121), state: "visible"}], Array.from({length: 41}, () => ({provider: "Didomi", state: "visible"}))]) {
+    assert.equal(cmpPreferencesEvidenceSchema.safeParse({...input, inspectionDiagnostic: {...input.inspectionDiagnostic, identityScopes: {...input.inspectionDiagnostic.identityScopes, providers}}}).success, false);
+  }
+});

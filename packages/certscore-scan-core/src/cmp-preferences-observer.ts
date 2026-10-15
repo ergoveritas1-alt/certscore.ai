@@ -35,7 +35,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v6", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v7", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -163,7 +163,7 @@ export async function runCmpPreferencesObserver(input: {
     }
     await binding();
     packet.inspectionDiagnostic!.phase = "control_inventory";
-    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"]; observedOptionsLabel?: boolean }> = [];
+    const matches: Array<{ provider: string; control: Locator; label: string; scope: Locator; recipe?: KnownCmpDefinition["preferenceInspection"]; dialogBinding?: KnownCmpDefinition["preferenceDialogBinding"]; observedOptionsLabel?: boolean; deferredAriaBinding?: KnownCmpDefinition["preferenceDeferredAriaBinding"]; controlScopeSelector?: string }> = [];
     const detected = new Set<string>();
     // Resolve all registered vendor scopes in one shadow-piercing locator read.
     // Serial full-document selector round trips used most of the remaining
@@ -171,6 +171,7 @@ export async function runCmpPreferencesObserver(input: {
     const scopeSelectors = definitions.map(cmpInventoryScopeSelector);
     const scopeInventory = await readCmpScopeInventory(page, definitions);
     packet.inspectionDiagnostic!.passiveDialogReveal = revealed || scopeInventory.revealed;
+    packet.inspectionDiagnostic!.identityScopes = { version: "cmp_scope_activity.v1", providers: scopeInventory.scopeStates.map(({index, state}) => ({provider: definitions[index]!.canonicalName, state})) };
     if (scopeInventory.overflow) { packet.limitations.push("control_inventory_overflow"); return finish(); }
     for (const index of scopeInventory.indices) detected.add(definitions[index]!.canonicalName);
     if (detected.size === 1) packet.support = { state: "partial", provider: [...detected][0]!, recipeVersion: CMP_PREFERENCE_POLICY_VERSION, reason: "inspection_incomplete" };
@@ -222,7 +223,8 @@ export async function runCmpPreferencesObserver(input: {
       packet.declarations = borlabs.declarations;
       packet.serviceNames = borlabs.services.filter(Boolean);
       packet.declarationCoverage = borlabs.coverage;
-      packet.declarationInventoryComplete = borlabs.coverage.configured > 0 && !borlabs.coverage.unresolved && !borlabs.coverage.truncated;
+      packet.declarationInventoryComplete = borlabs.cookieInventoryComplete;
+      if (!borlabs.cookieInventoryComplete) packet.limitations.push("configured_cookie_inventory_incomplete");
       packet.checkpoints!.declarations = true;
     }
     // Basic visible choices are valuable even when no unique Options control
@@ -258,7 +260,12 @@ export async function runCmpPreferencesObserver(input: {
       const recipe = definition.preferenceInspection;
       const scope = page.locator(scopeSelectors[definitionIndex]!);
       const controlSelector = recipe?.controlSelector ?? (definition.initialOptionalOffCloseObservation ? definition.preferenceDialogBinding!.controlSelector : undefined) ?? ['button, [role="button"], input[type="button"]', definition.preferenceDialogBinding?.controlSelector].filter(Boolean).join(",");
-      const controls = scope.locator(controlSelector);
+      const primaryScope = definition.preferenceControlScopeSelector ? scope.locator(definition.preferenceControlScopeSelector) : undefined;
+      // Older vendor banners without the registered action area retain the
+      // existing unique-Options requirement across their whole CMP scope.
+      const controlScopeSelector = primaryScope && await primaryScope.count() > 0 ? definition.preferenceControlScopeSelector : undefined;
+      const controlScope = controlScopeSelector ? primaryScope! : scope;
+      const controls = controlScope.locator(controlSelector);
       const inventory = await controls.evaluateAll(readCmpOptionsInventory, { registeredSelector: definition.preferenceDialogBinding?.controlSelector });
       if (inventory.overflow) { optionsResolution.overflow = true; packet.limitations.push("control_inventory_overflow"); continue; }
       for (const [index, fields] of inventory.fields.entries()) {
@@ -269,7 +276,7 @@ export async function runCmpPreferencesObserver(input: {
         if (result.intent !== "options" || !result.contextSatisfied || result.matchStrength === "weak") continue;
         optionsResolution.counts[fields.access]++;
         const control = controls.nth(index);
-        if (fields.access === "actionable") matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.title ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding, observedOptionsLabel });
+        if (fields.access === "actionable") matches.push({ provider: definition.canonicalName, control, label: fields.ariaLabel ?? fields.title ?? fields.label, scope, recipe, dialogBinding: definition.preferenceDialogBinding, observedOptionsLabel, deferredAriaBinding: definition.preferenceDeferredAriaBinding, controlScopeSelector });
       }
     }
     if (matches.length !== 1) {
@@ -300,10 +307,11 @@ export async function runCmpPreferencesObserver(input: {
     if (!controlled || priorMatches > 1 || (match.recipe && await match.scope.count() !== 1)) {
       return stopBinding(priorMatches > 1 ? "ambiguous" : "missing", priorMatches > 1 ? "preference_surface_ambiguous" : "preference_surface_binding_unavailable");
     }
-    // A registered OneTrust button may create its panel on opening. Bind that
+    // A registered CMP button may create its panel on opening. Bind that
     // transition to the exact existing vendor root, never to a guessed new modal.
-    const deferredRoot = (priorMatches === 0 || match.observedOptionsLabel) && registeredDialog?.deferredRootSelector
-      ? page.locator(registeredDialog.deferredRootSelector) : undefined;
+    const deferredRootSelector = registeredDialog?.deferredRootSelector ?? (!match.recipe && controlledId ? match.deferredAriaBinding?.rootSelector : undefined);
+    const deferredRoot = (priorMatches === 0 || match.observedOptionsLabel) && deferredRootSelector
+      ? page.locator(deferredRootSelector) : undefined;
     const deferredRootHandle = deferredRoot && await deferredRoot.count() === 1 ? await deferredRoot.elementHandle() : null;
     if (match.observedOptionsLabel && (!deferredRootHandle || !await match.control.evaluate((element, root) => Boolean(root?.isConnected && root.contains(element)), deferredRootHandle)))
       return stopBinding("parent_unbound", "preference_parent_binding_unavailable");
@@ -312,6 +320,7 @@ export async function runCmpPreferencesObserver(input: {
         return stopBinding(deferredRoot ? "parent_unbound" : "missing", deferredRoot ? "preference_parent_binding_unavailable" : "preference_surface_missing");
       }
       surfaceBinding.mode = "registered_deferred";
+      if (!registeredDialog && match.deferredAriaBinding) packet.support.recipeVersion = match.deferredAriaBinding.version;
     }
     const dialogHandle = priorMatches === 1 ? await controlled.elementHandle() : null;
     const beforeVisible = priorMatches === 1 && await controlled.isVisible();
@@ -332,7 +341,7 @@ export async function runCmpPreferencesObserver(input: {
     await binding();
     const dispatchFields = await match.control.evaluate((element, expected) => {
       const fields = { label: (element.textContent ?? "").trim(), ariaLabel: element.getAttribute("aria-label"), title: element.getAttribute("title"), value: (element as HTMLInputElement).value, controls: element.getAttribute("aria-controls"),
-        registered: !expected.selector || element.matches(expected.selector),
+        registered: (!expected.selector || element.matches(expected.selector)) && (!expected.controlScopeSelector || Boolean(element.closest(expected.controlScopeSelector))),
         parentBound: !expected.root || Boolean(expected.root.isConnected && expected.root.contains(element)),
         layerBound: !expected.layerControl || Boolean(element === expected.layerControl && expected.layerDialog?.isConnected && expected.layerDialog.contains(element)) };
       let ancestor: Element | null = element, accessible = true;
@@ -345,7 +354,7 @@ export async function runCmpPreferencesObserver(input: {
         ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
       }
       return { ...fields, accessible: accessible && !ancestor };
-    }, { selector: match.observedOptionsLabel ? match.dialogBinding?.controlSelector : registeredDialog?.controlSelector, root: deferredRootHandle, layerControl, layerDialog: layerControl ? dialogHandle : null });
+    }, { selector: match.observedOptionsLabel ? match.dialogBinding?.controlSelector : registeredDialog?.controlSelector, root: deferredRootHandle, controlScopeSelector: match.controlScopeSelector, layerControl, layerDialog: layerControl ? dialogHandle : null });
     const dispatchIntent = classifyConsentControlLabel({ ...dispatchFields, hasConsentContext: true, usage: match.recipe || match.observedOptionsLabel && dispatchFields.registered ? "observation" : "action" });
     if (dispatchIntent.intent !== "options" || !dispatchIntent.contextSatisfied || dispatchIntent.matchStrength === "weak" || dispatchFields.controls !== controlledId || !dispatchFields.registered || !dispatchFields.parentBound || !dispatchFields.layerBound || !dispatchFields.accessible) throw new Error("preference_control_changed");
     // Opening is optional depth, not permission to consume the entire lane.
@@ -389,7 +398,7 @@ export async function runCmpPreferencesObserver(input: {
     if (surfaceBinding.mode === "registered_deferred") {
       if (!deferredRoot || !deferredRootHandle) throw new Error("preference_surface_changed");
       surfaceBinding.verification = await verifyDeferredPreferencePanel({ panel: controlled, parent: deferredRootHandle,
-        roles: registeredDialog?.dialogRoles ?? ["dialog", "region"], remainingMs: Math.max(0, openingRemaining() - 25) });
+        roles: registeredDialog?.dialogRoles ?? (match.deferredAriaBinding ? ["dialog", "region", "tabpanel"] : ["dialog", "region"]), remainingMs: Math.max(0, openingRemaining() - 25) });
       if (surfaceBinding.verification.result === "verified") {
         if (await deferredRoot.count() !== 1) surfaceBinding.verification.result = "parent_ambiguous";
         else if (await controlled.count() !== 1) surfaceBinding.verification.result = "panel_ambiguous";
@@ -490,30 +499,38 @@ export async function readBorlabsPreferenceInventory(page: Page) {
     const declarations: Array<{ name: string; purpose: string; duration: string; source: "cmp_api_inventory" }> = [];
     const configured = target.borlabsCookieConfig?.services;
     const coverage = { scope: "configured_services" as const, configured: 0, resolved: 0, unresolved: 0, truncated: false };
-    if (!configured || typeof configured !== "object") return { categories, services, declarations, coverage };
+    let cookieInventoryComplete = true;
+    if (!configured || typeof configured !== "object") return { categories, services, declarations, coverage, cookieInventoryComplete: false };
     const items = Object.entries(configured);
     coverage.configured = Math.min(items.length, 10000);
     coverage.truncated = items.length > 100;
     for (const [id, item] of items.slice(0, 100)) {
-      if (!item || item.id !== id || typeof item.id !== "string" || item.id.length > 160) { coverage.unresolved++; continue; }
+      if (!item || item.id !== id || typeof item.id !== "string" || item.id.length > 160) { coverage.unresolved++; cookieInventoryComplete = false; continue; }
       try {
         const service = target.BorlabsCookie?.Services?.findByServiceId?.(item.id);
-        if (!service || service.serviceGroupId !== item.serviceGroupId) { coverage.unresolved++; continue; }
-        if (typeof service.name === "string") services.push(service.name.trim().slice(0, 240));
+        if (!service || service.serviceGroupId !== item.serviceGroupId) { coverage.unresolved++; cookieInventoryComplete = false; continue; }
+        const name = typeof service.name === "string" ? service.name.trim().slice(0, 240) : "";
+        if (name) { services.push(name); coverage.resolved++; }
+        else coverage.unresolved++;
         const group = item.serviceGroupId && target.BorlabsCookie?.ServiceGroups?.findByServiceGroupId?.(item.serviceGroupId);
         if (group && typeof group.name === "string") categories.push(group.name.trim().slice(0, 240));
-        if (!Array.isArray(service.cookies)) { coverage.unresolved++; continue; }
-        coverage.resolved++;
-        if (service.cookies.length > 100) coverage.truncated = true;
+        if (!Array.isArray(service.cookies)) { cookieInventoryComplete = false; continue; }
+        if (service.cookies.length > 100) cookieInventoryComplete = false;
         for (const cookie of service.cookies.slice(0, 100)) {
-          if (declarations.length >= 100) { coverage.truncated = true; break; }
-          if (!cookie || typeof cookie.name !== "string" || !/^[A-Za-z0-9_.$:#*+\-\[\]]{1,160}$/.test(cookie.name)) { coverage.unresolved++; continue; }
+          if (declarations.length >= 100) { cookieInventoryComplete = false; break; }
+          if (!cookie || typeof cookie.name !== "string" || !/^[A-Za-z0-9_.$:#*+\-\[\]]{1,160}$/.test(cookie.name)) { cookieInventoryComplete = false; continue; }
           declarations.push({ name: cookie.name, purpose: typeof cookie.purpose === "string" ? cookie.purpose.slice(0, 240) : "",
             duration: typeof cookie.lifetime === "string" ? cookie.lifetime.slice(0, 240) : "", source: "cmp_api_inventory" });
         }
-      } catch { coverage.unresolved++; }
+      } catch {
+        // A failed cookie/group read cannot erase an already-resolved name or
+        // count the same configured service twice.
+        cookieInventoryComplete = false;
+      }
     }
-    return { categories: [...new Set(categories)], services: [...new Set(services)], declarations, coverage };
+    coverage.unresolved = coverage.configured - coverage.resolved;
+    return { categories: [...new Set(categories)], services: [...new Set(services)], declarations, coverage,
+      cookieInventoryComplete: cookieInventoryComplete && coverage.configured > 0 && !coverage.truncated && !coverage.unresolved };
   });
 }
 

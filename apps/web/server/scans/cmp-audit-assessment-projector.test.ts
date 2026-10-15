@@ -1186,3 +1186,46 @@ test("scrolled privacy evidence remains factual, source-bound and score-neutral 
   invalid.privacyLinks[0]!.access!.version='privacy_link_access.v1';
   assert.equal(cmpPreferencesEvidenceSchema.safeParse(invalid).success,false);
 });
+
+test("complete Borlabs service accounting survives an explicitly incomplete cookie inventory without score effects", () => {
+  const input = bundle(), packet = input.cmpPreferencesEvidence!;
+  packet.support.provider = "Borlabs Cookie";
+  packet.checkpoints = { version: "cmp_partial_capture.v1", documentToken: "loader-1", privacyLinks: false, declarations: true, controls: false, controlsSurface: "first_layer" };
+  packet.serviceNames = Array.from({ length: 8 }, (_, i) => `Service ${i}`);
+  packet.declarationCoverage = { scope: "configured_services", configured: 8, resolved: 8, unresolved: 0, truncated: false };
+  packet.declarationInventoryComplete = false;
+  packet.limitations.push("configured_cookie_inventory_incomplete");
+  const original = structuredClone(input);
+  const audit = deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row => row.id === "services")!.status, "observed");
+  assert.notEqual(audit.rows.find(row => row.id === "found_not_declared")!.status, "observed_gap");
+  assert.deepEqual(input, original);
+  const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
+  const persisted = withCanonicalConsentAssessmentSnapshot({}, assessment);
+  const concerns = buildNormalizedConcerns({ runtimeArtifacts: persisted, reviewFindingCandidates: [], validationFindings: [] });
+  assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
+  const row = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns }).rows.find(row => row.id === "services")!;
+  assert.equal(row.status, "Observed");
+  packet.declarationCoverage.unresolved = 1;
+  assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "services")!.status, "not_assessed", "historical inconsistent accounting stays unverified");
+});
+
+test("prominence explains missing evidence and retained deferral without inventing a visual observation", async () => {
+  const input = bundle();
+  const missing = deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "prominence")!;
+  assert.equal(missing.status, "not_assessed");
+  assert.match(missing.detail, /same-capture Accept\/Reject pair/);
+  const { consentVisualFixture } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison");
+  const { geometry } = await consentVisualFixture();
+  geometry.pageUrl = input.url; geometry.candidates.forEach(c => { c.frameContext.frameUrl = input.url; });
+  input.startedAt = new Date(Date.parse(geometry.capturedAt) - 1000).toISOString();
+  input.consentUiObservations = [{ documentUrl: input.url, documentIdentity: geometry.documentIdentity }] as any;
+  input.screenshots = [{ artifactId: "selected", capturedAtMs: 1000, path: geometry.screenshotArtifactRef!, url: input.url, documentIdentity: geometry.documentIdentity, consentStateAtTime: "pre_consent", retentionStatus: "available", displayStatus: "available" }] as any;
+  input.modulesRun = [{ moduleName: "preConsentRuntimeScanner", timingBreakdown: [{label: "consent pixel comparison", detail: JSON.stringify({ artifactId: "selected", status: "deferred" })}] }] as any;
+  const row = deriveCmpAuditAssessment(input, geometry as any)!.rows.find(row => row.id === "prominence")!;
+  assert.equal(row.status, "incomplete");
+  assert.equal(row.limitation?.code, "pixel_comparison_deferred");
+  assert.match(row.detail, /interim capture/);
+  input.modulesRun[0]!.timingBreakdown![0]!.detail = JSON.stringify({ artifactId: "unrelated", status: "deferred" });
+  assert.equal(deriveCmpAuditAssessment(input, geometry as any)!.rows.find(row => row.id === "prominence")!.limitation?.code, "visual_measurement_unavailable");
+});

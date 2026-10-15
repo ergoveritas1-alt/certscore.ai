@@ -730,3 +730,94 @@ test("preference privacy hit tests skip unrelated navigation links", { timeout: 
     assert.equal(packet.action.count, 0);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });
+
+test("registered Cookiebot and Termly aria targets may mount after Options inside their retained root", { timeout: 60_000 }, async () => {
+  let mode = "valid", provider = "Cookiebot", clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    const termly = provider === "Termly";
+    const root = termly ? 'data-termly-part="consent-banner"' : 'id="CybotCookiebotDialog"';
+    const button = '<button aria-controls="prefs" data-options>Cookie settings</button>';
+    const panel = `<section id="prefs" role="tabpanel" ${mode === "unnamed" ? '' : 'aria-label="Cookie preferences"'}><label><input type="checkbox">Analytics</label><button>Save preferences</button></section>`;
+    res.end(`<main ${root} data-root>Cookie consent ${termly ? '<span role="button" aria-controls="prefs">Preferences</span><div data-termly-part="banner-actions">' : ''}${button}${mode === "duplicate" ? button : ''}${termly ? '</div>' : ''}</main><script>document.querySelectorAll('[data-options]').forEach(button => button.onclick = () => {fetch('/clicked');const root=document.querySelector('[data-root]');${mode === "replace-root" ? 'root.outerHTML=root.outerHTML;' : ''}${mode === "outside" ? 'document.body' : 'document.querySelector("[data-root]")'}.insertAdjacentHTML('beforeend',${JSON.stringify(panel)});});</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    for (provider of ["Cookiebot", "Termly"]) for (mode of ["valid", "duplicate", "outside", "replace-root", "unnamed"]) {
+      clicks = 0;
+      const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: `${provider}-${mode}`, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+      const context = `${provider}-${mode}: ${JSON.stringify(packet)}`;
+      assert.equal(packet.support.provider, provider, context);
+      assert.equal(clicks, mode === "duplicate" ? 0 : 1, context);
+      assert.equal(packet.action.opened, mode === "valid", context);
+      if (mode === "valid") {
+        assert.equal(packet.inspectionDiagnostic?.surfaceBinding?.verification?.result, "verified", context);
+        assert.ok(packet.controls.some(c => c.label === "Analytics"), context);
+      } else assert.equal(packet.controlInventoryComplete, false, context);
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("Borlabs service accounting remains exact when cookie declarations are malformed, missing or truncated", async () => {
+  const { chromium } = await import("playwright");
+  const { readBorlabsPreferenceInventory } = await import("./cmp-preferences-observer.js");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.evaluate("window.__name = (value) => value");
+    for (const mode of ["valid", "bad-cookie", "missing-cookies", "too-many-cookies", "missing-name", "throwing-group"]) {
+      await page.evaluate(mode => {
+        const target = window as any;
+        const services = Array.from({ length: 8 }, (_, i) => [`service${i}`, { id: `service${i}`, serviceGroupId: "analytics" }]);
+        target.borlabsCookieConfig = { services: Object.fromEntries(services) };
+        target.BorlabsCookie = {
+          Services: { findByServiceId: (id: string) => ({ name: mode === "missing-name" && id === "service0" ? "" : id, serviceGroupId: "analytics",
+            cookies: mode === "missing-cookies" ? undefined : mode === "too-many-cookies" ? Array.from({length: 101}, (_, i) => ({name: `cookie${i}`})) : [{ name: "_ga", purpose: "Audience measurement", lifetime: "2 years" }, ...(mode === "bad-cookie" && id === "service0" ? [{ name: "bad cookie" }] : [])] }) },
+          ServiceGroups: { findByServiceGroupId: () => { if (mode === "throwing-group") throw new Error("unavailable"); return { name: "Analytics" }; } },
+        };
+      }, mode);
+      const result = await readBorlabsPreferenceInventory(page);
+      assert.deepEqual(result.coverage, { scope: "configured_services", configured: 8, resolved: mode === "missing-name" ? 7 : 8, unresolved: mode === "missing-name" ? 1 : 0, truncated: false }, mode);
+      assert.equal(result.services.length, result.coverage.resolved, mode);
+      assert.equal(result.cookieInventoryComplete, mode === "valid", mode);
+      assert.ok(result.declarations.length <= 100);
+    }
+  } finally { await browser.close(); }
+});
+
+test("Iubenda UI-v2 uses the actual shadow banner and never opens a marketing Preferences link", {timeout: 15_000}, async () => {
+  let clicks = 0;
+  const server = createServer((req, res) => {
+    if (req.url === "/clicked") { clicks++; res.end(); return; }
+    res.setHeader("Content-Type", "text/html");
+    res.end(`<header class="iubenda-header"><button aria-controls="marketing" onclick="fetch('/clicked');document.querySelector('#marketing').hidden=false">Preferences</button><div id="marketing" hidden>Marketing preferences</div></header><tb-banner-wrapper></tb-banner-wrapper><script>document.querySelector('tb-banner-wrapper').attachShadow({mode:'open'}).innerHTML='<section aria-label="Notice"><label><input type="checkbox">Analytics</label><button>Preferences</button><button>Reject</button><button>Accept</button></section>';</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "iubenda-shadow", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.equal(packet.support.provider, "Iubenda", JSON.stringify(packet));
+    assert.equal(packet.inspectionDiagnostic?.optionsResolution?.counts.actionable, 1);
+    assert.equal(clicks, 0); assert.equal(packet.action.count, 0);
+    assert.equal(packet.support.reason, "preference_surface_binding_unavailable");
+    assert.ok(packet.controls.some(c => c.label === "Analytics"));
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test("legacy Termly banners without a primary action area retain unique existing-panel inspection", {timeout: 10_000}, async () => {
+  const server = createServer((_req, res) => {
+    res.setHeader("Content-Type", "text/html");
+    res.end('<div id="termly-banner">Cookie consent <button aria-controls="prefs" onclick="document.querySelector(\'#prefs\').hidden=false">Cookie settings</button><section id="prefs" hidden><label><input type="checkbox">Analytics</label></section></div>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "termly-legacy", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.equal(packet.support.provider, "Termly");
+    assert.equal(packet.action.opened, true, JSON.stringify(packet));
+    assert.equal(packet.action.count, 1);
+    assert.ok(packet.controls.some(c => c.label === "Analytics"));
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});

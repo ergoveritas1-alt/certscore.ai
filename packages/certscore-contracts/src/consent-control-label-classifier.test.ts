@@ -1289,3 +1289,13 @@ test("German consent-and-continue is exact contextual observation, separate from
     assert.notEqual(classifyConsentControlLabel({ ...input, label, usage: "observation" }).intent, "reject", label);
   }
 });
+
+test("TrustArc Manage Settings is Options only in consent context", () => {
+  for (const usage of ["action", "observation"] as const) {
+    const result = classifyConsentControlLabel({ label: "Manage Settings", hasConsentContext: true, usage });
+    assert.equal(result.intent, "options");
+    assert.equal(result.contextSatisfied, true);
+    assert.equal(classifyConsentControlLabel({ label: "Manage Settings", hasConsentContext: false, usage }).intent, "unknown");
+  }
+  assert.equal(classifyConsentControlLabel({ label: "Manage Settings for your account", hasConsentContext: true }).intent, "unknown");
+});
