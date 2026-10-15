@@ -23,6 +23,13 @@ Do not use Vercel or an ad hoc local container as a production deployment path.
 5. Deploy only the affected services. Scanner deployment is separate from the
    web and MCP workflows.
 
+Coupled deploy-all releases wait for successful web and affected validation
+consumer promotions before deploying scanner producers. New evidence vocabulary
+must not reach readers from an earlier release. Failed, rejected or unresolved
+consumer outcomes preserve the current scanner image. Verify the installed,
+current IP-country and ASN databases locally before starting any deploy-all or
+scanner mutation; the canonical installer may reuse verified existing files.
+
 After pushing a new `main` revision, the canonical helper gives GitHub up to
 20 seconds to expose the push-triggered web/validation runs before dispatching
 a fallback. Reuse only an exact-SHA active or successful run; canceled and
