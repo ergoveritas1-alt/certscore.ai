@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { deployConsumersBeforeProducer } from "./lib/deployment-consumer-barrier";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -101,6 +102,10 @@ async function main() {
     await requireCleanWorktree();
   }
 
+  if (args.mode === "all" || args.mode === "scanners") {
+    await run(["node", "scripts/verify-iplocate.mjs"]);
+  }
+
   if (!args.noPredeploy && ["all", "web", "validation", "scanners", "db"].includes(args.mode)) {
     const preflight = await timedLane("preflight", async () => {
       const predeployArgs = args.mode === "all" ? ["preflight:all"] : ["preflight:fast"];
@@ -126,15 +131,17 @@ async function main() {
 
   const lanes: Array<Promise<LaneResult>> = [];
   if (args.mode === "all") {
-    lanes.push(deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: true }));
-    lanes.push(deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase }));
-    lanes.push(deployValidation({
-      ref: sha,
-      workflowRef,
-      registrationGraceMs: workflowRegistrationGraceMs,
-      skip: !args.forceValidation && !changed.validation,
-      pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase
-    }));
+    const coupled = await deployConsumersBeforeProducer({
+      consumers: [
+        () => deployWeb({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs, force: true }),
+        () => deployValidation({ ref: sha, workflowRef, registrationGraceMs: workflowRegistrationGraceMs,
+          skip: !args.forceValidation && !changed.validation,
+          pushRuntimeBase: args.forceValidationRuntimeBase || changed.validationRuntimeBase }),
+      ],
+      producer: () => deployScanners({ ref: sha, pushRuntimeBase: args.pushScannerRuntimeBase }),
+      skippedProducer: () => skippedLane("Lambda scanner deploys", "a consumer deployment failed; preserve the existing producer contract"),
+    });
+    lanes.push(...coupled.map(result => Promise.resolve(result)));
     lanes.push(Promise.resolve(skippedLane(
       "production DB migrations",
       "the web workflow applies migrations from the target image before ECS promotion"
@@ -801,14 +808,14 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   if (args.mode === "all" || args.mode === "web") {
     lanes.push("web ECS deploy");
   }
-  if (args.mode === "all" || args.mode === "scanners") {
-    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; apply/verify ${SCANNER_MEMORY_SIZE} MB before image promotion; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
-  }
   if (args.mode === "all" || args.mode === "validation") {
     const skip = args.mode === "all" && !args.forceValidation && !changed.validation;
     lanes.push(skip
       ? "validation AWS deploy skipped (no validation deploy inputs changed)"
       : `validation AWS deploy (runtime base ${args.forceValidationRuntimeBase || changed.validationRuntimeBase ? "rebuild/push" : "reuse"})`);
+  }
+  if (args.mode === "all" || args.mode === "scanners") {
+    lanes.push(`Lambda scanner deploys (${SCANNER_REGIONS.join(", ")}; apply/verify ${SCANNER_MEMORY_SIZE} MB before image promotion; runtime base ${args.pushScannerRuntimeBase ? "rebuild/push" : "reuse when available, cached full-image fallback otherwise"})`);
   }
   if (args.mode === "all" || args.mode === "db") {
     lanes.push(args.mode === "all"
@@ -821,6 +828,7 @@ function printPlan(args: Args, changed: ChangedTargets, sha: string) {
   console.log(`  ref: ${sha}`);
   console.log(`  preflight: ${args.noPredeploy ? "skip" : args.mode === "all" ? "pnpm preflight:all" : "pnpm preflight:fast"}`);
   console.log(`  git push: ${args.noPush || args.ref ? "skip" : "push current branch to origin"}`);
+  if (args.mode === "all") console.log("  order: finish web and affected validation consumers before scanner promotion");
   for (const lane of lanes) {
     console.log(`  - ${lane}`);
   }

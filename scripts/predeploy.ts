@@ -160,7 +160,7 @@ const ROOT_FULL_CHECKS: Check[] = [
   {
     key: "deploy-latency-contracts",
     label: "deploy cache, runtime base and exact-SHA typecheck reuse guards",
-    command: ["node", "--import", "tsx", "--test", "scripts/deploy-latency.test.ts", "scripts/web-deployment-skew-protection.test.ts"]
+    command: ["node", "--import", "tsx", "--test", "scripts/deploy-latency.test.ts", "scripts/lib/deployment-consumer-barrier.test.ts", "scripts/web-deployment-skew-protection.test.ts"]
   },
   CONSENT_ACTION_SEMANTICS_CHECK,
   ACCESSIBILITY_AUDIT_CHECK,
@@ -292,6 +292,7 @@ const TARGETS: Target[] = [
           "apps/web/server/scans/restricted-scan-options.test.ts",
           "scripts/assert-forward-web-deploy.test.ts",
           "scripts/deploy-latency.test.ts",
+          "scripts/lib/deployment-consumer-barrier.test.ts",
           "scripts/web-deploy-migration-order.test.ts"
         ]
       },
