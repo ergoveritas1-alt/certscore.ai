@@ -1153,13 +1153,123 @@
       "consecutiveNoGoCount": 0,
       "cooldownUntil": "2026-11-12T03:52:35.697000Z",
       "note": "Owner-requested EU-Ireland cookie-purpose and Close verification. Two fresh browser visits: first passive-only due to an accessible-name lookup error; second one Close click, no Accept or terms interaction. Close saved completed choice with Google Analytics and HubSpot false and all four Google consent types denied; no new GA requests in 20s. No original report, score, app or scanner change. Evidence: outputs/mistral-close-review-2026-10-14/review.json. Contact history only, outside rotating inventory."
+    },
+    "https://www.consentmanager.net/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:42:26.061Z",
+      "lastContactAt": "2026-10-15T20:42:26.061Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.consentmanager.net/"
+    },
+    "https://termly.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:43:46.257Z",
+      "lastContactAt": "2026-10-15T20:43:46.257Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://termly.io/"
+    },
+    "https://www.cookiebot.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:44:15.335Z",
+      "lastContactAt": "2026-10-15T20:44:15.335Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.cookiebot.com/"
+    },
+    "https://www.osano.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:40:16.657Z",
+      "lastContactAt": "2026-10-15T20:40:16.657Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.osano.com/"
+    },
+    "https://borlabs.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:46:00.301Z",
+      "lastContactAt": "2026-10-15T20:46:00.301Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://borlabs.io/"
+    },
+    "https://www.onetrust.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:45:26.465Z",
+      "lastContactAt": "2026-10-15T20:45:26.465Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.onetrust.com/"
+    },
+    "https://www.cookieyes.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:41:45.377Z",
+      "lastContactAt": "2026-10-15T20:41:45.377Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.cookieyes.com/"
+    },
+    "https://trustarc.com/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:44:46.860Z",
+      "lastContactAt": "2026-10-15T20:44:46.860Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://trustarc.com/"
+    },
+    "https://www.iubenda.com/en/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:43:15.354Z",
+      "lastContactAt": "2026-10-15T20:43:15.354Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.iubenda.com/en/"
+    },
+    "https://www.didomi.io/": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T20:41:03.942Z",
+      "lastContactAt": "2026-10-15T20:41:03.942Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "state": "cooldown",
+      "url": "https://www.didomi.io/"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-15T03:52:35.697Z",
+  "updatedAt": "2026-10-15T20:47:58.357Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
+    "https://borlabs.io/",
     "https://mistral.ai/",
-    "https://sits.com/en/"
+    "https://sits.com/en/",
+    "https://termly.io/",
+    "https://trustarc.com/",
+    "https://www.consentmanager.net/",
+    "https://www.cookiebot.com/",
+    "https://www.cookieyes.com/",
+    "https://www.didomi.io/",
+    "https://www.iubenda.com/en/",
+    "https://www.onetrust.com/",
+    "https://www.osano.com/"
   ]
 }

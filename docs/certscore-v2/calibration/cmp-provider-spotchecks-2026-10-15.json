@@ -1,0 +1,2211 @@
+{
+  "version": "certscore.cmp_provider_spotcheck.v1",
+  "generatedAt": "2026-10-15T20:50:26.993133+00:00",
+  "scope": "Owner-requested diagnostic spot checks, not an acceptance calibration or provider-wide failure-rate estimate.",
+  "releaseSha": "e66e8dfc8b52b8906c5acddbeaafbfded36133fb",
+  "region": "eu_ie",
+  "siteCount": 10,
+  "totalChecks": 130,
+  "unresolvedChecks": 61,
+  "statusCounts": {
+    "Not assessed": 27,
+    "Incomplete": 28,
+    "Observed": 68,
+    "Review recommended": 1,
+    "Partially assessed": 6
+  },
+  "unresolvedByCriterion": {
+    "banner": 1,
+    "reject": 1,
+    "prominence": 7,
+    "categories": 7,
+    "services": 9,
+    "consent_record": 3,
+    "implementation": 3,
+    "declared_not_found": 7,
+    "found_not_declared": 10,
+    "cookie_information": 8,
+    "privacy_access": 3,
+    "duration": 2
+  },
+  "excluded": [
+    {
+      "reason": "cooldown_until:2026-10-24T02:41:36.835767+00:00",
+      "url": "https://usercentrics.com/"
+    },
+    {
+      "reason": "cooldown_until:2026-10-25T18:41:00.081438+00:00",
+      "url": "https://www.axept.io/"
+    }
+  ],
+  "estimatedIncrementalCostUsd": "Below $1 total, including bounded scans and operational ECS database helpers; no standing capacity added.",
+  "originalReportsPreserved": true,
+  "articleChanged": false,
+  "applicationCodeChanged": false,
+  "deployed": false,
+  "results": [
+    {
+      "name": "didomi",
+      "url": "https://www.didomi.io/",
+      "scanId": "c91693c6-2de3-4131-a5d5-f56d70145f04",
+      "reportUrl": "https://certscore.ai/scan/c91693c6-2de3-4131-a5d5-f56d70145f04",
+      "origin": "eu_ie",
+      "provider": "Didomi",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": null,
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "cmp_identity_ambiguous"
+      },
+      "counts": {
+        "Not assessed": 3,
+        "Incomplete": 7,
+        "Observed": 3
+      },
+      "unresolved": 10,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Not assessed",
+          "detail": "Sufficient verified evidence for this criterion was not retained in this scan.",
+          "sourceIds": []
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Not assessed",
+          "detail": "Sufficient verified evidence for this criterion was not retained in this scan.",
+          "sourceIds": []
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Not assessed",
+          "sourceIds": []
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "cmp_identity_ambiguous"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "cmp_identity_ambiguous"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Observed",
+          "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "actions",
+            "code": "accept_deterministic_accept_control_not_found"
+          },
+          "detail": "No post-choice consent record was captured; the choice checks did not complete.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "actions",
+            "code": "accept_deterministic_accept_control_not_found"
+          },
+          "detail": "Accept: a usable control was not found. Reject: a usable control was not found.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "cmp_identity_ambiguous"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "cmp_identity_ambiguous"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "cmp_identity_ambiguous"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [
+        {
+          "id": "preferences",
+          "code": "cmp_identity_ambiguous",
+          "title": "Preference inspection incomplete",
+          "criterionIds": [
+            "categories",
+            "services",
+            "declared_not_found",
+            "found_not_declared",
+            "cookie_information"
+          ]
+        },
+        {
+          "id": "actions",
+          "code": "accept_deterministic_accept_control_not_found",
+          "title": "Consent-action observation incomplete",
+          "criterionIds": [
+            "consent_record",
+            "implementation"
+          ]
+        }
+      ],
+      "verifiedBundleSha256": "979ad4febc1301eed25e9d4cdba51254095fb7592ff691f4737891ad9a85e935",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "control_inventory"
+      },
+      "preferenceLimitations": [
+        "cmp_identity_ambiguous"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 1578,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 0,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent\",\"allowanceMs\":0,\"elapsedMs\":0}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic",
+          "durationMs": 1100,
+          "detail": "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "iubenda",
+      "url": "https://www.iubenda.com/en/",
+      "scanId": "97e773d4-cb63-43ed-bb33-da6e4b64ac49",
+      "reportUrl": "https://certscore.ai/scan/97e773d4-cb63-43ed-bb33-da6e4b64ac49",
+      "origin": "eu_ie",
+      "provider": "Iubenda",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "Iubenda",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "preference_surface_binding_unavailable"
+      },
+      "counts": {
+        "Observed": 4,
+        "Incomplete": 5,
+        "Not assessed": 3,
+        "Review recommended": 1
+      },
+      "unresolved": 8,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Observed",
+          "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+          "sourceIds": [
+            "consent.visual_comparison.observed"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Not assessed",
+          "detail": "Privacy policy found. Its link was marked hidden when inspected.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Not assessed",
+          "detail": "No browser consent record was retained after a completed choice check.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Review recommended",
+          "detail": "18 tracking request(s) began after the Reject control was clicked (including RudderStack); first observed 0.10s after the click. Review the recorded requests and how the Reject action controls this tracking activity. The retained evidence did not support a purpose-specific after-Reject deduction. Refusal registration was not confirmed.",
+          "sourceIds": [
+            "post_reject_tracking_reduction"
+          ],
+          "evidenceAnchor": "evidence-row-post_reject_tracking_reduction"
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Not assessed",
+          "detail": "A bound consent-cookie expiry was not captured.",
+          "sourceIds": []
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [
+        {
+          "id": "preferences",
+          "code": "preference_surface_binding_unavailable",
+          "title": "Preference inspection incomplete",
+          "criterionIds": [
+            "categories",
+            "services",
+            "declared_not_found",
+            "found_not_declared",
+            "cookie_information"
+          ]
+        }
+      ],
+      "verifiedBundleSha256": "381eb844a44986e8af8ad175faf72adca0305811c31c2e926aef6da9e50c74ae",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "surface_binding",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 1,
+            "hidden": 1,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        },
+        "surfaceBinding": {
+          "version": "cmp_surface_binding.v1",
+          "mode": "aria_controls",
+          "priorMatches": 0,
+          "outcome": "missing"
+        }
+      },
+      "preferenceLimitations": [
+        "preference_surface_binding_unavailable"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 840,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 66,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"retained\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":80,\"elapsedMs\":66}",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "consentmanager",
+      "url": "https://www.consentmanager.net/",
+      "scanId": "34675586-a3fc-41e5-a377-415dcddf3cad",
+      "reportUrl": "https://certscore.ai/scan/34675586-a3fc-41e5-a377-415dcddf3cad",
+      "origin": "eu_ie",
+      "provider": "Consentmanager",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "Consentmanager",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "unique_actionable_options_not_resolved"
+      },
+      "counts": {
+        "Observed": 6,
+        "Not assessed": 7
+      },
+      "unresolved": 7,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Not assessed",
+          "sourceIds": []
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Not assessed",
+          "detail": "Selectable category controls were not verified in the inspected surface.",
+          "sourceIds": []
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Not assessed",
+          "detail": "No individual service names were retained by this CMP inspection.",
+          "sourceIds": []
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Not assessed",
+          "detail": "Privacy-policy links were found, but none was verified as reachable before consent. Individual inspection reasons are retained in the supporting evidence.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept and Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Observed",
+          "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Not assessed",
+          "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+          "sourceIds": []
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Not assessed",
+          "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+          "sourceIds": []
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Not assessed",
+          "detail": "Cookie purpose and duration information was not retained.",
+          "sourceIds": []
+        }
+      ],
+      "limitations": [],
+      "verifiedBundleSha256": "f64d23894bb6adfaafc00b10f3376047f7f4c4e7014a06e73a90abc8c45010a1",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "control_inventory",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 0,
+            "hidden": 0,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 1,
+            "unavailable": 0
+          },
+          "overflow": false
+        }
+      },
+      "preferenceLimitations": [
+        "unique_actionable_options_not_resolved"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 571,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 0,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent\",\"allowanceMs\":0,\"elapsedMs\":0}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "cookiebot",
+      "url": "https://www.cookiebot.com/",
+      "scanId": "99f35a9c-dd46-4bb9-8216-c833c37dc90d",
+      "reportUrl": "https://certscore.ai/scan/99f35a9c-dd46-4bb9-8216-c833c37dc90d",
+      "origin": "eu_ie",
+      "provider": "Cookiebot",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "Cookiebot",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "preference_surface_binding_unavailable"
+      },
+      "counts": {
+        "Observed": 6,
+        "Incomplete": 6,
+        "Partially assessed": 1
+      },
+      "unresolved": 7,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "visual",
+            "code": "pixel_comparison_no_budget"
+          },
+          "detail": "The pixel-comparison allowance was exhausted before this capture.",
+          "sourceIds": [
+            "ConsentControlGeometryEvidence.json",
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Observed",
+          "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Partially assessed",
+          "detail": "Accept: 3-second activity check completed.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "preference_surface_binding_unavailable"
+          },
+          "detail": "This check depends on the incomplete preference inspection.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [
+        {
+          "id": "preferences",
+          "code": "preference_surface_binding_unavailable",
+          "title": "Preference inspection incomplete",
+          "criterionIds": [
+            "categories",
+            "services",
+            "declared_not_found",
+            "found_not_declared",
+            "cookie_information"
+          ]
+        },
+        {
+          "id": "visual",
+          "code": "pixel_comparison_no_budget",
+          "title": "Button comparison incomplete",
+          "criterionIds": [
+            "prominence"
+          ]
+        }
+      ],
+      "verifiedBundleSha256": "4a51673c0fa9832ae9d452c1a66ee8d3e965f6d46fde120c227b72bba78283e0",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "surface_binding",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 1,
+            "hidden": 1,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        },
+        "surfaceBinding": {
+          "version": "cmp_surface_binding.v1",
+          "mode": "aria_controls",
+          "priorMatches": 0,
+          "outcome": "missing"
+        }
+      },
+      "preferenceLimitations": [
+        "preference_surface_binding_unavailable"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 1144,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 86,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"timed_out\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":80,\"elapsedMs\":86}",
+          "outcome": "timed_out"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 1,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"no_budget\",\"artifactId\":\"screenshot_pre_consent_geometry_proof\",\"allowanceMs\":0,\"elapsedMs\":1}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic",
+          "durationMs": 703,
+          "detail": "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "termly",
+      "url": "https://termly.io/",
+      "scanId": "83dbb855-028f-4fc0-a652-536bc6ee9477",
+      "reportUrl": "https://certscore.ai/scan/83dbb855-028f-4fc0-a652-536bc6ee9477",
+      "origin": "eu_ie",
+      "provider": "Termly",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "Termly",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "unique_actionable_options_not_resolved"
+      },
+      "counts": {
+        "Observed": 6,
+        "Incomplete": 5,
+        "Not assessed": 2
+      },
+      "unresolved": 7,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Observed",
+          "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+          "sourceIds": [
+            "consent.visual_comparison.observed"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "More than one actionable Options control was found; no preference control was clicked.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "More than one actionable Options control was found; no preference control was clicked.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Observed",
+          "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Not assessed",
+          "detail": "No browser consent record was retained after a completed choice check.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Observed",
+          "detail": "Accept: 2.861-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Not assessed",
+          "detail": "A bound consent-cookie expiry was not captured.",
+          "sourceIds": []
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "More than one actionable Options control was found; no preference control was clicked.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "More than one actionable Options control was found; no preference control was clicked.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "More than one actionable Options control was found; no preference control was clicked.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [
+        {
+          "id": "preferences",
+          "code": "unique_actionable_options_not_resolved",
+          "title": "Preference inspection incomplete",
+          "criterionIds": [
+            "categories",
+            "services",
+            "declared_not_found",
+            "found_not_declared",
+            "cookie_information"
+          ]
+        }
+      ],
+      "verifiedBundleSha256": "8373d69ced96c5b17e8a1d8d232d620707baf0d00fe31b17a00c3c561f541945",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "control_inventory",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 2,
+            "hidden": 0,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        }
+      },
+      "preferenceLimitations": [
+        "unique_actionable_options_not_resolved"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 579,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 30,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"retained\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":80,\"elapsedMs\":30}",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "trustarc",
+      "url": "https://trustarc.com/",
+      "scanId": "40ea16e3-3f65-4b32-ab11-cba05bda8d2f",
+      "reportUrl": "https://certscore.ai/scan/40ea16e3-3f65-4b32-ab11-cba05bda8d2f",
+      "origin": "eu_ie",
+      "provider": "TrustArc",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "TrustArc",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "unique_actionable_options_not_resolved"
+      },
+      "counts": {
+        "Observed": 6,
+        "Not assessed": 2,
+        "Incomplete": 5
+      },
+      "unresolved": 7,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Not assessed",
+          "sourceIds": []
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "No Options control was identified in the inspected CMP view; deeper preferences were not inspected.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "No Options control was identified in the inspected CMP view; deeper preferences were not inspected.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Not assessed",
+          "detail": "Privacy-policy links were found, but none was verified as reachable before consent. Individual inspection reasons are retained in the supporting evidence.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept and Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Observed",
+          "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "No Options control was identified in the inspected CMP view; deeper preferences were not inspected.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "No Options control was identified in the inspected CMP view; deeper preferences were not inspected.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Incomplete",
+          "limitation": {
+            "group": "preferences",
+            "code": "unique_actionable_options_not_resolved"
+          },
+          "detail": "No Options control was identified in the inspected CMP view; deeper preferences were not inspected.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [
+        {
+          "id": "preferences",
+          "code": "unique_actionable_options_not_resolved",
+          "title": "Preference inspection incomplete",
+          "criterionIds": [
+            "categories",
+            "services",
+            "declared_not_found",
+            "found_not_declared",
+            "cookie_information"
+          ]
+        }
+      ],
+      "verifiedBundleSha256": "402ff01585905d7d4dd84fabebaccfb679f90f4657278bf3d877a60e2813d85e",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "control_inventory",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 0,
+            "hidden": 0,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        }
+      },
+      "preferenceLimitations": [
+        "unique_actionable_options_not_resolved"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 848,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 0,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent\",\"allowanceMs\":0,\"elapsedMs\":0}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "onetrust",
+      "url": "https://www.onetrust.com/",
+      "scanId": "72919162-d0e8-4fca-80dd-80aaef9bc198",
+      "reportUrl": "https://certscore.ai/scan/72919162-d0e8-4fca-80dd-80aaef9bc198",
+      "origin": "eu_ie",
+      "provider": "OneTrust",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "OneTrust",
+        "recipeVersion": "onetrust_preferences.v2",
+        "reason": "bounded_visible_preference_inspection"
+      },
+      "counts": {
+        "Observed": 8,
+        "Not assessed": 2,
+        "Partially assessed": 3
+      },
+      "unresolved": 5,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Not assessed",
+          "sourceIds": []
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Not assessed",
+          "detail": "Selectable category controls were not verified in the inspected surface.",
+          "sourceIds": []
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Observed",
+          "detail": "27 services identified in the CMP. Additional services may be outside the captured inventory. Individual service controls were not tested.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Observed",
+          "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Partially assessed",
+          "detail": "Accept: 3-second activity check completed.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Observed",
+          "detail": "2 of 65 retained CMP cookie declaration patterns matched the pre-consent cookie capture; 63 were not observed in that window. Unobserved cookies may require consent or another page; this is not a declaration defect.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json",
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Partially assessed",
+          "detail": "25 of 26 cookie names matched captured declarations; 1 had no match in this partial list.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json",
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Partially assessed",
+          "detail": "65 cookie names captured; 0 purposes and 20 storage durations retained. Inferred purposes are shown separately.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [],
+      "verifiedBundleSha256": "1bfd4b98ca3d0e9cd1351222ce9beb3bfe5fc9dedaaffe08d25e49e9e5eda733",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "configuration": {
+          "version": "onetrust_loaded_configuration.v3",
+          "status": "available",
+          "groupCount": 7,
+          "retainedCookieCount": 65,
+          "truncated": true
+        },
+        "phase": "completed",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 1,
+            "hidden": 0,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        },
+        "surfaceBinding": {
+          "version": "cmp_surface_binding.v1",
+          "mode": "registered_existing",
+          "priorMatches": 1,
+          "priorVisible": false,
+          "outcome": "opened"
+        }
+      },
+      "preferenceLimitations": [
+        "cmp_inventory_bounded",
+        "deeper_preference_sections_not_opened"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 907,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 0,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":0,\"elapsedMs\":0}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 7,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"not_eligible\",\"reason\":\"pair_not_unique\",\"artifactId\":\"screenshot_pre_consent_geometry_proof\",\"allowanceMs\":0,\"elapsedMs\":7}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic",
+          "durationMs": 785,
+          "detail": "Artifact-only bounded consent-control geometry diagnostic after normal pre-consent screenshot and structured inventory capture.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "osano",
+      "url": "https://www.osano.com/",
+      "scanId": "34d1da4e-91ba-4460-a92c-ca77b528e602",
+      "reportUrl": "https://certscore.ai/scan/34d1da4e-91ba-4460-a92c-ca77b528e602",
+      "origin": "eu_ie",
+      "provider": "Osano",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "Osano",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "unique_actionable_options_not_resolved"
+      },
+      "counts": {
+        "Observed": 8,
+        "Not assessed": 5
+      },
+      "unresolved": 5,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Not assessed",
+          "sourceIds": []
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Observed",
+          "detail": "2 categories were available.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Not assessed",
+          "detail": "No individual service names were retained by this CMP inspection.",
+          "sourceIds": []
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Observed",
+          "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept and Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Observed",
+          "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Not assessed",
+          "detail": "Comparison requires retained declarations and a usable pre-consent cookie capture.",
+          "sourceIds": []
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Not assessed",
+          "detail": "The configured CMP cookie inventory could not be verified as complete; missing declarations cannot be inferred from a partial list.",
+          "sourceIds": []
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Not assessed",
+          "detail": "Cookie purpose and duration information was not retained.",
+          "sourceIds": []
+        }
+      ],
+      "limitations": [],
+      "verifiedBundleSha256": "bd7d5a00017cbe4de2ab83f5d9f29167a5b704edd1b961a695184ddd74f50d93",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "control_inventory",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 0,
+            "hidden": 1,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        }
+      },
+      "preferenceLimitations": [
+        "unique_actionable_options_not_resolved"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 1087,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 0,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"deferred\",\"artifactId\":\"screenshot_pre_consent\",\"allowanceMs\":0,\"elapsedMs\":0}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "cookieyes",
+      "url": "https://www.cookieyes.com/",
+      "scanId": "11a4a0d9-9aa8-41c0-8c87-03e22a6cb303",
+      "reportUrl": "https://certscore.ai/scan/11a4a0d9-9aa8-41c0-8c87-03e22a6cb303",
+      "origin": "eu_ie",
+      "provider": "CookieYes",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "CookieYes",
+        "recipeVersion": "cookieyes_preference_categories.v1",
+        "reason": "bounded_visible_preference_inspection"
+      },
+      "counts": {
+        "Observed": 10,
+        "Not assessed": 2,
+        "Partially assessed": 1
+      },
+      "unresolved": 3,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Not assessed",
+          "sourceIds": []
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Observed",
+          "detail": "4 categories were available.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Not assessed",
+          "detail": "Service names were not captured; deeper preference sections were not inspected.",
+          "sourceIds": []
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Observed",
+          "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept and Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Observed",
+          "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Observed",
+          "detail": "1 of 38 retained CMP cookie declaration patterns matched the pre-consent cookie capture; 37 were not observed in that window. Unobserved cookies may require consent or another page; this is not a declaration defect.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json",
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Partially assessed",
+          "detail": "6 of 6 cookie names matched captured declarations; 0 had no match in this partial list.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json",
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Observed",
+          "detail": "38 captured cookie entries included names, purposes and storage durations.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [],
+      "verifiedBundleSha256": "b24de10976cd3543f007257ebff1a43b1b45cdf6fa243d85e48f93bb736085d6",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": false,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "configuration": {
+          "version": "cookieyes_loaded_configuration.v1",
+          "status": "available",
+          "groupCount": 5,
+          "retainedCookieCount": 38,
+          "truncated": false
+        },
+        "phase": "completed",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 1,
+            "hidden": 0,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        },
+        "surfaceBinding": {
+          "version": "cmp_surface_binding.v1",
+          "mode": "aria_controls",
+          "priorMatches": 1,
+          "priorVisible": false,
+          "outcome": "opened"
+        }
+      },
+      "preferenceLimitations": [
+        "loaded_configuration_not_visibility_proof",
+        "deeper_preference_sections_not_opened"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 645,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 1,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"not_eligible\",\"reason\":\"pair_not_unique\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":0,\"elapsedMs\":1}",
+          "outcome": "skipped"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    },
+    {
+      "name": "borlabs-cookie",
+      "url": "https://borlabs.io/",
+      "scanId": "b90ce2bc-0a75-4514-83a9-b280c41f5970",
+      "reportUrl": "https://certscore.ai/scan/b90ce2bc-0a75-4514-83a9-b280c41f5970",
+      "origin": "eu_ie",
+      "provider": "Borlabs Cookie",
+      "inspectionSupport": {
+        "state": "partial",
+        "provider": "Borlabs Cookie",
+        "recipeVersion": "bounded_cmp_preferences.v1",
+        "reason": "unique_actionable_options_not_resolved"
+      },
+      "counts": {
+        "Observed": 11,
+        "Not assessed": 1,
+        "Partially assessed": 1
+      },
+      "unresolved": 2,
+      "total": 13,
+      "rows": [
+        {
+          "id": "banner",
+          "label": "Cookie banner available",
+          "status": "Observed",
+          "detail": "Consent surface observed on the initial visit.",
+          "sourceIds": [
+            "consentControlAssessment.surface"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "reject",
+          "label": "Option to reject cookies available",
+          "status": "Observed",
+          "detail": "First-layer Reject or equivalent refusal control.",
+          "sourceIds": [
+            "consentControlAssessment.controls.reject"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "prominence",
+          "label": "Accept / Reject prominence comparison",
+          "status": "Observed",
+          "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+          "sourceIds": [
+            "consent.visual_comparison.observed"
+          ],
+          "evidenceAnchor": "consent-review-evidence"
+        },
+        {
+          "id": "categories",
+          "label": "Selection by categories available",
+          "status": "Observed",
+          "detail": "3 categories were available.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "services",
+          "label": "Individual services identified in the CMP",
+          "status": "Not assessed",
+          "detail": "No individual service names were retained by this CMP inspection.",
+          "sourceIds": []
+        },
+        {
+          "id": "privacy_link",
+          "label": "Link to privacy policy available",
+          "status": "Observed",
+          "detail": "Public privacy-policy link or surface on the scanned page.",
+          "sourceIds": [
+            "privacy_notice_availability"
+          ],
+          "evidenceAnchor": "evidence-row-privacy_notice_availability"
+        },
+        {
+          "id": "privacy_access",
+          "label": "Privacy-policy link reachable before consent interaction",
+          "status": "Observed",
+          "detail": "A privacy-policy link had an unobstructed click target before consent interaction. Retrieval of the linked document is outside this criterion.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        },
+        {
+          "id": "consent_record",
+          "label": "Consent storage observed",
+          "status": "Observed",
+          "detail": "Browser consent records were stored or updated after Accept and Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "implementation",
+          "label": "Activity after Accept / Reject",
+          "status": "Observed",
+          "detail": "Accept: 2.897-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "duration",
+          "label": "CMP cookie expiry",
+          "status": "Observed",
+          "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+          "sourceIds": [
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "declared_not_found",
+          "label": "CMP cookie declarations compared with pre-consent capture",
+          "status": "Observed",
+          "detail": "0 of 27 retained CMP cookie declaration patterns matched the pre-consent cookie capture; 27 were not observed in that window. Unobserved cookies may require consent or another page; this is not a declaration defect.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json",
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "found_not_declared",
+          "label": "Unmatched cookie names",
+          "status": "Partially assessed",
+          "detail": "4 of 10 cookie names matched captured declarations; 6 had no match in this partial list.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json",
+            "CanonicalEvidenceBundle.json"
+          ]
+        },
+        {
+          "id": "cookie_information",
+          "label": "Information about cookies available (e.g., storage duration)",
+          "status": "Observed",
+          "detail": "27 captured cookie entries included names, purposes and storage durations.",
+          "sourceIds": [
+            "CmpPreferencesEvidencePacket.json"
+          ]
+        }
+      ],
+      "limitations": [],
+      "verifiedBundleSha256": "04c1f99896be8bf51312eb1e33cc77020adba1e2552b1c43521c80a55b2e6138",
+      "preferenceDiagnostics": {
+        "revision": "cmp_preferences.v6",
+        "passiveDialogReveal": true,
+        "budgetMs": 17000,
+        "navigationHttpStatus": 200,
+        "basicCaptureReserveMs": 1000,
+        "phase": "control_inventory",
+        "optionsResolution": {
+          "version": "cmp_options_resolution.v1",
+          "counts": {
+            "actionable": 0,
+            "hidden": 0,
+            "disabled": 0,
+            "outside_viewport": 0,
+            "covered": 0,
+            "unavailable": 0
+          },
+          "overflow": false
+        }
+      },
+      "preferenceLimitations": [
+        "unique_actionable_options_not_resolved"
+      ],
+      "visualDiagnostics": [
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "early consent control geometry",
+          "durationMs": 747,
+          "detail": "Bounded typed geometry capture starts after the initial inventory while the visible pre-consent document is still live.",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent pixel comparison",
+          "durationMs": 53,
+          "detail": "{\"policy\":\"terminal_pair_first.v2\",\"status\":\"retained\",\"artifactId\":\"screenshot_pre_consent_settled\",\"allowanceMs\":80,\"elapsedMs\":53}",
+          "outcome": "completed"
+        },
+        {
+          "module": "preConsentRuntimeScanner",
+          "label": "consent control geometry diagnostic skipped",
+          "durationMs": 0,
+          "detail": "Skipped artifact-only consent-control geometry diagnostic because the pre-consent module budget was exhausted.",
+          "outcome": "skipped"
+        }
+      ]
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": 1,
+      "area": "Verified preference access",
+      "targets": [
+        "Iubenda",
+        "Cookiebot",
+        "Termly",
+        "TrustArc"
+      ],
+      "evidence": "Iubenda and Cookiebot each found one actionable Options control but its aria-controls target was absent before opening; Termly retained two actionable candidates; TrustArc retained none. Five dependent checks are incomplete per site, 20 total.",
+      "proposal": "Add reviewed canonical panel lifecycle bindings and control-scope resolution using retained evidence plus deterministic fixtures. Keep exact-target and unique-action guards; do not arbitrarily choose or force-click controls.",
+      "impact": "20 blocked checks are a potential coverage opportunity, not a promise of 20 resolved checks."
+    },
+    {
+      "priority": 2,
+      "area": "CMP identity disambiguation",
+      "targets": [
+        "Didomi"
+      ],
+      "evidence": "Preference capture reports cmp_identity_ambiguous; first-layer and action capture are also limited.",
+      "proposal": "Inspect exact matching provider scopes and separate active CMP UI from inactive or demo surfaces. Retain identities and match provenance. Do not prefer a provider because of the target hostname."
+    },
+    {
+      "priority": 3,
+      "area": "Service and cookie inventories",
+      "evidence": "41 of 61 unresolved checks concern categories, services, declaration comparison, unmatched names, or cookie information. These overlap the preference-access opportunity above. OneTrust retained a bounded partial configuration; CookieYes retained loaded configuration without visibility or completeness proof.",
+      "proposal": "Extend bounded canonical inventory adapters and retain declared names, purposes, durations and completeness independently. Do not infer undeclared cookies from a partial inventory or treat an inferred purpose as a declared purpose."
+    },
+    {
+      "priority": 4,
+      "area": "Prominence capture and reasons",
+      "evidence": "Seven comparisons remain unresolved. Cookiebot retained an 80ms comparison timeout followed by no remaining allowance. CookieYes and OneTrust retain pair_not_unique diagnostics; several other captures remain deferred. Six report rows omit the explanatory detail.",
+      "proposal": "Review canonical candidate pairing and existing-budget scheduling; carry verified failure reasons through the typed assessment. Preserve unknown results when a valid comparison is absent."
+    }
+  ]
+}
