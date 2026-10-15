@@ -1,5 +1,9 @@
 # @certscore/sdk
 
+## 0.2.18
+
+Extend Detailed Evidence types for scoped CMP inventories, possible cookie-template matches, inferred purpose, observed expiry and incomplete capture diagnostics. Preserve saved assessments and evidence provenance.
+
 ## 0.2.17
 
 - Include typed California privacy-choice evidence in shared report exports and focused policy results. Preserve verified controls, unverified candidates, notice passages and provenance.

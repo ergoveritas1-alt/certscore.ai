@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.29
+
+Bundle the updated SDK and Detailed Evidence contracts so hosted and npm MCP consumers retain scoped CMP inventories and capture diagnostics without changing tool names or scan budgets.
+
 ## 0.2.28
 
 - Preserve typed full-report evidence during compaction to prevent output-schema errors; keep existing byte ceilings and explicit whole-section omissions.
