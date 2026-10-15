@@ -21,7 +21,9 @@ export type CanonicalCookieKnowledge = {
   vendor: string | null;
 };
 
+export const AXEPTIO_COOKIE_PURPOSE_POLICY = "axeptio_consent_preferences.v1" as const;
 export type CanonicalCookieContext = {
+  purposePolicyVersion?: typeof AXEPTIO_COOKIE_PURPOSE_POLICY;
   cookieDomain?: string | null;
   hostname?: string | null;
   initiatorChain?: readonly string[] | null;
@@ -569,6 +571,11 @@ export function resolveCanonicalCookieKnowledge(
 ): CanonicalCookieKnowledge {
   const name = cookieName?.trim() ?? "";
   const contextHosts = canonicalCookieContextHosts(context);
+  const axeptioRule = context.purposePolicyVersion === AXEPTIO_COOKIE_PURPOSE_POLICY
+    ? COOKIE_PURPOSE_CANDIDATE_RULES.find(rule => rule.vendor === "Axeptio" && rule.pattern.test(name)) : undefined;
+  // Exact documented consent-preference identities only; no prefix exemption.
+  if (axeptioRule) return { name, category: axeptioRule.category, vendor: axeptioRule.vendor,
+    dataTypes: [...axeptioRule.dataTypes], description: axeptioRule.description, essentiality: "essential" };
   const rule = COOKIE_KNOWLEDGE_RULES.find((candidate) =>
     candidate.pattern.test(name) &&
     (!candidate.contextHostPatterns || candidate.contextHostPatterns.some((pattern) =>

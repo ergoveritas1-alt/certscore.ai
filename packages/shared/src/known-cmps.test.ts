@@ -62,6 +62,18 @@ test("detects Fides from canonical runtime markers without host inference", () =
   assert.equal(isKnownCmpCookieName("fides_consent_tenant_a"), true);
 });
 
+test("Axeptio recognition is passive and does not register an automatic Close action", () => {
+  assert.equal(getKnownCmpVendorName({ cookieNames: ["axeptio_cookies"] }), "Axeptio");
+  assert.equal(getKnownCmpVendorName({ jsGlobals: ["axeptioSDK"] }), "Axeptio");
+  assert.equal(getKnownCmpVendorName({ urls: ["https://static.axept.io/sdk.js"] }), "Axeptio");
+  assert.equal(isKnownCmpCookieName("axeptio_unknown"), false);
+  assert.equal(getKnownCmpVendorName({ urls: ["https://mistral.ai/"] }), null);
+  for (const action of ["accept", "reject"] as const) {
+    assert.equal(getKnownCmpActionCapability("Axeptio", action)?.recipeAvailable, false);
+    assert.equal(getKnownCmpActionCapability("Axeptio", action)?.semanticConfirmationRegistered, false);
+  }
+});
+
 test("detects Amazon Privacy Preferences from first-party consent evidence", () => {
   const [detection] = detectKnownCmps({
     urls: ["https://www.amazon.de/privacyprefs/retail/v3/banner?pagePath=%2F"],

@@ -18,6 +18,46 @@ import {
   buildRuntimeCookiePriorityGroups,
   getRuntimeCookieReviewPriority
 } from "./runtime-cookie-priority";
+import { AXEPTIO_COOKIE_PURPOSE_POLICY } from "@certscore/vendor-resolver";
+import { buildNormalizedConcerns } from "./normalized-concerns";
+import { deriveGdprEprivacyCoveragePolicyOutcomes } from "./gdpr-eprivacy-coverage-policy";
+import { deriveGdprEprivacyCoverageChecklist } from "./gdpr-eprivacy-coverage-checklist";
+import { getGdprEprivacyRowDeduction } from "./regulatory-coverage-score";
+
+test("versioned Axeptio preference storage clears the unknown-purpose review without reclassifying historical rows", () => {
+  const cookieNames = ["__cf_bm", "axeptio_cookies", "axeptio_all_vendors", "axeptio_authorized_vendors"];
+  const legacy = { cookieWriteObservations: cookieNames.map(cookieName => ({ cookieName, domain: "mistral.ai",
+    beforeConsent: true, category: "unknown", essentiality: "unknown", setMethod: "browser_snapshot" })),
+    storageSummary: { distinctPreConsentCookieCount: 4 } };
+  const original = structuredClone(legacy);
+  assert.equal(buildPreConsentStorageAssessment({ hybridRuntimeEvidence: legacy }).status, "partially_classified");
+  const current = { ...legacy, cookieWriteObservations: legacy.cookieWriteObservations.map(row => ({ ...row,
+    essentialityReasonCodes: [`cookie_purpose_policy:${AXEPTIO_COOKIE_PURPOSE_POLICY}`] })) };
+  const inventory = buildRuntimeCookieInventory({ hybridRuntimeEvidence: current });
+  assert.equal(inventory.rows.filter(row => row.category === "consent_management").length, 3);
+  const assessment = buildPreConsentStorageAssessment({ hybridRuntimeEvidence: current });
+  assert.equal(assessment.status, "classified_zero");
+  assert.equal(assessment.classifiedEssentialCount, 4);
+  assert.equal(assessment.provenWriteCount, 0);
+  assert.equal(assessment.unclassifiedCount, 0);
+  const storageDeduction = (hybridRuntimeEvidence: Record<string, unknown>) => {
+    const runtimeArtifacts = { hybridRuntimeEvidence };
+    const normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
+    const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ runtimeArtifacts, normalizedConcerns,
+      scanCompleted: true, coverageLimited: false });
+    const rows = deriveGdprEprivacyCoverageChecklist({ coverageOutcomes, scanCompleted: true, coverageLimited: false,
+      projectedFindings: [], unifiedFindings: [] });
+    return getGdprEprivacyRowDeduction(rows.find(row => row.id === "pre_consent_cookies_storage")!);
+  };
+  assert.equal(storageDeduction(legacy), 8);
+  assert.equal(storageDeduction(current), 0);
+  assert.deepEqual(legacy, original);
+  assert.equal(buildPreConsentStorageAssessment({ hybridRuntimeEvidence: legacy }).status, "partially_classified");
+  const withAnalytics = { ...current, storageSummary: { distinctPreConsentCookieCount: 5 },
+    cookieWriteObservations: [...current.cookieWriteObservations, { ...current.cookieWriteObservations[0], cookieName: "_ga", setMethod: "document_cookie", setAtMs: 1000 }] };
+  assert.equal(buildPreConsentStorageAssessment({ hybridRuntimeEvidence: withAnalytics }).status, "classified_nonessential_observed");
+  assert.equal(storageDeduction(withAnalytics), 8, "a real Analytics write retains its deduction");
+});
 
 test("classifies expanded non-essential cookie families", () => {
   assert.equal(classifyRuntimeCookieCategory("_vwo_uuid_v2", ".example.com"), "advertising");

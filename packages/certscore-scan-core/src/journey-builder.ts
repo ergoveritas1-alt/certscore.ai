@@ -14,6 +14,7 @@ import type {
   ScriptEvent,
   StorageSnapshot,
 } from "@certscore/contracts";
+import { AXEPTIO_COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
 
 export interface BuildObservedJourneysInput {
   networkEvents: NetworkEvent[];
@@ -52,7 +53,10 @@ export function classifyCookieEvents(
         : event.firstParty === true
           ? "first_party"
           : "unknown";
-    const cookiePurpose = relatedVendor?.purpose ?? classifyKnownCookiePurpose(event.cookieName);
+    const retainedKnowledge = event.cookieEssentialityReasonCodes?.includes(`cookie_purpose_policy:${AXEPTIO_COOKIE_PURPOSE_POLICY}`)
+      ? resolveCanonicalCookieKnowledge(event.cookieName, { purposePolicyVersion: AXEPTIO_COOKIE_PURPOSE_POLICY }) : null;
+    const cookiePurpose = retainedKnowledge?.category === "consent_management" ? "consent_management"
+      : relatedVendor?.purpose ?? classifyKnownCookiePurpose(event.cookieName);
 
     return {
       ...event,

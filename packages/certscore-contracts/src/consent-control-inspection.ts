@@ -83,7 +83,7 @@ export function classifyConsentInspectionRole(c: {
     return { role: "unknown", unresolvedIntents: [...intents] };
   }
   if (c.classifierReasonCodes?.includes("initial_necessary_only_selection_observed") &&
-    (c.tagName !== "button" || !isInitialSelectionSubmit(c.label, c.classifierReasonCodes) || !isInitialNecessaryOnlySelection(c.initialSelection))) {
+    (c.tagName !== "button" || !isInitialSelectionSubmit(c.label, c.classifierReasonCodes, c.initialSelection) || !isInitialNecessaryOnlySelection(c.initialSelection))) {
     return { role: "selection_submit", unresolvedIntents: ["reject"] };
   }
   if (c.classifierReasonCodes?.includes("matched_dismiss")) return { role: "dismiss", unresolvedIntents: [] };
@@ -125,7 +125,7 @@ export function isControlInspectionComplete(inspection: ConsentControlInspection
   return inspection.structuralCoverage === "complete" && !inspection.candidates.some(c => c.unresolvedIntents.includes(intent));
 }
 
-export const initialConsentSelectionSchema = z.object({
+const drupalInitialConsentSelectionSchema = z.object({
   recipe: z.literal("drupal_eu_cookie_compliance.initial_selection.v1"),
   scopeSelector: z.literal("#sliding-popup .eu-cookie-compliance-banner"),
   submitSelector: z.literal(".eu-cookie-compliance-categories-buttons .eu-cookie-compliance-save-preferences-button"),
@@ -134,17 +134,34 @@ export const initialConsentSelectionSchema = z.object({
     id: z.string().min(1).max(80), checked: z.boolean(), disabled: z.boolean(), inputType: z.literal("checkbox"),
   })).min(1).max(24),
 });
+const axeptioInitialConsentSelectionSchema = z.object({
+  recipe: z.literal("axeptio.initial_optional_off_close.v1"),
+  scopeSelector: z.literal("open_shadow_root:axeptio"),
+  submitSelector: z.literal('#axeptio_btn_close[aria-label="Close cookie settings"]'),
+  complete: z.boolean(),
+  categories: z.array(z.object({
+    id: z.string().min(1).max(80), checked: z.boolean(), disabled: z.boolean(), inputType: z.literal("checkbox"),
+  })).min(2).max(24),
+}).strict();
+export const initialConsentSelectionSchema = z.union([drupalInitialConsentSelectionSchema, axeptioInitialConsentSelectionSchema]);
 export type InitialConsentSelection = z.infer<typeof initialConsentSelectionSchema>;
 /** The registered submit must describe saving the current selection, not a
  * conflicting decision. This is an observation recipe, never an action recipe. */
-export function isInitialSelectionSubmit(label: string | undefined, reasons: readonly string[] = []): boolean {
+export function isInitialSelectionSubmit(label: string | undefined, reasons: readonly string[] = [], selection?: unknown): boolean {
   if (reasons.some(r => ["conflicting_consent_decisions", "visible_accessible_intent_conflict", "negated_consent_choice"].includes(r))) return false;
+  if ((label ?? "").trim().toLowerCase() === "close") {
+    const parsed = axeptioInitialConsentSelectionSchema.safeParse(selection);
+    return parsed.success && isInitialNecessaryOnlySelection(parsed.data);
+  }
   return ["accept selected", "accept selections", "save selection", "save preferences", "accetta solo i selezionati"].includes((label ?? "").trim().toLocaleLowerCase());
 }
 export function isInitialNecessaryOnlySelection(value: unknown): value is InitialConsentSelection {
   const p = initialConsentSelectionSchema.safeParse(value);
   if (!p.success || !p.data.complete) return false;
   const categories = p.data.categories;
+  if (p.data.recipe === "axeptio.initial_optional_off_close.v1") {
+    return new Set(categories.map(c => c.id)).size === categories.length && categories.every(c => !c.checked && !c.disabled);
+  }
   return new Set(categories.map(c => c.id)).size === categories.length &&
     categories.some(c => c.id === "mandatory" && c.checked && c.disabled) &&
     categories.some(c => c.id !== "mandatory") &&

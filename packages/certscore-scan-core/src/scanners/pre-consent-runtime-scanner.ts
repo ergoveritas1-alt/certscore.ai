@@ -61,6 +61,7 @@ import { installRuntimeGraphCapture, type RuntimeGraphCaptureInput } from "../ru
 import {
   isCanonicalIdSyncEndpoint,
   resolveCanonicalCookieKnowledge,
+  AXEPTIO_COOKIE_PURPOSE_POLICY,
   resolveEndpointGeography,
   resolveVendorObservations,
   captureGoogleConsentModeRequest,
@@ -509,6 +510,7 @@ export function applyFinalDocumentPartyClassification(input: {
 
   for (const event of input.cookieEvents) {
     const knowledge = resolveCanonicalCookieKnowledge(event.cookieName, {
+      purposePolicyVersion: AXEPTIO_COOKIE_PURPOSE_POLICY,
       cookieDomain: event.cookieDomain,
       hostname: event.hostname,
       initiatorChain: event.initiatorChain,
@@ -530,7 +532,7 @@ export function applyFinalDocumentPartyClassification(input: {
     event.cookieEssentialityConfidence = knowledge.essentiality === "unknown" ? undefined : 0.98;
     event.cookieEssentialityReasonCodes = knowledge.essentiality === "unknown"
       ? ["canonical_cookie_knowledge_no_match"]
-      : [`canonical_cookie_kb:${knowledge.category}`];
+      : [`canonical_cookie_kb:${knowledge.category}`, ...(knowledge.vendor === "Axeptio" ? [`cookie_purpose_policy:${AXEPTIO_COOKIE_PURPOSE_POLICY}`] : [])];
     event.cookieClassificationBasis = unique([
       ...event.cookieClassificationBasis.filter((basis) =>
         basis !== "first_party" && basis !== "third_party" && basis !== "unknown"
@@ -2521,6 +2523,7 @@ export async function preConsentRuntimeScanner(
       const setterScriptUrl = boundedInitiatorUrl(documentWrite?.scriptUrl) ??
         initiatorChain.find((value) => /^https?:\/\//i.test(value));
       const knowledge = resolveCanonicalCookieKnowledge(cookie.name, {
+        purposePolicyVersion: AXEPTIO_COOKIE_PURPOSE_POLICY,
         cookieDomain: cookie.domain,
         hostname: cookieHostname,
         initiatorChain,
@@ -2565,12 +2568,12 @@ export async function preConsentRuntimeScanner(
         dataTypes: knowledge.dataTypes,
         cookieParty,
         vendorAssociated: false,
-        cookiePurpose: classifyKnownCookiePurpose(cookie.name),
+        cookiePurpose: knowledge.category === "unknown" ? classifyKnownCookiePurpose(cookie.name) : canonicalCookiePurpose(knowledge.category),
         cookieEssentiality: knowledge.essentiality,
         cookieEssentialityConfidence: knowledge.essentiality === "unknown" ? undefined : 0.98,
         cookieEssentialityReasonCodes: knowledge.essentiality === "unknown"
           ? ["canonical_cookie_knowledge_no_match"]
-          : [`canonical_cookie_kb:${knowledge.category}`],
+          : [`canonical_cookie_kb:${knowledge.category}`, ...(knowledge.vendor === "Axeptio" ? [`cookie_purpose_policy:${AXEPTIO_COOKIE_PURPOSE_POLICY}`] : [])],
         cookieClassificationBasis: [cookieParty, "browser_snapshot", `canonical_cookie_kb:${knowledge.category}`],
         operation: "browser_snapshot",
         valueRedacted: true,
@@ -4583,6 +4586,7 @@ export async function preConsentRuntimeScanner(
       const setterScriptUrl = graphCapture ? undefined : boundedInitiatorUrl(requestEvent?.responsibleScriptUrl) ??
         initiatorChain.find((value) => /^https?:\/\//i.test(value));
       const knowledge = resolveCanonicalCookieKnowledge(cookieMetadata.name, {
+        purposePolicyVersion: AXEPTIO_COOKIE_PURPOSE_POLICY,
         cookieDomain: cookieMetadata.domain,
         hostname,
         initiatorChain,
@@ -4627,12 +4631,12 @@ export async function preConsentRuntimeScanner(
         dataTypes: knowledge.dataTypes,
         cookieParty,
         vendorAssociated: false,
-        cookiePurpose: classifyKnownCookiePurpose(cookieMetadata.name),
+        cookiePurpose: knowledge.category === "unknown" ? classifyKnownCookiePurpose(cookieMetadata.name) : canonicalCookiePurpose(knowledge.category),
         cookieEssentiality: knowledge.essentiality,
         cookieEssentialityConfidence: knowledge.essentiality === "unknown" ? undefined : 0.98,
         cookieEssentialityReasonCodes: knowledge.essentiality === "unknown"
           ? ["canonical_cookie_knowledge_no_match"]
-          : [`canonical_cookie_kb:${knowledge.category}`],
+          : [`canonical_cookie_kb:${knowledge.category}`, ...(knowledge.vendor === "Axeptio" ? [`cookie_purpose_policy:${AXEPTIO_COOKIE_PURPOSE_POLICY}`] : [])],
         cookieClassificationBasis: ["set_cookie_header", `canonical_cookie_kb:${knowledge.category}`],
         operation: "set_cookie_header",
         valueRedacted: true,

@@ -15,6 +15,7 @@ export {
   resolveCanonicalCookieKnowledge,
   resolveCanonicalCookiePurposeCandidate,
   COOKIE_PURPOSE_CANDIDATE_VERSION,
+  AXEPTIO_COOKIE_PURPOSE_POLICY,
   resolveCanonicalVendorLegalContext,
   type CanonicalCookieCategory,
   type CanonicalCookieContext,

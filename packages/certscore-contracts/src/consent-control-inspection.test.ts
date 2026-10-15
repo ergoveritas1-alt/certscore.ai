@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyConsentInspectionRole, isControlInspectionComplete, isInitialNecessaryOnlySelection, verifyConsentControlInspection, CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, isRelevantConsentInspectionCandidate } from "./consent-control-inspection";
+import { classifyConsentInspectionRole, isControlInspectionComplete, isInitialNecessaryOnlySelection, isInitialSelectionSubmit, verifyConsentControlInspection, CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, isRelevantConsentInspectionCandidate } from "./consent-control-inspection";
+
+test("Close requires the complete registered Axeptio optional-off proof", () => {
+  const proof = { recipe: "axeptio.initial_optional_off_close.v1", scopeSelector: "open_shadow_root:axeptio",
+    submitSelector: '#axeptio_btn_close[aria-label="Close cookie settings"]', complete: true,
+    categories: ["all", "ga", "hubspot"].map(id => ({ id, checked: false, disabled: false, inputType: "checkbox" })) };
+  assert.equal(isInitialSelectionSubmit("Close", [], proof), true);
+  assert.equal(isInitialSelectionSubmit("Close"), false);
+  for (const invalid of [{ ...proof, complete: false }, { ...proof, categories: [] },
+    { ...proof, categories: [...proof.categories, proof.categories[0]] },
+    { ...proof, categories: proof.categories.map(c => ({ ...c, checked: true })) },
+    { ...proof, categories: proof.categories.map(c => ({ ...c, disabled: true })) },
+    { ...proof, submitSelector: "#generic_close" }]) {
+    assert.equal(isInitialNecessaryOnlySelection(invalid), false);
+    assert.equal(isInitialSelectionSubmit("Close", [], invalid), false);
+  }
+  assert.equal(isInitialSelectionSubmit("Close", ["conflicting_consent_decisions"], proof), false);
+});
 
 test("information can leave Options limited while Reject inspection is complete", () => {
   const role = classifyConsentInspectionRole({ label: "More information", actionType: "other", tagName: "button", consentContextConfirmed: true });

@@ -113,6 +113,36 @@ test("initial selected-only refusal retains category proof and never claims a co
   }
 });
 
+test("Axeptio Close carries optional-off proof through persistence, concerns and scoring", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.route("**/*", route => route.fulfill({ contentType: "text/html", body: "<!doctype html><div id='host'></div>" }));
+    await page.goto(url);
+    await page.evaluate(() => {
+      document.querySelector("#host")!.attachShadow({ mode: "open" }).innerHTML = `<section role="dialog" style="position:fixed;bottom:20px;background:white;padding:20px"><p>We use cookies for analytics. Choose your cookie preferences.</p>
+        <label>Toggle all<input type="checkbox"></label><label>Google Analytics 4<input type="checkbox"></label><label>Hubspot<input type="checkbox"></label>
+        <input id="axeptio_consent_checkbox" type="checkbox" hidden>
+        <button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button><button id="axeptio_btn_acceptAllAndNext">OK, accept all</button>
+        <button id="axeptio_btn_next">Next</button><button id="axeptio_main_button" aria-label="Close the widget without accepting cookie settings">Cookies</button></section>`;
+    });
+    const geometry = await captureConsentControlGeometry(page, { documentIdentity: identity });
+    const assessment = materialize(geometry);
+    assert.equal(assessment.controls.reject.state, "observed");
+    assert.equal(assessment.evidence.find(e => e.intent === "reject")?.initialSelection?.recipe, "axeptio.initial_optional_off_close.v1");
+    const result = project(assessment);
+    const row = result.checklist.find(r => r.id === "reject_all_path_availability")!;
+    assert.equal(getGdprEprivacyRowDeduction(row), 0);
+    assert.equal(result.findings.some(f => f.normalizedConcern.suggestedUnifiedFindingId === "reject_button_missing"), false);
+    assert.equal(result.runtimeArtifacts.postRefusalObservation, undefined);
+    const altered = structuredClone(geometry);
+    altered.candidates.find(c => c.label === "Close")!.initialSelection!.categories[1]!.checked = true;
+    assert.equal(materialize(altered).controls.reject.state, "unknown", "changed retained selection cannot be promoted");
+    const stale = structuredClone(geometry);
+    stale.documentIdentity = { ...identity, token: "another-loader" };
+    assert.equal(materialize(stale).controls.reject.state, "unknown");
+  } finally { await page.close(); }
+});
+
 test("a fully inspected empty first layer reports no controls without inventing a refusal finding", async () => {
   const geometry = await capture('<main><h1>Public page</h1></main>');
   assert.equal(materialize(geometry).controls.reject.state, "unknown", "early empty geometry cannot replace a completed surface inspection");

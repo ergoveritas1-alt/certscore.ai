@@ -59,6 +59,11 @@ export type KnownCmpActionCapability = {
 };
 
 export type KnownCmpDefinition = {
+  initialOptionalOffCloseObservation?: {
+    recipe: "axeptio.initial_optional_off_close.v1";
+    submitSelector: '#axeptio_btn_close[aria-label="Close cookie settings"]';
+    widgetSelector: string; acceptSelector: string; nextSelector: string; inputSelector: string;
+  };
   /** One read-only preference visit; never shared with Accept/Reject recipes. */
   preferenceInspection?: {
     version: string;
@@ -176,6 +181,26 @@ export type KnownCmpDetectionInput = {
 };
 
 export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
+  {
+    canonicalName: "Axeptio", aliases: ["Axeptio CMP"],
+    domains: ["axept.io", "axeptio.eu"],
+    cookieNames: ["axeptio_cookies", "axeptio_all_vendors", "axeptio_authorized_vendors"],
+    domSelectors: ["#axeptio_btn_close", "#axeptio_main_button"],
+    globalNames: ["axeptioSettings", "axeptioSDK"],
+    urlPatterns: [/^https:\/\/(?:static|client|api)\.axept\.io\//i],
+    evidenceTreatment: "cmp_infrastructure", role: "consent management platform",
+    standards: ["google_consent_mode"],
+    initialOptionalOffCloseObservation: {
+      recipe: "axeptio.initial_optional_off_close.v1",
+      submitSelector: '#axeptio_btn_close[aria-label="Close cookie settings"]',
+      widgetSelector: '#axeptio_main_button[aria-label="Close the widget without accepting cookie settings"]',
+      acceptSelector: "#axeptio_btn_acceptAllAndNext", nextSelector: "#axeptio_btn_next",
+      inputSelector: 'input:not(#axeptio_consent_checkbox),select,textarea,[role="switch"]',
+    },
+    // Passive all-off recognition does not authorize a Close action. Registration
+    // requires its own separately verified action recipe and semantic witness.
+    interactionDocumentationUrls: ["https://support.axeptio.eu/en/articles/274085-does-axeptio-place-cookies"],
+  },
   {
     aliases: [
       "OpenAI first-party consent controls",

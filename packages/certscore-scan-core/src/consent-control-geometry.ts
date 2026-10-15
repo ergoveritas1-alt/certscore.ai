@@ -353,6 +353,7 @@ export async function captureConsentControlGeometry(
     consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
     controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     registrySelectors,
+    initialOptionalOffCloseRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.initialOptionalOffCloseObservation ? [entry.initialOptionalOffCloseObservation] : []),
     nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
   };
   const initialPageUrl = page.url();
@@ -863,7 +864,7 @@ function buildCandidateEvidence(
   const baseClassification = classifyCandidate(candidate);
   const classification: ConsentControlLabelClassification = candidate.layer === "first_layer" &&
     candidate.enabled && candidate.intersectsViewport && candidate.occlusion.center &&
-    CONSENT_CONTEXT_PATTERN.test(candidate.contextText) && isInitialSelectionSubmit(candidate.label, baseClassification.reasonCodes) &&
+    CONSENT_CONTEXT_PATTERN.test(candidate.contextText) && isInitialSelectionSubmit(candidate.label, baseClassification.reasonCodes, candidate.initialSelection) &&
     isInitialNecessaryOnlySelection(candidate.initialSelection)
       ? { intent: "reject", semanticRole: "necessary_only", confidence: 0.95, contextSatisfied: true,
           registryVersion: baseClassification.registryVersion, matchStrength: "equivalent",
@@ -1292,6 +1293,7 @@ function collectConsentGeometryInPage(input: {
   consentPatternSource: string;
   controlLabelPatternSource: string;
   registrySelectors: string[];
+  initialOptionalOffCloseRecipes: NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["initialOptionalOffCloseObservation"]>[];
   nonFirstLayerSurfaceSelector: string;
 }): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
@@ -1618,9 +1620,37 @@ function collectConsentGeometryInPage(input: {
     };
   }
 
-  // Canonical Drupal category-submit recipe. Read only the initial state; never
-  // activate the Save control. A missing/hidden category or ambiguous scope fails closed.
+  // Canonical category-submit recipes read only the initial state. Missing,
+  // hidden or ambiguous inputs fail closed; they never authorize a click.
   function initialSelectionFor(element: Element): InitialConsentSelection | undefined {
+    // Reviewed Axeptio first-layer all-off Close variant. Every optional input
+    // must have a visible label and be enabled and unchecked in this shadow root.
+    // Generic Close buttons and the floating dismiss widget are never promoted.
+    const root = element.getRootNode();
+    const recipe = input.initialOptionalOffCloseRecipes.find(recipe => element.matches(recipe.submitSelector));
+    const axeptioSubmit = recipe?.submitSelector;
+    if (element instanceof HTMLButtonElement && recipe && axeptioSubmit && element.matches(axeptioSubmit) &&
+      root instanceof ShadowRoot && root.mode === "open" &&
+      root.querySelectorAll(axeptioSubmit).length === 1 &&
+      root.querySelectorAll(recipe.widgetSelector).length === 1 &&
+      root.querySelectorAll(recipe.acceptSelector).length === 1 && root.querySelectorAll(recipe.nextSelector).length === 1) {
+      const inputs = Array.from(root.querySelectorAll(recipe.inputSelector));
+      if (inputs.length < 2 || inputs.length > 24) return undefined;
+      const categories = inputs.map((item, index) => ({ id: `optional_${index}`, inputType: "checkbox" as const,
+        checked: (item as HTMLInputElement).checked, disabled: (item as HTMLInputElement).disabled }));
+      return { recipe: "axeptio.initial_optional_off_close.v1", scopeSelector: "open_shadow_root:axeptio", submitSelector: axeptioSubmit,
+        categories, complete: inputs.every(item => {
+          // Axeptio renders custom switches around native checkbox inputs.
+          // Bind visibility to their wrapping labels, not the native input paint.
+          const label = item.closest("label");
+          if (!label) return false;
+          const box = rectFor(label), style = window.getComputedStyle(label);
+          return item instanceof HTMLInputElement && item.type === "checkbox" &&
+            !item.hidden && Boolean(label.textContent?.trim()) && label.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
+            box.width > 0 && box.height > 0 && intersects(box, viewportRect()) &&
+            style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
+        }) };
+    }
     const scopeSelector = "#sliding-popup .eu-cookie-compliance-banner" as const;
     const submitSelector = ".eu-cookie-compliance-categories-buttons .eu-cookie-compliance-save-preferences-button" as const;
     if (!(element instanceof HTMLButtonElement) || !element.matches(submitSelector)) return undefined;

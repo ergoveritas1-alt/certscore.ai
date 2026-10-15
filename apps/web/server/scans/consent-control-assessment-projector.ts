@@ -182,7 +182,7 @@ function geometryInput(
           : [];
         const selectionClaim = classifierReasonCodes.includes("initial_necessary_only_selection_observed");
         const selectionVerified = !selectionClaim || (row.tagName === "button" && isInitialNecessaryOnlySelection(row.initialSelection) &&
-          isInitialSelectionSubmit(typeof row.label === "string" ? row.label : undefined, classifierReasonCodes));
+          isInitialSelectionSubmit(typeof row.label === "string" ? row.label : undefined, classifierReasonCodes, row.initialSelection));
         const supportedActionType = retainedActionType(
           selectionVerified && ["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"].includes(actionType)
           ? actionType as ConsentControlAssessmentCandidate["actionType"]
