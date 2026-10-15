@@ -55,7 +55,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.28`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.29`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 
@@ -477,3 +477,5 @@ Focused report retrieval: certscore_get_report_evidence_page accepts section=con
 Detailed Evidence parity: SDK 0.2.16 adds getReportEvidence(scanId, {section}) for bounded, snapshot-checked reconstruction. MCP 0.2.27 supports section="cmp" and section="cms" in certscore_get_report_evidence_page. The same API endpoint supports these selectors. These reads expose existing report assessments, wording, correction steps and safe retained evidence; they do not create scans, findings or score changes.
 
 Detailed Evidence fixes: SDK 0.2.17 types California privacy-choice evidence in full and section="policy" exports. MCP 0.2.28 preserves typed full-report evidence, including long GPC proof lists, under the existing byte ceilings. Verified controls, unverified candidates, notice passages and source provenance remain distinct. These updates do not change stored assessments or start scans.
+
+SDK 0.2.18 and MCP 0.2.29 retain scoped CMP inventory types, possible cookie-template matches, inferred cookie purpose, observed expiry and explicit incomplete-capture diagnostics. Captured observations remain distinct from verified consent or enforcement.
