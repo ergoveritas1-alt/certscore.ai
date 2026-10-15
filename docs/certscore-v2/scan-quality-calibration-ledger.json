@@ -1131,11 +1131,23 @@
       "note": "One owner-authorized fresh localhost diagnostic scan 68e528ce-ff80-4dd3-99be-e9e951c2f535, validating protected screenshot review and breadth-before-detail capture. Valid prominence evidence, 11 services, 36 declarations, 3 categories, 13 contrast-affected elements and two checks for manual review. No retry or deployment. Global SITS hold unchanged; not a release calibration cohort.",
       "state": "cooldown",
       "url": "https://sits.com/en/"
+    },
+    "https://anthropic.com": {
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T00:18:37.248Z",
+      "lastContactAt": "2026-10-15T00:18:37.248Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [],
+      "lastOutcome": "completed",
+      "note": "Owner-requested one local comparison of production Anthropic report 358ac0fd-afba-4d17-aa0e-dc8817f9543e: daf8069b-5c8c-4930-bc9a-9aafcdbcf6ed. Closed consent dialog during local capture; no regional proxy configured, so not an AWS Ireland coverage equivalence result. Normal local quota unchanged; no rescan/deployment. Contact history only, outside rotating inventory.",
+      "state": "cooldown",
+      "url": "https://anthropic.com"
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-14T23:38:34.937Z",
+  "updatedAt": "2026-10-15T00:19:56.997Z",
   "contactOnlyUrls": [
+    "https://anthropic.com",
     "https://sits.com/en/"
   ]
 }
