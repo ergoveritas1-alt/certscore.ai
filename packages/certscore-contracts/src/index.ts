@@ -1,4 +1,6 @@
 export * from "./cookie-disclosure-column";
+import { googleConsentModeObservationSchema } from "./google-consent-mode";
+export * from "./google-consent-mode";
 import { cmpBasicEvidenceSchema, type CmpBasicEvidence, cmpPreferencesEvidenceSchema, type CmpPreferencesEvidence } from "./cmp-audit-evidence";
 export * from "./cmp-audit-evidence";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
@@ -538,6 +540,7 @@ export const networkEventSchema = runtimeEvidenceEventSchema.extend({
   endpointGeographyBasis: z.array(z.string().max(120)).optional(),
   relatedEvidenceRefs: z.array(evidenceRefSchema).optional(),
   requestPayloadSignals: requestPayloadSignalsSchema.optional(),
+  googleConsentMode: googleConsentModeObservationSchema.optional(),
 });
 
 export const networkResponseEventSchema = runtimeEvidenceEventSchema.extend({

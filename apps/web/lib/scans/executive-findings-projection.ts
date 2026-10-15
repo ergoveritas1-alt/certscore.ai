@@ -2397,6 +2397,10 @@ function buildPreConsentTrackingEvidenceDetails(
       noConsentActionObserved: request.noConsentActionObserved
     });
     return {
+      ...(request.googleConsentMode ? {
+        googleConsentMode: request.googleConsentMode, requestId: request.requestId,
+        eventId: request.eventId, tsMs: request.tsMs, evidenceRefs: request.evidenceRefs,
+      } : {}),
       url: request.requestUrl,
       requestUrl: request.requestUrl,
       hostname: request.hostname,

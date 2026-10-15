@@ -3,6 +3,7 @@ import { retainedActionTimingSchema, retainActionTiming, validateRetainedActionT
 import { terminalConsentDecisionSchema, validateTerminalConsentDecision } from "./terminal-consent-decision";
 import { assessChoicePathExecution, choicePathExecutionSchema, registeredObservationCompletionSchema, retainRegisteredObservationCompletion, validateChoicePathExecution } from "./choice-path-execution";
 import { z } from "zod";
+import { googleConsentModeObservationSchema } from "./google-consent-mode";
 import { actionStoragePhaseDiagnosticsSchema } from "./action-storage-collection-diagnostics";
 import { actionOriginDomStorageObservationSchema, validateOriginDomStorageObservation } from "./action-origin-dom-storage-observation";
 import { actionStorageNameSchema, validateActionStorageName, validateLegacyActionStorageNames } from "./action-storage-name";
@@ -144,6 +145,7 @@ export const postRefusalNetworkRequestSchema = z.object({
     "unknown",
   ]).optional(),
   nonEssential: z.boolean(),
+  googleConsentMode: googleConsentModeObservationSchema.optional(),
 });
 
 export const postRefusalStorageItemSchema = z.object({

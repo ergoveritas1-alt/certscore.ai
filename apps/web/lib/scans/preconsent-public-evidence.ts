@@ -1,7 +1,13 @@
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import type { GoogleConsentModeAssessment } from "@certscore/contracts";
+import { readRetainedGoogleConsentMode } from "./google-consent-mode-assessment";
 import { getReportUrlQueryKeys, stripReportUrlAnnotation } from "./report-facing-page-url";
 
 export type PromotionGradePreconsentRequest = {
+  googleConsentMode?: GoogleConsentModeAssessment;
+  requestId?: string;
+  eventId?: string;
+  tsMs?: number;
   scannedPageUrl?: string | null;
   requestUrl: string;
   queryKeysSample: string[];
@@ -473,7 +479,9 @@ export function buildPromotionGradePreconsentRequests(input: {
     const scannedPageUrl = input.scannedPageUrl && retainedScannedPageUrl && !sameScannedSite(retainedScannedPageUrl, input.scannedPageUrl)
       ? input.scannedPageUrl
       : retainedScannedPageUrl ?? input.scannedPageUrl ?? null;
+    const googleConsentMode = readRetainedGoogleConsentMode(row);
     requests.push({
+      ...(googleConsentMode ? { googleConsentMode, requestId: row.requestId as string, eventId: row.eventId as string, tsMs: row.tsMs as number } : {}),
       scannedPageUrl: scannedPageUrl ? safeEvidenceUrl(scannedPageUrl) : null,
       requestUrl: safeEvidenceUrl(requestUrl),
       queryKeysSample: getReportUrlQueryKeys(requestUrl),

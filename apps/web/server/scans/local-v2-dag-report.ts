@@ -1,4 +1,5 @@
 import { buildFirstLayerRejectPathProjection } from "./scan-report-consent-projection";
+import { projectGoogleConsentModeRequest } from "../../lib/scans/google-consent-mode-assessment";
 import { reportArtifactIdentityKey, verifyReportArtifactTransfer } from "../../../../packages/shared/src/report-artifact-transfer";
 import { withVerifiedConsentVisualSource } from "./consent-visual-provenance";
 import { deriveConsentScreenshotCrops } from "./consent-banner-crop";
@@ -5709,10 +5710,12 @@ function buildMaterializedLocalV2Detail(
         : "library";
       const correlatedResponses = responseEventsByRequestId.get(event.requestId) ?? [];
       const responseCookieNamesSet = uniqueStrings(correlatedResponses.flatMap((response) => response.cookieNamesSet ?? [])).slice(0, 24);
+      const googleConsentMode = projectGoogleConsentModeRequest(event);
       return matchedVendor && url && hostname
         ? {
             category: matchedVendor.vendorCategory,
             classification,
+            ...(googleConsentMode ? { googleConsentMode, requestId: event.requestId, eventId: event.eventId } : {}),
             classificationBasis: "local_v2_dag_runtime_vendor_observation",
             collectionEndpointObserved: event.collectionEndpointObserved === true,
             collectionEndpointType: matchedVendor.collectionEndpointType,

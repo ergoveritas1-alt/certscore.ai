@@ -35,7 +35,7 @@ import {
   type PostRefusalStorageItem,
   type PostRefusalTcfState,
 } from "@certscore/contracts";
-import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import { captureGoogleConsentModeRequest, resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -2533,12 +2533,14 @@ function classifyRequests(
   return captured.map((entry) => {
     const url = entry.request.url();
     const vendor = vendorFor({ type: "request", url });
+    const googleConsentMode = captureGoogleConsentModeRequest({ url, requestId: entry.requestId, timestampMs: elapsed(scanStartedAtMs, entry.startedAtEpochMs) });
     const offset = acceptanceRegisteredAtEpochMs === undefined
       ? undefined
       : elapsed(scanStartedAtMs, entry.startedAtEpochMs) - elapsed(scanStartedAtMs, acceptanceRegisteredAtEpochMs);
     return {
       requestId: entry.requestId,
       sanitizedUrl: sanitizeUrl(url),
+      ...(googleConsentMode ? { googleConsentMode } : {}),
       ...(hostnameFromUrl(url) ? { hostname: hostnameFromUrl(url) } : {}),
       resourceType: entry.request.resourceType(),
       startedAtMs: elapsed(scanStartedAtMs, entry.startedAtEpochMs),

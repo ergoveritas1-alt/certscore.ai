@@ -9542,3 +9542,62 @@ test("materialization retains visual comparison only with the original image has
     await rm(outDir, { recursive: true, force: true });
   }
 });
+
+
+test("consent-mode context follows canonical materialization without changing findings or score", async () => {
+  const previousAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+  const { materializeLocalV2DagScanDetail } = await loadLocalV2DagReport();
+  const { captureGoogleConsentModeRequest, resolveVendorObservations } = await import("@certscore/vendor-resolver");
+  const { projectPreconsentTrackingTiming, describePreconsentTrackingTiming } = await import("../../lib/scans/preconsent-tracking-timing");
+  const outDir = await mkdtemp(path.join(process.cwd(), "artifacts/local-v2-dag-scans/consent-mode-"));
+  const url = "https://www.google-analytics.com/g/collect?redacted=1";
+  const networkEvent = { eventId: "net_ga", requestId: "req_ga", eventType: "network_request", method: "POST",
+    documentUrl: "https://example.test/", topLevelUrl: "https://example.test/", scenario: "fresh_pre_consent", pagePhase: "settled",
+    requestUrl: url, url, hostname: "www.google-analytics.com", timestampMs: 4929, resourceType: "fetch",
+    collectionEndpointObserved: true, thirdParty: true, consentStateAtTime: "pre_consent", sourceScanner: "pre_consent_runtime", evidenceRefs: [] };
+  const baseBundle = { scanId: "consent-mode-fixture", url: "https://example.test/", normalizedUrl: "https://example.test/",
+    startedAt: "2026-10-14T12:00:00.000Z", completedAt: "2026-10-14T12:00:14.000Z",
+    schemaVersion: "certscore.v2.canonical-evidence-bundle.v1", networkEvents: [networkEvent],
+    normalizedVendorObservations: resolveVendorObservations([{ type: "request", evidenceId: "net_ga", url,
+      hostname: "www.google-analytics.com", matchSource: "network_request", sourceEventType: "network_request",
+      consentStateAtTime: "pre_consent", evidenceRef: { refId: "ref_net_ga", eventId: "net_ga", eventType: "network_request", url } }]),
+    observedJourneys: [], cookieEvents: [], policySurfaceObservations: [],
+    modulesRun: [{ moduleName: "preConsentRuntimeScanner", status: "completed", errors: [], evidenceRefs: [], durationMs: 14000, timingBreakdown: [], startedAt: "2026-10-14T12:00:00.000Z", completedAt: "2026-10-14T12:00:14.000Z" }],
+    consentUiObservations: [], derivedRuntimeSignals: { consentBannerLikelyPresent: false, preConsentTrackingObserved: true },
+    domSnapshots: [{ artifactId: "dom_page", url: "https://example.test/", capturedAtMs: 1000, consentStateAtTime: "pre_consent", textExcerpt: "This public website describes its products and documentation. It has a substantive page with an analytics measurement request in this deterministic fixture." }],
+    runtimeCoverage: { coverageStatus: "usable", limitationKeys: [], fallbackModesUsed: [], notes: [], silentEmpty: false, observationCounts: { networkEvents: 1, normalizedVendors: 1, thirdPartyRequests: 1 } } };
+  const original = makeScanRecord();
+  const record = makeScanRecord({ scan: { ...original.scan, domainHostname: "example.test", scanConfigJson: {
+    hostname: "example.test", normalizedUrl: "https://example.test/", processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
+    execution: { localV2Dag: { outDir }, v2DagParallel: { artifactOnly: true, localOnly: true, productionFindingIntegration: false } },
+  } } });
+  try {
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), JSON.stringify(baseBundle));
+    const before = await materializeLocalV2DagScanDetail(record);
+    const googleConsentMode = captureGoogleConsentModeRequest({ url: "https://www.google-analytics.com/g/collect?gcs=G100&gcd=13p3p3p2p5l1&npa=1", requestId: "req_ga", timestampMs: 4929 });
+    await writeFile(path.join(outDir, "CanonicalEvidenceBundle.json"), JSON.stringify({ ...baseBundle, networkEvents: [{ ...networkEvent, googleConsentMode }] }));
+    const after = await materializeLocalV2DagScanDetail(record);
+    const beforeRows = before.runtimeArtifacts?.requestPurposeClassificationConfidence as Array<Record<string, unknown>>;
+    const afterRows = after.runtimeArtifacts?.requestPurposeClassificationConfidence as Array<Record<string, unknown>>;
+    assert.equal(beforeRows.length, 1);
+    assert.equal(afterRows.length, 1);
+    const { googleConsentMode: retained, requestId, eventId, ...unchanged } = afterRows[0]!;
+    assert.deepEqual(unchanged, beforeRows[0]);
+    assert.equal((retained as Record<string, unknown>).storageDeclaration, "denied");
+    assert.deepEqual(after.validationFindings, before.validationFindings);
+    const beforeProjection = buildCanonicalGdprEprivacyShadowProjection(before);
+    const afterProjection = buildCanonicalGdprEprivacyShadowProjection(after);
+    assert.deepEqual(afterProjection.legacyScoreAssessment, beforeProjection.legacyScoreAssessment);
+    assert.deepEqual(afterProjection.checklistRows.map(row => [row.id, row.status]), beforeProjection.checklistRows.map(row => [row.id, row.status]));
+    assert.deepEqual(after.snapshot, before.snapshot);
+    assert.match(describePreconsentTrackingTiming(projectPreconsentTrackingTiming(afterRows)), /storage consent denied/);
+    const unified = buildScanReportUnifiedFindingsForScan(after);
+    assert.deepEqual(unified.map(row => [row.unifiedFindingId, row.severity, row.presentationDecision]),
+      buildScanReportUnifiedFindingsForScan(before).map(row => [row.unifiedFindingId, row.severity, row.presentationDecision]),
+      "consent-mode context must not promote or suppress findings");
+  } finally {
+    if (previousAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL; else process.env.NEXT_PUBLIC_APP_URL = previousAppUrl;
+    await rm(outDir, { recursive: true, force: true });
+  }
+});

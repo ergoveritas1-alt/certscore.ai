@@ -27,7 +27,7 @@ import {
   type PostRefusalStorageWrite,
   type PostRefusalTcfState,
 } from "@certscore/contracts";
-import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import { captureGoogleConsentModeRequest, resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import {
   detectKnownCmps,
   KNOWN_CMP_REGISTRY,
@@ -1826,12 +1826,14 @@ function classifyRequests(
     const requestUrl = captured.request.url();
     const vendor = vendorFor({ type: "request", url: requestUrl });
     const startedAtMs = elapsed(scanStartedAtMs, captured.startedAtEpochMs);
+    const googleConsentMode = captureGoogleConsentModeRequest({ url: requestUrl, requestId: captured.requestId, timestampMs: startedAtMs });
     const msOffsetFromRefusal = refusalRegisteredAtEpochMs === undefined
       ? undefined
       : elapsed(scanStartedAtMs, captured.startedAtEpochMs) - elapsed(scanStartedAtMs, refusalRegisteredAtEpochMs);
     return {
       requestId: captured.requestId,
       sanitizedUrl: sanitizeUrl(requestUrl),
+      ...(googleConsentMode ? { googleConsentMode } : {}),
       ...(hostnameFromUrl(requestUrl) ? { hostname: hostnameFromUrl(requestUrl) } : {}),
       resourceType: captured.request.resourceType(),
       startedAtMs,

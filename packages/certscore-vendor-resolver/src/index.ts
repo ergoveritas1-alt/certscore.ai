@@ -8,6 +8,7 @@ import type {
   VendorRegistryIdentity,
   VendorRegistryAttribution,
 } from "@certscore/contracts";
+import { googleConsentModeObservationSchema, type GoogleConsentModeObservation } from "@certscore/contracts";
 
 export {
   isCanonicalIdSyncEndpoint,
@@ -5229,6 +5230,46 @@ export function resolveCanonicalVendor(input: VendorResolverInput): CanonicalVen
     ? rules.find(rule => observation.registryAttribution?.ruleIds.includes(rule.basisLabel) && rule.resourceRole && rule.urlPatterns?.some(pattern => pattern.test(input.url ?? "")))?.resourceRole
     : undefined;
   return { status: "resolved", observation, ...(resourceRole ? { resourceRole } : {}) };
+}
+
+/** Consent-mode parsing is scoped to a precise canonical collection service,
+ * never Google ownership, a tag library, or a parameter name alone. */
+export function isCanonicalGoogleAnalyticsCollectionUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port ||
+      !["/g/collect", "/collect", "/j/collect"].includes(parsed.pathname)) return false;
+    const match = resolveCanonicalVendor({ type: "request", url });
+    return match.status === "resolved" && match.observation.product === "Google Analytics" &&
+      match.observation.registryAttribution?.matchKind === "endpoint";
+  } catch { return false; }
+}
+
+/** Retain only bounded consent flags before request URL sanitization. Google's
+ * detailed gcd encoding is deliberately not decoded; its presence alone does
+ * not establish consent mode. No identifiers or raw query values are retained.
+ * Sources: developers.google.com/tag-platform/security/concepts/consent-mode
+ * and google-marketing-solutions/gps-sgtm-pantheon/sgtm/argos (G100/G111). */
+export function captureGoogleConsentModeRequest(input: {
+  url: string; requestId: string; timestampMs: number;
+}): GoogleConsentModeObservation | undefined {
+  if (!isCanonicalGoogleAnalyticsCollectionUrl(input.url)) return undefined;
+  const url = new URL(input.url);
+  if (!["gcs", "gcd", "npa"].some(key => url.searchParams.has(key))) return undefined;
+  const values = url.searchParams.getAll("gcs");
+  const known = ["G100", "G101", "G110", "G111"];
+  const gcs = values.length === 0 ? "not_present" :
+    values.length === 1 && known.includes(values[0]!) ? values[0] : "unrecognized";
+  const npa = url.searchParams.getAll("npa");
+  const parsed = googleConsentModeObservationSchema.safeParse({
+    version: "google-consent-mode-request.v1", source: "request_query",
+    requestId: input.requestId, timestampMs: input.timestampMs,
+    requestOrigin: url.origin, requestPath: url.pathname,
+    gcs, gcdPresent: url.searchParams.has("gcd"),
+    nonPersonalizedAds: npa.length === 1 && npa[0] === "1" ? "declared" :
+      npa.length === 1 && npa[0] === "0" ? "not_declared" : "unknown",
+  });
+  return parsed.success ? parsed.data : undefined;
 }
 
 /** Resource role is independent of its observed technical type and purpose. */

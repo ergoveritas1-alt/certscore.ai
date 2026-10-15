@@ -63,6 +63,7 @@ import {
   resolveCanonicalCookieKnowledge,
   resolveEndpointGeography,
   resolveVendorObservations,
+  captureGoogleConsentModeRequest,
   type VendorResolverInput,
 } from "@certscore/vendor-resolver";
 import {
@@ -959,6 +960,8 @@ export async function preConsentRuntimeScanner(
       relatedEvidenceRefs: [],
       requestPayloadSignals: payloadSignals,
     };
+    const googleConsentMode = captureGoogleConsentModeRequest({ url: requestUrl, requestId, timestampMs: event.timestampMs });
+    if (googleConsentMode) event.googleConsentMode = googleConsentMode;
     formTracing?.request(requestId, requestUrl, request.method(), event.timestampMs, request.postData(), currentBrowserDocumentIdentity(page)?.token ?? "");
     networkEvents.push(event);
     impactCapture?.recordRequest(event);
