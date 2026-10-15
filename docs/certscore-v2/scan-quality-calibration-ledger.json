@@ -1142,12 +1142,24 @@
       "note": "Owner-requested one local comparison of production Anthropic report 358ac0fd-afba-4d17-aa0e-dc8817f9543e: daf8069b-5c8c-4930-bc9a-9aafcdbcf6ed. Closed consent dialog during local capture; no regional proxy configured, so not an AWS Ireland coverage equivalence result. Normal local quota unchanged; no rescan/deployment. Contact history only, outside rotating inventory.",
       "state": "cooldown",
       "url": "https://anthropic.com"
+    },
+    "https://mistral.ai/": {
+      "url": "https://mistral.ai/",
+      "state": "cooldown",
+      "lastContactAt": "2026-10-15T03:52:35.697Z",
+      "lastContactSource": "owner_requested_independent_browser",
+      "lastOutcome": "completed",
+      "lastNoGoReasons": [],
+      "consecutiveNoGoCount": 0,
+      "cooldownUntil": "2026-11-12T03:52:35.697000Z",
+      "note": "Owner-requested EU-Ireland cookie-purpose and Close verification. Two fresh browser visits: first passive-only due to an accessible-name lookup error; second one Close click, no Accept or terms interaction. Close saved completed choice with Google Analytics and HubSpot false and all four Google consent types denied; no new GA requests in 20s. No original report, score, app or scanner change. Evidence: outputs/mistral-close-review-2026-10-14/review.json. Contact history only, outside rotating inventory."
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-15T00:19:56.997Z",
+  "updatedAt": "2026-10-15T03:52:35.697Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
+    "https://mistral.ai/",
     "https://sits.com/en/"
   ]
 }
