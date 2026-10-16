@@ -3,6 +3,40 @@ import test from "node:test";
 import { chromium } from "playwright";
 import { captureCmpBasicEvidence } from "./cmp-basic-capture.js";
 
+test("passive Cookiebot reads hidden declarations without clicks or visible-control claims", async () => {
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage(); let requests=0;
+    await page.route('**/*',route=>{requests++;return route.abort();});
+    const card=`<div class="CybotCookiebotDialogDetailBodyContentCookieGroup"><div class="CybotCookiebotDialogDetailBodyContentCookieProvider">Google</div>
+      <div class="CybotCookiebotDialogDetailBodyContentCookieInfo"><span class="CybotCookiebotDialogDetailBodyContentCookieInfoTitle">_ga</span>
+      <p class="CybotCookiebotDialogDetailBodyContentCookieInfoDescription">Audience measurement</p><div class="CybotCookiebotDialogDetailBodyContentCookieInfoFooterContent"><b>Maximum Storage Duration</b>: 2 years</div>
+      <div class="CybotCookiebotDialogDetailBodyContentCookieInfoFooterContent"><b>Type</b>: HTTP Cookie</div></div></div>`;
+    const content=`<div id="CybotCookiebotDialog"><button>Customize</button><div hidden id="CybotCookiebotDialogTabContentDetails" role="tabpanel">${card}<label><input type="checkbox">Hidden category</label></div></div><script>window.clicks=0;document.addEventListener('click',()=>window.clicks++);</script>`;
+    const input={page,scanId:"passive-cookiebot",targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:"loader"}),isCurrent:()=>true};
+    await page.setContent(content);
+    const packet=await captureCmpBasicEvidence(input);
+    assert.equal(packet?.contractVersion,"certscore.cmp-basic-evidence.v2");
+    assert.deepEqual(packet?.declarations,[{name:"_ga",purpose:"Audience measurement",duration:"2 years",source:"cmp_loaded_inventory"}]);
+    assert.equal(packet?.loadedInventory?.records[0]?.provider,"Google");
+    assert.deepEqual(packet?.inventoryManifest?.names,["_ga"]);
+    assert.equal(packet?.loadedInventoryBinding?.documentToken,"loader");
+    assert.deepEqual(packet?.controls,[],"Hidden controls do not become observed choices");
+    assert.equal(await page.evaluate(()=>(window as any).clicks),0);assert.equal(requests,0);
+    for (const mode of ["missing","outside","duplicate-root","duplicate-panel"]) {
+      await page.setContent(content);
+      await page.evaluate(mode=>{const root=document.querySelector('#CybotCookiebotDialog')!,panel=document.querySelector('#CybotCookiebotDialogTabContentDetails')!;
+        if(mode==='missing')panel.remove();if(mode==='outside')document.body.append(panel);
+        if(mode==='duplicate-root')document.body.append(root.cloneNode(true));if(mode==='duplicate-panel')root.append(panel.cloneNode(true));},mode);
+      assert.equal((await captureCmpBasicEvidence(input))?.loadedInventory,undefined,mode);
+    }
+    await page.setContent(content);
+    let checks=0;
+    const stale=await captureCmpBasicEvidence({...input,readBinding:()=>({url:page.url(),token:++checks>=3?'new-loader':'loader'})});
+    assert.equal(stale?.loadedInventory,undefined,"Drift after the controls checkpoint preserves only earlier facts");
+  } finally {await browser.close();}
+});
+
 test("passive first-layer inventory is bounded, document-bound and never opens or changes consent", async () => {
   const browser = await chromium.launch({headless:true});
   try {

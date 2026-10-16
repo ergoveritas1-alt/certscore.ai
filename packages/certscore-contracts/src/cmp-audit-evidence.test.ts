@@ -1,6 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmpPreferencesEvidenceSchema, cmpPrivacyLinkSchema } from "./cmp-audit-evidence";
+import { cmpBasicEvidenceSchema, cmpPreferencesEvidenceSchema, cmpPrivacyLinkSchema } from "./cmp-audit-evidence";
+
+test("passive loaded inventory requires v2 exact source, provider and document proof; v1 stays unchanged", () => {
+  const v1={contractVersion:"certscore.cmp-basic-evidence.v1",sourceLane:"consent_proof",scanId:"passive",targetUrl:"https://example.test/",documentUrl:"https://example.test/",documentToken:"loader",capturedAtMs:100,provider:"Cookiebot",controls:[],privacyLinks:[],declarations:[],serviceNames:[],limitations:["passive_first_layer_only","declaration_inventory_not_complete"]};
+  assert.deepEqual(cmpBasicEvidenceSchema.parse(v1),v1);
+  const valid={...v1,contractVersion:"certscore.cmp-basic-evidence.v2",captureProgress:{version:"cmp_capture_checkpoints.v1",documentToken:"loader",declarationsAtMs:90},
+    loadedInventoryBinding:{version:"cookiebot_passive_loaded_inventory.v1",rootSelector:"#CybotCookiebotDialog",panelSelector:"#CybotCookiebotDialogTabContentDetails",documentToken:"loader"},
+    loadedInventory:{version:"cookiebot_loaded_declarations.v1",records:[{name:"_ga",purpose:"Analytics",duration:"2 years",storageType:"cookie",provider:"Google",sourceRef:"provider:0/record:0"}],truncated:false,unresolvedRecords:0},
+    declarations:[{name:"_ga",purpose:"Analytics",duration:"2 years",source:"cmp_loaded_inventory"}],limitations:[...v1.limitations,"loaded_declarations_not_visibility_proof"]};
+  assert.equal(cmpBasicEvidenceSchema.safeParse(valid).success,true);
+  for (const mutate of [
+    (p:any)=>p.contractVersion=v1.contractVersion,(p:any)=>p.provider='OneTrust',(p:any)=>p.sourceLane='runtime_evidence',
+    (p:any)=>delete p.loadedInventory,(p:any)=>delete p.loadedInventoryBinding,(p:any)=>delete p.captureProgress.declarationsAtMs,
+    (p:any)=>p.loadedInventoryBinding.documentToken='other',(p:any)=>p.loadedInventoryBinding.panelSelector='#guessed',
+    (p:any)=>p.declarations[0].purpose='Changed',(p:any)=>p.declarations.push({...p.declarations[0]}),
+    (p:any)=>p.loadedInventory.records[0].storageType='local_storage',(p:any)=>p.serviceNames=['Invented service'],
+    (p:any)=>p.limitations=p.limitations.filter((s:string)=>s!=='declaration_inventory_not_complete'),
+    (p:any)=>p.inventoryManifest={version:'cmp_inventory_manifest.v1',source:'cookiebot_loaded_declarations.v1',names:['_invented'],sourceRecordCount:1,resolvedRecordCount:1,unresolvedRecordCount:0,unresolvedSources:0,truncated:false},
+  ]) {const candidate=structuredClone(valid);mutate(candidate);assert.equal(cmpBasicEvidenceSchema.safeParse(candidate).success,false,mutate.toString());}
+});
 
 function packet() {
   return {

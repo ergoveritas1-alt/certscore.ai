@@ -1,11 +1,12 @@
 import { cmpInventoryScopeSelector, readCmpScopeInventory } from "./cmp-scope-inventory.js";
-import { cmpBasicEvidenceSchema, type CmpBasicEvidence } from "@certscore/contracts";
+import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, type CmpBasicEvidence } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { Page } from "playwright";
 import { readBorlabsPreferenceInventory, readPreferenceControls, classifyControls } from "./cmp-preferences-observer.js";
 import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
 import { readCookieYesPreferenceInventory } from "./cookieyes-preference-inventory.js";
 import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
+import { readPassiveCookiebotLoadedInventory } from "./cookiebot-loaded-inventory.js";
 
 /** Opportunistic read in the existing consent-proof visit. No action, wait,
  * navigation, retry or late join. The caller retains only a settled, loader-bound
@@ -61,6 +62,20 @@ export async function captureCmpBasicEvidence(input: {
   if(inventory) packet.captureProgress!.declarationsAtMs=Date.now()-input.scanStartedAtMs;
   if(inventory && "truncated" in inventory && inventory.truncated) packet.limitations.push("cmp_inventory_bounded");
   if(definition.preferenceInventory) packet.limitations.push(definition.preferenceInventory,"loaded_configuration_not_visibility_proof");
+  if (definition.passiveLoadedInventory && input.isCurrent()) {
+    const loaded=await readPassiveCookiebotLoadedInventory(page,definition);
+    if (loaded) {
+      packet.contractVersion="certscore.cmp-basic-evidence.v2";
+      packet.loadedInventory=loaded;
+      packet.loadedInventoryBinding={...definition.passiveLoadedInventory,documentToken:before.token};
+      packet.declarations=projectLoadedCmpInventory(loaded).declarations;
+      packet.inventoryManifest=loaded.inventoryManifest;
+      packet.captureProgress!.declarationsAtMs=Date.now()-input.scanStartedAtMs;
+      packet.limitations.push("loaded_declarations_not_visibility_proof");
+      if (loaded.truncated) packet.limitations.push("cmp_inventory_bounded");
+      if (loaded.unresolvedRecords) packet.limitations.push("loaded_inventory_records_unresolved");
+    }
+  }
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
   const privacyScope=page.locator(scopes[index]!).locator("a[href]");
   const links=await privacyScope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,

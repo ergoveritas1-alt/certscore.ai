@@ -2904,6 +2904,10 @@ export async function preConsentRuntimeScanner(
             if (postCaptureObservation.controls.length === 0) {
               return postCaptureObservation;
             }
+            // Reuse the existing single passive read while later semantic and
+            // visual work runs; do not defer it until those channels finish.
+            retainedConsentUiObservation=postCaptureObservation;
+            startCmpBasicCapture();
             const postCaptureBasis = postCaptureObservation.basis.some((basis) =>
               basis.startsWith("inventory:full_document_")
             )
@@ -2964,6 +2968,8 @@ export async function preConsentRuntimeScanner(
           recapturedConsentObservation,
           recaptureBasis,
         );
+        retainedConsentUiObservation=consentObservation;
+        startCmpBasicCapture();
         if (
           hasActionableConsentChoiceControl(consentObservation) &&
           screenshotMode !== "never" &&

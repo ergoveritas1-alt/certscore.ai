@@ -97,6 +97,12 @@ export type KnownCmpDefinition = {
     recordSelector: string; nameSelector: string; descriptionSelector: string;
     footerSelector: string;
   };
+  /** Read the already-mounted declaration panel without opening it. */
+  passiveLoadedInventory?: {
+    version: "cookiebot_passive_loaded_inventory.v1";
+    rootSelector: "#CybotCookiebotDialog";
+    panelSelector: "#CybotCookiebotDialogTabContentDetails";
+  };
   /** Read-only category identity inside a verified preference dialog.
    * Identifies control type only, never cookie purpose or consent state. */
   preferenceCategoryInventory?: {
@@ -567,6 +573,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "#CybotCookiebotDialogBodyButtonAccept",
     ],
     canonicalName: "Cookiebot",
+    passiveLoadedInventory: { version: "cookiebot_passive_loaded_inventory.v1", rootSelector: "#CybotCookiebotDialog", panelSelector: "#CybotCookiebotDialogTabContentDetails" },
     preferenceDialogBinding: {version: "cookiebot_customize_tab.v1", controlSelector: "#CybotCookiebotDialogBodyLevelButtonCustomize",
       dialogSelector: '#CybotCookiebotDialog #CybotCookiebotDialogTabContentDetails[role="tabpanel"]', deferredRootSelector: "#CybotCookiebotDialog",
       dialogRoles: ["tabpanel"], tabSelector: "#CybotCookiebotDialogNavDetails"},

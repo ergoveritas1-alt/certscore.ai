@@ -784,6 +784,35 @@ test("v3 basic checkpoints retain verified page facts when CMP readiness cannot 
   assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
 });
 
+test("passive Cookiebot loaded declarations use canonical assessment and concerns without Options or scoring", () => {
+  const input=bundle();delete input.cmpPreferencesEvidence;delete input.cmpPreferenceLaneOutcome;
+  input.completedAt="2026-10-13T00:00:02.000Z";
+  input.domSnapshots=[{url:input.url,capturedAtMs:100,consentStateAtTime:"pre_consent",documentIdentity:{token:"passive-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+  input.cmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v2",sourceLane:"consent_proof",scanId:input.scanId,targetUrl:input.url,documentUrl:input.url,documentToken:"passive-loader",capturedAtMs:100,provider:"Cookiebot",controls:[],privacyLinks:[],serviceNames:[],
+    loadedInventoryBinding:{version:"cookiebot_passive_loaded_inventory.v1",rootSelector:"#CybotCookiebotDialog",panelSelector:"#CybotCookiebotDialogTabContentDetails",documentToken:"passive-loader"},
+    loadedInventory:{version:"cookiebot_loaded_declarations.v1",records:[{name:"_ga",purpose:"Analytics",duration:"2 years",storageType:"cookie",provider:"Google",sourceRef:"provider:0/record:0"}],truncated:true,unresolvedRecords:1},
+    declarations:[{name:"_ga",purpose:"Analytics",duration:"2 years",source:"cmp_loaded_inventory"}],
+    captureProgress:{version:"cmp_capture_checkpoints.v1",documentToken:"passive-loader",declarationsAtMs:90},
+    limitations:["passive_first_layer_only","declaration_inventory_not_complete","loaded_declarations_not_visibility_proof"]};
+  input.cookieEvents=[{cookieName:"_ga"}] as CanonicalEvidenceBundle["cookieEvents"];
+  const audit=deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row=>row.id==='services')?.status,'observed');
+  assert.match(audit.rows.find(row=>row.id==='services')!.detail,/already-loaded/);
+  assert.equal(audit.rows.find(row=>row.id==='services')?.inventory?.services?.[0]?.source,'cmp_loaded_inventory');
+  assert.equal(audit.rows.find(row=>row.id==='cookie_information')?.status,'observed');
+  assert.notEqual(audit.rows.find(row=>row.id==='categories')?.status,'observed');
+  assert.equal(audit.rows.find(row=>row.id==='found_not_declared')?.status,'partially_assessed');
+  assert.equal(audit.rows.find(row=>row.id==='found_not_declared')?.cookieComparison?.declarationInventoryComplete,false);
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:assessment},reviewFindingCandidates:[],validationFindings:[]});
+  const projected=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(projected.rows.find(row=>row.id==='services')?.status,'Observed');
+  assert.ok(concerns.filter(c=>c.originKey.startsWith('consent.cmp_audit.')).every(c=>!c.scoreEffects?.length));
+  for(const patch of [{contractVersion:'certscore.cmp-basic-evidence.v1'},{documentToken:'foreign'},{provider:'OneTrust'}]){
+    const bad=structuredClone(input);Object.assign(bad.cmpBasicEvidence!,patch);assert.equal(deriveCmpAuditAssessment(bad),undefined);
+  }
+});
+
 test("required-lane basics survive a cancelled optional inspection through persisted concern projection", () => {
   const input = bundle(); delete input.cmpPreferencesEvidence;
   input.cmpPreferenceLaneOutcome = { status: "limited", startedAt: input.startedAt, completedAt: "2026-10-13T00:00:12.000Z", limitationCode: "preference_inspection_cancelled" };
