@@ -122,6 +122,8 @@ After the external edit, verify the rendered name, endpoint, no-auth setting, th
 
 Submission artifact: `packages/certscore-mcp/server-light.json`.
 
+October 16, 2026 status: the official latest registry record remains 0.2.26, while npm and the hosted MCP report 0.2.29. The October 12 receipt records the publication state on that date. Update the registry listing separately if a newer registry version is intended.
+
 October 12, 2026: **published and verified active/latest at 0.2.26** under the existing `ai.certscore/mcp-light` name. Both the exact-version and latest official API records return the correct no-auth Streamable HTTP Light endpoint. npm `@certscore/mcp` latest and the production hosted health endpoint independently report 0.2.26. Verification receipt: `docs/gtm/mcp-registry-publication-2026-10-12.json`; raw public responses: `artifacts/mcp-registry-publication-20261012/`.
 
 The namespace-permission blocker is resolved: authenticate with the existing domain HTTP proof at `https://certscore.ai/.well-known/mcp-registry-auth` and its matching local Ed25519 key, using `mcp-publisher login http --domain=certscore.ai --private-key=<private-seed-hex>`. This grants `ai.certscore/*`; GitHub-only authentication grants a different namespace and cannot publish this listing. Keep private keys and registry tokens outside the repository and logs. No DNS change, runtime deployment, new scan, or recurring cost increase was required (estimated incremental recurring cost: $0/month).

@@ -1,8 +1,10 @@
 # CertScore.ai MCP Light directory submission copy
 
+October 16, 2026 status: the official registry still lists 0.2.26 as latest. The hosted MCP and npm package report 0.2.29. The registry record remains active and points to the correct no-auth Light endpoint. The October 12 publication receipt below is a dated record, not evidence that registry, hosted, and npm versions currently match.
+
 October 12, 2026 official registry update: `ai.certscore/mcp-light` version **0.2.26** is published, active, and latest, with the existing no-auth Streamable HTTP endpoint `https://mcp.certscore.ai/mcp/light`. The released npm package and live hosted service both report 0.2.26. Domain-based HTTP authentication restored `ai.certscore/*` publishing permission using the existing Ed25519 key and `https://certscore.ai/.well-known/mcp-registry-auth`; no DNS change, new namespace, runtime deployment, or recurring cost increase was required. The September 14 namespace blocker below is historical and now resolved. Verification receipt: `docs/gtm/mcp-registry-publication-2026-10-12.json`.
 
-Current release preparation (October 5, 2026): hosted/npm MCP `0.2.26` adds focused report sections, Light review prompts and retained-example connection testing. Claude, Cursor and OpenAI package versions remain independent; no directory submission or approval is implied. The dated records below remain historical.
+October 5, 2026 release preparation: hosted/npm MCP `0.2.26` adds focused report sections, Light review prompts and retained-example connection testing. Claude, Cursor and OpenAI package versions remain independent; no directory submission or approval is implied. The dated records below remain historical.
 
 Use MCP Light as the recommended discovery entry in community directories: `CertScore.ai MCP Light`, registry name `ai.certscore/mcp-light`. Do not list the authenticated MCP as a second name for this product. Mention it only as an optional higher-volume CertScore service where a directory permits upgrade information.
 
