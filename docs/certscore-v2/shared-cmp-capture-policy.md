@@ -73,6 +73,36 @@ scoring weights or rewrite historical assessments.
 
 ## Verification and cost
 
+### Local terminal comparison repair, October 16
+
+`terminal_pair_first.v3` permits the existing synchronized CMP-control image
+to consume the single 80 ms comparison allowance when the producer explicitly
+marks the pair terminal and its frame set remained stable. Complete structured
+inspection, exact loader/URL binding, capture skew, unique visible controls and
+visual safety review remain required. It does not add an image decode, retry,
+capture, safety review or timeout allowance.
+
+The producer tracks the latest retained geometry independently of accumulated
+observation notes. A historical negative surface note cannot trigger replacement
+of newer complete, positive geometry from the same URL and loader. Missing,
+limited, negative or document-mismatched geometry still permits the existing
+revalidation path. Historical notes remain retained. This affects scheduling,
+not assessment or display eligibility.
+
+`label_bound_necessary_only_reject.v2` adds the exact label "Accept only
+necessary" to the named OneTrust Reject proof. The canonical registry and
+retained-proof validator share one versioned label vocabulary. The exact
+registered banner and control, unique enabled native button, non-form context,
+target binding, hit test and final dispatch recheck remain required. The generic
+action classifier continues to reject this observation-only phrase. Registration
+still requires the existing verified refusal transition; the label alone cannot
+create an After Reject result. Version 1 proofs retain their original vocabulary.
+
+These repairs are local only. The incremental bounded comparison work is
+estimated below $1/month at 100,000 scans. The action repair uses the existing
+owner-approved action lane and observation budget. No new lane, per-scan browser
+session, model call, deadline or standing capacity is introduced.
+
 Use deterministic streaming/timeout/drift fixtures, historical replay and
 ledger-selected fresh Ireland diagnostics. Report newly incomplete checks as
 well as resolved checks; do not treat a bounded partial source as a failure to

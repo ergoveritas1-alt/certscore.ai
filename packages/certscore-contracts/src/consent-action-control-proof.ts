@@ -15,6 +15,13 @@ export const CONSENT_ACTION_CONTROL_PROOF_VERSION =
 
 export const REGISTERED_CONTEXTUAL_ACCEPT_POLICY = "registered_contextual_accept.v1" as const;
 
+/** Versioned activation vocabulary. Generic observation terms remain separate;
+ * the named adapter must still prove the exact live banner/control binding. */
+export const NAMED_NECESSARY_ONLY_REJECT_LABELS = {
+  "label_bound_necessary_only_reject.v1": ["strictly necessary", "essential cookies"],
+  "label_bound_necessary_only_reject.v2": ["strictly necessary", "essential cookies", "accept only necessary"],
+} as const;
+
 export const customAcceptControlBindingSchema = z.object({
   policyVersion: z.literal("custom_accept_control.v1"),
   kind: z.literal("direct_onclick"),
@@ -54,7 +61,7 @@ export const consentActionControlProofSchema = z.object({
   }).strict().optional(),
   customControlBinding: customAcceptControlBindingSchema.optional(),
   labelBoundNecessaryOnly: z.object({
-    policyVersion: z.literal("label_bound_necessary_only_reject.v1"),
+    policyVersion: z.enum(["label_bound_necessary_only_reject.v1", "label_bound_necessary_only_reject.v2"]),
     bannerSelector: z.literal("#onetrust-banner-sdk"),
     controlSelector: z.literal("#onetrust-reject-all-handler"),
     contextText: z.string().min(1).max(4096),
@@ -73,7 +80,7 @@ export const consentActionControlProofSchema = z.object({
   enabled: z.literal(true),
   uniquelyActionable: z.literal(true),
 }).strict().superRefine((proof, context) => {
-  if (!proof.labelBoundNecessaryOnly && proof.classifierReasonCodes.includes("label_bound_necessary_only_reject.v1")) {
+  if (!proof.labelBoundNecessaryOnly && proof.classifierReasonCodes.some(code => Object.hasOwn(NAMED_NECESSARY_ONLY_REJECT_LABELS, code))) {
     context.addIssue({code: z.ZodIssueCode.custom, path: ["labelBoundNecessaryOnly"],
       message: "Reviewed necessary-only labels must retain their scoped instruction proof."});
   }
@@ -84,7 +91,7 @@ export const consentActionControlProofSchema = z.object({
       proof.actionSemantics !== "canonical_necessary_only_recipe" || proof.cmpId !== "OneTrust" ||
       proof.recipeId !== "canonical-cmp:OneTrust:reject:v3" || !proof.frameIdentitySha256 || !proof.authorizedTargetSha256 ||
       proof.selectorHint !== "#onetrust-reject-all-handler, #onetrust-banner-sdk.ot-close-btn-link button.onetrust-close-btn-handler.banner-close-button" ||
-      !["strictly necessary", "essential cookies"].includes(normalizeConsentControlText(proof.accessibleLabel)) ||
+      !(NAMED_NECESSARY_ONLY_REJECT_LABELS[proof.labelBoundNecessaryOnly.policyVersion] as readonly string[]).includes(normalizeConsentControlText(proof.accessibleLabel)) ||
       classification.intent !== "reject" || classification.variant !== "necessary_only" ||
       proof.classifierIntent !== classification.intent || proof.classifierConfidence !== classification.confidence ||
       proof.matchStrength !== classification.matchStrength || proof.matchedLocale !== classification.matchedLocale) {

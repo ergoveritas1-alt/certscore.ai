@@ -120,7 +120,7 @@ export function createConsentVisualComparisonCollector(screenshots: ScreenshotAr
     const image = screenshots.find(image => image.path === geometry.screenshotArtifactRef);
     const authoritative = image && (
       ["screenshot_pre_consent_geometry_proof", "screenshot_pre_consent_packet_recovery"].includes(image.artifactId) ||
-      image.artifactId === "screenshot_pre_consent_settled" && state?.terminalPair === true && state.framesStable === true);
+      ["screenshot_pre_consent_settled", "screenshot_pre_consent_cmp_controls"].includes(image.artifactId) && state?.terminalPair === true && state.framesStable === true);
     const diagnostic = (status: ConsentVisualComparisonDiagnostic["status"], allowanceMs = 0, reason?: ConsentVisualComparisonDiagnostic["reason"]) =>
       onDiagnostic?.({ status, ...(reason ? { reason } : {}), artifactId: image?.artifactId, allowanceMs, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
     if (!authoritative) { diagnostic("deferred"); return geometry; }

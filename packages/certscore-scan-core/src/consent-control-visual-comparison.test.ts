@@ -337,3 +337,21 @@ test("exact analysis rectangle and streaming samples match full-frame measuremen
     }
   }
 });
+
+test("the final synchronized CMP capture uses the remaining single comparison allowance", async () => {
+  const { createConsentVisualComparisonCollector } = await import('./consent-control-visual-comparison.js');
+  const fixture = await consentVisualFixture();
+  const image = {artifactId:'screenshot_pre_consent_cmp_controls',path:fixture.geometry.screenshotArtifactRef!,url:fixture.geometry.pageUrl,
+    documentIdentity:fixture.geometry.documentIdentity,capturedAtMs:1000,consentStateAtTime:'pre_consent' as const};
+  let calls=0;
+  const diagnostics:string[]=[];
+  const collector=createConsentVisualComparisonCollector([image],visualFixtureStartMs,()=>1000,
+    async geometry=>{calls++;return geometry;},d=>diagnostics.push(d.status));
+  await collector(fixture.geometry);
+  await collector(fixture.geometry,{terminalPair:true,frameRevision:1,framesStable:false});
+  assert.equal(calls,0);
+  await collector(fixture.geometry,{terminalPair:true,frameRevision:1,framesStable:true});
+  await collector(fixture.geometry,{terminalPair:true,frameRevision:1,framesStable:true});
+  assert.equal(calls,1);
+  assert.deepEqual(diagnostics,['deferred','deferred','unavailable','no_budget']);
+});

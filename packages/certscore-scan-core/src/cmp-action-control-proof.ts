@@ -345,7 +345,7 @@ export async function buildConsentActionControlProof(input: {
       classifierReasonCodes: [
         ...classification.reasonCodes,
         ...(necessaryOnlyLabelVerified ? ["canonical_necessary_only_recipe_verified"] : []),
-        ...(labelBoundNecessaryOnly ? ["label_bound_necessary_only_reject.v1"] : []),
+        ...(labelBoundNecessaryOnly ? [labelBoundNecessaryOnly.policyVersion] : []),
         ...(contextualLabelVerified ? ["registered_contextual_accept_scope_verified"] : []),
       ].slice(0, 16),
       ...(input.cmpId ? { cmpId: bound(input.cmpId, 120) } : {}),

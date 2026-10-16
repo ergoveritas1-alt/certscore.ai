@@ -1025,7 +1025,7 @@ export async function preConsentRuntimeScanner(
   const measureVisualComparison = createConsentVisualComparisonCollector(screenshots, input.scanStartedAtMs, remainingModuleBudgetMs, undefined,
     diagnostic => timingBreakdown.push({ label: "consent pixel comparison", durationMs: diagnostic.elapsedMs,
       outcome: diagnostic.status === "retained" ? "completed" : diagnostic.status === "timed_out" ? "timed_out" : "skipped",
-      detail: JSON.stringify({ policy: "terminal_pair_first.v2", ...diagnostic }) }));
+      detail: JSON.stringify({ policy: "terminal_pair_first.v3", ...diagnostic }) }));
   const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;
@@ -1053,6 +1053,7 @@ export async function preConsentRuntimeScanner(
   let earlyScreenshotCaptured = false;
   let supplementalScreenshotAttempted = false;
   let consentGeometryDiagnosticWritten = false;
+  let latestRetainedConsentGeometry: ConsentControlGeometryArtifact | undefined;
   let consentGeometryArtifactRetained = false;
   // The settled packet can satisfy timing readiness while the dedicated
   // diagnostic remains pending, including its screenshot/scroll recovery.
@@ -1793,6 +1794,7 @@ export async function preConsentRuntimeScanner(
           },
         );
         consentGeometryArtifactRetained = true;
+        latestRetainedConsentGeometry = earlyConsentGeometry;
         consentGeometryDiagnosticWritten = true;
         preScreenshotConsentObservation = reconcileConsentUiObservationWithCompletedGeometry({
           artifactPath: earlyGeometryArtifactPath,
@@ -2098,6 +2100,7 @@ export async function preConsentRuntimeScanner(
               },
             );
             consentGeometryArtifactRetained = true;
+            latestRetainedConsentGeometry = pairedGeometry.geometry;
             if (geometryComplete) {
               // An eligible measured pair completes the existing protected
               // packet now. Avoid a later duplicate screenshot after chat or
@@ -2782,6 +2785,7 @@ export async function preConsentRuntimeScanner(
           },
         );
         consentGeometryArtifactRetained = true;
+        latestRetainedConsentGeometry = pairedGeometry.geometry;
         consentGeometryDiagnosticWritten = true;
         return reconcileConsentUiObservationWithCompletedGeometry({
           artifactPath: geometryArtifactPath,
@@ -2970,6 +2974,8 @@ export async function preConsentRuntimeScanner(
             "screenshot-pre-consent-cmp-controls.png",
           );
           const synchronizedDocumentIdentityBeforeCapture = currentBrowserDocumentIdentity(page);
+          const synchronizedFrameRevision = consentFrameRevision;
+          const synchronizedFrames = page.frames();
           const synchronizedCapture = await recordTiming(
             timingBreakdown,
             "synchronized CMP control screenshot",
@@ -3072,7 +3078,11 @@ export async function preConsentRuntimeScanner(
                 synchronizedGeometry.geometry.viewport.height > 0,
               );
               if (synchronizedGeometry && synchronizedGeometryComplete) {
-                synchronizedGeometry.geometry = await measureVisualComparison(synchronizedGeometry.geometry);
+                synchronizedGeometry.geometry = await measureVisualComparison(synchronizedGeometry.geometry, {
+                  terminalPair: true, frameRevision: synchronizedFrameRevision,
+                  framesStable: consentFrameRevision === synchronizedFrameRevision &&
+                    page.frames().length === synchronizedFrames.length && synchronizedFrames.every(frame => page.frames().includes(frame)),
+                });
                 const synchronizedGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
                   "ConsentControlGeometryEvidence.json",
                   {
@@ -3084,6 +3094,7 @@ export async function preConsentRuntimeScanner(
                   },
                 );
                 consentGeometryArtifactRetained = true;
+                latestRetainedConsentGeometry = synchronizedGeometry.geometry;
                 consentGeometryDiagnosticWritten = true;
                 consentObservation = reconcileConsentUiObservationWithCompletedGeometry({
                   artifactPath: synchronizedGeometryArtifactPath,
@@ -3410,6 +3421,7 @@ export async function preConsentRuntimeScanner(
     }
     const completedGeometryNegativeHasLaterSurfaceHint =
       consentGeometryDiagnosticWritten &&
+      !hasCurrentPositiveConsentGeometry(latestRetainedConsentGeometry, page.url(), currentBrowserDocumentIdentity(page)?.token) &&
       consentObservation.likelyPresent &&
       consentObservation.basis.some((basis) =>
         basis === "geometry:hidden_cmp_markup_separated_from_visible_surface" ||
@@ -3605,6 +3617,7 @@ export async function preConsentRuntimeScanner(
           productionFindingIntegration: false,
         });
         consentGeometryArtifactRetained = true;
+        latestRetainedConsentGeometry = geometry;
         consentGeometryDiagnosticWritten = true;
         consentObservation = reconcileConsentUiObservationWithCompletedGeometry({
           artifactPath: geometryArtifactPath,
@@ -3841,6 +3854,8 @@ export async function preConsentRuntimeScanner(
           if (recoveryTypedInventoryComplete && remainingModuleBudgetMs() >= 700) {
             boundedRecoveryOutcome = "geometry_incomplete";
             const recoveryGeometryTimeoutMs = Math.min(1_100, remainingModuleBudgetMs());
+            const recoveryFrameRevision = consentFrameRevision;
+            const recoveryFrames = page.frames();
             const recoveryGeometry = await recordBoundedTiming<{
               access: Awaited<ReturnType<typeof collectConsentGeometryPageAccess>>;
               geometry: ConsentControlGeometryArtifact;
@@ -3881,7 +3896,11 @@ export async function preConsentRuntimeScanner(
               }),
             );
             if (recoveryGeometry && recoveryGeometryComplete) {
-              recoveryGeometry.geometry = await measureVisualComparison(recoveryGeometry.geometry);
+              recoveryGeometry.geometry = await measureVisualComparison(recoveryGeometry.geometry, {
+                terminalPair: true, frameRevision: recoveryFrameRevision,
+                framesStable: consentFrameRevision === recoveryFrameRevision &&
+                  page.frames().length === recoveryFrames.length && recoveryFrames.every(frame => page.frames().includes(frame)),
+              });
               const recoveryGeometryArtifactPath = await input.artifactWriter.writeJsonArtifact(
                 "ConsentControlGeometryEvidence.json",
                 {
@@ -3893,6 +3912,7 @@ export async function preConsentRuntimeScanner(
                 },
               );
               consentGeometryArtifactRetained = true;
+              latestRetainedConsentGeometry = recoveryGeometry.geometry;
               consentGeometryDiagnosticWritten = true;
               consentObservation = finalizeBoundedSameSessionConsentPacket({
                 artifactPath: recoveryGeometryArtifactPath,
@@ -13373,6 +13393,18 @@ function strictConsentDocumentIdentity(value: string | undefined): string | null
 
 function normalizeConsentControlIdentityLabel(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
+/** Historical negative basis strings remain in the observation trail. They
+ * must not trigger replacement of a newer, complete same-document positive
+ * capture. This is capture scheduling only, never an assessment fallback. */
+export function hasCurrentPositiveConsentGeometry(
+  geometry: ConsentControlGeometryArtifact | undefined, pageUrl: string, documentToken: string | undefined,
+): boolean {
+  return Boolean(geometry && documentToken && geometry.documentIdentity?.source === "cdp_loader_id" &&
+    geometry.documentIdentity.token === documentToken && geometry.pageUrl === pageUrl &&
+    geometry.controlInspection?.structuralCoverage === "complete" &&
+    hasConfirmedFirstLayerGeometryControls(geometry));
 }
 
 export function reconcileConsentUiObservationWithCompletedGeometry(input: {

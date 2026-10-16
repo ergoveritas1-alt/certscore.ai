@@ -95,10 +95,10 @@ test("Portuguese final dispatch guard rejects label, source and banner drift", a
   } finally {await browser.close();}
 });
 
-for (const label of ["Strictly Necessary", "Essential Cookies", "Rejeitar"] as const) {
+for (const label of ["Strictly Necessary", "Essential Cookies", "Accept only necessary", "Rejeitar"] as const) {
   test(`canonical Reject observer dispatches ${label} once and verifies a complete fresh receipt`, async () => {
     let clicks = 0;
-    const text = label === "Rejeitar" ? "Utilizamos cookies. Pode aceitar ou rejeitar cookies." : instructions[label];
+    const text = label === "Rejeitar" ? "Utilizamos cookies. Pode aceitar ou rejeitar cookies." : label === "Accept only necessary" ? "We use cookies for analytics and advertising." : instructions[label];
     const server = createServer((request, response) => {
       if (request.url === "/clicked") {clicks++;response.end("ok");return;}
       response.setHeader("content-type", "text/html");
@@ -173,4 +173,27 @@ test("Reject guard veto remains unattempted even when a fresh refusal receipt ap
     await browser.close();server.closeAllConnections();
     await new Promise<void>(resolve=>server.close(()=>resolve()));
   }
+});
+
+test("OneTrust's exact Accept only necessary label uses versioned named proof, never generic action vocabulary", async () => {
+  const browser = await chromium.launch({headless:true});
+  try {
+    const page = await browser.newPage();
+    const html = '<section id="onetrust-banner-sdk"><p>We use cookies for analytics and advertising.</p><button type="button" id="onetrust-reject-all-handler">Accept only necessary</button></section>';
+    const proof = () => buildConsentActionControlProof({action:"reject",page,control:page.locator('#onetrust-reject-all-handler').first(),
+      observedAtMs:1,cmpId:"OneTrust",recipeId:recipe.recipeId,selectorHint:recipe.controlSelector,authorizedTargetSha256:hash(page.url())});
+    await page.setContent(html);
+    const result = await proof();assert.equal(result.status,"verified",JSON.stringify(result));
+    if(result.status!=="verified")return;
+    assert.equal(result.proof.labelBoundNecessaryOnly?.policyVersion,"label_bound_necessary_only_reject.v2");
+    assert.equal(consentActionControlProofSchema.safeParse(result.proof).success,true);
+    assert.equal(consentActionControlProofSchema.safeParse({...result.proof,labelBoundNecessaryOnly:{...result.proof.labelBoundNecessaryOnly,policyVersion:"label_bound_necessary_only_reject.v1"}}).success,false,"historical v1 does not acquire the new label");
+    assert.equal(classifyConsentControlLabel({label:"Accept only necessary",hasConsentContext:true,usage:"action"}).intent,"unknown");
+    for(const bad of [html.replace('id="onetrust-banner-sdk"','id="other"'),`<form>${html}</form>`,
+      html.replace('type="button"','type="button" aria-label="Accept all"'),html.replace('Accept only necessary','Accept only necessary or accept all'),
+      html.replace('</section>','<button id="onetrust-reject-all-handler">Accept only necessary</button></section>')]) {
+      await page.setContent(bad);assert.notEqual((await proof()).status,"verified",bad);
+      await assert.rejects(assertReviewedRejectDispatchAllowed({page,control:page.locator('#onetrust-reject-all-handler').first(),proof:result.proof}),/binding_changed/);
+    }
+  } finally {await browser.close();}
 });

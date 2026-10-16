@@ -1,3 +1,5 @@
+import { NAMED_NECESSARY_ONLY_REJECT_LABELS } from "@certscore/contracts";
+
 export type KnownCmpStandard = "tcf" | "gpp" | "usp" | "gpc" | "google_consent_mode";
 
 export type KnownCmpSignalSource =
@@ -136,7 +138,7 @@ export type KnownCmpDefinition = {
   /** Exact first-layer control plus visible label-bound refusal instructions.
    * Authorizes activation only; semantic registration is verified separately. */
   rejectLabelBoundNecessaryOnly?: {
-    policyVersion: "label_bound_necessary_only_reject.v1";
+    policyVersion: keyof typeof NAMED_NECESSARY_ONLY_REJECT_LABELS;
     bannerSelector: string;
     controlSelector: string;
     expectedNormalizedLabels: string[];
@@ -395,10 +397,10 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     canonicalName: "OneTrust",
     preferenceDialogBinding: { version: "onetrust_preferences.v2", controlSelector: "#onetrust-pc-btn-handler", dialogSelector: "#onetrust-pc-sdk", deferredRootSelector: "#onetrust-consent-sdk" },
     rejectLabelBoundNecessaryOnly: {
-      policyVersion: "label_bound_necessary_only_reject.v1",
+      policyVersion: "label_bound_necessary_only_reject.v2",
       bannerSelector: "#onetrust-banner-sdk",
       controlSelector: "#onetrust-reject-all-handler",
-      expectedNormalizedLabels: ["strictly necessary", "essential cookies"],
+      expectedNormalizedLabels: [...NAMED_NECESSARY_ONLY_REJECT_LABELS["label_bound_necessary_only_reject.v2"]],
     },
     cookieNames: [
       "OptanonConsent",

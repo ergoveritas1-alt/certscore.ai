@@ -1048,3 +1048,21 @@ test("completed empty recapture cannot erase known same-document controls from a
     strongerBasis: "stronger", completedWithoutControlsBasis: "empty" });
   assert.equal(unverifiedVisibility.completedNegativeRetained, true, "preservation requires positively verified visibility");
 });
+
+test("a newer complete positive geometry supersedes historical negative scheduling hints only in the same document", async () => {
+  const {hasCurrentPositiveConsentGeometry} = await import('./scanners/pre-consent-runtime-scanner.js');
+  const {consentVisualFixture} = await import('./test-fixtures/consent-visual-comparison.js');
+  const {geometry} = await consentVisualFixture();
+  const token = geometry.documentIdentity!.token;
+  assert.equal(hasCurrentPositiveConsentGeometry(geometry, geometry.pageUrl, token), true);
+  assert.equal(hasCurrentPositiveConsentGeometry(undefined, geometry.pageUrl, token), false);
+  assert.equal(hasCurrentPositiveConsentGeometry(geometry, geometry.pageUrl, 'new-loader'), false);
+  assert.equal(hasCurrentPositiveConsentGeometry(geometry, geometry.pageUrl + 'changed', token), false);
+  assert.equal(hasCurrentPositiveConsentGeometry(geometry, geometry.pageUrl, undefined), false);
+  const limited = structuredClone(geometry);
+  limited.controlInspection!.structuralCoverage = 'limited';
+  assert.equal(hasCurrentPositiveConsentGeometry(limited, geometry.pageUrl, token), false);
+  const negative = structuredClone(geometry);
+  negative.candidates = [];
+  assert.equal(hasCurrentPositiveConsentGeometry(negative, geometry.pageUrl, token), false);
+});
