@@ -138,6 +138,7 @@ const observed = REGIONS.map((region) => {
   }
   const context = EXPECTED_CONTEXT[region];
   const required = [
+    ["Options/Customize worker", env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, "0"],
     ["memory", config.MemorySize, 3008],
     ["timeout", config.Timeout, 75],
     ["architecture", config.Architectures?.[0], "x86_64"],

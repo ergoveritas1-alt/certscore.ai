@@ -8,4 +8,6 @@ test("AWS deployment keeps the owner-disabled preference lane off", async () => 
   assert.doesNotMatch(deployment, /CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED:\s*"1"/);
   assert.match(deployment, /CERTSCORE_POST_ACCEPT_WORKER_ENABLED:\s*"1"/);
   assert.match(deployment, /CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED:\s*"1"/);
+  const parity = await readFile(new URL("./check-regional-scanner-parity.ts", import.meta.url), "utf8");
+  assert.match(parity, /\["Options\/Customize worker", env\.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, "0"\]/);
 });

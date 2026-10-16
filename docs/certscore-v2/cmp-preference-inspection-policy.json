@@ -4,8 +4,9 @@
     "ownerDecision": "Disable the Options/Customize inspection lane.",
     "deploymentFeatureFlagValue": "0",
     "passiveCmpCaptureEnabled": true,
-    "productionChangeApplied": false,
-    "note": "Local configuration and the canonical AWS deployment script disable this lane. No deployment or live AWS configuration mutation was performed. Historical evidence remains unchanged. Re-enabling requires a new explicit owner instruction."
+    "productionChangeApplied": true,
+    "productionVerificationDateUtc": "2026-10-16",
+    "note": "The owner authorized a configuration-only production disable. All three production regions and their primary/inventory functions have the flag set to 0. Three fresh production canary scans each completed exactly six evidence workers, with Accept/Reject joined and passive evidence retained. Scanner images and unrelated settings were preserved. Historical evidence remains unchanged. Re-enabling requires a new explicit owner instruction."
   },
   "ownerApprovalDate": "2026-10-13",
   "approval": "Expanded preference inspection \u2014 approve the interaction and cost ceiling",
