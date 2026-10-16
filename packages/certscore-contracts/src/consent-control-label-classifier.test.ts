@@ -1299,3 +1299,13 @@ test("TrustArc Manage Settings is Options only in consent context", () => {
   }
   assert.equal(classifyConsentControlLabel({ label: "Manage Settings for your account", hasConsentContext: true }).intent, "unknown");
 });
+
+
+test("Didomi descriptive Agree aria label requires exact wording and consent context for actions", () => {
+  const label = "I agree: Agree to our data processing and close";
+  assert.equal(classifyConsentControlLabel({label, usage: "action", hasConsentContext: true}).intent, "accept");
+  assert.equal(classifyConsentControlLabel({label, usage: "action", hasConsentContext: false}).intent, "unknown");
+  for (const suffix of [" and subscribe", " and purchase", " terms and conditions"]) {
+    assert.equal(classifyConsentControlLabel({label: label + suffix, usage: "action", hasConsentContext: true}).intent, "unknown");
+  }
+});

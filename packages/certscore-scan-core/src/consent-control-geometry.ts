@@ -25,6 +25,7 @@ import {
 } from "@certscore/contracts";
 import {
   KNOWN_CMP_REGISTRY,
+  CONSENT_NON_VISITOR_SURFACES,
   knownCmpObservationRecipe,
   detectKnownCmps,
   type KnownCmpDetection,
@@ -366,6 +367,7 @@ export async function captureConsentControlGeometry(
     consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
     controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     registrySelectors,
+    nonVisitorSurfaces: CONSENT_NON_VISITOR_SURFACES,
     namedRejectRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.rejectLabelBoundNecessaryOnly
       ? [{ ...entry.rejectLabelBoundNecessaryOnly, provider: entry.canonicalName }] : []),
     initialOptionalOffCloseRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.initialOptionalOffCloseObservation ? [entry.initialOptionalOffCloseObservation] : []),
@@ -1325,10 +1327,17 @@ function collectConsentGeometryInPage(input: {
   namedRejectRecipes: (NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["rejectLabelBoundNecessaryOnly"]> & { provider: string })[];
   initialOptionalOffCloseRecipes: NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["initialOptionalOffCloseObservation"]>[];
   nonFirstLayerSurfaceSelector: string;
+  nonVisitorSurfaces: readonly { origin: string; selector: string }[];
 }): RawGeometryCapture {
   const globalWithNameHelper = globalThis as typeof globalThis & { __name?: <T>(target: T) => T };
   globalWithNameHelper.__name ??= function(target) {
     return target;
+  };
+  const isExcludedSurface = (element: Element): boolean => {
+    if (element.closest(input.nonFirstLayerSurfaceSelector)) return true;
+    const view = element.ownerDocument.defaultView;
+    return Boolean(view && view !== view.top && input.nonVisitorSurfaces.some(rule =>
+      view.location.origin === rule.origin && element.closest(rule.selector)));
   };
   const maxText = 1_200;
   const maxHtml = 2_000;
@@ -1407,7 +1416,7 @@ function collectConsentGeometryInPage(input: {
       const tagName = element.tagName.toLowerCase();
       const role = (element.getAttribute("role") || "").toLowerCase();
       return (
-        !element.closest(input.nonFirstLayerSurfaceSelector) &&
+        !isExcludedSurface(element) &&
         !isPageChromeContext(element) &&
         tagName !== "html" &&
         tagName !== "body" &&
@@ -1457,7 +1466,7 @@ function collectConsentGeometryInPage(input: {
       };
   }
   const documentControls = deepQuerySelectorAll(controlSelector)
-    .filter(element => !element.closest(input.nonFirstLayerSurfaceSelector))
+    .filter(element => !isExcludedSurface(element))
     .filter((element) => {
       const label = labelFor(element);
       const attrs = compactText([
@@ -1488,7 +1497,7 @@ function collectConsentGeometryInPage(input: {
   const containerControls = containerControlInventories.flatMap(controls => controls.slice(0, 80));
   const seenControlElements = new Set<Element>();
   const controlElements = [...containerControls, ...documentControls].filter((element) => {
-    if (element.closest(input.nonFirstLayerSurfaceSelector) || seenControlElements.has(element)) {
+    if (isExcludedSurface(element) || seenControlElements.has(element)) {
       return false;
     }
     seenControlElements.add(element);

@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v17";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v18";
 
 export type ConsentControlIntent =
   | "accept"
@@ -244,6 +244,9 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
     ...direct("accept", "allow all"),
     ...direct("accept", "agree"),
     ...direct("accept", "i agree"),
+    // Exact accessible label retained on Didomi's first-layer Agree button.
+    // Keep the descriptive suffix intact; do not fall back to shorter text.
+    { phrase: "i agree: agree to our data processing and close", intent: "accept", strength: "direct", requiresConsentContext: true, exactLabelOnly: true },
     ...direct("accept", "i accept"),
     ...direct("accept", "yes, i agree"),
     ...direct("accept", "consent"),

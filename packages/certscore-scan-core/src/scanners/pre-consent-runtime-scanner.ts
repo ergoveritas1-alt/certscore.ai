@@ -71,6 +71,8 @@ import {
 import {
   classifyBlockedResponse,
   KNOWN_CMP_REGISTRY,
+  CONSENT_NON_VISITOR_SURFACES,
+  isNonVisitorConsentSurface,
 } from "@website-signal-risk-scanner/shared";
 import { readFile, writeFile } from "node:fs/promises";
 import { isIP } from "node:net";
@@ -7977,6 +7979,8 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
   onStage("main_inventory");
   // One self-contained browser call avoids installation/probe round trips and stale page globals.
   const inventorySource = String.raw`(input) => {
+    const isNonVisitorSurface = ${isNonVisitorConsentSurface.toString()};
+    const nonVisitorSurfaces = ${JSON.stringify(CONSENT_NON_VISITOR_SURFACES)};
     const normalize = (value) => (value ?? "").replace(/\s+/g, " ").trim();
     const canonicalLabels = new Set(input.canonicalConsentInventoryLabels.map((value) => normalize(value).toLowerCase().replace(/\u0307/g, "")));
     const embeddedLabels = [...canonicalLabels].filter((value) => value.length >= 8);
@@ -8121,7 +8125,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       : document.querySelectorAll(semanticControlSelector);
     let visitedCandidates = 0;
     for (const element of candidates) {
-      if (element.closest(input.nonFirstLayerSurfaceSelector)) continue;
+      if (element.closest(input.nonFirstLayerSurfaceSelector) || isNonVisitorSurface(element, nonVisitorSurfaces)) continue;
       if (probeBudgetExpired()) break;
       visitedCandidates += 1;
       if (visitedCandidates > 5_000) break;
@@ -9304,7 +9308,7 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
     frame.evaluate<{
       controls: ConsentUiInventoryControl[];
       textExcerpt: string;
-    }>(() => {
+    }, typeof CONSENT_NON_VISITOR_SURFACES>(input => {
       const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
       const consentContextPattern = /cookie|cookies|privacy|consent|preference|preferences|optanon|onetrust|cmp|trustarc|didomi|usercentrics|cookiebot/i;
       const labelFor = (element: Element) => {
@@ -9366,6 +9370,9 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
       const controls = Array.from(document.querySelectorAll(controlSelector))
         .slice(0, 80)
         .flatMap((element) => {
+          const view = element.ownerDocument.defaultView;
+          if (view && view !== view.top && input.some(rule =>
+            view.location.origin === rule.origin && element.closest(rule.selector))) return [];
           const label = labelFor(element).slice(0, 120);
           if (!label || label.length > 120 || !isVisible(element) || !localConsentContext(element)) {
             return [];
@@ -9394,7 +9401,7 @@ function boundedFrameInventoryRead(frame: Frame): Promise<{
         controls,
         textExcerpt: (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, 2_000),
       };
-    }),
+    }, CONSENT_NON_VISITOR_SURFACES),
     new Promise<null>((resolve) => {
       timer = setTimeout(() => resolve(null), 500);
     }),
@@ -9866,6 +9873,8 @@ function axStringValue(value: AccessibilityNodeValue | undefined) {
 }
 
 const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
+    const isNonVisitorSurface = ${isNonVisitorConsentSurface.toString()};
+    const nonVisitorSurfaces = ${JSON.stringify(CONSENT_NON_VISITOR_SURFACES)};
     const nonFirstLayerSurfaceSelector = ${JSON.stringify(NON_FIRST_LAYER_SURFACE_SELECTOR)};
     window.__certscoreConsentInventory = (allowFullDocumentCmpControls, canonicalConsentInventoryLabels = [], canonicalConsentContextHints = [], canonicalCmpControlSelectors = []) => {
       const controlSelector = "button, [role='button'], a, input[type='button'], input[type='submit']";
@@ -10315,7 +10324,7 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
         .slice(0, 1_200);
       const seen = new Set();
       const controls = candidates.flatMap((element) => {
-        if (element.closest?.(nonFirstLayerSurfaceSelector)) return [];
+        if (element.closest?.(nonFirstLayerSurfaceSelector) || isNonVisitorSurface(element, nonVisitorSurfaces)) return [];
         if (!isVisible(element)) {
           rememberCandidate(element, "", "hidden");
           return [];

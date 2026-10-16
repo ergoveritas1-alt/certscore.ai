@@ -187,7 +187,7 @@ test("scope inventory separates provably inactive SDK roots from visible consent
   try {
     const page = await browser.newPage();
     for (const mode of ["hidden", "visible", "zero-size", "shadow-hidden", "aria-hidden", "inert", "visibility-override"]) {
-      await page.setContent(`<div id="didomi-host"><button>Manage cookies</button></div><div id="parent" ${mode === "hidden" ? 'style="display:none"' : mode === "aria-hidden" ? 'aria-hidden="true"' : mode === "inert" ? 'inert' : mode === "visibility-override" ? 'style="visibility:hidden"' : ''}><div id="hs-eu-cookie-confirmation" ${mode === "visibility-override" ? 'style="visibility:visible"' : ''}>${mode === "zero-size" ? '' : '<button>Manage cookies</button>'}</div></div>`);
+      await page.setContent(`<div id="didomi-host"><div class="didomi-notice-banner"><button>Manage cookies</button></div></div><div id="parent" ${mode === "hidden" ? 'style="display:none"' : mode === "aria-hidden" ? 'aria-hidden="true"' : mode === "inert" ? 'inert' : mode === "visibility-override" ? 'style="visibility:hidden"' : ''}><div id="hs-eu-cookie-confirmation" ${mode === "visibility-override" ? 'style="visibility:visible"' : ''}>${mode === "zero-size" ? '' : '<button>Manage cookies</button>'}</div></div>`);
       if (mode === "shadow-hidden") await page.evaluate(() => {
         const host = document.createElement("div"); host.hidden = true; document.body.append(host);
         host.attachShadow({ mode: "open" }).append(document.querySelector("#parent")!);

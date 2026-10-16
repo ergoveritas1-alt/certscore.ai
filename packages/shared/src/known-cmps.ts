@@ -822,11 +822,11 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#didomi-notice-agree-button"],
     canonicalName: "Didomi",
-    preferenceScopeSelector: "#didomi-host, #didomi-notice",
+    preferenceScopeSelector: "#didomi-host .didomi-notice-banner, #didomi-host .didomi-notice-popup, #didomi-host #didomi-notice",
     preferenceDialogBinding: { version: "didomi_preferences.v1", controlSelector: "#didomi-notice-learn-more-button", dialogSelector: "#didomi-consent-popup", deferredRootSelector: "#didomi-host" },
     cookieNames: ["didomi_token", "euconsent-v2"],
     domains: ["didomi.io", "sdk.privacy-center.org", "privacy-center.org"],
-    domSelectors: ["#didomi-host", "[id*='didomi' i]"],
+    domSelectors: ["#didomi-host"],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["Didomi", "__tcfapi"],
     interactionDocumentationUrls: [

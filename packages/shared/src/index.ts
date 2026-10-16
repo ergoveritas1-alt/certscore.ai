@@ -24,6 +24,7 @@ export * from "./accessibility/accessibility-score";
 export * from "./accessibility/accessibility-benchmarks";
 export * from "./policy-review-notes";
 export * from "./known-cmps";
+export * from "./consent-non-visitor-surfaces";
 export * from "./validation-finding-taxonomy";
 export * from "./validators/domain";
 export * from "./utils/env";
