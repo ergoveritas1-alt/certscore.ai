@@ -17,6 +17,8 @@ export type ReleaseSection = {
   id: string;
   paragraphs?: readonly string[];
   sourceLinks?: readonly ReleaseLink[];
+  sourceLinksLabel?: string;
+  code?: string;
   steps?: readonly string[];
 };
 
@@ -57,14 +59,14 @@ const releases: readonly ProductRelease[] = [
   "headline": "Read the privacy-policy wording behind your report",
   "shortDescription": "Find discovered policy pages, inspect retained disclosures and keep the source URL and capture time with your review.",
   "publicationDate": "2026-10-16",
-  "category": "Scanner capability",
+  "category": "Feature guide",
   "seoTitle": "Privacy policy capture and transparency evidence",
   "metaDescription": "Find privacy policy pages and inspect retained passages, source URLs and capture times across 11 transparency checks in CertScore.ai reports.",
-  "ctaHeading": "Check a website’s privacy-policy evidence",
-  "ctaDescription": "Run a public website scan, then inspect the policy pages and supporting passages retained in your report.",
+  "ctaHeading": "Scan your own website",
+  "ctaDescription": "Enter your website URL to start a free scan and inspect the privacy-policy pages and supporting passages retained in your report.",
   "primaryCta": {
     "href": "/#homepage-scan",
-    "label": "Check a website"
+    "label": "Run free scan"
   },
   "researchLink": {
     "href": "/insights/privacy-policy-transparency-study-2026",
@@ -73,7 +75,7 @@ const releases: readonly ProductRelease[] = [
   "body": [
     "CertScore.ai’s privacy-policy evidence features are available in scan reports. Start in Executive overview and open Policy surfaces to see the pages the scan found. In Detailed evidence, expand Policies & disclosures to review 11 privacy-policy transparency checks, including GDPR-related topics such as legal basis, retention, privacy rights and international transfers.",
     "When supporting wording is available, the magnifying glass opens the retained passage with its source URL and capture timestamp. Services & Resources also shows policy-disclosure evidence beside detected services where supported. Connected agents can retrieve retained policy evidence for accessible reports and keep the source text with their explanations.",
-    "Today’s announcement brings together these available features and a new study of 5,000 archived reports. It is an announcement of the evidence-review workflow, rather than a first-release date for every capability."
+    "This guide shows how to use the policy-evidence features available in CertScore.ai reports, alongside a new study of 5,000 archived reports. Report access and usage limits apply; evidence coverage varies with language and the wording retained by each scan."
   ],
   "sections": [
     {
@@ -83,7 +85,14 @@ const releases: readonly ProductRelease[] = [
         "Open Policy surfaces in Executive overview to see the policy pages the scan discovered.",
         "Follow Detailed evidence and expand Policies & disclosures. Its 11 privacy-policy transparency checks cover availability and ten content topics; the section also has a separate cookie-disclosure check.",
         "Use the magnifying glass beside an available disclosure to read its retained passage, source URL and capture timestamp. The viewer shows evidence retained at scan time, rather than a live fetch of the current policy."
-      ]
+      ],
+      "image": {
+        "path": "/insights/assets/privacy-policy-evidence-viewer-2026.jpg",
+        "alt": "Captured privacy policy viewer showing the retained controller/contact passage, source URL and October 15, 2026 capture time from an ErgoVeritas test report.",
+        "width": 1280,
+        "height": 720,
+        "caption": "Actual viewer from an owned ErgoVeritas test report. The source URL, capture timestamp and retained passage stay together. This example illustrates the interface and is separate from the study cohort."
+      }
     },
     {
       "id": "services",
@@ -96,7 +105,7 @@ const releases: readonly ProductRelease[] = [
       "id": "research",
       "heading": "What 5,000 archived reports brought into view",
       "paragraphs": [
-        "The study identified 10,485 exact unique excerpt texts across 11,567 screened report-topic entries. It follows four unnamed policy examples and includes two charts and a retention table. One passage says certain contract and transaction records are retained for ten years after a person’s last interaction. The category of information and the starting event remain part of that example.",
+        "In 611 of 728 captured retention passages (84%), the study found conditions for keeping information without an explicit numeric period. One of the four quoted examples says certain contract and transaction records remain for ten years after the last interaction. Its record type and starting event are part of that statement.",
         "These are counts of captured evidence in a recency-selected snapshot, not disclosure rates or a compliance ranking. The article explains eligibility, repeated wording, overlapping topics, English-only retention coding and CertScore.ai’s commercial interest."
       ],
       "sourceLinks": [
@@ -104,20 +113,25 @@ const releases: readonly ProductRelease[] = [
           "href": "/insights/privacy-policy-transparency-study-2026",
           "label": "Read the article and methods"
         }
-      ]
+      ],
+      "sourceLinksLabel": "Read more:"
     },
     {
       "id": "agents",
       "heading": "Keep the source text with an agent’s answer",
       "paragraphs": [
-        "A connected agent can retrieve retained policy evidence for an accessible report. Ask which records the policy says it keeps after an account closes, and request the supporting passage, source URL and capture timestamp. Keep policy wording, observed website behavior and legal interpretation separate."
+        "A connected agent can retrieve retained policy evidence for an accessible report. Ask which records the policy says it keeps after an account closes, and request the supporting passage, source URL and capture timestamp. Keep policy wording, observed website behavior and legal interpretation separate.",
+        "Try this prompt: “Use the existing CertScore.ai report [SCAN_ID]. Show the retained data-retention wording with its source URL and capture time. Explain what it says happens after an account closes, and identify anything the excerpt cannot answer.”",
+        "Replace [SCAN_ID] with an accessible completed report. Keep section=\"policy\" with each pagination cursor until pagination.complete is true. This is a tool-call example; the passage and source must come from the actual report response."
       ],
       "sourceLinks": [
         {
           "href": "/developers/mcp",
           "label": "Connect an agent to CertScore.ai"
         }
-      ]
+      ],
+      "code": "certscore_get_report_evidence_page({\n  \"scanId\": \"[SCAN_ID]\",\n  \"section\": \"policy\"\n})",
+      "sourceLinksLabel": "Read more:"
     }
   ],
   "resourceLinks": [
@@ -139,17 +153,18 @@ const releases: readonly ProductRelease[] = [
     }
   ],
   "socialImage": {
-    "path": "/insights/assets/privacy-policy-study-social-2026.png",
-    "alt": "One captured policy says certain contract and transaction records are kept for ten years after the last interaction. Policy wording, not verified practice.",
+    "path": "/insights/assets/privacy-policy-evidence-social-2026.png",
+    "alt": "Read the wording behind your report. Retained passage, source URL and capture time in CertScore.ai.",
     "width": 1200,
-    "height": 627
+    "height": 630
   },
   "cardImage": {
-    "path": "/insights/assets/privacy-policy-study-social-2026.png",
-    "alt": "Privacy-policy evidence from a study of 5,000 archived website reports.",
+    "path": "/insights/assets/privacy-policy-evidence-social-2026.png",
+    "alt": "Read the wording behind your report. Retained passage, source URL and capture time in CertScore.ai.",
     "width": 1200,
-    "height": 627
-  }
+    "height": 630
+  },
+  "scanForm": true
 },
 {
   "slug": "session-replay-detection",

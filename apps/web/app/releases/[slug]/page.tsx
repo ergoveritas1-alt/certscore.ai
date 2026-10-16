@@ -77,19 +77,20 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-4xl gap-12 px-6 py-14 sm:py-16">
+      <div className="mx-auto grid max-w-4xl grid-cols-1 gap-12 px-6 py-14 sm:py-16">
         <section aria-label="Release introduction" className="space-y-5 text-base leading-8 text-slate-700">
           {release.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
         </section>
 
         {release.sections.map((section) => (
-          <section className="scroll-mt-28" id={section.id} key={section.id}>
+          <section className="min-w-0 scroll-mt-28" id={section.id} key={section.id}>
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">{section.heading}</h2>
             {section.paragraphs?.length ? (
               <div className="mt-5 space-y-4 text-base leading-8 text-slate-700">
                 {section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
               </div>
             ) : null}
+            {section.code ? <pre className="mt-5 overflow-x-auto rounded-xl bg-slate-950 p-5 text-sm leading-7 text-slate-100"><code>{section.code}</code></pre> : null}
             {section.example === "session-replay" ? <SessionReplayEvidenceExample /> : null}
             {section.image ? (
               <figure className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-6">
@@ -99,7 +100,7 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
             ) : null}
             {section.sourceLinks?.length ? (
               <p className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm leading-6 text-slate-600">
-                <span className="font-semibold text-slate-700">Primary sources:</span>
+                <span className="font-semibold text-slate-700">{section.sourceLinksLabel ?? "Primary sources:"}</span>
                 {section.sourceLinks.map((link) => (
                   <a className="font-medium text-sky-700 underline decoration-sky-300 underline-offset-4 hover:text-sky-900" href={link.href} key={link.href}>
                     {link.label}
@@ -121,7 +122,7 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
               <ol className="mt-5 grid gap-4 text-base leading-7 text-slate-700">
                 {section.steps.map((item, index) => (
                   <li className="flex gap-4" key={item}>
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-800">
+                    <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-100 text-sm font-semibold text-sky-800">
                       {index + 1}
                     </span>
                     <span className="pt-0.5">{item}</span>
@@ -143,7 +144,7 @@ export default async function ReleaseDetailPage({ params }: ReleasePageProps) {
           {release.scanForm ? (
             <div className="mt-6">
               <Suspense fallback={<p className="text-sm text-slate-600">Loading scan form…</p>}>
-                <DomainScanForm mode="full" variant="homepage-hero" scanSource="release" buttonLabel="Scan now" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
+                <DomainScanForm mode="full" variant="homepage-hero" scanSource="release" buttonLabel="Run free scan" inputLabel="Website URL" inputPlaceholder="https://your-website.com" />
               </Suspense>
               <p className="mt-4 text-sm leading-6 text-slate-600">Start with a free scan of one public page. Results describe the scan’s conditions and coverage.</p>
             </div>
