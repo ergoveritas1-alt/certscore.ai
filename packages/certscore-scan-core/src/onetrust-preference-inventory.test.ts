@@ -111,3 +111,42 @@ test("the single loaded getter read retains only a unique rendered CMP disclosur
     }
   }finally{await browser.close();}
 });
+
+
+test("OneTrust SDK cookie fields retain lowercase purposes and exact day-based lifetimes", () => {
+  const input = { LfSpanSecs: "a few seconds", Groups: [{ CustomGroupId: "C1", GroupDescription: "Not a cookie purpose", FirstPartyCookies: [
+    {Name:"current",description:"Audience measurement",IsSession:false,Length:"364",DurationType:1,CookieValue:"private"},
+    {Name:"year",description:"Cookie purpose",IsSession:false,Length:365,DurationType:365},
+    {Name:"month",IsSession:false,Length:"60",DurationType:30},
+    {Name:"week",IsSession:false,Length:"14",DurationType:7},
+    {Name:"unrounded",IsSession:false,Length:"364",DurationType:365},
+    {Name:"short",IsSession:false,Length:"0",DurationType:1},
+    {Name:"session",IsSession:true,Length:"0",DurationType:1},
+    {Name:"legacy",Description:"Legacy cookie purpose",Lifespan:"2 years"},
+  ], Hosts:[{HostId:"H1",Description:"Host-wide description",Cookies:[{Name:"host_cookie",IsSession:false,Length:"1",DurationType:1}]}] }] };
+  const before=structuredClone(input), result=read(input);
+  assert.deepEqual(result.declarations.map((row:any)=>[row.name,row.purpose,row.duration]),[
+    ["current","Audience measurement","364 days"],["year","Cookie purpose","1 year"],["month","","2 months"],
+    ["week","","2 weeks"],["unrounded","","364 days"],["short","","a few seconds"],
+    ["session","","Session"],["legacy","Legacy cookie purpose","2 years"],["host_cookie","","1 day"],
+  ]);
+  assert.equal(result.configurationVersion,"onetrust_loaded_configuration.v4");
+  assert.equal(result.declarationInventoryComplete,undefined);
+  assert.deepEqual(input,before);assert.ok(!JSON.stringify(result).includes("private"));
+});
+
+test("ambiguous or malformed OneTrust fields do not acquire guessed purposes or durations", () => {
+  const rows=[
+    {Name:"conflict",description:"Current",Description:"Different"},
+    {Name:"same",description:"Same",Description:"Same"},
+    {Name:"unknown_session",Length:365,DurationType:365},
+    {Name:"unknown_unit",IsSession:false,Length:365},
+    {Name:"invalid_unit",IsSession:false,Length:365,DurationType:2},
+    {Name:"unit_string",IsSession:false,Length:365,DurationType:"365"},
+    ...["365junk"," 365",-1,Infinity,NaN,{},1_000_001].map((Length,i)=>({Name:`bad_${i}`,IsSession:false,Length,DurationType:1})),
+    {Name:"zero_without_label",IsSession:false,Length:0,DurationType:1},
+  ];
+  const result=read({Groups:[{CustomGroupId:"C1",FirstPartyCookies:rows}]});
+  assert.equal(result.declarations.find((r:any)=>r.name==="same").purpose,"Same");
+  for(const row of result.declarations){assert.equal(row.duration,"");if(row.name!=="same")assert.equal(row.purpose,"");}
+});

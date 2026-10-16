@@ -1206,12 +1206,12 @@
     },
     "https://www.onetrust.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-13T04:19:55.712Z",
-      "lastContactAt": "2026-10-16T04:19:55.712Z",
+      "cooldownUntil": "2026-11-13T15:17:02.218Z",
+      "lastContactAt": "2026-10-16T15:17:02.218Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
-      "note": "Ben Masek approved one guarded EU-Ireland verification after human review on 2026-10-16. Approval consumed by onetrust-approved-verification-local-onetrust-d4b09965-049e-4498-8a40-303c08c348f4; completed, normal cooldown resumed. Prior no-go retained in contact history.",
+      "note": "Owner-requested one guarded EU-Ireland local passive cookie inventory verification on 2026-10-16. Completed onetrust-passive-inventory-local-onetrust-6caf3bef-30c1-4205-96d0-bebe556dda70 without Options. Normal cooldown resumed. Prior contact history preserved.",
       "state": "cooldown",
       "url": "https://www.onetrust.com/"
     },
@@ -1257,7 +1257,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-16T14:52:03.891Z",
+  "updatedAt": "2026-10-16T15:20:05.671Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",

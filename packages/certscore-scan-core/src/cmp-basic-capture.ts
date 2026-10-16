@@ -61,6 +61,7 @@ export async function captureCmpBasicEvidence(input: {
   packet.declarations=inventory?.declarations??[];packet.serviceNames=inventory?.services.filter(Boolean)??[];
   packet.serviceDisclosures=inventory && "serviceDisclosures" in inventory ? inventory.serviceDisclosures : undefined;
   packet.inventoryManifest=inventory && "inventoryManifest" in inventory ? inventory.inventoryManifest : undefined;
+  if(inventory && "configurationVersion" in inventory) packet.limitations.push(inventory.configurationVersion,"loaded_configuration_not_visibility_proof");
   packet.controls=classifyControls(rawControls.controls,inventory);
   if(inventory) packet.captureProgress!.declarationsAtMs=Date.now()-input.scanStartedAtMs;
   if(inventory && "truncated" in inventory && inventory.truncated) packet.limitations.push("cmp_inventory_bounded");

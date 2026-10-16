@@ -106,7 +106,7 @@ test("v6 scopes protect historical conclusions and bound independent activity fa
 
 test("OneTrust named-service configuration keeps its capture revision distinct from historical packets", () => {
   const input:any=packet();
-  for(const version of ["onetrust_loaded_configuration.v1","onetrust_loaded_configuration.v2"]){
+  for(const version of ["onetrust_loaded_configuration.v1","onetrust_loaded_configuration.v2","onetrust_loaded_configuration.v3","onetrust_loaded_configuration.v4"]){
     input.inspectionDiagnostic.configuration={version,status:"available",groupCount:5,retainedCookieCount:12,truncated:false};
     assert.equal(cmpPreferencesEvidenceSchema.parse(input).inspectionDiagnostic!.configuration!.version,version);
   }

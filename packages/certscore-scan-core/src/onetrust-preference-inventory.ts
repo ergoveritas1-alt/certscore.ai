@@ -5,6 +5,8 @@ import { parseNamedCmpPartnerDisclosure } from "@certscore/contracts";
 /** Documented read-only getter: https://developer.onetrust.com/onetrust/docs/javascript-api
  * Named fields follow OneTrust's own SDK (202507.1.0): VendorServices.ServiceName,
  * linked GeneralVendors.Name, and Hosts.DisplayName. A bare host is not a service.
+ * SDK 202604.2.0 renders cookie `description` and derives duration from Length
+ * (days) / DurationType (1, 7, 30, 365). Host Description is not cookie purpose.
  * No fetch, opening API, consent mutation, retry or second browser evaluation. */
 export function readOneTrustPreferenceInventory(page: Page) {
   // tsx names nested helpers; keep its helper local to this serialized read.
@@ -20,7 +22,7 @@ export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNam
   try { data = api.GetDomainData(); } catch { return undefined; }
   if (!data || typeof data !== "object" || !Array.isArray((data as { Groups?: unknown }).Groups)) return undefined;
   type Row = Record<string, unknown>;
-  const root = data as { Groups: unknown[]; GeneralVendors?: unknown };
+  const root = data as { Groups: unknown[]; GeneralVendors?: unknown; LfSpanSecs?: unknown };
   const categories: string[] = [];
   const declarations: Array<{ name: string; purpose: string; duration: string; source: "cmp_api_inventory" }> = [];
   const groups: Row[] = [], seenGroups = new Set<object>();
@@ -47,6 +49,34 @@ export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNam
       raw = doc.body.textContent ?? "";
     }
     return (raw as string).replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, 240);
+  };
+  // Cookie-level fields only. Conflicting aliases remain unresolved, and a
+  // host/category description can never fill a missing cookie description.
+  const cookiePurpose = (row: Row) => {
+    const current = text(row.description), legacy = text(row.Description);
+    return current && legacy && current !== legacy ? "" : current || legacy;
+  };
+  const cookieDuration = (row: Row) => {
+    if (row.IsSession === true) return "Session";
+    const explicit = text(row.Lifespan);
+    // Preserve the existing explicit-unit source. Numeric strings alone do not
+    // establish a unit; no parseInt coercion or SDK rounding is used here.
+    if (/\p{L}/u.test(explicit)) return explicit;
+    if (row.IsSession !== false) return "";
+    const raw = row.Length;
+    const days = typeof raw === "number" ? raw
+      : typeof raw === "string" && /^(?:0|[1-9]\d{0,6})(?:\.\d{1,6})?$/.test(raw) ? Number(raw) : NaN;
+    const type = row.DurationType;
+    if (!Number.isFinite(days) || days < 0 || days > 1_000_000 ||
+        (type !== 1 && type !== 7 && type !== 30 && type !== 365)) return "";
+    // Zero is rendered with the configured SDK duration label, not as zero
+    // days. If that label is missing, keep the duration unknown.
+    if (days === 0) return text(root.LfSpanSecs);
+    const unit = type === 365 ? "year" : type === 30 ? "month" : type === 7 ? "week" : "day";
+    // Length is already in days. Use the declared display unit only for an exact
+    // multiple; otherwise retain exact days instead of inventing a rounded life.
+    const count = days / type;
+    return Number.isInteger(count) ? `${count} ${unit}${count === 1 ? "" : "s"}` : `${days} day${days === 1 ? "" : "s"}`;
   };
   const id = (raw: unknown) => typeof raw === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(raw) ? raw : "";
   // Preserve cookie breadth on vendor-heavy tenants, without enlarging the
@@ -146,15 +176,14 @@ export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNam
         if (!cookie || typeof cookie !== "object") continue;
         const row = cookie as Row;
         if (typeof row.Name !== "string" || !/^[A-Za-z0-9_.$:#*+\-\[\]]{1,160}$/.test(row.Name)) continue;
-        const purpose = text(row.Description), rawDuration = text(row.Lifespan);
-        const duration = row.IsSession === true ? "Session" : /\p{L}/u.test(rawDuration) ? rawDuration : "";
+        const purpose = cookiePurpose(row), duration = cookieDuration(row);
         const declaration = { name: row.Name, purpose, duration, source: "cmp_api_inventory" as const };
         if (!declarations.some(previous => previous.name === declaration.name && previous.purpose === declaration.purpose && previous.duration === declaration.duration)) declarations.push(declaration);
       }
     }
   }
   const resolved = [...names.values()].filter(Boolean).length;
-  return { categories, services: [...new Set([...names.values()].filter(Boolean))], serviceDisclosures, declarations, truncated,
+  return { configurationVersion: "onetrust_loaded_configuration.v4" as const, categories, services: [...new Set([...names.values()].filter(Boolean))], serviceDisclosures, declarations, truncated,
     groupCount: Math.min(root.Groups.length + Math.max(0, groups.length - root.Groups.length), 10000),
     ...(inventoryManifest ? {inventoryManifest} : {}),
     coverage: { scope: "configured_services" as const, configured: names.size, resolved, unresolved: names.size - resolved, truncated } };

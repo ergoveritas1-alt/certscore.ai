@@ -200,7 +200,7 @@ export async function runCmpPreferencesObserver(input: {
     const oneTrust = detected.size === 1 && detected.has("OneTrust") && remaining() > 250
       ? await readOneTrustPreferenceInventory(page) : undefined;
     if (detected.size === 1 && detected.has("OneTrust")) packet.inspectionDiagnostic!.configuration = {
-      version: "onetrust_loaded_configuration.v3", status: oneTrust ? "available" : "unavailable",
+      version: "onetrust_loaded_configuration.v4", status: oneTrust ? "available" : "unavailable",
       ...(oneTrust ? { groupCount: oneTrust.groupCount, retainedCookieCount: oneTrust.declarations.length, truncated: oneTrust.truncated } : {}),
     };
     if (oneTrust) {

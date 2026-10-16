@@ -64,7 +64,7 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
   try {
     const page = await browser.newPage();
     await page.setContent(`<div id="onetrust-banner-sdk"><p id="onetrust-policy-text">For this, we use unique identifiers like your IP address and share your data with 2 partners (Vimeo, Google).</p><a href="https://example.test/privacy">Privacy policy</a><label><input type="checkbox">Analytics</label><button onclick="window.actions++">Manage options</button><section hidden><label><input type="checkbox">Marketing</label></section></div><script>
-      window.actions=0;window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'<strong>Named Analytics</strong>'}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]}}};
+      window.actions=0;window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'<strong>Named Analytics</strong>'}],FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:false,Length:'730',DurationType:365}]}]}}};
     </script>`);
     let token = "loader-1";
     const input = {page,scanId:"fixture",targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token}),isCurrent:()=>true};
@@ -72,6 +72,8 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
     const packet = await captureCmpBasicEvidence(input);
     assert.ok(packet); assert.deepEqual(packet.controls.map(row=>row.label),["Analytics"]);
     assert.deepEqual(packet.declarations.map(row=>row.name),["_ga"]);
+    assert.deepEqual(packet.declarations,[{name:"_ga",purpose:"Audience measurement",duration:"2 years",source:"cmp_api_inventory"}]);
+    assert.ok(packet.limitations.includes("onetrust_loaded_configuration.v4"));
     assert.deepEqual(packet.serviceNames,["Named Analytics"]);
     assert.deepEqual(packet.serviceDisclosures?.[0]?.names,["Vimeo","Google"]);
     assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction,true);

@@ -144,7 +144,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
     }).strict().optional(),
     navigationHttpStatus: z.number().int().min(100).max(599).optional(),
     basicCaptureReserveMs: z.number().int().min(0).max(1000).optional(),
-    configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2", "onetrust_loaded_configuration.v3", "cookieyes_loaded_configuration.v1"]), status: z.enum(["available", "unavailable"]),
+    configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2", "onetrust_loaded_configuration.v3", "onetrust_loaded_configuration.v4", "cookieyes_loaded_configuration.v1"]), status: z.enum(["available", "unavailable"]),
       groupCount: z.number().int().min(0).max(10000).optional(), retainedCookieCount: z.number().int().min(0).max(100).optional(), truncated: z.boolean().optional(),
     }).strict().optional(),
     openingStage: z.enum(["dispatch", "panel_visibility", "content_ready", "binding_verification", "completed"]).optional(),

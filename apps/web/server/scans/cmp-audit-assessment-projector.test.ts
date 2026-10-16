@@ -1464,3 +1464,31 @@ test("literal visible inventory reaches persisted concerns and public service ev
   input.cmpPreferencesEvidence!.limitations.push("preference_document_changed");
   assert.notEqual(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="services")?.status,"observed");
 });
+
+
+test("passive OneTrust cookie details project canonically without changing visibility or score", () => {
+  const input=bundle();delete input.cmpPreferencesEvidence;delete input.cmpPreferenceLaneOutcome;
+  input.completedAt="2026-10-13T00:00:02.000Z";
+  input.domSnapshots=[{url:input.url,capturedAtMs:100,consentStateAtTime:"pre_consent",documentIdentity:{token:"passive-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+  input.cmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v1",sourceLane:"consent_proof",scanId:input.scanId,
+    targetUrl:input.url,documentUrl:input.url,documentToken:"passive-loader",capturedAtMs:100,provider:"OneTrust",controls:[],privacyLinks:[],serviceNames:[],
+    declarations:[{name:"site_metric",purpose:"Audience measurement",duration:"1 year",source:"cmp_api_inventory"}],
+    captureProgress:{version:"cmp_capture_checkpoints.v1",documentToken:"passive-loader",declarationsAtMs:90},
+    limitations:["passive_first_layer_only","declaration_inventory_not_complete","onetrust_loaded_configuration.v4","loaded_configuration_not_visibility_proof"]};
+  const before=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row=>row.id==="cookie_information")?.status,"observed");
+  assert.equal(audit.rows.find(row=>row.id==="categories")?.status,"not_assessed");
+  assert.notEqual(audit.rows.find(row=>row.id==="found_not_declared")?.status,"observed");
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const persisted=withCanonicalConsentAssessmentSnapshot({},assessment);
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:persisted,reviewFindingCandidates:[],validationFindings:[]});
+  const projected=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(projected.rows.find(row=>row.id==="cookie_information")?.status,"Observed");
+  assert.deepEqual(projected.rows.find(row=>row.id==="cookie_information")?.supportingEvidence?.inventory?.declarations,input.cmpBasicEvidence.declarations);
+  assert.ok(concerns.filter(c=>c.originKey.startsWith("consent.cmp_audit.")).every(c=>!c.scoreEffects?.length));
+  assert.deepEqual(input,before);
+  input.cmpBasicEvidence.declarations[0]!.purpose="";
+  assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="cookie_information")?.status,"partially_assessed");
+  input.cmpBasicEvidence.documentToken="other";
+  assert.notEqual(deriveCmpAuditAssessment(input)?.rows.find(row=>row.id==="cookie_information")?.status,"observed");
+});
