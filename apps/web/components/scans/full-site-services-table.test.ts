@@ -39,7 +39,7 @@ test("an unresolved fonts-only inventory stays behind the unattributed disclosur
   const html = render([fonts]);
   assert.match(html, /Unattributed resources \(1\)/);
   assert.doesNotMatch(html, /Expand Google Fonts/);
-  assert.match(html, /Loading origins could not be verified/);
+  assert.match(html, /Resources are available below\./);
   const direct = render([{...fonts, origins: [{ key: "site:document", kind: "site", name: "Site document", nodeId: "document", edgeIds: ["load"], inferred: false, pageId: "p", occurrenceId: "request", eventCount: 1, resourceKey: "font" }]}]);
   assert.match(direct, /Expand Google Fonts/);
   assert.doesNotMatch(direct, /Unattributed resources \(1\)/);

@@ -113,7 +113,7 @@ export function FullSiteServices({ collapseVersion = 0, services, pageName, page
         {tableHead}
         <tbody>{rows.map(branch => renderBranch(branch))}</tbody>
       </table>
-      {!rows.length ? <p className="p-5 text-sm text-slate-500">{unattributed ? "Loading origins could not be verified. Resources are available below." : "No services match the current filters."}</p> : null}
+      {!rows.length ? <p className="p-5 text-sm text-slate-500">{unattributed ? "Resources are available below." : "No services match the current filters."}</p> : null}
       {unattributed ? <details open={unattributedOpen} className="border-t border-zinc-100" onToggle={event => setUnattributedOpen(event.currentTarget.open)}>
         <summary className="cursor-pointer px-3 py-3 text-xs text-slate-500 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500">Unattributed resources ({unattributed.service.resources.length})<button type="button" popoverTarget={unattributedHelpId} onClick={event => event.stopPropagation()} aria-label="Explain unattributed resources" title="About unattributed resources" className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded align-middle text-slate-500 hover:bg-sky-100 hover:text-sky-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5M10 6v.01"/></svg></button></summary>
         {unattributedOpen ? <>
