@@ -48,6 +48,36 @@ test("report and focused exports retain the 13 CMP outcomes, comparisons and sha
   assert.ok(!JSON.stringify(exported).includes("deductionPoints"));
   assert.deepEqual(report, before);
 });
+test("passively loaded CMP sources and long retained references survive focused and full report exports", () => {
+  const report = fixture();
+  report.cmpAudit!.version = "cmp_audit_report.v3";
+  const services = [{name: "Retained provider", source: "cmp_loaded_inventory" as const, sourceRef: "record:0"}];
+  const declarations = [{name: "_ga", purpose: "Declared analytics purpose", duration: "2 years", source: "cmp_loaded_inventory" as const}];
+  Object.assign(report.cmpAudit!.rows.find(row => row.id === "services")!, {status: "Observed", supportingEvidence: {inventory: {services}}});
+  Object.assign(report.cmpAudit!.rows.find(row => row.id === "cookie_information")!, {status: "Observed", supportingEvidence: {inventory: {declarations}}});
+  const policy = report.gdprTransparencyRows[0]!;
+  const excerpt = "Excerpt: " + "Retained policy passage. ".repeat(180);
+  assert.ok(excerpt.length > 4000 && excerpt.length <= 8192);
+  policy.evidenceRefs = [excerpt];
+  const before = structuredClone(report);
+  const prepared = {...report, ...buildDetailedEvidenceExport(report)};
+  for (const section of ["cmp", "consent", undefined] as const) {
+    const selected = section ? selectReportEvidenceSection(prepared, section).report : prepared;
+    const exported = buildReportDisplayExport(selected, {scanId: report.scan.id});
+    const pages = []; let cursor: string | undefined;
+    do {
+      const page = buildReportEvidencePage({scanId: report.scan.id, report: exported, section, cursor});
+      pages.push({...page, entries: page.entries.map(entry => ({...entry, value: entry.value}))});
+      cursor = page.pagination.nextCursor ?? undefined;
+    } while (cursor);
+    const result = reconstructReportEvidencePages(pages);
+    assert.equal(result.cmpAudit?.rows.length, 13);
+    assert.deepEqual(result.cmpAudit?.rows.find(row => row.id === "services")?.supportingEvidence?.inventory?.services, services);
+    assert.deepEqual(result.cmpAudit?.rows.find(row => row.id === "cookie_information")?.supportingEvidence?.inventory?.declarations, declarations);
+    if (!section) assert.deepEqual(result.detailedEvidence?.sections.find(item => item.id === "policy")?.rows.find(row => row.id === policy.id)?.evidenceRefs, [excerpt]);
+  }
+  assert.deepEqual(report, before);
+});
 test("CMS export preserves existing version/advisory evidence and omits document state", () => {
   const report = fixture();
   const prepared = { ...report, ...buildDetailedEvidenceExport(report) };

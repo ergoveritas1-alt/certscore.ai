@@ -91,7 +91,7 @@ export const detailedEvidenceOpenApiSchemas = {
         "type": "array",
         "items": {
           "type": "string",
-          "maxLength": 4000
+          "maxLength": 8192
         },
         "maxItems": 200
       },
@@ -282,7 +282,7 @@ export const detailedEvidenceOpenApiSchemas = {
               "type": "array",
               "items": {
                 "type": "string",
-                "maxLength": 4000
+                "maxLength": 8192
               },
               "maxItems": 200
             },
@@ -496,7 +496,7 @@ export const detailedEvidenceOpenApiSchemas = {
                     "type": "array",
                     "items": {
                       "type": "string",
-                      "maxLength": 4000
+                      "maxLength": 8192
                     },
                     "maxItems": 200
                   },
@@ -1163,7 +1163,8 @@ export const detailedEvidenceOpenApiSchemas = {
                               "cmp_api_inventory",
                               "labelled_control",
                               "cmp_named_disclosure",
-                              "cmp_visible_inventory"
+                              "cmp_visible_inventory",
+                              "cmp_loaded_inventory"
                             ]
                           },
                           "sourceRef": {
@@ -1233,7 +1234,8 @@ export const detailedEvidenceOpenApiSchemas = {
                             "type": "string",
                             "enum": [
                               "cmp_visible_inventory",
-                              "cmp_api_inventory"
+                              "cmp_api_inventory",
+                              "cmp_loaded_inventory"
                             ]
                           },
                           "inferredPurpose": {

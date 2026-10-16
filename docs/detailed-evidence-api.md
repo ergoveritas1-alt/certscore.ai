@@ -32,10 +32,19 @@ value-free table evidence:
 
 - `expiries`: cookie `name`, `visit` (Accept/Reject), original `capturedAtEpochSeconds` and `expiresAtEpochSeconds`, and unrounded `remainingSeconds`. Up to four rows; remaining time must agree with both timestamps. This is remaining time at capture, not an original Max-Age or configured lifetime.
 - `categories`: selectable category `name` and captured `checked` state (boolean or null).
-- `services`: service `name` and `source` (`cmp_api_inventory` or `labelled_control`).
+- `services`: service `name` and `source` (`cmp_api_inventory`, `labelled_control`, `cmp_named_disclosure`, `cmp_visible_inventory` or `cmp_loaded_inventory`), with a bounded `sourceRef` when retained.
 - `declarations`: cookie/pattern `name`, `purpose`, `duration`, and declaration `source`.
 - `cookies`: observed `name`, `matchedPattern` (null means no match), and
   `observedIn` (`before_choice`, `after_accept`, or both).
+
+The October 16 local parity fix adds `cmp_loaded_inventory` to the public
+service and declaration source enums and regenerates the SDK/OpenAPI mirrors.
+Loaded configuration remains distinct from visible disclosure or exercised
+controls. It also permits retained Detailed Evidence references up to 8,192
+characters, including existing policy excerpt references; the page serializer
+chunks them without shortening the text. Other display text remains bounded
+at 4,000 characters. These changes are local and have not been deployed or
+published. See [local channel verification](certscore-v2/cmp-channel-parity-local-2026-10-16.md).
 
 Service, category, declaration and comparison lists are capped at 100 entries; expiry lists at four. Match results use the canonical deterministic
 wildcard comparison; a match indicates declaration coverage, not correct consent
