@@ -1166,11 +1166,12 @@
     },
     "https://termly.io/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-12T20:43:46.257Z",
-      "lastContactAt": "2026-10-15T20:43:46.257Z",
+      "cooldownUntil": "2026-11-13T15:47:40.413Z",
+      "lastContactAt": "2026-10-16T15:47:40.413Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
+      "note": "Owner-requested one guarded EU-Ireland local passive Termly inventory verification on 2026-10-16. Completed termly-passive-inventory-local-termly-3b12ca63-84e0-4c76-a867-b3a40443b6c5 without Options. Normal cooldown resumed. Prior contact history preserved.",
       "state": "cooldown",
       "url": "https://termly.io/"
     },
@@ -1257,7 +1258,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-16T15:20:05.671Z",
+  "updatedAt": "2026-10-16T15:51:26.941Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",

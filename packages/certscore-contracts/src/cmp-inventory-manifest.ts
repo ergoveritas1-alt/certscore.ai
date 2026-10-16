@@ -4,7 +4,7 @@ import {z} from "zod";
  * Loaded DOM and selected SDK lists never prove the entire CMP inventory. */
 export const cmpInventoryManifestSchema = z.object({
   version:z.literal("cmp_inventory_manifest.v1"),
-  source:z.enum(["cookieyes_category_configuration.v1","onetrust_group_cookie_lists.v1","cookiebot_loaded_declarations.v1"]),
+  source:z.enum(["cookieyes_category_configuration.v1","onetrust_group_cookie_lists.v1","cookiebot_loaded_declarations.v1","termly_cookie_response.v1"]),
   names:z.array(z.string().regex(/^[A-Za-z0-9_.$:#*+\-\[\]]{1,160}$/)).max(256),
   sourceRecordCount:z.number().int().min(0).max(10000),
   resolvedRecordCount:z.number().int().min(0).max(10000),

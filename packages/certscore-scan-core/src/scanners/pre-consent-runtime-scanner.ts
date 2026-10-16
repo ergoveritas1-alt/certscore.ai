@@ -1,3 +1,5 @@
+import {installPassiveTermlyInventoryCapture} from "../termly-network-inventory.js";
+import {cmpBasicEvidenceSchema,projectNetworkCmpCookies} from "@certscore/contracts";
 import { captureCmpBasicEvidence, finishPassiveCmpPrivacyLinks } from "../cmp-basic-capture.js";
 import type { CmpBasicEvidence } from "@certscore/contracts";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
@@ -672,6 +674,7 @@ export async function preConsentRuntimeScanner(
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
   const browserDocumentIdentityState: BrowserDocumentIdentityState = {};
   let networkMetadataSession: CDPSession | null = null;
+  let termlyNetworkInventory:ReturnType<typeof installPassiveTermlyInventoryCapture>|undefined;
   let visualCapture: VisualCaptureSummary = {
     status: "unavailable",
     failureReason: screenshotMode === "never" ? "skipped_by_mode" : "unknown",
@@ -785,6 +788,12 @@ export async function preConsentRuntimeScanner(
   networkMetadataSession = await installCdpNetworkMetadataCapture(page, {
     initiatorsByUrl: cdpInitiatorsByUrl,
     documentIdentityState: browserDocumentIdentityState,
+    onSessionReady:(session,mainFrameId)=>{
+      if(input.captureScope!=="consent_proof" || !input.cmpBasicScanId || !mainFrameId)return;
+      termlyNetworkInventory=installPassiveTermlyInventoryCapture({session,mainFrameId,targetUrl:input.normalizedUrl,
+        now:()=>elapsed(input.scanStartedAtMs),readBinding:()=>({url:page.url(),token:currentBrowserDocumentIdentity(page)?.token}),
+        isCurrent:()=>!cmpBasicCaptureClosed && !input.signal?.aborted && remainingModuleBudgetMs()>0});
+    },
     impactCapture,
   }).catch((error) => {
     runtimeErrors.push(`CDP network metadata capture unavailable: ${errorMessageFromUnknown(error)}`);
@@ -1100,6 +1109,17 @@ export async function preConsentRuntimeScanner(
   let cmpBasicCaptureClosed=false;
   let cmpBasicCaptureElapsedMs=350;
   const currentCmpBasicEvidence = () => {
+    const network=termlyNetworkInventory?.snapshot();
+    termlyNetworkInventory?.close();
+    if(network && retainedCmpBasicEvidence?.provider==="Termly" &&
+        retainedCmpBasicEvidence.documentToken===network.documentToken && retainedCmpBasicEvidence.documentUrl===network.documentUrl){
+      const parsed=cmpBasicEvidenceSchema.safeParse({...retainedCmpBasicEvidence,contractVersion:"certscore.cmp-basic-evidence.v5",
+        capturedAtMs:Math.max(retainedCmpBasicEvidence.capturedAtMs,network.completedAtMs),networkCookieInventory:network,
+        declarations:projectNetworkCmpCookies(network),inventoryManifest:network.inventoryManifest,
+        captureProgress:{...retainedCmpBasicEvidence.captureProgress,declarationsAtMs:network.completedAtMs},
+        limitations:[...retainedCmpBasicEvidence.limitations,"already_requested_cookie_response","response_inventory_not_complete"]});
+      if(parsed.success)retainedCmpBasicEvidence=parsed.data;
+    }
     cmpBasicCaptureClosed=true;
     const identity = currentBrowserDocumentIdentity(page);
     return retainedCmpBasicEvidence?.documentToken === identity?.token && retainedCmpBasicEvidence?.documentUrl === page.url()
@@ -4549,6 +4569,7 @@ export async function preConsentRuntimeScanner(
     page.off("framenavigated", recordConsentFrameChange);
     page.off("frameattached", recordConsentFrameChange);
     page.off("framedetached", recordConsentFrameChange);
+    termlyNetworkInventory?.close();
     if (networkMetadataSession) {
       await boundedCleanup(networkMetadataSession.detach(), 250);
     }
@@ -12071,6 +12092,7 @@ async function installCdpNetworkMetadataCapture(
   stores: {
     initiatorsByUrl: Map<string, string[][]>;
     documentIdentityState: BrowserDocumentIdentityState;
+    onSessionReady?:(session:CDPSession,mainFrameId:string|undefined)=>void;
     impactCapture?: ReturnType<typeof createGpcImpactCapture>;
   },
 ): Promise<CDPSession> {
@@ -12119,6 +12141,7 @@ async function installCdpNetworkMetadataCapture(
     ]).filter((value) => /^https?:\/\//i.test(value));
     if (chain.length > 0) pushQueuedValue(stores.initiatorsByUrl, url, chain);
   });
+  stores.onSessionReady?.(session,mainFrameId);
   return session;
 }
 

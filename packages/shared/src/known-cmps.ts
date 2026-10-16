@@ -89,6 +89,8 @@ export type KnownCmpDefinition = {
     rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; shadowContentSelector?: string; sdkPath: string[] };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
+  /** Bounded response capture; no request, getter, panel opening or consent state. */
+  passiveNetworkInventory?: {version:"termly_cookie_response.v1";origin:"https://app.termly.io";scriptPathPrefix:"/resource-blocker/";responsePathPrefix:"/api/v1/snippets/websites/"};
   /** Read only already-ready configured vendor names, without opening UI. */
   passiveServiceInventory?: {
     version: "didomi_required_vendors.v1";
@@ -985,6 +987,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       resolution: "scoped_accessible_control",
     }],
     canonicalName: "Termly",
+    passiveNetworkInventory:{version:"termly_cookie_response.v1",origin:"https://app.termly.io",scriptPathPrefix:"/resource-blocker/",responsePathPrefix:"/api/v1/snippets/websites/"},
     preferenceControlScopeSelector: '[data-termly-part="banner-actions"]',
     preferenceDeferredAriaBinding: { version: "termly_aria_preferences.v1", rootSelector: '[data-termly-part="consent-banner"]' },
     cookieNames: ["TERMLY_API_CACHE", "termly_gtm_template_default_consents"],

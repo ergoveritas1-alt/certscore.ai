@@ -3774,3 +3774,5 @@ export * from "./action-origin-dom-storage-observation";
 export * from "./observed-action-source-proof";
 
 export * from "./measurement-request-evidence";
+
+export * from "./cmp-network-cookie-inventory";

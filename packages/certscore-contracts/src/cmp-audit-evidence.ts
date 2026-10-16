@@ -1,3 +1,4 @@
+import {cmpNetworkCookieInventorySchema,projectNetworkCmpCookies} from "./cmp-network-cookie-inventory";
 import { z } from "zod";
 import {cmpInventoryManifestSchema,cmpCaptureProgressSchema} from "./cmp-inventory-manifest";
 import { cmpVisibleInventorySchema, projectVisibleCmpInventory } from "./cmp-visible-inventory";
@@ -177,6 +178,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
       packet.inspectionDiagnostic?.revision!=="cmp_preferences.v12" ||
       packet.inventoryManifest.source.startsWith("cookieyes_") && packet.support.provider!=="CookieYes" ||
       packet.inventoryManifest.source.startsWith("onetrust_") && packet.support.provider!=="OneTrust" ||
+      packet.inventoryManifest.source==="termly_cookie_response.v1" ||
       packet.inventoryManifest.source.startsWith("cookiebot_") && (packet.support.provider!=="Cookiebot" || !packet.loadedInventory || JSON.stringify(packet.inventoryManifest)!==JSON.stringify(packet.loadedInventory.inventoryManifest))))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Compact inventory requires its provider-bound declaration checkpoint."});
   const loadedDeclarations = packet.declarations.filter(row => row.source === "cmp_loaded_inventory");
@@ -214,7 +216,7 @@ export type CmpPreferencesEvidence = z.infer<typeof cmpPreferencesEvidenceSchema
 /** Passive facts captured by the required consent-proof visit. This is not an
  * Options action, a complete preference inventory, or a product-capability test. */
 export const cmpBasicEvidenceSchema = z.object({
-  contractVersion: z.enum(["certscore.cmp-basic-evidence.v1", "certscore.cmp-basic-evidence.v2", "certscore.cmp-basic-evidence.v3", "certscore.cmp-basic-evidence.v4"]),
+  contractVersion: z.enum(["certscore.cmp-basic-evidence.v1", "certscore.cmp-basic-evidence.v2", "certscore.cmp-basic-evidence.v3", "certscore.cmp-basic-evidence.v4", "certscore.cmp-basic-evidence.v5"]),
   sourceLane: z.literal("consent_proof"),
   scanId: z.string().min(1).max(160), targetUrl: z.string().url().max(2000),
   documentUrl: z.string().url().max(2000), documentToken: z.string().min(1).max(160),
@@ -225,6 +227,7 @@ export const cmpBasicEvidenceSchema = z.object({
   declarations: cmpPreferencesEvidenceSchema.innerType().shape.declarations,
   serviceNames: z.array(z.string().min(1).max(240)).max(100),
   sdkServiceInventory: cmpSdkServiceInventorySchema.optional(),
+  networkCookieInventory: cmpNetworkCookieInventorySchema.optional(),
   configuredConsentCookies: configuredConsentCookiesSchema.optional(),
   inventoryManifest: cmpInventoryManifestSchema.optional(),
   captureProgress: cmpCaptureProgressSchema.optional(),
@@ -257,6 +260,7 @@ export const cmpBasicEvidenceSchema = z.object({
   if (packet.inventoryManifest && (!progress ||
       packet.inventoryManifest.source.startsWith("cookieyes_") && packet.provider!=="CookieYes" ||
       packet.inventoryManifest.source.startsWith("onetrust_") && packet.provider!=="OneTrust" ||
+      packet.inventoryManifest.source==="termly_cookie_response.v1" && !packet.networkCookieInventory ||
       packet.inventoryManifest.source.startsWith("cookiebot_") && (!packet.loadedInventory ||
         JSON.stringify(packet.inventoryManifest)!==JSON.stringify(packet.loadedInventory.inventoryManifest))))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive compact inventory requires its canonical configured source."});
@@ -280,6 +284,16 @@ export const cmpBasicEvidenceSchema = z.object({
         packet.declarations.length!==projected.length || loadedDeclarations.length!==projected.length ||
         projected.some(row=>!loadedDeclarations.some(declared=>declared.name===row.name && declared.purpose===row.purpose && declared.duration===row.duration)))
       ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive loaded inventory requires exact versioned provider, document, source and partial declaration projection."});
+  }
+  if(packet.contractVersion === "certscore.cmp-basic-evidence.v5" || packet.networkCookieInventory){
+    const network=packet.networkCookieInventory;
+    if(packet.contractVersion!=="certscore.cmp-basic-evidence.v5" || packet.provider!=="Termly" || !network ||
+      network.documentToken!==packet.documentToken || network.documentUrl!==packet.documentUrl ||
+      packet.documentUrl!==packet.targetUrl || network.completedAtMs>packet.capturedAtMs ||
+      !progress || progress.declarationsAtMs!==network.completedAtMs || packet.loadedInventory || packet.sdkServiceInventory || packet.serviceNames.length ||
+      JSON.stringify(packet.declarations)!==JSON.stringify(network && projectNetworkCmpCookies(network)) ||
+      JSON.stringify(packet.inventoryManifest)!==JSON.stringify(network?.inventoryManifest))
+      ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive response declarations require their exact source, document and completed checkpoint."});
   }
   if (packet.contractVersion === "certscore.cmp-basic-evidence.v4" || packet.sdkServiceInventory) {
     if (packet.contractVersion !== "certscore.cmp-basic-evidence.v4" || packet.provider !== "Didomi" || !packet.sdkServiceInventory ||

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { projectPostAcceptEvidenceForReport, cmpCookieExpiryEvidenceSchema, cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { cmpNetworkCookieInventorySchema, projectNetworkCmpCookies, projectPostAcceptEvidenceForReport, cmpCookieExpiryEvidenceSchema, cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveCmpAuditAssessment } from "./cmp-audit-assessment-projector";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
@@ -1491,4 +1491,35 @@ test("passive OneTrust cookie details project canonically without changing visib
   assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row=>row.id==="cookie_information")?.status,"partially_assessed");
   input.cmpBasicEvidence.documentToken="other";
   assert.notEqual(deriveCmpAuditAssessment(input)?.rows.find(row=>row.id==="cookie_information")?.status,"observed");
+});
+
+
+test("Termly passive response resolves only the supported cookie comparison through persisted policy", () => {
+  const input=bundle();delete input.cmpPreferencesEvidence;delete input.cmpPreferenceLaneOutcome;
+  input.completedAt="2026-10-13T00:00:02.000Z";
+  input.domSnapshots=[{url:input.url,capturedAtMs:100,consentStateAtTime:"pre_consent",documentIdentity:{token:"passive-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+  input.scanLaneRuns=[{laneId:"runtime_evidence",accessOutcome:"representative_page",executionOutcome:"success",challengeDetected:false,firstHttpStatus:200,firstEffectiveUrl:input.url}] as CanonicalEvidenceBundle["scanLaneRuns"];
+  input.runtimeMetadataSnapshots=[{url:input.url,capturedAtMs:70,consentStateAtTime:"pre_consent",documentIdentity:{source:"cdp_loader_id",token:"runtime-loader"}}] as CanonicalEvidenceBundle["runtimeMetadataSnapshots"];
+  input.cookieSnapshots=[{capturedAtMs:80,consentStateAtTime:"pre_consent",cookies:[{name:"security"}],captureCoverage:{version:"bound_cookie_snapshot.v1",scope:"browser_context_point_in_time",targetUrl:input.url,documentUrl:input.url,documentToken:"runtime-loader",startedAtMs:70,completedAtMs:80,status:"completed"}}] as CanonicalEvidenceBundle["cookieSnapshots"];
+  const tenant="9598d17a-6c78-437c-83a3-52d50ae899fd";
+  const network=cmpNetworkCookieInventorySchema.parse({version:"termly_cookie_response.v1",source:"already_requested_response",documentToken:"passive-loader",documentUrl:input.url,tenantId:tenant,
+    scriptUrl:`https://app.termly.io/resource-blocker/${tenant}?autoBlock=off`,responseUrl:`https://app.termly.io/api/v1/snippets/websites/${tenant}/cookies?lang=en`,requestId:"request",frameId:"main",httpStatus:200,mimeType:"application/json",completedAtMs:90,decodedBytes:100,bodySha256:"a".repeat(64),
+    records:[{name:"security",purpose:"",duration:"Session",technology:"server_cookie",sourceRef:"category:1/record:0"}],truncated:false,
+    inventoryManifest:{version:"cmp_inventory_manifest.v1",source:"termly_cookie_response.v1",names:["security"],sourceRecordCount:1,resolvedRecordCount:1,unresolvedRecordCount:0,unresolvedSources:0,truncated:false}});
+  input.cmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v5",sourceLane:"consent_proof",scanId:input.scanId,targetUrl:input.url,documentUrl:input.url,documentToken:"passive-loader",capturedAtMs:100,provider:"Termly",controls:[],privacyLinks:[],serviceNames:[],networkCookieInventory:network,inventoryManifest:network.inventoryManifest,declarations:projectNetworkCmpCookies(network),captureProgress:{version:"cmp_capture_checkpoints.v1",documentToken:"passive-loader",declarationsAtMs:90},limitations:["passive_first_layer_only","response_inventory_not_complete"]};
+  input.cookieEvents=[{cookieName:"security"}] as CanonicalEvidenceBundle["cookieEvents"];
+  const original=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(r=>r.id==="declared_not_found")!.status,"observed");
+  assert.equal(audit.rows.find(r=>r.id==="cookie_information")!.status,"partially_assessed");
+  assert.equal(audit.rows.find(r=>r.id==="found_not_declared")!.cookieComparison?.declarationInventoryComplete,false);
+  for(const id of ["categories","services"])assert.equal(audit.rows.find(r=>r.id===id)!.status,"not_assessed");
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const persisted=withCanonicalConsentAssessmentSnapshot({},assessment);
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:persisted,reviewFindingCandidates:[],validationFindings:[]});
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(report.rows.find(r=>r.id==="declared_not_found")!.status,"Observed");
+  assert.ok(concerns.filter(c=>c.originKey.startsWith("consent.cmp_audit.")).every(c=>!c.scoreEffects?.length));
+  assert.deepEqual(input,original);
+  input.cmpBasicEvidence.networkCookieInventory!.documentToken="foreign";
+  assert.equal(deriveCmpAuditAssessment(input),undefined);
 });
