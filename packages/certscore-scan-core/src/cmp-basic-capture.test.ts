@@ -11,7 +11,7 @@ test("passive first-layer inventory is bounded, document-bound and never opens o
       window.actions=0;window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'<strong>Named Analytics</strong>'}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]}}};
     </script>`);
     let token = "loader-1";
-    const input = {page,scanId:"fixture",targetUrl:"https://example.test/",scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token}),isCurrent:()=>true};
+    const input = {page,scanId:"fixture",targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token}),isCurrent:()=>true};
     const started = Date.now();
     const packet = await captureCmpBasicEvidence(input);
     assert.ok(packet); assert.deepEqual(packet.controls.map(row=>row.label),["Analytics"]);
@@ -61,7 +61,7 @@ test("passive Drupal identity uses the existing scope read and rejects getters a
   try {
     const page = await browser.newPage();
     await page.setContent(`<div id="sliding-popup"><button>Accept cookies</button></div><script>window.drupalSettings={eu_cookie_compliance:{cookie_name:'cookie_compliance'}};</script>`);
-    const input = { page, scanId: "fixture", targetUrl: "https://example.test/", scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
+    const input = { page, scanId: "fixture", targetUrl: page.url(), scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
     const packet = await captureCmpBasicEvidence(input);
     assert.equal(packet?.configuredConsentCookies?.[0]?.name, "cookie_compliance");
     await page.evaluate(() => { Object.defineProperty((window as any).drupalSettings.eu_cookie_compliance, "cookie_name", { get() { throw Error("No getter allowed"); } }); });
@@ -76,7 +76,7 @@ test("passive inventory shares registered category identities and preserves ambi
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
-    const input = { page, scanId: "category-fixture", targetUrl: "https://example.test/", scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
+    const input = { page, scanId: "category-fixture", targetUrl: page.url(), scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
     for (const ambiguous of [false, true]) {
       await page.setContent(`<div class="cky-consent-container"><section class="cky-preference-center" data-cky-tag="detail" role="dialog"><div class="cky-accordion">
         <h3 data-cky-tag="detail-category-title">Others</h3>${ambiguous ? '<h3 data-cky-tag="detail-category-title">Another category</h3>' : ''}
@@ -97,7 +97,7 @@ test("passive Axeptio inventory uses its exact registered widget without treatin
   try {
     const page = await browser.newPage();
     const panel = `<section data-testid="widget-container"><label>Google Analytics 4<input type="checkbox"></label><button id="axeptio_btn_close" aria-label="Close cookie settings">Close</button><a href="https://example.test/privacy">Privacy policy</a></section>`;
-    const input = { page, scanId: "axeptio-fixture", targetUrl: "https://example.test/", scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
+    const input = { page, scanId: "axeptio-fixture", targetUrl: page.url(), scanStartedAtMs: Date.now(), readBinding: () => ({ url: page.url(), token: "loader-1" }), isCurrent: () => true };
     await page.setContent(panel);
     const packet = await captureCmpBasicEvidence(input);
     assert.equal(packet?.provider, "Axeptio");

@@ -16,6 +16,55 @@ function bundle() {
   } as unknown as CanonicalEvidenceBundle;
 }
 
+test("verified cookie snapshot coverage is independent of unfinished DOM loading and cannot establish broader absence",()=>{
+  const input=bundle();input.completedAt="2026-10-13T00:00:10.000Z";
+  input.runtimeCoverage={...input.runtimeCoverage!,coverageStatus:"limited_partial",limitationKeys:["pre_consent_runtime_partial","runtime_page_inventory_document_unsettled"]};
+  input.scanLaneRuns=[{laneId:"runtime_evidence",accessOutcome:"representative_page",executionOutcome:"degraded",challengeDetected:false,firstHttpStatus:200,firstEffectiveUrl:input.url}] as CanonicalEvidenceBundle["scanLaneRuns"];
+  input.cookieSnapshots=[{capturedAtMs:5000,consentStateAtTime:"pre_consent",cookies:[{name:"_ga"}],captureCoverage:{version:"bound_cookie_snapshot.v1",scope:"browser_context_point_in_time",targetUrl:input.url,documentUrl:input.url,documentToken:"runtime-loader",startedAtMs:4900,completedAtMs:5000,status:"completed"}}] as CanonicalEvidenceBundle["cookieSnapshots"];
+  input.runtimeMetadataSnapshots=[{url:input.url,capturedAtMs:4800,consentStateAtTime:"pre_consent",documentIdentity:{source:"cdp_loader_id",token:"runtime-loader"}}] as CanonicalEvidenceBundle["runtimeMetadataSnapshots"];
+  const original=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row=>row.id==="declared_not_found")?.status,"observed");
+  assert.match(audit.rows.find(row=>row.id==="declared_not_found")!.detail,/point-in-time/);
+  assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.status,"partially_assessed");
+  assert.deepEqual(input,original);
+  const diagnosticVisit=structuredClone(input);Object.assign(diagnosticVisit.scanLaneRuns![0]!,{accessOutcome:"bot_challenge",challengeDetected:true,challengeType:"potential_security_challenge",executionOutcome:"success"});
+  diagnosticVisit.scanNoGoAssessment={status:"available",version:"scan-no-go-assessment-v1",decision:"continue_with_diagnostics",scanNoGoConfidence:0.72,reasonCodes:["potential_security_challenge"],corroboratorCodes:[],contradictorCodes:[],evidenceRefs:[],supportingSignals:{blockingFrameChallengeObserved:false}};
+  assert.equal(deriveCmpAuditAssessment(diagnosticVisit)!.rows.find(row=>row.id==="declared_not_found")?.status,"observed","Canonical continued diagnostic visits may retain a completed factual snapshot comparison");
+  diagnosticVisit.scanNoGoAssessment!.decision="no_go";
+  assert.notEqual(deriveCmpAuditAssessment(diagnosticVisit)!.rows.find(row=>row.id==="declared_not_found")?.status,"observed");
+  const invalidNewProof=structuredClone(input);invalidNewProof.runtimeCoverage!.coverageStatus="usable";invalidNewProof.cookieSnapshots[0]!.captureCoverage!.documentToken="other";
+  assert.notEqual(deriveCmpAuditAssessment(invalidNewProof)!.rows.find(row=>row.id==="declared_not_found")?.status,"observed","Unverifiable new proof must not fall back to historical coverage rules");
+  const laterMetadata=structuredClone(input);laterMetadata.runtimeMetadataSnapshots![0]!.capturedAtMs=5100;
+  assert.equal(deriveCmpAuditAssessment(laterMetadata)!.rows.find(row=>row.id==="declared_not_found")?.status,"observed","Immutable CDP loader binding may be retained after the cookie read, within the same scan");
+  for(const mutate of [
+    (b:typeof input)=>{b.runtimeMetadataSnapshots![0]!.capturedAtMs=11000},
+    (b:typeof input)=>{b.cookieSnapshots[0]!.captureCoverage!.documentToken="other"},
+    (b:typeof input)=>{b.cookieSnapshots[0]!.captureCoverage!.documentUrl="https://other.test/"},
+    (b:typeof input)=>{b.cookieSnapshots[0]!.captureCoverage!.completedAtMs=5001},
+    (b:typeof input)=>{b.runtimeMetadataSnapshots=[]},
+    (b:typeof input)=>{b.scanLaneRuns![0]!.challengeDetected=true},
+    (b:typeof input)=>{delete b.cookieSnapshots[0]!.captureCoverage},
+  ]) {const invalid=structuredClone(input);mutate(invalid);assert.notEqual(deriveCmpAuditAssessment(invalid)!.rows.find(row=>row.id==="declared_not_found")?.status,"observed");}
+});
+
+test("compact configured names support comparison without inventing missing descriptions or complete DOM inventories",()=>{
+  const input=bundle(),packet=input.cmpPreferencesEvidence!;packet.support.provider="CookieYes";
+  packet.inspectionDiagnostic={revision:"cmp_preferences.v12",budgetMs:17000,phase:"completed"};
+  packet.checkpoints={version:"cmp_partial_capture.v1",documentToken:"loader-1",privacyLinks:true,declarations:true,controls:true,controlsSurface:"preferences"};
+  packet.captureProgress={version:"cmp_capture_checkpoints.v1",documentToken:"loader-1",declarationsAtMs:1000};
+  packet.inventoryManifest={version:"cmp_inventory_manifest.v1",source:"cookieyes_category_configuration.v1",names:["_ga","beyond_detail_sample"],sourceRecordCount:2,resolvedRecordCount:2,unresolvedRecordCount:0,unresolvedSources:0,truncated:false};
+  input.cookieSnapshots=[{consentStateAtTime:"pre_consent",cookies:[{name:"_ga"},{name:"beyond_detail_sample"}]}] as CanonicalEvidenceBundle["cookieSnapshots"];
+  input.cookieEvents=[{cookieName:"_ga"},{cookieName:"beyond_detail_sample"}] as CanonicalEvidenceBundle["cookieEvents"];
+  const audit=deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.status,"not_observed");
+  assert.equal(audit.rows.find(row=>row.id==="cookie_information")?.inventory?.declarations?.length,1);
+  assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.cookieComparison?.declarationPatternCount,2);
+  const partial=structuredClone(input);partial.cmpPreferencesEvidence!.inventoryManifest!.source="onetrust_group_cookie_lists.v1";partial.cmpPreferencesEvidence!.support.provider="OneTrust";
+  assert.equal(deriveCmpAuditAssessment(partial)!.rows.find(row=>row.id==="found_not_declared")?.status,"partially_assessed");
+  const malformed=structuredClone(packet);malformed.inventoryManifest!.resolvedRecordCount=0;
+  assert.equal(cmpPreferencesEvidenceSchema.safeParse(malformed).success,false);
+});
+
 test("bound loaded Cookiebot cards resolve factual inventory through canonical concerns while remaining partial and score-neutral", async () => {
   const {projectLoadedCmpInventory} = await import("@certscore/contracts");
   const input=bundle(), packet=input.cmpPreferencesEvidence!;

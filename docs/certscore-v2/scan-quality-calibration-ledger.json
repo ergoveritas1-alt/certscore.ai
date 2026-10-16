@@ -1176,8 +1176,8 @@
     },
     "https://www.cookiebot.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-13T02:13:36.154Z",
-      "lastContactAt": "2026-10-16T02:13:36.154Z",
+      "cooldownUntil": "2026-11-13T02:59:29.163Z",
+      "lastContactAt": "2026-10-16T02:59:29.163Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1206,8 +1206,8 @@
     },
     "https://www.onetrust.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-12T20:45:26.465Z",
-      "lastContactAt": "2026-10-15T20:45:26.465Z",
+      "cooldownUntil": "2026-11-13T03:00:10.990Z",
+      "lastContactAt": "2026-10-16T03:00:10.990Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1216,8 +1216,8 @@
     },
     "https://www.cookieyes.com/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-12T20:41:45.377Z",
-      "lastContactAt": "2026-10-15T20:41:45.377Z",
+      "cooldownUntil": "2026-11-13T02:59:50.293Z",
+      "lastContactAt": "2026-10-16T02:59:50.293Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1256,7 +1256,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-16T02:16:16.745Z",
+  "updatedAt": "2026-10-16T03:17:11.752Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",

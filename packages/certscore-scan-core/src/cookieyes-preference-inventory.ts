@@ -1,3 +1,4 @@
+import {captureCmpNameManifest} from "./cmp-inventory-manifest-capture.js";
 import type { Page } from "playwright";
 
 /** Read the already-loaded CookieYes configuration used by its audit-table
@@ -6,14 +7,14 @@ import type { Page } from "playwright";
  * The caller must bind one registered CMP and the current document before/after.
  */
 export function readCookieYesPreferenceInventory(page: Page) {
-  return page.evaluate<ReturnType<typeof readCookieYesInventoryInDocument>>(`(() => { const __name = (fn) => fn; return (${readCookieYesInventoryInDocument.toString()})(); })()`);
+  return page.evaluate<ReturnType<typeof readCookieYesInventoryInDocument>>(`(() => { const __name = (fn) => fn; return (${readCookieYesInventoryInDocument.toString()})(${captureCmpNameManifest.toString()}); })()`);
 }
 
 /** Self-contained browser reader. Category references select cookie names;
  * active-language records must repeat the exact name before supplying detail.
  * Never derive a service, purpose or consent choice from a category/domain.
  */
-export function readCookieYesInventoryInDocument() {
+export function readCookieYesInventoryInDocument(readManifest?:typeof captureCmpNameManifest) {
   const own = (value: unknown, key: string): unknown => {
     if (!value || typeof value !== "object") return undefined;
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
@@ -22,6 +23,15 @@ export function readCookieYesInventoryInDocument() {
   const store = own(own(window, "cookieyes"), "_ckyStore");
   const categories = own(store, "_categories");
   if (!Array.isArray(categories)) return undefined;
+  const manifestLists:unknown[]=[];
+  let invalidSources=0;
+  for(let i=0;i<Math.min(categories.length,32);i++) {
+    const category=own(categories,String(i)),slug=own(category,"slug");
+    if(typeof slug!=="string" || !/^[a-z0-9_-]{1,80}$/i.test(slug)) invalidSources++;
+    manifestLists.push(own(category,"cookies"));
+  }
+  const inventoryManifest=readManifest?.(manifestLists,"cookieID","cookieyes_category_configuration.v1",invalidSources);
+  if(inventoryManifest && categories.length>32) inventoryManifest.truncated=true;
   const language = own(store, "_language"), active = own(language, "_active"), languages = own(language, "_store");
   let localized: unknown;
   if (languages instanceof Map && typeof active === "string" && active.length <= 40) {
@@ -55,5 +65,5 @@ export function readCookieYesInventoryInDocument() {
     }
   }
   return { declarations, categories: [] as string[], services: [] as string[], truncated, unresolved,
-    groupCount: Math.min(categories.length, 10000) };
+    groupCount: Math.min(categories.length, 10000), ...(inventoryManifest ? {inventoryManifest} : {}) };
 }

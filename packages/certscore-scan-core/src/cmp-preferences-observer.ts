@@ -39,7 +39,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v11", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v12", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -101,12 +101,13 @@ export async function runCmpPreferencesObserver(input: {
     session.on("Page.frameNavigated", ({ frame }) => {
       if (!frame.parentId && frame.loaderId !== packet.documentToken) {
         packet.checkpoints = undefined; packet.configuredConsentCookies = undefined; packet.controls = []; packet.privacyLinks = [];
-        packet.declarations = []; packet.visibleInventory = undefined; packet.loadedInventory = undefined; packet.serviceNames = undefined; packet.serviceDisclosures = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
+        packet.declarations = []; packet.visibleInventory = undefined; packet.loadedInventory = undefined; packet.inventoryManifest=undefined; packet.captureProgress=undefined; packet.serviceNames = undefined; packet.serviceDisclosures = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
         packet.controlInventoryComplete = false; packet.action.opened = false;
         packet.documentToken = null; packet.limitations.push("preference_document_changed");
       }
     });
     await binding();
+    packet.captureProgress={version:"cmp_capture_checkpoints.v1",documentToken:packet.documentToken!};
     packet.checkpoints = { version: "cmp_partial_capture.v1", documentToken: packet.documentToken!, privacyLinks: false, declarations: false, controls: false, controlsSurface: "first_layer" };
     // Readiness, navigation, inventory and opening share one wall-clock budget.
     // Waiting for the first visible vendor surface avoids racing delayed CMP init.
@@ -128,18 +129,6 @@ export async function runCmpPreferencesObserver(input: {
         .then(() => !input.signal?.aborted && Date.now() < readinessDeadline, () => false),
     ]);
     await binding();
-    const privacyScope = page.locator("a[href]");
-    const links = await privacyScope.evaluateAll(nodes => nodes.slice(0, 300).map((node, index) => ({
-      index, url: (node as HTMLAnchorElement).href,
-      label: (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 160),
-    })));
-    const privacyCandidates = privacyPolicyLinkCandidates(links);
-    // Spend the existing hit-test allowance on privacy surfaces, not unrelated
-    // navigation links. The browser callback rechecks each exact link identity.
-    packet.privacyLinks = (await privacyScope.evaluateAll(readPrivacyLinkAccess, { candidates: privacyCandidates, allowOneDocumentScroll: true }))
-      .map(({url, hitTargetBeforeAction, access}) => ({url, hitTargetBeforeAction, access}));
-    await binding();
-    packet.checkpoints!.privacyLinks = true;
     let revealed = false;
     let unidentifiedScopeChecked = false;
     while (cmpReady && !await readyControl.isVisible()) {
@@ -189,6 +178,25 @@ export async function runCmpPreferencesObserver(input: {
     // Preserve a bounded read of this document's already-loaded configuration
     // before panel binding/opening can consume the remaining inspection budget.
     // Ambiguous vendor identity never authorizes an API read or a click.
+    const detectedIndex = detected.size === 1 ? scopeInventory.indices.find(index => definitions[index]?.canonicalName === [...detected][0]) : undefined;
+    let initialControls:Awaited<ReturnType<typeof readPreferenceControls>>|undefined;
+    // Basic visible choices are valuable even when no unique Options control
+    // exists. Preserve their own checkpoint before optional deeper inspection.
+    if (detectedIndex !== undefined && definitions[detectedIndex]!.initialOptionalOffCloseObservation &&
+        await page.locator(scopeSelectors[detectedIndex]!).count() !== 1) {
+      packet.support.reason = "cmp_identity_ambiguous";
+      packet.limitations.push("cmp_identity_ambiguous");
+      return finish();
+    }
+    if (detectedIndex !== undefined && remaining() > 250) {
+      const initial = await readPreferenceControls(page.locator(scopeSelectors[detectedIndex]!), definitions[detectedIndex]!.preferenceCategoryInventory, definitions[detectedIndex]!.initialOptionalOffCloseObservation?.inputSelector);
+      await binding();
+      initialControls=initial;
+      packet.controls = classifyControls(initial.controls);
+      packet.checkpoints!.controls = packet.controls.length>0;
+      if(packet.checkpoints!.controls) packet.captureProgress!.controlsAtMs=Date.now()-started;
+      if (initial.overflow) packet.limitations.push("control_inventory_overflow");
+    }
     const oneTrust = detected.size === 1 && detected.has("OneTrust") && remaining() > 250
       ? await readOneTrustPreferenceInventory(page) : undefined;
     if (detected.size === 1 && detected.has("OneTrust")) packet.inspectionDiagnostic!.configuration = {
@@ -198,14 +206,15 @@ export async function runCmpPreferencesObserver(input: {
     if (oneTrust) {
       await binding();
       packet.declarations = oneTrust.declarations;
+      packet.inventoryManifest=oneTrust.inventoryManifest;
       packet.serviceNames = oneTrust.services;
       packet.serviceDisclosures = oneTrust.serviceDisclosures;
       packet.declarationCoverage = oneTrust.coverage;
       packet.declarationInventoryComplete = false;
       packet.checkpoints!.declarations = true;
+    packet.captureProgress!.declarationsAtMs=Date.now()-started;
       if (oneTrust.truncated) packet.limitations.push("cmp_inventory_bounded");
     }
-    const detectedIndex = detected.size === 1 ? scopeInventory.indices.find(index => definitions[index]?.canonicalName === [...detected][0]) : undefined;
     if (detectedIndex !== undefined && definitions[detectedIndex]?.preferenceInventory === "cookieyes_loaded_configuration.v1" && remaining() > 250) {
       const loaded = await readCookieYesPreferenceInventory(page);
       await binding();
@@ -213,8 +222,10 @@ export async function runCmpPreferencesObserver(input: {
         ...(loaded ? { groupCount: loaded.groupCount, retainedCookieCount: loaded.declarations.length, truncated: loaded.truncated } : {}) };
       if (loaded) {
         packet.declarations = loaded.declarations;
+        packet.inventoryManifest=loaded.inventoryManifest;
         packet.declarationInventoryComplete = false;
         packet.checkpoints!.declarations = true;
+        packet.captureProgress!.declarationsAtMs=Date.now()-started;
         packet.limitations.push("loaded_configuration_not_visibility_proof");
         if (loaded.truncated) packet.limitations.push("cmp_inventory_bounded");
         if (loaded.unresolved) packet.limitations.push("cmp_inventory_detail_unresolved");
@@ -230,22 +241,24 @@ export async function runCmpPreferencesObserver(input: {
       packet.declarationInventoryComplete = borlabs.cookieInventoryComplete;
       if (!borlabs.cookieInventoryComplete) packet.limitations.push("configured_cookie_inventory_incomplete");
       packet.checkpoints!.declarations = true;
+    packet.captureProgress!.declarationsAtMs=Date.now()-started;
     }
-    // Basic visible choices are valuable even when no unique Options control
-    // exists. Preserve their own checkpoint before optional deeper inspection.
-    if (detectedIndex !== undefined && definitions[detectedIndex]!.initialOptionalOffCloseObservation &&
-        await page.locator(scopeSelectors[detectedIndex]!).count() !== 1) {
-      packet.support.reason = "cmp_identity_ambiguous";
-      packet.limitations.push("cmp_identity_ambiguous");
-      return finish();
-    }
-    if (detectedIndex !== undefined && remaining() > 250) {
-      const initial = await readPreferenceControls(page.locator(scopeSelectors[detectedIndex]!), definitions[detectedIndex]!.preferenceCategoryInventory, definitions[detectedIndex]!.initialOptionalOffCloseObservation?.inputSelector);
-      await binding();
-      packet.controls = classifyControls(initial.controls, borlabs ?? oneTrust);
-      packet.checkpoints!.controls = packet.controls.length > 0;
-      if (initial.overflow) packet.limitations.push("control_inventory_overflow");
-    }
+    if(initialControls) packet.controls=classifyControls(initialControls.controls,borlabs??oneTrust);
+    // Completed core checkpoints precede whole-document link work. The
+    // hit test must still occur before Options to retain its original meaning.
+    const privacyScope = page.locator("a[href]");
+    const links = await privacyScope.evaluateAll(nodes => nodes.slice(0, 300).map((node, index) => ({
+      index, url: (node as HTMLAnchorElement).href,
+      label: (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 160),
+    })));
+    const privacyCandidates = privacyPolicyLinkCandidates(links);
+    // Spend the existing hit-test allowance on privacy surfaces, not unrelated
+    // navigation links. The browser callback rechecks each exact link identity.
+    packet.privacyLinks = (await privacyScope.evaluateAll(readPrivacyLinkAccess, { candidates: privacyCandidates, allowOneDocumentScroll: true }))
+      .map(({url, hitTargetBeforeAction, access}) => ({url, hitTargetBeforeAction, access}));
+    await binding();
+    packet.checkpoints!.privacyLinks = true;
+    packet.captureProgress!.privacyLinksAtMs=Date.now()-started;
     if (!cmpReady) {
       packet.support.reason = "preference_readiness_incomplete";
       packet.limitations.push("preference_readiness_incomplete");
@@ -488,6 +501,7 @@ export async function runCmpPreferencesObserver(input: {
     if (portal && (!portalPanel || !await verifyPreferencePortal(page, controlled, portal, portalPanel))) throw new Error("preference_document_changed");
     packet.controls = classifyControls(raw.controls, borlabs ?? oneTrust);
     packet.checkpoints!.controls = true;
+    packet.captureProgress!.controlsAtMs=Date.now()-started;
     packet.checkpoints!.controlsSurface = "preferences";
     // Visible toggles establish presence, not completeness of collapsed tabs,
     // lazy service lists, closed shadow roots, or inaccessible frames.
@@ -512,6 +526,7 @@ export async function runCmpPreferencesObserver(input: {
       await binding();
       if (!dialogHandle || !await controlled.evaluate((panel, original) => panel === original && panel.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
       packet.loadedInventory = loaded;
+      packet.inventoryManifest=loaded.inventoryManifest;
       packet.declarations.push(...projectLoadedCmpInventory(loaded).declarations);
       packet.limitations.push("loaded_declarations_not_visibility_proof", "declaration_inventory_not_complete");
       if (loaded.truncated) packet.limitations.push("cookie_inventory_overflow");
@@ -524,6 +539,7 @@ export async function runCmpPreferencesObserver(input: {
     await binding();
     if (portal && (!portalPanel || !await verifyPreferencePortal(page, controlled, portal, portalPanel))) throw new Error("preference_document_changed");
     packet.checkpoints!.declarations = true;
+    packet.captureProgress!.declarationsAtMs=Date.now()-started;
     packet.status = "completed";
     packet.inspectionDiagnostic!.phase = "completed";
     return finish();
@@ -531,7 +547,7 @@ export async function runCmpPreferencesObserver(input: {
     packet.status = "limited";
     if (!packet.checkpoints?.controls) { packet.controls = []; packet.action.opened = false; }
     packet.controlInventoryComplete = false;
-    if (!packet.checkpoints?.declarations) { packet.visibleInventory = undefined; packet.loadedInventory = undefined; packet.declarations = packet.declarations.filter(row => row.source !== "cmp_loaded_inventory"); }
+    if (!packet.checkpoints?.declarations) { packet.visibleInventory = undefined; packet.loadedInventory = undefined; packet.inventoryManifest=undefined; packet.declarations = packet.declarations.filter(row => row.source !== "cmp_loaded_inventory"); }
     const budgetExhausted = expired || Date.now() >= deadline || (error instanceof Error && error.message === "preference_budget_exhausted");
     const operationTimedOut = error instanceof Error && error.name === "TimeoutError";
     const openingTimedOut = error instanceof Error && error.message === "preference_opening_budget_exhausted";

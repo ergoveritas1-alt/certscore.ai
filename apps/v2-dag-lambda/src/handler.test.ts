@@ -5058,6 +5058,21 @@ test("passive CMP basics belong exclusively to the consent-proof lane", () => {
   assert.equal(mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:"lane-fixture",artifactRoot:"/tmp/lane-fixture",consentProof:consent,runtimeEvidence:runtime,policyEvidence:policy}).cmpBasicEvidence,undefined);
 });
 
+test("cookie snapshot coverage and its document metadata remain owned by the runtime lane",()=>{
+  const runtime=canonicalBundleFixture("lane-fixture",{scanLaneRuns:[laneRunFixture("runtime_evidence","runtime")]});
+  runtime.runtimeCoverage={coverageStatus:"usable",fallbackModesUsed:[],limitationKeys:[],notes:[],silentEmpty:false,
+    observationCounts:{cookieEvents:0,cookiesBeforeConsent:0,networkEvents:0,normalizedVendors:0,observedJourneys:0,thirdPartyRequests:0}};
+  const snapshot={artifactId:"cookie_snapshot_pre_consent",capturedAtMs:100,consentStateAtTime:"pre_consent" as const,cookies:[],cookieNames:[],evidenceRefs:[],
+    captureCoverage:{version:"bound_cookie_snapshot.v1" as const,scope:"browser_context_point_in_time" as const,targetUrl:runtime.url,documentUrl:runtime.url,documentToken:"runtime-loader",startedAtMs:90,completedAtMs:100,status:"completed" as const}};
+  runtime.cookieSnapshots=[snapshot];
+  const consent=canonicalBundleFixture("lane-fixture",{cookieSnapshots:[{...snapshot,captureCoverage:{...snapshot.captureCoverage,documentToken:"wrong-lane"}}],scanLaneRuns:[laneRunFixture("consent_proof","consent")]});
+  const policy=canonicalBundleFixture("lane-fixture",{scanLaneRuns:[laneRunFixture("policy_evidence","policy")]});
+  const merged=mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:"lane-fixture",artifactRoot:"/tmp/lane-fixture",consentProof:consent,runtimeEvidence:runtime,policyEvidence:policy});
+  assert.equal(merged.cookieSnapshots[0]!.captureCoverage?.documentToken,"runtime-loader");
+  runtime.cookieSnapshots=[];
+  assert.deepEqual(mergeLocalV2DagLambdaEvidenceLaneBundles({scanId:"lane-fixture",artifactRoot:"/tmp/lane-fixture",consentProof:consent,runtimeEvidence:runtime,policyEvidence:policy}).cookieSnapshots,[]);
+});
+
 
 test("CMP observation cancellation retains its bounded packet with the independent artifact signal", async () => {
   const saved = { flag: process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, bucket: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET };

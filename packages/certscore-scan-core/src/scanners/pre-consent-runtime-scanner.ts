@@ -1094,7 +1094,9 @@ export async function preConsentRuntimeScanner(
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
   let retainedCmpBasicEvidence: CmpBasicEvidence | undefined;
   let cmpBasicCaptureStarted = false;
+  let cmpBasicCaptureClosed=false;
   const currentCmpBasicEvidence = () => {
+    cmpBasicCaptureClosed=true;
     const identity = currentBrowserDocumentIdentity(page);
     return retainedCmpBasicEvidence?.documentToken === identity?.token && retainedCmpBasicEvidence?.documentUrl === page.url()
       ? retainedCmpBasicEvidence : undefined;
@@ -1108,13 +1110,15 @@ export async function preConsentRuntimeScanner(
     void captureCmpBasicEvidence({ page, scanId: input.cmpBasicScanId, targetUrl: input.normalizedUrl,
       scanStartedAtMs: input.scanStartedAtMs,
       readBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token }),
-      isCurrent: () => !effectiveSignal?.aborted && Date.now() < deadline,
+      isCurrent: () => !cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now() < deadline,
       onOutcome: reason => { basicOutcome = reason; },
+      onCheckpoint: packet => { if(!cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now()<deadline) retainedCmpBasicEvidence=packet; },
     }).then(packet => {
-      if (packet && Date.now() < deadline && !effectiveSignal?.aborted) retainedCmpBasicEvidence = packet;
+      if(cmpBasicCaptureClosed) return;
+      if (packet && !cmpBasicCaptureClosed && Date.now() < deadline && !effectiveSignal?.aborted) retainedCmpBasicEvidence = packet;
       timingBreakdown.push({ label: "passive CMP basics", durationMs: Date.now() - basicStartedAt,
         outcome: retainedCmpBasicEvidence ? "completed" : basicOutcome === "capture_slice_exhausted" ? "timed_out" : "skipped", detail: retainedCmpBasicEvidence ? "Document-bound first-layer facts retained without a preference-worker join." : basicOutcome });
-    }).catch(() => { timingBreakdown.push({ label: "passive CMP basics", durationMs: Date.now() - basicStartedAt, outcome: "failed", detail: "capture_failed" }); });
+    }).catch(() => { if(cmpBasicCaptureClosed) return; timingBreakdown.push({ label: "passive CMP basics", durationMs: Date.now() - basicStartedAt, outcome: "failed", detail: "capture_failed" }); });
   };
   let consentUiInspectionAttempted = false;
   let retainedCollectionSurfaceInventory: CollectionSurfaceInventory | undefined;
@@ -1363,7 +1367,15 @@ export async function preConsentRuntimeScanner(
               "consent inventory during document loading",
               "Read-only rapid control inventory overlaps DOMContentLoaded; loading-document absence is never reused.",
               750, () => readRapidFirstLayerConsentUiObservation(page, input.scanStartedAtMs, 750, "initial"),
-              () => emptyConsentUiObservation(input.scanStartedAtMs, page.url()));
+              () => emptyConsentUiObservation(input.scanStartedAtMs, page.url())).then(observation=>{
+                if(observation.controls.some(control=>control.visible!==false) &&
+                    observation.documentUrl===page.url() && observation.documentIdentity?.token===currentBrowserDocumentIdentity(page)?.token && !effectiveSignal?.aborted) {
+                  // Start the existing single basic read from the first positive
+                  // typed result, while parser and screenshot work continue.
+                  retainedConsentUiObservation=observation;startCmpBasicCapture();
+                }
+                return observation;
+              });
             await page.waitForLoadState("domcontentloaded", {
               timeout: Math.max(1, Math.min(navigationTimeoutMs - (Date.now() - navigationDispatchAtMs), remainingModuleBudgetMs())),
             });
@@ -2490,21 +2502,34 @@ export async function preConsentRuntimeScanner(
       }
     }
 
+    const cookieCaptureBefore={url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)};
+    const cookieCaptureStartedAtMs=elapsed(input.scanStartedAtMs);
+    let cookieCaptureSucceeded=true;
     const cookies = await recordTiming(timingBreakdown, "cookie capture", "Browser-context cookie snapshot before consent.", () =>
       browserContext.cookies().catch((error) => {
         if (isContextClosedError(error)) {
+          cookieCaptureSucceeded=false;
           runtimeErrors.push(`Cookie capture unavailable because the page/context closed: ${errorMessage(error)}`);
           return [];
         }
         throw error;
       })
     );
+    const cookieCaptureCompletedAtMs=elapsed(input.scanStartedAtMs);
+    const cookieCaptureAfter={url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)};
+    const cookieCaptureCoverage=captureScope==="runtime_evidence" && !input.globalPrivacyControlEnabled &&
+      cookieCaptureSucceeded && !effectiveSignal?.aborted && cookieCaptureBefore.url===input.normalizedUrl &&
+      cookieCaptureBefore.documentIdentity?.source==="cdp_loader_id" && cookieCaptureBefore.documentIdentity.token && sameDocumentCaptureBinding(cookieCaptureBefore,cookieCaptureAfter)
+      ? {version:"bound_cookie_snapshot.v1" as const,scope:"browser_context_point_in_time" as const,
+        targetUrl:input.normalizedUrl,documentUrl:cookieCaptureAfter.url,documentToken:cookieCaptureBefore.documentIdentity.token,
+        startedAtMs:cookieCaptureStartedAtMs,completedAtMs:cookieCaptureCompletedAtMs,status:"completed" as const} : undefined;
     const documentCookieWrites = graphCapture ? [] : await readCookieWriteProbe(page);
     graphCapture?.cookies(cookies);
     // Concurrent metadata-only work remains inside this lane's existing absolute deadline.
     void graphCapture?.snapshotStorage();
     const cookieSnapshot: CookieSnapshot = {
       artifactId: "cookie_snapshot_pre_consent",
+      ...(cookieCaptureCoverage ? {captureCoverage:cookieCaptureCoverage} : {}),
       capturedAtMs: elapsed(input.scanStartedAtMs),
       consentStateAtTime: "pre_consent",
       cookies: cookies.map((cookie) => ({

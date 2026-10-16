@@ -9,6 +9,7 @@ import { cmpBasicEvidenceSchema, type CmpBasicEvidence, cmpPreferencesEvidenceSc
 export * from "./cmp-audit-evidence";
 export * from "./cmp-visible-inventory";
 export * from "./cmp-loaded-inventory";
+export * from "./cmp-inventory-manifest";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
 export * from "./collection-surface-snapshot";
 export * from "./post-accept-form-snapshots";
@@ -617,6 +618,13 @@ export const cookieEventSchema = runtimeEvidenceEventSchema.extend({
 });
 
 export const cookieSnapshotSchema = z.object({
+  captureCoverage:z.object({
+    version:z.literal("bound_cookie_snapshot.v1"),scope:z.literal("browser_context_point_in_time"),
+    targetUrl:z.string().url().max(2000),documentUrl:z.string().url().max(2000),documentToken:z.string().min(1).max(160),
+    startedAtMs:z.number().int().nonnegative(),completedAtMs:z.number().int().nonnegative(),
+    status:z.literal("completed"),
+  }).strict().refine(value=>value.targetUrl===value.documentUrl && value.completedAtMs>=value.startedAtMs,
+    "Cookie coverage requires an exact stable target and ordered capture.").optional(),
   artifactId: z.string(),
   capturedAtMs: z.number().int().nonnegative(),
   consentStateAtTime: consentStateSchema,

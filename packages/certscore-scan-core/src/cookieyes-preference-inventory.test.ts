@@ -27,7 +27,7 @@ test("CookieYes loaded names and bound localized details stay factual, partial a
     assert.deepEqual(inventory?.services,[]);assert.deepEqual(inventory?.categories,[]);
     assert.equal(inventory?.unresolved,true);assert.ok(!JSON.stringify(inventory).includes('private'));
     assert.equal(await page.evaluate(()=>(window as any).getters),0);
-    const input={page,scanId:'cookieyes',targetUrl:'https://example.test/',scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:'loader-1'}),isCurrent:()=>true};
+    const input={page,scanId:'cookieyes',targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:'loader-1'}),isCurrent:()=>true};
     const packet=await captureCmpBasicEvidence(input);assert.ok(packet);
     assert.deepEqual(packet.declarations,inventory?.declarations);
     assert.ok(packet.limitations.includes('loaded_configuration_not_visibility_proof'));

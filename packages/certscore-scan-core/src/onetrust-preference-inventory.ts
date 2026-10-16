@@ -1,3 +1,4 @@
+import {captureCmpNameManifest} from "./cmp-inventory-manifest-capture.js";
 import type { Page } from "playwright";
 import { parseNamedCmpPartnerDisclosure } from "@certscore/contracts";
 
@@ -7,12 +8,12 @@ import { parseNamedCmpPartnerDisclosure } from "@certscore/contracts";
  * No fetch, opening API, consent mutation, retry or second browser evaluation. */
 export function readOneTrustPreferenceInventory(page: Page) {
   // tsx names nested helpers; keep its helper local to this serialized read.
-  return page.evaluate<ReturnType<typeof readOneTrustInventoryInDocument>>(`(() => { const __name = (fn) => fn; return (${readOneTrustInventoryInDocument.toString()})(${parseNamedCmpPartnerDisclosure.toString()}); })()`);
+  return page.evaluate<ReturnType<typeof readOneTrustInventoryInDocument>>(`(() => { const __name = (fn) => fn; return (${readOneTrustInventoryInDocument.toString()})(${parseNamedCmpPartnerDisclosure.toString()},${captureCmpNameManifest.toString()}); })()`);
 }
 
 /** Self-contained for browser serialization. One shared 100-record allowance
  * replaces the previous per-group host loops; nested groups share a 64-node cap. */
-export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNamedCmpPartnerDisclosure) {
+export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNamedCmpPartnerDisclosure,readManifest?:typeof captureCmpNameManifest) {
   const api = (window as unknown as { OneTrust?: { GetDomainData?: () => unknown } }).OneTrust;
   if (typeof api?.GetDomainData !== "function") return undefined;
   let data: unknown;
@@ -79,6 +80,20 @@ export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNam
       if (key) vendors.set(key, vendors.has(key) ? null : row);
     }
   }
+  const manifestLists:unknown[]=[];
+  let invalidSources=truncated || groups.length!==queue.length ? 1 : 0;
+  for(const group of groups) {
+    if(group.FirstPartyCookies!==undefined) manifestLists.push(group.FirstPartyCookies);
+    if(group.Hosts!==undefined && !Array.isArray(group.Hosts)) invalidSources++;
+    if(Array.isArray(group.Hosts)) {
+      if(group.Hosts.length>100) invalidSources++;
+      for(const host of group.Hosts.slice(0,100)) {
+        if(host && typeof host==="object" && (host as Row).Cookies!==undefined) manifestLists.push((host as Row).Cookies);
+        else if(!host || typeof host!=="object") invalidSources++;
+      }
+    }
+  }
+  const inventoryManifest=readManifest?.(manifestLists,"Name","onetrust_group_cookie_lists.v1",invalidSources);
   const names = new Map<string, string>();
   const remember = (key: string, name: string) => {
     if (names.has(key) && names.get(key) !== name) names.set(key, "");
@@ -141,5 +156,6 @@ export function readOneTrustInventoryInDocument(readDisclosure?: typeof parseNam
   const resolved = [...names.values()].filter(Boolean).length;
   return { categories, services: [...new Set([...names.values()].filter(Boolean))], serviceDisclosures, declarations, truncated,
     groupCount: Math.min(root.Groups.length + Math.max(0, groups.length - root.Groups.length), 10000),
+    ...(inventoryManifest ? {inventoryManifest} : {}),
     coverage: { scope: "configured_services" as const, configured: names.size, resolved, unresolved: names.size - resolved, truncated } };
 }

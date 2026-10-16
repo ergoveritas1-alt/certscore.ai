@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {cmpInventoryManifestSchema,cmpCaptureProgressSchema} from "./cmp-inventory-manifest";
 import { cmpVisibleInventorySchema, projectVisibleCmpInventory } from "./cmp-visible-inventory";
 import { cmpLoadedInventorySchema, projectLoadedCmpInventory } from "./cmp-loaded-inventory";
 import { parseNamedCmpPartnerDisclosure } from "./cmp-named-disclosure";
@@ -114,6 +115,8 @@ export const cmpPreferencesEvidenceSchema = z.object({
   declarationInventoryComplete: z.boolean(),
   visibleInventory: cmpVisibleInventorySchema.optional(),
   loadedInventory: cmpLoadedInventorySchema.optional(),
+  inventoryManifest: cmpInventoryManifestSchema.optional(),
+  captureProgress: cmpCaptureProgressSchema.optional(),
   serviceNames: z.array(z.string().min(1).max(240)).max(100).optional(),
   configuredConsentCookies: configuredConsentCookiesSchema.optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
@@ -134,7 +137,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
     truncated: z.boolean(),
   }).optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
     identityScopes: z.object({ version: z.literal("cmp_scope_activity.v1"),
       providers: z.array(z.object({ provider: z.string().min(1).max(120), state: z.enum(["visible", "inactive", "unverified"]) }).strict()).max(40),
     }).strict().optional(),
@@ -165,25 +168,35 @@ export const cmpPreferencesEvidenceSchema = z.object({
     }).strict().optional(),
   }).optional(),
 }).superRefine((packet, ctx) => {
+  if (packet.captureProgress && (!packet.documentToken || packet.captureProgress.documentToken!==packet.documentToken ||
+      packet.finalUrl!==packet.targetUrl || packet.inspectionDiagnostic?.revision!=="cmp_preferences.v12" ||
+      [packet.captureProgress.controlsAtMs,packet.captureProgress.declarationsAtMs,packet.captureProgress.privacyLinksAtMs].some(at=>at!==undefined && at>Date.parse(packet.completedAt)-Date.parse(packet.startedAt))))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Capture progress must bind the current versioned document."});
+  if (packet.inventoryManifest && (!packet.checkpoints?.declarations || packet.captureProgress?.declarationsAtMs===undefined ||
+      packet.inspectionDiagnostic?.revision!=="cmp_preferences.v12" ||
+      packet.inventoryManifest.source.startsWith("cookieyes_") && packet.support.provider!=="CookieYes" ||
+      packet.inventoryManifest.source.startsWith("onetrust_") && packet.support.provider!=="OneTrust" ||
+      packet.inventoryManifest.source.startsWith("cookiebot_") && (packet.support.provider!=="Cookiebot" || !packet.loadedInventory || JSON.stringify(packet.inventoryManifest)!==JSON.stringify(packet.loadedInventory.inventoryManifest))))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Compact inventory requires its provider-bound declaration checkpoint."});
   const loadedDeclarations = packet.declarations.filter(row => row.source === "cmp_loaded_inventory");
   if (packet.loadedInventory || loadedDeclarations.length) {
     const projected = packet.loadedInventory ? projectLoadedCmpInventory(packet.loadedInventory).declarations : [];
-    if (!packet.loadedInventory || packet.inspectionDiagnostic?.revision !== "cmp_preferences.v11" ||
+    if (!packet.loadedInventory || !["cmp_preferences.v11","cmp_preferences.v12"].includes(packet.inspectionDiagnostic?.revision ?? "") ||
         packet.support.provider !== "Cookiebot" || !packet.action.opened || !packet.checkpoints?.declarations ||
-        packet.inspectionDiagnostic.surfaceBinding?.verification?.result !== "verified" ||
+        packet.inspectionDiagnostic?.surfaceBinding?.verification?.result !== "verified" ||
         packet.declarationInventoryComplete || loadedDeclarations.length !== projected.length ||
         projected.some(row => !loadedDeclarations.some(declared => declared.name === row.name && declared.purpose === row.purpose && declared.duration === row.duration)))
       ctx.addIssue({code: z.ZodIssueCode.custom, message: "Loaded declarations require exact versioned, bound, partial source projection."});
   }
   if (packet.visibleInventory) {
     const projected = projectVisibleCmpInventory(packet.visibleInventory);
-    if (!["cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11"].includes(packet.inspectionDiagnostic?.revision ?? "") || !packet.action.opened || !packet.checkpoints?.declarations || projected.declarations.some(row =>
+    if (!["cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12"].includes(packet.inspectionDiagnostic?.revision ?? "") || !packet.action.opened || !packet.checkpoints?.declarations || projected.declarations.some(row =>
         !packet.declarations.some(declared => declared.name === row.name && declared.purpose === row.purpose && declared.duration === row.duration && declared.source === row.source)))
       ctx.addIssue({code: z.ZodIssueCode.custom, message: "Visible inventory requires versioned exact declaration projection"});
   }
   if (packet.status === "completed" && (!packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
   if (packet.inspectionDiagnostic?.surfaceBinding?.mode === "registered_portal" &&
-      (!["cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
+      (!["cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
        packet.inspectionDiagnostic.surfaceBinding.verification?.result !== "verified"))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Registered portal opening requires versioned verified binding." });
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });
@@ -211,9 +224,26 @@ export const cmpBasicEvidenceSchema = z.object({
   declarations: cmpPreferencesEvidenceSchema.innerType().shape.declarations,
   serviceNames: z.array(z.string().min(1).max(240)).max(100),
   configuredConsentCookies: configuredConsentCookiesSchema.optional(),
+  inventoryManifest: cmpInventoryManifestSchema.optional(),
+  captureProgress: cmpCaptureProgressSchema.optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   limitations: z.array(z.string().min(1).max(120)).max(8),
-}).strict();
+}).strict().superRefine((packet,ctx)=>{
+  const progress=packet.captureProgress;
+  if (progress && (progress.documentToken!==packet.documentToken || packet.documentUrl!==packet.targetUrl ||
+      [progress.controlsAtMs,progress.declarationsAtMs,progress.privacyLinksAtMs].some(at=>at!==undefined && at>packet.capturedAtMs) ||
+      packet.controls.length>0 && progress.controlsAtMs===undefined ||
+      (packet.declarations.length>0 || packet.serviceNames.length>0 || packet.inventoryManifest) && progress.declarationsAtMs===undefined ||
+      packet.privacyLinks.length>0 && progress.privacyLinksAtMs===undefined))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive facts require exact completed document checkpoints."});
+  if (packet.inventoryManifest && (!progress ||
+      packet.inventoryManifest.source.startsWith("cookieyes_") && packet.provider!=="CookieYes" ||
+      packet.inventoryManifest.source.startsWith("onetrust_") && packet.provider!=="OneTrust" ||
+      packet.inventoryManifest.source.startsWith("cookiebot_")))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive compact inventory requires its canonical configured source."});
+  if (packet.declarations.some(row=>row.source==="cmp_loaded_inventory"))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Loaded panel declarations require the authorized preference packet."});
+});
 export type CmpBasicEvidence = z.infer<typeof cmpBasicEvidenceSchema>;
 
 export const cmpAuditRowSchema = z.object({

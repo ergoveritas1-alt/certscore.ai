@@ -15,6 +15,7 @@ export async function captureCmpBasicEvidence(input: {
   readBinding: () => { url: string; token?: string };
   isCurrent: () => boolean;
   onOutcome?: (reason: string) => void;
+  onCheckpoint?: (packet:CmpBasicEvidence)=>void;
 }): Promise<CmpBasicEvidence | undefined> {
   const { page } = input;
   const before = input.readBinding();
@@ -30,37 +31,44 @@ export async function captureCmpBasicEvidence(input: {
   if (definition.initialOptionalOffCloseObservation && await page.locator(scopes[index]!).count() !== 1) {
     input.onOutcome?.("ambiguous_passive_container"); return undefined;
   }
-  const inventory = definition.preferenceInspection?.kind === "borlabs_v3" ? await readBorlabsPreferenceInventory(page)
-    : definition.canonicalName === "OneTrust" ? await readOneTrustPreferenceInventory(page)
-    : definition.preferenceInventory === "cookieyes_loaded_configuration.v1" ? await readCookieYesPreferenceInventory(page) : undefined;
-  if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
-  const rawControls = await readPreferenceControls(page.locator(scopes[index]!), definition.preferenceCategoryInventory, definition.initialOptionalOffCloseObservation?.inputSelector);
-  if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
-  // The visible CMP surface takes priority over potentially thousands of
-  // unrelated page links. Classify bounded names first; hit-test only privacy links rather than every
-  // link on a prolific page. Recheck the exact identity before reading geometry.
-  const privacyScope = page.locator(scopes[index]!).locator("a[href]");
-  const links = await privacyScope.evaluateAll(nodes => nodes.slice(0, 300).map((node, index) => ({
-    index, url: (node as HTMLAnchorElement).href,
-    label: (node.getAttribute("aria-label") ?? node.textContent ?? "").trim().slice(0, 160),
-  })));
-  const candidates = privacyPolicyLinkCandidates(links);
-  if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
-  const privacyLinks = (await privacyScope.evaluateAll(readPrivacyLinkAccess, {candidates}))
+  const packet:CmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v1",sourceLane:"consent_proof",scanId:input.scanId,
+    targetUrl:input.targetUrl,documentUrl:before.url,documentToken:before.token,capturedAtMs:Date.now()-input.scanStartedAtMs,
+    provider:definition.canonicalName,configuredConsentCookies:scopeInventory.configuredConsentCookies,
+    controls:[],privacyLinks:[],declarations:[],serviceNames:[],
+    captureProgress:{version:"cmp_capture_checkpoints.v1",documentToken:before.token},
+    limitations:["passive_first_layer_only","declaration_inventory_not_complete"]};
+  let retained:CmpBasicEvidence|undefined;
+  const checkpoint=()=>{
+    const after=input.readBinding();
+    if(!input.isCurrent() || before.url!==input.targetUrl || before.url!==after.url || before.token!==after.token) return false;
+    packet.capturedAtMs=Date.now()-input.scanStartedAtMs;
+    retained=cmpBasicEvidenceSchema.parse(structuredClone(packet));
+    input.onCheckpoint?.(retained);return true;
+  };
+  // Protect the minimal visible-control packet before descriptions or links.
+  const rawControls=await readPreferenceControls(page.locator(scopes[index]!),definition.preferenceCategoryInventory,definition.initialOptionalOffCloseObservation?.inputSelector);
+  packet.controls=classifyControls(rawControls.controls);
+  packet.captureProgress!.controlsAtMs=Date.now()-input.scanStartedAtMs;
+  if(rawControls.overflow) packet.limitations.push("control_inventory_overflow");
+  if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
+  const inventory=definition.preferenceInspection?.kind==="borlabs_v3" ? await readBorlabsPreferenceInventory(page)
+    : definition.canonicalName==="OneTrust" ? await readOneTrustPreferenceInventory(page)
+    : definition.preferenceInventory==="cookieyes_loaded_configuration.v1" ? await readCookieYesPreferenceInventory(page) : undefined;
+  packet.declarations=inventory?.declarations??[];packet.serviceNames=inventory?.services.filter(Boolean)??[];
+  packet.serviceDisclosures=inventory && "serviceDisclosures" in inventory ? inventory.serviceDisclosures : undefined;
+  packet.inventoryManifest=inventory && "inventoryManifest" in inventory ? inventory.inventoryManifest : undefined;
+  packet.controls=classifyControls(rawControls.controls,inventory);
+  if(inventory) packet.captureProgress!.declarationsAtMs=Date.now()-input.scanStartedAtMs;
+  if(inventory && "truncated" in inventory && inventory.truncated) packet.limitations.push("cmp_inventory_bounded");
+  if(definition.preferenceInventory) packet.limitations.push(definition.preferenceInventory,"loaded_configuration_not_visibility_proof");
+  if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
+  const privacyScope=page.locator(scopes[index]!).locator("a[href]");
+  const links=await privacyScope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
+    label:(node.getAttribute("aria-label")??node.textContent??"").trim().slice(0,160)})));
+  if(!input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
+  packet.privacyLinks=(await privacyScope.evaluateAll(readPrivacyLinkAccess,{candidates:privacyPolicyLinkCandidates(links)}))
     .map(({url,hitTargetBeforeAction,access})=>({url,hitTargetBeforeAction,access}));
-  const after = input.readBinding();
-  if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
-  if (before.url !== after.url || before.token !== after.token) { input.onOutcome?.("document_changed"); return undefined; }
-  input.onOutcome?.("captured");
-  return cmpBasicEvidenceSchema.parse({
-    contractVersion: "certscore.cmp-basic-evidence.v1", sourceLane: "consent_proof", scanId: input.scanId,
-    targetUrl: input.targetUrl, documentUrl: before.url, documentToken: before.token,
-    capturedAtMs: Date.now() - input.scanStartedAtMs, provider: definition.canonicalName,
-    configuredConsentCookies: scopeInventory.configuredConsentCookies,
-    controls: classifyControls(rawControls.controls, inventory), privacyLinks,
-    declarations: inventory?.declarations ?? [], serviceNames: (inventory?.services ?? []).filter(Boolean),
-    serviceDisclosures: inventory && "serviceDisclosures" in inventory ? inventory.serviceDisclosures : undefined,
-    limitations: ["passive_first_layer_only", "declaration_inventory_not_complete", ...(definition.preferenceInventory ? [definition.preferenceInventory, "loaded_configuration_not_visibility_proof"] : []), ...(rawControls.overflow ? ["control_inventory_overflow"] : []),
-      ...(inventory && "truncated" in inventory && inventory.truncated ? ["cmp_inventory_bounded"] : [])],
-  });
+  packet.captureProgress!.privacyLinksAtMs=Date.now()-input.scanStartedAtMs;
+  if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
+  input.onOutcome?.("captured");return retained;
 }

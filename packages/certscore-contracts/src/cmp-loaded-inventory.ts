@@ -1,10 +1,12 @@
 import { z } from "zod";
+import {cmpInventoryManifestSchema} from "./cmp-inventory-manifest";
 import { isExplicitCmpProviderName } from "./cmp-visible-inventory";
 
 /** Already-loaded public declaration cards. These may be collapsed: this
  * contract deliberately carries no visibility or complete-inventory claim. */
 export const cmpLoadedInventorySchema = z.object({
   version: z.literal("cookiebot_loaded_declarations.v1"),
+  inventoryManifest:cmpInventoryManifestSchema.refine(value=>value.source==="cookiebot_loaded_declarations.v1","Loaded inventory requires its own manifest source.").optional(),
   records: z.array(z.object({
     name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240),
     storageType: z.enum(["cookie", "local_storage", "indexed_db", "pixel", "unknown"]),
