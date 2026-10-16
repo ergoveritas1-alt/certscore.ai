@@ -3,6 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FindingRow } from "./report-finding-row";
+import { FindingRow as AlternateFindingRow } from "../scanso2/report-finding-row";
 import { evidenceRowAnchor, findingEvidenceAnchor } from "../../lib/scans/report-evidence-navigation";
 
 test("a top issue orders affected pages and items, recommended fixes, then JSON evidence", () => {
@@ -35,4 +36,21 @@ test("navigation supports grouped accessibility and specialized canonical findin
   assert.equal(findingEvidenceAnchor("acceptance_signal_contradicts_action"), "consent-review-evidence");
   assert.equal(findingEvidenceAnchor("unmapped"), "evidence");
   assert.equal(evidenceRowAnchor("pre_consent_cookies_storage"), "evidence-row-pre_consent_cookies_storage");
+});
+
+test("priority cards show a specific reader summary and retain canonical assessment detail in both report variants", () => {
+  const summary = "Partial support from scan evidence; An obsolete EU-US Privacy Shield reference was observed. The current transfer basis was not established by this scan.";
+  const finding = {
+    id: "regulatory_gap__gdpr_eprivacy__international_transfers_disclosure",
+    title: "Outdated transfer framework referenced", rank: 1, summary,
+    status: "Partial concern" as const, focus: "", vendors: [], evidence: ["Policy excerpt retained"], evidenceJson: {}, correctionSteps: [],
+  };
+  for (const Row of [FindingRow, AlternateFindingRow]) {
+    const priorityHtml = renderToStaticMarkup(<Row priority finding={finding}/>);
+    assert.match(priorityHtml, /An obsolete EU-US Privacy Shield reference was observed\. Scan evidence only partially supports this finding\./);
+    assert.match(priorityHtml, /Assessment detail: <\/span>Partial support from scan evidence;/);
+    const ordinaryHtml = renderToStaticMarkup(<Row finding={finding}/>);
+    assert.doesNotMatch(ordinaryHtml, /Assessment detail:/);
+    assert.match(ordinaryHtml, /Partial support from scan evidence;/);
+  }
 });

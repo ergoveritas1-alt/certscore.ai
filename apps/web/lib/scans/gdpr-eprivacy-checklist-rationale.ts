@@ -54,6 +54,18 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     if (evidenceLabel === "Not observed") {
       return "No request met the tracking-classified threshold before a recorded consent action. Broader third-party requests or embedded services, when present, are reported separately and do not by themselves establish tracking.";
     }
+    // A legacy review signal can have a process-only status basis even though
+    // its already-projected note states the observed activity and uncertainty.
+    // Keep the review classification; do not infer a tracking purpose.
+    if ((item.assessmentStatus === "review_signal" || item.status === "Review signal") &&
+        item.criticalEvidence.statusBasis === "Selected retained pre-consent request/vendor timing evidence; storage evidence is evaluated separately.") {
+      if (item.note?.startsWith("Security/performance vendor activity was observed before a recorded consent choice")) {
+        return "Security/performance vendor activity was observed before a recorded consent choice. The scan did not classify it as advertising or retargeting.";
+      }
+      if (item.note?.startsWith("3rd party vendor activity with unresolved purpose was observed before a recorded consent choice")) {
+        return "Third-party activity was observed before a recorded consent choice, but its purpose and essentiality were unresolved.";
+      }
+    }
     return item.status === "Gap observed" || item.assessmentStatus === "gap_observed"
       ? describePreconsentTrackingTiming(evidence.trackingRequestTiming)
       : item.criticalEvidence.statusBasis;
@@ -341,6 +353,10 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     if (evidenceLabel === "Potential gap") {
       return "The sufficiently retained first-layer consent surface did not show a reject, necessary-only, or equivalent refusal option. First-layer presentation expectations can vary by jurisdiction, so manual review is recommended.";
     }
+    if ((item.assessmentStatus === "review_signal" || item.status === "Review signal") &&
+        item.criticalEvidence.statusBasis?.startsWith("A first-layer GDPR/ePrivacy cookie consent surface was retained with an accept option and non-essential cookie/purpose text, but no same-layer reject")) {
+      return "A first-layer consent surface had an accept option and non-essential cookie/purpose text, but no same-layer refusal option was retained. This describes first-layer availability only; CertScore did not run a consent flow.";
+    }
   }
 
   if (item.id === "accept_consent_control") {
@@ -376,6 +392,10 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
     if (item.status === "Review signal" && evidence.balancedAcceptDeclineWithoutFirstLayerSettings === true) {
       return "Accept and Decline controls were observed on the first-layer consent surface. A separate preferences or granular-settings control was not retained on that layer. This is not necessarily a compliance gap where refusal is as easy as acceptance. Verify whether users can later review, vary, or withdraw consent by purpose.";
+    }
+    if ((item.assessmentStatus === "review_signal" || item.status === "Review signal") &&
+        item.criticalEvidence.statusBasis?.startsWith("A preferences control was retained as an inline text link outside the confirmed accept/reject action cluster")) {
+      return "A preferences link was retained outside the confirmed Accept/Reject action cluster. Granular choices appear available; verify the link's prominence, keyboard access, label, and purpose-level choices.";
     }
   }
 
