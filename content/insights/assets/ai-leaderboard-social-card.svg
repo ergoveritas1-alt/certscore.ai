@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+<rect width="1200" height="630" fill="#f4f2ed"/>
+<rect x="0" y="0" width="1200" height="12" fill="#e24a2d"/>
+<g font-family="Arial, Helvetica, sans-serif" fill="#171715">
+<text x="62" y="76" font-size="26" font-weight="700">CertScore.ai</text>
+<text x="1138" y="75" text-anchor="end" font-size="18" letter-spacing="2" fill="#625f58">RESEARCH / 15 OCT 2026</text>
+<path d="M62 105H1138" stroke="#d4d0c6"/>
+<text x="62" y="187" font-size="58" font-weight="700">AI Lab Privacy</text>
+<text x="62" y="254" font-size="58" font-weight="700">Leaderboard</text>
+<text x="62" y="312" font-size="27" fill="#625f58">We scanned 10 AI companies' websites.</text>
+<text x="62" y="355" font-size="22" fill="#625f58">Cookies, trackers and activity after Reject clicks.</text>
+<rect x="62" y="405" width="640" height="108" rx="8" fill="#ffffff" stroke="#d4d0c6"/>
+<text x="88" y="449" font-size="20" fill="#625f58">HIGHEST OVERALL SCORE IN THIS SAMPLE</text>
+<text x="88" y="487" font-size="21" font-weight="700">Cohere</text>
+<text x="675" y="484" text-anchor="end" font-size="48" font-weight="700" fill="#1d7451">100</text>
+<rect x="758" y="150" width="380" height="363" rx="8" fill="#171715"/>
+<text x="792" y="198" font-size="18" letter-spacing="1.5" fill="#b6b2a8">EU-IRELAND SCANS</text>
+<text x="792" y="312" font-size="86" font-weight="700" fill="#ffffff">10 sites</text>
+<text x="792" y="365" font-size="22" fill="#ffffff">Public starting pages</text>
+<text x="792" y="401" font-size="22" fill="#ffffff">Scores, findings and evidence</text>
+<path d="M792 436H1104" stroke="#625f58"/>
+<text x="792" y="474" font-size="18" fill="#b6b2a8">Evidence and full reports at certscore.ai</text>
+<path d="M62 551H1138" stroke="#d4d0c6"/>
+<text x="62" y="590" font-size="18" fill="#625f58">Scores include accessibility. Coverage limits apply. Not a compliance determination.</text>
+</g></svg>
