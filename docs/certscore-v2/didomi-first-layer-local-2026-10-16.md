@@ -79,9 +79,8 @@ found no material difference meeting the existing review threshold. Accept and
 Reject were each clicked once in separate fresh sessions; three-second and
 eight-second captures completed. Their final semantic registration states were
 unconfirmed and remain unknown/neutral. Factual post-click storage/activity
-coverage is separate from semantic registration and legal conclusions. The
-first local run retained a confirmed Reject outcome, but it does not supply
-proof to the second run. No scoring rule or historical score changed.
+coverage is separate from semantic registration and legal conclusions. Both local runs retained unconfirmed registration outcomes; neither supplies
+registration proof to another run. No scoring rule or historical score changed.
 
 This is targeted owner-requested verification, not a release acceptance cohort
 or a provider-wide coverage estimate. Live visits vary; all remaining unknowns

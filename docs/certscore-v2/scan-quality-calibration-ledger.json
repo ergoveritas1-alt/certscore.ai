@@ -1247,8 +1247,8 @@
     },
     "https://www.didomi.io/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-13T05:57:24.119Z",
-      "lastContactAt": "2026-10-16T05:57:24.119Z",
+      "cooldownUntil": "2026-11-13T06:26:38.239Z",
+      "lastContactAt": "2026-10-16T06:26:38.239Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1257,7 +1257,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-16T05:58:40.664Z",
+  "updatedAt": "2026-10-16T06:27:59.394Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",

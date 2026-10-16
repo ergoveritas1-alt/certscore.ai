@@ -488,7 +488,7 @@ const postAcceptConfirmationSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("cmp_api_consent_state_changed"),
-    provider: z.enum(["termly", "transcend", "borlabs", "osano", "hubspot", "drupal_eu_cookie"]),
+    provider: z.enum(["termly", "transcend", "borlabs", "osano", "hubspot", "drupal_eu_cookie", "didomi"]),
   }),
   z.object({
     kind: z.literal("local_storage_equals"),

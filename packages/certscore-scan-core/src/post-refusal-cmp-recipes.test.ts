@@ -161,7 +161,10 @@ test("high-exposure CMP Reject recipes require stable controls and retained stat
         true,
       );
     }
-    if (cmpId === "Osano" || cmpId === "HubSpot Consent Banner") {
+    if (cmpId === "Didomi") {
+      assert.deepEqual(recipe.confirmation, {kind: "cmp_api_consent_state_changed", provider: "didomi"});
+      assert.match(recipe.recipeId, /:v3$/);
+    } else if (cmpId === "Osano" || cmpId === "HubSpot Consent Banner") {
       assert.deepEqual(recipe.confirmation, { kind: "cmp_api_consent_state_changed", provider: cmpId === "Osano" ? "osano" : "hubspot" });
       assert.match(recipe.recipeId, /:v2$/);
     } else if (recipe.confirmation.kind === "cmp_cookie_names_changed") {

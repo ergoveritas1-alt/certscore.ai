@@ -1,6 +1,7 @@
 import type { Frame, Page } from "playwright";
+import { readDidomiConsentSnapshot } from "./didomi-consent-state.js";
 
-export type CmpApiConsentProvider = "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie";
+export type CmpApiConsentProvider = "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
 
 export type CmpApiConsentSnapshot = {
   canonicalState: string;
@@ -14,6 +15,7 @@ export async function readCmpApiConsentSnapshot(
   scope: Page | Frame,
   provider: CmpApiConsentProvider,
 ): Promise<CmpApiConsentSnapshot | undefined> {
+  if (provider === "didomi") return readDidomiConsentSnapshot(scope);
   return scope.evaluate(async ({ provider }) => {
     if (provider === "osano" || provider === "hubspot") {
       type Tracker = { sequence: number; state?: string; decision?: "granted" | "denied" | "mixed"; observedAtEpochMs?: number };

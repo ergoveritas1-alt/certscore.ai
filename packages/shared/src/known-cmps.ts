@@ -31,7 +31,7 @@ export type KnownCmpActionConfirmation =
   | { kind: "local_storage_equals"; expectedValue: string; key: string }
   | {
       kind: "cmp_api_consent_state_changed";
-      provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie";
+      provider: "termly" | "transcend" | "borlabs" | "osano" | "hubspot" | "drupal_eu_cookie" | "didomi";
     }
   | {
       kind: "tcf_purposes_or_cmp_cookie_changed";
@@ -816,10 +816,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
   },
   {
     aliases: ["Didomi CMP"],
-    acceptConfirmation: {
-      kind: "tcf_purposes_or_cmp_cookie_changed",
-      cookieName: "didomi_token",
-    },
+    acceptConfirmation: { kind: "cmp_api_consent_state_changed", provider: "didomi" },
     acceptControlSelectors: ["#didomi-notice-agree-button"],
     canonicalName: "Didomi",
     preferenceScopeSelector: "#didomi-host .didomi-notice-banner, #didomi-host .didomi-notice-popup, #didomi-host #didomi-notice",
@@ -834,12 +831,9 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "https://developers.didomi.io/cmp/web-sdk/reference/events",
     ],
     reopenControlHints: ["didomi", "privacy choices"],
-    rejectConfirmation: {
-      kind: "tcf_purposes_or_cmp_cookie_changed",
-      cookieName: "didomi_token",
-    },
+    rejectConfirmation: { kind: "cmp_api_consent_state_changed", provider: "didomi" },
     rejectControlSelectors: ["#didomi-notice-disagree-button"],
-    recipeVersion: "v1",
+    recipeVersion: "v3",
     role: "consent management platform",
     standards: ["tcf", "gpp", "google_consent_mode"],
     urlPatterns: [/didomi/i]
