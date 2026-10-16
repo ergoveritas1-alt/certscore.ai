@@ -2153,9 +2153,11 @@ async function runCoordinatorFixture(input: {
   actionLane?: "accept" | "reject";
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
   preferences?: "complete" | "partial" | "hang" | "wrong_hash" | "wrong_target";
+  explicitPreferences?: boolean;
 }) {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
+  const workerCalls: string[] = [];
   const passiveBundles = new Map<string, CanonicalEvidenceBundle>([
     ["consent_proof", input.consentBundle],
     ["runtime_evidence", canonicalBundleFixture(input.scanId, {
@@ -2197,6 +2199,10 @@ async function runCoordinatorFixture(input: {
     orchestrationMode: "sharded",
     scanId: input.scanId,
     callbackCorrelationId: input.scanId,
+    ...(input.explicitPreferences ? { cmpPreferenceInspection: {
+      policyVersion: "bounded_cmp_preferences.v1", enabled: true,
+      scanId: input.scanId, exactTargetUrl: "https://example.com/",
+    } } : {}),
     ...(input.gpcPair ? { gpcObservation: { contractVersion: "certscore.gpc-observation-dispatch.v1", enabled: true, pairWithLane: "runtime_evidence", protocol: "passive_baseline_with_sec_gpc" } } : {}),
     ...(actionLane === "accept"
       ? { postAcceptObservation: coordinatorPostAcceptConfig(input.dispatchDelayMs) }
@@ -2217,6 +2223,7 @@ async function runCoordinatorFixture(input: {
     async send(command: any, options?: { abortSignal?: AbortSignal }) {
       const workerPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8")) as Record<string, any>;
       const lane = String(workerPayload.workerLane);
+      workerCalls.push(lane);
       if (lane === "cmp_preferences") {
         if (input.preferences === "hang") return new Promise<never>((_resolve, reject) => {
           options?.abortSignal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
@@ -2343,7 +2350,7 @@ async function runCoordinatorFixture(input: {
       s3GetClient,
     });
     const bundle = JSON.parse(await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"))) as Record<string, any>;
-    return { actionCalls, artifactRoot, bundle, result };
+    return { actionCalls, workerCalls, artifactRoot, bundle, result };
   } catch (error) {
     await rm(artifactRoot, { recursive: true, force: true });
     throw error;
@@ -4972,6 +4979,40 @@ test("policy-lane negative-search proof survives the hash-bound early handoff", 
   assert.equal(sourceHash, createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"));
   assert.equal(packet.productionFindingIntegration, false);
 });
+
+for (const flag of [undefined, "0"] as const) {
+  for (const explicitPreferences of [false, true]) {
+    test(`disabled CMP preference lane never dispatches: flag=${flag ?? "unset"}, explicit=${explicitPreferences}`, async () => {
+      const saved = { preference: process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED,
+        bucket: process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET };
+      if (flag === undefined) delete process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED;
+      else process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED = flag;
+      process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = "test-bucket";
+      let artifactRoot: string | undefined;
+      try {
+        const scanId = `cmp-disabled-${flag ?? "unset"}-${explicitPreferences}`;
+        const result = await runCoordinatorFixture({ scanId, explicitPreferences,
+          action: "none", dispatchDelayMs: 1000,
+          consentBundle: coordinatorConsentBundle(scanId, { inspectionCompleted: true, acceptControlObserved: false }) });
+        artifactRoot = result.artifactRoot;
+        assert.equal(result.workerCalls.includes("cmp_preferences"), false);
+        assert.equal(result.bundle.cmpPreferencesEvidence, undefined);
+        assert.equal(result.bundle.cmpPreferenceLaneOutcome, undefined);
+        assert.equal(result.result.laneTimingSummary.cmpPreferenceInspection, undefined);
+        for (const lane of ["consent_proof", "runtime_evidence", "policy_evidence"]) {
+          assert.ok(result.workerCalls.includes(lane));
+        }
+        assert.equal(result.bundle.runtimeCoverage.coverageStatus, "usable");
+      } finally {
+        for (const [key, value] of [["CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED", saved.preference],
+          ["CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET", saved.bucket]]) {
+          if (value === undefined) delete process.env[key!]; else process.env[key!] = value;
+        }
+        if (artifactRoot) await rm(artifactRoot, { recursive: true, force: true });
+      }
+    });
+  }
+}
 
 test("CMP preference authorization stays exact and has its own worker packet", async () => {
   const config = { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "scan-local-1", exactTargetUrl: "https://example.com/" };

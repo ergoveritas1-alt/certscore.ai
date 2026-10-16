@@ -1,5 +1,12 @@
 {
   "policyVersion": "bounded_cmp_preferences.v1",
+  "operationalState": {
+    "ownerDecision": "Disable the Options/Customize inspection lane.",
+    "deploymentFeatureFlagValue": "0",
+    "passiveCmpCaptureEnabled": true,
+    "productionChangeApplied": false,
+    "note": "Local configuration and the canonical AWS deployment script disable this lane. No deployment or live AWS configuration mutation was performed. Historical evidence remains unchanged. Re-enabling requires a new explicit owner instruction."
+  },
   "ownerApprovalDate": "2026-10-13",
   "approval": "Expanded preference inspection \u2014 approve the interaction and cost ceiling",
   "scope": {
