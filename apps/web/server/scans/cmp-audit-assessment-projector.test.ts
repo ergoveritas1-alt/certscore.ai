@@ -16,6 +16,50 @@ function bundle() {
   } as unknown as CanonicalEvidenceBundle;
 }
 
+test("bound loaded Cookiebot cards resolve factual inventory through canonical concerns while remaining partial and score-neutral", async () => {
+  const {projectLoadedCmpInventory} = await import("@certscore/contracts");
+  const input=bundle(), packet=input.cmpPreferencesEvidence!;
+  packet.support.provider="Cookiebot";
+  packet.inspectionDiagnostic={revision:"cmp_preferences.v11",budgetMs:17000,phase:"completed",surfaceBinding:{version:"cmp_surface_binding.v1",mode:"registered_existing",priorMatches:1,outcome:"opened",verification:{version:"cmp_panel_verification.v1",result:"verified",role:"tabpanel"}}};
+  packet.checkpoints={version:"cmp_partial_capture.v1",documentToken:"loader-1",privacyLinks:true,declarations:true,controls:true,controlsSurface:"preferences"};
+  packet.loadedInventory={version:"cookiebot_loaded_declarations.v1",truncated:true,unresolvedRecords:0,records:[
+    {name:"_ga",purpose:"Audience measurement",duration:"2 years",storageType:"cookie",provider:"Google",sourceRef:"provider:0/record:0"},
+    {name:"storage_key",purpose:"Preferences",duration:"Persistent",storageType:"local_storage",provider:"Provider",sourceRef:"provider:1/record:0"},
+  ]};
+  packet.declarations=projectLoadedCmpInventory(packet.loadedInventory).declarations;
+  packet.controlInventoryComplete=false;
+  input.cookieSnapshots=[{consentStateAtTime:"pre_consent",cookies:[{name:"_ga"},{name:"unlisted"}]}] as CanonicalEvidenceBundle["cookieSnapshots"];
+  input.cookieEvents=[{cookieName:"_ga"},{cookieName:"unlisted"}] as CanonicalEvidenceBundle["cookieEvents"];
+  cmpPreferencesEvidenceSchema.parse(packet);
+  const original=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+  assert.equal(audit.rows.find(row=>row.id==="services")?.status,"observed");
+  assert.deepEqual(audit.rows.find(row=>row.id==="services")?.inventory?.services?.map(s=>s.name),["Google","Provider"]);
+  assert.match(audit.rows.find(row=>row.id==="services")!.detail,/may be collapsed/);
+  assert.equal(audit.rows.find(row=>row.id==="cookie_information")?.status,"observed");
+  assert.equal(audit.rows.find(row=>row.id==="declared_not_found")?.status,"observed");
+  assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.status,"partially_assessed");
+  assert.equal(audit.rows.find(row=>row.id==="cookie_information")?.inventory?.declarations?.some(d=>d.name==="storage_key"),false);
+  const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+  const concerns=buildNormalizedConcerns({runtimeArtifacts:{consentControlAssessment:assessment},reviewFindingCandidates:[],validationFindings:[]});
+  const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+  assert.equal(report.rows.find(row=>row.id==="services")?.status,"Observed");
+  assert.equal(report.rows.find(row=>row.id==="cookie_information")?.supportingEvidence?.inventory?.declarations?.[0]?.source,"cmp_loaded_inventory");
+  assert.ok(concerns.filter(c=>c.originKey.startsWith("consent.cmp_audit.")).every(c=>!c.scoreEffects?.length));
+  assert.deepEqual(input,original);
+  for(const mutate of [
+    (p:typeof packet)=>{p.documentToken="stale"},
+    (p:typeof packet)=>{p.declarations[0]!.purpose="invented"},
+    (p:typeof packet)=>{p.support.provider="Other"},
+    (p:typeof packet)=>{p.declarationInventoryComplete=true},
+    (p:typeof packet)=>{delete p.loadedInventory},
+    (p:typeof packet)=>{p.inspectionDiagnostic!.surfaceBinding!.verification!.result="panel_replaced"},
+    (p:typeof packet)=>{p.checkpoints!.declarations=false},
+    (p:typeof packet)=>{p.inspectionDiagnostic!.revision="cmp_preferences.v10"},
+  ]) {
+    const invalid=structuredClone(packet);mutate(invalid);assert.equal(cmpPreferencesEvidenceSchema.safeParse(invalid).success,false);
+  }
+});
+
 test("passive CookieYes configuration survives preference cancellation without inventing purposes, services or completeness", () => {
   const input=bundle();delete input.cmpPreferencesEvidence;
   input.completedAt="2026-10-13T00:00:12.000Z";

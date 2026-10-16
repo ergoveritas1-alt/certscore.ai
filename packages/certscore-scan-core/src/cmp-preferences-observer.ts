@@ -18,6 +18,8 @@ import { verifyDeferredPreferencePanel } from "./cmp-preference-panel-binding.js
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "./evidence-work-budget.js";
 import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
 import { readCmpOptionsInventory } from "./cmp-options-inventory.js";
+import { readCookiebotLoadedInventory } from "./cookiebot-loaded-inventory.js";
+import { projectLoadedCmpInventory } from "@certscore/contracts";
 
 /** A single isolated Options action. No preference changes, save, second click,
  * page retry, policy navigation, model call, or interaction in another lane. */
@@ -37,7 +39,7 @@ export async function runCmpPreferencesObserver(input: {
     status: "limited", support: { state: "unknown", provider: null, recipeVersion: null, reason: "inspection_incomplete" },
     action: { count: 0, intent: "options", label: null, opened: false }, controls: [], controlInventoryComplete: false,
     privacyLinks: [], declarations: [], declarationInventoryComplete: false, limitations: [],
-    inspectionDiagnostic: { revision: "cmp_preferences.v10", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
+    inspectionDiagnostic: { revision: "cmp_preferences.v11", budgetMs, basicCaptureReserveMs: Math.min(EVIDENCE_WORK_POLICY.preferences.basicCaptureReserveMs, Math.floor(budgetMs / 3)), phase: "browser_start" },
   };
   let browser = input.browser;
   let context: BrowserContext | undefined;
@@ -99,7 +101,7 @@ export async function runCmpPreferencesObserver(input: {
     session.on("Page.frameNavigated", ({ frame }) => {
       if (!frame.parentId && frame.loaderId !== packet.documentToken) {
         packet.checkpoints = undefined; packet.configuredConsentCookies = undefined; packet.controls = []; packet.privacyLinks = [];
-        packet.declarations = []; packet.visibleInventory = undefined; packet.serviceNames = undefined; packet.serviceDisclosures = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
+        packet.declarations = []; packet.visibleInventory = undefined; packet.loadedInventory = undefined; packet.serviceNames = undefined; packet.serviceDisclosures = undefined; packet.declarationCoverage = undefined; packet.declarationInventoryComplete = false;
         packet.controlInventoryComplete = false; packet.action.opened = false;
         packet.documentToken = null; packet.limitations.push("preference_document_changed");
       }
@@ -505,6 +507,16 @@ export async function runCmpPreferencesObserver(input: {
       if (visibleInventory.unresolvedRecords) packet.limitations.push("visible_inventory_records_unresolved");
     }
 
+    if (inventoryDefinition?.preferenceLoadedInventory) {
+      const loaded = await readCookiebotLoadedInventory(controlled, inventoryDefinition.preferenceLoadedInventory, 100 - packet.declarations.length);
+      await binding();
+      if (!dialogHandle || !await controlled.evaluate((panel, original) => panel === original && panel.isConnected, dialogHandle)) throw new Error("preference_surface_changed");
+      packet.loadedInventory = loaded;
+      packet.declarations.push(...projectLoadedCmpInventory(loaded).declarations);
+      packet.limitations.push("loaded_declarations_not_visibility_proof", "declaration_inventory_not_complete");
+      if (loaded.truncated) packet.limitations.push("cookie_inventory_overflow");
+    }
+
     if (packet.declarations.length > 100) { packet.declarations = packet.declarations.slice(0, 100); packet.declarationInventoryComplete = false; packet.limitations.push("cookie_inventory_overflow"); }
     // A table can be compared as a retained declaration sample. A visible
     // sample is not proof of the CMP's entire dynamic inventory.
@@ -519,7 +531,7 @@ export async function runCmpPreferencesObserver(input: {
     packet.status = "limited";
     if (!packet.checkpoints?.controls) { packet.controls = []; packet.action.opened = false; }
     packet.controlInventoryComplete = false;
-    if (!packet.checkpoints?.declarations) packet.visibleInventory = undefined;
+    if (!packet.checkpoints?.declarations) { packet.visibleInventory = undefined; packet.loadedInventory = undefined; packet.declarations = packet.declarations.filter(row => row.source !== "cmp_loaded_inventory"); }
     const budgetExhausted = expired || Date.now() >= deadline || (error instanceof Error && error.message === "preference_budget_exhausted");
     const operationTimedOut = error instanceof Error && error.name === "TimeoutError";
     const openingTimedOut = error instanceof Error && error.message === "preference_opening_budget_exhausted";
@@ -659,8 +671,32 @@ export async function readPreferenceControls(controlled: Locator, recipe?: Known
           serviceLinks[0]!.getAttribute("aria-label") === titles[0]!.textContent!.trim() + recipe.serviceLinkLabelSuffix &&
           /^https?:/.test((serviceLinks[0] as HTMLAnchorElement).href));
         const registeredCategory = registeredControl && recipe?.kind !== "service";
+        // Some reviewed CMP switches expose a styled sibling instead of a
+        // native label. Bind its unique original input and explicit heading;
+        // neither aria-labelledby alone nor offscreen/covered proxies suffice.
+        const proxy = registeredControl && recipe?.visibleProxySelector ? node.nextElementSibling : null;
+        const proxyVisible = proxy?.matches(recipe!.visibleProxySelector!) && node instanceof HTMLInputElement &&
+          !node.matches('[hidden], [aria-hidden="true"], [inert]') &&
+          node.getAttribute("aria-labelledby") === titles[0]!.id && titles[0]!.id.length > 0 &&
+          node.parentElement?.querySelectorAll(recipe!.toggleSelector).length === 1 && (() => {
+            const rect = proxy.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) return false;
+            // aria-hidden on the decorative sibling is intentional. The
+            // input, category and containing panel must remain accessible.
+            for (let ancestor: Element | null = proxy; ancestor; ancestor = ancestor.parentElement) {
+              const style = getComputedStyle(ancestor);
+              if (style.display === "none" || style.visibility !== "visible" || Number(style.opacity) === 0 ||
+                  ancestor.hasAttribute("hidden") || ancestor.hasAttribute("inert") ||
+                  ancestor !== proxy && ancestor.getAttribute("aria-hidden") === "true") return false;
+            }
+            const left = Math.max(0,rect.left), top = Math.max(0,rect.top);
+            const right = Math.min(innerWidth,rect.right), bottom = Math.min(innerHeight,rect.bottom);
+            if (right <= left || bottom <= top) return false;
+            const hit = document.elementFromPoint((left+right)/2,(top+bottom)/2);
+            return Boolean(hit && (hit === node || hit === proxy || proxy.contains(hit)));
+          })();
         const style = getComputedStyle(node);
-        return { registeredCategory, registeredService, label: registeredService ? titles[0]!.textContent!.trim().slice(0, 240) : label || (registeredCategory ? titles[0]!.textContent!.trim().slice(0, 240) : ""), groupLabel: groupLabel.trim().slice(0, 160), visible: radioVisible && (labelledTargetVisible || box.width > 0 && box.height > 0 && style.visibility !== "hidden" && Number(style.opacity) > 0),
+        return { registeredCategory, registeredService, label: registeredService ? titles[0]!.textContent!.trim().slice(0, 240) : label || (registeredCategory ? titles[0]!.textContent!.trim().slice(0, 240) : ""), groupLabel: groupLabel.trim().slice(0, 160), visible: radioVisible && (Boolean(proxyVisible) || labelledTargetVisible || box.width > 0 && box.height > 0 && style.visibility !== "hidden" && Number(style.opacity) > 0),
           enabled: radio ? radioValid && choices.some(choice => !choice.matches(':disabled, [aria-disabled="true"]')) : !node.matches(":disabled") && node.getAttribute("aria-disabled") !== "true", checked: radio ? null : node instanceof HTMLInputElement ? input.checked : node.getAttribute("aria-checked") === "true" };
       }),
     }), recipe);

@@ -1,4 +1,4 @@
-import { projectVisibleCmpInventory } from "@certscore/contracts";
+import { projectVisibleCmpInventory, projectLoadedCmpInventory } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
 import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
@@ -68,7 +68,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v11", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v12", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -317,7 +317,7 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
 }
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;
-type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints" | "visibleInventory">;
+type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints" | "visibleInventory" | "loadedInventory">;
 
 /** A document-settling limitation does not erase an already retained cookie
  * snapshot. It permits a partial name comparison only, never complete coverage,
@@ -411,6 +411,14 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     row.inventory = {...row.inventory, services};
   }
   const disclosed = declarationsUsable ? [...new Set(evidence.serviceDisclosures?.flatMap(disclosure => disclosure.names) ?? [])] : [];
+  const loadedServices = declarationsUsable && evidence.loadedInventory ? projectLoadedCmpInventory(evidence.loadedInventory).services : [];
+  if (loadedServices.length) {
+    const row = rows.find(row => row.id === "services")!;
+    const services = [...(row.inventory?.services ?? [])];
+    for (const service of loadedServices) if (!services.some(existing => existing.name === service.name) && services.length < 100) services.push(service);
+    set("services", "observed", `${services.length} services explicitly named in the CMP's already-loaded declaration cards. These cards may be collapsed; this bounded sample does not establish visible disclosure, service controls or complete inventory coverage.`);
+    row.inventory = {...row.inventory, services};
+  }
   if (disclosed.length) {
     const row = rows.find(row => row.id === "services")!;
     const services = [...(row.inventory?.services ?? [])];

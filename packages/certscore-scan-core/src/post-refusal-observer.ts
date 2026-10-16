@@ -2027,7 +2027,7 @@ function classifyStorageItem(input: {
   };
 }
 
-function classifyStorageWrite(
+export function classifyStorageWrite(
   write: InstrumentedStorageWrite,
   scanStartedAtMs: number,
   refusalRegisteredAtEpochMs: number,
@@ -2037,13 +2037,16 @@ function classifyStorageWrite(
   if (!write.name) return undefined;
   if (write.storageType === "cookie" && (write.deletion || write.value === "")) return undefined;
   const hostname = new URL(targetUrl).hostname;
-  const purpose = resolveCanonicalActionStoragePurpose({ storageType: write.storageType, name: write.name, hostname });
   const exactIdentity = resolveInstrumentedWriteStorageIdentity({
     hostname,
     name: write.name,
     postActionStorage,
     storageType: write.storageType,
   });
+  // Classification must bind the same domain as the retained cookie identity,
+  // including a parent-domain cookie written by a www document.
+  const purpose = resolveCanonicalActionStoragePurpose({ storageType: write.storageType, name: write.name,
+    hostname: exactIdentity?.hostname ?? hostname });
   return {
     storageType: write.storageType,
     name: write.name.slice(0, 180),

@@ -13,6 +13,7 @@ import {
   postRefusalStorageIdentityHash,
   responseCookieNamesFromHeaders,
   resolveInstrumentedWriteStorageIdentity,
+  classifyStorageWrite,
   runPostRefusalObserver,
   scopedAncestorSelector,
   selectExactResponseCookieWriteAnchor,
@@ -1671,6 +1672,18 @@ test("instrumented cookie writes inherit the exact retained parent-domain identi
     hostname: "example.com",
     identityHash,
   });
+});
+
+test("instrumented cookie purpose binds the retained parent domain, not the www document", async () => {
+  const {postRefusalStorageWriteSchema} = await import("@certscore/contracts");
+  const identityHash = "a".repeat(64);
+  const write = classifyStorageWrite({storageType:"cookie",name:"CookieConsent",value:"not-retained",observedAtEpochMs:1200},
+    1000,1100,"https://www.example.com/",[{storageType:"cookie",name:"CookieConsent",hostname:"example.com",identityHash,valueHash:"b".repeat(64),nonEssential:false}]);
+  assert.ok(write); assert.equal(write.hostname,"example.com");
+  assert.equal(write.storageIdentityHash,identityHash);
+  assert.equal(write.purposeAssessment?.version,"action_storage_purpose.v2");
+  assert.equal(postRefusalStorageWriteSchema.safeParse(write).success,true);
+  assert.equal(postRefusalStorageWriteSchema.safeParse({...write,hostname:"www.example.com"}).success,false,"The exact-domain guard must remain strict");
 });
 
 test("TCF v2 decoder rejects malformed strings and retains purpose grants", () => {

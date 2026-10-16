@@ -8,6 +8,7 @@ export * from "./google-consent-mode";
 import { cmpBasicEvidenceSchema, type CmpBasicEvidence, cmpPreferencesEvidenceSchema, type CmpPreferencesEvidence } from "./cmp-audit-evidence";
 export * from "./cmp-audit-evidence";
 export * from "./cmp-visible-inventory";
+export * from "./cmp-loaded-inventory";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
 export * from "./collection-surface-snapshot";
 export * from "./post-accept-form-snapshots";

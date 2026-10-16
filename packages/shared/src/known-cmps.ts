@@ -87,6 +87,14 @@ export type KnownCmpDefinition = {
     rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; shadowContentSelector?: string; sdkPath: string[] };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
+  /** Public declarations already loaded under the verified preference panel.
+   * Collapsed data is configuration evidence, never visible inventory proof. */
+  preferenceLoadedInventory?: {
+    version: "cookiebot_loaded_declarations.v1";
+    groupSelector: string; providerSelector: string; countSelector: string;
+    recordSelector: string; nameSelector: string; descriptionSelector: string;
+    footerSelector: string;
+  };
   /** Read-only category identity inside a verified preference dialog.
    * Identifies control type only, never cookie purpose or consent state. */
   preferenceCategoryInventory?: {
@@ -99,6 +107,8 @@ export type KnownCmpDefinition = {
     radioGroupSelector?: string;
     titleSelector: string;
     toggleSelector: string;
+    /** Exact reviewed sibling for a styled native checkbox, not a guessed label. */
+    visibleProxySelector?: string;
   };
   /** Named-CMP Options binding when aria-controls is absent. An on-demand
    * panel must appear under the same pre-existing registered vendor root.
@@ -559,6 +569,24 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       dialogSelector: '#CybotCookiebotDialog #CybotCookiebotDialogTabContentDetails[role="tabpanel"]', deferredRootSelector: "#CybotCookiebotDialog",
       dialogRoles: ["tabpanel"], tabSelector: "#CybotCookiebotDialogNavDetails"},
     preferenceDeferredAriaBinding: { version: "cookiebot_aria_preferences.v1", rootSelector: "#CybotCookiebotDialog" },
+    preferenceCategoryInventory: {
+      version: "cookiebot_inline_categories.v1",
+      dialogSelector: '#CybotCookiebotDialog #CybotCookiebotDialogTabContentDetails[role="tabpanel"]',
+      categorySelector: '.CybotCookiebotDialogDetailBodyContentCookieContainerHeader',
+      titleSelector: '[id^="CybotCookiebotDialogBodyLevelButton"][id$="InlineLabel"][role="heading"]',
+      toggleSelector: 'input[type="checkbox"][role="switch"][id^="CybotCookiebotDialogBodyLevelButton"][id$="Inline"]',
+      visibleProxySelector: '.CybotCookiebotDialogBodyLevelButtonSlider',
+    },
+    preferenceLoadedInventory: {
+      version: "cookiebot_loaded_declarations.v1",
+      groupSelector: '.CybotCookiebotDialogDetailBodyContentCookieGroup',
+      providerSelector: '.CybotCookiebotDialogDetailBodyContentCookieProvider',
+      countSelector: '.CybotCookiebotDialogDetailBodyContentCookieInfoCount',
+      recordSelector: '.CybotCookiebotDialogDetailBodyContentCookieInfo',
+      nameSelector: '.CybotCookiebotDialogDetailBodyContentCookieInfoTitle',
+      descriptionSelector: '.CybotCookiebotDialogDetailBodyContentCookieInfoDescription',
+      footerSelector: '.CybotCookiebotDialogDetailBodyContentCookieInfoFooterContent',
+    },
     observationControlRecipes: [{
       recipeId: "Cookiebot.options.v1",
       controlSelector: "#CybotCookiebotDialogBodyEdgeMoreDetailsLink",

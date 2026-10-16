@@ -22,6 +22,13 @@ export const cmpVisibleInventorySchema = z.object({
 });
 export type CmpVisibleInventory = z.infer<typeof cmpVisibleInventorySchema>;
 
+/** A literal named provider, not a domain, category or unavailable marker. */
+export function isExplicitCmpProviderName(provider: string) {
+  return /^[\p{L}\p{N}][\p{L}\p{N} .'’&()+-]{0,159}$/u.test(provider) &&
+    !/^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+\.?$/u.test(provider) &&
+    !/^(?:first party|third party|unknown|various|none|not available|n\/a|analytics|marketing|necessary|functional)$/i.test(provider);
+}
+
 export function projectVisibleCmpInventory(inventory: CmpVisibleInventory) {
   const declarations: Array<{name: string; purpose: string; duration: string; source: "cmp_visible_inventory"}> = [];
   const services: Array<{name: string; source: "cmp_visible_inventory"; sourceRef: string}> = [];
@@ -35,9 +42,7 @@ export function projectVisibleCmpInventory(inventory: CmpVisibleInventory) {
     // The explicit Provider field supplies the name. Domains, category labels,
     // cookie names and broad industry/vendor lists are not service identities.
     const provider = value("provider");
-    if (/^[\p{L}\p{N}][\p{L}\p{N} .'’&()+-]{0,159}$/u.test(provider) &&
-        !/^[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+\.?$/u.test(provider) &&
-        !/^(?:first party|third party|unknown|various|none|not available|n\/a|analytics|marketing|necessary|functional)$/i.test(provider) &&
+    if (isExplicitCmpProviderName(provider) &&
         !services.some(item => item.name === provider))
       services.push({name: provider, source: "cmp_visible_inventory", sourceRef: record.ref});
   }
