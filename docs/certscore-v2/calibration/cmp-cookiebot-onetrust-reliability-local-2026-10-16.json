@@ -1,0 +1,271 @@
+{
+  "version": "certscore.cmp-cookiebot-onetrust-reliability-local.v1",
+  "scope": "Local targeted diagnostics only. No deployment, historical report update, or release acceptance claim.",
+  "artifactRoot": "/Users/benmasek/WC01/outputs/cmp-cookiebot-onetrust-reliability-local-2026-10-16",
+  "generatedAt": "2026-10-16T04:09:27.480507+00:00",
+  "baseline": {
+    "latestCookiebotUnresolved": 6,
+    "latestOneTrustUnresolved": 6,
+    "latestTotal": 12,
+    "earlierCookiebotUnresolved": 2,
+    "earlierOneTrustUnresolved": 6,
+    "earlierTotal": 8
+  },
+  "fresh": {
+    "attempted": 2,
+    "completed": 1,
+    "failed": 1,
+    "cookiebot": {
+      "scanId": "cmp-cookiebot-onetrust-reliability-local-cookiebot-5189d783-6735-4c92-b438-521d3aa65b04",
+      "unresolved": 1,
+      "recoveredRegressionRows": 4,
+      "newlyResolvedVersusEarlierBaseline": 1,
+      "newlyUnresolved": 0,
+      "remaining": [
+        "found_not_declared"
+      ],
+      "panelCompletedAtMs": 14831,
+      "pairedImageEligibilityMs": 1,
+      "pairedImageSafety": "available",
+      "projection": {
+        "site": "cookiebot",
+        "oldScanId": "cmp-shared-capture-local-cookiebot-1e1064c6-f73c-468b-a46a-0770aa895042",
+        "newScanId": "cmp-cookiebot-onetrust-reliability-local-cookiebot-5189d783-6735-4c92-b438-521d3aa65b04",
+        "baselineUnresolved": 2,
+        "resolved": 1,
+        "remainingOriginal": 1,
+        "newlyUnresolved": 0,
+        "totalFreshUnresolved": 1,
+        "rows": [
+          {
+            "id": "banner",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Consent surface observed on the initial visit.",
+            "sourceIds": [
+              "consentControlAssessment.surface"
+            ]
+          },
+          {
+            "id": "reject",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "First-layer Reject or equivalent refusal control.",
+            "sourceIds": [
+              "consentControlAssessment.controls.reject"
+            ]
+          },
+          {
+            "id": "prominence",
+            "before": "Incomplete",
+            "after": "Observed",
+            "wasUnresolved": true,
+            "resolved": true,
+            "newlyUnresolved": false,
+            "detail": "Accept and Reject were compared in the captured view. No material prominence difference met the review threshold.",
+            "sourceIds": [
+              "consent.visual_comparison.observed"
+            ]
+          },
+          {
+            "id": "categories",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "3 categories were available.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "services",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "17 services explicitly named in the CMP's already-loaded declaration cards. These cards may be collapsed; this bounded sample does not establish visible disclosure, service controls or complete inventory coverage.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "privacy_link",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Public privacy-policy link or surface on the scanned page.",
+            "sourceIds": [
+              "privacy_notice_availability"
+            ]
+          },
+          {
+            "id": "privacy_access",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "A privacy-policy link had an unobstructed click target after scrolling, before consent interaction. The original viewport was restored. Retrieval of the linked document is outside this criterion.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "consent_record",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Browser consent records were stored or updated after Accept and Reject.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "implementation",
+            "before": "Review recommended",
+            "after": "Review recommended",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "A reject action and post-reject comparison window were retained, and eligible non-essential tracking activity persisted after reject. The retained evidence did not support a purpose-specific after-Reject deduction.",
+            "sourceIds": [
+              "post_reject_tracking_reduction"
+            ]
+          },
+          {
+            "id": "duration",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "declared_not_found",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "1 of 87 retained CMP cookie name patterns matched the completed pre-consent cookie snapshot. This is a point-in-time comparison; page loading and later activity are separate coverage limits. Unmatched patterns do not establish a declaration defect.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json",
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "found_not_declared",
+            "before": "Partially assessed",
+            "after": "Partially assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Captured cookie names were compared with retained CMP name patterns. A complete missing-declaration assessment was not established by this bounded snapshot comparison.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json",
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "cookie_information",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "61 captured cookie entries included names, purposes and storage durations.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          }
+        ]
+      }
+    },
+    "onetrust": {
+      "scanId": "cmp-cookiebot-onetrust-reliability-local-onetrust-68fa1a08-e8ec-433b-a060-570fb3d90877",
+      "status": "failed",
+      "firstBrokenStage": "consent_proof public-network target guard before browser capture",
+      "message": "This target is not eligible for public website scanning.",
+      "specificResolverCauseRetained": false,
+      "publicRejectRepairVerified": false,
+      "retried": false,
+      "reportProduced": false,
+      "verifiedRetainedPassiveLanes": [
+        "runtime_evidence",
+        "policy_evidence",
+        "gpc_observation"
+      ]
+    }
+  },
+  "interpretation": {
+    "overallFreshCohortComparisonAvailable": false,
+    "latestUsableMixedRoundUnresolved": 7,
+    "latestUsableMixedRoundExplanation": "Fresh Cookiebot1 plus previous OneTrust6; OneTrust has no fresh report. This is not a two-site fresh improvement claim.",
+    "screenshotTimingHypothesisProven": false
+  },
+  "verification": {
+    "focusedTestsPassed": 180,
+    "handlerBoundaryTestsPassed": 28,
+    "typechecks": [
+      "scan-core",
+      "v2-dag-lambda"
+    ],
+    "retainedReplay": {
+      "oneTrustHistoricalFlags": {
+        "rejectPassiveBarrierOnly": true
+      },
+      "historicalCookiebotWithheldPairEligible": false,
+      "sourceFilesReadOnly": true
+    },
+    "irelandEgress": {
+      "browserIp": "63.33.9.201",
+      "httpIp": "63.33.9.201",
+      "country": "IE",
+      "awsRegion": "eu-west-1",
+      "verifiedAt": "2026-10-16T04:04:25.009Z"
+    },
+    "originalArtifactHashesChecked": 1008,
+    "originalArtifactHashesChanged": 0
+  },
+  "contactLedger": {
+    "persisted": 2,
+    "idempotentRunKey": "cmp-cookiebot-onetrust-reliability-local-20261016-astra-r1",
+    "repositoryCandidateReviewed": true,
+    "oneTrustState": "blocked",
+    "oneTrustNoGoReason": "unsafe_target_blocked"
+  },
+  "tunnelCleanup": {
+    "temporaryRuleRemoved": true,
+    "sshStopped": true,
+    "finishedAt": 1792123622.846545
+  },
+  "cost": {
+    "recurringIncrementEstimate": "Below $1/month at100,000 scans for bounded metadata/processing; existing approved review and action budgets unchanged.",
+    "oneTimeVerificationEstimate": "Below $1 total through existing Ireland proxy and canonical ledger tasks.",
+    "disclosedBeforeFreshRun": true
+  },
+  "limitations": [
+    "OneTrust public Reject execution remains unverified after fresh guard failure; no bypass or retry.",
+    "Cookiebot success is a single diagnostic, not a reliability rate or release gate.",
+    "Historical75ms eligibility timing was not retained; it remains a plausible cause, not established solecause.",
+    "Partial Cookiebot declaration inventory remains partial."
+  ],
+  "deployReady": false
+}

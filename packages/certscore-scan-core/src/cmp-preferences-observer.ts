@@ -333,12 +333,20 @@ export async function runCmpPreferencesObserver(input: {
     const deferredRootSelector = registeredDialog?.deferredRootSelector ?? (!match.recipe && controlledId ? match.deferredAriaBinding?.rootSelector : undefined);
     const deferredRoot = (priorMatches === 0 || match.observedOptionsLabel || registeredDialog?.deferredRootSelector) && deferredRootSelector
       ? page.locator(deferredRootSelector) : undefined;
-    const deferredRootHandle = deferredRoot && await deferredRoot.count() === 1 ? await deferredRoot.elementHandle() : null;
+    // Resolve independent retained handles concurrently. Each remains subject
+    // to the original unique-count and dispatch-time identity checks. On busy
+    // pages serial protocol round trips consumed the optional opening reserve.
+    const tab = registeredDialog?.tabSelector ? page.locator(registeredDialog.tabSelector) : undefined;
+    const [deferredRootHandle, initialTabHandle, dialogHandle, beforeVisible] = await Promise.all([
+      deferredRoot ? deferredRoot.count().then(count => count === 1 ? deferredRoot.elementHandle() : null) : null,
+      tab ? tab.count().then(count => count === 1 ? tab.elementHandle() : null) : null,
+      priorMatches === 1 ? controlled.elementHandle() : null,
+      priorMatches === 1 ? controlled.isVisible() : false,
+    ]);
     let boundTab: Awaited<ReturnType<Locator["elementHandle"]>> = null;
     if (registeredDialog?.tabSelector) {
       if (priorMatches !== 1) return stopBinding("missing", "preference_surface_missing");
-      const tab = page.locator(registeredDialog.tabSelector);
-      boundTab = await tab.count() === 1 ? await tab.elementHandle() : null;
+      boundTab = initialTabHandle;
       if (!deferredRootHandle || !boundTab || !await match.control.evaluate((element, root) => root?.isConnected && root.contains(element), deferredRootHandle) ||
           !await boundTab.evaluate((element, expected) => expected.root?.isConnected && expected.root.contains(element) &&
             element.getAttribute("role") === "tab" && element.getAttribute("aria-selected") === "false" &&
@@ -355,8 +363,6 @@ export async function runCmpPreferencesObserver(input: {
       surfaceBinding.mode = portal ? "registered_portal" : "registered_deferred";
       if (!registeredDialog && match.deferredAriaBinding) packet.support.recipeVersion = match.deferredAriaBinding.version;
     }
-    const dialogHandle = priorMatches === 1 ? await controlled.elementHandle() : null;
-    const beforeVisible = priorMatches === 1 && await controlled.isVisible();
     surfaceBinding.priorVisible = beforeVisible;
     const layerSelector = registeredDialog?.layerTransitionSelector;
     let layerControl: Awaited<ReturnType<Locator["elementHandle"]>> = null;

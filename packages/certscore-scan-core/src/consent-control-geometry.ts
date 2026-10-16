@@ -114,6 +114,16 @@ export interface ConsentControlContainerEvidence {
   intersectsViewport: boolean;
 }
 
+/** Passive routing proof only. It does not authorize an action or establish a
+ * semantic decision; the independent observer must still verify its live proof. */
+export interface NamedRejectRoutingEvidence {
+  version: "named_reject_routing.v1";
+  provider: string;
+  policyVersion: string;
+  bannerSelector: string;
+  controlSelector: string;
+}
+
 export interface ConsentControlCandidateEvidence {
   candidateId: string;
   label: string;
@@ -128,6 +138,7 @@ export interface ConsentControlCandidateEvidence {
   value?: string;
   inputType?: string;
   initialSelection?: InitialConsentSelection;
+  namedRejectRouting?: NamedRejectRoutingEvidence;
   selectorHint: string;
   containerSelectorHint?: string;
   containerId?: string;
@@ -252,6 +263,7 @@ interface RawGeometryCandidate {
   value?: string;
   inputType?: string;
   initialSelection?: InitialConsentSelection;
+  namedRejectRouting?: NamedRejectRoutingEvidence;
   selectorHint: string;
   containerSelectorHint?: string;
   containerIndex?: number;
@@ -354,6 +366,8 @@ export async function captureConsentControlGeometry(
     consentPatternSource: CONSENT_CONTEXT_PATTERN.source,
     controlLabelPatternSource: CANDIDATE_ACTION_PRIORITY_PATTERN.source,
     registrySelectors,
+    namedRejectRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.rejectLabelBoundNecessaryOnly
+      ? [{ ...entry.rejectLabelBoundNecessaryOnly, provider: entry.canonicalName }] : []),
     initialOptionalOffCloseRecipes: KNOWN_CMP_REGISTRY.flatMap(entry => entry.initialOptionalOffCloseObservation ? [entry.initialOptionalOffCloseObservation] : []),
     nonFirstLayerSurfaceSelector: KNOWN_CMP_REGISTRY.flatMap(entry => entry.nonFirstLayerSurfaceSelectors ?? []).join(","),
   };
@@ -898,6 +912,11 @@ function buildCandidateEvidence(
     value: candidate.value,
     inputType: candidate.inputType,
     initialSelection: candidate.initialSelection,
+    ...(actionType === "reject_all" && decisionStatus === "confirmed_visible" &&
+      candidate.namedRejectRouting && KNOWN_CMP_REGISTRY.some(entry =>
+        entry.canonicalName === candidate.namedRejectRouting!.provider &&
+        entry.rejectLabelBoundNecessaryOnly?.expectedNormalizedLabels.includes(normalizeLabel(candidate.label)))
+      ? { namedRejectRouting: candidate.namedRejectRouting } : {}),
     selectorHint: candidate.selectorHint,
     containerSelectorHint: candidate.containerSelectorHint,
     containerId: typeof candidate.containerIndex === "number" ? containers[candidate.containerIndex]?.containerId : undefined,
@@ -1303,6 +1322,7 @@ function collectConsentGeometryInPage(input: {
   consentPatternSource: string;
   controlLabelPatternSource: string;
   registrySelectors: string[];
+  namedRejectRecipes: (NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["rejectLabelBoundNecessaryOnly"]> & { provider: string })[];
   initialOptionalOffCloseRecipes: NonNullable<(typeof KNOWN_CMP_REGISTRY)[number]["initialOptionalOffCloseObservation"]>[];
   nonFirstLayerSurfaceSelector: string;
 }): RawGeometryCapture {
@@ -1593,6 +1613,19 @@ function collectConsentGeometryInPage(input: {
       value: element instanceof HTMLInputElement ? element.value.slice(0, 160) : undefined,
       inputType: element instanceof HTMLInputElement ? element.type : undefined,
       initialSelection: initialSelectionFor(element),
+      namedRejectRouting: (() => {
+        const recipe = input.namedRejectRecipes.find(row => element.matches(row.controlSelector));
+        const root = element.getRootNode() as Document | ShadowRoot;
+        const banner = recipe && element.closest(recipe.bannerSelector);
+        if (!recipe || !banner || root.querySelectorAll(recipe.bannerSelector).length !== 1 ||
+            root.querySelectorAll(recipe.controlSelector).length !== 1 ||
+            !(element instanceof HTMLButtonElement) || element.disabled || element.form ||
+            element.closest("form") || element.hasAttribute("form") ||
+            !(element.type === "button" || element.getAttribute("type") === null) ||
+            !contextTextIsReadable(element) || !contextTextIsReadable(banner)) return undefined;
+        return { version: "named_reject_routing.v1" as const, provider: recipe.provider,
+          policyVersion: recipe.policyVersion, bannerSelector: recipe.bannerSelector, controlSelector: recipe.controlSelector };
+      })(),
       selectorHint: selectorHintFor(element),
       containerSelectorHint: container?.evidence.selectorHint,
       containerIndex,

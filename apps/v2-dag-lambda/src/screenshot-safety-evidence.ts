@@ -55,6 +55,7 @@ function object(value: unknown): Record<string, unknown> | null {
 export async function verifiedPairedScreenshot(input: {
   artifactRoot: string;
   bundle: CanonicalEvidenceBundle;
+  reviewedImage?: (filePath: string) => Readonly<{ sha256: string; width: number; height: number }> | undefined;
 }): Promise<{ path: string; sha256: string } | null> {
   let bytes: Buffer | undefined;
   try {
@@ -136,6 +137,15 @@ export async function verifiedPairedScreenshot(input: {
               row.visibilityEvidence === "box_model_verified" && row.consentContextEvidence === "local_surface";
           })()) &&
           row.tagName === candidate.tagName && normalizeConsentControlText(row.label) === normalizeConsentControlText(String(candidate.label ?? "")))) return null;
+    }
+    // Capture-time review already read and hashed these exact bytes. Reuse only
+    // immutable metadata, never its mutable buffer. reviewFor still rereads the
+    // retained file after moderation and checks literal equality before serving.
+    const reviewed = input.reviewedImage?.(screenshot.path);
+    if (reviewed) {
+      if ((visual && reviewed.sha256 !== visual.screenshotSha256) ||
+          reviewed.width !== viewport.width || reviewed.height !== viewport.height) return null;
+      return { path: screenshot.path, sha256: reviewed.sha256 };
     }
     bytes = await readBoundedImage(screenshot.path);
     const sha256 = imageDigest(bytes);

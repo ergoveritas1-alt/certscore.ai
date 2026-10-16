@@ -214,6 +214,7 @@ export function createHomepageScreenshotSafetyReviewCoordinator(input: {
   let closed = false;
   let finalized = false;
   let preferredPath: string | undefined;
+  let pairEligibility: { status: "verified" | "unverified" | "deadline_exceeded"; elapsedMs: number } | undefined;
   const unavailable = (): ScreenshotSafetyReviewOutcome => ({ status: "unavailable", failureCode: "temporary_file_unavailable" });
   const priorityFor = (filePath: string) => filePath === preferredPath ? 100 :
     /screenshot-pre-consent-settled\./.test(filePath) ? 20 :
@@ -325,6 +326,16 @@ export function createHomepageScreenshotSafetyReviewCoordinator(input: {
   };
 
   return {
+    reviewedImage(filePath: string) {
+      const entry = reviews.get(filePath);
+      const bytes = entry?.job?.bytes;
+      if (closed || !entry?.sha256 || !bytes || bytes.length < 24 ||
+          bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") return undefined;
+      return Object.freeze({ sha256: entry.sha256, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) });
+    },
+    recordPairEligibility(value: NonNullable<typeof pairEligibility>) {
+      if (!finalized) pairEligibility = { ...value };
+    },
     prioritize(screenshotPath: string | undefined) {
       preferredPath = screenshotPath;
       if (screenshotPath) {
@@ -372,6 +383,7 @@ export function createHomepageScreenshotSafetyReviewCoordinator(input: {
       return {
         version: "screenshot_safety_review_diagnostics.v1",
         maxConcurrency: MAX_REVIEW_CONCURRENCY,
+        pairEligibility,
         reviews: [...reviews.values()].map((entry, index) => ({
           reviewId: index + 1,
           artifactId: entry.artifactId,
@@ -640,13 +652,16 @@ export async function applyHomepageScreenshotSafetyGate(input: {
       outcome: reviewWithinFinalizationBudget(review, finalizationStartedAtMs + budgetMs) };
   });
   let eligibilityTimer: ReturnType<typeof setTimeout> | undefined;
+  let eligibilityExpired = false;
   const paired = await Promise.race([
-    verifiedPairedScreenshot(input),
+    verifiedPairedScreenshot({ ...input, reviewedImage: reviewCoordinator.reviewedImage }),
     new Promise<null>(resolve => {
-      eligibilityTimer = setTimeout(() => resolve(null), Math.max(0,
+      eligibilityTimer = setTimeout(() => { eligibilityExpired = true; resolve(null); }, Math.max(0,
         finalizationStartedAtMs + SCREENSHOT_SAFETY_FINALIZATION_BUDGET_MS - Date.now()));
     }),
   ]).finally(() => { if (eligibilityTimer) clearTimeout(eligibilityTimer); });
+  reviewCoordinator.recordPairEligibility({ status: paired ? "verified" : eligibilityExpired ? "deadline_exceeded" : "unverified",
+    elapsedMs: Date.now() - finalizationStartedAtMs });
   reviewCoordinator.prioritize(paired?.path);
   const reviewed = await Promise.all(reviews.map(async ({ screenshot, outcome, budgetMs }) => {
     let result = await outcome;

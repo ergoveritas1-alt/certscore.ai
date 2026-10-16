@@ -112,3 +112,52 @@ No new lane, per-scan browser run, model call, retry or timeout increase is
 introduced. Bounded metadata and processing are estimated below $1/month at
 100,000 scans with 30-day retention. One-time verification uses the existing
 Ireland proxy and is estimated below $1 total.
+
+### Local reliability follow-up, October 16
+
+Safety pair eligibility reuses an immutable digest and PNG dimensions from the
+existing capture-time review job when available. This removes a duplicate local
+image read; it does not grant eligibility from an image label or skip structural
+proof. After a safe review, the gate still rereads the retained file and requires
+literal equality to reviewed bytes and the paired hash. Replaced, removed,
+withheld, malformed and sensitive images remain unavailable. The 75 ms local
+eligibility window, four-second verified-pair absolute deadline, request count,
+concurrency and fail-closed deletion are unchanged. Bounded eligibility status
+and elapsed time are retained in the existing review diagnostics.
+
+Preference binding resolves independent root, tab and dialog handles concurrently
+inside the existing 17-second inspection budget. Exact uniqueness, ancestry,
+pre-action privacy access, final dispatch identity, one-click authorization and
+post-opening panel verification remain required.
+
+`named_reject_routing.v1` is a passive scheduling witness produced in the existing
+geometry DOM read. It requires the canonical named recipe, unique native enabled
+non-form control and its unique registered banner. The worker may retain the
+existing Reject tail only for a matching visible control, current recipe, exact
+target, `cdp_loader_id`, stable main-frame capture and observation within 500 ms.
+This repairs the mismatch between the approved named necessary-only action recipe
+and generic observation-only routing. It does not authorize a click or establish
+registration: the independent action observer must verify its full live action
+proof. Missing, mismatched or historical proof retains previous passive-only
+routing. The eight-second tail cap and single terminal publication are unchanged.
+
+A fresh Ireland Cookiebot diagnostic completed its preference inspection in
+14.831 seconds and verified paired-image eligibility in 1 ms. Its canonical CMP
+projection reduced unresolved checks from the latest six to one: four recovered
+regressions and one new prominence assessment relative to the earlier two-check
+baseline. The remaining inventory comparison is explicitly partial. This single
+run does not prove that the earlier 75 ms race caused every image failure or that
+panel reliability is now stable.
+
+The corresponding OneTrust run failed at the public-network target guard before
+consent capture. Other verified passive artifacts were retained, but no report
+was produced. The retained guard message cannot distinguish DNS failure from an
+empty or unsafe answer set. No guard bypass or retry was performed; the Reject
+repair has deterministic coverage but remains unverified on a fresh public run.
+
+These changes remain local, with no deployment or historical report rewrites.
+Bounded metadata and local processing are estimated below $1/month at 100,000
+scans. The existing approved review/action budgets are unchanged. One-time
+verification was estimated below $1 through the existing Ireland proxy. Both
+contacts were persisted idempotently, and temporary tunnel access was removed.
+See `calibration/cmp-cookiebot-onetrust-reliability-local-2026-10-16.json`.

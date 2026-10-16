@@ -1005,3 +1005,27 @@ test("queued geometry proof outranks settled and general screenshots without pre
     assert.equal(started.length, 3, "Cancellation cannot launch another request");
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("capture-time pair metadata is immutable and a replaced reviewed file still fails closed", async () => {
+  const directory = await testDirectory("pair-metadata-replacement");
+  try {
+    const { source, screenshotPath } = await pairedFixture(directory);
+    let finish!: (value: {safeForDisplay: boolean}) => void;
+    const coordinator = createHomepageScreenshotSafetyReviewCoordinator({artifactRoot: directory,
+      classifier: async () => new Promise(resolve => {finish = resolve;})});
+    coordinator.schedule(source.screenshots[0]!);
+    for (let i = 0; i < 100 && !coordinator.reviewedImage(screenshotPath); i++) await new Promise(resolve => setTimeout(resolve, 5));
+    const receipt = coordinator.reviewedImage(screenshotPath);
+    assert.ok(receipt && Object.isFrozen(receipt));
+    assert.equal(receipt.width, 100);
+    const resultPromise = applyHomepageScreenshotSafetyGate({ artifactRoot: directory, bundle: source, reviewCoordinator: coordinator });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    await writeFile(screenshotPath, await sharp({create:{width:100,height:100,channels:3,background:"red"}}).png().toBuffer());
+    finish({safeForDisplay:true});
+    const result = await resultPromise;
+    assert.equal(result.screenshots[0]!.displayStatus, "withheld");
+    assert.equal(coordinator.diagnostics().pairEligibility?.status, "verified");
+    assert.equal(coordinator.diagnostics().reviews[0]!.byteBindingFailure, "reviewed_image_bytes_changed");
+    await assert.rejects(stat(screenshotPath), /ENOENT/);
+  } finally { await rm(directory, {recursive:true,force:true}); }
+});

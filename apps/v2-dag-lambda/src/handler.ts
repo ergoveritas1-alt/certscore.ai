@@ -11,7 +11,7 @@ import { Agent as HttpsAgent, request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import type { Duplex } from "node:stream";
 import path from "node:path";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { connect as tlsConnect, type TLSSocket } from "node:tls";
 import { consentActionPassiveBarrierLimits } from "./consent-action-tail-policy.js";
 import { actionLanePassiveAbsenceDisposition } from "./action-lane-passive-absence.js";
@@ -3981,7 +3981,13 @@ async function readConsentRejectAvailabilityFromArtifactRoot(artifactRoot: strin
     const bundle = canonicalEvidenceBundleSchema.parse(JSON.parse(
       await readFile(path.join(artifactRoot, "CanonicalEvidenceBundle.json"), "utf8"),
     ));
-    return deriveConsentActionAvailability(bundle);
+    const geometryPath = path.join(artifactRoot, "ConsentControlGeometryEvidence.json");
+    const geometry = await stat(geometryPath).then(async metadata => {
+      if (!metadata.isFile() || metadata.size > 2 * 1024 * 1024) return undefined;
+      const bytes = await readFile(geometryPath);
+      return bytes.length <= 2 * 1024 * 1024 ? JSON.parse(bytes.toString("utf8")) : undefined;
+    }).catch(() => undefined);
+    return deriveConsentActionAvailability(bundle, geometry);
   } catch {
     return undefined;
   }
@@ -4010,10 +4016,10 @@ export function deriveConsentRejectAvailability(bundle: CanonicalEvidenceBundle)
   };
 }
 
-export function deriveConsentActionAvailability(bundle: CanonicalEvidenceBundle) {
+export function deriveConsentActionAvailability(bundle: CanonicalEvidenceBundle, geometry?: Parameters<typeof consentActionPassiveBarrierLimits>[1]) {
   return {
     ...deriveConsentRejectAvailability(bundle),
-    ...consentActionPassiveBarrierLimits(bundle),
+    ...consentActionPassiveBarrierLimits(bundle, geometry),
     acceptControlObserved: bundle.consentUiObservations.some((observation) =>
       observation.acceptControlObserved ||
       observation.controls.some((control) => control.actionType === "accept_all")

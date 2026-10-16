@@ -1643,3 +1643,20 @@ test("main-frame geometry keeps its actual read time when an unrelated child fra
     assert.equal(artifact.summary.firstLayerAccept,true);assert.equal(artifact.summary.firstLayerReject,true);
   }finally{await page.close();}
 });
+
+test("named Reject routing retains exact live root/control proof without authorizing a click", async () => {
+  for (const mode of ["valid", "outside", "duplicate", "duplicate-root", "form", "disabled", "wrong-label", "wrong-selector"]) {
+    const button = `<button type="button" id="${mode === "wrong-selector" ? "other" : "onetrust-reject-all-handler"}" ${mode === "disabled" ? "disabled" : ""}>${mode === "wrong-label" ? "Accept necessary maybe" : "Accept only necessary"}</button>`;
+    const artifact = await captureFixture(`<section id="onetrust-banner-sdk" role="dialog" aria-label="Cookie choices">
+      <p>We use cookies. You can reject all non-essential processing by choosing to accept only necessary cookies.</p>
+      ${mode === "outside" ? "" : mode === "form" ? `<form>${button}</form>` : button}
+      ${mode === "duplicate" ? button : ""}</section>${mode === "outside" ? button : ""}
+      ${mode === "duplicate-root" ? '<section id="onetrust-banner-sdk">Cookies</section>' : ""}`);
+    const proofs = artifact.candidates.filter(candidate => candidate.namedRejectRouting);
+    assert.equal(proofs.length, mode === "valid" ? 1 : 0, mode);
+    if (mode === "valid") assert.deepEqual(proofs[0]!.namedRejectRouting, {
+      version: "named_reject_routing.v1", provider: "OneTrust", policyVersion: "label_bound_necessary_only_reject.v2",
+      bannerSelector: "#onetrust-banner-sdk", controlSelector: "#onetrust-reject-all-handler",
+    });
+  }
+});
