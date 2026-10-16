@@ -2,10 +2,10 @@ import { z } from "zod";
 import {cmpInventoryManifestSchema} from "./cmp-inventory-manifest";
 import { isExplicitCmpProviderName } from "./cmp-visible-inventory";
 
-/** Already-loaded public declaration cards. These may be collapsed: this
+/** Already-loaded public declarations. These may be collapsed: this
  * contract deliberately carries no visibility or complete-inventory claim. */
 export const cmpLoadedInventorySchema = z.object({
-  version: z.literal("cookiebot_loaded_declarations.v1"),
+  version: z.enum(["cookiebot_loaded_declarations.v1", "consentmanager_loaded_declarations.v1"]),
   inventoryManifest:cmpInventoryManifestSchema.refine(value=>value.source==="cookiebot_loaded_declarations.v1","Loaded inventory requires its own manifest source.").optional(),
   records: z.array(z.object({
     name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240),
@@ -15,6 +15,8 @@ export const cmpLoadedInventorySchema = z.object({
   }).strict()).max(100),
   truncated: z.boolean(), unresolvedRecords: z.number().int().nonnegative().max(10000),
 }).strict().superRefine((inventory, context) => {
+  if (inventory.inventoryManifest && inventory.inventoryManifest.source !== inventory.version)
+    context.addIssue({code: z.ZodIssueCode.custom, message: "Loaded inventory cannot borrow another provider's manifest."});
   if (new Set(inventory.records.map(row => row.sourceRef)).size !== inventory.records.length)
     context.addIssue({code: z.ZodIssueCode.custom, message: "Loaded declaration references must be unique."});
   if (inventory.records.reduce((sum, row) => sum + row.name.length + row.purpose.length + row.duration.length + (row.provider?.length ?? 0), 0) > 16000)

@@ -7,6 +7,7 @@ import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory
 import { readCookieYesPreferenceInventory } from "./cookieyes-preference-inventory.js";
 import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
 import { readPassiveCookiebotLoadedInventory } from "./cookiebot-loaded-inventory.js";
+import { readPassiveConsentmanagerLoadedInventory } from "./consentmanager-loaded-inventory.js";
 
 /** Opportunistic read in the existing consent-proof visit. No action, wait,
  * navigation, retry or late join. The caller retains only a settled, loader-bound
@@ -64,9 +65,10 @@ export async function captureCmpBasicEvidence(input: {
   if(inventory && "truncated" in inventory && inventory.truncated) packet.limitations.push("cmp_inventory_bounded");
   if(definition.preferenceInventory) packet.limitations.push(definition.preferenceInventory,"loaded_configuration_not_visibility_proof");
   if (definition.passiveLoadedInventory && input.isCurrent()) {
-    const loaded=await readPassiveCookiebotLoadedInventory(page,definition);
+    const loaded=definition.passiveLoadedInventory.version==="consentmanager_passive_loaded_inventory.v1"
+      ? await readPassiveConsentmanagerLoadedInventory(page,definition) : await readPassiveCookiebotLoadedInventory(page,definition);
     if (loaded) {
-      packet.contractVersion="certscore.cmp-basic-evidence.v2";
+      packet.contractVersion=loaded.version==="consentmanager_loaded_declarations.v1" ? "certscore.cmp-basic-evidence.v3" : "certscore.cmp-basic-evidence.v2";
       packet.loadedInventory=loaded;
       packet.loadedInventoryBinding={...definition.passiveLoadedInventory,documentToken:before.token};
       packet.declarations=projectLoadedCmpInventory(loaded).declarations;

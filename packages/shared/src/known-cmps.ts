@@ -102,6 +102,10 @@ export type KnownCmpDefinition = {
     version: "cookiebot_passive_loaded_inventory.v1";
     rootSelector: "#CybotCookiebotDialog";
     panelSelector: "#CybotCookiebotDialogTabContentDetails";
+  } | {
+    version: "consentmanager_passive_loaded_inventory.v1";
+    rootSelector: "#cmpbox";
+    panelSelector: ".cmpcookiesdescrbox table.cmpcookietbl";
   };
   /** Read-only category identity inside a verified preference dialog.
    * Identifies control type only, never cookie purpose or consent state. */
@@ -540,6 +544,11 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["a.cmpboxbtnyes"],
     canonicalName: "Consentmanager",
+    passiveLoadedInventory: {
+      version: "consentmanager_passive_loaded_inventory.v1",
+      rootSelector: "#cmpbox",
+      panelSelector: ".cmpcookiesdescrbox table.cmpcookietbl",
+    },
     cookieNames: ["__cmpconsent*", "__cmpconsents*", "__cmpconsentx*", "__cmpcc", "__cmpcpc", "__cmpcvc", "__cmpiab"],
     domains: ["consentmanager.net", "consentmanager.de", "cdn.consentmanager.net", "delivery.consentmanager.net"],
     domSelectors: ["#cmpbox", "#cmpboxrecall", "[id*='cmpbox' i]", "[class*='cmpbox' i]"],

@@ -59,7 +59,7 @@ export async function readCookiebotLoadedInventory(panel: Locator, recipe: NonNu
  * Node identity must survive the bounded DOM read, even when the panel is hidden. */
 export async function readPassiveCookiebotLoadedInventory(page: Page, definition: KnownCmpDefinition) {
   const binding=definition.passiveLoadedInventory;
-  if (!binding || !definition.preferenceLoadedInventory || definition.canonicalName!=="Cookiebot") return undefined;
+  if (binding?.version!=="cookiebot_passive_loaded_inventory.v1" || !definition.preferenceLoadedInventory || definition.canonicalName!=="Cookiebot") return undefined;
   const roots=await page.locator(binding.rootSelector).elementHandles();
   const panels=await page.locator(binding.panelSelector).elementHandles();
   try {

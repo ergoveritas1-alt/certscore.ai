@@ -851,6 +851,38 @@ test("required-lane basics survive a cancelled optional inspection through persi
     {categories:[{name:"Analytics",checked:false}]});
 });
 
+test("passive Consentmanager table follows persisted assessment and canonical CMP projection without claiming complete inventory", () => {
+  const input = bundle(); delete input.cmpPreferencesEvidence; delete input.cmpPreferenceLaneOutcome;
+  input.completedAt = "2026-10-13T00:00:02.000Z";
+  input.domSnapshots = [{url: input.url, capturedAtMs: 100, consentStateAtTime: "pre_consent", documentIdentity: {token: "passive-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+  input.cmpBasicEvidence = {contractVersion: "certscore.cmp-basic-evidence.v3", sourceLane: "consent_proof", scanId: input.scanId, targetUrl: input.url, documentUrl: input.url, documentToken: "passive-loader", capturedAtMs: 100, provider: "Consentmanager", controls: [], privacyLinks: [], serviceNames: [],
+    loadedInventoryBinding: {version: "consentmanager_passive_loaded_inventory.v1", rootSelector: "#cmpbox", panelSelector: ".cmpcookiesdescrbox table.cmpcookietbl", documentToken: "passive-loader"},
+    loadedInventory: {version: "consentmanager_loaded_declarations.v1", records: [{name: "_ga", purpose: "Analytics", duration: "1 year", storageType: "cookie", provider: "Example Analytics", sourceRef: "provider:0/record:0"}], truncated: false, unresolvedRecords: 0},
+    declarations: [{name: "_ga", purpose: "Analytics", duration: "1 year", source: "cmp_loaded_inventory"}],
+    captureProgress: {version: "cmp_capture_checkpoints.v1", documentToken: "passive-loader", declarationsAtMs: 90},
+    limitations: ["passive_first_layer_only", "declaration_inventory_not_complete", "loaded_declarations_not_visibility_proof"]};
+  input.cookieEvents = [{cookieName: "_ga"}, {cookieName: "unlisted"}] as CanonicalEvidenceBundle["cookieEvents"];
+  const original = structuredClone(input), audit = deriveCmpAuditAssessment(input)!;
+  assert.deepEqual(input, original);
+  assert.equal(audit.rows.find(row => row.id === "services")?.status, "observed");
+  assert.match(audit.rows.find(row => row.id === "services")!.detail, /already-loaded declaration table/);
+  assert.equal(audit.rows.find(row => row.id === "cookie_information")?.status, "observed");
+  assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.status, "partially_assessed");
+  assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.cookieComparison?.declarationInventoryComplete, false);
+  const assessment = consentControlAssessmentSchema.parse({...observedControlAssessment, cmpAudit: audit});
+  // Persistence is a typed JSON round trip, without reconstructing raw facts.
+  const persisted = consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(assessment)));
+  assert.deepEqual(persisted.cmpAudit, JSON.parse(JSON.stringify(audit)));
+  const concerns = buildNormalizedConcerns({runtimeArtifacts: {consentControlAssessment: persisted}, reviewFindingCandidates: [], validationFindings: []});
+  const projected = projectCmpAudit({scanId: input.scanId, consentControlAssessment: persisted, normalizedConcerns: concerns});
+  assert.equal(projected.rows.find(row => row.id === "services")?.status, "Observed");
+  assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
+  for (const patch of [{documentToken: "stale"}, {provider: "Cookiebot"}, {contractVersion: "certscore.cmp-basic-evidence.v2"}]) {
+    const bad = structuredClone(input); Object.assign(bad.cmpBasicEvidence!, patch);
+    assert.equal(deriveCmpAuditAssessment(bad), undefined);
+  }
+});
+
 test("v6 retains v1 after-click facts and hashed consent storage without upgrading registration", () => {
   const input = bundle();
   const packet = completedUnconfirmedPacket("accept") as NonNullable<CanonicalEvidenceBundle["postAcceptEvidence"]>;

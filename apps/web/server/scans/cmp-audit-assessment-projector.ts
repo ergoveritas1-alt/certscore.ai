@@ -441,7 +441,9 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     const row = rows.find(row => row.id === "services")!;
     const services = [...(row.inventory?.services ?? [])];
     for (const service of loadedServices) if (!services.some(existing => existing.name === service.name) && services.length < 100) services.push(service);
-    set("services", "observed", `${services.length} services explicitly named in the CMP's already-loaded declaration cards. These cards may be collapsed; this bounded sample does not establish visible disclosure, service controls or complete inventory coverage.`);
+    const source = evidence.loadedInventory!.version === "consentmanager_loaded_declarations.v1" ? "table" : "cards";
+    const visibility = source === "table" ? "This table may be hidden;" : "These cards may be collapsed;";
+    set("services", "observed", `${services.length} services explicitly named in the CMP's already-loaded declaration ${source}. ${visibility} this bounded sample does not establish visible disclosure, service controls or complete inventory coverage.`);
     row.inventory = {...row.inventory, services};
   }
   if (disclosed.length) {

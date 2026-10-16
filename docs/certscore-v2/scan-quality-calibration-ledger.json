@@ -1156,8 +1156,8 @@
     },
     "https://www.consentmanager.net/": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-12T20:42:26.061Z",
-      "lastContactAt": "2026-10-15T20:42:26.061Z",
+      "cooldownUntil": "2026-11-13T13:45:26.377Z",
+      "lastContactAt": "2026-10-16T13:45:26.377Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1257,7 +1257,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-16T06:27:59.394Z",
+  "updatedAt": "2026-10-16T13:47:14.352Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",
