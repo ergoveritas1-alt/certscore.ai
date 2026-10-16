@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
-import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "@certscore/contracts";
+import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 
 let browser: Browser | undefined;
@@ -12,6 +12,29 @@ test.before(async () => {
 
 test.after(async () => {
   await browser?.close();
+});
+
+test("main-frame visual witness freezes before a later child navigation without completing global inspection", async () => {
+  const page = await browser!.newPage();
+  try {
+    await page.route("https://visual-capture.test/**", route => route.fulfill({contentType: "text/html", body: route.request().url().endsWith('/root')
+      ? `<div id="didomi-host"><section class="didomi-notice-banner" data-testid="notice" style="position:fixed;left:20px;top:20px;background:white;padding:20px"><div class="didomi-popup-notice-text">We use cookies with <a href="#">our 26 partners</a></div><button id="didomi-notice-agree-button">I agree</button><button id="didomi-notice-disagree-button">I disagree</button><button id="didomi-notice-learn-more-button">Configure</button></section></div><iframe src="/child"></iframe>` : '<p>Unrelated child frame</p>'}));
+    await page.goto("https://visual-capture.test/root");
+    const child = page.frames().find(frame => frame !== page.mainFrame())!;
+    const originalEvaluate = child.evaluate.bind(child);
+    child.evaluate = (async (...args: any[]) => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      await child.goto("https://visual-capture.test/child-later");
+      return (originalEvaluate as any)(...args);
+    }) as typeof child.evaluate;
+    let revision = 0; page.on("framenavigated", () => revision++);
+    const geometry = await captureConsentControlGeometry(page, {documentIdentity: {source: "cdp_loader_id", token: "fixture-loader"},
+      screenshotArtifactRef: "proof.png", visualFrameRevisionBeforeImage: 0, readFrameRevision: () => revision, timeoutMs: 2000});
+    assert.ok(revision > 0);
+    assert.equal(geometry.controlInspection?.structuralCoverage, "limited");
+    assert.equal(geometry.mainFrameVisualCapture?.frameRevisionAtMainRead, 0);
+    assert.ok(verifiedMainFrameVisualCapture(geometry));
+  } finally {await page.close();}
 });
 
 test("captures IKEA-style OneTrust first-layer accept, reject, and options controls", async () => {

@@ -1,4 +1,4 @@
-import { projectVisibleCmpInventory, projectLoadedCmpInventory, completeConfiguredCmpNames } from "@certscore/contracts";
+import { projectVisibleCmpInventory, projectLoadedCmpInventory, completeConfiguredCmpNames, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
 import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
@@ -271,7 +271,7 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
   if (!row) return;
   if (row.status === "not_assessed" && !row.detail) row.detail = "A same-capture Accept/Reject pair with verified visual measurements was not retained; relative prominence could not be assessed.";
   if (!geometry || geometry.artifactVersion !== "consent_control_geometry.v1" || geometry.sourceScanner !== "consent_control_geometry_diagnostic" || geometry.pageUrl !== bundle.url) return;
-  if (verifyConsentControlInspection(geometry.controlInspection, geometry.candidates)?.structuralCoverage !== "complete") return;
+  if (verifyConsentControlInspection(geometry.controlInspection, geometry.candidates)?.structuralCoverage !== "complete" && !verifiedMainFrameVisualCapture(geometry)) return;
   const identity = geometry.documentIdentity as { source?: string; token?: string } | undefined;
   // The coordinator mirrors lane files into the parent artifact prefix. Match
   // the unique retained file identity together with loader and capture time;

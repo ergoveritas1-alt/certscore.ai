@@ -1,9 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
-import { hasMaterialAcceptVisualProminence, consentControlVisualComparisonSchema } from "@certscore/contracts";
+import { hasMaterialAcceptVisualProminence, consentControlVisualComparisonSchema, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { dominantQuantizedRgb, comparisonPair, measureConsentControlVisualComparison, retainPairedConsentVisualCapture, preCaptureConsentPairObserved } from "./consent-control-visual-comparison.js";
 import { consentVisualFixture, separatedConsentVisualFixture, visualFixtureStartMs } from "./test-fixtures/consent-visual-comparison.js";
+
+test("verified main-frame pixels remain measurable when child frames change only after the main read", async () => {
+  const fixture = await consentVisualFixture("equal"), g = fixture.geometry;
+  g.captureTiming = {version: "consent_geometry_capture_timing.v1", mainFrameCompletedAt: g.capturedAt, completedAt: g.capturedAt};
+  g.controlInspection!.structuralCoverage = "limited";
+  g.controlInspection!.captureCoverage.documentAndFramesStable = false;
+  g.controlInspection!.reasonCodes = ["structural_control_inventory_incomplete"];
+  g.mainFrameVisualCapture = {version: "consent_main_frame_visual_capture.v1", documentToken: g.documentIdentity!.token,
+    pageUrl: g.pageUrl, capturedAt: g.capturedAt, screenshotArtifactRef: g.screenshotArtifactRef!, inventoryComplete: true,
+    frameRevisionBeforeImage: 7, frameRevisionAtMainRead: 7, candidateIds: g.candidates.map(c => c.candidateId)};
+  assert.ok(verifiedMainFrameVisualCapture(g));
+  const result = await measureConsentControlVisualComparison(fixture);
+  assert.equal(result?.version, "consent_control_visual_comparison.v2");
+  assert.equal(hasMaterialAcceptVisualProminence(result!), false);
+  assert.equal(g.controlInspection!.structuralCoverage, "limited", "No whole-inventory upgrade");
+  for (const mutate of [
+    (v: typeof g) => {v.mainFrameVisualCapture!.frameRevisionAtMainRead++;},
+    (v: typeof g) => {v.mainFrameVisualCapture!.documentToken = "foreign";},
+    (v: typeof g) => {v.mainFrameVisualCapture!.candidateIds.pop();},
+    (v: typeof g) => {v.controlInspection!.version = "control_specific_inspection.v2";},
+    (v: typeof g) => {delete v.mainFrameVisualCapture;},
+  ]) {const invalid = structuredClone(g); mutate(invalid); assert.equal(await measureConsentControlVisualComparison({...fixture, geometry: invalid}), undefined);}
+  const {createConsentVisualComparisonCollector} = await import("./consent-control-visual-comparison.js");
+  const image = {artifactId: "screenshot_pre_consent_geometry_proof", path: g.screenshotArtifactRef!, capturedAtMs: fixture.screenshotCapturedAtMs - visualFixtureStartMs,
+    url: g.pageUrl, documentIdentity: g.documentIdentity, consentStateAtTime: "pre_consent" as const, captureMethod: "primary_viewport_fallback" as const};
+  let calls = 0;
+  const collector = createConsentVisualComparisonCollector([image], visualFixtureStartMs, () => 1000, async geometry => {calls++; return geometry;});
+  await collector(g, {framesStable: false, frameRevision: 6}); assert.equal(calls, 0);
+  await collector(g, {framesStable: false, frameRevision: 7}); assert.equal(calls, 1);
+});
 
 async function retentionFixture() {
   const fixture = await consentVisualFixture();

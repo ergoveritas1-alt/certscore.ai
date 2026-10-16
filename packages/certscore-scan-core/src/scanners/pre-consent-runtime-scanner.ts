@@ -3515,6 +3515,8 @@ export async function preConsentRuntimeScanner(
         // that earlier diagnostic read. Changes during capture still fail closed.
         const geometryCaptureFrameRevision = consentFrameRevision;
         const geometryCaptureFrames = page.frames();
+        let geometryVisualFrameRevision: number | undefined;
+        let geometryVisualProofPath: string | undefined;
         // Move the existing proof capture before geometry when typed A/R
         // controls already justify it. This starts safety review earlier and
         // pairs the next actual main-frame read with fresh pixels, rather than
@@ -3526,15 +3528,18 @@ export async function preConsentRuntimeScanner(
             "Existing same-session proof screenshot scheduled immediately before geometry so review and child-frame work can overlap.",
             () => captureConsentGeometryProofScreenshot(page, input, {screenshotErrors,
               timeoutMs: input.waitMode === "fast" ? 4_000 : 5_000}));
-          if (proof) { screenshots.unshift(proof); notifyScreenshotCaptured(input, proof); }
+          if (proof) { geometryVisualFrameRevision = geometryCaptureFrameRevision; geometryVisualProofPath = proof.path; screenshots.unshift(proof); notifyScreenshotCaptured(input, proof); }
         }
+        const geometryScreenshotRef = preferredPreConsentScreenshotRef(screenshots, {documentIdentity: currentBrowserDocumentIdentity(page), pageUrl: page.url()});
         let geometry = await recordTiming(
           timingBreakdown,
           "consent geometry DOM capture",
           "Capture typed first-layer control geometry from the untouched browser document.",
           () => captureConsentControlGeometry(page, {
+            visualFrameRevisionBeforeImage: geometryScreenshotRef === geometryVisualProofPath ? geometryVisualFrameRevision : undefined,
+            readFrameRevision: () => consentFrameRevision,
             documentIdentity: currentBrowserDocumentIdentity(page),
-            screenshotArtifactRef: preferredPreConsentScreenshotRef(screenshots, { documentIdentity: currentBrowserDocumentIdentity(page), pageUrl: page.url() }),
+            screenshotArtifactRef: geometryScreenshotRef,
             timeoutMs: input.waitMode === "fast" ? 3_000 : 5_000,
           }),
         );

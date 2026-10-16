@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { consentMainFrameVisualCaptureSchema } from "./consent-main-frame-visual-capture";
 
 export const CONSENT_VISUAL_COMPARISON_VERSION = "consent_control_visual_comparison.v1" as const;
 const measurementSchema = z.object({
@@ -13,7 +14,8 @@ const measurementSchema = z.object({
 
 /** Pixel measurements only. Scanner output does not decide finding eligibility. */
 export const consentControlVisualComparisonSchema = z.object({
-  version: z.literal(CONSENT_VISUAL_COMPARISON_VERSION),
+  version: z.enum([CONSENT_VISUAL_COMPARISON_VERSION, "consent_control_visual_comparison.v2"]),
+  mainFrameCapture: consentMainFrameVisualCaptureSchema.optional(),
   documentToken: z.string().min(1).max(160),
   screenshotArtifactRef: z.string().min(1).max(500),
   screenshotSha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -23,6 +25,10 @@ export const consentControlVisualComparisonSchema = z.object({
   accept: measurementSchema,
   reject: measurementSchema,
 }).strict().superRefine((value, context) => {
+  if (value.version === "consent_control_visual_comparison.v2" ? !value.mainFrameCapture ||
+      value.mainFrameCapture.documentToken !== value.documentToken || value.mainFrameCapture.screenshotArtifactRef !== value.screenshotArtifactRef ||
+      ![value.accept.candidateId, value.reject.candidateId].every(id => value.mainFrameCapture!.candidateIds.includes(id)) : value.mainFrameCapture !== undefined)
+    context.addIssue({code: z.ZodIssueCode.custom, message: "Scoped visual comparison requires its versioned retained capture proof"});
   if (value.imageWidth * value.imageHeight > 4_000_000 || value.accept.candidateId === value.reject.candidateId ||
       [value.accept, value.reject].some(({ bounds: [x, y, w, h] }) => x < 12 || y < 12 ||
         x + w + 12 > value.imageWidth || y + h + 12 > value.imageHeight)) {

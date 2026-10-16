@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { classifyConsentInspectionRole, isControlInspectionComplete, isInitialNecessaryOnlySelection, isInitialSelectionSubmit, verifyConsentControlInspection, CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, isRelevantConsentInspectionCandidate } from "./consent-control-inspection";
 
+test("Didomi counted partner links have a versioned non-decision role without upgrading old inspections", () => {
+  const c = {tagName: "a", consentContextConfirmed: true, selectorHint: "div.didomi-popup-notice-text a", label: "our 26 partners"};
+  assert.deepEqual(classifyConsentInspectionRole(c), {role: "vendor_list", unresolvedIntents: []});
+  assert.equal(classifyConsentInspectionRole(c, "control_specific_inspection.v2").role, "unknown");
+  for (const patch of [{selectorHint: "a"}, {tagName: "button"}, {label: "Accept our 26 partners"}, {consentContextConfirmed: false}])
+    assert.notEqual(classifyConsentInspectionRole({...c, ...patch}).role, "vendor_list");
+});
+
 test("Close requires the complete registered Axeptio optional-off proof", () => {
   const proof = { recipe: "axeptio.initial_optional_off_close.v1", scopeSelector: "open_shadow_root:axeptio",
     submitSelector: '#axeptio_btn_close[aria-label="Close cookie settings"]', complete: true,

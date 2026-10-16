@@ -918,6 +918,35 @@ async function structuredPairFixture(directory: string) {
   return fixture;
 }
 
+test("versioned main-frame proof preserves image review while the whole-frame inspection stays limited", async () => {
+  for (const invalid of [false, true]) {
+    const directory = await testDirectory(`main-frame-scoped-${invalid}`);
+    try {
+      const {source, geometry, saveGeometry} = await structuredPairFixture(directory);
+      const g = geometry as any;
+      g.captureTiming = {version: "consent_geometry_capture_timing.v1", mainFrameCompletedAt: g.capturedAt, completedAt: g.capturedAt};
+      g.candidates = g.candidates.slice(0, 2);
+      g.controlInspection.version = "control_specific_inspection.v3";
+      g.controlInspection.retainedCandidateCount = 2;
+      g.controlInspection.candidates = g.controlInspection.candidates.slice(0, 2);
+      g.controlInspection.structuralCoverage = "limited";
+      g.controlInspection.captureCoverage.documentAndFramesStable = false;
+      g.controlInspection.reasonCodes = ["structural_control_inventory_incomplete"];
+      g.mainFrameVisualCapture = {version: "consent_main_frame_visual_capture.v1", documentToken: g.documentIdentity.token,
+        pageUrl: g.pageUrl, capturedAt: g.capturedAt, screenshotArtifactRef: g.screenshotArtifactRef, inventoryComplete: true,
+        frameRevisionBeforeImage: 7, frameRevisionAtMainRead: invalid ? 8 : 7, candidateIds: g.candidates.map((c: any) => c.candidateId)};
+      await saveGeometry();
+      let calls = 0;
+      const result = await applyHomepageScreenshotSafetyGate({artifactRoot: directory, bundle: source,
+        classifier: async () => {calls++; await new Promise(resolve => setTimeout(resolve, 180)); return {safeForDisplay: true};}});
+      assert.equal(calls, 1);
+      assert.equal(result.screenshots[0]?.displayStatus, invalid ? "withheld" : "available");
+      assert.equal((await diagnostics(directory)).pairEligibility?.status, invalid ? "unverified" : "verified");
+      assert.equal(g.controlInspection.structuralCoverage, "limited");
+    } finally {await rm(directory, {recursive: true, force: true});}
+  }
+});
+
 test("verified structured A/R screenshot keeps the approved review grace when pixel metrics are unavailable", async () => {
   const directory = await testDirectory("structured-pair-no-metrics");
   try {

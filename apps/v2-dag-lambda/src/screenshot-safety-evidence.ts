@@ -7,6 +7,7 @@ import {
   consentAccessibilityDomBindingSchema,
   normalizeConsentControlText,
   verifyConsentControlInspection,
+  verifiedMainFrameVisualCapture,
   type CanonicalEvidenceBundle,
 } from "@certscore/contracts";
 import { comparisonPair, geometryCaptureTimingValid } from "@certscore/scan-core/consent-control-comparison-pair";
@@ -73,6 +74,8 @@ export async function verifiedPairedScreenshot(input: {
     // A present but malformed comparison is still invalid, never a fallback.
     if (geometry.visualComparison !== undefined && !parsed.success) return null;
     const visual = parsed.success ? parsed.data : undefined;
+    if (visual?.version === "consent_control_visual_comparison.v2" &&
+        JSON.stringify(visual.mainFrameCapture) !== JSON.stringify(verifiedMainFrameVisualCapture(geometry))) return null;
     const selected = visual ? undefined : comparisonPair(geometry as unknown as ConsentControlGeometryArtifact);
     if (!visual && !selected) return null;
     const screenshotRef = visual?.screenshotArtifactRef ?? geometry.screenshotArtifactRef;
@@ -104,7 +107,7 @@ export async function verifiedPairedScreenshot(input: {
       !row.captureDiagnostics.timedOutChannels.some(channel => channel === "dom_inventory" || channel === "geometry"));
     if (!observation) return null;
     const inspection = verifyConsentControlInspection(geometry.controlInspection, geometry.candidates);
-    if (!inspection || inspection.structuralCoverage !== "complete" || inspection.reasonCodes.length) return null;
+    if (!inspection || (inspection.structuralCoverage !== "complete" || inspection.reasonCodes.length) && !verifiedMainFrameVisualCapture(geometry)) return null;
     // Observation selectors are surface-relative (e.g. "button"), while
     // geometry selectors include their container. They need not be identical.
     // Exact candidate/geometry/image binding below remains authoritative.

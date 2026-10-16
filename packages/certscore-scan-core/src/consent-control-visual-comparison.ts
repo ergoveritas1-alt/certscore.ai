@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import sharp from "sharp";
-import { consentControlVisualComparisonSchema, CONSENT_VISUAL_COMPARISON_VERSION, verifyConsentControlInspection,
+import { consentControlVisualComparisonSchema, CONSENT_VISUAL_COMPARISON_VERSION, verifyConsentControlInspection, verifiedMainFrameVisualCapture,
   type ConsentControlVisualComparison, type ScreenshotArtifact, type ConsentUiObservation } from "@certscore/contracts";
 import type { ConsentControlGeometryArtifact, ConsentControlCandidateEvidence } from "./consent-control-geometry.js";
 
@@ -116,7 +116,7 @@ function pairedImage(geometry: ConsentControlGeometryArtifact, screenshots: Scre
   const image = screenshots.find(s => s.path === geometry.screenshotArtifactRef && s.url === geometry.pageUrl &&
     s.consentStateAtTime === "pre_consent" && s.documentIdentity?.token === geometry.documentIdentity?.token &&
     s.documentIdentity?.source === "cdp_loader_id" && s.retentionStatus !== "withheld" && s.displayStatus !== "withheld");
-  if (!image || geometry.controlInspection?.structuralCoverage !== "complete") return undefined;
+  if (!image || geometry.controlInspection?.structuralCoverage !== "complete" && !verifiedMainFrameVisualCapture(geometry)) return undefined;
   const skew = Math.abs(Date.parse(geometry.capturedAt) - scanStartedAtMs - image.capturedAtMs);
   return Number.isInteger(skew) && skew <= 500 ? image : undefined;
 }
@@ -138,7 +138,8 @@ export function createConsentVisualComparisonCollector(screenshots: ScreenshotAr
     const diagnostic = (status: ConsentVisualComparisonDiagnostic["status"], allowanceMs = 0, reason?: ConsentVisualComparisonDiagnostic["reason"]) =>
       onDiagnostic?.({ status, ...(reason ? { reason } : {}), artifactId: image?.artifactId, allowanceMs, elapsedMs: Math.max(0, Date.now() - startedAtMs) });
     if (!authoritative) { diagnostic("deferred"); return geometry; }
-    if (state?.framesStable === false) { diagnostic("not_eligible", 0, "capture_frames_changed"); return geometry; }
+    const mainScope = verifiedMainFrameVisualCapture(geometry);
+    if (state?.framesStable === false && (!mainScope || mainScope.frameRevisionBeforeImage !== state.frameRevision)) { diagnostic("not_eligible", 0, "capture_frames_changed"); return geometry; }
     if (!comparisonPair(geometry)) {
       const occluded = ["accept_all", "reject_all"].some(action => geometry.candidates.some(c => c.actionType === action && c.layer === "first_layer" && c.decisionStatus === "covered"));
       diagnostic("not_eligible", 0, occluded ? "pair_occluded" : "pair_not_unique"); return geometry;
@@ -184,7 +185,7 @@ export async function measureConsentControlVisualComparison(input: {
   const captureSkewMs = Math.abs(Date.parse(geometry.capturedAt) - input.screenshotCapturedAtMs);
   if (screenshotBytes.length > 8 * 1024 * 1024 || !geometry.documentIdentity?.token || !geometry.screenshotArtifactRef ||
       !Number.isInteger(captureSkewMs) || captureSkewMs > 500 ||
-      geometry.controlInspection?.structuralCoverage !== "complete" || Date.now() >= (input.deadlineAtMs ?? Infinity)) return undefined;
+      geometry.controlInspection?.structuralCoverage !== "complete" && !verifiedMainFrameVisualCapture(geometry) || Date.now() >= (input.deadlineAtMs ?? Infinity)) return undefined;
   const pair = comparisonPair(geometry);
   if (!pair) return undefined;
   try {
@@ -237,7 +238,9 @@ export async function measureConsentControlVisualComparison(input: {
     };
     const accept = measure(pair.accept), reject = measure(pair.reject);
     if (!accept || !reject || Date.now() >= (input.deadlineAtMs ?? Infinity)) return undefined;
-    const parsed = consentControlVisualComparisonSchema.safeParse({ version: CONSENT_VISUAL_COMPARISON_VERSION,
+    const mainFrameCapture = geometry.controlInspection?.structuralCoverage === "complete" ? undefined : verifiedMainFrameVisualCapture(geometry);
+    const parsed = consentControlVisualComparisonSchema.safeParse({ version: mainFrameCapture ? "consent_control_visual_comparison.v2" : CONSENT_VISUAL_COMPARISON_VERSION,
+      ...(mainFrameCapture ? {mainFrameCapture} : {}),
       documentToken: geometry.documentIdentity.token, screenshotArtifactRef: geometry.screenshotArtifactRef,
       screenshotSha256: createHash("sha256").update(screenshotBytes).digest("hex"), imageWidth: metadata.width, imageHeight: metadata.height, captureSkewMs, accept, reject });
     return parsed.success ? parsed.data : undefined;

@@ -5,6 +5,7 @@ import {
   classifyConsentControlLabel,
   consentControlVisualComparisonSchema,
   verifyConsentControlInspection,
+  verifiedMainFrameVisualCapture,
   isInitialNecessaryOnlySelection, isInitialSelectionSubmit,
   initialConsentSelectionSchema,
   consentSessionAccessLimited,
@@ -259,7 +260,10 @@ function geometryInput(
   const verifiedInspection = verifyConsentControlInspection(raw.controlInspection, raw.candidates);
   const visual = consentControlVisualComparisonSchema.safeParse(raw.visualComparison);
   const visualComparison = visual.success && tokenBoundToCanonicalDocument && assessmentStatus === "complete" &&
-    verifiedInspection?.structuralCoverage === "complete" && visual.data.documentToken === documentToken &&
+    (visual.data.version === "consent_control_visual_comparison.v1" ||
+      JSON.stringify(visual.data.mainFrameCapture) === JSON.stringify(verifiedMainFrameVisualCapture(raw))) &&
+    (verifiedInspection?.structuralCoverage === "complete" || verifiedMainFrameVisualCapture(raw) &&
+      JSON.stringify(visual.data.mainFrameCapture) === JSON.stringify(verifiedMainFrameVisualCapture(raw))) && visual.data.documentToken === documentToken &&
     visual.data.imageWidth === (raw.viewport as Record<string, unknown> | undefined)?.width &&
     visual.data.imageHeight === (raw.viewport as Record<string, unknown> | undefined)?.height &&
     ["accept", "reject"].every(intent => {

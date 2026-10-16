@@ -10,6 +10,7 @@ export * from "./cmp-audit-evidence";
 export * from "./cmp-visible-inventory";
 export * from "./cmp-loaded-inventory";
 export * from "./cmp-sdk-service-inventory";
+export * from "./consent-main-frame-visual-capture";
 export * from "./cmp-inventory-manifest";
 import { collectionSurfaceSnapshotSchema } from "./collection-surface-snapshot";
 export * from "./collection-surface-snapshot";

@@ -43,7 +43,7 @@ const assessmentChannelSchema = z.enum([
 export const consentControlAssessmentControlResultSchema = z.object({
   state: consentControlAssessmentTriStateSchema,
   inspection: z.object({
-    policy: z.enum([LEGACY_CONTROL_INSPECTION_POLICY, CONTROL_INSPECTION_POLICY]),
+    policy: z.enum([LEGACY_CONTROL_INSPECTION_POLICY, "control_specific_inspection.v2", CONTROL_INSPECTION_POLICY]),
     status: z.enum(["complete", "limited"]),
     evidenceRefs: z.array(z.string().max(240)).max(24),
   }).optional(),

@@ -1,12 +1,12 @@
 import { z } from "zod";
 
 export const LEGACY_CONTROL_INSPECTION_POLICY = "control_specific_inspection.v1" as const;
-export const CONTROL_INSPECTION_POLICY = "control_specific_inspection.v2" as const;
-type InspectionPolicy = typeof CONTROL_INSPECTION_POLICY | typeof LEGACY_CONTROL_INSPECTION_POLICY;
+export const CONTROL_INSPECTION_POLICY = "control_specific_inspection.v3" as const;
+type InspectionPolicy = typeof CONTROL_INSPECTION_POLICY | typeof LEGACY_CONTROL_INSPECTION_POLICY | "control_specific_inspection.v2";
 const intents = ["accept", "reject", "options", "privacy_opt_out"] as const;
 export type InspectedConsentIntent = typeof intents[number];
 export const consentControlInspectionSchema = z.object({
-  version: z.enum([LEGACY_CONTROL_INSPECTION_POLICY, CONTROL_INSPECTION_POLICY]),
+  version: z.enum([LEGACY_CONTROL_INSPECTION_POLICY, "control_specific_inspection.v2", CONTROL_INSPECTION_POLICY]),
   structuralCoverage: z.enum(["complete", "limited"]),
   retainedCandidateCount: z.number().int().min(0).max(160),
   captureCoverage: z.object({
@@ -46,7 +46,7 @@ const inspectionCandidateSchema = z.object({
 });
 export function isRelevantConsentInspectionCandidate(c: z.infer<typeof inspectionCandidateSchema>, policy: InspectionPolicy = CONTROL_INSPECTION_POLICY): boolean {
   return (policy === LEGACY_CONTROL_INSPECTION_POLICY || c.consentContextConfirmed === true) && c.layer === "first_layer" && c.intersectsViewport && c.enabled && c.boundingBox.width > 0 &&
-    c.boundingBox.height > 0 && !["hidden", "dom_present_not_visible", ...(policy === CONTROL_INSPECTION_POLICY ? ["covered"] : [])].includes(c.decisionStatus);
+    c.boundingBox.height > 0 && !["hidden", "dom_present_not_visible", ...(policy !== LEGACY_CONTROL_INSPECTION_POLICY ? ["covered"] : [])].includes(c.decisionStatus);
 }
 
 /** Validate the producer's roles against the exact retained inventory. Missing,
@@ -95,7 +95,7 @@ export function classifyConsentInspectionRole(c: {
   if (["checkbox", "radio"].includes(c.inputType ?? "") || ["checkbox", "switch", "radio"].includes(c.role ?? "")) return { role: "category", unresolvedIntents: [] };
   const label = (c.label ?? "").trim().toLocaleLowerCase().replace(/[.!…]+$/u, "").trim();
   const scope = `${c.selectorHint ?? ""} ${c.containerSelectorHint ?? ""}`;
-  if (policy === CONTROL_INSPECTION_POLICY) {
+  if (policy !== LEGACY_CONTROL_INSPECTION_POLICY) {
     if (c.classifierReasonCodes?.includes("unverified_preferences_navigation")) return { role: "information", unresolvedIntents: ["options"] };
     if (c.tagName === "div" && !["button", "link"].includes(c.role ?? "") &&
         c.selectorHint === "#onetrust-banner-sdk" && c.containerSelectorHint === "#onetrust-banner-sdk" &&
@@ -107,6 +107,9 @@ export function classifyConsentInspectionRole(c: {
       return { role: "vendor_list", unresolvedIntents: [] };
     }
   }
+  if (policy === CONTROL_INSPECTION_POLICY && c.tagName === "a" &&
+      c.selectorHint === "div.didomi-popup-notice-text a" &&
+      /^our [1-9][0-9]{0,3} partners$/.test(label)) return {role: "vendor_list", unresolvedIntents: []};
   if ((/didomi-popup-notice-text/.test(scope) && /^nasi partnerzy(?: \(\d+\))?$/.test(label)) ||
       (/qc-cmp2-summary-info/.test(scope) && label === "partners")) return { role: "vendor_list", unresolvedIntents: [] };
   if (c.actionType === "policy_link" || (c.tagName === "a" && c.linkDestination === "other_document")) {

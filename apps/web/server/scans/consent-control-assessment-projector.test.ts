@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cmpPreferencesEvidenceSchema, deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveLaneOwnedConsentSurfaceInspection, deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
 
 function bundle(
@@ -64,6 +64,35 @@ function completeInspection(outcome: string, observed: boolean) {
     outcome,
   };
 }
+
+test("main-frame comparison persists through a limited whole-frame assessment without upgrading coverage", async () => {
+  const {consentVisualFixture, visualFixtureStartMs} = await import("../../../../packages/certscore-scan-core/src/test-fixtures/consent-visual-comparison");
+  const {measureConsentControlVisualComparison} = await import("../../../../packages/certscore-scan-core/src/consent-control-visual-comparison");
+  const fixture = await consentVisualFixture("equal"), g = fixture.geometry;
+  g.captureTiming = {version: "consent_geometry_capture_timing.v1", mainFrameCompletedAt: g.capturedAt, completedAt: g.capturedAt};
+  g.controlInspection!.structuralCoverage = "limited"; g.controlInspection!.captureCoverage.documentAndFramesStable = false;
+  g.controlInspection!.reasonCodes = ["structural_control_inventory_incomplete"];
+  g.mainFrameVisualCapture = {version: "consent_main_frame_visual_capture.v1", documentToken: g.documentIdentity!.token,
+    pageUrl: g.pageUrl, capturedAt: g.capturedAt, screenshotArtifactRef: g.screenshotArtifactRef!, inventoryComplete: true,
+    frameRevisionBeforeImage: 1, frameRevisionAtMainRead: 1, candidateIds: g.candidates.map(c => c.candidateId)};
+  g.visualComparison = await measureConsentControlVisualComparison(fixture);
+  assert.ok(g.visualComparison);
+  const source = bundle(g.candidates.map(c => ({...c, visible: true})), {url: g.pageUrl});
+  source.startedAt = new Date(visualFixtureStartMs).toISOString(); source.completedAt = new Date(visualFixtureStartMs + 10000).toISOString();
+  const time = Date.parse(g.capturedAt) - visualFixtureStartMs;
+  Object.assign(source.domSnapshots[0]!, {capturedAtMs: time, documentIdentity: g.documentIdentity});
+  Object.assign(source.consentUiObservations[0]!, {documentIdentity: g.documentIdentity, documentUrl: g.pageUrl, observedAtMs: time,
+    inventoryOutcome: "partial", captureDiagnostics: {completedChannels: ["dom_inventory", "geometry"], failedChannels: [], timedOutChannels: []}});
+  source.screenshots = [{artifactId: "screenshot_pre_consent_geometry_proof", path: g.screenshotArtifactRef!, url: g.pageUrl,
+    documentIdentity: g.documentIdentity, capturedAtMs: fixture.screenshotCapturedAtMs - visualFixtureStartMs, consentStateAtTime: "pre_consent", pagePhase: "network_idle",
+    captureMethod: "primary_viewport_fallback", retentionStatus: "available", displayStatus: "available"}];
+  const assessment = deriveMaterializedConsentControlAssessment({bundle: source, consentControlGeometryEvidence: g as unknown as Record<string, unknown>,
+    consentSurfaceInspection: {...completeInspection("actionable_surface_observed", true), observedAtMs: time}, finalUrl: g.pageUrl, requestedUrl: g.pageUrl, noGo: false});
+  assert.equal(assessment.assessmentStatus, "limited");
+  assert.equal(assessment.controls.accept.state, "observed"); assert.equal(assessment.controls.reject.state, "observed");
+  assert.equal(assessment.visualComparison?.version, "consent_control_visual_comparison.v2");
+  assert.deepEqual(consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(assessment))).visualComparison, assessment.visualComparison);
+});
 
 function geometry(candidates: Array<Record<string, unknown>>, summary: {
   firstLayerAccept: boolean;

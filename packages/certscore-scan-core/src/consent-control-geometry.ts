@@ -21,6 +21,7 @@ import {
   type ConsentControlLabelClassification,
   type ConsentControlLabelClassifierInput,
   type ConsentControlVisualComparison,
+  type ConsentMainFrameVisualCapture,
   type SupportedPrivacyEvidenceLocale,
 } from "@certscore/contracts";
 import {
@@ -211,6 +212,7 @@ export interface ConsentControlGeometryArtifact {
   documentIdentity?: BrowserDocumentIdentity;
   capturedAt: string;
   captureTiming?: {version: "consent_geometry_capture_timing.v1"; mainFrameCompletedAt: string; completedAt: string};
+  mainFrameVisualCapture?: ConsentMainFrameVisualCapture;
   viewport: {
     width: number;
     height: number;
@@ -232,6 +234,8 @@ export interface ConsentControlGeometryArtifact {
 }
 
 interface CaptureConsentControlGeometryOptions {
+  visualFrameRevisionBeforeImage?: number;
+  readFrameRevision?: () => number;
   documentIdentity?: BrowserDocumentIdentity;
   screenshotArtifactRef?: string;
   candidateLimit?: number;
@@ -400,8 +404,8 @@ export async function captureConsentControlGeometry(
   const cookieNamesPromise = frameTimeoutMs
     ? promiseWithTimeout(cookieNamesRead, frameTimeoutMs).catch(() => undefined)
     : cookieNamesRead;
-  let navigatedDuringCapture = false;
-  const onNavigation = (_frame: Frame) => { navigatedDuringCapture = true; };
+  let navigatedDuringCapture = false, mainFrameNavigatedDuringCapture = false;
+  const onNavigation = (frame: Frame) => { navigatedDuringCapture = true; if (frame === mainFrame) mainFrameNavigatedDuringCapture = true; };
   page.on("framenavigated", onNavigation);
   const [captureResults, retainedCookieNames] = await Promise.all([Promise.all(frames.map(async (frame, frameIndex) => {
     try {
@@ -409,13 +413,13 @@ export async function captureConsentControlGeometry(
       const result = frameTimeoutMs
         ? await promiseWithTimeout(capture, frameTimeoutMs)
         : await capture;
-      return result ? { capture: result, frameIndex, completedAtMs: Date.now() } : undefined;
+      return result ? { capture: result, frameIndex, completedAtMs: Date.now(), frameRevision: options.readFrameRevision?.() } : undefined;
     } catch {
       return undefined;
     }
   })), cookieNamesPromise]).finally(() => page.off("framenavigated", onNavigation));
   const successfulCaptures = captureResults.filter(
-    (result): result is { capture: RawGeometryCapture; frameIndex: number; completedAtMs: number } => Boolean(result),
+    (result): result is { capture: RawGeometryCapture; frameIndex: number; completedAtMs: number; frameRevision: number | undefined } => Boolean(result),
   );
   const mainFrameResult = successfulCaptures.find((result) => result.frameIndex === 0);
   const mainFrameCapture = mainFrameResult?.capture;
@@ -482,6 +486,16 @@ export async function captureConsentControlGeometry(
     // child frame must not replace the document identity of the scan.
     pageUrl: expectedPageUrl,
     ...(options.documentIdentity ? { documentIdentity: options.documentIdentity } : {}),
+    ...(mainFrameResult && mainFrameCapture && !mainFrameCapture.inventoryLimited && mainFrameCapture.documentReadyState === "complete" &&
+      !mainFrameNavigatedDuringCapture && initialPageUrl === expectedPageUrl && mainFrameCapture.pageUrl === expectedPageUrl &&
+      options.documentIdentity?.source === "cdp_loader_id" && options.screenshotArtifactRef &&
+      Number.isInteger(options.visualFrameRevisionBeforeImage) && options.visualFrameRevisionBeforeImage === mainFrameResult.frameRevision &&
+      candidates.filter(c => c.frameContext.frameKind === "main_frame").length === mainFrameCapture.candidates.length
+      ? {mainFrameVisualCapture: {version: "consent_main_frame_visual_capture.v1" as const,
+        documentToken: options.documentIdentity.token, pageUrl: expectedPageUrl, screenshotArtifactRef: options.screenshotArtifactRef,
+        capturedAt: new Date(mainFrameResult.completedAtMs).toISOString(), inventoryComplete: true as const,
+        frameRevisionBeforeImage: options.visualFrameRevisionBeforeImage!, frameRevisionAtMainRead: mainFrameResult.frameRevision!,
+        candidateIds: candidates.filter(c => c.frameContext.frameKind === "main_frame").map(c => c.candidateId)}} : {}),
     // Pixels describe the main frame. Child-frame waits and classification
     // work must not relabel when that actual main-frame geometry was read.
     capturedAt: new Date(mainFrameResult?.completedAtMs ?? Date.now()).toISOString(),
