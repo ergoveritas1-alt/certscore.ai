@@ -1,4 +1,4 @@
-import { captureCmpBasicEvidence } from "../cmp-basic-capture.js";
+import { captureCmpBasicEvidence, finishPassiveCmpPrivacyLinks } from "../cmp-basic-capture.js";
 import type { CmpBasicEvidence } from "@certscore/contracts";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "../evidence-work-budget.js";
@@ -81,7 +81,7 @@ import { consentGeometryProofCdpBudget, consentProminenceSettleBudgetMs } from "
 import { isPairedConsentGeometryReady } from "../consent-paired-geometry-readiness.js";
 import { bindConsentGeometryScreenshot, preferredPreConsentScreenshotRef } from "../consent-geometry-screenshot-binding.js";
 import { bindAccessibilityNodesToDom } from "../consent-accessibility-dom-binding.js";
-import { createConsentVisualComparisonCollector } from "../consent-control-visual-comparison.js";
+import { createConsentVisualComparisonCollector, preCaptureConsentPairObserved } from "../consent-control-visual-comparison.js";
 import { captureDocumentBoundValue, sameDocumentCaptureBinding, type DocumentBoundCapture } from "../document-bound-capture.js";
 import { connectTlsThroughConfiguredProxy, proxyFetch } from "../proxy-fetch.js";
 import {
@@ -1025,7 +1025,7 @@ export async function preConsentRuntimeScanner(
   const measureVisualComparison = createConsentVisualComparisonCollector(screenshots, input.scanStartedAtMs, remainingModuleBudgetMs, undefined,
     diagnostic => timingBreakdown.push({ label: "consent pixel comparison", durationMs: diagnostic.elapsedMs,
       outcome: diagnostic.status === "retained" ? "completed" : diagnostic.status === "timed_out" ? "timed_out" : "skipped",
-      detail: JSON.stringify({ policy: "terminal_pair_first.v3", ...diagnostic }) }));
+      detail: JSON.stringify({ policy: "terminal_pair_first.v4", ...diagnostic }) }));
   const navigationAttempts: NonNullable<NonNullable<ScanModuleRun["recoveryDiagnostics"]>["attempts"]> = [];
   let recoveryAttemptCount = 0;
   let recoveryDurationMs = 0;
@@ -1096,6 +1096,7 @@ export async function preConsentRuntimeScanner(
   let retainedCmpBasicEvidence: CmpBasicEvidence | undefined;
   let cmpBasicCaptureStarted = false;
   let cmpBasicCaptureClosed=false;
+  let cmpBasicCaptureElapsedMs=350;
   const currentCmpBasicEvidence = () => {
     cmpBasicCaptureClosed=true;
     const identity = currentBrowserDocumentIdentity(page);
@@ -1109,12 +1110,14 @@ export async function preConsentRuntimeScanner(
     const deadline = basicStartedAt + Math.min(remainingModuleBudgetMs(), 350);
     let basicOutcome = "capture_unavailable";
     void captureCmpBasicEvidence({ page, scanId: input.cmpBasicScanId, targetUrl: input.normalizedUrl,
+      deferCookiebotPrivacyLinks:true,
       scanStartedAtMs: input.scanStartedAtMs,
       readBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token }),
       isCurrent: () => !cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now() < deadline,
       onOutcome: reason => { basicOutcome = reason; },
       onCheckpoint: packet => { if(!cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now()<deadline) retainedCmpBasicEvidence=packet; },
     }).then(packet => {
+      cmpBasicCaptureElapsedMs=Date.now()-basicStartedAt;
       if(cmpBasicCaptureClosed) return;
       if (packet && !cmpBasicCaptureClosed && Date.now() < deadline && !effectiveSignal?.aborted) retainedCmpBasicEvidence = packet;
       timingBreakdown.push({ label: "passive CMP basics", durationMs: Date.now() - basicStartedAt,
@@ -2077,7 +2080,7 @@ export async function preConsentRuntimeScanner(
           );
           if (pairedGeometry) {
             pairedGeometry.geometry = await measureVisualComparison(pairedGeometry.geometry, {
-              terminalPair: true,
+              terminalPair: preCaptureConsentPairObserved(preScreenshotConsentObservation,pairedGeometry.geometry,settledScreenshot),
               frameRevision: pairedGeometry.frameRevision,
               framesStable: pairedGeometry.access.status === "loaded" && consentFrameRevision === pairedGeometry.frameRevision &&
                 page.frames().length === pairedGeometry.frames.length && pairedGeometry.frames.every(frame => page.frames().includes(frame)),
@@ -4092,6 +4095,20 @@ export async function preConsentRuntimeScanner(
     }
 
     if (deferGpcFinalization) await finalizeGpcEvidence();
+
+    // All consent visual capture is complete. Reuse only the unused portion
+    // of the single 350ms passive-read allowance, never a new tail budget.
+    const privacyAllowanceMs=Math.min(Math.max(0,350-cmpBasicCaptureElapsedMs),remainingModuleBudgetMs());
+    if (captureConsentEvidence && retainedCmpBasicEvidence?.provider==="Cookiebot" &&
+        retainedCmpBasicEvidence.captureProgress?.privacyLinksAtMs===undefined && privacyAllowanceMs>0) {
+      const privacyDeadline=Date.now()+privacyAllowanceMs;
+      const privacyPacket=await recordBoundedTiming(timingBreakdown,"passive CMP privacy links",
+        "One same-origin public-policy hit test after visual capture, with restored scroll and the unused passive-read allowance.",privacyAllowanceMs,
+        ()=>finishPassiveCmpPrivacyLinks({page,packet:retainedCmpBasicEvidence!,scanStartedAtMs:input.scanStartedAtMs,
+          readBinding:()=>({url:page.url(),token:currentBrowserDocumentIdentity(page)?.token}),
+          isCurrent:()=>!cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now()<privacyDeadline}),()=>undefined);
+      if (privacyPacket && !effectiveSignal?.aborted && Date.now()<privacyDeadline) retainedCmpBasicEvidence=privacyPacket;
+    }
 
     const domPath = await recordTiming(
       timingBreakdown,

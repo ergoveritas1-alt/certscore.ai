@@ -233,6 +233,10 @@ export const cmpBasicEvidenceSchema = z.object({
     panelSelector: z.literal("#CybotCookiebotDialogTabContentDetails"),
     documentToken: z.string().min(1).max(160),
   }).strict().optional(),
+  privacyLinkInspection: z.object({
+    version: z.literal("passive_public_privacy_links.v1"),
+    scope: z.literal("same_origin_page"), documentToken: z.string().min(1).max(160),
+  }).strict().optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
   limitations: z.array(z.string().min(1).max(120)).max(8),
 }).strict().superRefine((packet,ctx)=>{
@@ -250,6 +254,10 @@ export const cmpBasicEvidenceSchema = z.object({
         JSON.stringify(packet.inventoryManifest)!==JSON.stringify(packet.loadedInventory.inventoryManifest))))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive compact inventory requires its canonical configured source."});
   const loadedDeclarations=packet.declarations.filter(row=>row.source==="cmp_loaded_inventory");
+  if (packet.privacyLinkInspection && (!progress || progress.privacyLinksAtMs===undefined ||
+      packet.privacyLinkInspection.documentToken!==packet.documentToken || packet.documentUrl!==packet.targetUrl ||
+      packet.privacyLinks.some(link=>{try{return new URL(link.url).origin!==new URL(packet.targetUrl).origin;}catch{return true;}})))
+    ctx.addIssue({code:z.ZodIssueCode.custom,message:"Public privacy links require a completed same-origin document checkpoint."});
   const hasLoaded=Boolean(packet.loadedInventory || packet.loadedInventoryBinding || loadedDeclarations.length);
   if (packet.contractVersion==="certscore.cmp-basic-evidence.v2" || hasLoaded) {
     const projected=packet.loadedInventory ? projectLoadedCmpInventory(packet.loadedInventory).declarations : [];

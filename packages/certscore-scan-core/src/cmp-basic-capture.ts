@@ -17,6 +17,7 @@ export async function captureCmpBasicEvidence(input: {
   isCurrent: () => boolean;
   onOutcome?: (reason: string) => void;
   onCheckpoint?: (packet:CmpBasicEvidence)=>void;
+  deferCookiebotPrivacyLinks?: boolean;
 }): Promise<CmpBasicEvidence | undefined> {
   const { page } = input;
   const before = input.readBinding();
@@ -77,6 +78,7 @@ export async function captureCmpBasicEvidence(input: {
     }
   }
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
+  if (input.deferCookiebotPrivacyLinks && definition.canonicalName==="Cookiebot") return retained;
   const privacyScope=page.locator(scopes[index]!).locator("a[href]");
   const links=await privacyScope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
     label:(node.getAttribute("aria-label")??node.textContent??"").trim().slice(0,160)})));
@@ -86,4 +88,28 @@ export async function captureCmpBasicEvidence(input: {
   packet.captureProgress!.privacyLinksAtMs=Date.now()-input.scanStartedAtMs;
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
   input.onOutcome?.("captured");return retained;
+}
+
+/** Called after consent visual work, using only the unused passive-read budget.
+ * A single restored document scroll can verify a public link without opening it. */
+export async function finishPassiveCmpPrivacyLinks(input: {
+  page:Page; packet:CmpBasicEvidence; scanStartedAtMs:number;
+  readBinding:()=>{url:string;token?:string}; isCurrent:()=>boolean;
+}):Promise<CmpBasicEvidence|undefined> {
+  const {packet,page}=input;
+  const bound=()=>{const current=input.readBinding();return input.isCurrent() && current.url===packet.targetUrl && current.token===packet.documentToken;};
+  if (!bound()) return undefined;
+  const scope=page.locator('a[href]');
+  const links=await scope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
+    label:(node.getAttribute('aria-label')??node.textContent??'').trim().slice(0,160)})));
+  if(!bound())return undefined;
+  const origin=new URL(packet.targetUrl).origin;
+  const candidates=privacyPolicyLinkCandidates(links.filter(link=>{try{return new URL(link.url).origin===origin;}catch{return false;}}));
+  const privacyLinks=(await scope.evaluateAll(readPrivacyLinkAccess,{candidates,allowOneDocumentScroll:true}))
+    .map(({url,hitTargetBeforeAction,access})=>({url,hitTargetBeforeAction,access}));
+  if(!bound())return undefined;
+  const capturedAtMs=Date.now()-input.scanStartedAtMs;
+  return cmpBasicEvidenceSchema.parse({...packet,privacyLinks,capturedAtMs,
+    privacyLinkInspection:{version:'passive_public_privacy_links.v1',scope:'same_origin_page',documentToken:packet.documentToken},
+    captureProgress:{...packet.captureProgress,version:'cmp_capture_checkpoints.v1',documentToken:packet.documentToken,privacyLinksAtMs:capturedAtMs}});
 }

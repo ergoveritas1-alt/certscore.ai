@@ -34,6 +34,18 @@ function packet() {
   };
 }
 
+test("passive public policy access preserves document, origin and restoration proof",()=>{
+  const input={contractVersion:'certscore.cmp-basic-evidence.v1',sourceLane:'consent_proof',scanId:'links',targetUrl:'https://example.test/',documentUrl:'https://example.test/',documentToken:'loader',capturedAtMs:100,provider:'Cookiebot',controls:[],declarations:[],serviceNames:[],limitations:['passive_first_layer_only'],
+    captureProgress:{version:'cmp_capture_checkpoints.v1',documentToken:'loader',privacyLinksAtMs:100},
+    privacyLinkInspection:{version:'passive_public_privacy_links.v1',scope:'same_origin_page',documentToken:'loader'},
+    privacyLinks:[{url:'https://example.test/privacy',hitTargetBeforeAction:true,access:{version:'privacy_link_access.v2',outcome:'reachable',scroll:{version:'privacy_link_scroll.v1',initialOutcome:'outside_viewport',beforeY:0,inspectedY:2000,restored:true}}}]};
+  assert.equal(cmpBasicEvidenceSchema.safeParse(input).success,true);
+  for(const mutate of [(p:any)=>p.privacyLinks[0].url='https://vendor.test/privacy',(p:any)=>p.privacyLinks[0].url='invalid-url',(p:any)=>p.privacyLinkInspection.documentToken='other',
+    (p:any)=>delete p.captureProgress.privacyLinksAtMs,(p:any)=>p.privacyLinks[0].access.scroll.restored=false]){
+    const bad=structuredClone(input);mutate(bad);assert.equal(cmpBasicEvidenceSchema.safeParse(bad).success,false);
+  }
+});
+
 test("preference binding diagnostics preserve historical packets and never create opening proof", () => {
   const input=packet(), result=cmpPreferencesEvidenceSchema.parse(input);
   assert.equal(result.status,"limited");assert.equal(result.action.opened,false);assert.deepEqual(result.controls,[]);

@@ -1,7 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
-import { captureCmpBasicEvidence } from "./cmp-basic-capture.js";
+import { captureCmpBasicEvidence, finishPassiveCmpPrivacyLinks } from "./cmp-basic-capture.js";
+
+test("deferred Cookiebot policy access checks the page after visual capture, restores scroll, and rejects foreign or changed documents",async()=>{
+  const browser=await chromium.launch({headless:true});
+  try{
+    const page=await browser.newPage({viewport:{width:800,height:600}});
+    await page.route('https://example.test/',r=>r.fulfill({contentType:'text/html',body:'<main>Fixture</main>'}));await page.goto('https://example.test/');
+    const content=`<div id="CybotCookiebotDialog"><button>Customize</button><section hidden><a href="https://example.test/privacy-policy">Privacy policy</a></section></div><div style="height:2000px"></div><footer><a href="https://vendor.test/privacy-policy">Privacy policy</a><a href="https://example.test/privacy-policy">Privacy policy</a></footer><script>window.clicks=0;document.addEventListener('click',()=>window.clicks++);</script>`;
+    for(const covered of [false,true]){
+      await page.setContent(content+(covered?'<div style="position:fixed;inset:0;z-index:999"></div>':''));
+      const input={page,scanId:'public-policy',targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:'loader'}),isCurrent:()=>true};
+      const packet=await captureCmpBasicEvidence({...input,deferCookiebotPrivacyLinks:true});assert.ok(packet);
+      assert.equal(packet.captureProgress?.privacyLinksAtMs,undefined,'No scroll during the early visual work');
+      const result=await finishPassiveCmpPrivacyLinks({...input,packet});assert.ok(result);
+      assert.ok(result.privacyLinks.every(link=>new URL(link.url).origin==='https://example.test'));
+      assert.equal(result.privacyLinks.some(link=>link.hitTargetBeforeAction),!covered);
+      assert.ok(result.privacyLinks.some(link=>link.access?.scroll?.restored));
+      assert.equal(await page.evaluate(()=>scrollY),0);assert.equal(await page.evaluate(()=>(window as any).clicks),0);
+      assert.equal(await finishPassiveCmpPrivacyLinks({...input,packet,readBinding:()=>({url:page.url(),token:'new-loader'})}),undefined);
+      assert.equal(await finishPassiveCmpPrivacyLinks({...input,packet,isCurrent:()=>false}),undefined);
+    }
+  }finally{await browser.close();}
+});
 
 test("passive Cookiebot reads hidden declarations without clicks or visible-control claims", async () => {
   const browser=await chromium.launch({headless:true});

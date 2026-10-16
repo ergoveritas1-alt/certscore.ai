@@ -3,13 +3,27 @@ import { readFile, stat } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import sharp from "sharp";
 import { consentControlVisualComparisonSchema, CONSENT_VISUAL_COMPARISON_VERSION, verifyConsentControlInspection,
-  type ConsentControlVisualComparison, type ScreenshotArtifact } from "@certscore/contracts";
+  type ConsentControlVisualComparison, type ScreenshotArtifact, type ConsentUiObservation } from "@certscore/contracts";
 import type { ConsentControlGeometryArtifact, ConsentControlCandidateEvidence } from "./consent-control-geometry.js";
 
 import { comparisonPair, geometryCaptureTimingValid } from "./consent-control-comparison-pair.js";
 export { comparisonPair } from "./consent-control-comparison-pair.js";
 
 export type ConsentVisualCaptureState = { frameRevision: number; framesStable: boolean; terminalPair?: boolean };
+
+/** A post-image inventory cannot prove the banner was present in that image.
+ * This only selects an early analysis opportunity; pixel and frame proof remain required. */
+export function preCaptureConsentPairObserved(observation: ConsentUiObservation, geometry: ConsentControlGeometryArtifact, image: ScreenshotArtifact) {
+  const pair=comparisonPair(geometry);
+  if (!pair || observation.documentUrl!==image.url || observation.documentIdentity?.source!=="cdp_loader_id" ||
+      observation.documentIdentity.token!==image.documentIdentity?.token || !Number.isFinite(observation.observedAtMs) ||
+      observation.observedAtMs>image.capturedAtMs || image.capturedAtMs-observation.observedAtMs>500) return false;
+  return (["accept", "reject"] as const).every(intent=>{
+    const candidate=pair[intent], controls=observation.controls.filter(control=>control.actionType===`${intent}_all` && control.visible===true);
+    return controls.length===1 && Boolean(candidate.selectorHint) && controls[0]!.selectorHint===candidate.selectorHint &&
+      controls[0]!.label.trim()===candidate.label.trim();
+  });
+}
 
 function geometryFacts(geometry: ConsentControlGeometryArtifact) {
   const { capturedAt: _time, captureTiming: _timing, screenshotArtifactRef: _image, visualComparison: _visual, ...facts } = geometry;

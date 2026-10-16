@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
 import { hasMaterialAcceptVisualProminence, consentControlVisualComparisonSchema } from "@certscore/contracts";
-import { dominantQuantizedRgb, comparisonPair, measureConsentControlVisualComparison, retainPairedConsentVisualCapture } from "./consent-control-visual-comparison.js";
+import { dominantQuantizedRgb, comparisonPair, measureConsentControlVisualComparison, retainPairedConsentVisualCapture, preCaptureConsentPairObserved } from "./consent-control-visual-comparison.js";
 import { consentVisualFixture, separatedConsentVisualFixture, visualFixtureStartMs } from "./test-fixtures/consent-visual-comparison.js";
 
 async function retentionFixture() {
@@ -20,6 +20,27 @@ async function retentionFixture() {
       captureMethod: "primary_viewport_fallback" as const, pagePhase: "network_idle" as const,
       consentStateAtTime: "pre_consent" as const, retentionStatus: "available" as const, displayStatus: "available" as const }] };
 }
+
+test("a banner appearing after the settled screenshot cannot consume the final pair allowance", async()=>{
+  const {createConsentVisualComparisonCollector}=await import('./consent-control-visual-comparison.js');
+  const fixture=await consentVisualFixture();
+  const image={artifactId:'screenshot_pre_consent_settled',path:'early.png',url:fixture.geometry.pageUrl,documentIdentity:fixture.geometry.documentIdentity,capturedAtMs:1000,consentStateAtTime:'pre_consent' as const,pagePhase:'network_idle' as const};
+  const proof={...image,artifactId:'screenshot_pre_consent_geometry_proof',path:'proof.png'};
+  const geometry={...fixture.geometry,screenshotArtifactRef:image.path};
+  const observation:any={documentUrl:image.url,documentIdentity:image.documentIdentity,observedAtMs:900,controls:geometry.candidates.map(c=>({actionType:c.actionType,visible:true,label:c.label,selectorHint:c.selectorHint}))};
+  assert.equal(preCaptureConsentPairObserved(observation,geometry,image),true);
+  for(const patch of [{observedAtMs:1001},{observedAtMs:499},{documentUrl:'https://other.test/'},{documentIdentity:{source:'cdp_loader_id',token:'other'}},{controls:[]},
+    {controls:observation.controls.map((c:any)=>({...c,selectorHint:'#different'}))}]) {
+    assert.equal(preCaptureConsentPairObserved({...observation,...patch},geometry,image),false);
+  }
+  let calls=0;
+  const collector=createConsentVisualComparisonCollector([image,proof],visualFixtureStartMs,()=>1000,async g=>{calls++;return g;});
+  const postImage={...observation,observedAtMs:1001};
+  await collector(geometry,{terminalPair:preCaptureConsentPairObserved(postImage,geometry,image),framesStable:true,frameRevision:1});
+  assert.equal(calls,0,'An image from before the banner must not launch a decode');
+  await collector({...geometry,screenshotArtifactRef:proof.path},{framesStable:true,frameRevision:1});
+  assert.equal(calls,1,'The existing final proof retains its single 80ms opportunity');
+});
 
 test("later duplicate inspection preserves the complete early pair without relabeling its timing or references", async () => {
   const input = await retentionFixture(), before = structuredClone(input);
