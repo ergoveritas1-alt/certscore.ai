@@ -9,7 +9,7 @@ import { resolveReportReviewFocus } from "./report-review-focus";
 import { detailedEvidenceCopy, policyFindingSummary } from "./detailed-evidence-copy";
 import { accessibilityFindingCopy } from "./accessibility-finding-copy";
 import { accessibilityRuleTitle } from "./accessibility-report";
-import { CMP_AUDIT_CRITERIA, cmpDetailsExperience } from "./cmp-audit-projection";
+import { CMP_AUDIT_CRITERIA, cmpDetailsExperience, cmpDetailsRecap } from "./cmp-audit-projection";
 import { cmpCorrectionSteps } from "./cmp-correction-steps";
 import { getCorrectionGuidance } from "./checklist-correction-guidance";
 import { detailedEvidenceLayout, type SharedEvidenceLink } from "./detailed-evidence-layout";
@@ -89,7 +89,7 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
     };
   });
   const sections: DetailedEvidenceSection[] = [{
-    id: "cmp", title: experience.title, recap: experience.mode === "cmp_details" ? evidenceSectionRecap(cmpAudit.rows) : experience.summary,
+    id: "cmp", title: experience.title, recap: cmpDetailsRecap(experience, evidenceSectionRecap(cmpAudit.rows)),
     displayStatus: experience.mode === "capture_limited" ? "Limited" : evidenceHeaderStatus(experience.mode === "cmp_details"
       ? cmpAudit.rows : cmpAudit.rows.filter(row => experience.defaultCriterionIds.includes(row.id) && row.status === "Review recommended"))?.label ?? null,
     counts: evidenceSectionCounts(cmpAudit.rows), rows: cmpRows,

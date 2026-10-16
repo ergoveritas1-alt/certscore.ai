@@ -1,6 +1,6 @@
 import { cmpCorrectionSteps } from "../../lib/scans/cmp-correction-steps";
 import React, { type ReactNode } from "react";
-import { CMP_AUDIT_CRITERIA, cmpDetailsExperience, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
+import { CMP_AUDIT_CRITERIA, cmpDetailsExperience, cmpDetailsRecap, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { DisclosureChevron } from "./report-finding-row";
@@ -80,12 +80,12 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
     </DetailedEvidenceFinding>;
   };
   return <details id="cmp-details" className="group/cmp border-b border-r border-zinc-200 p-5">
-    <EvidenceSectionHeader title={experience.title} recap={experience.mode === "cmp_details" ? evidenceSectionRecap(rows) : experience.summary}
+    <EvidenceSectionHeader title={experience.title} recap={cmpDetailsRecap(experience, evidenceSectionRecap(rows))}
       badge={experience.mode === "cmp_details" ? <EvidenceHeaderStatus rows={rows} /> : experience.mode === "capture_limited"
         ? <EvidenceStatusBadge label="Limited" tone="limited" /> : <EvidenceHeaderStatus rows={defaultRows.filter(row => row.status === "Review recommended")} />} />
     <div className="mt-5">
-      {experience.mode === "cmp_details" ? <VendorBrandChip label={vendor ?? "Consent platform not identified"} showMeta={false} /> :
-        <p className="text-sm text-zinc-600">Provider: {experience.provider ?? "Not identified"}</p>}
+      {experience.mode === "cmp_details" ? <VendorBrandChip label={experience.provider ?? "Consent platform not identified"} showMeta={false} /> :
+        <p className="text-sm text-zinc-600">Provider: {experience.mode === "capture_limited" ? "Not determined" : "Not identified"}</p>}
       {experience.mode === "consent_controls" && experience.controls ? <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
         {(["accept", "reject", "options"] as const).map(role => <div key={role}>
           <dt className="font-semibold capitalize text-zinc-800">{role}</dt>

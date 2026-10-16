@@ -286,15 +286,17 @@ export function projectCmpAudit(input: {
     ...(audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version) ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
     assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows,
     experience: projectCmpExperience({ assessment, controls: controlReport?.controls ?? null,
+      explicitCustom: explicitlyCustomConsentVendor(input.consentVendor),
       provider: KNOWN_CMP_REGISTRY.find(entry => [entry.canonicalName, ...entry.aliases]
         .some(name => name.toLowerCase() === input.consentVendor?.trim().toLowerCase()))?.canonicalName ?? null, rows }) };
 }
 
 /** Read-only grouping of retained conclusions. Never changes a row, counts,
  * applicability, findings, scoring or action authorization. */
-function projectCmpExperience({ assessment, controls, provider, rows }: {
+function projectCmpExperience({ assessment, controls, explicitCustom, provider, rows }: {
   assessment: z.infer<typeof consentControlAssessmentSchema> | null;
   controls: NonNullable<ReturnType<typeof projectConsentControlReport>>["controls"] | null;
+  explicitCustom: boolean;
   provider: string | null;
   rows: readonly CmpAuditRow[];
 }): NonNullable<PublicCmpAudit["experience"]> {
@@ -305,15 +307,13 @@ function projectCmpExperience({ assessment, controls, provider, rows }: {
     && assessment.contradictions.length === 0;
   const mode = !assessment ? "capture_limited" : provider ? "cmp_details" : surfaceObserved ? "consent_controls"
     : noSurface ? "consent_signals" : "capture_limited";
-  const copy = {
-    cmp_details: ["CMP details", "Consent management audit"],
-    consent_controls: ["Consent controls", "Consent mechanism observed; provider not identified."],
-    consent_signals: ["Consent and cookie signals", "No consent surface was observed on this visit."],
-    capture_limited: ["Consent capture limited", "Control evidence unavailable"],
-  } as const;
+  const summary = mode === "cmp_details" ? noSurface ? "No consent banner observed on this visit." : "Consent management audit"
+    : mode === "consent_controls" ? explicitCustom ? "Custom consent banner observed." : "Consent banner observed; provider not identified."
+    : mode === "consent_signals" ? "No CMP identified. No consent banner observed on this visit."
+    : "CMP identification and consent banner detection could not be determined on this visit.";
   const meaningful = (row: CmpAuditRow) => ["Observed", "Review recommended", "Partially assessed", "Informational"].includes(row.status)
     || Boolean(row.deductionPoints) || Boolean(row.supportingEvidence);
-  return { version: "cmp_details_experience.v1", mode, title: copy[mode][0], summary: copy[mode][1],
+  return { version: "cmp_details_experience.v1", mode, title: "CMP details", summary,
     provider, controls,
     defaultCriterionIds: rows.filter(row => mode === "cmp_details" || meaningful(row)
       || (mode === "consent_controls" && ["banner", "reject"].includes(row.id))).map(row => row.id) };
@@ -322,9 +322,27 @@ function projectCmpExperience({ assessment, controls, provider, rows }: {
 /** Historical models without the new metadata retain their full audit. Their
  * absence of metadata is not evidence that no CMP or consent surface existed. */
 export function cmpDetailsExperience(audit: CmpAuditProjection | undefined, provider: string | null) {
-  return audit?.experience ?? { version: "cmp_details_experience.v1" as const,
+  if (audit?.experience) {
+    const experience = audit.experience;
+    const summary = experience.mode === "consent_controls"
+      ? explicitlyCustomConsentVendor(provider) ? "Custom consent banner observed." : "Consent banner observed; provider not identified."
+      : experience.mode === "consent_signals" ? "No CMP identified. No consent banner observed on this visit."
+      : experience.mode === "capture_limited" ? "CMP identification and consent banner detection could not be determined on this visit."
+      : experience.summary;
+    return { ...experience, title: "CMP details", summary };
+  }
+  return { version: "cmp_details_experience.v1" as const,
     mode: "cmp_details" as const, title: "CMP details", summary: "Consent management audit", provider, controls: null,
     defaultCriterionIds: CMP_AUDIT_CRITERIA.map(row => row.id) };
+}
+
+function explicitlyCustomConsentVendor(value: string | null | undefined) {
+  return ["custom consent banner", "custom consent mechanism", "custom cmp"].includes(value?.trim().toLowerCase() ?? "");
+}
+
+export function cmpDetailsRecap(experience: NonNullable<PublicCmpAudit["experience"]>, criterionRecap: string) {
+  if (experience.mode !== "cmp_details") return experience.summary;
+  return experience.summary === "Consent management audit" ? criterionRecap : `${experience.summary} ${criterionRecap}`;
 }
 
 export type CmpLimitationGroup = { id: "preferences" | "actions" | "visual"; code: string; title: string; criterionIds: CmpAuditCriterionId[] };
