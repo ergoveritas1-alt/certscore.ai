@@ -1,0 +1,47 @@
+{
+  "version": "certscore.onetrust-eligibility-local.v1",
+  "generatedAt": "2026-10-16T04:17:03.548973+00:00",
+  "scope": "Local diagnostics only. No deployment, new website contact or historical report modification.",
+  "originalFailure": {
+    "scanId": "cmp-cookiebot-onetrust-reliability-local-onetrust-68fa1a08-e8ec-433b-a060-570fb3d90877",
+    "firstHandlerGuardPassed": true,
+    "scanCoreGuardFailed": true,
+    "originalResolverCauseRetained": false,
+    "rootCauseEstablished": false
+  },
+  "currentDnsOnlyCheck": {
+    "location": "local operator Node22 resolver, not an Ireland browser visit",
+    "concurrentChecks": 6,
+    "allResolved": true,
+    "allAnswersPublic": true,
+    "siteHttpRequests": 0
+  },
+  "fix": {
+    "policy": "public_network_guard_failure.v1",
+    "behavior": "Preserve bounded reasons and allowlisted DNS system codes in internal Lambda event/failure artifact",
+    "externalMessageChanged": false,
+    "blockingPolicyChanged": false,
+    "newRetriesOrWaits": false
+  },
+  "verification": {
+    "guardTestsPassed": 8,
+    "handlerTestsPassed": 7,
+    "actionAuthorizationTestsPassed": 9,
+    "scanCoreTypecheck": "passed",
+    "lambdaTypecheck": "passed",
+    "preservation": {
+      "checked": 1441,
+      "changed": []
+    }
+  },
+  "eligibility": {
+    "centralExportSucceeded": true,
+    "state": "blocked",
+    "reason": "unsafe_target_blocked",
+    "canonicalSelector": "No eligible targets; no scan launched",
+    "humanReviewRequired": true
+  },
+  "freshEuIrelandRejectVerified": false,
+  "deployment": false,
+  "costEstimate": "Incremental failure metadata below $0.01/month at 100,000 scans; no additional runtime requests or waits."
+}

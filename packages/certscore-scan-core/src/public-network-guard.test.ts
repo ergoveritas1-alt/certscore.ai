@@ -85,3 +85,25 @@ test("explicit redirect responses validate the source and never open the destina
   assert.equal(opened.length, 1);
   await assert.rejects(() => guardedPublicFetch("https://example.com/", {}, { ...options, returnRedirectResponse: false }), PublicNetworkGuardError);
 });
+
+test("DNS failures retain bounded internal reasons without changing fail-closed behavior", async () => {
+  const cases = [
+    { resolver: async () => { throw Object.assign(new Error('private resolver detail'), {code:'EAI_AGAIN'}); }, reason:'dns_resolution_failed', resolverCode:'EAI_AGAIN' },
+    { resolver: async () => { throw Object.assign(new Error('private resolver detail'), {code:'private raw code'}); }, reason:'dns_resolution_failed', resolverCode:'other' },
+    { resolver: async () => [], reason:'dns_no_answers' },
+    { resolver: async () => [{address:'93.184.216.34',family:4},{address:'10.0.0.7',family:4}], reason:'non_public_dns_answer' },
+  ];
+  for (const {resolver,reason,resolverCode} of cases) {
+    let calls=0;
+    await assert.rejects(() => assertPublicNetworkUrl('https://example.com/', {resolver:async hostname => {calls++;return resolver();}}), error => {
+      assert.ok(error instanceof PublicNetworkGuardError);
+      assert.equal(error.code,'unsafe_target_blocked');
+      assert.equal(error.message,'This target is not eligible for public website scanning.');
+      assert.deepEqual(error.diagnostic,{version:'public_network_guard_failure.v1',reason,...(resolverCode?{resolverCode}:{})});
+      assert.ok(Object.isFrozen(error.diagnostic));
+      assert.doesNotMatch(JSON.stringify(error.diagnostic),/private|10\.0\.0|example\.com/);
+      return true;
+    });
+    assert.equal(calls,1,'diagnostics must not retry DNS');
+  }
+});

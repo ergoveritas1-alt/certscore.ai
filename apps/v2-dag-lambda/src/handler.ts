@@ -58,7 +58,7 @@ import type { RunScanInput } from "@certscore/scan-core";
 import { applyGoverningPolicySelection, mergePolicySurfaceObservations } from "@certscore/scan-core/policy-surface-projection";
 import { buildScanEvidenceLaneAssessment } from "@certscore/scan-core/scan-evidence-lane-assessment";
 import { chromiumContextOptions, chromiumLaunchArgs, chromiumLaunchOptions, isAwsLambdaRuntime, lambdaChromiumSingleProcessEnabled } from "@certscore/scan-core/playwright-runtime";
-import { assertPublicNetworkUrl, publicNetworkGuardEnabled } from "@certscore/scan-core/public-network-guard";
+import { assertPublicNetworkUrl, publicNetworkGuardEnabled, PublicNetworkGuardError, type PublicNetworkGuardDiagnostic } from "@certscore/scan-core/public-network-guard";
 import { buildGpcResponseAssessment } from "@certscore/scan-core/gpc-response-assessment";
 import { buildGpcProductionAssessment } from "@certscore/scan-core/gpc-production-observation";
 import { buildGpcActivityComparison } from "@certscore/scan-core/gpc-activity-comparison";
@@ -4995,6 +4995,7 @@ async function writeAndUploadFailureDiagnostic(input: {
   artifactChainTimeoutMs: number;
   artifactRoot: string;
   cancellationReason: string;
+  publicNetworkGuard?: PublicNetworkGuardDiagnostic;
   cancellationObservedAt: Date;
   cancellationRequestedAt?: Date;
   handlerStartedAt: Date;
@@ -5062,6 +5063,7 @@ async function writeAndUploadFailureDiagnostic(input: {
     artifactOnly: true,
     artifactVersion: "certscore.v2_lambda_failure_diagnostic.2",
     cancellationReason: input.cancellationReason.slice(0, 240),
+    ...(input.publicNetworkGuard ? { publicNetworkGuard: input.publicNetworkGuard } : {}),
     cancellationObservedAt: input.cancellationObservedAt.toISOString(),
     ...(input.cancellationRequestedAt ? {
       cancellationRequestedAt: input.cancellationRequestedAt.toISOString(),
@@ -6203,6 +6205,11 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     return result;
   } catch (error) {
     const cancellationObservedAt = now();
+    const publicNetworkGuard = error instanceof PublicNetworkGuardError ? error.diagnostic : undefined;
+    if (publicNetworkGuard) console.warn(JSON.stringify({
+      event: "v2_lambda_public_network_guard_failed", scan_id: payload?.scanId ?? null,
+      worker_lane: payload?.workerLane ?? null, diagnostic: publicNetworkGuard,
+    }));
     const scannerDeadlineAborted = scannerAbortController?.signal.aborted === true;
     if (scannerDeadlineTimer) clearTimeout(scannerDeadlineTimer);
     scannerAbortController?.abort(error);
@@ -6242,6 +6249,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
             artifactRoot,
             artifactChainTimeoutMs,
             cancellationReason: failureMessage,
+            publicNetworkGuard,
             cancellationObservedAt,
             cancellationRequestedAt: scannerCancellationRequestedAt,
             handlerStartedAt,

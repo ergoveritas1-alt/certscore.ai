@@ -161,3 +161,27 @@ scans. The existing approved review/action budgets are unchanged. One-time
 verification was estimated below $1 through the existing Ireland proxy. Both
 contacts were persisted idempotently, and temporary tunnel access was removed.
 See `calibration/cmp-cookiebot-onetrust-reliability-local-2026-10-16.json`.
+
+### Local network eligibility diagnostics, October 16
+
+`public_network_guard_failure.v1` retains bounded internal failure reasons for
+invalid or disallowed targets, resolver failures, empty answers, non-public
+answers and redirect limits. Resolver failures retain only an allowlisted system
+code, with unknown codes reduced to `other`. Raw resolver messages, addresses,
+URLs and credentials are excluded. The existing external message and error code
+remain unchanged. Lambda records the diagnostic in its internal failure event
+and existing failure artifact when that artifact can be retained.
+
+This is diagnostic work only. All-address public validation, repeated checks,
+redirect validation, fail-closed blocking, contact eligibility and action
+authorization remain unchanged. It adds no DNS retry, browser run, wait or model
+call. Incremental failure metadata is estimated below $0.01/month at 100,000
+scans. Historical failures are not assigned newly inferred reasons.
+
+OneTrust's failed run passed the handler's initial guard, then failed the
+scan-core guard before capture. Its original resolver cause was not retained.
+Six concurrent DNS-only checks now returned public answers, but those local
+checks do not establish the historical cause or a fresh Ireland browser result.
+The successfully exported central ledger still marks OneTrust blocked, and the
+canonical selector excludes it. No fresh contact was made. Human review is
+required before re-enablement under the calibration program.

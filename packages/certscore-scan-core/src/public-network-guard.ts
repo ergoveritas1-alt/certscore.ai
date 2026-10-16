@@ -8,13 +8,30 @@ import type { BrowserContext, Page, Route } from "playwright";
 
 export const PUBLIC_NETWORK_GUARD_ERROR_CODE = "unsafe_target_blocked" as const;
 
+export type PublicNetworkGuardReason =
+  | "invalid_url" | "unsupported_url" | "disallowed_hostname" | "non_public_literal"
+  | "dns_resolution_failed" | "dns_no_answers" | "non_public_dns_answer" | "redirect_limit" | "unspecified";
+const DNS_ERROR_CODES = ["EAI_AGAIN", "ENOTFOUND", "ETIMEOUT", "ESERVFAIL", "ECONNREFUSED", "ECANCELLED"] as const;
+export type PublicNetworkGuardDiagnostic = Readonly<{
+  version: "public_network_guard_failure.v1";
+  reason: PublicNetworkGuardReason;
+  resolverCode?: typeof DNS_ERROR_CODES[number] | "other";
+}>;
+
 export class PublicNetworkGuardError extends Error {
   readonly code = PUBLIC_NETWORK_GUARD_ERROR_CODE;
   readonly policyVersion = PUBLIC_TARGET_POLICY_VERSION;
 
-  constructor() {
+  readonly diagnostic: PublicNetworkGuardDiagnostic;
+
+  constructor(reason: PublicNetworkGuardReason = "unspecified", resolverCode?: string) {
     super("This target is not eligible for public website scanning.");
     this.name = "PublicNetworkGuardError";
+    this.diagnostic = Object.freeze({ version: "public_network_guard_failure.v1", reason,
+      ...(reason === "dns_resolution_failed" ? {
+        resolverCode: DNS_ERROR_CODES.find(code => code === resolverCode) ?? "other",
+      } : {}),
+    });
   }
 }
 
@@ -36,30 +53,33 @@ export async function assertPublicNetworkUrl(
   try {
     target = input instanceof URL ? input : new URL(input);
   } catch {
-    throw new PublicNetworkGuardError();
+    throw new PublicNetworkGuardError("invalid_url");
   }
   if ((target.protocol !== "http:" && target.protocol !== "https:") || target.username || target.password) {
-    throw new PublicNetworkGuardError();
+    throw new PublicNetworkGuardError("unsupported_url");
   }
   let hostname: string;
   try {
     hostname = assertPublicTargetHostname(target.hostname);
   } catch {
-    throw new PublicNetworkGuardError();
+    throw new PublicNetworkGuardError("disallowed_hostname");
   }
   const literal = classifyPublicTargetAddress(hostname);
   if (literal.family !== null) {
-    if (!literal.public) throw new PublicNetworkGuardError();
+    if (!literal.public) throw new PublicNetworkGuardError("non_public_literal");
     return target;
   }
   let answers: readonly { address: string; family: number }[];
   try {
     answers = await (options.resolver ?? defaultResolver)(hostname);
-  } catch {
-    throw new PublicNetworkGuardError();
+  } catch (error) {
+    // Retain only a bounded code; resolver messages may contain target details.
+    const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : undefined;
+    throw new PublicNetworkGuardError("dns_resolution_failed", code);
   }
-  if (answers.length === 0 || answers.some(({ address }) => !classifyPublicTargetAddress(address).public)) {
-    throw new PublicNetworkGuardError();
+  if (answers.length === 0) throw new PublicNetworkGuardError("dns_no_answers");
+  if (answers.some(({ address }) => !classifyPublicTargetAddress(address).public)) {
+    throw new PublicNetworkGuardError("non_public_dns_answer");
   }
   return target;
 }
@@ -119,7 +139,7 @@ export async function guardedPublicFetch(
     const location = response.headers.get("location");
     if (!location || redirectCount >= maxRedirects) {
       await response.body?.cancel().catch(() => undefined);
-      throw new PublicNetworkGuardError();
+      throw new PublicNetworkGuardError("redirect_limit");
     }
     await response.body?.cancel().catch(() => undefined);
     target = new URL(location, target);

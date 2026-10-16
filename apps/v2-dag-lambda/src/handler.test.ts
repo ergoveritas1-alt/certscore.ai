@@ -5114,3 +5114,28 @@ test("CMP observation cancellation retains its bounded packet with the independe
     if (saved.bucket === undefined) delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET; else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET = saved.bucket;
   }
 });
+
+test("handler retains the bounded network guard reason in internal failure diagnostics only", async () => {
+  const {PublicNetworkGuardError} = await import('@certscore/scan-core/public-network-guard');
+  const previousBucket=process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+  process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET='failure-diagnostic-test';
+  const uploads:string[]=[];
+  const workspaceRoot=await mkdtemp(path.join(os.tmpdir(),'network-guard-diagnostic-'));
+  try {
+    const result=await handler(validPayload(), {
+      workspaceRoot,handlerSafetyTimeoutMs:10_000,resultPublishTimeoutMs:100,
+      runArtifactChain:async()=>{throw new PublicNetworkGuardError('dns_resolution_failed','EAI_AGAIN');},
+      s3Client:{async send(command:PutObjectCommand){uploads.push(Buffer.from(command.input.Body as Uint8Array).toString('utf8'));return {$metadata:{}};}},
+      sqsClient:{async send(){return {$metadata:{}};}},
+    });
+    assert.equal(result.status,'failed');
+    assert.equal(result.error?.message,'This target is not eligible for public website scanning.');
+    assert.equal(uploads.length,1);
+    assert.deepEqual(JSON.parse(uploads[0]!).publicNetworkGuard,{version:'public_network_guard_failure.v1',reason:'dns_resolution_failed',resolverCode:'EAI_AGAIN'});
+    assert.doesNotMatch(JSON.stringify(result.error),/dns_resolution_failed|EAI_AGAIN/);
+  } finally {
+    if(previousBucket===undefined)delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=previousBucket;
+    await rm(workspaceRoot,{recursive:true,force:true});
+  }
+});
