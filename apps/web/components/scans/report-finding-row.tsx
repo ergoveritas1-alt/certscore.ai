@@ -1,5 +1,5 @@
 "use client";
-import type { ReactNode } from "react";
+import React, { type ReactNode } from "react";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import type { SitePriorityFinding } from "../../lib/scans/full-site-priority-review";
 import { VendorBrandChip } from "./vendor-brand-chip";
