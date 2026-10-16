@@ -1,0 +1,396 @@
+{
+  "version": "certscore.onetrust-approved-verification-local.v1",
+  "generatedAt": "2026-10-16T04:23:10.302591+00:00",
+  "scanId": "onetrust-approved-verification-local-onetrust-d4b09965-049e-4498-8a40-303c08c348f4",
+  "scope": "One owner-approved guarded local EU-Ireland scan; no deployment or existing report changes",
+  "approval": {
+    "version": "certscore.owner_target_reenable.v1",
+    "reviewer": "Ben Masek",
+    "targetUrl": "https://www.onetrust.com/",
+    "maxScans": 1,
+    "scope": "One guarded local EU-Ireland verification scan; no deploy or existing report changes",
+    "ownerInstruction": "Go ahead and re-enable OneTrust for one guarded EU-Ireland verification scan. Verify the Reject path, keep existing reports intact, and don\u2019t deploy.",
+    "reviewedAt": "2026-10-16T04:18:25.403300+00:00",
+    "priorNoGoReason": "unsafe_target_blocked",
+    "priorCause": "Original resolver reason not retained; current six DNS-only lookups resolved public answers",
+    "globalNetworkPolicyChanged": false
+  },
+  "singleUseApprovalConsumed": {
+    "scanId": "onetrust-approved-verification-local-onetrust-d4b09965-049e-4498-8a40-303c08c348f4",
+    "url": "https://www.onetrust.com/",
+    "consumedAt": "2026-10-16T04:19:35.514Z"
+  },
+  "egress": {
+    "browserIp": "63.33.9.201",
+    "httpIp": "63.33.9.201",
+    "country": "IE",
+    "awsRegion": "eu-west-1",
+    "verifiedAt": "2026-10-16T04:19:35.487Z"
+  },
+  "scanStatus": "completed",
+  "networkGuardForcedEnabled": true,
+  "reject": {
+    "laneOutcome": {
+      "contractVersion": "certscore.post_refusal_lane_outcome.v1",
+      "completedAt": "2026-10-16T04:19:55.562Z",
+      "evidenceJoined": true,
+      "maxTailWaitMs": 8000,
+      "status": "joined"
+    },
+    "label": "Accept only necessary",
+    "namedRecipePolicy": "label_bound_necessary_only_reject.v2",
+    "clickOutcome": "completed",
+    "registration": {
+      "status": "unconfirmed",
+      "refusalExercised": false,
+      "actionDispatchedAtMs": 10822,
+      "reason": "cmp_rejection_state_not_observed",
+      "witnesses": []
+    },
+    "decisionEvidence": {
+      "policyVersion": "semantic_consent_registration.v2",
+      "decision": "unknown",
+      "basis": "unverified"
+    },
+    "productionProjectable": false,
+    "observations": [],
+    "timing": {
+      "dispatchDelayMs": 0,
+      "navigationMs": 1669,
+      "resolverMs": 6422,
+      "confirmationMs": 2304,
+      "observationMs": 5586,
+      "totalMs": 18871,
+      "readyAtMs": 18871
+    },
+    "cancellation": {
+      "requested": false,
+      "outcome": "not_requested"
+    },
+    "semanticRefusalVerified": false
+  },
+  "routingReplay": {
+    "withoutNewGeometryMarker": {
+      "inventoryComplete": false,
+      "necessaryOnlyRejectEquivalentObserved": false,
+      "rejectControlObserved": true,
+      "rejectPassiveBarrierOnly": true,
+      "acceptControlObserved": true
+    },
+    "availability": {
+      "inventoryComplete": false,
+      "necessaryOnlyRejectEquivalentObserved": false,
+      "rejectControlObserved": true,
+      "acceptControlObserved": true
+    },
+    "namedMarkers": [
+      {
+        "id": "candidate_12",
+        "label": "Accept only necessary",
+        "proof": {
+          "version": "named_reject_routing.v1",
+          "provider": "OneTrust",
+          "policyVersion": "label_bound_necessary_only_reject.v2",
+          "bannerSelector": "#onetrust-banner-sdk",
+          "controlSelector": "#onetrust-reject-all-handler"
+        }
+      }
+    ],
+    "sourceReadOnly": true
+  },
+  "laneTiming": {
+    "acceptCompletedBeforeOrAtPassiveBarrier": true,
+    "acceptLaneAddedWaitMs": 0,
+    "acceptLaneJoin": "joined",
+    "acceptTailDeltaMs": -4400,
+    "contractVersion": "certscore.v2.lambda-lane-timing.v1",
+    "coordinatorStartedAt": "2026-10-16T04:19:36.177Z",
+    "generatedAt": "2026-10-16T04:19:55.667Z",
+    "lanes": [
+      {
+        "coordinatorElapsedMs": 11821,
+        "evidenceJoined": true,
+        "invocationStartedAt": "2026-10-16T04:19:36.179Z",
+        "lane": "consent_proof",
+        "outcome": "completed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": -7594,
+        "terminalOutcomeObservedAt": "2026-10-16T04:19:48.000Z",
+        "workerReportedCompletedAt": "2026-10-16T04:19:48.000Z",
+        "workerReportedHandlerDurationMs": 11821
+      },
+      {
+        "coordinatorElapsedMs": 14109,
+        "evidenceJoined": true,
+        "invocationStartedAt": "2026-10-16T04:19:36.179Z",
+        "lane": "runtime_evidence",
+        "outcome": "completed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": -5306,
+        "terminalOutcomeObservedAt": "2026-10-16T04:19:50.288Z",
+        "workerReportedCompletedAt": "2026-10-16T04:19:50.288Z",
+        "workerReportedHandlerDurationMs": 14109
+      },
+      {
+        "coordinatorElapsedMs": 19414,
+        "evidenceJoined": true,
+        "invocationStartedAt": "2026-10-16T04:19:36.180Z",
+        "lane": "policy_evidence",
+        "outcome": "completed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": 0,
+        "terminalOutcomeObservedAt": "2026-10-16T04:19:55.594Z",
+        "workerReportedCompletedAt": "2026-10-16T04:19:55.594Z",
+        "workerReportedHandlerDurationMs": 19414
+      },
+      {
+        "coordinatorElapsedMs": 8537,
+        "evidenceJoined": true,
+        "invocationStartedAt": "2026-10-16T04:19:36.180Z",
+        "lane": "gpc_observation",
+        "outcome": "completed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": -10877,
+        "terminalOutcomeObservedAt": "2026-10-16T04:19:44.717Z",
+        "workerReportedCompletedAt": "2026-10-16T04:19:44.717Z",
+        "workerReportedHandlerDurationMs": 8537
+      },
+      {
+        "coordinatorElapsedMs": 18912,
+        "evidenceJoined": true,
+        "invocationStartedAt": "2026-10-16T04:19:36.681Z",
+        "lane": "reject_observation",
+        "outcome": "completed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": -1,
+        "terminalOutcomeObservedAt": "2026-10-16T04:19:55.593Z",
+        "workerReportedCompletedAt": "2026-10-16T04:19:55.593Z",
+        "workerReportedHandlerDurationMs": 18912
+      },
+      {
+        "coordinatorElapsedMs": 14013,
+        "evidenceJoined": true,
+        "invocationStartedAt": "2026-10-16T04:19:37.181Z",
+        "lane": "accept_observation",
+        "outcome": "completed",
+        "terminalOutcomeDeltaFromPassiveBarrierMs": -4400,
+        "terminalOutcomeObservedAt": "2026-10-16T04:19:51.194Z",
+        "workerReportedCompletedAt": "2026-10-16T04:19:51.194Z",
+        "workerReportedHandlerDurationMs": 14013
+      }
+    ],
+    "maxAcceptTailWaitMs": 6000,
+    "maxRejectTailWaitMs": 8000,
+    "passiveLaneBarrierCompletedAt": "2026-10-16T04:19:55.594Z",
+    "rejectCompletedBeforeOrAtPassiveBarrier": true,
+    "rejectLaneAddedWaitMs": 0,
+    "rejectLaneJoin": "joined",
+    "rejectTailDeltaMs": -1,
+    "cmpPreferenceInspection": {
+      "status": "joined",
+      "startedAt": "2026-10-16T04:19:36.177Z",
+      "completedAt": "2026-10-16T04:19:47.617Z",
+      "durationMs": 11440,
+      "workerDurationMs": 11107,
+      "terminalOutcomeDeltaFromPassiveBarrierMs": -7977
+    }
+  },
+  "cmpComparison": {
+    "scope": "Fresh local sharded scans through verified Ireland egress. Canonical local materialization, concern policy, unified finding/checklist and CMP projection. No deployed or historical report changes.",
+    "generatedAt": "2026-10-16T04:20:50.640Z",
+    "baselineUnresolved": 6,
+    "resolved": 1,
+    "remainingOriginal": 5,
+    "newlyUnresolved": 0,
+    "freshUnresolved": 5,
+    "sites": [
+      {
+        "site": "onetrust",
+        "oldScanId": "cmp-shared-capture-local-onetrust-fd0172c9-d02b-4f14-a9df-186b51c084b9",
+        "newScanId": "onetrust-approved-verification-local-onetrust-d4b09965-049e-4498-8a40-303c08c348f4",
+        "baselineUnresolved": 6,
+        "resolved": 1,
+        "remainingOriginal": 5,
+        "newlyUnresolved": 0,
+        "totalFreshUnresolved": 5,
+        "rows": [
+          {
+            "id": "banner",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Consent surface observed on the initial visit.",
+            "sourceIds": [
+              "consentControlAssessment.surface"
+            ]
+          },
+          {
+            "id": "reject",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "First-layer Reject or equivalent refusal control.",
+            "sourceIds": [
+              "consentControlAssessment.controls.reject"
+            ]
+          },
+          {
+            "id": "prominence",
+            "before": "Incomplete",
+            "after": "Incomplete",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "The retained image could not complete screenshot review.",
+            "sourceIds": [
+              "consentControlAssessment.visualEvidence"
+            ]
+          },
+          {
+            "id": "categories",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Selectable category controls were not verified in the inspected surface.",
+            "sourceIds": []
+          },
+          {
+            "id": "services",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "27 services identified in the CMP. Additional services may be outside the captured inventory. Individual service controls were not tested.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "privacy_link",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Public privacy-policy link or surface on the scanned page.",
+            "sourceIds": [
+              "privacy_notice_availability"
+            ]
+          },
+          {
+            "id": "privacy_access",
+            "before": "Not assessed",
+            "after": "Not assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Privacy-policy links were found, but none was verified as reachable before consent. Individual inspection reasons are retained in the supporting evidence.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          },
+          {
+            "id": "consent_record",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Browser consent records were stored or updated after Accept and Reject.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "implementation",
+            "before": "Partially assessed",
+            "after": "Observed",
+            "wasUnresolved": true,
+            "resolved": true,
+            "newlyUnresolved": false,
+            "detail": "Accept: 3-second activity check completed. Reject: 8-second activity check completed. No requests classified as non-essential were observed during the 8-second check after Reject.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "duration",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "CMP cookie expiry was captured. Time remaining is shown below.",
+            "sourceIds": [
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "declared_not_found",
+            "before": "Observed",
+            "after": "Observed",
+            "wasUnresolved": false,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "2 of 66 retained CMP cookie name patterns matched the completed pre-consent cookie snapshot. This is a point-in-time comparison; page loading and later activity are separate coverage limits. Unmatched patterns do not establish a declaration defect.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json",
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "found_not_declared",
+            "before": "Partially assessed",
+            "after": "Partially assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "Captured cookie names were compared with retained CMP name patterns. A complete missing-declaration assessment was not established by this bounded snapshot comparison.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json",
+              "CanonicalEvidenceBundle.json"
+            ]
+          },
+          {
+            "id": "cookie_information",
+            "before": "Partially assessed",
+            "after": "Partially assessed",
+            "wasUnresolved": true,
+            "resolved": false,
+            "newlyUnresolved": false,
+            "detail": "65 cookie names captured; 0 purposes and 20 storage durations retained. Inferred purposes are shown separately.",
+            "sourceIds": [
+              "CmpPreferencesEvidencePacket.json"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "interpretation": [
+    "Reject click and joined completion verified in fresh Ireland run. Semantic refusal remains unconfirmed and score-neutral.",
+    "Completed activity capture reduced incomplete CMP checks from six to five. This does not establish successful refusal or compliance.",
+    "No tail wait needed in this run. Retained routing replay verifies the new marker removes passive-only routing.",
+    "Successful current guard does not establish the cause of the previous resolver failure."
+  ],
+  "preservation": {
+    "checked": 1473,
+    "changed": 0
+  },
+  "contact": {
+    "persisted": 1,
+    "runKey": "onetrust-approved-verification-local-20261016-r1",
+    "approvalExhausted": true,
+    "repositoryState": "cooldown",
+    "historicalNoGoRetained": true
+  },
+  "cleanup": {
+    "temporaryRuleRemoved": true,
+    "sshStopped": true,
+    "finishedAt": 1792124470.145337
+  },
+  "costEstimate": "Below $1 one-time; existing runtime budgets; no recurring infrastructure change",
+  "deployed": false
+}
