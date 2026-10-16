@@ -1,5 +1,10 @@
 # @certscore/sdk
 
+## 0.2.19
+
+- Type the optional CMP details presentation for recognized providers, custom consent controls, and visits without a banner.
+- Include passively loaded CMP inventory sources in service and cookie declarations. Preserve their provenance and the distinction between loaded configuration and visible disclosure.
+
 ## 0.2.18
 
 Extend Detailed Evidence types for scoped CMP inventories, possible cookie-template matches, inferred purpose, observed expiry and incomplete capture diagnostics. Preserve saved assessments and evidence provenance.

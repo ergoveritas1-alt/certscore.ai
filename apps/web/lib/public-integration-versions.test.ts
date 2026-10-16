@@ -27,5 +27,5 @@ test("the static agent guide names the current SDK result contract", async () =>
   const guide = await readFile("apps/web/public/llms-full.txt", "utf8");
 
   assert.match(guide, new RegExp(`@certscore/sdk@${PUBLIC_CERTSCORE_SDK_VERSION.replaceAll(".", "\\.")}`));
-  assert.match(guide, /typed GPC, Accept Path, and Reject Path results/);
+  assert.match(guide, /typed CMP details, GPC, Accept Path, and Reject Path results/);
 });
