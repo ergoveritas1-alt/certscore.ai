@@ -1365,6 +1365,12 @@ function collectConsentGeometryInPage(input: {
   const labelCache = new WeakMap<Element, string>();
   const textContextRootCache = new WeakMap<Element, Element | null>();
   const contextVisibilityCache = new WeakMap<Element, boolean>();
+  // No awaits or live-DOM writes occur in this collector. Cache only within
+  // this snapshot; later captures must re-read changing banners and visibility.
+  const styleCache = new WeakMap<Element, CSSStyleDeclaration>();
+  const rectCache = new WeakMap<Element, ConsentControlRect>();
+  const selectorCache = new WeakMap<Element, Map<boolean, string>>();
+  const readableTextCache = new WeakMap<Element, Array<{ parent: Element; text: string; interactive: boolean }>>();
   const viewport = {
     width: window.innerWidth,
     height: window.innerHeight,
@@ -1419,7 +1425,7 @@ function collectConsentGeometryInPage(input: {
     const cached = visibleElementCache.get(element);
     if (cached !== undefined) return cached;
     const box = rectFor(element);
-    const style = getComputedStyle(element);
+    const style = styleFor(element);
     const visible = box.width > 0 && box.height > 0 && intersects(box, viewportRect()) &&
       style.display !== "none" && style.visibility !== "hidden";
     visibleElementCache.set(element, visible);
@@ -1620,7 +1626,7 @@ function collectConsentGeometryInPage(input: {
       return null;
     }
     const box = rectFor(element);
-    const style = window.getComputedStyle(element);
+    const style = styleFor(element);
     const scrollableAncestor = nearestScrollableAncestor(element);
     const scrollableAncestorBox = scrollableAncestor ? rectFor(scrollableAncestor) : undefined;
     const clippedByScrollableAncestor = Boolean(scrollableAncestorBox && !containsRect(scrollableAncestorBox, box));
@@ -1715,7 +1721,7 @@ function collectConsentGeometryInPage(input: {
           // Bind visibility to their wrapping labels, not the native input paint.
           const label = item.closest("label");
           if (!label || !panel.contains(label)) return false;
-          const box = rectFor(label), style = window.getComputedStyle(label);
+          const box = rectFor(label), style = styleFor(label);
           return item instanceof HTMLInputElement && item.type === "checkbox" &&
             !item.hidden && Boolean(label.textContent?.trim()) && label.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) &&
             box.width > 0 && box.height > 0 && intersects(box, viewportRect()) &&
@@ -1733,7 +1739,7 @@ function collectConsentGeometryInPage(input: {
       .map(item => ({ id: item.id.replace(/^cookie-category-/, "").slice(0, 80), inputType: "checkbox" as const, checked: item.checked, disabled: item.disabled }));
     return { recipe: "drupal_eu_cookie_compliance.initial_selection.v1", scopeSelector, submitSelector, categories,
       complete: categories.length === inputs.length && inputs.every(item => {
-        const box = rectFor(item), style = window.getComputedStyle(item);
+        const box = rectFor(item), style = styleFor(item);
         return box.width > 0 && box.height > 0 && intersects(box, viewportRect()) &&
           style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) > 0;
       }) };
@@ -1810,21 +1816,29 @@ function collectConsentGeometryInPage(input: {
   }
 
   function readableContextText(root: Element, control?: Element): string {
-    const parts: string[] = [];
+    const parts = readableTextFor(root).filter(part => !control ||
+      (!composedContains(control, part.parent) && !part.interactive));
+    return compactText(parts.map(part => part.text).join(" "));
+  }
+
+  function readableTextFor(root: Element) {
+    const cached = readableTextCache.get(root);
+    if (cached) return cached;
+    const parts: Array<{ parent: Element; text: string; interactive: boolean }> = [];
     let count = 0;
     for (const textRoot of deepRootsFor(root)) {
       const walker = root.ownerDocument.createTreeWalker(textRoot, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node && count < 160; count += 1, node = walker.nextNode()) {
         const parent = node.parentElement;
-        if (parent && contextTextIsReadable(parent) &&
-          (!control || (!composedContains(control, parent) &&
-            !parent.closest("a,button,input,[role='button'],[role='link']")))) {
-          parts.push(node.textContent || "");
+        if (parent && contextTextIsReadable(parent)) {
+          parts.push({parent, text: node.textContent || "",
+            interactive: Boolean(parent.closest("a,button,input,[role='button'],[role='link']"))});
         }
       }
       if (count >= 160) break;
     }
-    return compactText(parts.join(" "));
+    readableTextCache.set(root, parts);
+    return parts;
   }
 
   function contextTextIsReadable(element: Element): boolean {
@@ -1835,7 +1849,7 @@ function collectConsentGeometryInPage(input: {
       const cached = contextVisibilityCache.get(current);
       if (cached !== undefined) { readable = cached; break; }
       visited.push(current);
-      const style = getComputedStyle(current);
+      const style = styleFor(current);
       if (current.matches("script,style,noscript,template,[hidden],[inert],[aria-hidden='true' i]") ||
         style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" ||
         Number.parseFloat(style.opacity || "1") <= 0.05) break;
@@ -2002,6 +2016,15 @@ function collectConsentGeometryInPage(input: {
   }
 
   function selectorHintFor(element: Element, requireUnique = false): string {
+    let cached = selectorCache.get(element);
+    if (cached?.has(requireUnique)) return cached.get(requireUnique)!;
+    if (!cached) { cached = new Map(); selectorCache.set(element, cached); }
+    const selector = readSelectorHint(element, requireUnique);
+    cached.set(requireUnique, selector);
+    return selector;
+  }
+
+  function readSelectorHint(element: Element, requireUnique: boolean): string {
     const id = element.getAttribute("id");
     const testId = element.getAttribute("data-testid");
     const aria = element.getAttribute("aria-label");
@@ -2130,7 +2153,7 @@ function collectConsentGeometryInPage(input: {
       element.getAttribute("aria-label") || "",
       deepText(element),
     ].join(" ")).toLowerCase();
-    const style = window.getComputedStyle(element);
+    const style = styleFor(element);
     if (
       element.getAttribute("role") === "dialog" ||
       element.getAttribute("aria-modal") === "true" ||
@@ -2165,7 +2188,7 @@ function collectConsentGeometryInPage(input: {
       if (current === document.body || current === document.documentElement) {
         return false;
       }
-      const style = window.getComputedStyle(current);
+      const style = styleFor(current);
       if (
         current.getAttribute("role") === "dialog" ||
         current.getAttribute("role") === "alertdialog" ||
@@ -2181,8 +2204,10 @@ function collectConsentGeometryInPage(input: {
   }
 
   function rectFor(element: Element): ConsentControlRect {
+    const cached = rectCache.get(element);
+    if (cached) return cached;
     const rect = element.getBoundingClientRect();
-    return {
+    const result = {
       x: round(rect.x),
       y: round(rect.y),
       width: round(rect.width),
@@ -2192,6 +2217,16 @@ function collectConsentGeometryInPage(input: {
       bottom: round(rect.bottom),
       left: round(rect.left),
     };
+    rectCache.set(element, result);
+    return result;
+  }
+
+  function styleFor(element: Element): CSSStyleDeclaration {
+    const cached = styleCache.get(element);
+    if (cached) return cached;
+    const style = window.getComputedStyle(element);
+    styleCache.set(element, style);
+    return style;
   }
 
   function viewportRect(): ConsentControlRect {
@@ -2218,7 +2253,7 @@ function collectConsentGeometryInPage(input: {
   function nearestScrollableAncestor(element: Element): Element | undefined {
     let current = parentElementOrHost(element);
     while (current && current !== document.body && current !== document.documentElement) {
-      const style = window.getComputedStyle(current);
+      const style = styleFor(current);
       const overflow = `${style.overflow} ${style.overflowX} ${style.overflowY}`;
       if (/(auto|scroll|hidden|clip)/.test(overflow) && (current.scrollHeight > current.clientHeight || current.scrollWidth > current.clientWidth)) {
         return current;

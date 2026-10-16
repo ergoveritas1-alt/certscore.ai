@@ -3,6 +3,7 @@ import test from "node:test";
 import { chromium, type Browser, type Page } from "playwright";
 import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
+import { comparisonPair, measureConsentControlVisualComparison } from "./consent-control-visual-comparison.js";
 
 let browser: Browser | undefined;
 
@@ -12,6 +13,63 @@ test.before(async () => {
 
 test.after(async () => {
   await browser?.close();
+});
+
+test("late CookieYes controls get fresh same-image geometry without repeated snapshot reads or clicks", async () => {
+  const page = await browser!.newPage({viewport: {width: 1366, height: 900}});
+  try {
+    await page.route("https://late-consent.test/**", route => route.fulfill({contentType: "text/html", body: `
+      <style>body{margin:0;font:16px Arial}#promo-banner{padding:20px;background:#eee}
+      #cookieyes-banner{position:fixed;bottom:0;left:0;right:0;background:white;padding:24px;z-index:100}
+      #cookieyes-banner button{padding:12px 24px;background:#155de9;color:white;border:0;margin:4px}</style>
+      <div id="promo-banner">Cookie consent products <a href="/shopify">Install on Shopify</a><button>Dismiss banner</button></div>
+      <main>${'<p>Website platform information <span>Product details</span></p>'.repeat(300)}</main>
+      <script>window.fixtureClicks=0;document.addEventListener('click',()=>window.fixtureClicks++)</script>`}));
+    await page.goto("https://late-consent.test/");
+    const identity = {source: "cdp_loader_id" as const, token: "late-fixture-loader"};
+    const early = await captureConsentControlGeometry(page, {documentIdentity: identity, screenshotArtifactRef: "early.png", timeoutMs: 900});
+    assert.equal(comparisonPair(early), undefined);
+    await page.evaluate(() => {
+      const banner = document.createElement("section"); banner.id = "cookieyes-banner";
+      banner.innerHTML = `<p>We value your privacy. We use cookies to analyse our traffic.</p>
+        <div class="cky-actions"><button id="customise">Customise</button><button id="reject">Reject All</button><button id="accept">Accept All</button></div>`;
+      document.body.append(banner);
+      const styles = new WeakMap<Element, number>(), rects = new WeakMap<Element, number>(), walks = new WeakMap<Node, number>();
+      const stats = {styleMax: 0, rectMax: 0, walkMax: 0}; (window as any).snapshotReads = stats;
+      const style = window.getComputedStyle.bind(window), rect = Element.prototype.getBoundingClientRect;
+      const walker = document.createTreeWalker.bind(document);
+      window.getComputedStyle = ((element: Element, pseudo?: string | null) => {
+        const count = (styles.get(element) ?? 0) + 1; styles.set(element, count); stats.styleMax = Math.max(stats.styleMax, count);
+        return style(element, pseudo);
+      }) as typeof window.getComputedStyle;
+      Element.prototype.getBoundingClientRect = function () {
+        const count = (rects.get(this) ?? 0) + 1; rects.set(this, count); stats.rectMax = Math.max(stats.rectMax, count);
+        return rect.call(this);
+      };
+      document.createTreeWalker = ((root: Node, ...args: any[]) => {
+        const count = (walks.get(root) ?? 0) + 1; walks.set(root, count); stats.walkMax = Math.max(stats.walkMax, count);
+        return (walker as any)(root, ...args);
+      }) as typeof document.createTreeWalker;
+    });
+    const screenshotBytes = await page.screenshot(), screenshotCapturedAtMs = Date.now();
+    const geometry = await captureConsentControlGeometry(page, {documentIdentity: identity, screenshotArtifactRef: "late.png", timeoutMs: 900});
+    const reads = await page.evaluate(() => (window as any).snapshotReads);
+    assert.equal(reads.styleMax, 1, "One style read per element in this synchronous snapshot");
+    assert.equal(reads.rectMax, 1, "One bounds read per element in this synchronous snapshot");
+    assert.equal(reads.walkMax, 1, "Shared consent prose is walked once, with per-control exclusions preserved");
+    assert.equal(geometry.summary.firstLayerAccept, true);
+    assert.equal(geometry.summary.firstLayerReject, true);
+    assert.equal(geometry.summary.firstLayerOptions, true);
+    assert.equal(geometry.controlInspection?.structuralCoverage, "complete");
+    assert.ok(comparisonPair(geometry));
+    assert.ok(await measureConsentControlVisualComparison({geometry, screenshotBytes, screenshotCapturedAtMs}));
+    assert.equal(await measureConsentControlVisualComparison({geometry: early, screenshotBytes, screenshotCapturedAtMs}), undefined,
+      "Later pixels never repair the earlier missing pair");
+    assert.equal(await page.evaluate(() => (window as any).fixtureClicks), 0);
+    await page.evaluate(() => { document.getElementById("reject")!.style.display = "none"; });
+    const changed = await captureConsentControlGeometry(page, {documentIdentity: identity, timeoutMs: 900});
+    assert.equal(changed.summary.firstLayerReject, false, "Snapshot caches never cross captures");
+  } finally {await page.close();}
 });
 
 test("main-frame visual witness freezes before a later child navigation without completing global inspection", async () => {
