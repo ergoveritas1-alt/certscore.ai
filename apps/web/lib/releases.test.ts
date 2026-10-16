@@ -145,6 +145,13 @@ test("social profiles expose the confirmed LinkedIn and X URLs and validate opti
   const previousLinkedInUrl = process.env.NEXT_PUBLIC_CERTSCORE_LINKEDIN_URL;
   try {
     delete process.env.NEXT_PUBLIC_CERTSCORE_LINKEDIN_URL;
+    assert.equal(CERTSCORE_LINKEDIN_URL, "https://www.linkedin.com/company/certscore-ai");
+    assert.deepEqual(getCertScoreSocialProfiles(), [
+      { label: "LinkedIn", url: CERTSCORE_LINKEDIN_URL },
+      { label: "X", url: CERTSCORE_X_URL }
+    ]);
+
+    process.env.NEXT_PUBLIC_CERTSCORE_LINKEDIN_URL = "https://www.linkedin.com/company/123334088";
     assert.deepEqual(getCertScoreSocialProfiles(), [
       { label: "LinkedIn", url: CERTSCORE_LINKEDIN_URL },
       { label: "X", url: CERTSCORE_X_URL }

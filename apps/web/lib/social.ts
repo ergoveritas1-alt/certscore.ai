@@ -1,4 +1,4 @@
-export const CERTSCORE_LINKEDIN_URL = "https://www.linkedin.com/company/123334088";
+export const CERTSCORE_LINKEDIN_URL = "https://www.linkedin.com/company/certscore-ai";
 export const CERTSCORE_X_URL = "https://x.com/certscoreai";
 
 export type SocialProfile = {
@@ -16,7 +16,8 @@ function linkedInUrl() {
     if (
       url.protocol !== "https:" ||
       (hostname !== "linkedin.com" && hostname !== "www.linkedin.com") ||
-      !/^\/company\/[^/]+\/?$/.test(url.pathname)
+      !/^\/company\/[^/]+\/?$/.test(url.pathname) ||
+      url.pathname.replace(/\/$/, "") === "/company/123334088"
     ) {
       return CERTSCORE_LINKEDIN_URL;
     }
