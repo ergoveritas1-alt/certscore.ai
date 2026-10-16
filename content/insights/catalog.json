@@ -7,12 +7,35 @@
       "datePublished": "2026-10-12",
       "dateModified": "2026-10-15",
       "file": "ai-lab-privacy-leaderboard-2026.html"
+    },
+    {
+      "path": "/insights/privacy-policy-transparency-study-2026",
+      "title": "Your data can outlast your account by years",
+      "description": "Privacy-policy wording from 5,000 website reports shows how long companies say they keep information, what you can ask them to delete, and where your data may go.",
+      "datePublished": "2026-10-16",
+      "dateModified": "2026-10-16",
+      "file": "privacy-policy-transparency-study-2026.html"
     }
   ],
   "assets": [
     {
       "path": "/images/ai-leaderboard-social-card.png",
       "file": "assets/ai-leaderboard-social-card.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "/insights/assets/privacy-policy-topics-2026.png",
+      "file": "assets/privacy-policy-topics-2026.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "/insights/assets/privacy-policy-retention-periods-2026.png",
+      "file": "assets/privacy-policy-retention-periods-2026.png",
+      "contentType": "image/png"
+    },
+    {
+      "path": "/insights/assets/privacy-policy-study-social-2026.png",
+      "file": "assets/privacy-policy-study-social-2026.png",
       "contentType": "image/png"
     }
   ]
