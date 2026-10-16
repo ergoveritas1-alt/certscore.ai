@@ -11,7 +11,7 @@ import {
 
 const title = "CertScore.ai Releases";
 const description =
-  "Explore CertScore.ai product updates for session replay, forms, consent testing and developer integrations. Read release details and try a website scan.";
+  "Explore CertScore.ai product updates for privacy-policy evidence, session replay, forms, consent testing and developer integrations. Read release details and try a website scan.";
 
 export const metadata: Metadata = createPageMetadata({
   description,
