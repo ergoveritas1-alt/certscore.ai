@@ -40,6 +40,16 @@ const observedCookieExpirySchema = z.object({ visit: z.enum(["Accept", "Reject",
 export const publicCmpAuditSchema = z.object({
   version: z.enum(["cmp_audit_report.v1", "cmp_audit_report.v2", "cmp_audit_report.v3"]), scanId: z.string(), scope: z.literal("starting_page"),
   assessmentSourceHash: z.string().nullable(),
+  // Presentation only. Rows, counts, findings and scores remain authoritative.
+  experience: z.object({
+    version: z.literal("cmp_details_experience.v1"),
+    mode: z.enum(["cmp_details", "consent_controls", "consent_signals", "capture_limited"]),
+    title: text, summary: text, provider: z.string().max(120).nullable(),
+    controls: z.object({ accept: z.enum(["observed", "not_observed"]), reject: z.enum(["observed", "not_observed"]),
+      options: z.enum(["observed", "not_observed"]) }).strict().nullable(),
+    defaultCriterionIds: z.array(z.enum(["banner", "reject", "prominence", "categories", "services", "privacy_link", "privacy_access", "consent_record", "implementation", "duration", "declared_not_found", "found_not_declared", "cookie_information"])).max(13)
+      .refine(ids => new Set(ids).size === ids.length, "Default criteria must be unique"),
+  }).strict().optional(),
   limitationGroups: z.array(z.object({ id: z.enum(["preferences", "actions", "visual"]), code: ref, title: text,
     criterionIds: z.array(z.enum(["banner", "reject", "prominence", "categories", "services", "privacy_link", "privacy_access", "consent_record", "implementation", "duration", "declared_not_found", "found_not_declared", "cookie_information"])).min(1).max(13) }).strict()).max(3).optional(),
   inspectionSupport: z.object({ state: z.enum(["supported", "partial", "unsupported", "unknown"]),

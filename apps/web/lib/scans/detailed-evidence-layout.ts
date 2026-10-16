@@ -1,9 +1,11 @@
+import { cmpDetailsExperience } from "./cmp-audit-projection";
 import type { ShadowReportData } from "../../components/scans/report-lab/shadow-report-data";
 import { evidenceRowAnchor, HIDDEN_DETAILED_EVIDENCE_ROW_IDS } from "./report-evidence-navigation";
 
 export type SharedEvidenceLink = { targetId: string; label: string; showLink?: boolean };
 /** Route already-projected rows to one full evidence view. No assessment changes. */
 export function detailedEvidenceLayout(report: ShadowReportData) {
+  const cmpTitle = cmpDetailsExperience(report.cmpAudit, report.consentVendor).title;
   const platformRows = report.consentRows.filter(row => ["cmp_framework_signal_observed", "consent-management-framework"].includes(row.id));
   const cookieRows = report.consentRows.filter(row => row.id === "cookie_notice_policy_availability" || row.id === "cookie-notice-policy").map(row => ({
     ...row, title: "Cookie disclosure available",
@@ -20,10 +22,10 @@ export function detailedEvidenceLayout(report: ShadowReportData) {
   const banner = cmp?.find(row => row.id === "banner");
   for (const row of consentRows) {
     if (["consent_surface_observed", "consent-surface"].includes(row.id) && banner?.status === row.status) {
-      consentLinks[row.id] = { targetId: "cmp-criterion-banner", label: "View cookie-banner evidence in CMP Details" };
+      consentLinks[row.id] = { targetId: "cmp-criterion-banner", label: `View cookie-banner evidence in ${cmpTitle}` };
     }
     if (row.id === "post_reject_tracking_reduction" && cmp?.find(item => item.id === "implementation")?.sourceIds.includes(row.id)) {
-      consentLinks[row.id] = { targetId: "cmp-criterion-implementation", label: "View post-Reject tracking evidence in CMP Details", showLink: !report.rejectPath };
+      consentLinks[row.id] = { targetId: "cmp-criterion-implementation", label: `View post-Reject tracking evidence in ${cmpTitle}`, showLink: !report.rejectPath };
     }
     const control = row.id === "accept_consent_control" ? "accept" : row.id === "options_settings_preferences_control" ? "options" : null;
     if (control && report.consentControlsAvailable !== false && row.status === report.controls[control]) {

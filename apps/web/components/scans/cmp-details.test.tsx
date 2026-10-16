@@ -90,7 +90,7 @@ test("prominence magnifier needs a retained comparison and preserves observed or
 });
 
 test("CMP details precede consent controls without redundant platform details in both report layouts", () => {
-  const report = { ...SHADOW_REPORT, cmpAudit: projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment }) };
+  const report = { ...SHADOW_REPORT, cmpAudit: projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment, consentVendor: "Borlabs Cookie" }) };
   for (const compact of [false, true]) {
     const html = renderToStaticMarkup(<EvidenceDirectory report={report} compact={compact} />);
     const cmpStart = html.indexOf('id="cmp-details"');
@@ -110,12 +110,12 @@ test("expanded executive Consent platform links to the CMP details anchor", () =
   const html = renderToStaticMarkup(<SignalSnapshot report={SHADOW_REPORT} siteOverview />);
   const platform = html.slice(html.indexOf("Consent platform"), html.indexOf("Consent controls"));
   assert.match(platform, /href="#cmp-details"/);
-  assert.match(platform, /View CMP Details/);
+  assert.match(platform, /View CMP details/);
 });
 
 test("internal preference inspection status does not distract from criterion assessments", async () => {
   const { CmpDetails } = await import("./cmp-details");
-  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment });
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment, consentVendor: "Borlabs Cookie" });
   audit.inspectionSupport = { state: "unknown", provider: null, recipeVersion: null, reason: "preference_budget_exhausted" };
   const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor="Borlabs Cookie" />);
   assert.match(html, /Borlabs Cookie/);
@@ -218,7 +218,7 @@ test("compact CMP tables retain all rows, exact matches and historical limitatio
 
 test("v2 groups one shared preference failure and retains every criterion anchor and JSON evidence", async () => {
   const { CmpDetails } = await import("./cmp-details");
-  const audit = projectCmpAudit({ scanId: "scan-1" });
+  const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: observedControlAssessment, consentVendor: "OneTrust" });
   audit.version = "cmp_audit_report.v2";
   const ids = ["categories", "services", "cookie_information"] as const;
   for (const id of ids) Object.assign(audit.rows.find(row => row.id === id)!, { status: "Incomplete", detail: "This check depends on the incomplete preference inspection.",

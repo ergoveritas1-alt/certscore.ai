@@ -59,3 +59,7 @@ reconstruction and MCP evidence pages carry the same fields. Missing historical
 lists are not reconstructed from counts. Existing assessments and source hashes
 remain unchanged on read; older retained bundles require an explicit verified
 materialization to add supplemental table evidence.
+
+## Local consent-details presentation update
+
+The unpublished `cmp_details_experience.v1` metadata on `cmpAudit.experience` supplies a shared section mode, title, summary, provider, binary report-control summary and default criterion IDs. Modes are `cmp_details`, `consent_controls`, `consent_signals` and `capture_limited`. All 13 rows and full coverage counts remain available regardless of the default view. This metadata does not change assessment statuses, findings, scores or action authorization. Unknown controls are never converted into verified absence or Not applicable. Clients reading historical reports must tolerate absent experience metadata.

@@ -2,11 +2,12 @@ import type { NormalizedConcern } from "./normalized-concerns";
 import { cmpAuditRowsEqual, consentVisualProminenceProjectionSchema, type ConsentControlVisualComparison, type CmpAuditAssessment } from "@certscore/contracts";
 import { z } from "zod";
 import { consentControlAssessmentSchema } from "@certscore/contracts";
-import type { ScanScoreExplanation } from "@certscore/api-contracts";
+import type { PublicCmpAudit, ScanScoreExplanation } from "@certscore/api-contracts";
 import type { GdprEprivacyCoverageChecklistItem } from "./gdpr-eprivacy-coverage-checklist";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { projectConsentControlReport } from "./consent-control-report";
 import { evidenceRowAnchor } from "./report-evidence-navigation";
+import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 
 export const CMP_AUDIT_REPORT_VERSION = "cmp_audit_report.v1" as const;
 export const CMP_AUDIT_CRITERIA = [
@@ -50,11 +51,12 @@ export type CmpAuditProjection = {
   scanId: string;
   assessmentSourceHash: string | null;
   inspectionSupport?: CmpAuditAssessment["support"];
+  experience?: NonNullable<PublicCmpAudit["experience"]>;
   rows: CmpAuditRow[];
 };
 
 /** Presentation of existing canonical assessments/checklists/findings only.
- * CMP identity, recipe support and raw runtime fields are deliberately not inputs.
+ * Provider identity selects presentation only, never assessment or eligibility.
  * No new finding, scoring rule, or positive implementation verdict is created. */
 export function projectCmpAudit(input: {
   scanId: string;
@@ -63,6 +65,7 @@ export function projectCmpAudit(input: {
   checklistRows?: GdprEprivacyCoverageChecklistItem[];
   unifiedFindings?: UnifiedFindingDisplayPacket[];
   scoreExplanation?: ScanScoreExplanation | null;
+  consentVendor?: string | null;
 }): CmpAuditProjection {
   const rows: CmpAuditRow[] = CMP_AUDIT_CRITERIA.map(criterion => ({
     ...criterion, status: "Not assessed", sourceIds: [],
@@ -281,7 +284,47 @@ export function projectCmpAudit(input: {
   }
   return { version: audit?.version === "cmp_audit_assessment.v6" ? "cmp_audit_report.v3" : audit?.version === "cmp_audit_assessment.v5" ? "cmp_audit_report.v2" : CMP_AUDIT_REPORT_VERSION,
     ...(audit && ["cmp_audit_assessment.v5", "cmp_audit_assessment.v6"].includes(audit.version) ? { limitationGroups: cmpLimitationGroups(rows) } : {}), scope: "starting_page", scanId: input.scanId,
-    assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows };
+    assessmentSourceHash: assessment?.provenance.sourceHash ?? null, ...(audit ? { inspectionSupport: audit.support } : {}), rows,
+    experience: projectCmpExperience({ assessment, controls: controlReport?.controls ?? null,
+      provider: KNOWN_CMP_REGISTRY.find(entry => [entry.canonicalName, ...entry.aliases]
+        .some(name => name.toLowerCase() === input.consentVendor?.trim().toLowerCase()))?.canonicalName ?? null, rows }) };
+}
+
+/** Read-only grouping of retained conclusions. Never changes a row, counts,
+ * applicability, findings, scoring or action authorization. */
+function projectCmpExperience({ assessment, controls, provider, rows }: {
+  assessment: z.infer<typeof consentControlAssessmentSchema> | null;
+  controls: NonNullable<ReturnType<typeof projectConsentControlReport>>["controls"] | null;
+  provider: string | null;
+  rows: readonly CmpAuditRow[];
+}): NonNullable<PublicCmpAudit["experience"]> {
+  const surfaceObserved = assessment && (["observed_actionable", "observed_non_actionable"].includes(assessment.surface.status)
+    || Object.values(controls ?? {}).includes("observed"));
+  const noSurface = assessment?.assessmentStatus === "complete" && assessment.coverage.status === "complete"
+    && assessment.surface.status === "not_observed" && Object.values(assessment.controls).every(control => control.state === "not_observed")
+    && assessment.contradictions.length === 0;
+  const mode = !assessment ? "capture_limited" : provider ? "cmp_details" : surfaceObserved ? "consent_controls"
+    : noSurface ? "consent_signals" : "capture_limited";
+  const copy = {
+    cmp_details: ["CMP details", "Consent management audit"],
+    consent_controls: ["Consent controls", "Consent mechanism observed; provider not identified."],
+    consent_signals: ["Consent and cookie signals", "No consent surface was observed on this visit."],
+    capture_limited: ["Consent capture limited", "Control evidence unavailable"],
+  } as const;
+  const meaningful = (row: CmpAuditRow) => ["Observed", "Review recommended", "Partially assessed", "Informational"].includes(row.status)
+    || Boolean(row.deductionPoints) || Boolean(row.supportingEvidence);
+  return { version: "cmp_details_experience.v1", mode, title: copy[mode][0], summary: copy[mode][1],
+    provider, controls,
+    defaultCriterionIds: rows.filter(row => mode === "cmp_details" || meaningful(row)
+      || (mode === "consent_controls" && ["banner", "reject"].includes(row.id))).map(row => row.id) };
+}
+
+/** Historical models without the new metadata retain their full audit. Their
+ * absence of metadata is not evidence that no CMP or consent surface existed. */
+export function cmpDetailsExperience(audit: CmpAuditProjection | undefined, provider: string | null) {
+  return audit?.experience ?? { version: "cmp_details_experience.v1" as const,
+    mode: "cmp_details" as const, title: "CMP details", summary: "Consent management audit", provider, controls: null,
+    defaultCriterionIds: CMP_AUDIT_CRITERIA.map(row => row.id) };
 }
 
 export type CmpLimitationGroup = { id: "preferences" | "actions" | "visual"; code: string; title: string; criterionIds: CmpAuditCriterionId[] };

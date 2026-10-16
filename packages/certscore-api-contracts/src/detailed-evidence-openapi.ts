@@ -592,6 +592,114 @@ export const detailedEvidenceOpenApiSchemas = {
           }
         ]
       },
+      "experience": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "mode",
+          "title",
+          "summary",
+          "provider",
+          "controls",
+          "defaultCriterionIds"
+        ],
+        "properties": {
+          "version": {
+            "const": "cmp_details_experience.v1",
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "cmp_details",
+              "consent_controls",
+              "consent_signals",
+              "capture_limited"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "controls": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "accept",
+                  "reject",
+                  "options"
+                ],
+                "properties": {
+                  "accept": {
+                    "type": "string",
+                    "enum": [
+                      "observed",
+                      "not_observed"
+                    ]
+                  },
+                  "reject": {
+                    "type": "string",
+                    "enum": [
+                      "observed",
+                      "not_observed"
+                    ]
+                  },
+                  "options": {
+                    "type": "string",
+                    "enum": [
+                      "observed",
+                      "not_observed"
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "defaultCriterionIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "banner",
+                "reject",
+                "prominence",
+                "categories",
+                "services",
+                "privacy_link",
+                "privacy_access",
+                "consent_record",
+                "implementation",
+                "duration",
+                "declared_not_found",
+                "found_not_declared",
+                "cookie_information"
+              ]
+            },
+            "maxItems": 13
+          }
+        }
+      },
       "limitationGroups": {
         "type": "array",
         "items": {

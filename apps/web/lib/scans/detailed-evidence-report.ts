@@ -9,7 +9,7 @@ import { resolveReportReviewFocus } from "./report-review-focus";
 import { detailedEvidenceCopy, policyFindingSummary } from "./detailed-evidence-copy";
 import { accessibilityFindingCopy } from "./accessibility-finding-copy";
 import { accessibilityRuleTitle } from "./accessibility-report";
-import { CMP_AUDIT_CRITERIA } from "./cmp-audit-projection";
+import { CMP_AUDIT_CRITERIA, cmpDetailsExperience } from "./cmp-audit-projection";
 import { cmpCorrectionSteps } from "./cmp-correction-steps";
 import { getCorrectionGuidance } from "./checklist-correction-guidance";
 import { detailedEvidenceLayout, type SharedEvidenceLink } from "./detailed-evidence-layout";
@@ -26,10 +26,12 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
   const privacy = californiaPrivacyEvidence(report.privacyAuditEvidence, report.scan.id);
   const sourceRows = [...report.consentRows, ...report.gdprTransparencyRows, ...report.preConsentRuntimeRows, ...report.trackingExternalRows];
   const audit = report.cmpAudit?.scanId === report.scan.id ? report.cmpAudit : undefined;
+  const experience = cmpDetailsExperience(audit, report.consentVendor);
   const cmpAudit = publicCmpAuditSchema.parse({
     version: audit?.version ?? "cmp_audit_report.v1", limitationGroups: audit?.limitationGroups, scanId: report.scan.id, scope: "starting_page",
     assessmentSourceHash: audit?.assessmentSourceHash ?? null,
     inspectionSupport: audit?.inspectionSupport,
+    experience,
     rows: (audit?.rows ?? CMP_AUDIT_CRITERIA.map(criterion => ({ ...criterion, status: "Not assessed", sourceIds: [] }))).map(row => ({
       id: row.id, label: row.label, status: row.status, limitation: "limitation" in row ? row.limitation : undefined, detail: "detail" in row ? row.detail : undefined,
       sourceIds: row.sourceIds, evidenceAnchor: "evidenceAnchor" in row ? row.evidenceAnchor : undefined,
@@ -87,8 +89,9 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
     };
   });
   const sections: DetailedEvidenceSection[] = [{
-    id: "cmp", title: EVIDENCE_SECTION_TITLES.cmp, recap: evidenceSectionRecap(cmpAudit.rows),
-    displayStatus: evidenceHeaderStatus(cmpAudit.rows)?.label ?? null,
+    id: "cmp", title: experience.title, recap: experience.mode === "cmp_details" ? evidenceSectionRecap(cmpAudit.rows) : experience.summary,
+    displayStatus: experience.mode === "capture_limited" ? "Limited" : evidenceHeaderStatus(experience.mode === "cmp_details"
+      ? cmpAudit.rows : cmpAudit.rows.filter(row => experience.defaultCriterionIds.includes(row.id) && row.status === "Review recommended"))?.label ?? null,
     counts: evidenceSectionCounts(cmpAudit.rows), rows: cmpRows,
   }];
   const consent = section("consent", layout.consentRows, "consentRows", layout.consentLinks);

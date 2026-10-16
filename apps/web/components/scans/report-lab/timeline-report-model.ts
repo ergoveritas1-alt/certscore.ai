@@ -826,7 +826,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
   const cmpAudit = projectCmpAudit({ scanId: scanRecord.scan.id, normalizedConcerns: canonical.normalizedConcerns,
     consentControlAssessment: retainedConsentAssessment(scanRecord), checklistRows: reportableChecklistRows,
-    unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation });
+    unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation, consentVendor });
   const rejectActivityCaptured = cmpAudit.version === "cmp_audit_report.v3" &&
     cmpAudit.rows.find(row => row.id === "implementation")?.supportingEvidence?.inventory?.choiceActivity?.some(activity => activity.action === "reject");
   const visibleLimitations = evidenceRows.filter(row => row.status === "Limited" && !HIDDEN_DETAILED_EVIDENCE_ROW_IDS.includes(row.id) &&

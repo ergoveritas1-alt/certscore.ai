@@ -13,6 +13,7 @@ import { ViewerTimestamp } from "../../time/viewer-timestamp";
 import { FormDestinationEvidence } from "../form-destination-evidence";
 import { CmsSecurityEvidence } from "../cms-security-evidence";
 import { CmpDetails } from "../cmp-details";
+import { cmpDetailsExperience } from "../../../lib/scans/cmp-audit-projection";
 import { EvidenceJumpLink } from "../evidence-jump-link";
 import { GpcObservedFacts } from "../gpc-observed-facts";
 import { GpcActivityComparison } from "../gpc-activity-comparison";
@@ -489,7 +490,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <VendorBrandChip className="max-w-[13rem]" label={consentVendor} showMeta={false} />
             {consentPlatformDetail ? <p className="text-xs leading-5 text-zinc-600">{consentPlatformDetail}</p> : null}
-            <EvidenceJumpLink targetId="cmp-details" className="basis-full text-xs">View CMP Details ↓</EvidenceJumpLink>
+            <EvidenceJumpLink targetId="cmp-details" className="basis-full text-xs">View {cmpDetailsExperience(report.cmpAudit, report.consentVendor).title} ↓</EvidenceJumpLink>
           </div>
         </details>
         {report.consentControlsAvailable !== false ? <details className={signalRowClass}>
@@ -1570,6 +1571,11 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
           <EvidenceColumns siteIntegrity={<SiteIntegrityEvidence finding={report.siteIntegrity} />} hasSiteIntegrity={Boolean(report.siteIntegrity)}>
             {additionalEvidence}
             <CmpDetails audit={report.cmpAudit} vendor={report.consentVendor} compact={compact} sharedEvidence={cmpLinks}
+              relatedEvidence={[
+                ...(report.preConsentRuntimeRows[0] ? [{ label: "View cookies and storage", targetId: evidenceRowAnchor(report.preConsentRuntimeRows[0].id) }] : []),
+                ...(report.trackingExternalRows[0] ? [{ label: "View tracking evidence", targetId: evidenceRowAnchor(report.trackingExternalRows[0].id) }] : []),
+                ...(policyRows[0] ? [{ label: "View policy evidence", targetId: evidenceRowAnchor(policyRows[0].id) }] : []),
+              ]}
               bannerPreview={report.scan.consentBannerPreview}
               rejectPreview={report.scan.consentRejectPreview}
               prominencePreview={report.scan.consentProminencePreview}

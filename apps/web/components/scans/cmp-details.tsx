@@ -1,7 +1,6 @@
-import { EVIDENCE_SECTION_TITLES } from "../../lib/scans/detailed-evidence-presentation";
 import { cmpCorrectionSteps } from "../../lib/scans/cmp-correction-steps";
 import React, { type ReactNode } from "react";
-import { CMP_AUDIT_CRITERIA, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
+import { CMP_AUDIT_CRITERIA, cmpDetailsExperience, type CmpAuditProjection, type CmpAuditRow, type CmpAuditStatus } from "../../lib/scans/cmp-audit-projection";
 import { EvidenceStatusBadge, type EvidenceBadgeTone } from "./evidence-status-badge";
 import { DetailedEvidenceFinding } from "./detailed-evidence-finding";
 import { DisclosureChevron } from "./report-finding-row";
@@ -22,7 +21,7 @@ const statusTone: Record<CmpAuditStatus, EvidenceBadgeTone> = {
   "Incomplete": "limited", "Not applicable": "neutral", "Not observed": "neutral", "Review recommended": "review", "Partially assessed": "context", "Not assessed": "limited",
 };
 
-export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, cookieEvidenceAnchor, rejectActionAvailable = false, bannerPreview, rejectPreview, prominencePreview }: {
+export function CmpDetails({ audit, vendor, compact = false, children, evidenceRows = [], sharedEvidence = {}, cookieEvidenceAnchor, rejectActionAvailable = false, relatedEvidence = [], bannerPreview, rejectPreview, prominencePreview }: {
   audit?: CmpAuditProjection;
   vendor: string | null;
   compact?: boolean;
@@ -31,6 +30,7 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
   sharedEvidence?: Record<string, SharedEvidenceLink>;
   cookieEvidenceAnchor?: string;
   rejectActionAvailable?: boolean;
+  relatedEvidence?: Array<{ label: string; targetId: string }>;
   bannerPreview?: ConsentBannerPreview | null;
   rejectPreview?: ConsentRejectPreview | null;
   prominencePreview?: ConsentProminencePreview | null;
@@ -39,6 +39,13 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
     ...criterion, status: "Not assessed" as const, sourceIds: [],
   }));
   const grouped = new Set((audit?.limitationGroups ?? []).flatMap(group => group.criterionIds));
+  const experience = cmpDetailsExperience(audit, vendor);
+  const defaults = new Set(experience.defaultCriterionIds);
+  const defaultRows = rows.filter(row => defaults.has(row.id));
+  const additionalRows = rows.filter(row => !defaults.has(row.id));
+  const visibleGroups = (audit?.limitationGroups ?? []).map(group => ({ ...group,
+    criterionIds: group.criterionIds.filter(id => defaults.has(id)),
+  })).filter(group => group.criterionIds.length);
   const renderRow = (row: CmpAuditRow) => {
     const source = evidenceRows.find(source => row.sourceIds.includes(source.id) || evidenceRowAnchor(source.id) === row.evidenceAnchor);
     const { id, label, status, detail, sourceIds, supportingEvidence } = row;
@@ -71,19 +78,37 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
     </DetailedEvidenceFinding>;
   };
   return <details id="cmp-details" className="group/cmp border-b border-r border-zinc-200 p-5">
-    <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.cmp} recap={evidenceSectionRecap(rows)} badge={<EvidenceHeaderStatus rows={rows} />} />
+    <EvidenceSectionHeader title={experience.title} recap={experience.mode === "cmp_details" ? evidenceSectionRecap(rows) : experience.summary}
+      badge={experience.mode === "cmp_details" ? <EvidenceHeaderStatus rows={rows} /> : experience.mode === "capture_limited"
+        ? <EvidenceStatusBadge label="Limited" tone="limited" /> : <EvidenceHeaderStatus rows={defaultRows.filter(row => row.status === "Review recommended")} />} />
     <div className="mt-5">
-      <VendorBrandChip label={vendor ?? "Consent platform not identified"} showMeta={false} />
-      <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4>
+      {experience.mode === "cmp_details" ? <VendorBrandChip label={vendor ?? "Consent platform not identified"} showMeta={false} /> :
+        <p className="text-sm text-zinc-600">Provider: {experience.provider ?? "Not identified"}</p>}
+      {experience.mode === "consent_controls" && experience.controls ? <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs">
+        {(["accept", "reject", "options"] as const).map(role => <div key={role}>
+          <dt className="font-semibold capitalize text-zinc-800">{role}</dt>
+          <dd className="mt-1 text-zinc-600">{experience.controls![role] === "observed" ? "Observed" : "Not observed"}</dd>
+        </div>)}
+      </dl> : null}
+      {experience.mode !== "cmp_details" ? <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs">
+        {experience.controls ? <EvidenceJumpLink targetId="consent-choice-controls">View consent choices</EvidenceJumpLink> : null}
+        {relatedEvidence.map(link => <EvidenceJumpLink key={link.targetId} targetId={link.targetId}>{link.label}</EvidenceJumpLink>)}
+      </div> : null}
+      {experience.mode === "cmp_details" ? <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4> : null}
       <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">
-        {rows.filter(row => !grouped.has(row.id)).map(renderRow)}
-        {(audit?.limitationGroups ?? []).map(group => <details key={group.id} id={`cmp-limitation-${group.id}`} className="group/cmp-limitation py-3">
+        {defaultRows.filter(row => !grouped.has(row.id)).map(renderRow)}
+        {visibleGroups.map(group => <details key={group.id} id={`cmp-limitation-${group.id}`} className="group/cmp-limitation py-3">
           <summary className="cursor-pointer list-none text-sm font-semibold text-zinc-800 [&::-webkit-details-marker]:hidden">
             <span className="flex items-start justify-between gap-3"><span>{group.title}<span className="mt-1 block text-xs font-normal text-zinc-500">{`${group.criterionIds.length} ${group.criterionIds.length === 1 ? "check" : "checks"} · View affected checks`}</span></span><span className="flex shrink-0 items-center gap-2"><EvidenceStatusBadge label="Incomplete" tone="limited" /><DisclosureChevron className="text-zinc-400 group-open/cmp-limitation:rotate-180" /></span></span>
           </summary>
-          <div className="mt-2 divide-y divide-zinc-200">{rows.filter(row => group.criterionIds.includes(row.id)).map(renderRow)}</div>
+          <div className="mt-2 divide-y divide-zinc-200">{defaultRows.filter(row => group.criterionIds.includes(row.id)).map(renderRow)}</div>
         </details>)}
       </div>
+      {additionalRows.length ? <details className="mt-3" data-cmp-retained-checks>
+        <summary className="cursor-pointer text-sm font-semibold text-zinc-700">All retained checks · {rows.length} criteria</summary>
+        <p className="mt-2 text-xs text-zinc-500">{evidenceSectionRecap(rows)}</p>
+        <div className="mt-2 divide-y divide-zinc-200">{additionalRows.map(renderRow)}</div>
+      </details> : null}
       {children}
     </div>
   </details>;
