@@ -84,7 +84,7 @@ test("custom mechanisms keep consent checks while incomplete provider inventory 
   }
 });
 
-test("no-surface default avoids an empty audit grid while preserving every status and reachable evidence anchor", () => {
+test("no-surface view omits retained-check disclosure while preserving underlying statuses and related evidence", () => {
   const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: noSurface() });
   const before = structuredClone(audit);
   assert.deepEqual(audit.experience!.defaultCriterionIds, []);
@@ -92,11 +92,16 @@ test("no-surface default avoids an empty audit grid while preserving every statu
     const report = { ...SHADOW_REPORT, scan: { ...SHADOW_REPORT.scan, id: "scan-1" }, consentVendor: null, cmpAudit: audit,
       controls: { accept: "Not observed", reject: "Not observed", options: "Not observed" } };
     const html = renderToStaticMarkup(<EvidenceDirectory report={report} compact={compact} />);
-    const start = html.indexOf('id="cmp-details"'), retained = html.indexOf("data-cmp-retained-checks", start);
-    assert.match(html.slice(start, retained), /Consent and cookie signals/);
-    assert.doesNotMatch(html.slice(start, retained), /id="cmp-criterion-|Consent management audit|No review flags/);
-    assert.match(html.slice(start, retained), /View cookies and storage|View tracking evidence|View policy evidence/);
-    assert.equal((html.match(/id="cmp-criterion-/g) ?? []).length, 13);
+    const start = html.indexOf('id="cmp-details"'), end = html.indexOf('id="consent-review-evidence"', start);
+    const cmp = html.slice(start, end);
+    assert.match(cmp, /Consent and cookie signals/);
+    assert.doesNotMatch(cmp, /<details id="cmp-criterion-|Consent management audit|No review flags|All retained checks|data-cmp-retained-checks/);
+    assert.equal((cmp.match(/data-shared-evidence-target="cmp-details"/g) ?? []).length, 13, "Existing deep links retain aliases to the section");
+    assert.match(cmp, /Provider: Not identified/);
+    assert.doesNotMatch(cmp, /View consent choices|View cookies and storage|View tracking evidence|View policy evidence/);
+    const exported = buildDetailedEvidenceExport(report);
+    assert.equal(exported.cmpAudit.rows.length, 13);
+    assert.deepEqual(JSON.parse(JSON.stringify(exported.cmpAudit.rows)), JSON.parse(JSON.stringify(audit.rows)));
   }
   assert.deepEqual(audit, before);
   assert.equal(audit.rows.find(row => row.id === "categories")!.status, "Not assessed");
@@ -130,5 +135,25 @@ test("all four experiences and complete counts survive API pagination and SDK re
       assert.equal(cmp.counts.checks, 13, "Collapsed rows do not count as resolved checks");
     }
     assert.deepEqual(report, before, "No score, finding or report input mutation");
+  }
+});
+
+test("no-surface view omits duplicate observed policy detail but keeps a supported review visible and exports unchanged", () => {
+  for (const status of ["Observed", "Review recommended"] as const) {
+    const audit = projectCmpAudit({ scanId: "scan-1", consentControlAssessment: noSurface() });
+    const policy = audit.rows.find(row => row.id === "privacy_link")!;
+    policy.status = status;
+    audit.experience!.defaultCriterionIds = ["privacy_link"];
+    const report = { ...SHADOW_REPORT, scan: { ...SHADOW_REPORT.scan, id: "scan-1" }, consentVendor: null, cmpAudit: audit };
+    const before = buildDetailedEvidenceExport(report);
+    for (const compact of [false, true]) {
+      const html = renderToStaticMarkup(<CmpDetails audit={audit} vendor={null} compact={compact} />);
+      assert.doesNotMatch(html, /All retained checks|View consent choices|View cookies and storage|View tracking evidence|View policy evidence/);
+      assert.match(html, /Provider: Not identified/);
+      assert.equal(html.includes('<details id="cmp-criterion-privacy_link"'), status === "Review recommended");
+      assert.ok(html.includes('id="cmp-criterion-privacy_link"'), "Existing navigation anchor remains available");
+    }
+    assert.deepEqual(buildDetailedEvidenceExport(report), before);
+    assert.equal(before.cmpAudit.rows.length, 13);
   }
 });

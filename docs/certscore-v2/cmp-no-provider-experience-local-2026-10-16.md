@@ -34,3 +34,11 @@ Artifacts: `/Users/benmasek/WC01/outputs/cmp-no-provider-experience-local-2026-1
 ## Cost
 
 Experience metadata measured 229 to 477 bytes on the retained examples, below 1 KB. Conservative incremental transfer and optional artifact retention estimate: under $0.25/month at 100,000 scans/month, up to four 1 KB copies per scan and one year retention. No new infrastructure, paid model usage, scan compute or retention policy. Local replay and verification used no AWS or model calls.
+
+## Owner-requested no-CMP simplification
+
+The owner subsequently removed All retained checks, shortcut links and the duplicate observed privacy-policy row from the `consent_signals` web view. Keep Provider: Not identified and the factual visit summary. Supported review rows remain visible. Identified CMP, custom-control and limited-capture views retain their previous behavior.
+
+This is a component-only presentation change. Underlying projection metadata, all 13 assessment rows, public exports, counts, source references and scores are unchanged. Invisible navigation aliases preserve existing criterion targets by routing them to the section; they do not render check rows or create evidence. Policy evidence remains in Policies & disclosures.
+
+Verification artifacts: `/Users/benmasek/WC01/outputs/cmp-no-provider-simplify-local-2026-10-16`. Passed 38 focused component/export/layout tests and 48 actual local API/SDK/MCP/download cases. Web typecheck passed. Refreshed and visually verified the retained Hugging Face example in the in-app browser. No new scans, infrastructure cost or deployment.

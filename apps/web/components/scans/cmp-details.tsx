@@ -41,10 +41,12 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
   const grouped = new Set((audit?.limitationGroups ?? []).flatMap(group => group.criterionIds));
   const experience = cmpDetailsExperience(audit, vendor);
   const defaults = new Set(experience.defaultCriterionIds);
-  const defaultRows = rows.filter(row => defaults.has(row.id));
-  const additionalRows = rows.filter(row => !defaults.has(row.id));
+  const defaultRows = rows.filter(row => defaults.has(row.id) && !(experience.mode === "consent_signals"
+    && row.id === "privacy_link" && row.status === "Observed"));
+  const displayed = new Set(defaultRows.map(row => row.id));
+  const additionalRows = rows.filter(row => !displayed.has(row.id));
   const visibleGroups = (audit?.limitationGroups ?? []).map(group => ({ ...group,
-    criterionIds: group.criterionIds.filter(id => defaults.has(id)),
+    criterionIds: group.criterionIds.filter(id => displayed.has(id)),
   })).filter(group => group.criterionIds.length);
   const renderRow = (row: CmpAuditRow) => {
     const source = evidenceRows.find(source => row.sourceIds.includes(source.id) || evidenceRowAnchor(source.id) === row.evidenceAnchor);
@@ -90,12 +92,12 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
           <dd className="mt-1 text-zinc-600">{experience.controls![role] === "observed" ? "Observed" : "Not observed"}</dd>
         </div>)}
       </dl> : null}
-      {experience.mode !== "cmp_details" ? <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs">
+      {experience.mode !== "cmp_details" && experience.mode !== "consent_signals" ? <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs">
         {experience.controls ? <EvidenceJumpLink targetId="consent-choice-controls">View consent choices</EvidenceJumpLink> : null}
         {relatedEvidence.map(link => <EvidenceJumpLink key={link.targetId} targetId={link.targetId}>{link.label}</EvidenceJumpLink>)}
       </div> : null}
       {experience.mode === "cmp_details" ? <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4> : null}
-      <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">
+      {defaultRows.length ? <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">
         {defaultRows.filter(row => !grouped.has(row.id)).map(renderRow)}
         {visibleGroups.map(group => <details key={group.id} id={`cmp-limitation-${group.id}`} className="group/cmp-limitation py-3">
           <summary className="cursor-pointer list-none text-sm font-semibold text-zinc-800 [&::-webkit-details-marker]:hidden">
@@ -103,12 +105,14 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
           </summary>
           <div className="mt-2 divide-y divide-zinc-200">{defaultRows.filter(row => group.criterionIds.includes(row.id)).map(renderRow)}</div>
         </details>)}
-      </div>
-      {additionalRows.length ? <details className="mt-3" data-cmp-retained-checks>
+      </div> : null}
+      {experience.mode !== "consent_signals" && additionalRows.length ? <details className="mt-3" data-cmp-retained-checks>
         <summary className="cursor-pointer text-sm font-semibold text-zinc-700">All retained checks · {rows.length} criteria</summary>
         <p className="mt-2 text-xs text-zinc-500">{evidenceSectionRecap(rows)}</p>
         <div className="mt-2 divide-y divide-zinc-200">{additionalRows.map(renderRow)}</div>
       </details> : null}
+      {experience.mode === "consent_signals" ? additionalRows.map(row =>
+        <span key={row.id} id={`cmp-criterion-${row.id}`} data-shared-evidence-target="cmp-details" className="hidden" />) : null}
       {children}
     </div>
   </details>;
