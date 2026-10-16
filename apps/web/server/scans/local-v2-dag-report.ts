@@ -8,6 +8,7 @@ import { postAcceptEvidencePacketSchema } from "@certscore/contracts";
 import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-projection";
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
+import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
 import { projectFormDestinations } from "./form-destination-projection";
 import { projectCmsSecurity } from "./cms-security-projection";
@@ -5667,6 +5668,11 @@ function buildMaterializedLocalV2Detail(
     bundle.policySurfaceObservations ?? [],
     canonicalDocumentUrl
   );
+  const californiaPrivacyReview = runtimeEvidenceReportable && !consentControlAssessment.scan.noGo
+    ? projectCaliforniaPrivacyReview(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null;
+  if (californiaPrivacyReview && consentControlAssessment.artifactVersion === "2.2") {
+    consentControlAssessment.californiaPrivacyReview = californiaPrivacyReview;
+  }
   const gdprTransparencyEvidenceProfile = normalizeGdprTransparencyProductionEvidenceProfile(
     options.gdprTransparencyEvidenceProfile
   );

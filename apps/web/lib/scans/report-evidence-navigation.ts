@@ -9,6 +9,7 @@ export function findingEvidenceAnchor(id: string, presentationGroup?: unknown) {
   if (id === "site_integrity_cms_security") return "cms-security-evidence";
   if (id === "form_data_unexpected_destination") return "form-destination-evidence";
   if (id.startsWith("site_integrity_")) return "site-integrity-evidence";
+  if ((id.startsWith("california_privacy_choice_") || id === "california_sale_sharing_opt_out_activity" || id === "california_notice_at_collection_destination_error" || id === "california_rights_information_destination_error")) return "california-privacy-evidence";
   if (id === "acceptance_signal_contradicts_action") return "consent-review-evidence";
   const prefix = "regulatory_gap__gdpr_eprivacy__";
   return id.startsWith(prefix) ? evidenceRowAnchor(id.slice(prefix.length)) : "evidence";

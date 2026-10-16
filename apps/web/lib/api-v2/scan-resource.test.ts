@@ -380,19 +380,14 @@ test("buildApiV2ScanResource projects a completed scan into public-safe v2 shape
   assert.equal(resource.links?.findings, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings");
 });
 
-test("API v2 resource and status surface the canonical GPC response without private artifact URIs", () => {
+test("API resource/status hide GPC and remove its retained score deduction", () => {
   const resource = buildApiV2ScanResource(gpcCanonicalFixture());
   const status = buildApiV2ScanStatus(gpcCanonicalFixture(), { canonicalScan: resource });
 
-  assert.equal(resource.gpcResponse?.status, "no_observable_response");
-  assert.equal(resource.gpcResponse?.findingTitle, "No observable GPC response");
-  assert.equal(resource.gpcResponse?.comparison.enabledProof.secGpcHeaderValue, "1");
-  assert.equal(resource.gpcResponse?.comparison.enabledProof.requestsWithSecGpc, 2);
-  assert.equal(resource.gpcResponse?.comparison.deltas.trackers.shared.length, 1);
-  assert.deepEqual(resource.gpcResponse?.californiaPolicy, { applied: true, deductionPoints: 15 });
-  assert.equal(resource.gpcResponse?.evidenceUrl, "https://certscore.ai/api/v2/scans/00000000-0000-4000-8000-000000000123/findings/gpc_response");
-  assert.doesNotMatch(JSON.stringify(resource.gpcResponse), /s3:\/\//);
-  assert.deepEqual(status.gpcResponse, resource.gpcResponse);
+  assert.equal(resource.gpcResponse,null);
+  assert.equal(status.gpcResponse,null);
+  assert.equal(resource.score,null, "No scorable checklist evidence: do not invent a replacement score.");
+  assert.equal(resource.scoreVersion,"overall-posture.v11");
 });
 
 for (const scenario of ["no_observable_response", "responsive", "indeterminate", "late_journey", "redirect", "stale_redirect"] as const) {
@@ -422,8 +417,10 @@ for (const scenario of ["no_observable_response", "responsive", "indeterminate",
     assert.equal(concerns.length, 1);
     const expectedDeduction = outcome === "no_observable_response" && scenario !== "late_journey" ? 15 : 0;
     const report = buildGpcResponseReportProjection(findings);
-    assert.deepEqual(report?.assessment, assessment);
-    assert.equal(report?.californiaDeductionPoints, expectedDeduction);
+    assert.equal(report,null);
+    assert.ok(finding.details?.family === "privacy_signal" && finding.details.kind === "gpc_response");
+    assert.deepEqual(finding.details.assessment,assessment);
+    assert.equal(finding.scoreEffects?.length ?? 0,0);
     const record = gpcCanonicalFixture() as ScanDetailResponse & { canonicalReportProjection: Record<string, unknown> };
     record.runtimeArtifacts = runtimeArtifacts;
     record.canonicalReportProjection = { ...record.canonicalReportProjection!, normalizedConcerns: concerns,
@@ -437,28 +434,10 @@ for (const scenario of ["no_observable_response", "responsive", "indeterminate",
     const publicRecord = { ...record, ...hydrated, scan: record.scan };
     const resource = buildApiV2ScanResource(publicRecord);
     const status = buildApiV2ScanStatus(publicRecord, { canonicalScan: resource });
-    const response = apiV2GpcResponseSchema.parse(resource.gpcResponse);
-    assert.equal(response.contractVersion, "certscore.gpc-response-assessment.v2");
-    assert.equal(response.status, outcome);
-    assert.equal(response.californiaPolicy.deductionPoints, expectedDeduction);
-    assert.deepEqual(response, status.gpcResponse);
-    assert.doesNotMatch(JSON.stringify(response), /s3:\/\/|documentUrlSha256|contextConfigSha256/);
-    if (outcome === "no_observable_response" && scenario !== "late_journey") {
-      assert.equal(response.comparison.deltas.trackers.sharedCount, 150);
-      assert.equal(response.comparison.deltas.trackers.shared.length, 100);
-      assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, comparison: { ...response.comparison,
-        deltas: { ...response.comparison.deltas, trackers: { ...response.comparison.deltas.trackers, sharedCount: 99 } } } }).success, false);
-    }
-    if (scenario === "late_journey") {
-      assert.equal(response.comparison.deltas.trackers.baselineCount, 0);
-      assert.equal(response.comparison.deltas.trackers.gpcCount, 0);
-    }
-    if (scenario === "indeterminate") {
-      assert.equal(response.comparison.gpcArtifact, null);
-      assert.equal(response.comparison.enabledProof.navigatorGlobalPrivacyControl, null);
-      assert.equal(response.comparison.delivery?.status, "unavailable");
-    }
-    assert.equal(readPersistedScanReportProjection({ scan: record.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);
+    assert.equal(resource.gpcResponse,null);
+    assert.equal(status.gpcResponse,null);
+    assert.ok(hydrated.runtimeArtifacts?.gpcResponseAssessment);
+
   });
 }
 
@@ -1775,15 +1754,10 @@ test("GPC v3 independent observation survives actual persisted report hydration 
   assert.ok(hydrated);
   const publicRecord = { ...record, ...hydrated, scan: record.scan };
   const resource = buildApiV2ScanResource(publicRecord);
-  const response = apiV2GpcResponseSchema.parse(resource.gpcResponse);
-  assert.equal(response.contractVersion, "certscore.gpc-response-assessment.v3");
-  assert.equal(response.observation?.status, "complete");
-  assert.equal(response.status, "indeterminate");
-  assert.deepEqual(response.californiaPolicy, { applied: false, deductionPoints: 0 });
-  assert.deepEqual(buildApiV2ScanStatus(publicRecord, { canonicalScan: resource }).gpcResponse, response);
-  assert.doesNotMatch(JSON.stringify(response), /s3:\/\/|prototype|requestDiagnostics/);
-  assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, observation: undefined }).success, false);
-  assert.equal(apiV2GpcResponseSchema.safeParse({ ...response, observation: { ...response.observation, sourceSha256: "0".repeat(64) } }).success, false);
+  assert.equal(resource.gpcResponse,null);
+  assert.equal(buildApiV2ScanStatus(publicRecord,{canonicalScan:resource}).gpcResponse,null);
+  assert.deepEqual(hydrated.runtimeArtifacts?.gpcResponseAssessment,assessment);
+
 });
 
 test("public A/R summaries require their canonical observed control while action evidence stays retained", async () => {

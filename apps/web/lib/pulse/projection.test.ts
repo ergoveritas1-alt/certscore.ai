@@ -523,7 +523,7 @@ test("Pulse surfaces canonical score-neutral post-Accept findings", () => {
   assert.doesNotThrow(() => pulseResponseSchema.parse(pulse));
 });
 
-test("Pulse JSON surfaces GPC with retained proof alongside Accept and Reject results", () => {
+test("Pulse JSON hides suspended GPC results while retaining Accept and Reject results", () => {
   const delta = {
     baselineCount: 1,
     gpcCount: 1,
@@ -641,12 +641,9 @@ test("Pulse JSON surfaces GPC with retained proof alongside Accept and Reject re
     waitSeconds: 0,
   }) as Record<string, any>;
 
-  assert.equal(pulse.gpcResponse.status, "no_observable_response");
-  assert.equal(pulse.gpcResponse.comparison.enabledProof.secGpcHeaderValue, "1");
-  assert.equal(pulse.gpcResponse.comparison.deltas.trackers.shared.length, 1);
+  assert.equal(pulse.gpcResponse, null);
   assert.equal(pulse.postAcceptObservation.status, "confirmed_observation");
   assert.equal(pulse.postRefusalObservation.status, "confirmed_clean");
-  assert.doesNotMatch(JSON.stringify(pulse.gpcResponse), /s3:\/\//);
   assert.doesNotThrow(() => pulseResponseSchema.parse(pulse));
 });
 

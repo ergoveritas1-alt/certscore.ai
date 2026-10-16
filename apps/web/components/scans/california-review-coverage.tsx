@@ -1,0 +1,18 @@
+import type { CaliforniaPrivacyReview } from "@certscore/contracts";
+import { PRIVACY_TOPIC_LABELS } from "../../lib/scans/california-privacy-evidence";
+
+/** Coverage from the persisted typed assessment, never from empty display lists. */
+export function CaliforniaReviewCoverage({ assessment, homepage = false }: { assessment?: CaliforniaPrivacyReview | null; homepage?: boolean }) {
+  return <details className="my-3 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3" data-testid="california-review-coverage">
+    <summary className="cursor-pointer text-sm font-semibold text-zinc-800">California review coverage{homepage ? " · starting page" : ""}</summary>
+    <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+      <div><dt className="font-medium">Named privacy choices</dt><dd className="mt-1 text-zinc-600">{assessment?.choiceSurface === "observed" ? `${assessment.controls.length} visible named ${assessment.controls.length === 1 ? "choice" : "choices"} retained.` : assessment?.choiceSurface === "not_observed_in_inspected_scope" ? "None identified in a complete inspection of rendered links and buttons." : "Not determined: complete inspection evidence is unavailable."}</dd></div>
+      <div><dt className="font-medium">Choice destinations</dt><dd className="mt-1 text-zinc-600">{assessment?.controls.some(row => row.destinationStatus === "http_error") ? "A retained destination returned HTTP 404 or 410. See the related review issue." : "Only retained retrieval results are available; end-to-end functionality is unassessed."}</dd></div>
+      <div><dt className="font-medium">Privacy-request routes</dt><dd className="mt-1 text-zinc-600">{assessment?.inspection?.rightsMethods?.length ? `${assessment.inspection.rightsMethods.length} clearly named ${assessment.inspection.rightsMethods.length === 1 ? "route" : "routes"} retained from the rendered page. Request submission and verification are unassessed.` : "No verified request-route result. Availability and functionality remain unassessed."}</dd></div>
+      <div><dt className="font-medium">Sale/sharing opt-out effectiveness</dt><dd className="mt-1 text-zinc-600">{assessment?.optOutEffectiveness === "bounded_observation" ? `Recorded sale/sharing decision observed; ${assessment.optOutObservation!.evidence.requests.length} advertising-classified ${assessment.optOutObservation!.evidence.requests.length === 1 ? "response" : "responses"} retained in the 500 ms observation window. This does not establish overall opt-out compliance.` : "Not assessed in this result. Cookie Reject does not establish a sale/sharing opt-out."}</dd></div>
+      <div><dt className="font-medium">Notice coverage</dt><dd className="mt-1 text-zinc-600">{assessment?.noticeTopics.length ? `Passages retained for ${assessment.noticeTopics.map(topic => PRIVACY_TOPIC_LABELS[topic].toLowerCase()).join(", ")}. ` : "No assessed notice coverage is available. "}Notice completeness and legal adequacy are unassessed.</dd></div>
+      <div><dt className="font-medium">Named notice and rights links</dt><dd className="mt-1 text-zinc-600">{assessment?.failedNoticeLinks?.length ? `${assessment.failedNoticeLinks.length} exact destination ${assessment.failedNoticeLinks.length === 1 ? "error" : "errors"} retained. See the related review issues.` : "No confirmed destination error retained; other links and collection points may be unassessed."}</dd></div>
+    </dl>
+    <p className="mt-3 text-xs leading-5 text-zinc-500">Business coverage, legally defined sale/sharing and permitted alternative methods require review. Unassessed checks do not establish compliance.</p>
+  </details>;
+}

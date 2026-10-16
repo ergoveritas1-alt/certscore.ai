@@ -1,3 +1,5 @@
+> **Current policy:** See the October 16 local implementation below. GPC customer results and scoring are suspended; earlier GPC guidance is historical.
+
 # Regulatory report focus and privacy workpapers
 
 A completed report has one retained evidence set and two presentation focuses:
@@ -7,7 +9,7 @@ The actual origin stays visible, and a different regional view does not claim
 that region's visitor experience was tested. Share links and PDF/JSON downloads
 retain `reviewFocus`.
 
-The shared report layout, canonical findings and score inputs stay unchanged.
+The shared report layout and score inputs stay unchanged.
 The CCPA/CPRA focus highlights the existing GPC workpaper and opens privacy
 choices/notices. There is no separate CCPA score or new legal conclusion.
 Existing California GPC policy is unchanged. GPC response, verified signal
@@ -15,6 +17,80 @@ delivery and comparison coverage remain independent; neither a completed run nor
 a vendor's presence proves GPC honoring.
 
 ## Evidence contract
+
+### Regulatory priority context (local implementation, October 16, 2026)
+
+This section supersedes the historical GPC presentation/scoring guidance below.
+The owner suspended GPC customer results and score deductions on October 16.
+Original assessments remain retained internally. Current concern policy is
+`california-gpc-response.v2-suspended`, overall score version is v11 and site
+score version is v10. Historical GPC effects are excluded by shared scoring;
+old numeric scores with those effects are recomputed from canonical evidence,
+not increased by 15 after flooring. Unrelated historical numeric scores remain
+unchanged. No GPC result or placeholder appears in customer reports or report
+exports; public API resources return null. Capture remains internal and unchanged.
+
+The executive overview and Regulatory Risk Review share a mode-specific selector
+over already-projected identities. General accessibility and unmapped site issues
+appear under Other issues. EU-only privacy findings do not become California gaps.
+The static context catalog has **31 EU families and six California routes**.
+It imposes no 30-item cap and does not claim every EU topic is currently projectable.
+
+Each mapped issue has a brief Why it matters line and a rule link. Expandable
+related enforcement examples appear only where a primary source supports the
+relationship; they state date, authority, conduct, outcome and case limitations.
+They never estimate the scanned site’s fine or equate a scan signal with liability.
+No live retrieval or model generation occurs during report rendering.
+
+California routes: supported privacy-policy absence; an exact HTTP 404/410 on a
+visible named notice-at-collection or California rights-information link; no
+named choice found in a complete dedicated rendered-link/button inspection; an
+exact privacy-choice HTTP 404/410 destination; and advertising activity after a
+separately registered sale/sharing opt-out. The five new routes are factual,
+score-neutral reviews, with
+applicability and permitted alternative methods unresolved. An empty workpaper,
+incomplete inspection, blocked fetch, generic Cookie Settings, or cookie Reject
+cannot establish any of them. Missing notice passages never establish omissions.
+Clearly named privacy-request routes are retained from the existing rendered
+DOM inspection as positive coverage evidence only. Neither a link nor its
+absence proves request-method functionality. Notice adequacy, collection-point
+coverage and request submission remain unassessed.
+
+The versioned policy-lane `privacyChoiceInspection` and verified action packet
+materialize into `ConsentControlAssessment v2.2.californiaPrivacyReview`, an
+independently versioned child bound to the same scan/target and original source
+hash. Persisted typed assessment → normalized concern → concern policy → unified
+finding → mode-specific selection. Historical A/R/O conclusions and source hashes
+remain unchanged. No display layer creates, upgrades or repairs a finding.
+The original three legacy California families remain deferred; the narrow new
+identities do not lift those gates wholesale.
+
+The separate opt-out worker requires explicit rollout intent plus its own feature
+flag, a fresh isolated browser, exact target authorization and a registered CMP
+recipe with an explicit sale/sharing label. A same-document GPP semantic transition
+must independently confirm both opt-outs. A 250 ms grace period precedes a 500 ms
+response-backed advertising observation. Generic Save/Reject, preference toggles,
+forms and account flows remain unsupported. No GPC signal is used. No response in
+that brief window is not proof of compliance. See the [approved budget/design](scoring/california-opt-out-execution-proposal.md).
+
+Review at `/dev-fixtures/regulatory-review` on localhost:3000. These are clearly
+labelled illustrative fixtures, including the supplied sits.com excerpt, not a
+fresh/imported scan. Cycle 31 EU and six California scenarios, empty states,
+all-topics view and Other issues. Ten further California topics are explicitly
+coverage work: choice symmetry, excessive verification, notice at collection,
+disclosure contradictions, retention, sensitive-information limits, request
+methods, privacy-notice accessibility, minor opt-in and contractual restrictions.
+Thirty would overstate public-scan coverage; this smaller California set is the
+honest current boundary. Add topics only when their dedicated evidence supports them.
+
+The owner approved a **combined $50/month ceiling at 100,000 eligible scans** for
+the bounded observer, including passive metadata and report-transfer overhead.
+Worker maximum: five seconds total, at most 4 GB; browser budget three seconds.
+No added tail wait, retry, model call, screenshot, retention extension or later
+publication. Rollout flags remain disabled and nothing is deployed. Current
+incremental production spend is $0. Validate real-site coverage/timings before rollout.
+
+### Persisted workpaper
 
 Canonical materialization projects `certscore.privacy-audit-evidence.v1` only
 from a verified original bundle. The persisted runtime projection retains its
@@ -169,3 +245,11 @@ and approval are separate from the hosted MCP and npm release.
 This is wording and documentation only: no capture, scoring, persistence or capacity
 changes. Extra bounded guidance traffic remains below $1/month at 100,000 reads;
 no automatic workpaper request is added.
+
+### Reusing EU context families for California
+
+Reuse retained facts and assessment machinery where appropriate, with an independently qualified California concern. Do not copy a GDPR status, legal explanation or enforcement example into the California mode. Privacy-policy availability is already shared. Next priorities are collection notices, purposes/retention, recipient disclosures, California rights methods, equal privacy choices and accessibility barriers bound to a privacy notice/control. These require California-specific typed assessments before customer promotion; presence-only semantic passages cannot establish missing disclosures.
+
+Tracking, embeds, replay, fingerprinting and sensitive-context evidence may support a California disclosure comparison or sale/sharing review only with the additional required proof. Activity before consent is not by itself a California opt-out failure, and cookie Reject is not a sale/sharing opt-out. Keep GDPR legal-basis, DPO and EEA-transfer topics EU-specific. California ADMT requires separate applicability and effective-date checks. General transport warnings remain technical issues unless a separately supported personal-information security concern qualifies.
+
+The development preview includes the reuse matrix and ten further California assessment topics, separate from the four currently mapped routes. Coverage should grow with supported evidence rather than a 30-item quota. Official context: CPPA regulations effective January 1, 2026 (https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf), and Honda's March 12, 2025 resolution covering excessive verification, unequal choices, agents and contracts (https://cppa.ca.gov/announcements/2025/20250312.html). Honda's $632,500 total resolved multiple claims; it is not an estimated penalty for a scan finding.

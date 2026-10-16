@@ -114,6 +114,7 @@ function CrawlResourceScope({ homepage, source, children }: { homepage: boolean;
 }
 
 export function FullSiteWorkspace({
+  reviewFocus,
   scanId,
   requested,
   homepageGraph,
@@ -127,6 +128,8 @@ export function FullSiteWorkspace({
   homepageVerdict,
   homepageHighlightLinks,
   homepageFindings = [],
+  californiaAssessment,
+  californiaScore,
   homepageRuntimeCards,
   homepageUrl,
   siteMetadata,
@@ -139,6 +142,7 @@ export function FullSiteWorkspace({
   scanNext,
   children,
 }: {
+  reviewFocus?: import("@certscore/api-contracts").ReportReviewFocus;
   scanId: string;
   requested: CrawlOptions;
   afterAcceptForms?: CollectionSurfaceTableRow[];
@@ -152,6 +156,8 @@ export function FullSiteWorkspace({
   homepageVerdict?: string;
   homepageHighlightLinks?: readonly import("../../lib/scans/assessment-highlights").AssessmentHighlightLink[];
   homepageFindings?: ShadowFinding[];
+  californiaAssessment?: import("@certscore/contracts").CaliforniaPrivacyReview | null;
+  californiaScore?: import("../../lib/scans/california-regulatory-score").CaliforniaRegulatoryScore | null;
   homepageRuntimeCards?: ExecutiveRuntimeCard[];
   homepageUrl?: string;
   siteMetadata?: SiteMetadataProjection | null;
@@ -501,6 +507,10 @@ export function FullSiteWorkspace({
           { label: INVENTORY_METRIC_LABELS.frames, value: data?.summary.totals.embedInstances, group: "embeds" },
         ].map(metric => ({ ...metric, counts: data?.priorityTotals?.[metric.group], overview: metric.group === "requests" ? data?.networkOverview : undefined }));
   const inventorySummary = <ReportInventorySummary formCountStatus={formCountStatus((data?.collectionSurfaces?.rows.length ?? 0) + afterAcceptForms.length, !data?.collectionSurfaces || Boolean(data.collectionSurfaces.limitedPages || data.collectionSurfaces.pagesWithoutInventory || afterAcceptFormsLimited))} forms={[...(data?.collectionSurfaces?.rows ?? []), ...afterAcceptForms]} onViewEvidence={() => flushSync(() => setTab("resources"))} formCount={data?.collectionSurfaces?.rows.length} updating={valuesUpdating} metrics={inventoryMetrics} siteIntegrity={overview?.score?.siteIntegrity} />;
+  const homePriorities = homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }));
+  const cachedPriorities = overview?.score?.priorityReview;
+  const priorityFindings = cachedPriorities ? [...cachedPriorities, ...homePriorities.filter(row => (row.id.startsWith("california_privacy_choice_") || row.id === "california_sale_sharing_opt_out_activity" || row.id === "california_notice_at_collection_destination_error" || row.id === "california_rights_information_destination_error") && !cachedPriorities.some(existing => existing.id === row.id))] : homePriorities;
+  const reviewScore = overview?.score ? { ...overview.score, priorityReview: priorityFindings } : overview?.score;
   return (
     <FullSiteRegionContext.Provider value={state?.region ?? initialNotice?.region}>
     <FullSiteScanDurationContext.Provider value={scanDuration}>
@@ -582,8 +592,8 @@ export function FullSiteWorkspace({
       {tab !== "homepage" ? (
         <>
           {tab === "resources" ? <>
-          <FullSiteExecutiveSummary inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={overview?.score} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageHighlightLinks={homepageHighlightLinks} />
-          {!(initialPending && !overview?.score) ? <SitePriorityReview scannedPages={scannedPages} findings={overview?.score?.priorityReview ?? homepageFindings.map(finding => ({ ...finding, pages: homepageUrl ? [{ id: scanId, url: homepageUrl, homepage: true }] : [] }))} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
+          <FullSiteExecutiveSummary reviewFocus={reviewFocus} californiaScore={californiaScore} inventorySummary={inventorySummary} actions={reportActionsAvailable ? executiveActions : null} statusLabel={reportStatus} score={reviewScore} pending={!overview || valuesUpdating} loadingSavedResult={!initialPending && !overview && !["waiting_homepage", "running"].includes(initialNotice?.status ?? "")} scannedPages={scannedPages} snapshot={executiveSnapshot} homepageVerdict={homepageVerdict} homepageHighlightLinks={homepageHighlightLinks} />
+          {!(initialPending && !overview?.score) ? <SitePriorityReview californiaAssessment={californiaAssessment} reviewFocus={reviewFocus} scannedPages={scannedPages} findings={priorityFindings} pending={!overview || valuesUpdating} sitewideAvailable={Boolean(overview?.score)} /> : null}
           {homepageTimeline}
           </> : null}
           <section id="site-resource-inventory" className="my-5 min-w-0 rounded-xl border border-zinc-200 bg-white p-4 lg:p-5">

@@ -4,7 +4,7 @@ import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-di
 import { readAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
 import { describeAccessibilityEvidence, getAccessibilityFindingIdForRuleCode } from "./accessibility-evidence";
 import { formDestinationProjectionSchema, formDestinationCopy, qualifiesFormDestinationReview, FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
-import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL } from "@certscore/contracts";
+import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL, readCaliforniaPrivacyReviewFromConsent, californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy, CALIFORNIA_PRIVACY_REVIEW_SIGNAL } from "@certscore/contracts";
 import { projectConsentControlBehavior } from "./consent-control-behavior";
 import { siteIntegrityProjectionSchema, SITE_INTEGRITY_FINDING_ID, SITE_INTEGRITY_SIGNAL, SITE_INTEGRITY_COPY, SITE_INTEGRITY_POLICY_VERSION, SITE_INTEGRITY_SEVERITY } from "@certscore/contracts";
 import { describeGpcBoundedObservation } from "@certscore/contracts";
@@ -171,7 +171,7 @@ export type NormalizedConcernRegulatoryChecklistEligibility =
   | "none";
 
 export type NormalizedConcernScoreEffect = {
-  appliesTo: "certscore_overall";
+  appliesTo: "certscore_overall" | "california_posture";
   deductionPoints: number;
   evidenceRefs: string[];
   framework: "california" | "site_integrity" | "accessibility";
@@ -4540,6 +4540,19 @@ function buildFormDestinationConcerns(runtimeArtifacts: Record<string, unknown> 
   })];
 }
 
+function buildCaliforniaPrivacyReviewConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
+  const assessment = runtimeArtifacts?.consentControlAssessment;
+  const projection = readCaliforniaPrivacyReviewFromConsent(assessment);
+  if (!projection) return [];
+  return californiaPrivacyReviewFindingIds(projection).map(id => {
+    const copy = californiaPrivacyReviewCopy(id);
+    return buildConcernFromSharedInput({categoryId: "privacy", originType: "runtime_artifact", originKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`,
+      title: copy.title, description: copy.description, observedValue: copy.description, severity: "medium",
+      sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`, signalLabel: copy.title,
+      evidence: [projection.documentUrl], rawEvidence: {consentControlAssessment: assessment, californiaPrivacyReview: projection, unifiedFindingId: id, pageUrl: projection.documentUrl}});
+  });
+}
+
 function buildCmsSecurityConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
   const result = cmsSecurityProjectionSchema.safeParse(runtimeArtifacts?.cmsSecurity);
   if (!result.success || !result.data.assessment.matches.length) return [];
@@ -4595,6 +4608,7 @@ export function buildNormalizedConcerns(input: {
     ...buildAccessibilityAuditConcerns(input.runtimeArtifacts),
     ...buildFormDestinationConcerns(input.runtimeArtifacts),
     ...buildCmsSecurityConcerns(input.runtimeArtifacts),
+    ...buildCaliforniaPrivacyReviewConcerns(input.runtimeArtifacts),
     ...buildScanNoGoAssessmentConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildRuntimeCoverageLimitationConcerns(input.runtimeArtifacts, input.domainContext),
     ...buildCollectionSurfaceAssessmentConcerns(input.runtimeArtifacts, input.domainContext),

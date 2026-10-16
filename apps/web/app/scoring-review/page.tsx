@@ -1,6 +1,6 @@
-import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS, CALIFORNIA_GPC_RESPONSE_POLICY_VERSION, CANONICAL_OVERALL_SCORE_VERSION } from "../../lib/scans/california-gpc-response-policy";
+import { CANONICAL_OVERALL_SCORE_VERSION } from "../../lib/scans/california-gpc-response-policy";
+import { CALIFORNIA_REGULATORY_SCORE_RULES, CALIFORNIA_REGULATORY_SCORE_VERSION } from "../../lib/scans/california-regulatory-score";
 import { SCORE_BASE, SCORE_FLOOR, SCORING_RULES, SCORING_FAMILIES, SCORING_POLICY_VERSION, scoringRuleDescription } from "../../lib/scans/scoring-policy";
-import { getCaliforniaEvidenceRowPoints } from "../../lib/scans/regulatory-coverage-score";
 
 export const metadata = {
   title: "Scoring policy review",
@@ -9,67 +9,33 @@ export const metadata = {
 export const dynamic = "force-dynamic";
 
 export default function ScoringReviewPage() {
-  const dnsChecklistPoints = getCaliforniaEvidenceRowPoints("do_not_sell_share_availability");
-  const gpcDisclosureChecklistPoints = getCaliforniaEvidenceRowPoints("gpc_opt_out_signal_handling");
   return (
     <main className="min-h-screen bg-slate-50 px-5 py-10 text-slate-900 sm:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="mb-7">
           <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-sky-700">CertScore · Scoring policy</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Canonical scoring policy</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">This table is generated from the canonical scoring policy used by the scoring engine. Select any row or cell to propose a future change.</p>
+          <h1 className="text-3xl font-semibold tracking-tight">EU and California scoring policies</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">The two review postures use separate scoring policies over the same retained visit. California-specific findings affect the California score; the established overall score uses GDPR/ePrivacy-weighted rules.</p>
           <div className="mt-5 rounded-xl bg-slate-950 px-5 py-4 text-sm text-white">
-            <strong>Score = max({SCORE_FLOOR}, {SCORE_BASE} − eligible deductions after shared category caps)</strong>
-            <p className="mt-1 text-slate-300">The lowest possible score is {SCORE_FLOOR}. Highlighted rows apply across assessed pages under this policy. Repeated evidence counts once across the site. “Homepage only” carries the homepage deduction into the full-site score.</p>
+            <strong>EU/overall score = max({SCORE_FLOOR}, {SCORE_BASE} − eligible deductions after shared category caps)</strong>
+            <p className="mt-1 text-slate-300">The California score has its own policy below. The EU/overall score has a floor of {SCORE_FLOOR}. Highlighted rows apply across assessed pages under that policy. Repeated evidence counts once across the site. “Homepage only” carries the homepage deduction into the full-site score.</p>
           </div>
         </header>
 
         <section aria-labelledby="ccpa-scoring-heading" className="mb-7 rounded-xl border border-sky-200 bg-white p-5 sm:p-6">
-          <h2 id="ccpa-scoring-heading" className="text-xl font-semibold tracking-tight">CCPA/CPRA interpretation</h2>
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600">The overall technical score combines privacy posture with eligible GPC, site-integrity and accessibility deductions. Both review views share this score. Changing review focus changes emphasis while preserving evidence and scoring. The California evidence scorecard keeps link-availability and GPC-disclosure checklist rows score-neutral; they cannot duplicate the verified GPC deduction.</p>
+          <h2 id="ccpa-scoring-heading" className="text-xl font-semibold tracking-tight">CCPA/CPRA posture score</h2>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-600">The California starting-page score uses its own versioned policy ({CALIFORNIA_REGULATORY_SCORE_VERSION}). It begins at 100 and deducts only for supported, reportable canonical findings. The shared privacy-notice gap can affect both postures. GPC is excluded from customer scoring. No score is shown when California assessment coverage is incomplete and no supported finding was retained.</p>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
             <table className="w-full min-w-[600px] text-left text-sm">
-              <caption className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-left font-semibold">Do Not Sell/Share and opt-out scoring</caption>
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600"><tr><th scope="col" className="px-4 py-2">Evidence</th><th scope="col" className="px-4 py-2">Current effect</th><th scope="col" className="px-4 py-2">Gate</th></tr></thead>
+              <caption className="border-b border-slate-200 bg-slate-50 px-4 py-3 text-left font-semibold">California-specific deductions · starting page</caption>
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-600"><tr><th scope="col" className="px-4 py-2">Supported finding</th><th scope="col" className="px-4 py-2">Points</th><th scope="col" className="px-4 py-2">Evidence gate</th></tr></thead>
               <tbody className="divide-y divide-slate-100">
-                <tr><th scope="row" className="px-4 py-3 font-medium">Do Not Sell/Share or Your Privacy Choices link</th><td className="px-4 py-3">{dnsChecklistPoints === null ? "Unconfigured" : `${dnsChecklistPoints} points`}</td><td className="px-4 py-3">Observed, missing, or unverified link evidence alone cannot establish opt-out failure.</td></tr>
-                <tr><th scope="row" className="px-4 py-3 font-medium">GPC disclosure checklist row</th><td className="px-4 py-3">{gpcDisclosureChecklistPoints === null ? "Unconfigured" : `${gpcDisclosureChecklistPoints} points`}</td><td className="px-4 py-3">A notice passage is not a verified response.</td></tr>
-                <tr><th scope="row" className="px-4 py-3 font-medium">Qualified California GPC response finding</th><td className="px-4 py-3">−{CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS} points once</td><td className="px-4 py-3">Verified signal delivery and paired comparison, with qualifying baseline activity persisting unsuppressed under GPC.</td></tr>
+                {CALIFORNIA_REGULATORY_SCORE_RULES.map(rule => <tr key={rule.policyKey}><th scope="row" className="px-4 py-3 font-medium">{rule.label}</th><td className="px-4 py-3">−{rule.points}</td><td className="px-4 py-3">Verified typed assessment → eligible concern policy → reportable unified finding</td></tr>)}
+                <tr><th scope="row" className="px-4 py-3 font-medium">Privacy notice unavailable (shared)</th><td className="px-4 py-3">−10</td><td className="px-4 py-3">Canonical checklist gap from retained policy evidence</td></tr>
               </tbody>
             </table>
           </div>
-          <div className="mt-5 grid gap-6 md:grid-cols-2">
-            <div>
-              <h3 className="font-semibold text-slate-900">What deducts today</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">The eligible California GPC finding subtracts <strong className="text-slate-900">{CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS} points, once</strong>. The retained assessment must pass its versioned delivery and comparison checks. Qualifying advertising/marketing activity from the baseline must persist under GPC, with none of that qualifying activity suppressed.</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">A completed GPC observation alone does not establish a response or trigger a deduction. A reduction in tracking does not prove that GPC was legally honored. The California policy label does not establish the scan’s geographic origin.</p>
-              <p className="mt-2 text-xs text-slate-500">Current GPC policy: {CALIFORNIA_GPC_RESPONSE_POLICY_VERSION}. Historical evidence keeps its recorded version.</p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900">What stays score-neutral</h3>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
-                <li>Indeterminate or insufficiently verified GPC comparisons.</li>
-                <li>Analytics-only activity or no qualifying advertising/marketing activity in the baseline.</li>
-                <li>Partial suppression, which remains a review signal under the current policy.</li>
-                <li>Suppression of all qualifying baseline activity, which does not establish broader compliance.</li>
-              </ul>
-              <p className="mt-2 text-sm font-medium text-slate-900">No deduction does not mean passed. Missing evidence remains a coverage limitation.</p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900">Evidence-only CCPA/CPRA checks</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Observed Do Not Sell/Share, Your Privacy Choices and Cookie Settings surfaces remain distinct. Their presence, absence in one capture, and retained notice passages create no additional CCPA/CPRA deductions. A missing link is not a verified opt-out failure.</p>
-              <p className="mt-2 text-sm leading-6 text-slate-600">The tracking inventory supports review; it does not independently establish sale or sharing. Runtime activity may still support existing technical deductions in the table below.</p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900">What remains unassessed</h3>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
-                <li>Successful execution of a sale/share opt-out. A cookie-banner Reject action is a separate observation.</li>
-                <li>Legal adequacy of notice text and notice placement at collection points.</li>
-                <li>Vendor-specific sale/sharing treatment and GPC honoring.</li>
-              </ul>
-              <p className="mt-2 text-sm leading-6 text-slate-600">A future CCPA/CPRA score needs its own approved evidence gates, deduction policy and calibration. No proposed weights are included in the current table.</p>
-            </div>
-          </div>
+          <p className="mt-4 text-sm leading-6 text-slate-600">A complete named-choice inspection can support a bounded score of 100 when none of these findings is observed. Limited inspection with an eligible finding can produce a score marked limited; limited inspection without one remains unscored. Applicability, notice adequacy, alternative rights methods and vendor-specific sale/sharing treatment remain outside this score. A score is a risk signal, not a compliance grade.</p>
         </section>
 
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -96,7 +62,7 @@ export default function ScoringReviewPage() {
           <p>Accessibility deducts at most {SCORING_FAMILIES.accessibility.cap} points from the shared overall score. Each category charges once across assessed pages. Keyboard and reproduced focus barriers share one allowance. Overlapping image/link barriers charge the stronger category once; unresolved overlap receives the same conservative allowance.</p>
           <p>Obsolete transfer guidance deducts {SCORING_RULES.find(rule => rule.id === "outdated_transfer_framework_reference")?.points} points once across the site only when verified retained policy text presents it as current guidance. Historical or explicitly corrected references remain neutral. This is a disclosure-quality finding, not proof of unlawful transfers.</p>
           <p>Missing or unverified evidence does not itself create a deduction. An inventory “Review” label does not automatically deduct points.</p>
-          <p>Source of truth: scoring-policy.ts. Evidence eligibility remains governed by canonical concern policy. Stored historical reports retain their recorded policy version.</p>
+          <p>Sources of truth: scoring-policy.ts and california-regulatory-score.ts. Evidence eligibility remains governed by canonical concern policy. Stored historical reports retain their recorded policy version.</p>
         </footer>
       </div>
     </main>

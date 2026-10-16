@@ -61,6 +61,8 @@ export type KnownCmpActionCapability = {
 };
 
 export type KnownCmpDefinition = {
+  /** Separate California action recipe; cookie Reject/Save never authorizes this action. */
+  saleSharingOptOut?: { version: string; entranceSelector: string; dialogSelector: string; submitSelector: string; submitLabels: readonly string[]; documentationUrls: readonly string[] };
   /** Explicit documented tenant/site cookie variants; identity only. */
   cookieNameVariants?: Array<{ canonicalName: string; pattern: RegExp }>;
   initialOptionalOffCloseObservation?: {
@@ -415,6 +417,9 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#onetrust-accept-btn-handler"],
     canonicalName: "OneTrust",
+    saleSharingOptOut: { version: "onetrust.explicit_sale_share.v1", entranceSelector: "#ot-sdk-btn.ot-sdk-show-settings", dialogSelector: "#onetrust-pc-sdk",
+      submitSelector: "button.save-preference-btn-handler.onetrust-close-btn-handler", submitLabels: ["do not sell or share my personal information"],
+      documentationUrls: ["https://developer.onetrust.com/onetrust/docs/common-custom-css", "https://developer.onetrust.com/onetrust/docs/iab-ccpa-us-privacy-string"] },
     preferenceDialogBinding: { version: "onetrust_preferences.v2", controlSelector: "#onetrust-pc-btn-handler", dialogSelector: "#onetrust-pc-sdk", deferredRootSelector: "#onetrust-consent-sdk" },
     rejectLabelBoundNecessaryOnly: {
       policyVersion: "label_bound_necessary_only_reject.v2",

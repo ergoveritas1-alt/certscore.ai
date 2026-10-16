@@ -2,6 +2,9 @@ import { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonica
 export { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonicalPolicyUrlIdentity } from "../policy-surface-projection.js";
 import {
   type ArtifactRef,
+  privacyChoiceInspectionSchema,
+  classifyCaliforniaRightsMethod,
+  type PrivacyChoiceInspection,
   extractPolicyUpdateDateText,
   decodeCommonHtmlEntities,
   article13DisclosureRejectReason as sharedArticle13DisclosureRejectReason,
@@ -168,6 +171,7 @@ export interface PolicySurfaceScannerInput {
 
 export interface PolicySurfaceScannerResult {
   negativeSearchEvidence?: PolicyNegativeSearchEvidence;
+  privacyChoiceInspection?: PrivacyChoiceInspection;
   moduleRun: ScanModuleRun;
   policySurfaceObservations: PolicySurfaceObservation[];
   artifactRefs: ArtifactRef[];
@@ -1102,6 +1106,7 @@ export async function policySurfaceScanner(
     let renderedCandidates: PolicySurfaceCandidate[];
     let renderedDiscoveryDeadlineReached = false;
     let renderedInspection: RenderedPolicyDiscoveryResult["inspection"];
+    let privacyChoiceInspection: PrivacyChoiceInspection | undefined;
     try {
       if (fastStaticCoverage) {
         renderedCandidates = await recordPolicyTiming(
@@ -1119,6 +1124,7 @@ export async function policySurfaceScanner(
         );
         renderedCandidates = renderedDiscovery.candidates;
         renderedInspection = renderedDiscovery.inspection;
+        privacyChoiceInspection = renderedDiscovery.privacyChoiceInspection;
         renderedDiscoveryDeadlineReached = renderedDiscovery.deadlineReached;
       }
     } catch (error) {
@@ -1352,6 +1358,7 @@ export async function policySurfaceScanner(
     return {
       moduleRun: completedPolicyModuleRun(),
       negativeSearchEvidence,
+      privacyChoiceInspection,
       policySurfaceObservations: observations,
       artifactRefs,
     };
@@ -2298,10 +2305,16 @@ async function processPolicyCandidate({
   }
   if (!fetched.ok) {
     const failedAttempt = [...(fetched.attempts ?? [])].reverse().find((attempt) => attempt.outcome !== "fetched");
+    const exactMissingDestination = failedAttempt?.outcome === "http_error" &&
+      [404, 410].includes(failedAttempt.httpStatus ?? 0) &&
+      failedAttempt.requestedUrl === candidate.normalizedUrl &&
+      failedAttempt.finalUrl === candidate.normalizedUrl &&
+      failedAttempt.redirectCount === 0;
     return {
       observation: observationFromCandidate(candidate, {
         status: "failed",
         httpStatus: fetched.status,
+        ...(exactMissingDestination ? { finalUrl: failedAttempt.finalUrl } : {}),
         fetchFailureReason: failedAttempt?.outcome === "fetched" ? undefined : failedAttempt?.outcome,
         redirectChain: policyFetchRedirectChain(fetched),
         confidence: Math.max(0.35, candidate.assisted?.confidence ?? candidate.deterministicScore),
@@ -4331,6 +4344,7 @@ async function extractRenderedCandidates(
       }
 
       let candidateEnumerationTruncated = false;
+      let unnamedControlCount = 0;
       const seenRoots = new Set<ParentNode>();
       function collect(root: ParentNode, output: RawCandidate[]): void {
         if (seenRoots.has(root)) return;
@@ -4395,6 +4409,7 @@ async function extractRenderedCandidates(
           ] as const;
           const named = names.find(([, value]) => value?.trim());
           const accessibleName = normalizeText(named?.[1]).slice(0, 220);
+          if (!accessibleName && element.matches("a[href],button,[role='button'],[role='link']")) unnamedControlCount++;
           let linkVisibility: "visible" | "hidden" = "visible";
           if (directAnchor) {
             for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
@@ -4463,6 +4478,7 @@ async function extractRenderedCandidates(
       };
       inspectCoverage(document);
       return { candidates: output, documentUrl: document.URL, timeOrigin: performance.timeOrigin,
+        language: document.documentElement.lang, unnamedControlCount,
         documentReady: document.readyState === "complete" && Boolean(document.body),
         candidateEnumerationTruncated, uninspectedShadowRootCount, uninspectedFrameCount };
     };
@@ -4588,7 +4604,40 @@ async function extractRenderedCandidates(
       textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin &&
       assessPolicyHomepageAccess({ ok: navigationResponse?.ok() ?? false,
         status: navigationResponse?.status(), text: visibleText }) === "representative_page";
+    const supportedDocumentLanguage = Boolean(domInspection?.language && PRIVACY_EVIDENCE_LOCALE_REGISTRY.some(entry => entry.locale === domInspection.language.toLowerCase().split("-")[0]));
+    const documentStable = Boolean(domInspection && domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
+      textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin);
+    const representativeDocument = assessPolicyHomepageAccess({ok: navigationResponse?.ok() ?? false, status: navigationResponse?.status(), text: visibleText}) === "representative_page";
+    // Reuse the current rendered DOM read. These are positive routes only;
+    // neither an empty list nor a visible link verifies a usable request flow.
+    const rightsMethods = rawCandidates.flatMap(candidate => {
+      if (candidate.cmpVendor || candidate.linkVisibility !== "visible" || !candidate.accessibleName ||
+          !candidate.accessibleNameSource || candidate.accessibleNameSource === "none" ||
+          candidate.linkSourcePageUrl !== renderedBaseUrl || !candidate.href ||
+          !classifyCaliforniaRightsMethod(candidate.accessibleName)) return [];
+      const destination = normalizeUrl(candidate.href, renderedBaseUrl);
+      if (!destination) return [];
+      try {
+        const parsed = new URL(destination);
+        if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) return [];
+        parsed.search = ""; parsed.hash = "";
+        return [{ label: candidate.accessibleName.slice(0, 200), destinationUrl: parsed.toString(),
+          accessibleNameSource: candidate.accessibleNameSource }];
+      } catch { return []; }
+    }).filter((row, index, rows) => rows.findIndex(other => other.destinationUrl === row.destinationUrl && other.label === row.label) === index).slice(0, 12);
+    const choiceInspection = domInspection ? privacyChoiceInspectionSchema.safeParse({
+      contractVersion: "certscore.privacy-choice-inspection.v1", documentUrl: renderedBaseUrl,
+      capturedAt: new Date().toISOString(), sourceHash: createHash("sha256").update(JSON.stringify({domInspection, textInspection})).digest("hex"),
+      scope: "rendered_named_links_and_buttons",
+      coverage: inspectionComplete && supportedDocumentLanguage && domInspection.unnamedControlCount === 0 ? "complete" : "limited",
+      namedChoiceCandidateCount: candidates.filter(candidate => ["do_not_sell_or_share", "your_privacy_choices"].includes(candidate.deterministicSurfaceType)).length,
+      unnamedControlCount: domInspection.unnamedControlCount, candidateEnumerationTruncated: domInspection.candidateEnumerationTruncated,
+      uninspectedFrameCount: domInspection.uninspectedFrameCount, uninspectedShadowRootCount: domInspection.uninspectedShadowRootCount,
+      supportedDocumentLanguage, representativeDocument, documentStable,
+      rightsMethods,
+    }) : null;
     return { candidates, deadlineReached: false,
+      ...(choiceInspection?.success ? { privacyChoiceInspection: choiceInspection.data } : {}),
       ...(inspectionComplete ? { inspection: { documentUrl: renderedBaseUrl,
         sourceHash: createHash("sha256").update(JSON.stringify({ domInspection, textInspection })).digest("hex") } } : {}) };
   } catch {
@@ -4615,6 +4664,7 @@ function bindAbortSignalToBrowserContext(
 }
 
 interface RenderedPolicyDiscoveryResult {
+  privacyChoiceInspection?: PrivacyChoiceInspection;
   inspection?: { documentUrl: string; sourceHash: string };
   candidates: PolicySurfaceCandidate[];
   deadlineReached: boolean;

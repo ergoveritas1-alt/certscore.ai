@@ -56,6 +56,13 @@ test("completed crawls persist permanent page limitations but never persist fail
     const preserved = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash: historicalKey, score: historical } } }, [home, failed]);
     assert.deepEqual(preserved, historical, "source-bound historical scores keep their original twelve-point amount");
     assert.equal(globals.scoreWrites.length, 1, "historical read does not rewrite or recapture evidence");
+    const gpcPriority = { id: "gpc_response", rank: 1, title: "GPC response", summary: "Historical response", status: "Partial concern", evidence: [], evidenceJson: {}, correctionSteps: [], pages: [] };
+    const neutralGpc = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash: historicalKey, score: { ...historical, priorityReview: [gpcPriority] } } } }, [home, failed]);
+    assert.equal(neutralGpc.value, 88, "suppressing a neutral historical GPC result preserves unrelated scoring");
+    assert.deepEqual(neutralGpc.priorityReview, []);
+    const deductedGpc = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: { sourceHash: historicalKey, score: { ...historical, value: 85, deductions: [{ family: "gpc", label: "GPC", deductionPoints: 15, rules: [{ ruleId: "gpc_response", label: "GPC", policyDeductionPoints: 15, decisionVerification: "not_applicable" }] }] } } } }, [home, failed]);
+    assert.equal(deductedGpc.value, 100, "historical GPC deductions must use the retained canonical recomputation");
+    assert.deepEqual(deductedGpc.deductions, []);
     const mismatched = await loadFullSiteScore({ ...crawl, policy_json: { fullSiteScore: {
       sourceHash: historicalKey, score: { ...historical, version: first.version },
     } } }, [home, failed]);

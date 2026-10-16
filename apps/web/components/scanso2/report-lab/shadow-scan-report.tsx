@@ -1,3 +1,4 @@
+import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
@@ -516,7 +517,7 @@ function SignalSnapshot({ report, siteOverview = false }: { report: ShadowReport
             ))}
           </ul>
         </details>
-        {!siteOverview && (report.gpcResponse ? (
+        {GPC_CUSTOMER_RESULTS_ENABLED && !siteOverview && (report.gpcResponse ? (
           <details className={signalRowClass} data-testid="executive-gpc-snapshot">
             <summary className={signalSummaryClass}>
               <span className="text-xs font-medium text-zinc-500">Global Privacy Control (GPC)</span>
@@ -1653,7 +1654,7 @@ export function EvidenceDirectory({ report, compact = false }: { report: ShadowR
               </summary>
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>}
-            {report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : null}
+            {GPC_CUSTOMER_RESULTS_ENABLED && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : null)}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-4 [&::-webkit-details-marker]:hidden">
                 <div><p className="text-xs font-semibold uppercase text-zinc-500">Transport security{compact ? " · Starting page" : ""}</p><h3 className={`mt-1 ${reportCardTitle}`}>{report.transportRows.filter((row) => row.status === "Observed").length} positive · {report.transportRows.length} checks</h3></div>

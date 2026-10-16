@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { privacyAuditEvidenceSchema } from "@certscore/api-contracts";
-import { readPrivacyAuditEvidence, resolveReportReviewFocus, reviewFocusScopeNote, reportUrlWithFocus } from "../../lib/scans/report-review-focus";
+import { readPrivacyAuditEvidence, resolveReportReviewFocus, reviewFocusMismatchNote, reviewFocusScopeNote, reportUrlWithFocus } from "../../lib/scans/report-review-focus";
 import { projectPrivacyAuditEvidence, projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 
 const url = "https://example.test/";
@@ -177,5 +177,9 @@ test("review focus defaults to origin, allows either view and preserves geograph
   assert.equal(resolveReportReviewFocus("ccpa_cpra", "eu_de"), "ccpa_cpra");
   assert.match(reviewFocusScopeNote("ccpa_cpra", "eu_de"), /California visitor behavior was not tested/);
   assert.match(reviewFocusScopeNote("gdpr_eprivacy", "california"), /EU visitor behavior was not tested/);
+  assert.equal(reviewFocusMismatchNote("gdpr_eprivacy", "eu_de"), null);
+  assert.equal(reviewFocusMismatchNote("ccpa_cpra", "california"), null);
+  assert.match(reviewFocusMismatchNote("ccpa_cpra", "eu_ie") ?? "", /Scanned from Ireland; California visitor behavior was not tested/);
+  assert.match(reviewFocusMismatchNote("gdpr_eprivacy", "california") ?? "", /Scanned from California; EU visitor behavior was not tested/);
   assert.equal(reportUrlWithFocus("/scan/123?foo=bar#evidence", "ccpa_cpra"), "/scan/123?foo=bar&reviewFocus=ccpa_cpra#evidence");
 });

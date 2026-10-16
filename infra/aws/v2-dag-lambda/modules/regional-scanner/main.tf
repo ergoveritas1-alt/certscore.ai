@@ -48,6 +48,7 @@ locals {
     CERTSCORE_CMP_ACTION_RECIPE_DISABLED                           = ""
     CERTSCORE_POST_ACCEPT_WORKER_ENABLED                           = "1"
     CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED                   = "1"
+    CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED                          = "1"
     CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET                        = var.artifact_bucket
     CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_DIR                           = "/tmp/certscore-v2-dag-lambda"
     CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_PREFIX                        = local.artifact_prefix

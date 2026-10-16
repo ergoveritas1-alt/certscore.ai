@@ -33,9 +33,9 @@ import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
-const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
+const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
 const persistedScoreSchema = z.object({
-  version: z.enum([VERSION, "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
+  version: z.enum([VERSION, "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
   priorityReview: z.array(sitePriorityFindingSchema),
   deductions: z.array(z.object({
@@ -165,9 +165,9 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
   const saved = z.object({ fullSiteScore: z.object({sourceHash: z.string(), score: z.unknown()}) }).safeParse(crawl.policy_json);
   if (saved.success && [key, ...historicalKeys.values()].includes(saved.data.fullSiteScore.sourceHash)) {
     const parsed = persistedScoreSchema.safeParse(saved.data.fullSiteScore.score);
-    if (parsed.success && saved.data.fullSiteScore.sourceHash === (parsed.data.version === VERSION ? key : historicalKeys.get(parsed.data.version))) {
+    if (parsed.success && parsed.data.deductions && !parsed.data.deductions.some(row => row.family === "gpc" || row.rules.some(rule => rule.ruleId === "gpc_response")) && saved.data.fullSiteScore.sourceHash === (parsed.data.version === VERSION ? key : historicalKeys.get(parsed.data.version))) {
       // Preserve the source-bound historical amount when a scoring weight changes.
-      if (parsed.data.version !== VERSION) return groupStoredReportScorePriorities(parsed.data);
+      if (parsed.data.version !== VERSION) return groupStoredReportScorePriorities({ ...parsed.data, priorityReview: parsed.data.priorityReview.filter(row => row.id !== "gpc_response") });
       const homeScore = deriveCanonicalOverallScoreForReport({
         scanRecord: home,
         checklistRows: canonical.checklistRows,
@@ -176,7 +176,7 @@ export async function loadFullSiteScore(crawl: FullSiteCrawlRow, pages: CrawlPag
       // Older cached site results may have a null value solely because the
       // report suppressed scores for incomplete consent inspection. Reassess
       // those results from retained page evidence so site-wide effects remain intact.
-      if (parsed.data.value !== null || homeScore === null) return groupStoredReportScorePriorities(parsed.data);
+      if (parsed.data.value !== null || homeScore === null) return groupStoredReportScorePriorities({ ...parsed.data, priorityReview: parsed.data.priorityReview.filter(row => row.id !== "gpc_response") });
     }
   }
   const existing = cache.get(key);

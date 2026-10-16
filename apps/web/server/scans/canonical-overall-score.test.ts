@@ -33,7 +33,7 @@ function gpcFinding(deductionPoints: number): UnifiedFindingDisplayPacket {
   } as unknown as UnifiedFindingDisplayPacket;
 }
 
-test("canonical overall score applies the qualified California GPC deduction exactly once", () => {
+test("canonical overall score suspends California GPC deductions including retained historical effects", () => {
   const baseline = deriveCanonicalOverallScoreForReport({ scanRecord: { runtimeArtifacts: null },
     checklistRows: checkedChecklist,
     unifiedFindings: [],
@@ -44,7 +44,7 @@ test("canonical overall score applies the qualified California GPC deduction exa
   });
 
   assert.equal(baseline, 100);
-  assert.equal(withGpcGap, 85);
+  assert.equal(withGpcGap, 100);
 });
 
 test("canonical overall score rejects malformed or differently valued GPC score effects", () => {
@@ -59,10 +59,10 @@ test("canonical explanations preserve family caps and independently approved ove
     evidenceState: "observed", criticalEvidence: { retainedEvidence: { afterRejectScoringAssessment: highRiskAfterRejectAssessment(), rejectInteractionConfirmed: true } } } as unknown as GdprEprivacyCoverageChecklistItem;
   const explanation = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null },
     checklistRows: [...checkedChecklist, postReject, postReject], unifiedFindings: [gpcFinding(15), gpcFinding(15)] })!;
-  assert.equal(explanation.score, 70);
-  assert.equal(explanation.totalPolicyDeductionPoints, 30);
+  assert.equal(explanation.score, 85);
+  assert.equal(explanation.totalPolicyDeductionPoints, 15);
   assert.equal(explanation.deductions.find(row => row.family === "post_refusal_enforcement")?.deductionPoints, 15);
-  assert.equal(explanation.deductions.find(row => row.family === "gpc")?.deductionPoints, 15);
+  assert.equal(explanation.deductions.find(row => row.family === "gpc"), undefined);
   assert.equal(explanation.deductions.find(row => row.family === "post_refusal_enforcement")?.rules[0]?.decisionVerification, "confirmed");
 });
 
@@ -116,7 +116,7 @@ test("site-wide link identities union across pages and duplicate projections do 
   assert.equal(scoreIntegrity([...home, ...home]), 83);
   assert.equal(scoreIntegrity([...home, ...page, ...page]), 73);
   assert.equal(scoreIntegrity([...integrityFindings(6), ...page]), 60);
-  assert.equal(scoreIntegrity([...integrityFindings(12),gpcFinding(15)]),45);
+  assert.equal(scoreIntegrity([...integrityFindings(12),gpcFinding(15)]),60);
 });
 test("missing, stale, and malformed integrity score effects fail closed", () => {
   const finding = integrityFindings(1)[0]!;

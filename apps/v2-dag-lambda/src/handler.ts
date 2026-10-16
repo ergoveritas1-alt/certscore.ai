@@ -1,3 +1,4 @@
+import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
 import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
@@ -147,6 +148,7 @@ export type LocalV2DagLambdaDispatchPayload = {
   }>;
   /** Exact digest of the coordinator dispatch, propagated only to workers. */
   parentDispatchSha256?: string;
+  saleSharingOptOut?: SaleSharingOptOutDispatch;
   cmpPreferenceInspection?: CmpPreferenceDispatch;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
@@ -194,6 +196,7 @@ export type LocalV2DagLambdaResultMessage = {
       sha256: string;
       sizeBytes: number;
     };
+    saleSharingOptOutPacketUri?: { sha256: string; sizeBytes: number };
     cmpPreferencesPacketUri?: { sha256: string; sizeBytes: number };
     postAcceptPacketUri?: {
       sha256: string;
@@ -206,6 +209,7 @@ export type LocalV2DagLambdaResultMessage = {
     reportAdapterArtifactUri?: string;
     reviewArtifactUri?: string;
     scanArtifactUri?: string;
+    saleSharingOptOutPacketUri?: string;
     cmpPreferencesPacketUri?: string;
     postAcceptPacketUri?: string;
     postRefusalPacketUri?: string;
@@ -374,6 +378,7 @@ export type LocalV2DagLambdaLaneTiming = {
 };
 export type LocalV2DagLambdaLaneTimingSummary = {
   contractVersion: typeof LOCAL_V2_DAG_LAMBDA_LANE_TIMING_CONTRACT_VERSION;
+  saleSharingOptOut?: { status: "joined" | "limited"; startedAt: string; completedAt: string; durationMs: number; workerDurationMs: number | null; terminalOutcomeDeltaFromPassiveBarrierMs: number };
   cmpPreferenceInspection?: { status: "joined" | "limited"; startedAt: string; completedAt: string; durationMs: number; workerDurationMs: number | null; terminalOutcomeDeltaFromPassiveBarrierMs: number };
   coordinatorStartedAt: string;
   generatedAt: string;
@@ -391,6 +396,7 @@ export type LocalV2DagLambdaLaneTimingSummary = {
   rejectTailDeltaMs: number | null;
 };
 type LocalV2DagLambdaWorkerLane =
+  | "sale_sharing_opt_out"
   | "cmp_preferences"
   | "coordinator"
   | "consent_proof"
@@ -764,6 +770,8 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
   const coordinatorPlanSummary = parseCoordinatorPlanSummary(record.coordinatorPlanSummary);
   const debugOverrides = parseDebugOverrides(record.debugOverrides);
   const policySurfaceSeeds = parsePolicySurfaceSeeds(record.policySurfaceSeeds);
+  const saleSharingOptOut = record.saleSharingOptOut === undefined ? undefined : saleSharingOptOutDispatchSchema.parse(record.saleSharingOptOut);
+  if (saleSharingOptOut && (saleSharingOptOut.scanId !== scanId || saleSharingOptOut.exactTargetUrl !== record.targetUrl || !["sharded", "worker"].includes(String(record.orchestrationMode)))) throw new Error("Sale/sharing authorization must bind an exact sharded scan target.");
   const cmpPreferenceInspection = record.cmpPreferenceInspection !== undefined
     ? cmpPreferenceDispatchSchema.parse(record.cmpPreferenceInspection)
     : record.orchestrationMode === "sharded" && process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED === "1"
@@ -803,6 +811,7 @@ export function parseLocalV2DagLambdaDispatchPayload(event: unknown): LocalV2Dag
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...(parentDispatchSha256 ? { parentDispatchSha256 } : {}),
+    ...(saleSharingOptOut ? { saleSharingOptOut } : {}),
     ...(cmpPreferenceInspection ? { cmpPreferenceInspection } : {}),
     ...(postAcceptObservation ? { postAcceptObservation } : {}),
     ...(postRefusalObservation ? { postRefusalObservation } : {}),
@@ -924,7 +933,7 @@ function parsePolicySurfaceSeeds(value: unknown): NonNullable<LocalV2DagLambdaDi
 }
 
 function isWorkerLane(value: unknown): value is LocalV2DagLambdaWorkerLane {
-  return value === "cmp_preferences" || value === "coordinator" ||
+  return value === "sale_sharing_opt_out" || value === "cmp_preferences" || value === "coordinator" ||
     value === "consent_proof" ||
     value === "runtime_evidence" ||
     value === "policy_evidence" ||
@@ -1959,6 +1968,7 @@ export function postRefusalParentDispatchSha256(
     localCallbackUrl: payload.localCallbackUrl,
     orchestrationMode: payload.orchestrationMode ?? "single",
     ...(payload.policySurfaceSeeds ? { policySurfaceSeeds: payload.policySurfaceSeeds } : {}),
+    ...(payload.saleSharingOptOut ? { saleSharingOptOut: payload.saleSharingOptOut } : {}),
     ...(payload.cmpPreferenceInspection ? { cmpPreferenceInspection: payload.cmpPreferenceInspection } : {}),
     ...(payload.postRefusalObservation
       ? { postRefusalObservation: payload.postRefusalObservation }
@@ -2385,6 +2395,36 @@ export async function runLocalV2DagLambdaPostAcceptArtifactChain(
   };
 }
 
+export async function runSaleSharingOptOutArtifactChain(payload: LocalV2DagLambdaDispatchPayload,
+  options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal; artifactSignal?: AbortSignal;
+    onScanCoreComplete?: () => void }): Promise<ArtifactChainResult> {
+  if (payload.workerLane !== "sale_sharing_opt_out" || !payload.saleSharingOptOut ||
+    process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED !== "1" || !payload.parentDispatchSha256) throw new Error("Sale/sharing opt-out is not authorized.");
+  const memory = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? (process.env.AWS_LAMBDA_FUNCTION_NAME ? "NaN" : "4096"));
+  if (!Number.isFinite(memory) || memory < 512 || memory > 4096) throw new Error("Sale/sharing worker exceeds approved memory budget.");
+  const { runSaleSharingOptOutObserver } = await import("@certscore/scan-core/sale-sharing-opt-out-observer");
+  const packet = await runSaleSharingOptOutObserver({ config: payload.saleSharingOptOut, parentDispatchSha256: payload.parentDispatchSha256, signal: options.signal });
+  options.onScanCoreComplete?.();
+  return retainSaleSharingOptOutPacket(payload, packet, options);
+}
+
+/** A stopped observation may still retain verified partial checkpoints during
+ * the existing artifact reserve. Overall artifact cancellation always wins. */
+export async function retainSaleSharingOptOutPacket(payload: LocalV2DagLambdaDispatchPayload,
+  packet: unknown, options: { artifactRoot: string; s3Client?: S3PutClient; artifactSignal?: AbortSignal }): Promise<ArtifactChainResult> {
+  options.artifactSignal?.throwIfAborted();
+  const parsed = saleSharingOptOutEvidenceSchema.parse(packet);
+  if (parsed.scanId !== payload.scanId || parsed.targetUrl !== payload.targetUrl || parsed.parentDispatchSha256 !== payload.parentDispatchSha256)
+    throw new Error("sale_sharing_packet_binding_mismatch");
+  const body = Buffer.from(JSON.stringify(parsed));
+  const sha256 = createHash("sha256").update(body).digest("hex");
+  const bucket = requireArtifactBucket(), key = `${artifactKeyPrefix(payload)}/SaleSharingOptOutEvidencePacket.json`;
+  await mkdir(options.artifactRoot, { recursive: true });
+  await writeFile(path.join(options.artifactRoot, "SaleSharingOptOutEvidencePacket.json"), body);
+  await (options.s3Client ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: body, ContentType: "application/json", Metadata: { sha256 } }), { abortSignal: AbortSignal.any([AbortSignal.timeout(500), ...(options.artifactSignal ? [options.artifactSignal] : [])]) });
+  return { artifactPointers: { saleSharingOptOutPacketUri: s3Uri(bucket, key) }, artifactMetadata: { saleSharingOptOutPacketUri: { sha256, sizeBytes: body.byteLength } } };
+}
+
 export async function runCmpPreferencesArtifactChain(payload: LocalV2DagLambdaDispatchPayload,
   options: { artifactRoot: string; s3Client?: S3PutClient; signal?: AbortSignal; artifactSignal?: AbortSignal;
     onScanCoreComplete?: () => void }): Promise<ArtifactChainResult> {
@@ -2442,6 +2482,27 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
   ];
   // Independent action lane: join exactly once before canonical publication.
   // Its failure limits CMP coverage and cannot poison verified passive lanes.
+  const optOutStartedAt = Date.now();
+  const optOutController = new AbortController();
+  const optOutOutcome = payload.saleSharingOptOut && process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED === "1"
+    ? (async () => {
+      const signal = AbortSignal.any([optOutController.signal, AbortSignal.timeout(SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS), ...(options.signal ? [options.signal] : [])]);
+      try {
+        const result = await withHandlerSafetyTimeout(invokeLocalV2DagLambdaWorker({ parentPayload: payload, parentScanId: payload.scanId, workerLane: "sale_sharing_opt_out", lambdaClient: options.lambdaClient, signal }), SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS);
+        const uri = result.artifactPointers?.saleSharingOptOutPacketUri, metadata = result.artifactMetadata?.saleSharingOptOutPacketUri;
+        if (!uri || !metadata || metadata.sizeBytes > 32_000) throw new Error("sale_sharing_packet_metadata_invalid");
+        const { bucket, key } = parseS3Uri(uri);
+        const response = await (options.s3GetClient ?? localV2DagLambdaS3Client(payload.awsRegion)).send(new GetObjectCommand({ Bucket: bucket, Key: key }), { abortSignal: signal });
+        const body = await streamToBuffer(response.Body);
+        if (body.byteLength !== metadata.sizeBytes || createHash("sha256").update(body).digest("hex") !== metadata.sha256) throw new Error("sale_sharing_packet_checksum_mismatch");
+        const packet = saleSharingOptOutEvidenceSchema.parse(JSON.parse(body.toString("utf8")));
+        if (packet.scanId !== payload.scanId || packet.targetUrl !== payload.targetUrl || packet.parentDispatchSha256 !== postRefusalParentDispatchSha256(payload)) throw new Error("sale_sharing_packet_binding_mismatch");
+        return { status: "joined" as const, packet, sha256: metadata.sha256, sizeBytes: metadata.sizeBytes, startedAt: new Date(optOutStartedAt).toISOString(), completedAt: new Date().toISOString() };
+      } catch { return { status: "limited" as const,
+        limitationCode: options.signal?.aborted ? "opt_out_inspection_cancelled" as const
+          : signal.aborted || Date.now() - optOutStartedAt >= SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS ? "opt_out_budget_exhausted" as const : "opt_out_worker_failed" as const,
+        startedAt: new Date(optOutStartedAt).toISOString(), completedAt: new Date().toISOString() }; }
+    })() : undefined;
   const preferenceStartedAt = Date.now();
   const preferenceController = new AbortController();
   const preferenceOutcome = payload.cmpPreferenceInspection && process.env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED === "1"
@@ -2979,6 +3040,19 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       },
     });
   }
+  // No new tail wait or later publication for the California action lane.
+  const joinedOptOut = optOutOutcome ? await Promise.race([optOutOutcome, Promise.resolve(undefined)]) : undefined;
+  optOutController.abort();
+  const optOutLaneOutcome = optOutOutcome ? {
+    status: joinedOptOut?.status ?? "limited", startedAt: new Date(optOutStartedAt).toISOString(),
+    completedAt: joinedOptOut?.completedAt ?? new Date().toISOString(),
+    ...(joinedOptOut?.status === "joined" ? {} : { limitationCode: joinedOptOut?.limitationCode ?? "opt_out_inspection_cancelled" }),
+  } : undefined;
+  if (optOutLaneOutcome) bundle = canonicalEvidenceBundleSchema.parse({ ...bundle,
+    ...(joinedOptOut?.status === "joined" ? {saleSharingOptOut: { evidence: joinedOptOut.packet, sha256: joinedOptOut.sha256, sizeBytes: joinedOptOut.sizeBytes, verificationStatus: "verified" }} : {}),
+    saleSharingOptOutLaneOutcome: optOutLaneOutcome,
+    completedAt: latestIsoTimestamp(bundle.completedAt, optOutLaneOutcome.completedAt),
+  });
   // The preference lane gets no tail wait beyond the existing report barrier.
   // Late workers remain bounded but cannot reopen or republish this result.
   const joinedPreferences = preferenceOutcome ? await Promise.race([
@@ -3016,6 +3090,12 @@ export async function runLocalV2DagLambdaShardedArtifactChain(
       result: postAcceptState.result,
     },
   });
+  if (optOutLaneOutcome) laneTimingSummary.saleSharingOptOut = {
+    status: optOutLaneOutcome.status, startedAt: optOutLaneOutcome.startedAt, completedAt: optOutLaneOutcome.completedAt,
+    durationMs: Date.parse(optOutLaneOutcome.completedAt)-optOutStartedAt,
+    workerDurationMs: joinedOptOut?.status === "joined" ? Date.parse(joinedOptOut.packet.completedAt)-Date.parse(joinedOptOut.packet.startedAt) : null,
+    terminalOutcomeDeltaFromPassiveBarrierMs: Date.parse(optOutLaneOutcome.completedAt)-passiveLaneBarrierCompletedAtMs,
+  };
   if (joinedPreferences) laneTimingSummary.cmpPreferenceInspection = {
     status: joinedPreferences.status, startedAt: joinedPreferences.startedAt, completedAt: joinedPreferences.completedAt,
     durationMs: Date.parse(joinedPreferences.completedAt) - Date.parse(joinedPreferences.startedAt),
@@ -3333,7 +3413,7 @@ export async function invokeLocalV2DagLambdaWorker(input: {
   const { gpcObservation: parentGpcObservation, ...parentPayloadWithoutGpcObservation } = input.parentPayload;
   const workerPayload: LocalV2DagLambdaDispatchPayload = {
     ...parentPayloadWithoutGpcObservation,
-    ...(workerLane === "cmp_preferences" ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
+    ...(["cmp_preferences", "sale_sharing_opt_out"].includes(workerLane) ? { parentDispatchSha256: postRefusalParentDispatchSha256(input.parentPayload) } : {}),
     callbackCorrelationId: input.parentScanId,
     ...(input.coordinatorPlanSummary ? { coordinatorPlanSummary: input.coordinatorPlanSummary } : {}),
     ...(workerLane === "reject_observation" && input.parentPayload.postRefusalObservation
@@ -3687,6 +3767,7 @@ function parseLocalV2DagLambdaShardResult(
     throw new Error("Local v2 DAG Lambda accept_observation worker did not return a post-accept packet URI.");
   }
   if (
+    expectedWorkerLane !== "sale_sharing_opt_out" &&
     expectedWorkerLane !== "cmp_preferences" &&
     expectedWorkerLane !== "reject_observation" &&
     expectedWorkerLane !== "accept_observation" &&
@@ -3750,6 +3831,7 @@ function parseArtifactPointersRecord(value: unknown): LocalV2DagLambdaArtifactPo
     reportAdapterArtifactUri: compactString(record.reportAdapterArtifactUri) ?? undefined,
     reviewArtifactUri: compactString(record.reviewArtifactUri) ?? undefined,
     scanArtifactUri: compactString(record.scanArtifactUri) ?? undefined,
+    saleSharingOptOutPacketUri: compactString(record.saleSharingOptOutPacketUri) ?? undefined,
     cmpPreferencesPacketUri: compactString(record.cmpPreferencesPacketUri) ?? undefined,
     postAcceptPacketUri: compactString(record.postAcceptPacketUri) ?? undefined,
     postRefusalPacketUri: compactString(record.postRefusalPacketUri) ?? undefined,
@@ -3764,6 +3846,7 @@ function parseArtifactMetadataRecord(value: unknown): LocalV2DagLambdaArtifactMe
     reportAdapterArtifactUri: parseArtifactMetadataEntry(record.reportAdapterArtifactUri),
     reviewArtifactUri: parseArtifactMetadataEntry(record.reviewArtifactUri),
     scanArtifactUri: parseArtifactMetadataEntry(record.scanArtifactUri),
+    saleSharingOptOutPacketUri: parseArtifactMetadataEntry(record.saleSharingOptOutPacketUri),
     cmpPreferencesPacketUri: parseArtifactMetadataEntry(record.cmpPreferencesPacketUri),
     postAcceptPacketUri: parseArtifactMetadataEntry(record.postAcceptPacketUri),
     postRefusalPacketUri: parseArtifactMetadataEntry(record.postRefusalPacketUri),
@@ -5927,7 +6010,10 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       ? path.join(baseArtifactRoot, "lanes", payload.workerLane)
       : baseArtifactRoot;
     const runArtifactChain = options.runArtifactChain ?? ((dispatchPayload, runOptions) =>
-      dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "cmp_preferences"
+      dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "sale_sharing_opt_out"
+        ? runSaleSharingOptOutArtifactChain(dispatchPayload, { artifactRoot: runOptions.artifactRoot, s3Client: options.s3Client,
+            signal: runOptions.signal, artifactSignal: runOptions.artifactSignal, onScanCoreComplete: runOptions.onScanCoreComplete })
+        : dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "cmp_preferences"
         ? runCmpPreferencesArtifactChain(dispatchPayload, { artifactRoot: runOptions.artifactRoot, s3Client: options.s3Client,
             signal: runOptions.signal, artifactSignal: runOptions.artifactSignal, onScanCoreComplete: runOptions.onScanCoreComplete })
         : dispatchPayload.orchestrationMode === "worker" && dispatchPayload.workerLane === "reject_observation"
@@ -5960,6 +6046,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     artifactChainStartedAt = now();
     const evidenceCoordinator = payload.orchestrationMode === "sharded";
     const evidenceWorker = payload.orchestrationMode === "worker" && (
+      payload.workerLane === "sale_sharing_opt_out" ||
       payload.workerLane === "cmp_preferences" ||
       payload.workerLane === "consent_proof" ||
       payload.workerLane === "runtime_evidence" ||
@@ -6007,6 +6094,12 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
       ),
       Math.max(scannerWorkTimeoutMs, handlerSafetyTimeoutMs - 2_000)
     ));
+    if (evidenceWorker && payload.workerLane === "sale_sharing_opt_out") {
+      const elapsed = Math.max(0, Date.now() - handlerStartedAtMs);
+      handlerSafetyTimeoutMs = Math.min(handlerSafetyTimeoutMs, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS);
+      scannerWorkTimeoutMs = Math.max(10, 3000 - elapsed);
+      artifactChainTimeoutMs = Math.max(10, 4000 - elapsed);
+    }
     if (evidenceWorker && payload.workerLane === "cmp_preferences") {
       // Bound the entire worker, including a stalled browser shutdown/upload,
       // rather than relying only on the observer's browser deadline.
@@ -6366,6 +6459,7 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
 
 function consentScenariosForWorkerLane(workerLane: LocalV2DagLambdaWorkerLane): ConsentFlowScenario[] {
   switch (workerLane) {
+    case "sale_sharing_opt_out":
     case "cmp_preferences":
     case "coordinator":
     case "consent_proof":

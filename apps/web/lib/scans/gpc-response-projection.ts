@@ -1,3 +1,4 @@
+import { GPC_CUSTOMER_RESULTS_ENABLED } from "./gpc-customer-policy";
 import { gpcResponseAssessmentSchema, type GpcResponseAssessment } from "@certscore/contracts";
 import {
   CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS,
@@ -91,6 +92,7 @@ export function describeCanonicalGpcResponse(assessment: GpcResponseAssessment) 
 export function buildCanonicalGpcResponseProjection(
   findings: UnifiedFindingDisplayPacket[],
 ): CanonicalGpcResponseProjection | null {
+  if (!GPC_CUSTOMER_RESULTS_ENABLED) return null;
   const finding = findings.find((candidate) =>
     candidate.unifiedFindingId === "gpc_response" &&
     candidate.presentationDecision.status === "surface"

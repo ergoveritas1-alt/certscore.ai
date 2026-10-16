@@ -1,11 +1,11 @@
 import { gpcResponseAssessmentSchema, type GpcResponseAssessment } from "@certscore/contracts";
 
-export const CALIFORNIA_GPC_RESPONSE_POLICY_VERSION = "california-gpc-response.v1" as const;
+export const CALIFORNIA_GPC_RESPONSE_POLICY_VERSION = "california-gpc-response.v2-suspended" as const;
 export const CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS = 15 as const;
 export const CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY =
   "california.gpc_response.qualifying_activity_not_suppressed" as const;
 export const CANONICAL_OVERALL_SCORE_SOURCE = "canonical.multi_framework" as const;
-export const CANONICAL_OVERALL_SCORE_VERSION = "overall-posture.v10" as const;
+export const CANONICAL_OVERALL_SCORE_VERSION = "overall-posture.v11" as const;
 
 export type CaliforniaGpcResponsePolicyAssessment = {
   assessmentStatus: "checked" | "gap_observed" | "needs_evidence" | "not_applicable" | "review_signal";
@@ -16,8 +16,9 @@ export type CaliforniaGpcResponsePolicyAssessment = {
     suppressedUnderGpc: string[];
   };
   policyKey: typeof CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY;
-  policyVersion: typeof CALIFORNIA_GPC_RESPONSE_POLICY_VERSION;
+  policyVersion: typeof CALIFORNIA_GPC_RESPONSE_POLICY_VERSION | "california-gpc-response.v1";
   reasonCode:
+    | "gpc_customer_policy_suspended"
     | "comparable_gpc_no_qualifying_suppression"
     | "comparable_gpc_partial_qualifying_suppression"
     | "comparable_gpc_qualifying_activity_suppressed"
@@ -46,12 +47,12 @@ function qualifyingIdentities(values: Iterable<string>) {
  * identities. Analytics, measurement, cookies, and CMP changes alone cannot
  * create this deduction because they do not establish sale/share treatment.
  */
-export function deriveCaliforniaGpcResponsePolicy(
+export function deriveHistoricalCaliforniaGpcResponsePolicy(
   assessment: GpcResponseAssessment,
 ): CaliforniaGpcResponsePolicyAssessment {
   const base = {
     policyKey: CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY,
-    policyVersion: CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,
+    policyVersion: "california-gpc-response.v1",
   } as const;
   const comparable = gpcResponseAssessmentSchema.safeParse(assessment).success && assessment.status !== "indeterminate" &&
     assessment.comparison.comparable &&
@@ -129,4 +130,11 @@ export function deriveCaliforniaGpcResponsePolicy(
     reasonCode: "comparable_gpc_partial_qualifying_suppression",
     scoreEffect: "none",
   };
+}
+
+/** Current policy: no GPC score or compliance assessment is customer-eligible. */
+export function deriveCaliforniaGpcResponsePolicy(_assessment: GpcResponseAssessment): CaliforniaGpcResponsePolicyAssessment {
+  return { policyKey: CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY, policyVersion: CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,
+    assessmentStatus: "not_applicable", deductionPoints: 0, scoreEffect: "none", reasonCode: "gpc_customer_policy_suspended",
+    eligibleActivity: { baseline: [], persistedUnderGpc: [], suppressedUnderGpc: [] } };
 }

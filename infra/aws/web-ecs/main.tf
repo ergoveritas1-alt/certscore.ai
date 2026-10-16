@@ -91,6 +91,7 @@ locals {
       { name = "CERTSCORE_POST_ACCEPT_WORKER_ROLLOUT_MODE", value = "all_eligible" },
       { name = "CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED", value = "1" },
       { name = "CERTSCORE_POST_REFUSAL_REJECT_WORKER_ROLLOUT_MODE", value = "all_eligible" },
+      { name = "CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED", value = "1" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV", value = "production" },
       { name = "CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME", value = local.v2_dag_lambda_function_name },
       { name = "CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL", value = local.v2_dag_lambda_queue_urls.eu_de },

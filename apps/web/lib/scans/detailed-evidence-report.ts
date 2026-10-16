@@ -123,11 +123,7 @@ export function buildDetailedEvidenceExport(report: ShadowReportData) {
       displayStatus: issues || review ? "Review" : a.status !== "completed" ? "Limited" : null,
       counts: { checks: issues + review, review: issues + review, limited: 0, observed: 0, unsupported: 0 }, rows });
   }
-  sections.push({ id: "gpc", title: EVIDENCE_SECTION_TITLES.gpc,
-    recap: report.gpcResponse ? report.gpcResponse.assessment.status === "indeterminate" ? "Response not determined" : report.gpcResponse.comparisonHeadline : "Evidence unavailable",
-    displayStatus: report.gpcResponse?.californiaDeductionPoints ? "Review" : !report.gpcResponse || report.gpcResponse.assessment.status === "indeterminate" ? "Limited" : null,
-    counts: { checks: 1, review: report.gpcResponse?.californiaDeductionPoints ? 1 : 0,
-      limited: !report.gpcResponse || report.gpcResponse.assessment.status === "indeterminate" ? 1 : 0, observed: 0, unsupported: 0 }, rows: [] });
+
   if (cms && cmsSecurity && (cms.assessment.detections.length || cmsSecurity.plugins.length)) sections.push({
     id: "cms", title: EVIDENCE_SECTION_TITLES.cms, recap: cmsEvidenceRecap(cms.assessment.detections, cmsSecurity.plugins.length),
     displayStatus: cms.assessment.matches.length ? "Review" : null,

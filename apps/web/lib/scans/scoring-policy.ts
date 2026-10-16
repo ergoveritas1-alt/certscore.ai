@@ -1,8 +1,7 @@
-import { CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS } from "./california-gpc-response-policy";
 
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
 export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v20";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v9";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v10";
 export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
 export const POST_REJECT_SCORING_TIERS = { high_risk: 15, measurement: 5, performance_only: 0, review: 0 } as const;
 export const SCORE_FLOOR = 0;
@@ -19,7 +18,7 @@ export const SCORING_FAMILIES = {
   transport_security: { label: "Transport", cap: 20 },
   site_integrity: { label: "Site integrity", cap: 40 },
   accessibility: { label: "Accessibility (WCAG)", cap: 12 },
-  gpc: { label: "GPC", cap: CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS },
+  gpc: { label: "GPC (suspended)", cap: 0 },
 } as const;
 export type ScoringRule = {
   id: string; anchor: string; label: string; family: keyof typeof SCORING_FAMILIES;
@@ -45,7 +44,6 @@ export const SCORING_RULES: readonly ScoringRule[] = [
   {"id": "transport_security_form_transport", "anchor": "forms", "label": "Insecure form transport", "family": "transport_security", "siteWide": false, "points": 10},
   {"id": "transport_security_mixed_content", "anchor": "mixed-content", "label": "Mixed content", "family": "transport_security", "siteWide": false, "points": 8},
   {"id": "transport_security_http_redirect", "anchor": "redirect", "label": "HTTP redirect handling", "family": "transport_security", "siteWide": false, "points": 2},
-  {"id": "gpc_response", "anchor": "gpc", "label": "Eligible California GPC finding", "family": "gpc", "siteWide": false, "points": CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS},
   { id: "site_integrity_hidden_outbound_links", anchor: "hidden-links", label: "Hidden outbound links", family: "site_integrity", siteWide: true, points: 17, identity: { first: 17, second: 5, subsequentEach: 5, unit: "link occurrence" } },
   { id: "text_alternative_accessibility_issue", anchor: "accessibility-evidence", label: "Text alternatives", family: "accessibility", siteWide: true, points: 3 },
   { id: "semantic_labeling_accessibility_issue", anchor: "accessibility-evidence", label: "Accessible names, labels and semantics", family: "accessibility", siteWide: true, points: 4 },

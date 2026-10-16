@@ -1,3 +1,4 @@
+import { hasSuspendedGpcScoreEffect } from "../scans/gpc-customer-policy";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "../api-v2/scan-report-summary";
 import { isAccessibilityAuditLimited } from "@certscore/contracts";
 import { projectAccessibilityAuditSummary, withAccessibilityAuditCoverage } from "../scans/accessibility-audit-evidence";
@@ -453,7 +454,7 @@ function buildPulseReportSurface(input: {
     unifiedFindings: unifiedFindingPackets
   });
   const persistedReportScore =
-    scanRecord.snapshot?.report_projection_status === "ready"
+    scanRecord.snapshot?.report_projection_status === "ready" && !hasSuspendedGpcScoreEffect(scanRecord)
       ? finiteNumber(scanRecord.snapshot.certscore_overall)
       : null;
   const score = resolveScanReportScore(scanRecord, boundedScore(persistedReportScore ?? canonicalScore));
@@ -464,7 +465,7 @@ function buildPulseReportSurface(input: {
     scoreSource: stringValue(scanRecord.snapshot?.score_source) ?? CANONICAL_OVERALL_SCORE_SOURCE,
     scoreStatus: score === null ? "withheld" as const : "scored" as const,
     scoreValue: score,
-    scoreVersion: stringValue(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION,
+    scoreVersion: hasSuspendedGpcScoreEffect(scanRecord) ? CANONICAL_OVERALL_SCORE_VERSION : stringValue(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION,
     withholdingReason: score === null ? "canonical_overall_score_unavailable" : null
   };
   const groupedTrackerRows = buildTrackerInventoryGroupRows(trackerInventoryRows);
@@ -692,7 +693,7 @@ export function derivePulseReportScore(input: {
 }) {
   const scanRecord = input.scanRecord;
   const persistedReportScore =
-    scanRecord.snapshot?.report_projection_status === "ready"
+    scanRecord.snapshot?.report_projection_status === "ready" && !hasSuspendedGpcScoreEffect(scanRecord)
       ? finiteNumber(scanRecord.snapshot.certscore_overall)
       : null;
   if (persistedReportScore !== null) {

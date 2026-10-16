@@ -2154,6 +2154,7 @@ async function runCoordinatorFixture(input: {
   gpcPair?: { baseline: CanonicalEvidenceBundle; gpc: CanonicalEvidenceBundle };
   preferences?: "complete" | "partial" | "hang" | "wrong_hash" | "wrong_target";
   explicitPreferences?: boolean;
+  optOut?: "complete" | "hang" | "wrong_hash" | "wrong_target";
 }) {
   const artifactRoot = await mkdtemp(path.join(os.tmpdir(), "certscore-coordinator-cutoff-"));
   const actionCalls: string[] = [];
@@ -2199,6 +2200,7 @@ async function runCoordinatorFixture(input: {
     orchestrationMode: "sharded",
     scanId: input.scanId,
     callbackCorrelationId: input.scanId,
+    ...(input.optOut ? {saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:input.scanId,exactTargetUrl:"https://example.com/"}}:{}),
     ...(input.explicitPreferences ? { cmpPreferenceInspection: {
       policyVersion: "bounded_cmp_preferences.v1", enabled: true,
       scanId: input.scanId, exactTargetUrl: "https://example.com/",
@@ -2224,6 +2226,13 @@ async function runCoordinatorFixture(input: {
       const workerPayload = JSON.parse(Buffer.from(command.input.Payload ?? []).toString("utf8")) as Record<string, any>;
       const lane = String(workerPayload.workerLane);
       workerCalls.push(lane);
+      if(lane === "sale_sharing_opt_out") {
+        if(input.optOut === "hang")return new Promise<never>((_resolve,reject)=>{options?.abortSignal?.addEventListener("abort",()=>reject(new Error("aborted")),{once:true});});
+        const packet={contractVersion:"certscore.sale-sharing-opt-out-evidence.v1",policyVersion:"bounded_sale_sharing_opt_out.v1",scanId:input.scanId,parentDispatchSha256:postRefusalParentDispatchSha256(payload),targetUrl:input.optOut === "wrong_target"?"https://other.example/":payload.targetUrl,documentToken:null,startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),status:"unsupported",recipeVersion:null,provider:null,actionCount:0,submitted:false,registration:"not_attempted",confirmedAt:null,before:null,after:null,observationWindowMs:0,captureComplete:false,truncated:false,requests:[],limitations:["no_unique_registered_recipe"]};
+        const body=Buffer.from(JSON.stringify(packet)),uri=`s3://test-bucket/workers/${input.scanId}/sale_sharing_opt_out/SaleSharingOptOutEvidencePacket.json`;
+        const entry={uri,body,sizeBytes:body.byteLength,sha256:createHash("sha256").update(body).digest("hex")};pointers.set(uri,entry);
+        return {StatusCode:200,Payload:Buffer.from(JSON.stringify({scanId:input.scanId,workerLane:lane,status:"completed",parentDispatchSha256:postRefusalParentDispatchSha256(payload),artifactPointers:{saleSharingOptOutPacketUri:uri},artifactMetadata:{saleSharingOptOutPacketUri:{sizeBytes:entry.sizeBytes,sha256:input.optOut === "wrong_hash"?"0".repeat(64):entry.sha256}}}))};
+      }
       if (lane === "cmp_preferences") {
         if (input.preferences === "hang") return new Promise<never>((_resolve, reject) => {
           options?.abortSignal?.addEventListener("abort", () => reject(new Error("aborted")), { once: true });
@@ -5180,3 +5189,32 @@ test("handler retains the bounded network guard reason in internal failure diagn
     await rm(workspaceRoot,{recursive:true,force:true});
   }
 });
+
+
+test("sale/sharing opt-out authorization cannot reuse a different scan, target, or unsharded run",()=>{
+  const config={policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:"scan-local-1",exactTargetUrl:"https://example.com/"};
+  for(const patch of [{scanId:"different"},{exactTargetUrl:"https://example.com/other"}])assert.throws(()=>parseLocalV2DagLambdaDispatchPayload(validPayload({orchestrationMode:"sharded",saleSharingOptOut:{...config,...patch}})));
+  assert.throws(()=>parseLocalV2DagLambdaDispatchPayload(validPayload({orchestrationMode:"single",saleSharingOptOut:config})));
+  const parent=parseLocalV2DagLambdaDispatchPayload(validPayload({orchestrationMode:"sharded",saleSharingOptOut:config}));
+  assert.deepEqual(parent.saleSharingOptOut,config);
+});
+for(const optOut of ["complete","hang","wrong_hash","wrong_target"] as const) for(const enabled of [true,false]) {
+  test(`sale/sharing opt-out barrier verifies original bytes without tail wait: ${optOut}, enabled=${enabled}`,async()=>{
+    const oldFlag=process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED,oldBucket=process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;
+    process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED=enabled?"1":"0";process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET="test-bucket";
+    let root:string|undefined;
+    try {
+      const scanId=`opt-out-${optOut}-${enabled}`,start=Date.now();
+      const result=await runCoordinatorFixture({scanId,optOut,action:"none",dispatchDelayMs:1000,consentBundle:coordinatorConsentBundle(scanId,{inspectionCompleted:true,acceptControlObserved:false})});root=result.artifactRoot;
+      assert.ok(Date.now()-start<1500,"No extra action tail wait");
+      assert.equal(result.workerCalls.includes("sale_sharing_opt_out"),enabled);
+      assert.equal(Boolean(result.bundle.saleSharingOptOut),enabled&&optOut === "complete");
+      assert.equal(result.bundle.saleSharingOptOutLaneOutcome?.status,!enabled?undefined:optOut === "complete"?"joined":"limited");
+      assert.equal(result.bundle.runtimeCoverage.coverageStatus,"usable");
+    } finally {
+      if(oldFlag===undefined)delete process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;else process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED=oldFlag;
+      if(oldBucket===undefined)delete process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET;else process.env.CERTSCORE_V2_DAG_LAMBDA_ARTIFACT_BUCKET=oldBucket;
+      if(root)await rm(root,{recursive:true,force:true});
+    }
+  });
+}

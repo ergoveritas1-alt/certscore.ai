@@ -132,7 +132,7 @@ export function getPersistedCanonicalReportProjection(
   }
 
   const checklistRows = preserveRetainedRejectClickCapture(
-    candidate.checklistRows as GdprEprivacyCoverageChecklistItem[],
+    (candidate.checklistRows as GdprEprivacyCoverageChecklistItem[]).filter(row => !row.id.includes("gpc")),
     isRecord(root.runtimeArtifacts) ? root.runtimeArtifacts.postRefusalEvidenceProjection : undefined,
   );
 
@@ -153,12 +153,18 @@ export function getPersistedCanonicalReportProjection(
       consentControlSummary: projectConsentControlReport(retainedConsentAssessment(scanRecord), scanRecord.scan.id),
       checklistRows: getReportableGdprEprivacyCoverageItems(checklistRows, { consentControlAssessment: retainedConsentAssessment(scanRecord) }),
       checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation, retainedConsentAssessment(scanRecord)),
-      ownerUnifiedFindings,
+      ownerUnifiedFindingIds: (candidate.ownerUnifiedFindingIds as string[]).filter(id => id !== "gpc_response"),
+      ownerUnifiedFindings: ownerUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
+      globalUnifiedFindings: candidate.globalUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
+      topFindingIds: candidate.topFindingIds.filter(id => id !== "gpc_response"),
     } as PersistedCanonicalReportProjection;
   }
 
   return {
     ...candidate,
+    ownerUnifiedFindings: candidate.ownerUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
+    globalUnifiedFindings: candidate.globalUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
+    topFindingIds: candidate.topFindingIds.filter(id => id !== "gpc_response"),
     consentControlSummary: projectConsentControlReport(retainedConsentAssessment(scanRecord), scanRecord.scan.id),
     checklistRows: getReportableGdprEprivacyCoverageItems(checklistRows, { consentControlAssessment: retainedConsentAssessment(scanRecord) }),
     checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation, retainedConsentAssessment(scanRecord)),

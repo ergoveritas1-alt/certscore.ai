@@ -1,4 +1,8 @@
+import { verifiedSaleSharingOptOutSchema, saleSharingOptOutLaneOutcomeSchema, type SaleSharingOptOutLaneOutcome, type VerifiedSaleSharingOptOut } from "./sale-sharing-opt-out";
+export * from "./sale-sharing-opt-out";
 import { cookieClassificationSchema } from "./cookie-classification";
+import { privacyChoiceInspectionSchema, type PrivacyChoiceInspection } from "./california-privacy-review";
+export * from "./california-privacy-review";
 import { consentAccessibilityDomBindingSchema } from "./consent-accessibility-dom-binding";
 export * from "./consent-accessibility-dom-binding";
 export * from "./cookie-classification";
@@ -2604,6 +2608,7 @@ export const policyNegativeSearchEvidenceSchema: z.ZodType<PolicyNegativeSearchE
 });
 
 export const policySurfaceInspectionOutcomeSchema = z.object({
+  privacyChoiceInspection: privacyChoiceInspectionSchema.optional(),
   outcome: z.enum([
     "privacy_policy_observed",
     "no_privacy_policy_observed_complete_coverage",
@@ -2657,6 +2662,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   modulesRun?: z.infer<typeof scanModuleRunSchema>[];
   normalizedUrl?: string;
   negativeSearchEvidence?: PolicyNegativeSearchEvidence;
+  privacyChoiceInspection?: PrivacyChoiceInspection;
   policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
 }) {
   const observations = input.policySurfaceObservations ?? [];
@@ -2731,6 +2737,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
       : "indeterminate_limited_coverage" as const;
 
   return policySurfaceInspectionOutcomeSchema.parse({
+    privacyChoiceInspection: input.privacyChoiceInspection,
     outcome,
     ...(negativeSearchCoverageVerified ? { negativeSearchEvidence } : {}),
     coverageStatus,
@@ -3522,12 +3529,14 @@ const canonicalEvidenceBundleBaseSchema: z.ZodType<z.output<typeof canonicalEvid
 });
 
 // Keep the large legacy contract named, preserving defaults and input types while adding a bounded extension.
-type CmpBundleExtension = { cmpBasicEvidence?: CmpBasicEvidence; cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
+type CmpBundleExtension = { saleSharingOptOut?: VerifiedSaleSharingOptOut; saleSharingOptOutLaneOutcome?: SaleSharingOptOutLaneOutcome; cmpBasicEvidence?: CmpBasicEvidence; cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
 export const canonicalEvidenceBundleSchema: z.ZodType<
   z.output<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
   z.ZodTypeDef,
   z.input<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] }
 > = withRuntimeGraphCompatibility(canonicalEvidenceBundleBaseSchema.and(z.object({
+  saleSharingOptOut: verifiedSaleSharingOptOutSchema.optional(),
+  saleSharingOptOutLaneOutcome: saleSharingOptOutLaneOutcomeSchema.optional(),
   cmpBasicEvidence: cmpBasicEvidenceSchema.optional(),
   cmpPreferencesEvidence: cmpPreferencesEvidenceSchema.optional(),
   cmpPreferenceLaneOutcome: z.object({ status: z.enum(["joined", "limited"]), startedAt: z.string().datetime(), completedAt: z.string().datetime(), limitationCode: z.enum(["preference_budget_exhausted", "preference_worker_failed", "preference_inspection_cancelled"]).optional() }).optional(),

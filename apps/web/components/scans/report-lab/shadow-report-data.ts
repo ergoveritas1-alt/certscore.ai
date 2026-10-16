@@ -148,6 +148,7 @@ export type GpcResponseReportProjection = {
 export type ShadowReportData = {
   cmpAudit?: import("../../../lib/scans/cmp-audit-projection").CmpAuditProjection;
   reviewFocus?: import("@certscore/api-contracts").ReportReviewFocus;
+  californiaPrivacyReview?: import("@certscore/contracts").CaliforniaPrivacyReview | null;
   privacyAuditEvidence?: import("@certscore/api-contracts").PrivacyAuditEvidence | null;
   executiveRuntimeCards?: import("../../../lib/scans/executive-runtime-cards").ExecutiveRuntimeCard[];
   siteIntegrity?: SiteIntegrityReportFinding | null;
@@ -184,6 +185,7 @@ export type ShadowReportData = {
     consentProminencePreview?: import("../../../lib/scans/visual-evidence").ConsentProminencePreview | null;
   };
   score: { label: string; value: number };
+  californiaScore?: import("../../../lib/scans/california-regulatory-score").CaliforniaRegulatoryScore;
   formsSummary?: import("@certscore/api-contracts").ScanFormsSummary | null;
   scoreExplanation?: import("@certscore/api-contracts").ScanScoreExplanation | null;
   metrics: {

@@ -1,3 +1,4 @@
+import { projectCaliforniaRegulatoryPriorities } from "./california-regulatory-priorities";
 import { projectAccessibilityPriorities } from "./accessibility-priority";
 import { groupAccessibilityPriorityEntries } from "./accessibility-priority-group";
 import { comparePriorityReviewFindings } from "./priority-review-order";
@@ -73,5 +74,6 @@ export function buildSitePriorityReview(rows: GdprEprivacyCoverageChecklistItem[
     ...integrity, rank: priorities.length + 1,
     pages: "pages" in integrity ? integrity.pages : pages.filter(page => page.homepage).map(({ id, url, homepage }) => ({ id, url, homepage })),
   });
+  priorities.push(...projectCaliforniaRegulatoryPriorities(unified).filter(finding => !priorities.some(existing => existing.id === finding.id)).map(finding => ({ ...finding, rank: 1, pages: pages.filter(page => page.homepage).map(({ id, url, homepage }) => ({ id, url, homepage })) })));
   return groupAccessibilityPriorityEntries(priorities.sort(comparePriorityReviewFindings)).map((finding, index) => ({ ...finding, rank: index + 1 }));
 }

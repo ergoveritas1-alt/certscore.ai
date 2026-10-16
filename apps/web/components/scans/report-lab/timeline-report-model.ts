@@ -1,3 +1,5 @@
+import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
+import { projectCaliforniaRegulatoryPriorities } from "../../../lib/scans/california-regulatory-priorities";
 import { projectAccessibilityPriorities } from "../../../lib/scans/accessibility-priority";
 import { projectCmpAudit } from "../../../lib/scans/cmp-audit-projection";
 import { groupAccessibilityPriorityEntries } from "../../../lib/scans/accessibility-priority-group";
@@ -47,6 +49,7 @@ import {
 } from "../../../lib/scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../../server/scans/get-scan-by-id";
 import { deriveCanonicalOverallScoreForReport } from "../../../server/scans/canonical-overall-score";
+import { deriveCaliforniaRegulatoryScore } from "../../../lib/scans/california-regulatory-score";
 import { getPersistedCanonicalReportProjection } from "../../../server/scans/persisted-canonical-report-projection";
 import { getVisualEvidenceArtifacts } from "../../../lib/scans/visual-evidence";
 import {
@@ -705,6 +708,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   if (cmsPriority) findings.unshift({ ...cmsPriority, rank: 1, focus: "CMS security", vendors: [] });
   const integrityPriority = projectSiteIntegrityPriority(canonical.ownerUnifiedFindings);
   if (integrityPriority) findings.push({ ...integrityPriority, rank: findings.length + 1, focus: "Site integrity", vendors: [] });
+  findings.push(...projectCaliforniaRegulatoryPriorities(canonical.ownerUnifiedFindings).map(finding => ({ ...finding, rank: 1, focus: "CCPA/CPRA", vendors: [] })));
   findings.sort(comparePriorityReviewFindings);
   findings = groupAccessibilityPriorityEntries(findings);
   findings.forEach((finding, index) => { finding.rank = index + 1; });
@@ -824,6 +828,9 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
   const afterAcceptForms = projectPostAcceptForms(scanRecord);
   const privacyRows = evidenceRows.filter((row) => GDPR_TRANSPARENCY_REPORT_ROW_ID_SET.has(row.id) || row.id === "outdated_transfer_framework_reference");
   const scoreExplanation = projectScanScoreExplanation(scanRecord, score);
+  const californiaPrivacyReview = readCaliforniaPrivacyReviewFromConsent(retainedConsentAssessment(scanRecord));
+  const californiaScore = deriveCaliforniaRegulatoryScore({ assessment: californiaPrivacyReview,
+    checklistRows, unifiedFindings: canonical.ownerUnifiedFindings });
   const cmpAudit = projectCmpAudit({ scanId: scanRecord.scan.id, normalizedConcerns: canonical.normalizedConcerns,
     consentControlAssessment: retainedConsentAssessment(scanRecord), checklistRows: reportableChecklistRows,
     unifiedFindings: canonical.ownerUnifiedFindings, scoreExplanation, consentVendor });
@@ -900,6 +907,8 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     verifiedPolicyDocumentUrls: verifiedPolicyDocumentUrls(runtimeArtifacts),
     gpcResponse,
     gpcLaneStatus,
+    californiaPrivacyReview,
+    californiaScore,
     privacyAuditEvidence: readPrivacyAuditEvidence(runtimeArtifacts, scanRecord.scan.id),
     acceptPath,
     actionTimelines,

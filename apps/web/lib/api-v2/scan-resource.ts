@@ -1,3 +1,4 @@
+import { hasSuspendedGpcScoreEffect } from "../scans/gpc-customer-policy";
 import { projectScanFormsSummary, projectScanScoreExplanation } from "./scan-report-summary";
 import { isAccessibilityAuditLimited } from "@certscore/contracts";
 import { projectAccessibilityAuditSummary } from "../scans/accessibility-audit-evidence";
@@ -1037,7 +1038,7 @@ export function buildApiV2ScanResource(
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
   const formsSummary = canonicalResultState === "final" ? projectScanFormsSummary(scanRecord) : null;
   const scoreExplanation = canonicalResultState === "final" ? projectScanScoreExplanation(scanRecord, score) : null;
-  const scoreVersion = stringOrNull(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION;
+  const scoreVersion = hasSuspendedGpcScoreEffect(scanRecord) ? CANONICAL_OVERALL_SCORE_VERSION : stringOrNull(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION;
   const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
   const gpcResponse = deriveApiV2GpcResponse(scanRecord);
   const postAcceptObservation = deriveApiV2PostAcceptObservation(scanRecord);

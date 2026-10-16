@@ -21,7 +21,7 @@ const nanoAssistProvider: PolicyNanoAssistProvider = {
 };
 const body = `<main><h1>Riverside Restaurant</h1><p>${"Visit our family restaurant for lunch and dinner. Explore our seasonal menu, opening hours, reservations and local catering services. ".repeat(12)}</p></main>`;
 
-for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "blocked", "enumeration_overflow", "uninspected_frame", "uninspected_shadow", "loading_document"] as const) {
+for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "observed_notice_404", "blocked", "enumeration_overflow", "uninspected_frame", "uninspected_shadow", "loading_document"] as const) {
   test(`policy negative search: ${scenario}`, { timeout: 25_000 }, async () => {
     const server = createServer((request, response) => {
       response.setHeader("content-type", "text/html");
@@ -33,6 +33,7 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         response.statusCode = 403; response.end("Access denied"); return;
       }
       const extra = (scenario === "observed_but_unfetchable" || scenario === "seeded_observed_but_unfetchable") ? '<footer><a href="/privacy-policy">Privacy policy</a></footer>'
+        : scenario === "observed_notice_404" ? '<footer><a href="/notice">Notice at Collection</a></footer>'
         : scenario === "enumeration_overflow" ? Array.from({ length: 1001 }, (_, i) => `<button>Menu item ${i}</button>`).join("")
         : scenario === "uninspected_frame" ? '<iframe src="about:blank"></iframe>'
         : scenario === "uninspected_shadow" ? '<div id="custom-footer"></div><script>document.querySelector("#custom-footer").attachShadow({mode:"open"}).innerHTML="<span>Footer</span>"</script>'
@@ -50,20 +51,29 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         ...(scenario.startsWith("seeded_") ? { policySurfaceSeeds: [{ hintType: "privacy_policy",
           source: "canonical_legal_surface_hint" as const, url: new URL("/privacy-policy", normalizedUrl).href }] } : {}) });
       const inspection = derivePolicySurfaceInspectionOutcome({ modulesRun: [result.moduleRun], normalizedUrl,
-        negativeSearchEvidence: result.negativeSearchEvidence, policySurfaceObservations: result.policySurfaceObservations });
+        privacyChoiceInspection: result.privacyChoiceInspection, negativeSearchEvidence: result.negativeSearchEvidence, policySurfaceObservations: result.policySurfaceObservations });
       if (scenario === "missing" || scenario === "seeded_missing") {
         assert.equal(result.moduleRun.status, "completed", JSON.stringify(result.moduleRun));
         assert.ok(result.policySurfaceObservations.filter(row => row.status === "failed").length > 0,
           "Guessed URL 404s do not negate the independently completed observed-link search.");
         assert.equal(inspection.outcome, "no_privacy_policy_observed_complete_coverage", JSON.stringify(result));
         assert.ok(inspection.negativeSearchEvidence?.renderedInspectionHash);
+        assert.equal(inspection.privacyChoiceInspection?.coverage,"complete");
+        assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,0);
+        assert.equal(inspection.privacyChoiceInspection?.documentUrl,normalizedUrl);
       } else if (scenario === "observed_but_unfetchable" || scenario === "seeded_observed_but_unfetchable") {
         assert.equal(inspection.outcome, "privacy_policy_observed");
         assert.equal(inspection.documentRetrievalCoverageStatus, "insufficient");
         assert.equal(result.negativeSearchEvidence, undefined);
+      } else if (scenario === "observed_notice_404") {
+        const notice = result.policySurfaceObservations.find(row => row.surfaceType === "notice_at_collection" && row.status === "failed" && row.httpStatus === 404);
+        assert.ok(notice, "Expected the observed named notice link to retain its fetch result.");
+        assert.equal(notice.finalUrl, new URL("/notice", normalizedUrl).href);
+        assert.equal(notice.fetchFailureReason, "http_error");
       } else {
         assert.equal(inspection.outcome, "indeterminate_limited_coverage", scenario);
         assert.equal(result.negativeSearchEvidence, undefined);
+        assert.notEqual(inspection.privacyChoiceInspection?.coverage,"complete");
       }
     } finally {
       server.closeAllConnections(); server.close(); await once(server, "close");

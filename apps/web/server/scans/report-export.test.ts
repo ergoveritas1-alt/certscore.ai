@@ -12,6 +12,7 @@ import { renderCanonicalReportPdf } from "./report-export-pdf";
 import { aggregateFullSite } from "@website-signal-risk-scanner/shared";
 import { completedActionProjection } from "../../lib/scans/test-fixtures/action-execution-projection";
 import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
+import { deriveConsentControlAssessment } from "@certscore/contracts";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 
@@ -68,6 +69,29 @@ test("review focus changes presentation without changing evidence, findings or s
   assert.equal(review.source.scanId, record.scan.id);
   assert.equal(review.source.scanFrom, "eu_ie");
   assert.equal(review.score, null);
+});
+test("California export carries its own versioned starting-page score", () => {
+  const record = scanRecord();
+  const scanId = record.scan.id;
+  const documentUrl = "https://example.test/";
+  const parent = deriveConsentControlAssessment({scan:{scanId,finalUrl:documentUrl}});
+  parent.californiaPrivacyReview = {
+    contractVersion:"certscore.california-privacy-review.v1",policyVersion:"california-privacy-review.v1",
+    scanId,documentUrl,capturedAt:"2026-10-16T12:00:02.000Z",sourceHash:"a".repeat(64),verificationStatus:"verified",
+    scoreEffect:"none",applicability:"not_determined",choiceSurface:"observed",
+    inspection:{contractVersion:"certscore.privacy-choice-inspection.v1",documentUrl,capturedAt:"2026-10-16T12:00:01.000Z",
+      sourceHash:"b".repeat(64),scope:"rendered_named_links_and_buttons",coverage:"complete",namedChoiceCandidateCount:1,
+      unnamedControlCount:0,candidateEnumerationTruncated:false,uninspectedFrameCount:0,uninspectedShadowRootCount:0,
+      supportedDocumentLanguage:true,representativeDocument:true,documentStable:true},
+    controls:[{label:"Your Privacy Choices",kind:"your_privacy_choices",evidenceRef:"policy-surface:choice",
+      destinationUrl:"https://example.test/choices",destinationStatus:"retrieved"}],controlsTruncated:false,
+    optOutEffectiveness:"not_assessed",noticeAdequacy:"not_assessed",noticeTopics:[],noticeEvidenceRefs:[],
+  };
+  record.runtimeArtifacts = {...record.runtimeArtifacts,consentControlAssessment:parent};
+  const ca = buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
+  assert.equal(ca.californiaScore.score,100);
+  assert.equal(ca.californiaScore.coverage,"bounded");
+  assert.match(renderCanonicalReportPdf(ca).toString("latin1"),/California starting-page score: 100\/100/);
 });
 
 test("exports omit speculative action lanes but preserve independently verified clicks", () => {
@@ -132,7 +156,7 @@ test("full-site JSON and PDF retain scope while homepage projection and score in
   assert.match(pdf.toString("latin1"), /clinic.example\/unavailable/);
   assert.match(pdf.toString("latin1"),/additional-page-resource/);
   assert.equal(report.fullSite?.resources.length, 1);
-  assert.match(pdf.toString("latin1"),/Full-site score: 51/);
+  assert.match(pdf.toString("latin1"),/Full-site score .*GDPR\/ePrivacy-weighted.*51/);
   assert.equal(report.fullSite?.score?.value,51);
   assert.match(pdf.toString("latin1"),/robots.txt restricts crawl coverage/);
 });
@@ -313,7 +337,7 @@ test("projects GDPR Transparency and retained collection assessments into separa
   assert.equal(readPersistedScanReportProjection({ scan: scan.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);
 });
 
-test("bounded GPC measurements survive checked persistence, both report focuses and PDF without altering scores", async () => {
+test("bounded GPC measurements remain retained but hidden from both customer review focuses", async () => {
   const { gpcRuntimeFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
   const { gpcActivityComparisonFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
   const { buildGpcResponseAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-response-assessment");
@@ -340,15 +364,14 @@ test("bounded GPC measurements survive checked persistence, both report focuses 
   assert.ok(restored);
   const eu = buildCanonicalReportExport(restored, undefined, "gdpr_eprivacy")!;
   const ca = buildCanonicalReportExport(restored, undefined, "ccpa_cpra")!;
-  assert.deepEqual(eu.gpcResponse?.activityComparison, activityComparison);
-  assert.deepEqual(ca.gpcResponse, eu.gpcResponse);
-  assert.equal(eu.gpcResponse?.status, assessment.status);
+  assert.equal(eu.gpcResponse, null);
+  assert.equal(ca.gpcResponse, null);
   const { renderPulseMarkdown } = await import("../../lib/pulse/markdown");
   const markdown = renderPulseMarkdown({ domain: "example.test", scanId: scan.scan.id, scanStatus: "completed", gpcResponse: ca.gpcResponse, topFindings: [], links: {}, summary: {} });
-  assert.match(markdown, /Baseline -> GPC, first 1000 ms after each document commit/);
+  assert.doesNotMatch(markdown, /Baseline -> GPC/);
   const pdf = renderCanonicalReportPdf(ca).toString("latin1");
-  assert.match(pdf, /Baseline -> GPC, first 1000 ms after each document commit/);
-  assert.match(pdf, /advertising\/marketing requests 2 ->[\s\S]{0,100}1; analytics\/replay requests 1 -> 1/);
+  assert.doesNotMatch(pdf, /Baseline -> GPC/);
+  assert.match(pdf, /California starting-page score: Unavailable/);
   const foreign = { ...restored, scan: { ...restored.scan, id: "foreign-scan" } };
   assert.equal(buildCanonicalReportExport(foreign), null, "a report cannot be rebound to a different scan");
 });

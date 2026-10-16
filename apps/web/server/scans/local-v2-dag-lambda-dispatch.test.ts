@@ -16,13 +16,17 @@ import { LOCAL_V2_DAG_SCAN_PROCESSOR } from "./local-v2-dag-scan-config";
 function buildLambdaScanConfig(options: {
   orchestrationMode?: "single" | "sharded";
   localV2DagLambdaDebugOverrides?: Parameters<typeof buildQueuedFullScanConfig>[0]["localV2DagLambdaDebugOverrides"];
+  saleSharingEnabled?: boolean;
+  scanFrom?: "eu_de" | "eu_ie" | "california";
+  source?: string;
 } = {}) {
   return buildQueuedFullScanConfig({
     env: {
       CERTSCORE_V2_DAG_LAMBDA_ENABLED: "true",
       CERTSCORE_V2_DAG_LAMBDA_FUNCTION_NAME: "certscore-v2-dag-dev",
+      ...(options.saleSharingEnabled ? { CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED: "1" } : {}),
       ...(options.orchestrationMode ? { CERTSCORE_V2_DAG_LAMBDA_ORCHESTRATION_MODE: options.orchestrationMode } : {}),
-      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: "https://sqs.eu-west-1.amazonaws.com/123/certscore-v2-dag-local-results",
+      CERTSCORE_V2_DAG_LAMBDA_RESULT_QUEUE_URL: `https://sqs.${options.scanFrom === "california" ? "us-west-1" : options.scanFrom === "eu_de" ? "eu-central-1" : "eu-west-1"}.amazonaws.com/123/certscore-v2-dag-local-results`,
       CERTSCORE_V2_DAG_LAMBDA_TARGET_ENV: "local",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
       NODE_ENV: "development"
@@ -34,7 +38,8 @@ function buildLambdaScanConfig(options: {
     maxPages: 3,
     normalizedUrl: "https://example.com/",
     profile: "homepage",
-    source: "manual-dashboard"
+    scanFrom: options.scanFrom,
+    source: options.source ?? "manual-dashboard"
   });
 }
 
@@ -118,6 +123,65 @@ test("dispatch always includes GPC for sharded orchestration", () => {
     protocol: "passive_baseline_with_sec_gpc",
   });
   assert.equal(sharded.orchestrationMode, "sharded");
+});
+
+test("sale/sharing opt-out requires its own server flag and persisted exact-target rollout intent", () => {
+  const previous = process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
+  try {
+    for (const enabled of [true, false]) for (const rollout of ["all_eligible", "disabled"]) for (const serverFlag of ["1", "0"]) {
+      process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = serverFlag;
+      const config = buildLambdaScanConfig({ orchestrationMode: "sharded", scanFrom: "california" });
+      const intent = config.execution!.v2DagLambda as unknown as Record<string, unknown>;
+      intent.saleSharingOptOutEnabled = enabled;
+      intent.saleSharingOptOutRolloutMode = rollout;
+      const payload = buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: "opt-out-authorization" });
+      assert.equal(Boolean(payload.saleSharingOptOut), enabled && rollout === "all_eligible" && serverFlag === "1");
+      if (payload.saleSharingOptOut) {
+        assert.equal(payload.saleSharingOptOut.scanId, payload.scanId);
+        assert.equal(payload.saleSharingOptOut.exactTargetUrl, payload.targetUrl);
+      }
+    }
+    process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = "1";
+    for (const orchestrationMode of ["single", "sharded"] as const) {
+      const config = buildLambdaScanConfig({ orchestrationMode, scanFrom: "california" });
+      assert.equal(buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: "no-opt-out-intent" }).saleSharingOptOut, undefined);
+    }
+    const config = buildLambdaScanConfig({ scanFrom: "california" });
+    const intent = config.execution!.v2DagLambda as unknown as Record<string, unknown>;
+    intent.saleSharingOptOutEnabled = true;
+    intent.saleSharingOptOutRolloutMode = "all_eligible";
+    assert.equal(buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: "single-opt-out-intent" }).saleSharingOptOut, undefined);
+  } finally {
+    if (previous === undefined) delete process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
+    else process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = previous;
+  }
+});
+
+test("every eligible regional scan source receives sale/sharing intent and dispatch; single or disabled scans do not", () => {
+  const previous = process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
+  try {
+    process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = "1";
+    for (const scanFrom of ["eu_de", "eu_ie", "california"] as const) for (const source of ["manual-dashboard", "api_v2", "mac-mini-bot"]) {
+      const config = buildLambdaScanConfig({ orchestrationMode: "sharded", saleSharingEnabled: true, scanFrom, source });
+      const intent = config.execution?.v2DagLambda as Record<string, unknown>;
+      assert.equal(intent.saleSharingOptOutEnabled, true);
+      assert.equal(intent.saleSharingOptOutRolloutMode, "all_eligible");
+      const payload = buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: `${scanFrom}-${source}` });
+      assert.equal(payload.saleSharingOptOut?.scanId, `${scanFrom}-${source}`);
+      assert.equal(payload.saleSharingOptOut?.exactTargetUrl, "https://example.com/");
+    }
+    for (const options of [
+      { orchestrationMode: "single", saleSharingEnabled: true, scanFrom: "california" },
+      { orchestrationMode: "sharded", saleSharingEnabled: false, scanFrom: "california" },
+      { orchestrationMode: "single", saleSharingEnabled: true, scanFrom: "eu_ie" },
+    ] as const) {
+      const config = buildLambdaScanConfig(options);
+      assert.equal(buildLocalV2DagLambdaDispatchPayload({ scanConfig: config, scanId: "ineligible" }).saleSharingOptOut, undefined);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED;
+    else process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = previous;
+  }
 });
 
 test("carries bounded prior policy URLs into Lambda as acceleration hints", () => {

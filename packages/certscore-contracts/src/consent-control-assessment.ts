@@ -1,4 +1,5 @@
 import { cmpAuditAssessmentSchema, type CmpAuditAssessment } from "./cmp-audit-evidence";
+import { californiaPrivacyReviewSchema } from "./california-privacy-review";
 import { CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, consentControlInspectionSchema, initialConsentSelectionSchema, isControlInspectionComplete, type InitialConsentSelection, type ConsentControlInspection } from "./consent-control-inspection";
 import { z } from "zod";
 import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
@@ -92,6 +93,9 @@ export const consentControlAssessmentSchema = z.object({
   evidencePolicy: z.literal(CONSENT_CONTROL_EVIDENCE_POLICY).optional(),
   visualEvidence: consentControlVisualEvidenceSchema.optional(),
   cmpAudit: cmpAuditAssessmentSchema.optional(),
+  // Independently versioned policy-lane assessment. Never changes A/R/O states,
+  // their provenance hash, action authorization, or first-layer completeness.
+  californiaPrivacyReview: californiaPrivacyReviewSchema.optional(),
   visualComparison: consentControlVisualComparisonSchema.optional(),
   assessmentStatus: consentControlAssessmentStatusSchema,
   scan: z.object({
@@ -145,6 +149,11 @@ export const consentControlAssessmentSchema = z.object({
     computedAt: z.string().datetime(),
   }),
 }).superRefine((assessment, context) => {
+  const california = assessment.californiaPrivacyReview;
+  if (california && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
+      california.scanId !== assessment.scan.scanId || california.documentUrl !== assessment.scan.finalUrl)) {
+    context.addIssue({code: z.ZodIssueCode.custom, message: "California choice assessment must bind the same usable scan and final document."});
+  }
   if (assessment.cmpAudit && assessment.cmpAudit.scanId !== assessment.scan.scanId) context.addIssue({ code: z.ZodIssueCode.custom, message: "CMP audit must bind the assessment scan." });
   const visual = assessment.visualComparison;
   if (visual && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
@@ -181,6 +190,11 @@ export const consentControlAssessmentSchema = z.object({
 });
 
 export type ConsentControlAssessment = z.infer<typeof consentControlAssessmentSchema>;
+
+export function readCaliforniaPrivacyReviewFromConsent(value: unknown) {
+  const parsed = consentControlAssessmentSchema.safeParse(value);
+  return parsed.success ? parsed.data.californiaPrivacyReview ?? null : null;
+}
 export type ConsentControlAssessmentControlResult = z.infer<typeof consentControlAssessmentControlResultSchema>;
 export type ConsentControlAssessmentEvidence = z.infer<typeof consentControlAssessmentEvidenceSchema>;
 

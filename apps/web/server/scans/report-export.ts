@@ -5,6 +5,7 @@ import { readPrivacyAuditEvidence, resolveReportReviewFocus, reviewFocusScopeNot
 import {
   consentControlAssessmentSchema,
   SITE_INTEGRITY_FINDING_ID,
+  readCaliforniaPrivacyReviewFromConsent,
   type CollectionSurfaceAssessment,
 } from "@certscore/contracts";
 import {
@@ -16,6 +17,7 @@ import type { ScanDetailResponse } from "./get-scan-by-id";
 import { getPersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
 import { selectSiteIntegrityFinding } from "../../lib/scans/site-integrity-report";
+import { deriveCaliforniaRegulatoryScore } from "../../lib/scans/california-regulatory-score";
 
 export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v6" as const;
 const MAX_APPENDIX_INVENTORY_ROWS = 500;
@@ -308,6 +310,8 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
   const assessment = consentAssessment(scanRecord);
+  const californiaScore = deriveCaliforniaRegulatoryScore({ assessment: readCaliforniaPrivacyReviewFromConsent(assessment),
+    checklistRows: canonical.checklistRows, unifiedFindings: canonical.ownerUnifiedFindings });
   const findings = canonical.ownerUnifiedFindings as Array<Record<string, unknown>>;
   const siteIntegrity = selectSiteIntegrityFinding(canonical.ownerUnifiedFindings);
   const normalizedConcerns = canonical.normalizedConcerns as Array<Record<string, unknown>>;
@@ -322,7 +326,8 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     "CCPA/CPRA review focuses on GPC response, observed privacy choices, retained notices and tracking inventory.",
     privacyAuditEvidence ? `${privacyAuditEvidence.controls.length} observed privacy-choice/settings surfaces${privacyAuditEvidence.contractVersion === "certscore.privacy-audit-evidence.v2" && privacyAuditEvidence.controlCandidates.length ? ` and ${privacyAuditEvidence.controlCandidates.length} link candidates needing proof` : ""}, plus ${privacyAuditEvidence.notices.length} notice documents, are retained in the bounded workpaper. Presence does not establish a working opt-out or adequate disclosure.`
       : "Verified California privacy-choice and notice evidence is unavailable; absence and disclosure adequacy remain unknown.",
-    "Existing technical findings are retained. A separate CCPA/CPRA score is not available; the overall score must not be interpreted as a CCPA/CPRA compliance score.",
+    californiaScore.score === null ? "California score is unavailable because verified review coverage is insufficient. The overall score uses GDPR/ePrivacy-weighted rules." :
+      `California starting-page score: ${californiaScore.score}/100 under ${californiaScore.policyVersion}. This is a bounded risk signal, not a compliance grade.`,
   ];
 
   return {
@@ -333,6 +338,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     reviewFocus: focus,
     reviewFocusLabel: REVIEW_FOCUS_LABELS[focus],
     reviewScope: reviewFocusScopeNote(focus, scanRecord.scan.scanFromValue),
+    californiaScore,
     privacyAuditEvidence,
     accessibilityAudit: projectAccessibilityAuditSummary(scanRecord.runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id),
     accessibilityEvidence: readAccessibilityAudit(scanRecord.runtimeArtifacts?.accessibilityAudit, scanRecord.scan.id)?.observation ?? null,
@@ -379,7 +385,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       },
       {
         code: "privacy_opt_out_execution_not_tested",
-        detail: "Do Not Sell/Share opt-out execution and notice placement at collection points were not assessed. Retained choice outcomes describe only their verified bounded scope.",
+        detail: "Sale/sharing opt-out execution is assessed only where a supported, verified bounded observation is retained. Notice placement at collection points remains unassessed. Missing observation does not establish a working or broken opt-out.",
       },
       ...(assessment?.limitations ?? []).map((limitation) => ({
         code: limitation.code,

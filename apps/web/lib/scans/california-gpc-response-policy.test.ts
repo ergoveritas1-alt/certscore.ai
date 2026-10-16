@@ -5,7 +5,7 @@ import { gpcRuntimeFixture } from "../../../../packages/certscore-contracts/src/
 import { buildGpcResponseAssessment } from "../../../../packages/certscore-scan-core/src/gpc-response-assessment";
 import {
   CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS,
-  deriveCaliforniaGpcResponsePolicy,
+  deriveHistoricalCaliforniaGpcResponsePolicy as deriveCaliforniaGpcResponsePolicy,
 } from "./california-gpc-response-policy";
 
 function assessment(input: {

@@ -324,6 +324,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     { text: `Scan region: ${report.scan.scanFrom || "Not retained"}  |  Duration: ${formatDuration(report.scan.durationMs)}`, size: 9, kind: "caption" },
     { text: `Report generated: ${report.generatedAt}`, size: 9, kind: "caption", gapAfter: image ? 6 : 11 },
     ...wrappedLines(`${report.reviewFocusLabel} focus. ${report.reviewScope}`, { size: 9, gapAfter: 5 }),
+    ...(report.reviewFocus === "ccpa_cpra" ? wrappedLines(`California starting-page score: ${report.californiaScore.score === null ? "Unavailable" : `${report.californiaScore.score}/100`} (${report.californiaScore.policyVersion}; ${report.californiaScore.coverage} coverage). This is a bounded risk signal, not a compliance grade.`, { size: 9, gapAfter: 5 }) : []),
     ...(image
       ? [
           { text: "Captured page evidence", size: 9, bold: true, kind: "caption" as const, gapAfter: 3 },
@@ -370,7 +371,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     lines.splice(0,0,...[
       sectionHeading("Scan scope and resource inventory"),
       ...wrappedLines(`${f.scope}. Additional pages: Not assessed for consent, CMP, policy, GDPR transparency or transport.`),
-      ...wrappedLines(`${f.scoreScope}: ${f.score?.value ?? "Unavailable"}/100. ${f.score?.scope ?? "Scored evidence unavailable."}`),
+      ...wrappedLines(`${f.scoreScope} (overall, GDPR/ePrivacy-weighted): ${f.score?.value ?? "Unavailable"}/100. ${f.score?.scope ?? "Scored evidence unavailable."}`),
       ...wrappedLines(`${f.condition} ${f.countingScope}`),
       ...wrappedLines(`Max pages including homepage: ${state.requested.maxPages}; requested concurrency: ${state.requested.concurrency}; wait between starts: ${state.requested.waitSeconds}s; region: ${state.region}.`),
       ...wrappedLines(`Effective concurrency: ${state.effective.concurrency}; effective wait: ${state.effective.waitSeconds}s. Status: ${state.status}; stop reason: ${state.stopReason??"In progress"}.`),

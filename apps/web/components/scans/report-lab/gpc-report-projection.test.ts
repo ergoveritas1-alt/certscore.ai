@@ -67,20 +67,10 @@ function gpcFinding(input: {
   } as unknown as UnifiedFindingDisplayPacket;
 }
 
-test("projects a surfaced typed GPC finding with proof, deltas, and the exact California effect", () => {
-  const projection = buildGpcResponseReportProjection([gpcFinding({ deductionPoints: 15 })]);
-
-  assert.equal(projection?.assessment.findingTitle, "No observable GPC response");
-  assert.equal(projection?.assessment.comparison.enabledProof.secGpcHeaderValue, "1");
-  assert.equal(projection?.assessment.comparison.deltas.trackers.shared.length, 1);
-  assert.equal(projection?.californiaDeductionPoints, 15);
-  assert.equal(projection?.headline, "No observable response");
-  assert.match(projection?.coverageSummary ?? "", /did not observe a qualifying reduction/i);
-  assert.match(projection?.coverageSummary ?? "", /not a legal compliance conclusion/i);
-  assert.deepEqual(projection?.evidenceRefs, [
-    "s3://evidence/baseline.json",
-    "s3://evidence/gpc.json",
-  ]);
+test("historically surfaced GPC results are hidden without changing retained evidence", () => {
+  const finding=gpcFinding({deductionPoints:15}), before=structuredClone(finding);
+  assert.equal(buildGpcResponseReportProjection([finding]),null);
+  assert.deepEqual(finding,before);
 });
 
 test("separates verified GPC delivery from an incomplete baseline comparison", () => {
@@ -156,12 +146,12 @@ test("responsive GPC card describes a retained partial reduction", async () => {
 test("fails closed for non-surfaced packets and malformed score effects", () => {
   assert.equal(buildGpcResponseReportProjection([gpcFinding({ presentationStatus: "suppress" })]), null);
   assert.equal(
-    buildGpcResponseReportProjection([gpcFinding({ deductionPoints: 5 })])?.californiaDeductionPoints,
-    0,
+    buildGpcResponseReportProjection([gpcFinding({ deductionPoints: 5 })]),
+    null,
   );
 });
 
-test("a short-window measurement preserves the independent California deduction and stored response", async () => {
+test("a short-window measurement stays hidden while its original evidence is preserved", async () => {
   const { gpcActivityComparisonFixture } = await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
   const finding = gpcFinding({ deductionPoints: 15 });
   assert.ok(finding.details?.family === "privacy_signal" && finding.details.kind === "gpc_response");
@@ -169,8 +159,7 @@ test("a short-window measurement preserves the independent California deduction 
   const zero = { baselineRequests: 0, gpcRequests: 0, baselineServices: 0, gpcServices: 0 };
   finding.details.activityComparison = gpcActivityComparisonFixture({ durationMs: 250, activity: { advertisingMarketing: zero, analyticsReplay: zero } });
   const result = buildGpcResponseReportProjection([finding]);
-  assert.equal(result?.activityComparison?.durationMs, 250);
-  assert.equal(result?.californiaDeductionPoints, 15);
-  assert.deepEqual(result?.assessment, buildGpcResponseReportProjection([before])?.assessment);
+  assert.equal(result, null);
+  assert.equal(buildGpcResponseReportProjection([before]), null);
   assert.deepEqual(finding.scoreEffects, before.scoreEffects);
 });

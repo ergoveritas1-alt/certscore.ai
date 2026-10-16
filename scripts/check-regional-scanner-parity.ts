@@ -136,6 +136,10 @@ const observed = REGIONS.map((region) => {
   if (postRefusalRejectWorkerEnabled !== "1") {
     errors.push(`${region}: Reject worker enable flag expected 1, received ${postRefusalRejectWorkerEnabled}.`);
   }
+  const saleSharingOptOutEnabled = env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED ?? "0";
+  if (saleSharingOptOutEnabled !== "1") {
+    errors.push(`${region}: Sale/sharing observer enable flag expected 1, received ${saleSharingOptOutEnabled}.`);
+  }
   const context = EXPECTED_CONTEXT[region];
   const required = [
     ["Options/Customize worker", env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, "0"],

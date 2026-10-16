@@ -6,7 +6,7 @@ const REPORT_FIELDS = new Set([
   "scan", "score", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
   "coverage", "controls", "consentControlsAvailable", "consentVendor", "consentRows", "gdprTransparencyRows", "detailedEvidence", "cmpAudit", "cmsSecurity",
   "preConsentRuntimeRows", "trackingExternalRows", "transportRows", "relatedRows",
-  "privacyAuditEvidence", "policySurfaceCoverage", "gpcResponse", "gpcLaneStatus", "acceptPath", "rejectPath", "accessibilityAudit", "accessibilityEvidence",
+  "privacyAuditEvidence", "californiaPrivacyReview", "policySurfaceCoverage", "acceptPath", "rejectPath", "accessibilityAudit", "accessibilityEvidence",
   "choicePathComparison", "timeline", "inventory", "inventorySummary", "resourceInventory",
   "trackerVendors", "collectionFields", "collectionLimitations", "collectionStatus",
   "collectionSurfaces", "collectionTableRows", "siteMetadata", "fullSiteReport",
@@ -28,7 +28,7 @@ export function buildReportDisplayExport(report: Record<string, unknown>, option
   for (const [key, schema] of [["detailedEvidence", detailedEvidenceReportSchema], ["cmpAudit", publicCmpAuditSchema], ["cmsSecurity", publicCmsSecuritySchema], ["privacyAuditEvidence", privacyAuditEvidenceSchema]] as const) {
     if (report[key] === undefined || report[key] === null) continue;
     const parsed = schema.safeParse(report[key]);
-    if (parsed.success && (!scanId || parsed.data.scanId === scanId)) report[key] = parsed.data;
+    if (parsed.success && (!scanId || parsed.data.scanId === scanId)) report[key] = key === "detailedEvidence" && "sections" in parsed.data ? { ...parsed.data, sections: parsed.data.sections.filter(row => row.id !== "gpc") } : parsed.data;
     else delete report[key];
   }
   const seen = new Map<string, string>();

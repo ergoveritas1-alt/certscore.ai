@@ -1,6 +1,7 @@
 import { afterRejectScoringNarrative, readAfterRejectScoringAssessment, type AfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { FORM_DESTINATION_FINDING_ID, formDestinationProjectionSchema, type FormDestinationProjection } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, cmsSecurityProjectionSchema, type CmsSecurityProjection } from "@certscore/contracts";
+import { CALIFORNIA_PRIVACY_REVIEW_IDS, readCaliforniaPrivacyReviewFromConsent, type CaliforniaPrivacyReview } from "@certscore/contracts";
 import { SITE_INTEGRITY_FINDING_ID, siteIntegrityProjectionSchema, type SiteIntegrityProjection } from "@certscore/contracts";
 import { REJECT_CLICK_TRACKING_COPY } from "./consent-action-copy";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
@@ -108,6 +109,7 @@ import { buildPromotionGradePreconsentRequests } from "./preconsent-public-evide
 export type UnifiedFindingDetails =
   | { family: "form_destinations"; projection: FormDestinationProjection }
   | { family: "cms_security"; projection: CmsSecurityProjection }
+  | { family: "california_privacy_review"; projection: CaliforniaPrivacyReview }
   | { family: "site_integrity"; projection: SiteIntegrityProjection }
   | {
       family: "coverage_gap";
@@ -1826,6 +1828,10 @@ function buildUnifiedFindingDetails(input: {
   if (input.findingId === CMS_SECURITY_FINDING_ID) {
     const projection = cmsSecurityProjectionSchema.safeParse(input.fallbackEvidence?.cmsSecurity);
     return projection.success ? { family: "cms_security", projection: projection.data } satisfies UnifiedFindingDetails : undefined;
+  }
+  if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === input.findingId)) {
+    const projection = readCaliforniaPrivacyReviewFromConsent(input.fallbackEvidence?.consentControlAssessment);
+    return projection ? {family: "california_privacy_review", projection} satisfies UnifiedFindingDetails : undefined;
   }
   if (input.findingId === SITE_INTEGRITY_FINDING_ID) {
     const projection = siteIntegrityProjectionSchema.safeParse(input.fallbackEvidence?.siteIntegrity);

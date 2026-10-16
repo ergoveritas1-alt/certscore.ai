@@ -8,6 +8,7 @@ import type { ShadowEvidenceStatus, ShadowFinding } from "./report-lab/shadow-re
 import { EvidenceJumpLink } from "./evidence-jump-link";
 import { findingEvidenceAnchor } from "../../lib/scans/report-evidence-navigation";
 import { topFindingReaderSummary } from "../../lib/scans/top-finding-reader-summary";
+import { ENFORCEMENT_REVIEWED_AT, type regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
 const monoClass = "font-mono tabular-nums";
 
 export function DisclosureChevron({ className = "" }: { className?: string }) {
@@ -103,7 +104,7 @@ export function EvidenceTools({
   );
 }
 
-export function FindingRow({ finding, dense = false, priority = false, pages, observations, idPrefix = "" }: { finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; observations?: SitePriorityFinding["observations"]; idPrefix?: string }) {
+export function FindingRow({ finding, dense = false, priority = false, pages, observations, idPrefix = "", regulatoryContext }: { regulatoryContext?: ReturnType<typeof regulatoryReviewContext>; finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; observations?: SitePriorityFinding["observations"]; idPrefix?: string }) {
   const evidenceAnchor = findingEvidenceAnchor(finding.id, finding.evidenceJson.presentationGroup);
   const readerSummary = priority ? topFindingReaderSummary(finding) : finding.summary;
   return (
@@ -113,6 +114,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
         <span className={`min-w-0 ${priority ? "pr-7 sm:pr-0" : ""}`}>
           <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}{pages?.length ? <span className="ml-2 inline-block text-xs font-normal text-zinc-500">{pages.length === 1 && pages[0]?.homepage ? "Starting page" : `${pages.length} ${pages.length === 1 ? "page" : "pages"}`}</span> : null}</span>
           {!dense ? <span className={`${priority ? "mt-0.5 text-xs leading-5 text-zinc-500 sm:pr-4" : "mt-1 text-sm leading-6 text-zinc-600"} overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] group-open:[display:block] group-open:[-webkit-line-clamp:unset]`}>{readerSummary}</span> : null}
+          {regulatoryContext ? <span className="mt-2 block max-w-3xl text-sm leading-6 text-zinc-700"><span className="font-semibold text-zinc-900">Why it matters: </span>{regulatoryContext.why}</span> : null}
           {!dense ? <span className="mt-3 inline-flex sm:hidden"><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
         </span>
         {!dense && finding.focus ? <span className={`${priority ? "hidden self-center rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
@@ -124,6 +126,20 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
         {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{finding.summary}</p> : null}
         {priority && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{finding.summary}</p> : null}
+        {regulatoryContext ? <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
+          <a href={regulatoryContext.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{regulatoryContext.rule} ↗</a>
+          {regulatoryContext.examples.length ? <details className="group/enforcement mt-3">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 [&::-webkit-details-marker]:hidden">Related enforcement <DisclosureChevron className="group-open/enforcement:rotate-180" /></summary>
+            <div className="mt-3 space-y-4">{regulatoryContext.examples.map(example => <article key={example.id}>
+              <p className="text-sm font-semibold">{example.name} <span className="font-normal text-zinc-500">· {example.date.slice(0, 4)}</span></p>
+              <p className="mt-1 text-xs text-zinc-500">{example.authority}</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-700">{example.conduct}</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-700">{example.outcome}</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-600"><span className="font-medium">Connection to this finding: </span>{example.relevance}</p>
+              <a className="mt-2 inline-block text-xs text-sky-800 underline underline-offset-2" href={example.url} target="_blank" rel="noreferrer">Read the official case ↗</a>
+            </article>)}<p className="text-xs text-zinc-500">Examples reviewed {ENFORCEMENT_REVIEWED_AT}.</p></div>
+          </details> : null}
+        </div> : null}
         {pages?.length ? <details className="group/pages mb-4 border-b border-zinc-200 pb-3">
           <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold [&::-webkit-details-marker]:hidden">Affected pages <DisclosureChevron className="text-zinc-400 group-open/pages:rotate-180" /></summary>
           <ul className="mt-3 max-h-36 space-y-1 overflow-auto text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Starting page" : ""}</li>)}</ul>

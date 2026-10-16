@@ -4,6 +4,8 @@ import { cmpAuditRowsEqual } from "@certscore/contracts";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
 import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
+import { CALIFORNIA_PRIVACY_REVIEW_IDS, californiaPrivacyReviewFindingIds, readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
+import { californiaFindingScoreEffect } from "./california-regulatory-score";
 import { buildSiteIntegrityScoreEffects } from "./site-integrity-score-policy";
 import { buildAccessibilityScoreEffects, buildFocusAccessibilityScoreEffects } from "./accessibility-score-policy";
 import { qualifiesSiteIntegrityReview, SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
@@ -2605,6 +2607,13 @@ export function deriveConcernPolicy(input: {
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [],
       regulatoryChecklistEligibility: "none", scoreEffects: [] };
   }
+  if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === input.concern.suggestedUnifiedFindingId)) {
+    const eligible = input.concern.originType === "runtime_artifact" && californiaPrivacyReviewFindingIds(readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment)).includes(input.concern.suggestedUnifiedFindingId!);
+    const assessment = readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment);
+    return {allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
+      promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [], regulatoryChecklistEligibility: "none",
+      scoreEffects: eligible && assessment ? californiaFindingScoreEffect(input.concern.suggestedUnifiedFindingId!, assessment.sourceHash) : []};
+  }
   if (input.concern.suggestedUnifiedFindingId === SITE_INTEGRITY_FINDING_ID) {
     const eligible = input.concern.originType === "runtime_artifact" && qualifiesSiteIntegrityReview(input.rawEvidence?.siteIntegrity);
     return { allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
@@ -2733,9 +2742,9 @@ export function deriveConcernPolicy(input: {
       getFirstString(input.rawEvidence, ["legalInterpretation"]) === "not_assessed";
     return {
       allowedNarrativeTier: validAssessment && (status !== "indeterminate" || (typedAssessment?.contractVersion === "certscore.gpc-response-assessment.v3" && typedAssessment.observation.status === "complete")) ? "moderate" : "weak",
-      externalSurfacingEligibility: validAssessment ? "eligible" : "suppress",
+      externalSurfacingEligibility: validAssessment ? "audit_only" : "suppress",
       negativeEvidenceFlags: [],
-      promotionEligibility: validAssessment ? "eligible" : "blocked",
+      promotionEligibility: validAssessment ? "internal_only" : "blocked",
       regulatoryChecklistEligibility: "none",
       ...(validAssessment && scoreEffects.length > 0 ? { scoreEffects } : {}),
     };

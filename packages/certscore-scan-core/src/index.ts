@@ -1359,6 +1359,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
   const policySurfaceInspection = derivePolicySurfaceInspectionOutcome({
     normalizedUrl,
     negativeSearchEvidence: policySurfaceResult?.negativeSearchEvidence,
+    privacyChoiceInspection: policySurfaceResult?.privacyChoiceInspection,
     modulesRun: boundedModulesRun,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });

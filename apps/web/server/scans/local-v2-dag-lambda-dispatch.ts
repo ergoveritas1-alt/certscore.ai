@@ -1,3 +1,4 @@
+import { saleSharingOptOutDispatchSchema, SALE_SHARING_OPT_OUT_POLICY, type SaleSharingOptOutDispatch } from "@certscore/contracts";
 import {
   isFreshPriorScanAccelerationSource,
   normalizeUrl,
@@ -61,6 +62,7 @@ export type LocalV2DagLambdaDispatchPayload = {
     SharedCrawlSeedHint,
     "confidence" | "hintType" | "source" | "sourceCompletedAt" | "sourceScanId" | "url"
   >>;
+  saleSharingOptOut?: SaleSharingOptOutDispatch;
   postAcceptObservation?: PostAcceptLambdaDispatchConfig;
   postRefusalObservation?: PostRefusalLambdaDispatchConfig;
   gpcObservation?: GpcObservationDispatchConfig;
@@ -436,6 +438,11 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     scanId: input.scanId,
     targetUrl,
   });
+  // Independent authorization and rollout; never reuse cookie action flags.
+  const saleSharingOptOut = intent.orchestrationMode === "sharded" && intent.saleSharingOptOutEnabled === true &&
+    intent.saleSharingOptOutRolloutMode === "all_eligible" && process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED === "1" &&
+    new URL(targetUrl).protocol === "https:" && !new URL(targetUrl).port
+      ? saleSharingOptOutDispatchSchema.parse({ policyVersion: SALE_SHARING_OPT_OUT_POLICY, enabled: true, scanId: input.scanId, exactTargetUrl: targetUrl }) : undefined;
   const gpcObservation = intent.orchestrationMode === "sharded"
     ? {
         contractVersion: GPC_OBSERVATION_DISPATCH_CONTRACT_VERSION,
@@ -463,6 +470,7 @@ export function buildLocalV2DagLambdaDispatchPayload(input: {
     processor: LOCAL_V2_DAG_SCAN_PROCESSOR,
     ...(policySurfaceSeeds.length > 0 ? { policySurfaceSeeds } : {}),
     ...postActionObservation,
+    ...(saleSharingOptOut ? { saleSharingOptOut } : {}),
     ...(gpcObservation ? { gpcObservation } : {}),
     ...(runtimeGraph ? { runtimeGraph } : {}),
     productionFindingIntegration: false,

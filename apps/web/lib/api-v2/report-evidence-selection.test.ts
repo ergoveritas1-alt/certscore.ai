@@ -6,6 +6,19 @@ import { buildReportDisplayExport } from "./report-display-export";
 import { buildReportEvidencePage, ReportPageCursorError } from "./report-evidence-page";
 
 const scanId = "9ba99a8c-b1ad-44c1-985f-92cef760ab40";
+test("historical GPC report sections stay hidden in focused and complete customer exports", () => {
+  const section = { id: "gpc", title: "Historical GPC result", recap: "Retained internally", displayStatus: "Review", counts: { checks: 1, review: 1, limited: 0, observed: 0, unsupported: 0 }, rows: [] };
+  const report = { scan: { id: scanId }, gpcResponse: { status: "no_observable_response" }, gpcLaneStatus: "completed",
+    detailedEvidence: { version: "certscore.detailed-evidence.v1", scanId, interpretation: "Retained evidence", sections: [section] } };
+  const original = structuredClone(report);
+  for (const input of [report, selectReportEvidenceSection(report, "gpc").report]) {
+    const output = buildReportDisplayExport(input) as Record<string, any>;
+    assert.equal(output.gpcResponse, undefined);
+    assert.equal(output.gpcLaneStatus, undefined);
+    assert.deepEqual(output.detailedEvidence.sections, []);
+  }
+  assert.deepEqual(report, original, "original retained evidence must remain intact");
+});
 test("accessibility evidence survives focused selection, display export and pagination", () => {
   const audit = { status: "limited", failedRuleCount: 1 };
   const evidence = { violations: [{ ruleId: "image-alt", representativeNodes: [{ selectors: ["#logo"] }] }] };
