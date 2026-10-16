@@ -578,10 +578,13 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   const basicExpiries = applyClientFacts(bundle, set, candidates, observations, configuredCookieNames(basic.provider, basic.configuredConsentCookies));
   if (basicExpiries.length) candidates.find(row => row.id === "duration")!.inventory = { expiries: basicExpiries };
   if (basicDeclarationsUsable && basic.serviceNames.length) {
-    const services = [...new Set(basic.serviceNames)].map(name => ({ name, source: "cmp_api_inventory" as const })) as NonNullable<NonNullable<CmpAuditAssessment["rows"][number]["inventory"]>["services"]>;
+    const services = [...new Set(basic.serviceNames)].map(name => ({ name, source: "cmp_api_inventory" as const,
+      ...(basic.sdkServiceInventory ? {sourceRef: `didomi_required_vendors.v1/record:${basic.sdkServiceInventory.records.findIndex(record => record.name === name)}`} : {}) })) as NonNullable<NonNullable<CmpAuditAssessment["rows"][number]["inventory"]>["services"]>;
     for (const service of candidates.find(row => row.id === "services")!.inventory?.services ?? [])
       if (!services.some(row => row.name === service.name) && services.length < 100) services.push(service);
-    set("services", "observed", `${services.length} services identified in the inspected CMP.${basic.serviceDisclosures?.length ? " Includes its explicit partner disclosure; the full inventory was not inspected." : ""} Individual service controls were not tested.`);
+    set("services", "observed", basic.sdkServiceInventory
+      ? `${services.length} services explicitly named in the CMP's already-loaded configuration. This bounded sample does not establish visible disclosure, service controls or complete inventory coverage.`
+      : `${services.length} services identified in the inspected CMP.${basic.serviceDisclosures?.length ? " Includes its explicit partner disclosure; the full inventory was not inspected." : ""} Individual service controls were not tested.`);
     const row = candidates.find(row => row.id === "services")!;
     row.inventory = { ...row.inventory, services };
   }
@@ -595,6 +598,6 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, assign, assessment.rows, observations.filter(capture => capture.networkCompleted)); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v6", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: basic.sdkServiceInventory ? "independent_cmp_basic_facts.v7" : "independent_cmp_basic_facts.v6", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

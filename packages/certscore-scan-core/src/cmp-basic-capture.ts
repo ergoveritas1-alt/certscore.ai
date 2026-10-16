@@ -1,5 +1,5 @@
 import { cmpInventoryScopeSelector, readCmpScopeInventory } from "./cmp-scope-inventory.js";
-import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, type CmpBasicEvidence } from "@certscore/contracts";
+import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, projectSdkCmpServices, type CmpBasicEvidence } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { Page } from "playwright";
 import { readBorlabsPreferenceInventory, readPreferenceControls, classifyControls } from "./cmp-preferences-observer.js";
@@ -8,6 +8,7 @@ import { readCookieYesPreferenceInventory } from "./cookieyes-preference-invento
 import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
 import { readPassiveCookiebotLoadedInventory } from "./cookiebot-loaded-inventory.js";
 import { readPassiveConsentmanagerLoadedInventory } from "./consentmanager-loaded-inventory.js";
+import { readPassiveDidomiServiceInventory } from "./didomi-service-inventory.js";
 
 /** Opportunistic read in the existing consent-proof visit. No action, wait,
  * navigation, retry or late join. The caller retains only a settled, loader-bound
@@ -64,6 +65,17 @@ export async function captureCmpBasicEvidence(input: {
   if(inventory) packet.captureProgress!.declarationsAtMs=Date.now()-input.scanStartedAtMs;
   if(inventory && "truncated" in inventory && inventory.truncated) packet.limitations.push("cmp_inventory_bounded");
   if(definition.preferenceInventory) packet.limitations.push(definition.preferenceInventory,"loaded_configuration_not_visibility_proof");
+  if (definition.passiveServiceInventory && input.isCurrent()) {
+    const services = await readPassiveDidomiServiceInventory(page, definition, before.token);
+    if (services) {
+      packet.contractVersion = "certscore.cmp-basic-evidence.v4";
+      packet.sdkServiceInventory = services;
+      packet.serviceNames = projectSdkCmpServices(services);
+      packet.captureProgress!.declarationsAtMs = Date.now() - input.scanStartedAtMs;
+      packet.limitations.push("loaded_configuration_not_visibility_proof", "service_inventory_not_complete");
+      if (services.truncated) packet.limitations.push("cmp_inventory_bounded");
+    }
+  }
   if (definition.passiveLoadedInventory && input.isCurrent()) {
     const loaded=definition.passiveLoadedInventory.version==="consentmanager_passive_loaded_inventory.v1"
       ? await readPassiveConsentmanagerLoadedInventory(page,definition) : await readPassiveCookiebotLoadedInventory(page,definition);

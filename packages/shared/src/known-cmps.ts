@@ -89,6 +89,12 @@ export type KnownCmpDefinition = {
     rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; shadowContentSelector?: string; sdkPath: string[] };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
+  /** Read only already-ready configured vendor names, without opening UI. */
+  passiveServiceInventory?: {
+    version: "didomi_required_vendors.v1";
+    rootSelector: "#didomi-host";
+    noticeSelector: ".didomi-notice-banner, .didomi-notice-popup, #didomi-notice";
+  };
   /** Public declarations already loaded under the verified preference panel.
    * Collapsed data is configuration evidence, never visible inventory proof. */
   preferenceLoadedInventory?: {
@@ -828,6 +834,8 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     acceptConfirmation: { kind: "cmp_api_consent_state_changed", provider: "didomi" },
     acceptControlSelectors: ["#didomi-notice-agree-button"],
     canonicalName: "Didomi",
+    passiveServiceInventory: {version: "didomi_required_vendors.v1", rootSelector: "#didomi-host",
+      noticeSelector: ".didomi-notice-banner, .didomi-notice-popup, #didomi-notice"},
     preferenceScopeSelector: "#didomi-host .didomi-notice-banner, #didomi-host .didomi-notice-popup, #didomi-host #didomi-notice",
     preferenceDialogBinding: { version: "didomi_preferences.v1", controlSelector: "#didomi-notice-learn-more-button", dialogSelector: "#didomi-consent-popup", deferredRootSelector: "#didomi-host" },
     cookieNames: ["didomi_token", "euconsent-v2"],

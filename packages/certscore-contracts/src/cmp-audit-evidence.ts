@@ -2,6 +2,7 @@ import { z } from "zod";
 import {cmpInventoryManifestSchema,cmpCaptureProgressSchema} from "./cmp-inventory-manifest";
 import { cmpVisibleInventorySchema, projectVisibleCmpInventory } from "./cmp-visible-inventory";
 import { cmpLoadedInventorySchema, projectLoadedCmpInventory } from "./cmp-loaded-inventory";
+import { cmpSdkServiceInventorySchema, projectSdkCmpServices } from "./cmp-sdk-service-inventory";
 import { parseNamedCmpPartnerDisclosure } from "./cmp-named-disclosure";
 import { possibleCmpCookieTemplate } from "./cmp-cookie-template";
 export { possibleCmpCookieTemplate } from "./cmp-cookie-template";
@@ -213,7 +214,7 @@ export type CmpPreferencesEvidence = z.infer<typeof cmpPreferencesEvidenceSchema
 /** Passive facts captured by the required consent-proof visit. This is not an
  * Options action, a complete preference inventory, or a product-capability test. */
 export const cmpBasicEvidenceSchema = z.object({
-  contractVersion: z.enum(["certscore.cmp-basic-evidence.v1", "certscore.cmp-basic-evidence.v2", "certscore.cmp-basic-evidence.v3"]),
+  contractVersion: z.enum(["certscore.cmp-basic-evidence.v1", "certscore.cmp-basic-evidence.v2", "certscore.cmp-basic-evidence.v3", "certscore.cmp-basic-evidence.v4"]),
   sourceLane: z.literal("consent_proof"),
   scanId: z.string().min(1).max(160), targetUrl: z.string().url().max(2000),
   documentUrl: z.string().url().max(2000), documentToken: z.string().min(1).max(160),
@@ -223,6 +224,7 @@ export const cmpBasicEvidenceSchema = z.object({
   privacyLinks: cmpPreferencesEvidenceSchema.innerType().shape.privacyLinks,
   declarations: cmpPreferencesEvidenceSchema.innerType().shape.declarations,
   serviceNames: z.array(z.string().min(1).max(240)).max(100),
+  sdkServiceInventory: cmpSdkServiceInventorySchema.optional(),
   configuredConsentCookies: configuredConsentCookiesSchema.optional(),
   inventoryManifest: cmpInventoryManifestSchema.optional(),
   captureProgress: cmpCaptureProgressSchema.optional(),
@@ -264,7 +266,7 @@ export const cmpBasicEvidenceSchema = z.object({
       packet.privacyLinks.some(link=>{try{return new URL(link.url).origin!==new URL(packet.targetUrl).origin;}catch{return true;}})))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Public privacy links require a completed same-origin document checkpoint."});
   const hasLoaded=Boolean(packet.loadedInventory || packet.loadedInventoryBinding || loadedDeclarations.length);
-  if (packet.contractVersion!=="certscore.cmp-basic-evidence.v1" || hasLoaded) {
+  if (["certscore.cmp-basic-evidence.v2", "certscore.cmp-basic-evidence.v3"].includes(packet.contractVersion) || hasLoaded) {
     const projected=packet.loadedInventory ? projectLoadedCmpInventory(packet.loadedInventory).declarations : [];
     const providerBound = packet.contractVersion==="certscore.cmp-basic-evidence.v2" && packet.provider==="Cookiebot" &&
       packet.loadedInventory?.version==="cookiebot_loaded_declarations.v1" && packet.loadedInventoryBinding?.version==="cookiebot_passive_loaded_inventory.v1" ||
@@ -278,6 +280,14 @@ export const cmpBasicEvidenceSchema = z.object({
         packet.declarations.length!==projected.length || loadedDeclarations.length!==projected.length ||
         projected.some(row=>!loadedDeclarations.some(declared=>declared.name===row.name && declared.purpose===row.purpose && declared.duration===row.duration)))
       ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive loaded inventory requires exact versioned provider, document, source and partial declaration projection."});
+  }
+  if (packet.contractVersion === "certscore.cmp-basic-evidence.v4" || packet.sdkServiceInventory) {
+    if (packet.contractVersion !== "certscore.cmp-basic-evidence.v4" || packet.provider !== "Didomi" || !packet.sdkServiceInventory ||
+        !progress || progress.declarationsAtMs === undefined || packet.sdkServiceInventory.documentToken !== packet.documentToken ||
+        packet.documentUrl !== packet.targetUrl || packet.declarations.length || packet.loadedInventory || packet.inventoryManifest || packet.serviceDisclosures?.length ||
+        !packet.limitations.includes("loaded_configuration_not_visibility_proof") || !packet.limitations.includes("service_inventory_not_complete") ||
+        JSON.stringify(packet.serviceNames) !== JSON.stringify(packet.sdkServiceInventory ? projectSdkCmpServices(packet.sdkServiceInventory) : []))
+      ctx.addIssue({code: z.ZodIssueCode.custom, message: "Passive SDK services require exact v4 provider, source, document and partial name projection"});
   }
 });
 export type CmpBasicEvidence = z.infer<typeof cmpBasicEvidenceSchema>;

@@ -883,6 +883,34 @@ test("passive Consentmanager table follows persisted assessment and canonical CM
   }
 });
 
+test("passive Didomi configured services follow canonical persistence, concern policy and checklist without inventing cookies or controls", () => {
+  const input = bundle(); delete input.cmpPreferencesEvidence; delete input.cmpPreferenceLaneOutcome;
+  input.completedAt = "2026-10-13T00:00:02.000Z";
+  input.domSnapshots = [{url: input.url, capturedAtMs: 100, consentStateAtTime: "pre_consent", documentIdentity: {token: "passive-loader"}}] as CanonicalEvidenceBundle["domSnapshots"];
+  input.cmpBasicEvidence = {contractVersion: "certscore.cmp-basic-evidence.v4", sourceLane: "consent_proof", scanId: input.scanId, targetUrl: input.url, documentUrl: input.url, documentToken: "passive-loader", capturedAtMs: 100, provider: "Didomi", controls: [], privacyLinks: [], serviceNames: ["Example Analytics"], declarations: [],
+    sdkServiceInventory: {version: "didomi_required_vendors.v1", getter: "Didomi.getRequiredVendors", readiness: "already_ready_callback", rootSelector: "#didomi-host", noticeSelector: ".didomi-notice-banner, .didomi-notice-popup, #didomi-notice", documentToken: "passive-loader", sourceRecordCount: 1, inspectedRecordCount: 1, unresolvedRecordCount: 0, truncated: false, records: [{id: "c:analytics", name: "Example Analytics"}]},
+    captureProgress: {version: "cmp_capture_checkpoints.v1", documentToken: "passive-loader", declarationsAtMs: 90},
+    limitations: ["passive_first_layer_only", "declaration_inventory_not_complete", "loaded_configuration_not_visibility_proof", "service_inventory_not_complete"]};
+  const original = structuredClone(input), audit = deriveCmpAuditAssessment(input)!;
+  assert.deepEqual(input, original);
+  assert.equal(audit.rows.find(row => row.id === "services")?.status, "observed");
+  assert.match(audit.rows.find(row => row.id === "services")!.detail, /already-loaded configuration/);
+  assert.equal(audit.rows.find(row => row.id === "services")?.inventory?.services?.[0]?.sourceRef, "didomi_required_vendors.v1/record:0");
+  for (const id of ["categories", "cookie_information", "declared_not_found", "found_not_declared"]) assert.equal(audit.rows.find(row => row.id === id)?.status, "not_assessed");
+  const assessment = consentControlAssessmentSchema.parse({...observedControlAssessment, cmpAudit: audit});
+  const persisted = consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(assessment)));
+  assert.deepEqual(persisted.cmpAudit, JSON.parse(JSON.stringify(audit)));
+  const concerns = buildNormalizedConcerns({runtimeArtifacts: {consentControlAssessment: persisted}, reviewFindingCandidates: [], validationFindings: []});
+  const projected = projectCmpAudit({scanId: input.scanId, consentControlAssessment: persisted, normalizedConcerns: concerns});
+  assert.equal(projected.rows.find(row => row.id === "services")?.status, "Observed");
+  assert.ok(concerns.filter(c => c.originKey.startsWith("consent.cmp_audit.")).every(c => !c.scoreEffects?.length));
+  for (const patch of [{documentToken: "stale"}, {provider: "OneTrust"}, {contractVersion: "certscore.cmp-basic-evidence.v1"}]) {
+    const bad = structuredClone(input); Object.assign(bad.cmpBasicEvidence!, patch); assert.equal(deriveCmpAuditAssessment(bad), undefined);
+  }
+  const missingNames = structuredClone(input); missingNames.cmpBasicEvidence!.serviceNames = [];
+  assert.equal(deriveCmpAuditAssessment(missingNames), undefined);
+});
+
 test("v6 retains v1 after-click facts and hashed consent storage without upgrading registration", () => {
   const input = bundle();
   const packet = completedUnconfirmedPacket("accept") as NonNullable<CanonicalEvidenceBundle["postAcceptEvidence"]>;
