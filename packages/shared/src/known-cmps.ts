@@ -89,6 +89,8 @@ export type KnownCmpDefinition = {
     rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; shadowContentSelector?: string; sdkPath: string[] };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
+  /** Existing passive page-link budget, after visual work and with restored scroll. */
+  passivePrivacyLinkInspection?: "same_origin_after_visual.v1";
   /** Bounded response capture; no request, getter, panel opening or consent state. */
   passiveNetworkInventory?: {version:"termly_cookie_response.v1";origin:"https://app.termly.io";scriptPathPrefix:"/resource-blocker/";responsePathPrefix:"/api/v1/snippets/websites/"};
   /** Read only already-ready configured vendor names, without opening UI. */
@@ -590,6 +592,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       "#CybotCookiebotDialogBodyButtonAccept",
     ],
     canonicalName: "Cookiebot",
+    passivePrivacyLinkInspection: "same_origin_after_visual.v1",
     passiveLoadedInventory: { version: "cookiebot_passive_loaded_inventory.v1", rootSelector: "#CybotCookiebotDialog", panelSelector: "#CybotCookiebotDialogTabContentDetails" },
     preferenceDialogBinding: {version: "cookiebot_customize_tab.v1", controlSelector: "#CybotCookiebotDialogBodyLevelButtonCustomize",
       dialogSelector: '#CybotCookiebotDialog #CybotCookiebotDialogTabContentDetails[role="tabpanel"]', deferredRootSelector: "#CybotCookiebotDialog",
@@ -987,6 +990,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
       resolution: "scoped_accessible_control",
     }],
     canonicalName: "Termly",
+    passivePrivacyLinkInspection: "same_origin_after_visual.v1",
     passiveNetworkInventory:{version:"termly_cookie_response.v1",origin:"https://app.termly.io",scriptPathPrefix:"/resource-blocker/",responsePathPrefix:"/api/v1/snippets/websites/"},
     preferenceControlScopeSelector: '[data-termly-part="banner-actions"]',
     preferenceDeferredAriaBinding: { version: "termly_aria_preferences.v1", rootSelector: '[data-termly-part="consent-banner"]' },

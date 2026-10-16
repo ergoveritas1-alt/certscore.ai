@@ -1523,3 +1523,34 @@ test("Termly passive response resolves only the supported cookie comparison thro
   input.cmpBasicEvidence.networkCookieInventory!.documentToken="foreign";
   assert.equal(deriveCmpAuditAssessment(input),undefined);
 });
+
+test("Termly passive public policy hit tests survive canonical persistence without creating score effects",()=>{
+ const input=bundle();delete input.cmpPreferencesEvidence;delete input.cmpPreferenceLaneOutcome;input.completedAt='2026-10-13T00:00:02.000Z';
+ input.domSnapshots=[{url:input.url,capturedAtMs:100,consentStateAtTime:'pre_consent',documentIdentity:{token:'passive-loader'}}] as CanonicalEvidenceBundle['domSnapshots'];
+ input.cmpBasicEvidence={contractVersion:'certscore.cmp-basic-evidence.v1',sourceLane:'consent_proof',scanId:input.scanId,targetUrl:input.url,documentUrl:input.url,documentToken:'passive-loader',capturedAtMs:100,provider:'Termly',controls:[],privacyLinks:[{url:input.url+'our-privacy-policy/',hitTargetBeforeAction:true,access:{version:'privacy_link_access.v2',outcome:'reachable',scroll:{version:'privacy_link_scroll.v1',initialOutcome:'outside_viewport',beforeY:0,inspectedY:1800,restored:true}}}],declarations:[],serviceNames:[],privacyLinkInspection:{version:'passive_public_privacy_links.v1',scope:'same_origin_page',documentToken:'passive-loader'},captureProgress:{version:'cmp_capture_checkpoints.v1',documentToken:'passive-loader',privacyLinksAtMs:100},limitations:['passive_first_layer_only','declaration_inventory_not_complete']};
+ const before=structuredClone(input),audit=deriveCmpAuditAssessment(input)!;
+ assert.equal(audit.rows.find(r=>r.id==='privacy_access')?.status,'observed');
+ const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+ const persisted=withCanonicalConsentAssessmentSnapshot({},assessment);
+ const concerns=buildNormalizedConcerns({runtimeArtifacts:persisted,reviewFindingCandidates:[],validationFindings:[]});
+ const report=projectCmpAudit({scanId:input.scanId,consentControlAssessment:assessment,normalizedConcerns:concerns});
+ assert.equal(report.rows.find(r=>r.id==='privacy_access')?.status,'Observed');assert.match(report.rows.find(r=>r.id==='privacy_access')!.detail!,/after scrolling/);
+ assert.ok(concerns.filter(c=>c.originKey.startsWith('consent.cmp_audit.')).every(c=>!c.scoreEffects?.length));assert.deepEqual(input,before);
+ input.cmpBasicEvidence.privacyLinks[0]!.hitTargetBeforeAction=false;
+ input.cmpBasicEvidence.privacyLinks[0]!.access!.outcome='hit_target_missed';
+ const unresolved=deriveCmpAuditAssessment(input)!;
+ assert.equal(unresolved.rows.find(r=>r.id==='privacy_access')?.status,'not_assessed');
+ assert.match(unresolved.rows.find(r=>r.id==='privacy_access')!.detail,/click-target check could not reach it/);
+ assert.ok(unresolved.rows.find(r=>r.id==='privacy_access')!.evidenceRefs.length>0);
+ const unresolvedAssessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:unresolved});
+ const unresolvedConcerns=buildNormalizedConcerns({runtimeArtifacts:withCanonicalConsentAssessmentSnapshot({},unresolvedAssessment),reviewFindingCandidates:[],validationFindings:[]});
+ const unresolvedReport=projectCmpAudit({scanId:input.scanId,consentControlAssessment:unresolvedAssessment,normalizedConcerns:unresolvedConcerns});
+ assert.equal(unresolvedReport.rows.find(r=>r.id==='privacy_access')?.status,'Not assessed');
+ assert.match(unresolvedReport.rows.find(r=>r.id==='privacy_access')!.detail!,/click-target check could not reach it/);
+ assert.ok(unresolvedConcerns.filter(c=>c.originKey.startsWith('consent.cmp_audit.')).every(c=>!c.scoreEffects?.length));
+ input.cmpPreferencesEvidence=bundle().cmpPreferencesEvidence;
+ input.cmpPreferencesEvidence!.privacyLinks=[{url:input.url+'privacy',hitTargetBeforeAction:false,access:{version:'privacy_link_access.v1',outcome:'hidden'}}];
+ assert.match(deriveCmpAuditAssessment(input)!.rows.find(r=>r.id==='privacy_access')!.detail,/marked hidden/,'A passive diagnostic must not overwrite another retained inspection');
+ delete input.cmpPreferencesEvidence;
+ input.cmpBasicEvidence.privacyLinks[0]!.url='https://foreign.test/privacy';assert.equal(deriveCmpAuditAssessment(input),undefined);
+});

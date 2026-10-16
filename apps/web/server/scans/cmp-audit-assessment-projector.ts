@@ -588,9 +588,17 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     const row = candidates.find(row => row.id === "services")!;
     row.inventory = { ...row.inventory, services };
   }
-  for (const row of candidates) if (!["not_assessed", "incomplete"].includes(row.status)) {
+  for (const row of candidates) {
+    // A completed typed public-link inspection can explain an unresolved check.
+    // It cannot turn a hit-test miss into absence, a gap or a score effect, and
+    // must not replace another lane's already-retained inspection diagnostic.
+    const passiveLinkDiagnostic=row.id==="privacy_access" && row.status==="not_assessed" && basicPrivacyUsable &&
+      basic.privacyLinkInspection?.version==="passive_public_privacy_links.v1" && basic.privacyLinks.length>0 &&
+      basic.privacyLinks.every(link=>link.access!==undefined);
+    if (["not_assessed", "incomplete"].includes(row.status) && !passiveLinkDiagnostic) continue;
     const previous = assessment.rows.find(item => item.id === row.id)!;
-    if (["not_assessed", "incomplete"].includes(previous.status)) Object.assign(previous, row, { limitation: undefined });
+    if (["not_assessed", "incomplete"].includes(previous.status) && (!passiveLinkDiagnostic || previous.evidenceRefs.length===0))
+      Object.assign(previous, row, { limitation: undefined });
   }
   if (!original) {
     const assign: AuditSet = (id, status, detail, evidenceRefs = []) => Object.assign(assessment.rows.find(row => row.id === id)!, { status, detail, evidenceRefs });
@@ -598,6 +606,6 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, assign, assessment.rows, observations.filter(capture => capture.networkCompleted)); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: basic.networkCookieInventory ? "independent_cmp_basic_facts.v8" : basic.sdkServiceInventory ? "independent_cmp_basic_facts.v7" : "independent_cmp_basic_facts.v6", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: basic.privacyLinkInspection ? "independent_cmp_basic_facts.v9" : basic.networkCookieInventory ? "independent_cmp_basic_facts.v8" : basic.sdkServiceInventory ? "independent_cmp_basic_facts.v7" : "independent_cmp_basic_facts.v6", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

@@ -498,3 +498,12 @@ test("combined privacy and cookie statements retain their shared canonical scope
   }
   assert.notEqual(classifyPrivacySurface({ linkText: "Cookie statement", url: "https://example.test/cookies" }).variant, "combined_privacy_cookie_surface");
 });
+
+test("policy generators and templates cannot masquerade as governing notices",()=>{
+ for(const path of ["/products/privacy-policy-generator/","/resources/templates/privacy-policy-template/","/privacy-policy-generator","/cookie-policy-template"]){
+  const c=classifyPrivacySurface({url:`https://example.test${path}`,linkText:"Privacy Policy",surroundingText:"GDPR privacy policy personal data"});
+  assert.equal(c.surfaceType,"unknown",path);assert.ok(c.reasonCodes.includes("product_or_template_not_policy_document"));
+ }
+ for(const path of ["/our-privacy-policy/","/privacy-policy-generator/privacy-policy","/products/privacy-policy"])
+  assert.equal(classifyPrivacySurface({url:`https://example.test${path}`,linkText:"Our Privacy Policy"}).surfaceType,"privacy_policy",path);
+});

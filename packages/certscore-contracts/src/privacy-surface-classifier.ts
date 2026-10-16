@@ -401,6 +401,10 @@ export function nonPolicyDocumentReason(input: PrivacySurfaceClassifierInput): s
   let path = "";
   try { path = decodeURIComponent(new URL(input.url ?? "").pathname).toLowerCase().replace(/\/$/, ""); } catch {}
   if (/\/(?:privacy|data-subject|dsar)[-_]requests?$/.test(path) || /^(?:submit (?:a |your )?)?(?:privacy|data subject|data access) request$/.test(label)) return "privacy_request_surface_not_policy_document";
+  // The terminal slug identifies a policy creation/reference product. A policy
+  // document below that product (for example /privacy-policy-generator/privacy)
+  // is still eligible; surrounding marketing text does not veto real notices.
+  if (/(?:^|\/)(?:privacy|cookie)[-_]policy[-_](?:generator|templates?)$/.test(path)) return "product_or_template_not_policy_document";
   if (/\/(?:solutions|products)\//.test(path) && /(?:privacy[- ]policy|cookie[- ]consent).*(?:scanner|checker|tool)/.test(`${path} ${label}`)) return "product_surface_not_policy_document";
   return undefined;
 }

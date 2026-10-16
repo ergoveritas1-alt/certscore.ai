@@ -71,3 +71,12 @@ test("bounded privacy verification prefers an explicit policy over a general pri
  ]);
  assert.equal(candidates[0]?.index,1);
 });
+
+test("the single public-policy scroll cannot be spent on a policy generator or template",()=>{
+ const candidates=privacyPolicyLinkCandidates([
+  {index:0,url:"https://example.test/products/privacy-policy-generator/",label:"Privacy Policy Generator"},
+  {index:1,url:"https://example.test/resources/templates/privacy-policy-template/",label:"Privacy Policy Template"},
+  {index:2,url:"https://example.test/our-privacy-policy/",label:"Our Privacy Policy"},
+ ]);
+ assert.deepEqual(candidates.map(c=>c.index),[2]);
+});

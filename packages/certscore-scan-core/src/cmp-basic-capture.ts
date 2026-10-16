@@ -19,7 +19,7 @@ export async function captureCmpBasicEvidence(input: {
   isCurrent: () => boolean;
   onOutcome?: (reason: string) => void;
   onCheckpoint?: (packet:CmpBasicEvidence)=>void;
-  deferCookiebotPrivacyLinks?: boolean;
+  deferPublicPrivacyLinks?: boolean;
 }): Promise<CmpBasicEvidence | undefined> {
   const { page } = input;
   const before = input.readBinding();
@@ -93,7 +93,7 @@ export async function captureCmpBasicEvidence(input: {
     }
   }
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
-  if (input.deferCookiebotPrivacyLinks && definition.canonicalName==="Cookiebot") return retained;
+  if (input.deferPublicPrivacyLinks && definition.passivePrivacyLinkInspection==="same_origin_after_visual.v1") return retained;
   const privacyScope=page.locator(scopes[index]!).locator("a[href]");
   const links=await privacyScope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
     label:(node.getAttribute("aria-label")??node.textContent??"").trim().slice(0,160)})));
@@ -103,6 +103,10 @@ export async function captureCmpBasicEvidence(input: {
   packet.captureProgress!.privacyLinksAtMs=Date.now()-input.scanStartedAtMs;
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
   input.onOutcome?.("captured");return retained;
+}
+
+export function usesDeferredPassivePrivacyLinks(provider:string){
+  return KNOWN_CMP_REGISTRY.some(d=>d.canonicalName===provider && d.passivePrivacyLinkInspection==="same_origin_after_visual.v1");
 }
 
 /** Called after consent visual work, using only the unused passive-read budget.

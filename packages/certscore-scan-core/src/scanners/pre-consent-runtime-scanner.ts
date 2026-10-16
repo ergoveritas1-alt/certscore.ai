@@ -1,6 +1,6 @@
 import {installPassiveTermlyInventoryCapture} from "../termly-network-inventory.js";
 import {cmpBasicEvidenceSchema,projectNetworkCmpCookies} from "@certscore/contracts";
-import { captureCmpBasicEvidence, finishPassiveCmpPrivacyLinks } from "../cmp-basic-capture.js";
+import { captureCmpBasicEvidence, finishPassiveCmpPrivacyLinks, usesDeferredPassivePrivacyLinks } from "../cmp-basic-capture.js";
 import type { CmpBasicEvidence } from "@certscore/contracts";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "../evidence-work-budget.js";
@@ -1132,7 +1132,7 @@ export async function preConsentRuntimeScanner(
     const deadline = basicStartedAt + Math.min(remainingModuleBudgetMs(), 350);
     let basicOutcome = "capture_unavailable";
     void captureCmpBasicEvidence({ page, scanId: input.cmpBasicScanId, targetUrl: input.normalizedUrl,
-      deferCookiebotPrivacyLinks:true,
+      deferPublicPrivacyLinks:true,
       scanStartedAtMs: input.scanStartedAtMs,
       readBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token }),
       isCurrent: () => !cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now() < deadline,
@@ -4126,7 +4126,7 @@ export async function preConsentRuntimeScanner(
     // All consent visual capture is complete. Reuse only the unused portion
     // of the single 350ms passive-read allowance, never a new tail budget.
     const privacyAllowanceMs=Math.min(Math.max(0,350-cmpBasicCaptureElapsedMs),remainingModuleBudgetMs());
-    if (captureConsentEvidence && retainedCmpBasicEvidence?.provider==="Cookiebot" &&
+    if (captureConsentEvidence && retainedCmpBasicEvidence && usesDeferredPassivePrivacyLinks(retainedCmpBasicEvidence.provider) &&
         retainedCmpBasicEvidence.captureProgress?.privacyLinksAtMs===undefined && privacyAllowanceMs>0) {
       const privacyDeadline=Date.now()+privacyAllowanceMs;
       const privacyPacket=await recordBoundedTiming(timingBreakdown,"passive CMP privacy links",

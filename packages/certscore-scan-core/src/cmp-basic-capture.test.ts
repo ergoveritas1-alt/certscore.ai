@@ -12,7 +12,7 @@ test("deferred Cookiebot policy access checks the page after visual capture, res
     for(const covered of [false,true]){
       await page.setContent(content+(covered?'<div style="position:fixed;inset:0;z-index:999"></div>':''));
       const input={page,scanId:'public-policy',targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:'loader'}),isCurrent:()=>true};
-      const packet=await captureCmpBasicEvidence({...input,deferCookiebotPrivacyLinks:true});assert.ok(packet);
+      const packet=await captureCmpBasicEvidence({...input,deferPublicPrivacyLinks:true});assert.ok(packet);
       assert.equal(packet.captureProgress?.privacyLinksAtMs,undefined,'No scroll during the early visual work');
       const result=await finishPassiveCmpPrivacyLinks({...input,packet});assert.ok(result);
       assert.ok(result.privacyLinks.every(link=>new URL(link.url).origin==='https://example.test'));
@@ -200,4 +200,38 @@ test("scope inventory separates provably inactive SDK roots from visible consent
       assert.equal(result.scopeStates.find(s => definitions[s.index]!.canonicalName === "HubSpot Consent Banner")!.state, inactive ? "inactive" : ["zero-size", "visibility-override"].includes(mode) ? "unverified" : "visible", mode);
     }
   } finally { await browser.close(); }
+});
+
+test("Termly public policy reachability is captured after visuals without Options, navigation or disclosure products",async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage({viewport:{width:800,height:600}});let requests=0;
+  await page.route('**/*',route=>{requests++;return route.fulfill({contentType:'text/html',body:''});});await page.goto('https://example.test/');const initialRequests=requests;
+  const content=`<section data-termly-part="consent-banner"><button>Accept all</button><button>Reject all</button><button onclick="window.clicks++">Options</button><a hidden href="/hidden-privacy">Privacy policy</a></section><a href="/products/privacy-policy-generator/">Privacy Policy Generator</a><a href="/resources/templates/privacy-policy-template/">Privacy Policy Template</a><div style="height:1800px"></div><footer><a href="/our-privacy-policy/">Our Privacy Policy</a><a href="https://foreign.test/privacy">Privacy Policy</a></footer><script>window.clicks=0;document.addEventListener('click',()=>window.clicks++);</script>`;
+  for(const covered of [false,true]){
+   await page.setContent(content+(covered?'<div style="position:fixed;inset:0;z-index:9999"></div>':''));
+   const input={page,scanId:'termly-link-fixture',targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:'loader'}),isCurrent:()=>true};
+   const packet=await captureCmpBasicEvidence({...input,deferPublicPrivacyLinks:true});assert.ok(packet);assert.equal(packet.provider,'Termly');assert.equal(packet.captureProgress?.privacyLinksAtMs,undefined);
+   const result=await finishPassiveCmpPrivacyLinks({...input,packet});assert.ok(result);
+   assert.equal(result.privacyLinks.some(l=>l.url==='https://example.test/our-privacy-policy/' && l.hitTargetBeforeAction),!covered);
+   assert.ok(!result.privacyLinks.some(l=>/generator|template|foreign/.test(l.url)));
+   assert.ok(result.privacyLinks.some(l=>l.access?.scroll?.restored));assert.equal(await page.evaluate(()=>scrollY),0);assert.equal(await page.evaluate(()=>(window as any).clicks),0);
+   assert.equal(requests,initialRequests);assert.equal(await finishPassiveCmpPrivacyLinks({...input,packet,readBinding:()=>({url:page.url(),token:'foreign'})}),undefined);
+  }
+ }finally{await browser.close();}
+});
+
+test("Termly consent-proof schedules the registered public-policy read after visuals inside its existing allowance",{timeout:20000},async()=>{
+ const {createServer}=await import('node:http');const {mkdtemp,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');
+ const {createArtifactWriter}=await import('./artifact-writer.js');const {preConsentRuntimeScanner}=await import('./scanners/pre-consent-runtime-scanner.js');
+ const requests:string[]=[];const server=createServer((req,res)=>{requests.push(req.url!);res.setHeader('content-type','text/html');res.end(`<main>Local consent-proof privacy-link fixture.</main><section data-termly-part="consent-banner"><button>Accept all</button><button>Reject all</button><button onclick="fetch('/unexpected-options')">Manage preferences</button></section><a href="/products/privacy-policy-generator/">Privacy Policy Generator</a><div style="height:1800px"></div><footer><a href="/our-privacy-policy/">Our Privacy Policy</a></footer>`);});
+ await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const address=server.address();assert.ok(address&&typeof address!=='string');const url=`http://127.0.0.1:${address.port}/`,root=await mkdtemp(`${tmpdir()}/termly-policy-link-`);
+ try{
+  const result=await preConsentRuntimeScanner({url,normalizedUrl:url,scanStartedAtMs:Date.now(),internalBudgetMs:6000,cmpBasicScanId:'termly-policy-link',captureScope:'consent_proof',screenshotMode:'always',artifactWriter:await createArtifactWriter(root)});
+  assert.equal(result.cmpBasicEvidence?.privacyLinks.some(l=>l.url===`${url}our-privacy-policy/` && l.hitTargetBeforeAction),true);
+  assert.equal(result.cmpBasicEvidence?.privacyLinkInspection?.scope,'same_origin_page');
+  const timing=result.moduleRun.timingBreakdown!.filter(t=>['passive CMP basics','passive CMP privacy links'].includes(t.label));assert.equal(timing.length,2);
+  assert.ok(timing.reduce((n,t)=>n+t.durationMs,0)<=350,JSON.stringify(timing));
+  assert.ok(!requests.includes('/our-privacy-policy/'));assert.ok(!requests.includes('/unexpected-options'));
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});}
 });
