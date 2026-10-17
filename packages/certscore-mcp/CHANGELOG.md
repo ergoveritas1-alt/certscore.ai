@@ -1,5 +1,9 @@
 # certscore-mcp
 
+## 0.2.30
+
+- Return both versioned posture scores in scan bundles and status responses, including California coverage. Preserve the legacy score and MCP response budgets.
+
 ## 0.2.29
 
 Bundle the updated SDK and Detailed Evidence contracts so hosted and npm MCP consumers retain scoped CMP inventories and capture diagnostics without changing tool names or scan budgets.

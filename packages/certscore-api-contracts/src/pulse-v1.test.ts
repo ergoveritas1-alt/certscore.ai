@@ -7,6 +7,7 @@ import {
   apiV2FindingListSchema,
   apiV2PreConsentCookiesTrackersSchema,
   apiV2PreConsentRuntimePreviewSchema,
+  apiV2PostureScoresSchema,
   apiV2ScanResourceSchema,
   buildCertScoreApiV2OpenApiDocument,
   buildPulseChatGptOpenApiDocument,
@@ -478,6 +479,15 @@ test("API v2 accepts EU-Germany, EU-Ireland, and California scan creation with t
   assert.deepEqual(findingList.findings[0]?.evidence.projectionWarnings, ["canonical_endpoint_vendor_replaced_raw_vendor"]);
 });
 
+test("posture score contract preserves two independently covered scores", () => {
+  const value = { contractVersion: "certscore.posture-scores.v1", gdprEprivacy: {
+    posture: "gdpr_eprivacy", score: 82, policyVersion: "gdpr-eprivacy-posture.v20", coverage: "scored", scope: "starting_page" },
+    ccpaCpra: { posture: "ccpa_cpra", score: null, policyVersion: "california-regulatory-posture.v1", coverage: "limited", scope: "starting_page" } };
+  assert.deepEqual(apiV2PostureScoresSchema.parse(value), value);
+  assert.equal(apiV2PostureScoresSchema.safeParse({ ...value, ccpaCpra: { ...value.ccpaCpra, score: 101 } }).success, false);
+  assert.equal(apiV2PostureScoresSchema.safeParse({ ...value, ccpaCpra: { ...value.ccpaCpra, posture: "gdpr_eprivacy" } }).success, false);
+});
+
 test("API v2 draft evidence summaries reject raw unbounded fields", () => {
   assert.throws(() =>
     apiV2EvidenceSummarySchema.parse({
@@ -532,7 +542,9 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.13");
+  assert.equal(document.info.version, "0.1.14");
+  assert.equal(document.components.schemas.Scan.properties.postureScores.$ref, "#/components/schemas/PostureScores");
+  assert.equal(document.components.schemas.ScanJob.properties.postureScores.$ref, "#/components/schemas/PostureScores");
   assert.equal(document.paths["/api/v2/scans/{scanId}/report-evidence"].get.operationId, "getReportEvidencePage");
   assert.equal(document.components.schemas.ReportEvidencePage.properties.workpaper.const, "tracking");
   assert.ok(document.components.schemas.ReportEvidencePage.properties.download.properties.csvUrl);

@@ -1526,6 +1526,12 @@ export function scanBundleText(bundle: Record<string, any>, options: { toolProfi
     lines.push(line);
     return true;
   };
+  if (bundle.postureScores) {
+    const eu = bundle.postureScores.gdprEprivacy;
+    const ca = bundle.postureScores.ccpaCpra;
+    const scoreText = (value: number | null | undefined) => value === null || value === undefined ? "unavailable" : `${value}/100`;
+    append(`Starting-page posture scores: GDPR/ePrivacy-weighted=${scoreText(eu?.score)}; CCPA/CPRA=${scoreText(ca?.score)} (${ca?.coverage ?? "unavailable"} coverage). Scores are bounded risk signals, not compliance grades.`);
+  }
   for (const line of reportSummaryTextLines(bundle)) append(line);
   const coverage = bundle.coverage && typeof bundle.coverage === "object" && !Array.isArray(bundle.coverage)
     ? bundle.coverage as Record<string, unknown>
@@ -1823,6 +1829,7 @@ export function buildScanBundle(input: {
     scanFrom: input.scan.scanFrom ?? null,
     status: input.scan.status,
     score: input.scan.score ?? null,
+    ...(input.scan.postureScores ? { postureScores: input.scan.postureScores } : {}),
     scoreLabel: "CertScore score",
     scoreStatus: input.scan.scoreStatus ?? "final",
     scoreVersion: input.scan.scoreVersion ?? null,
@@ -2146,6 +2153,7 @@ export function buildScanBundle(input: {
       scanFrom: bundle.scanFrom,
       status: bundle.status,
       score: bundle.score,
+      ...(bundle.postureScores ? { postureScores: bundle.postureScores } : {}),
       scoreLabel: bundle.scoreLabel,
       scoreStatus: bundle.scoreStatus,
       scoreVersion: bundle.scoreVersion,

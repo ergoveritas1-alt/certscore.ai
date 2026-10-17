@@ -299,6 +299,12 @@ export interface GpcResponse {
   evidenceUrl: string;
 }
 
+export interface PostureScores {
+  contractVersion: "certscore.posture-scores.v1";
+  gdprEprivacy: { posture: "gdpr_eprivacy"; score: number | null; policyVersion: string | null; coverage: "scored" | "unavailable"; scope: "starting_page" };
+  ccpaCpra: { posture: "ccpa_cpra"; score: number | null; policyVersion: "california-regulatory-posture.v1"; coverage: "bounded" | "limited" | "unavailable"; scope: "starting_page" };
+}
+
 export interface ScanResource extends ScanCreationMetadata {
   accessibilityAudit?: AccessibilityAuditSummary | null;
   formsSummary?: ScanFormsSummary | null;
@@ -317,6 +323,7 @@ export interface ScanResource extends ScanCreationMetadata {
   completedAt?: string | null;
   scanTimeSeconds?: number | null;
   score?: number | null;
+  postureScores?: PostureScores;
   scoreStatus?: "provisional" | "final";
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;
@@ -355,6 +362,7 @@ export interface ScanJob extends ScanCreationMetadata {
   completedAt?: string | null;
   scanTimeSeconds?: number | null;
   score?: number | null;
+  postureScores?: PostureScores;
   scoreStatus?: "provisional" | "final";
   scoreVersion?: string | null;
   scoreUpdatedAt?: string | null;

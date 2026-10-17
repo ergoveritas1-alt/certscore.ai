@@ -19,6 +19,20 @@ test("MCP bundles retain required accessibility status and link to rule evidence
   assert.equal(mcpScanBundleOutputSchema.safeParse(bundle).success, true);
 });
 
+test("MCP bundles retain both typed posture scores in bounded output", () => {
+  const postureScores = { contractVersion: "certscore.posture-scores.v1", gdprEprivacy: {
+    posture: "gdpr_eprivacy", score: 78, policyVersion: "gdpr-eprivacy-posture.v20", coverage: "scored", scope: "starting_page" },
+    ccpaCpra: { posture: "ccpa_cpra", score: 86, policyVersion: "california-regulatory-posture.v1", coverage: "bounded", scope: "starting_page" } };
+  const bundle = buildScanBundle({ detail: "summary", maxBytes: 8000, report: null,
+    findings: { type: "certscore_finding_list", scanId: "scan_123", findings: [] },
+    scan: { type: "certscore_scan", scanId: "scan_123", domain: "example.com", url: "https://example.com/", status: "completed",
+      score: 78, scoreStatus: "final", postureScores } as any });
+  assert.deepEqual(bundle.postureScores, postureScores);
+  assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
+  assert.ok(bundle.mcpMetadata.actualBytes <= 8000);
+  assert.match(scanBundleText(bundle), /GDPR\/ePrivacy-weighted=78\/100; CCPA\/CPRA=86\/100/);
+});
+
 test("MCP preserves the canonical accessibility score and capped deduction explanation", () => {
   const scoreExplanation = { contractVersion: "certscore.score-explanation.v1", scope: "starting_page_canonical_score",
     scoreVersion: "overall-posture.v7", policyVersion: "gdpr-eprivacy-posture.v17", baseScore: 100, scoreFloor: 0,

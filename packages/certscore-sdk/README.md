@@ -6,7 +6,7 @@ CertScore outputs are automated public-web observations for human and agentic re
 
 ## Status
 
-The SDK is published as `@certscore/sdk` on npm. Use version `0.2.11` or newer for typed GPC, Accept Path, and Reject Path results on both Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
+The SDK is published as `@certscore/sdk` on npm. Use version `0.2.20` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources. See the [npm package](https://www.npmjs.com/package/@certscore/sdk) and [SDK source](https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk).
 
 ```bash
 npm install @certscore/sdk

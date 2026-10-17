@@ -1,7 +1,7 @@
 import type { ReportEvidenceSection } from "@certscore/api-contracts";
 
 // Select existing display projections only. Never classify findings or infer observations.
-const CONTEXT_FIELDS = ["scan", "score", "scoreExplanation", "verdict", "findings", "nextStep", "coverage"] as const;
+const CONTEXT_FIELDS = ["scan", "score", "postureScores", "scoreExplanation", "verdict", "findings", "nextStep", "coverage"] as const;
 const SECTION_FIELDS: Record<ReportEvidenceSection, readonly string[]> = {
   consent: ["controls", "consentControlsAvailable", "consentVendor", "consentRows", "acceptPath", "rejectPath", "choicePathComparison", "cmpAudit"],
   cmp: ["cmpAudit", "consentVendor"],

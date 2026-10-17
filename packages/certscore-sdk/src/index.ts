@@ -47,6 +47,7 @@ export type {
   PendingJob,
   PostAcceptObservation,
   PostRefusalObservation,
+  PostureScores,
   PreConsentCookiesTrackers,
   PulseDetail,
   PulseErrorResponse,

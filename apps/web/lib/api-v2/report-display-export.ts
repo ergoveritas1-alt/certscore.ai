@@ -3,7 +3,7 @@ import { apiFormSnapshotExport } from "./form-snapshot-export";
 import { detailedEvidenceReportSchema, publicCmpAuditSchema, publicCmsSecuritySchema, privacyAuditEvidenceSchema } from "@certscore/api-contracts";
 /** Report content only: omit diagnostic downloads and encode repeated records once. */
 const REPORT_FIELDS = new Set([
-  "scan", "score", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
+  "scan", "score", "postureScores", "californiaScore", "formsSummary", "scoreExplanation", "verdict", "executiveHeadline", "findings", "nextStep", "metrics",
   "coverage", "controls", "consentControlsAvailable", "consentVendor", "consentRows", "gdprTransparencyRows", "detailedEvidence", "cmpAudit", "cmsSecurity",
   "preConsentRuntimeRows", "trackingExternalRows", "transportRows", "relatedRows",
   "privacyAuditEvidence", "californiaPrivacyReview", "policySurfaceCoverage", "acceptPath", "rejectPath", "accessibilityAudit", "accessibilityEvidence",

@@ -63,6 +63,15 @@ export default function DeveloperReferencePage() {
           </p>
         </Section>
 
+        <Section eyebrow="Scoring" title="EU and California postures">
+          <p className="max-w-3xl text-sm leading-7 text-slate-600">
+            Completed scan and status resources expose <code>postureScores.gdprEprivacy</code> and <code>postureScores.ccpaCpra</code>, each with a score, policy version, coverage and starting-page scope. The existing <code>score</code> remains the EU-weighted overall score for compatibility. A null California score means verified coverage did not support a number. Both scores interpret the retained visit; changing posture does not change where the scan ran or establish legal compliance.
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">
+            The same <code>postureScores</code> object appears in full and focused report-evidence responses and in MCP scan bundles. Use the coverage field before comparing scores across sites or scan locations.
+          </p>
+        </Section>
+
         <Section id="what-is-pulse" eyebrow="Projection" title="What is Pulse?">
           <p className="max-w-3xl text-sm leading-7 text-slate-600">
             Pulse is CertScore.ai&apos;s compact public projection for agents and developer workflows. It packages the scan summary,
@@ -183,14 +192,13 @@ export default function DeveloperReferencePage() {
           </div>
         </Section>
 
-        <Section id="choice-path-results" eyebrow="Typed observations" title="Accept, Reject, and GPC result fields">
+        <Section id="choice-path-results" eyebrow="Typed observations" title="Accept and Reject result fields">
           <div className="max-w-4xl space-y-4 text-sm leading-7 text-slate-600">
             <p><code className="rounded bg-white px-1">postAcceptObservation</code> is present on eligible completed scans where acceptance was attempted. It is a score-neutral comparison baseline: ordinary activity after confirmed acceptance is expected and never projects a negative finding.</p>
             <p><code className="rounded bg-white px-1">postRefusalObservation</code> describes an eligible refusal or necessary-only-equivalent attempt. Registered post-refusal verdicts require confirmed refusal and eligible retained activity. The separately approved Reject-click tracking policy may yield a canonical review finding after a completed Reject click with independently verified tracking evidence, without confirming refusal. Consume returned findings; do not infer a deduction from request counts.</p>
-            <p><code className="rounded bg-white px-1">gpcResponse</code> is a jurisdiction-neutral comparison with and without a Global Privacy Control signal. Its <code className="rounded bg-white px-1">scoreEffect</code> is <code className="rounded bg-white px-1">none</code> and <code className="rounded bg-white px-1">legalInterpretation</code> is <code className="rounded bg-white px-1">not_assessed</code>.</p>
+            <p>GPC observations remain retained internally; current customer API results omit them and do not score them.</p>
             <p>Use <code>execution.status</code> for path completion: both <code>succeeded</code> and <code>succeeded_with_confirmation</code> count as successful. Confirmation is a separate subset. Registered paths can omit <code>afterAction</code>; a completed click alone does not prove completed capture. Missing historical execution stays unavailable. An independent verified action can be reported even when the passive session did not observe that control.</p>
             <p>Both action results may include <code>afterAction</code>: retained click status, capture stop reason, request and storage-write counts, dropped-request count, and storage-snapshot availability. These facts remain useful with unconfirmed registration. The legacy <code>status</code>, <code>verdict</code>, and <code>productionProjectable</code> describe registered-decision evidence; they do not erase separately retained after-click observations. Missing fields in historical records do not establish failure or absence.</p>
-            <p>Version 3 adds <code className="rounded bg-white px-1">gpcResponse.observation</code> with bounded observation status, actual main-document delivery, current CMP-recorded sale/sharing state, acknowledgment coverage, and directly classified request and collection counts. Browser attempts conclusively blocked before transmission are counted separately and never treated as GPC delivery. A complete observation can coexist with an indeterminate paired comparison or unknown opt-out state; it does not mean GPC was honored. Historical v1/v2 records retain their original conclusions.</p>
           </div>
           <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <table className="min-w-[760px] w-full text-left text-sm">

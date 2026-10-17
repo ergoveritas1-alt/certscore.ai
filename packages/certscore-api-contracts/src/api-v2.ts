@@ -26,7 +26,7 @@ export function isCanonicalScanId(value: unknown): value is string {
 }
 
 export const CERTSCORE_API_V2_VERSION = "v2";
-export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.13";
+export const CERTSCORE_API_V2_SCHEMA_VERSION = "0.1.14";
 
 export const apiV2Disclaimer =
   "CertScore outputs are automated public-web observations for human and agentic review. They are not legal advice, certification, or a compliance determination.";
@@ -34,6 +34,24 @@ export const apiV2Disclaimer =
 export const apiV2ScanStatusSchema = z.enum(["queued", "running", "finalizing", "completed", "completed_limited", "failed", "expired", "rate_limited"]);
 export const apiV2ScanFreshnessSchema = z.enum(["latest", "refresh"]);
 export const apiV2ScanFromSchema = z.enum(["eu_de", "eu_ie", "california"]);
+export const apiV2PostureScoresSchema = z.object({
+  contractVersion: z.literal("certscore.posture-scores.v1"),
+  gdprEprivacy: z.object({
+    posture: z.literal("gdpr_eprivacy"),
+    score: z.number().int().min(0).max(100).nullable(),
+    policyVersion: z.string().nullable(),
+    coverage: z.enum(["scored", "unavailable"]),
+    scope: z.literal("starting_page"),
+  }).strict(),
+  ccpaCpra: z.object({
+    posture: z.literal("ccpa_cpra"),
+    score: z.number().int().min(0).max(100).nullable(),
+    policyVersion: z.literal("california-regulatory-posture.v1"),
+    coverage: z.enum(["bounded", "limited", "unavailable"]),
+    scope: z.literal("starting_page"),
+  }).strict(),
+}).strict();
+export type ApiV2PostureScores = z.infer<typeof apiV2PostureScoresSchema>;
 export const apiV2FindingCriticalitySchema = z.enum(["critical", "high", "medium", "low", "info", "unknown"]);
 export const apiV2FindingConfidenceSchema = z.enum(["strong", "good", "moderate", "weak", "unknown"]);
 export const apiV2EvidenceBasisSchema = z.enum(["runtime_observation", "policy_surface_detection", "accessibility_check", "public_report_projection"]);
@@ -241,6 +259,7 @@ export const apiV2ScanJobSchema = z
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
+    postureScores: apiV2PostureScoresSchema.optional(),
     scoreStatus: z.enum(["provisional", "final"]).optional(),
     scoreVersion: z.string().nullable().optional(),
     formsSummary: scanFormsSummarySchema.nullable().optional(),
@@ -303,6 +322,7 @@ export const apiV2ScanResourceSchema = z
     completedAt: z.string().nullable().optional(),
     scanTimeSeconds: z.number().nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
+    postureScores: apiV2PostureScoresSchema.optional(),
     scoreStatus: z.enum(["provisional", "final"]).optional(),
     scoreVersion: z.string().nullable().optional(),
     formsSummary: scanFormsSummarySchema.nullable().optional(),

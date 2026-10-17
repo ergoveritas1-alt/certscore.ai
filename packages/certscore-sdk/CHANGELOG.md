@@ -1,5 +1,9 @@
 # @certscore/sdk
 
+## 0.2.20
+
+- Type both versioned EU and California posture scores on completed scan resources, status results and reconstructed report evidence.
+
 ## 0.2.19
 
 - Type the optional CMP details presentation for recognized providers, custom consent controls, and visits without a banner.

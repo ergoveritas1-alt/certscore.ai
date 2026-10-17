@@ -3,6 +3,9 @@ import { projectScanFormsSummary, projectScanScoreExplanation } from "./scan-rep
 import { isAccessibilityAuditLimited } from "@certscore/contracts";
 import { projectAccessibilityAuditSummary } from "../scans/accessibility-audit-evidence";
 import { readPrivacyAuditEvidence } from "../scans/report-review-focus";
+import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
+import { deriveCaliforniaRegulatoryScore } from "../scans/california-regulatory-score";
+import { buildApiV2PostureScores } from "./posture-scores";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../scans/after-action-report-eligibility";
 import { readChoicePathExecution } from "../scans/choice-path-execution";
 import { deriveAfterActionSummary, afterActionInterpretation } from "./after-action-summary";
@@ -1038,6 +1041,15 @@ export function buildApiV2ScanResource(
   const scoreStatus = canonicalResultState === "final" ? "final" : "provisional";
   const formsSummary = canonicalResultState === "final" ? projectScanFormsSummary(scanRecord) : null;
   const scoreExplanation = canonicalResultState === "final" ? projectScanScoreExplanation(scanRecord, score) : null;
+  const postureScores = canonicalResultState === "final" && !noGoProjection ? (() => {
+    const canonical = getPersistedCanonicalReportProjection(scanRecord);
+    const california = deriveCaliforniaRegulatoryScore({
+      assessment: canonical ? readCaliforniaPrivacyReviewFromConsent(retainedConsentAssessment(scanRecord)) : null,
+      checklistRows: canonical?.checklistRows ?? [],
+      unifiedFindings: canonical?.ownerUnifiedFindings ?? [],
+    });
+    return buildApiV2PostureScores({ score, scoreExplanation, californiaScore: california });
+  })() : undefined;
   const scoreVersion = hasSuspendedGpcScoreEffect(scanRecord) ? CANONICAL_OVERALL_SCORE_VERSION : stringOrNull(scanRecord.snapshot?.score_version) ?? CANONICAL_OVERALL_SCORE_VERSION;
   const scoreUpdatedAt = dateStringOrNull(scanRecord.snapshot?.score_scored_at ?? scan.completedAt);
   const gpcResponse = deriveApiV2GpcResponse(scanRecord);
@@ -1069,6 +1081,7 @@ export function buildApiV2ScanResource(
     completedAt: dateStringOrNull(scan.completedAt),
     scanTimeSeconds,
     score: noGoProjection ? null : score,
+    ...(postureScores ? { postureScores } : {}),
     scoreStatus,
     scoreVersion,
     scoreUpdatedAt,
@@ -1280,6 +1293,7 @@ export function buildApiV2ScanStatus(
     completedAt: dateStringOrNull(scan.completedAt),
     scanTimeSeconds,
     score: canonicalScan.score ?? null,
+    ...(canonicalScan.postureScores ? { postureScores: canonicalScan.postureScores } : {}),
     scoreStatus: canonicalScan.scoreStatus,
     scoreVersion: canonicalScan.scoreVersion ?? null,
     scoreUpdatedAt: canonicalScan.scoreUpdatedAt ?? null,

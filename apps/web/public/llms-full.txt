@@ -55,7 +55,7 @@ Use these canonical discovery resources:
 
 These resources are intended for OpenAI/ChatGPT, Anthropic/Claude, Perplexity, Google/Gemini, Microsoft Copilot/Bing, DeepSeek, Kimi, Qwen, Grok/xAI, Mistral, Meta, and future agents. They are vendor-neutral and should not be treated as limited to one AI platform.
 
-The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.29`, and the publisher and legal owner is CertScore.ai, LLC.
+The canonical MCP Light registry identity is `ai.certscore/mcp-light`, the current hosted MCP version is `0.2.30`, and the publisher and legal owner is CertScore.ai, LLC.
 
 ## Agent quick path
 
@@ -246,7 +246,7 @@ Agents and SDKs should honor `Retry-After` on pending or throttled responses. Th
 
 ## TypeScript SDK
 
-Status: published. Install `@certscore/sdk@0.2.19` or newer for typed CMP details, GPC, Accept Path, and Reject Path results, canonical form totals and score deductions on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California.
+Status: published. Install `@certscore/sdk@0.2.20` or newer for typed EU and California posture scores on API v2 scan and report-evidence resources, plus existing scan creation and retained evidence support.
 
 Choice-path interpretation:
 
@@ -478,4 +478,4 @@ Detailed Evidence parity: SDK 0.2.16 adds getReportEvidence(scanId, {section}) f
 
 Detailed Evidence fixes: SDK 0.2.17 types California privacy-choice evidence in full and section="policy" exports. MCP 0.2.28 preserves typed full-report evidence, including long GPC proof lists, under the existing byte ceilings. Verified controls, unverified candidates, notice passages and source provenance remain distinct. These updates do not change stored assessments or start scans.
 
-SDK 0.2.19 and MCP 0.2.29 retain scoped CMP inventory types, possible cookie-template matches, inferred cookie purpose, observed expiry and explicit incomplete-capture diagnostics. The SDK also types the optional CMP details presentation. Captured observations remain distinct from verified consent or enforcement.
+SDK 0.2.20 and MCP 0.2.30 include typed EU and California posture scores with policy version and coverage. Captured observations remain distinct from verified consent or enforcement.

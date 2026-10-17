@@ -15,6 +15,7 @@ import { enforceApiV2ScanReadThrottle } from "../../../../../../server/pulse/api
 import { loadAnonymousPersistedScanReportProjection, loadPersistedScanReportProjection } from "../../../../../../server/scans/scan-report-projection";
 import { buildVerifiedTimelineReportModel } from "../../../../../../server/scans/verified-timeline-report-model";
 import { buildDetailedEvidenceExport } from "../../../../../../lib/scans/detailed-evidence-report";
+import { buildApiV2PostureScores } from "../../../../../../lib/api-v2/posture-scores";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -71,7 +72,10 @@ export async function GET(request: Request, context: { params: Promise<{ scanId:
       if (fullSite && ["waiting_homepage", "running"].includes(fullSite.summary.state.status)) {
         return reply(buildApiV2Error({ code: "invalid_url", message: "Full-site capture is still in progress. Wait for the full-site report to finish before starting its export." }), 409);
       }
-      const presented = report.resultDisposition === "no_go" ? report : { ...report, ...buildDetailedEvidenceExport(report) };
+      const presented = report.resultDisposition === "no_go" ? report : { ...report,
+        postureScores: buildApiV2PostureScores({ score: report.score.value,
+          scoreExplanation: report.scoreExplanation, californiaScore: report.californiaScore }),
+        ...buildDetailedEvidenceExport(report) };
       const exportedReport = fullSite ? { ...presented, fullSiteReport: fullSiteEvidenceExport(scanId, fullSite) } : presented;
       const selected = section ? selectReportEvidenceSection(exportedReport, section) : null;
       sectionSelection = selected?.selection;

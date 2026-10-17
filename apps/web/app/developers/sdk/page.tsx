@@ -26,7 +26,7 @@ export default function DeveloperSdkPage() {
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://www.npmjs.com/package/@certscore/sdk">
               @certscore/sdk
             </a>
-            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{PUBLIC_CERTSCORE_SDK_VERSION}</code> or newer for typed privacy workpapers, GPC observations and activity comparisons, and Accept/Reject after-click summaries on Pulse and API v2 scan resources, plus API v2 scan creation in EU-Germany, EU-Ireland, and California. Source and examples live in{" "}
+            . Use version <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-800">{PUBLIC_CERTSCORE_SDK_VERSION}</code> or newer for typed EU and California posture scores, privacy workpapers, and Accept/Reject after-click summaries on API v2 scan resources, plus scan creation in EU-Germany, EU-Ireland, and California. Source and examples live in{" "}
             <a className="font-semibold text-sky-700 hover:text-sky-900" href="https://github.com/ergoveritas1-alt/certscore.ai/tree/main/packages/certscore-sdk">
               packages/certscore-sdk
             </a>

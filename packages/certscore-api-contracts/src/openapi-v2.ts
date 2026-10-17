@@ -35,6 +35,24 @@ const afterActionSummaryOpenApi = {
   },
 } as const;
 
+const postureScoresOpenApi = {
+  type: "object", additionalProperties: false,
+  description: "Two starting-page scoring postures from the same retained canonical findings. The legacy score field remains the EU-weighted score. A null California score means verified coverage cannot support a number; neither score is a compliance grade.",
+  required: ["contractVersion", "gdprEprivacy", "ccpaCpra"],
+  properties: {
+    contractVersion: { type: "string", const: "certscore.posture-scores.v1" },
+    gdprEprivacy: { type: "object", additionalProperties: false,
+      required: ["posture", "score", "policyVersion", "coverage", "scope"],
+      properties: { posture: { type: "string", const: "gdpr_eprivacy" }, score: { type: ["integer", "null"], minimum: 0, maximum: 100 },
+        policyVersion: { type: ["string", "null"] }, coverage: { type: "string", enum: ["scored", "unavailable"] }, scope: { type: "string", const: "starting_page" } } },
+    ccpaCpra: { type: "object", additionalProperties: false,
+      required: ["posture", "score", "policyVersion", "coverage", "scope"],
+      properties: { posture: { type: "string", const: "ccpa_cpra" }, score: { type: ["integer", "null"], minimum: 0, maximum: 100 },
+        policyVersion: { type: "string", const: "california-regulatory-posture.v1" },
+        coverage: { type: "string", enum: ["bounded", "limited", "unavailable"] }, scope: { type: "string", const: "starting_page" } } },
+  },
+} as const;
+
 const diagnosticHeaders = {
   "x-certscore-api-version": { schema: { type: "string", const: "v2" }, description: "CertScore API version marker." },
   "x-certscore-request-id": { schema: { type: "string" }, description: "Request identifier for support and diagnostics." }
@@ -1171,6 +1189,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             completedAt: { type: ["string", "null"] },
             scanTimeSeconds: { type: ["number", "null"] },
             score: { type: ["integer", "null"], minimum: 0, maximum: 100 },
+            postureScores: { $ref: "#/components/schemas/PostureScores" },
             scoreStatus: { type: "string", enum: ["provisional", "final"] },
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },
@@ -1221,6 +1240,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
           }
         },
         PrivacyAuditEvidence: privacyAuditEvidenceOpenApi,
+        PostureScores: postureScoresOpenApi,
         Scan: {
           type: "object",
           additionalProperties: true,
@@ -1240,6 +1260,7 @@ export function buildCertScoreApiV2OpenApiDocument() {
             completedAt: { type: ["string", "null"] },
             scanTimeSeconds: { type: ["number", "null"] },
             score: { type: ["integer", "null"], minimum: 0, maximum: 100 },
+            postureScores: { $ref: "#/components/schemas/PostureScores" },
             scoreStatus: { type: "string", enum: ["provisional", "final"] },
             scoreVersion: { type: ["string", "null"] },
             scoreUpdatedAt: { type: ["string", "null"], format: "date-time" },

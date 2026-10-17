@@ -15,6 +15,7 @@ import { observedControlAssessment } from "../../lib/scans/test-fixtures/observe
 import { deriveConsentControlAssessment } from "@certscore/contracts";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
+import { buildApiV2ScanResource, buildApiV2ScanStatus } from "../../lib/api-v2/scan-resource";
 
 function scanRecord(): ScanDetailResponse {
   const scanId = "00000000-0000-0000-0000-000000000001";
@@ -88,9 +89,18 @@ test("California export carries its own versioned starting-page score", () => {
     optOutEffectiveness:"not_assessed",noticeAdequacy:"not_assessed",noticeTopics:[],noticeEvidenceRefs:[],
   };
   record.runtimeArtifacts = {...record.runtimeArtifacts,consentControlAssessment:parent};
+  record.accessPostureSummary = {} as ScanDetailResponse["accessPostureSummary"];
+  record.snapshot = { report_projection_status: "ready", certscore_overall: 82,
+    score_version: "overall-posture.v11" } as ScanDetailResponse["snapshot"];
   const ca = buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
   assert.equal(ca.californiaScore.score,100);
   assert.equal(ca.californiaScore.coverage,"bounded");
+  const resource = buildApiV2ScanResource(record);
+  const status = buildApiV2ScanStatus(record, { canonicalScan: resource });
+  assert.equal(resource.postureScores?.ccpaCpra.score,100);
+  assert.equal(resource.postureScores?.ccpaCpra.coverage,"bounded");
+  assert.equal(resource.postureScores?.gdprEprivacy.score,resource.score);
+  assert.deepEqual(status.postureScores,resource.postureScores);
   assert.match(renderCanonicalReportPdf(ca).toString("latin1"),/California starting-page score: 100\/100/);
 });
 

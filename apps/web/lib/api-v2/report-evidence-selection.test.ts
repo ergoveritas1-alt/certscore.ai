@@ -31,7 +31,9 @@ test("accessibility evidence survives focused selection, display export and pagi
   assert.match(JSON.stringify(page.entries), /image-alt|accessibilityEvidence/);
 });
 test("each focused section preserves canonical context without inventing missing evidence", () => {
-  const report = { scan: { id: scanId, scanFrom: "eu_ie", completedAt: "2026-09-12T20:26:00Z" }, score: { value: 72 },
+  const postureScores = { contractVersion: "certscore.posture-scores.v1", gdprEprivacy: { posture: "gdpr_eprivacy", score: 72, policyVersion: "gdpr-eprivacy-posture.v20", coverage: "scored", scope: "starting_page" },
+    ccpaCpra: { posture: "ccpa_cpra", score: null, policyVersion: "california-regulatory-posture.v1", coverage: "unavailable", scope: "starting_page" } };
+  const report = { scan: { id: scanId, scanFrom: "eu_ie", completedAt: "2026-09-12T20:26:00Z" }, score: { value: 72 }, postureScores,
     findings: [{ id: "canonical-finding", confidence: "review" }], coverage: { limitations: ["Partial capture"] },
     controls: { reject: "unknown" }, gpcResponse: { status: "indeterminate", scoreEffect: "none" },
     gdprTransparencyRows: [{ id: "retained-topic" }], transportRows: [], collectionStatus: "Unavailable", inventory: [],
@@ -42,6 +44,7 @@ test("each focused section preserves canonical context without inventing missing
     const selected = selectReportEvidenceSection(report, section);
     assert.deepEqual(selected.report.scan, report.scan);
     assert.equal(selected.report.score, report.score);
+    assert.equal(selected.report.postureScores, postureScores);
     assert.equal(selected.report.findings, report.findings);
     assert.equal(selected.report.coverage, report.coverage);
     assert.equal(selected.report.diagnostic, undefined);
@@ -59,6 +62,7 @@ test("each focused section preserves canonical context without inventing missing
   assert.equal(consent.report.rejectPath, undefined);
   assert.equal(consent.report.gpcResponse, undefined);
   assert.equal(selectReportEvidenceSection(report, "transport").report.transportRows, report.transportRows);
+  assert.deepEqual((buildReportDisplayExport(report) as Record<string, unknown>).postureScores, postureScores);
 });
 
 test("selection precedes deduplication so retained references never point to excluded fields", () => {
