@@ -16,3 +16,21 @@ test("the shared vendor registry bundles for browsers without the server script 
   assert.ok(result.outputFiles[0]?.text.length);
   assert.equal(Object.keys(result.metafile!.inputs).some(path => path.includes("runtime-script-facts") || path.includes("/acorn/")), false);
 });
+
+test("the scanner server entry bundles from source without generated dist files", async () => {
+  const result = await build({
+    stdin: {
+      contents: 'export { extractRuntimeScriptFacts } from "@certscore/vendor-resolver/runtime-script-facts";',
+      resolveDir: fileURLToPath(new URL("../../../", import.meta.url)),
+    },
+    tsconfig: fileURLToPath(new URL("../../../tsconfig.base.json", import.meta.url)),
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    write: false,
+    metafile: true,
+    logLevel: "silent",
+  });
+  assert.ok(Object.keys(result.metafile!.inputs).some(path => path.endsWith("/src/runtime-script-facts.ts")));
+  assert.equal(Object.keys(result.metafile!.inputs).some(path => /(?:^|\/)packages\/[^/]+\/dist\//.test(path)), false);
+});
