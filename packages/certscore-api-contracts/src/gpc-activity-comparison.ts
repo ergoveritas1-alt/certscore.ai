@@ -10,6 +10,7 @@ const activity = z.object({
 /** Approved measured facts only. Independent of response eligibility and scoring. */
 export const gpcActivityComparisonSchema = z.object({
   contractVersion: z.literal("certscore.gpc-activity-comparison.v1"),
+  evidencePolicy: z.literal("page_http_signal.v1").optional(),
   scanId: z.string().min(1).max(200),
   status: z.literal("measured"),
   scope: z.literal("matched_post_commit_request_window"),
@@ -23,5 +24,5 @@ export type GpcActivityComparison = z.infer<typeof gpcActivityComparisonSchema>;
 
 export function describeGpcActivityComparison(value: GpcActivityComparison): string {
   const a = value.activity.advertisingMarketing, b = value.activity.analyticsReplay;
-  return `Baseline -> GPC, first ${value.durationMs} ms after each document commit: advertising/marketing requests ${a.baselineRequests} -> ${a.gpcRequests}; analytics/replay requests ${b.baselineRequests} -> ${b.gpcRequests}.`;
+  return `Baseline -> GPC${value.evidencePolicy ? " page HTTP requests" : ""}, first ${value.durationMs} ms after each document commit: advertising/marketing requests ${a.baselineRequests} -> ${a.gpcRequests}; analytics/replay requests ${b.baselineRequests} -> ${b.gpcRequests}.`;
 }

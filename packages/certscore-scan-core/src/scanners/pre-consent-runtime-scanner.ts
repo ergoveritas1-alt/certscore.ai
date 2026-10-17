@@ -2370,7 +2370,7 @@ export async function preConsentRuntimeScanner(
         lateAccessibilityObservationPromise,
         gpcSignalCapture ? recordBoundedTiming(timingBreakdown,
           "GPC signal readback", "Read actual main/frame values alongside the existing bounded page snapshot; no extra settling.",
-          Math.min(2_500, Math.max(1, remainingModuleBudgetMs())), () => gpcSignalCapture.snapshot(), () => undefined)
+          Math.min(2_500, Math.max(1, remainingModuleBudgetMs())), () => gpcSignalCapture.snapshot({budgetMs: Math.min(2_500, Math.max(1, remainingModuleBudgetMs()))}), () => undefined)
           : Promise.resolve(undefined),
       ]),
     );

@@ -675,3 +675,25 @@ test("redirect navigation proof outranks a saturated advertising comparison wind
     assert.deepEqual(result.gpcImpactCapture?.windows, bundle.gpcImpactCapture.windows);
   }
 });
+
+test("new page-HTTP policy retains a complete short interval when the long interval exceeds event caps", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  bundle.networkEvents = bundle.networkEvents.map((e, i) => ({...e, timestampMs: i < 33 ? 1000+i : 1450}));
+  const nav=bundle.networkEvents.at(-1)!;
+  Object.assign(nav,{isMainFrame:true,resourceType:"document",timestampMs:900});
+  bundle.networkEvents[100]!.collectionEndpointObserved=true;
+  bundle.gpcImpactCapture={contractVersion:"certscore.gpc-impact-capture.v1",scope:"page_http_request_attempts_after_document_commit",
+    comparisonPolicy:"page_http_signal.v1",expectedEnabled:false,captureStartedAtMs:0,capturedAtMs:2100,readbackDocumentToken:"loader",
+    document:{token:"loader",urlSha256:"a".repeat(64),committedAtMs:1000,secGpc:null},requestsDropped:0,limitationKeys:[],
+    windows:([250,500,1000] as const).map(durationMs=>{const events=bundle.networkEvents.filter(e=>e.timestampMs>=1000&&e.timestampMs<1000+durationMs);
+      return {durationMs,requestCount:events.length,requestSetSha256:gpcImpactRequestSetHash(events)};})};
+  const retained=compactCanonicalEvidenceBundleForRetention(bundle,1);
+  assert.ok(retained.networkEvents.length<=80);
+  assert.ok(retained.networkEvents.some(e=>e.eventId===nav.eventId));
+  assert.ok(retained.networkEvents.some(e=>e.eventId===bundle.networkEvents[100]!.eventId));
+  const early=retained.networkEvents.filter(e=>e.timestampMs>=1000&&e.timestampMs<1250);
+  assert.equal(early.length,33);
+  assert.equal(gpcImpactRequestSetHash(early),bundle.gpcImpactCapture.windows[0]!.requestSetSha256);
+  assert.equal(retained.gpcImpactCapture?.retentionStatus,"incomplete","The longer windows remain incomplete");
+  assert.deepEqual(retained.gpcImpactCapture?.windows,bundle.gpcImpactCapture.windows);
+});

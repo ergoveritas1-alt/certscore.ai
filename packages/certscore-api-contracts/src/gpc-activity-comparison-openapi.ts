@@ -18,6 +18,10 @@ export const gpcActivityComparisonOpenApi = {
       "const": "certscore.gpc-activity-comparison.v1",
       "type": "string"
     },
+    "evidencePolicy": {
+      "const": "page_http_signal.v1",
+      "type": "string"
+    },
     "scanId": {
       "type": "string",
       "minLength": 1,

@@ -81,7 +81,7 @@ export async function captureCmpBasicEvidence(input: {
   if (!(input.isRetainable ?? input.isCurrent)()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   if (indices.length !== 1) { input.onOutcome?.(indices.length ? "ambiguous_registry_scopes" : "registered_scope_unavailable"); return undefined; }
   const index = indices[0]!, definition = definitions[index]!;
-  if (!input.isCurrent() && !scopeInventory.oneTrustInventory) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
+  if (!input.isCurrent() && !scopeInventory.oneTrustInventory && !scopeInventory.surface) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   if (definition.initialOptionalOffCloseObservation && await page.locator(scopes[index]!).count() !== 1) {
     input.onOutcome?.("ambiguous_passive_container"); return undefined;
   }
@@ -100,6 +100,15 @@ export async function captureCmpBasicEvidence(input: {
     retained=cmpBasicEvidenceSchema.parse(structuredClone(packet));
     input.onCheckpoint?.(retained);return true;
   };
+  if (scopeInventory.surface && !definition.initialOptionalOffCloseObservation) {
+    const { controls, links } = scopeInventory.surface;
+    packet.controls = classifyControls(controls.controls);
+    packet.captureProgress!.controlsAtMs = Date.now() - input.scanStartedAtMs;
+    if (controls.overflow) packet.limitations.push("control_inventory_overflow");
+    packet.privacyLinks = privacyPolicyLinkCandidates(links).map(({url,hitTargetBeforeAction,access}) => ({url,hitTargetBeforeAction,access}));
+    packet.captureProgress!.privacyLinksAtMs = Date.now() - input.scanStartedAtMs;
+    if (!checkpoint()) return undefined;
+  }
   const inlineInventory = definition.canonicalName === "OneTrust" ? scopeInventory.oneTrustInventory : undefined;
   if (inlineInventory) {
     packet.declarations = inlineInventory.declarations;
@@ -115,7 +124,7 @@ export async function captureCmpBasicEvidence(input: {
   // completed atomic inventory can still survive inside its original lane.
   if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return retained; }
   // Protect the minimal visible-control packet before descriptions or links.
-  const rawControls=configurationOnly?{controls:[],overflow:false}:await readPreferenceControls(page.locator(scopes[index]!),definition.preferenceCategoryInventory,definition.initialOptionalOffCloseObservation?.inputSelector);
+  const rawControls=scopeInventory.surface?.controls ?? (configurationOnly?{controls:[],overflow:false}:await readPreferenceControls(page.locator(scopes[index]!),definition.preferenceCategoryInventory,definition.initialOptionalOffCloseObservation?.inputSelector));
   packet.controls=classifyControls(rawControls.controls);
   packet.captureProgress!.controlsAtMs=Date.now()-input.scanStartedAtMs;
   if(rawControls.overflow) packet.limitations.push("control_inventory_overflow");
@@ -159,7 +168,7 @@ export async function captureCmpBasicEvidence(input: {
   }
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
   if (input.deferPublicPrivacyLinks && definition.passivePrivacyLinkInspection==="same_origin_after_visual.v1") return retained;
-  if(configurationOnly)return retained;
+  if(configurationOnly || scopeInventory.surface)return retained;
   const privacyScope=page.locator(scopes[index]!).locator("a[href]");
   const links=await privacyScope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
     label:(node.getAttribute("aria-label")??node.textContent??"").trim().slice(0,160)})));

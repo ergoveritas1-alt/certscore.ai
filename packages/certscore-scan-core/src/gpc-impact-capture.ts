@@ -80,7 +80,7 @@ export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: (
       } : undefined;
       frozen = gpcImpactCaptureSchema.parse({ contractVersion: "certscore.gpc-impact-capture.v1", scope: "page_http_request_attempts_after_document_commit",
         ...(quietCheckpoint ? {quietCheckpoint} : {}),
-        expectedEnabled: input.expectedEnabled, captureStartedAtMs: startedAt, capturedAtMs, readbackDocumentToken, document, requestsDropped, windows, limitationKeys: limits, invalidationReasons: [...invalidationReasons] });
+        comparisonPolicy: "page_http_signal.v1", expectedEnabled: input.expectedEnabled, captureStartedAtMs: startedAt, capturedAtMs, readbackDocumentToken, document, requestsDropped, windows, limitationKeys: limits, invalidationReasons: [...invalidationReasons] });
       return frozen;
     },
   };

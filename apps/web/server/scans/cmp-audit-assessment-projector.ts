@@ -554,7 +554,19 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   if (!parsed.success || parsed.data.scanId !== bundle.scanId || parsed.data.targetUrl !== bundle.url) return original;
   const basic = parsed.data;
   const duration = Date.parse(bundle.completedAt) - Date.parse(bundle.startedAt);
+  const consent = bundle.consentUiObservations?.at(-1);
+  const retainedPrimaryDocument = consent?.documentUrl === basic.documentUrl &&
+    consent.documentIdentity?.source === "cdp_loader_id" && consent.documentIdentity.token === basic.documentToken &&
+    (bundle.domSnapshots ?? []).some(snapshot => snapshot.artifactId === "dom_text_pre_consent" &&
+      snapshot.url === basic.documentUrl && snapshot.documentIdentity?.token === basic.documentToken &&
+      consent.evidenceRefs.some(ref => ref.artifactId === snapshot.artifactId && ref.path === snapshot.path));
+  // An unsuccessful, independent recovery session is diagnostic only. It must
+  // not invalidate the still-canonical primary session's loader-bound facts.
+  // All primary snapshots, and any recovery selected by consent, still enforce
+  // the existing latest-document guard below.
   const snapshots = (bundle.domSnapshots ?? []).filter(snapshot => snapshot.consentStateAtTime === "pre_consent" && Number.isFinite(snapshot.capturedAtMs))
+    .filter(snapshot => !(retainedPrimaryDocument && snapshot.artifactId === "dom_text_pre_consent_recovery" &&
+      !consent!.evidenceRefs.some(ref => ref.artifactId === snapshot.artifactId && ref.path === snapshot.path)))
     .sort((left, right) => right.capturedAtMs - left.capturedAtMs);
   const latest = snapshots[0];
   if (!Number.isFinite(duration) || basic.capturedAtMs > duration || !latest || latest.capturedAtMs < 0 || latest.capturedAtMs > duration ||
@@ -606,6 +618,6 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, assign, assessment.rows, observations.filter(capture => capture.networkCompleted)); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: basic.privacyLinkInspection ? "independent_cmp_basic_facts.v9" : basic.networkCookieInventory ? "independent_cmp_basic_facts.v8" : basic.sdkServiceInventory ? "independent_cmp_basic_facts.v7" : "independent_cmp_basic_facts.v6", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v10", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

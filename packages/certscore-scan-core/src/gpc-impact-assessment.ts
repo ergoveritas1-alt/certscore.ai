@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { canonicalEvidenceBundleSchema, gpcImpactAssessmentSchema, type CanonicalEvidenceBundle, type GpcImpactCapture, type GpcImpactAssessment, type NetworkEvent } from "@certscore/contracts";
 import { gpcImpactRequestSetHash } from "./gpc-impact-capture.js";
 import { evaluateGpcObservationSession } from "./gpc-observation-completion.js";
+import { retainedFinalDocumentRequest } from "./gpc-response-assessment.js";
 import { gpcEndpointEvidence } from "./gpc-vendor-evidence.js";
 
 export type GpcImpactSource = { bytes: Uint8Array; pointer: { sha256: string; sizeBytes: number } };
@@ -16,16 +17,20 @@ function eventsFor(bundle: CanonicalEvidenceBundle, capture: GpcImpactCapture, m
   const start = capture.document!.committedAtMs;
   return bundle.networkEvents.filter(e => e.timestampMs >= start && e.timestampMs < start + ms);
 }
-function validSignal(bundle: CanonicalEvidenceBundle, enabled: boolean, scanId: string) {
+function validSignal(bundle: CanonicalEvidenceBundle, enabled: boolean, scanId: string, pageHttpOnly = false) {
   const c = bundle.gpcImpactCapture, p = bundle.gpcSignalObservation;
   return bundle.scanId === scanId && bundle.scanLaneRuns.length === 1 &&
     bundle.scanLaneRuns[0]?.laneId === (enabled ? "gpc_observation" : "runtime_evidence") &&
     bundle.scanLaneRuns[0]?.region === bundle.region && c && c.expectedEnabled === enabled && c.document && p && p.expectedEnabled === enabled &&
     c.document.urlSha256 === p.documentUrlSha256 && c.document.token === c.readbackDocumentToken &&
     (enabled ? c.document.secGpc === "1" : c.document.secGpc === null) &&
-    p.workerCount === 0 && p.frameCount === p.frames.length && p.frameCount > 0 && p.limitationKeys.length === 0 &&
+    (pageHttpOnly ? c.comparisonPolicy === "page_http_signal.v1" &&
+      Boolean(retainedFinalDocumentRequest(bundle, p)?.requestHeaders) &&
+      (enabled ? retainedFinalDocumentRequest(bundle, p)?.requestHeaders?.secGpc === "1" : retainedFinalDocumentRequest(bundle, p)?.requestHeaders?.secGpc === undefined) &&
+      !p.limitationKeys.some(key => ["document_changed_during_readback", "prototype_document_identity_unverified"].includes(key)) :
+      p.workerCount === 0 && p.frameCount === p.frames.length && p.frameCount > 0 && p.limitationKeys.length === 0) &&
     p.frames.filter(f => f.mainFrame && f.documentUrlSha256 === c.document!.urlSha256).length === 1 &&
-    p.frames.filter(f => f.mainFrame).length === 1 && p.frames.every(f => f.navigatorValue === enabled) &&
+    p.frames.filter(f => f.mainFrame).length === 1 && (pageHttpOnly ? p.frames.filter(f => f.mainFrame) : p.frames).every(f => f.navigatorValue === enabled) &&
     p.capturedAtMs >= c.document.committedAtMs && p.capturedAtMs <= c.capturedAtMs;
 }
 function inventory(bundle: CanonicalEvidenceBundle, events: NetworkEvent[], purposes: Set<string>) {
@@ -41,7 +46,8 @@ function inventory(bundle: CanonicalEvidenceBundle, events: NetworkEvent[], purp
 
 /** Internal bounded-window measurement, independent of legacy response eligibility
  * and scoring. Old captures cannot acquire stronger historical conclusions. */
-export function buildGpcImpactAssessment(input: { scanId: string; baseline?: GpcImpactSource; gpc?: GpcImpactSource }): GpcImpactAssessment {
+export function buildGpcImpactAssessment(input: { scanId: string; baseline?: GpcImpactSource; gpc?: GpcImpactSource; pageHttpOnly?: boolean }): GpcImpactAssessment {
+  const pageHttpOnly = input.pageHttpOnly === true;
   const baseline = readVerifiedGpcImpactSource(input.baseline), gpc = readVerifiedGpcImpactSource(input.gpc);
   const limits: string[] = [];
   for (const [label, bundle, enabled, lane] of [["baseline", baseline, false, "runtime_evidence"], ["gpc", gpc, true, "gpc_observation"]] as const) {
@@ -49,9 +55,9 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
     if (bundle.scanId !== input.scanId || !bundle.scanLaneRuns.some(l => l.laneId === lane)) limits.push(`${label}_provenance_mismatch`);
     const capture = bundle.gpcImpactCapture;
     if (!capture) { limits.push(`${label}_impact_capture_missing`); continue; }
-    if (capture.retentionStatus === "incomplete") limits.push(`${label}_retained_request_set_incomplete`);
+    if (!pageHttpOnly && capture.retentionStatus === "incomplete") limits.push(`${label}_retained_request_set_incomplete`);
     if (capture.limitationKeys.length || capture.requestsDropped || !capture.windows.length) limits.push(`${label}_capture_incomplete`);
-    if (!validSignal(bundle, enabled, input.scanId)) limits.push(`${label}_delivery_or_document_unverified`);
+    if (!validSignal(bundle, enabled, input.scanId, pageHttpOnly)) limits.push(`${label}_delivery_or_document_unverified`);
     if (capture.capturedAtMs > Date.parse(bundle.completedAt) - Date.parse(bundle.startedAt)) limits.push(`${label}_capture_after_completion`);
     if (bundle.scanNoGoAssessment?.decision === "no_go" || bundle.scanEvidenceLaneAssessment?.outcome === "no_go" ||
       bundle.runtimeCoverage?.coverageStatus !== "usable" || !bundle.scanLaneRuns.some(l => l.laneId === lane && l.accessOutcome === "representative_page")) limits.push(`${label}_access_limited`);
@@ -59,7 +65,16 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   if (baseline && gpc && (baseline.region !== gpc.region || baseline.gpcSignalObservation?.contextConfigSha256 !== gpc.gpcSignalObservation?.contextConfigSha256 ||
     baseline.gpcImpactCapture?.document?.urlSha256 !== gpc.gpcImpactCapture?.document?.urlSha256)) limits.push("paired_context_or_document_mismatch");
   const bc = baseline?.gpcImpactCapture, gc = gpc?.gpcImpactCapture;
-  const windows = bc?.windows.filter(w => gc?.windows.some(g => g.durationMs === w.durationMs)) ?? [];
+  const verifiedWindow = (b: CanonicalEvidenceBundle, ms: number) => {
+    const c = b.gpcImpactCapture!, w = c.windows.find(w => w.durationMs === ms);
+    if (!c.document || !w) return false;
+    const events = eventsFor(b, c, ms);
+    return w.requestCount === events.length && new Set(events.map(e => e.eventId)).size === events.length &&
+      w.requestSetSha256 === gpcImpactRequestSetHash(events) && (b.gpcSignalObservation?.capturedAtMs ?? -1) >= c.document.committedAtMs + ms &&
+      events.every(e => e.requestHeaders !== undefined && (c.expectedEnabled ? e.requestHeaders?.secGpc === "1" : e.requestHeaders?.secGpc === undefined));
+  };
+  const windows = bc?.windows.filter(w => gc?.windows.some(g => g.durationMs === w.durationMs) &&
+    (!pageHttpOnly || baseline && gpc && verifiedWindow(baseline, w.durationMs) && verifiedWindow(gpc, w.durationMs))) ?? [];
   const horizon = windows.at(-1)?.durationMs;
   if (!horizon) limits.push("common_window_unavailable");
   for (const [label, bundle] of [["baseline", baseline], ["gpc", gpc]] as const) {
@@ -71,7 +86,7 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   // Recompute every declared window from the full original event arrays. A
   // downstream truncation, duplicate, mutation or lost request fails closed.
   for (const [label, b] of [["baseline", baseline], ["gpc", gpc]] as const) {
-    if (!b?.gpcImpactCapture?.document) continue;
+    if (!b?.gpcImpactCapture?.document || pageHttpOnly) continue;
     const c = b.gpcImpactCapture;
     if (c.windows.some(w => {
       const events = eventsFor(b, c, w.durationMs);
@@ -103,7 +118,7 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   const common = { contractVersion: "certscore.gpc-impact-assessment.v1" as const, mode: "internal_only" as const,
     productionProjectable: false as const, scoreEffect: "none" as const, causedByGpc: "not_established" as const,
     scanId: input.scanId, sourceHashes: { baseline: baseline ? input.baseline!.pointer.sha256 : null, gpc: gpc ? input.gpc!.pointer.sha256 : null },
-    delivery: { baselineVerified: Boolean(baseline && validSignal(baseline, false, input.scanId)), gpcVerified: Boolean(gpc && validSignal(gpc, true, input.scanId)) },
+    delivery: { baselineVerified: Boolean(baseline && validSignal(baseline, false, input.scanId, pageHttpOnly)), gpcVerified: Boolean(gpc && validSignal(gpc, true, input.scanId, pageHttpOnly)) },
     cmpRecordedState: { basis: "current_gpc_session_state", baselineState: baselineSemanticVerified ? "captured" : bs ? "unverified" : "not_captured",
       received: state?.gpc === true ? "received" : state?.gpc === false ? "not_received" : "unknown",
       sale: axis(state?.saleNotice, state?.saleOptOut), sharing: axis(state?.sharingNotice, state?.sharingOptOut) },

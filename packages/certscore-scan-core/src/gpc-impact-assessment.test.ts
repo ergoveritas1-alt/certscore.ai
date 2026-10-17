@@ -29,6 +29,7 @@ function fixture(enabled: boolean, names: string[], end = 1500) {
   bundle.gpcSignalObservation!.prototypeCaptureBinding = { captureId: "11111111-1111-4111-8111-111111111111", documentIdentitySource: "cdp_loader_id", documentToken: "loader" };
   capture.bindReadback("loader");
   bundle.gpcImpactCapture = capture.finish(bundle.gpcSignalObservation);
+  delete bundle.gpcImpactCapture.comparisonPolicy; // Preserve historical fixture eligibility.
   bundle.completedAt = "2026-09-05T12:00:02.000Z";
   bundle.modulesRun[0]!.timingBreakdown![0]!.outcome = "timed_out";
   return canonicalEvidenceBundleSchema.parse(bundle);
@@ -200,4 +201,37 @@ test("verified current CMP choice remains useful when the activity comparison is
   assert.equal(r.cmpRecordedState.sale,'opted_out');
   assert.equal(r.cmpRecordedState.baselineState,'not_captured');
   assert.equal(r.causedByGpc,'not_established');
+});
+
+
+test("page HTTP policy compares complete matched windows independently of worker/frame churn", () => {
+  const baseline = fixture(false, ["A", "B"]), gpc = fixture(true, ["A"]);
+  for (const b of [baseline, gpc]) {
+    b.gpcImpactCapture!.comparisonPolicy = "page_http_signal.v1";
+    b.gpcSignalObservation!.workerCount = 2;
+    b.gpcSignalObservation!.limitationKeys = ["worker_navigator_delivery_unverified", "frames_changed_during_readback", "frame_attached_during_readback"];
+  }
+  const run = () => buildGpcActivityComparison({scanId:baseline.scanId, baseline:source(baseline), gpc:source(gpc)});
+  assert.equal(run()?.evidencePolicy, "page_http_signal.v1");
+  assert.equal(run()?.activity.advertisingMarketing.baselineRequests, 2);
+  assert.equal(run()?.activity.advertisingMarketing.gpcRequests, 1);
+  assert.equal(buildGpcResponseAssessment({baseline,baselineArtifact:source(baseline).pointer,gpc,gpcArtifact:source(gpc).pointer}).status,"indeterminate");
+  // Lost late-window evidence permits only an independently hash-verified
+  // earlier interval, never a claim about the truncated longer interval.
+  gpc.networkEvents.pop(); gpc.gpcImpactCapture!.retentionStatus = "incomplete";
+  assert.equal(run()?.durationMs,250);
+  gpc.gpcSignalObservation!.frames[0]!.navigatorValue = false;
+  assert.equal(run(),undefined);
+});
+
+test("page HTTP comparison rejects missing per-request signal, loader changes and tampered hashes", () => {
+  for (const defect of ["header", "loader", "hash", "no_marker"]) {
+    const baseline=fixture(false,["A"]),gpc=fixture(true,["A"]);
+    for(const b of [baseline,gpc])b.gpcImpactCapture!.comparisonPolicy="page_http_signal.v1";
+    if(defect==="header") {gpc.networkEvents[1]!.requestHeaders={}; gpc.gpcImpactCapture!.windows=gpc.gpcImpactCapture!.windows.filter(w=>w.durationMs===1000);}
+    if(defect==="loader")gpc.gpcImpactCapture!.readbackDocumentToken="wrong";
+    if(defect==="hash")for(const w of gpc.gpcImpactCapture!.windows)w.requestSetSha256="f".repeat(64);
+    if(defect==="no_marker"){delete gpc.gpcImpactCapture!.comparisonPolicy;gpc.gpcSignalObservation!.workerCount=1;}
+    assert.equal(buildGpcActivityComparison({scanId:baseline.scanId,baseline:source(baseline),gpc:source(gpc)}),undefined,defect);
+  }
 });

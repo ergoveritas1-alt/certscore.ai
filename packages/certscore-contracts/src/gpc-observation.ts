@@ -120,6 +120,14 @@ export const gpcSignalObservationSchema = z.object({
     navigatorValue: z.boolean().nullable(),
   }).strict()).max(32),
   workerCount: countSchema,
+  workerReadback: z.object({
+    policyVersion: z.literal("worker_navigator_readback.v1"),
+    scope: z.literal("observed_value_only_not_startup_delivery"),
+    observed: countSchema,
+    samples: z.array(z.object({ index: countSchema, status: z.enum(["observed", "unavailable", "pending"]),
+      navigatorValue: z.boolean().nullable(), capturedAtMs: countSchema.nullable() }).strict()).max(8),
+    truncated: z.boolean(),
+  }).strict().optional(),
   limitationKeys: z.array(z.string().min(1).max(160)).max(12),
 }).strict();
 

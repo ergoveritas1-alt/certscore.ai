@@ -46,3 +46,33 @@ for (const enabled of [false, true]) {
     });
   }
 }
+
+
+test("worker reads are bounded, retained independently and never become startup delivery proof", async () => {
+  let observer: (worker: any) => void = () => {};
+  const f = fixture(true);
+  const main = f.main;
+  const capture = createGpcSignalCapture({context:{on(){}} as unknown as BrowserContext,
+    page:{on(name:string, cb:any){if(name==="worker")observer=cb;},frames:()=>[main],mainFrame:()=>main,url:()=>main.url()} as unknown as Page,
+    enabled:true,scanStartedAtMs:1000,internalBudgetMs:5000});
+  let reads=0;
+  for(let i=0;i<10;i++)observer({evaluate:async()=>{reads++;return i===0?true:null;}});
+  await Promise.resolve();
+  const proof=await capture.snapshot();
+  assert.equal(reads,8);assert.equal(proof?.workerCount,10);
+  assert.equal(proof?.workerReadback?.samples.length,8);assert.equal(proof?.workerReadback?.truncated,true);
+  assert.equal(proof?.workerReadback?.samples[0]?.navigatorValue,true);
+  assert.equal(proof?.workerReadback?.samples[1]?.navigatorValue,null);
+  assert.ok(proof?.limitationKeys.includes("worker_navigator_delivery_unverified"));
+});
+
+
+test("slow child readback preserves the completed main frame inside the existing allowance", async () => {
+  const f=fixture(true); let finishChild: (()=>void) | undefined;
+  f.child.evaluate=()=>new Promise(resolve=>{finishChild=()=>resolve({url:f.child.url(),timeOrigin:1000,value:true});});
+  const proof=await f.capture.snapshot({budgetMs:51});
+  assert.equal(proof?.frames.length,1);assert.equal(proof?.frames[0]?.mainFrame,true);
+  assert.equal(proof?.frameCount,2);assert.ok(proof?.limitationKeys.includes("frame_signal_readback_incomplete"));
+  finishChild?.();await Promise.resolve();
+  assert.equal(proof?.frames.length,1,"Late child completion cannot modify frozen evidence");
+});

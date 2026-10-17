@@ -27,29 +27,56 @@ export function createGpcSignalCapture(input: {
   impactReadback?: { documentIdentity: () => BrowserDocumentIdentity | undefined; bind: (token: string | undefined) => void };
 }) {
   const workers = new Set<Worker>();
-  input.page.on("worker", (worker) => workers.add(worker));
-  input.context.on("serviceworker", (worker) => workers.add(worker));
+  const workerSamples: NonNullable<GpcSignalObservation["workerReadback"]>["samples"] = [];
+  const observeWorker = (worker: Worker) => {
+    if (workers.has(worker)) return;
+    workers.add(worker);
+    if (workerSamples.length >= 8) return;
+    const row: (typeof workerSamples)[number] = { index: workers.size - 1, status: "pending", navigatorValue: null, capturedAtMs: null };
+    workerSamples.push(row);
+    // Read only, once, alongside existing browser work. Never inject a signal
+    // into an already-running worker, await completion, or claim startup proof.
+    void worker.evaluate(() => typeof (navigator as unknown as {globalPrivacyControl?: unknown}).globalPrivacyControl === "boolean"
+      ? (navigator as unknown as {globalPrivacyControl: boolean}).globalPrivacyControl : null).then(value => {
+        row.status = "observed"; row.navigatorValue = value;
+        row.capturedAtMs = Math.max(0, Date.now() - input.scanStartedAtMs);
+      }, () => { row.status = "unavailable"; });
+  };
+  input.page.on("worker", observeWorker);
+  input.context.on("serviceworker", observeWorker);
   const contextConfigSha256 = createHash("sha256").update(JSON.stringify({
     pairedSettlePolicy:PAIRED_RUNTIME_SETTLE_POLICY,pairedSettleMaxMs:PAIRED_RUNTIME_SETTLE_MAX_MS,
     context: chromiumContextOptions(), waitMode: input.waitMode ?? "default", internalBudgetMs: input.internalBudgetMs,
   })).digest("hex");
 
   return {
-    async snapshot(): Promise<GpcSignalObservation | undefined> {
+    async snapshot(options?: { budgetMs: number }): Promise<GpcSignalObservation | undefined> {
       const before = input.prototypeBinding?.documentIdentity();
       const impactBefore = input.impactReadback?.documentIdentity();
       const frames = input.page.frames();
-      const samples = await Promise.all(frames.slice(0, 32).map(async (frame) => {
+      type Sample = { documentUrlSha256: string; mainFrame: boolean; navigatorValue: boolean | null; timeOrigin: number };
+      const samples: Array<Sample | null> = frames.slice(0, 32).map(() => null);
+      let closed = false;
+      const readbacks = Promise.all(frames.slice(0, 32).map(async (frame, index) => {
         try {
           const sample = await frame.evaluate(() => ({
             url: location.href, timeOrigin: performance.timeOrigin,
             value: typeof (navigator as Navigator & { globalPrivacyControl?: unknown }).globalPrivacyControl === "boolean"
               ? (navigator as Navigator & { globalPrivacyControl: boolean }).globalPrivacyControl : null,
           }));
-          return { documentUrlSha256: gpcDocumentHash(sample.url), mainFrame: frame === input.page.mainFrame(),
+          if (!closed) samples[index] = { documentUrlSha256: gpcDocumentHash(sample.url), mainFrame: frame === input.page.mainFrame(),
             navigatorValue: sample.value, timeOrigin: sample.timeOrigin };
-        } catch { return null; }
+        } catch { /* Retain other completed frames; this one remains unavailable. */ }
       }));
+      // Finish inside the caller's existing readback allowance. A hanging child
+      // cannot erase a completed main-frame read or mutate the frozen packet.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        if (options) await Promise.race([readbacks, new Promise<void>(resolve => {
+          timer = setTimeout(resolve, Math.max(0, options.budgetMs - 50));
+        })]);
+        else await readbacks;
+      } finally { closed = true; if (timer) clearTimeout(timer); }
       const main = samples.find((sample) => sample?.mainFrame);
       if (!main) return undefined;
       const limitationKeys: string[] = [];
@@ -88,7 +115,10 @@ export function createGpcSignalCapture(input: {
         frameCount: frames.length,
         frames: samples.flatMap((sample) => sample ? [{ documentUrlSha256: sample.documentUrlSha256,
           mainFrame: sample.mainFrame, navigatorValue: sample.navigatorValue }] : []),
-        workerCount: workers.size, limitationKeys,
+        workerCount: workers.size, workerReadback: {
+          policyVersion: "worker_navigator_readback.v1", scope: "observed_value_only_not_startup_delivery",
+          observed: workers.size, samples: workerSamples.map(row => ({...row})), truncated: workers.size > 8,
+        }, limitationKeys,
       });
     },
   };

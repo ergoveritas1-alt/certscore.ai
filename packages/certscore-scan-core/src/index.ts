@@ -1619,6 +1619,16 @@ export function compactCanonicalEvidenceBundleForRetention(
     event.timestampMs >= captureDocument.committedAtMs && event.timestampMs < windowEnd) : [];
   // Small windows still use the existing additive restoration allowance.
   const prioritizeWindow = serializedBytes(windowEvents) > 16 * 1024;
+  // Protect one complete new-policy interval within existing event caps. The
+  // longest window may exceed the final 80-request budget; retain a complete
+  // shorter one, leaving at least 20 slots for navigation/collection evidence.
+  const comparisonWindowEventIds = new Set<string>();
+  if (compacted.gpcImpactCapture?.comparisonPolicy === "page_http_signal.v1" && captureDocument) {
+    const eligible = compacted.gpcImpactCapture.windows.map(window => ({ window, events: windowEvents.filter(event =>
+      event.timestampMs < captureDocument.committedAtMs + window.durationMs) })).filter(row => row.events.length <= 60);
+    const selected = eligible.at(-1);
+    if (selected) for (const event of selected.events) comparisonWindowEventIds.add(event.eventId);
+  }
   const protectedRequestIds = new Set<string>();
   for (const event of compacted.networkEvents) {
     if (event.isMainFrame && event.resourceType === "document") {
@@ -1637,7 +1647,7 @@ export function compactCanonicalEvidenceBundleForRetention(
   }
   compacted = canonicalEvidenceBundleSchema.parse({
     ...compacted,
-    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140, protectedEventIds, cmpEventIds, navigationEventIds),
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140, protectedEventIds, cmpEventIds, navigationEventIds, comparisonWindowEventIds),
     networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 100, protectedEventIds, cmpEventIds, navigationEventIds),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 80),
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 60),
@@ -1650,7 +1660,7 @@ export function compactCanonicalEvidenceBundleForRetention(
 
   return finishRetention(canonicalEvidenceBundleSchema.parse({
     ...compacted,
-    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80, protectedEventIds, cmpEventIds, navigationEventIds),
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80, protectedEventIds, cmpEventIds, navigationEventIds, comparisonWindowEventIds),
     networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 60, protectedEventIds, cmpEventIds, navigationEventIds),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 40),
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 40),
@@ -1876,13 +1886,14 @@ function retainPriorityEvents<T extends RetainableRuntimeEvent>(
   protectedEventIds: Set<string> = new Set(),
   cmpEventIds: Set<string> = new Set(),
   navigationEventIds: Set<string> = new Set(),
+  comparisonWindowEventIds: Set<string> = new Set(),
 ): T[] {
   if (events.length <= maxEvents) {
     return events;
   }
   return [...events]
     .map((event, index) => ({ event, index, score: retentionPriorityScore(event, referencedEventIds, index, events.length) +
-      (navigationEventIds.has(event.eventId) ? 100_000 : protectedEventIds.has(event.eventId) ? 10_000 : cmpEventIds.has(event.eventId) ? 2_000 : 0) }))
+      (navigationEventIds.has(event.eventId) ? 100_000 : comparisonWindowEventIds.has(event.eventId) ? 50_000 : protectedEventIds.has(event.eventId) ? 10_000 : cmpEventIds.has(event.eventId) ? 2_000 : 0) }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .slice(0, maxEvents)
     .sort((left, right) => left.index - right.index)

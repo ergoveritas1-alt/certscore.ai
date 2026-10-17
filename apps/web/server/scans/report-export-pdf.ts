@@ -377,7 +377,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     const gpc = report.gpcResponse;
     const facts = describeGpcObservedFacts(gpc.observation);
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
-    if (gpc.comparison.comparable && gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
+    if (gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
     if (gpc.comparison.comparable && gpc.status !== "indeterminate") {
       lines.push(...wrappedLines(hasNoQualifiedGpcActivity(gpc)
         ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."

@@ -16,5 +16,6 @@ export function GpcActivityComparison({ comparison }: { comparison?: Comparison 
           <td className="px-3 py-2 font-mono text-zinc-900">{comparison.activity[key].gpcRequests}</td>
         </tr>)}</tbody>
     </table>
+    {comparison.evidencePolicy ? <p className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-600">Matched page HTTP requests during this interval. Counts do not establish that GPC caused a change or that the choice was honored.</p> : null}
   </section>;
 }

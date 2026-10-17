@@ -10,6 +10,7 @@ export const gpcImpactCaptureSchema = z.object({
   contractVersion: z.literal("certscore.gpc-impact-capture.v1"),
   scope: z.literal("page_http_request_attempts_after_document_commit"),
   expectedEnabled: z.boolean(),
+  comparisonPolicy: z.literal("page_http_signal.v1").optional(),
   captureStartedAtMs: time, capturedAtMs: time,
   readbackDocumentToken: z.string().min(1).max(160).nullable(),
   document: z.object({ token: z.string().min(1).max(160), urlSha256: hash,

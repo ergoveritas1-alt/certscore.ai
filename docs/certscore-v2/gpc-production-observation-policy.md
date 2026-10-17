@@ -278,3 +278,65 @@ remain canonical; the observed CMP state does not establish downstream honoring.
 Browser fixtures cover history events, real navigation cancellation, atomic
 inventory retention and closed/stale rejection. Focused canonical projection
 regressions and scanner/web typechecks pass. No deployment is authorized here.
+
+### October 17 owner-requested scoped comparison and CMP coverage — local only
+
+New producer captures explicitly mark `page_http_signal.v1`. The existing
+canonical activity-comparison path may assess these captures independently of
+the full-context response test: verify both original artifacts, scan/region and
+protocol identity, representative access, the same final document, main-page
+navigator readback, main-document and every compared request's actual GPC header,
+and the original count/hash of the complete matched interval. Select the longest
+verified shared 250/500/1000 ms interval. Truncation of a longer interval cannot
+invalidate a complete shorter interval or make the truncated interval complete.
+Historical captures without the policy marker retain their prior eligibility.
+Within the existing retention caps, navigation remains highest priority, then
+one complete interval of at most 60 requests, then existing collection/CMP
+priorities. This reserves at least 20 of the final 80 request slots for other
+evidence. Original interval hashes and any longer-window limitation stay intact.
+
+The canonical projection carries the scoped evidence policy through concern,
+finding, API/SDK and report/PDF. It describes page HTTP request counts only;
+worker startup delivery, causal impact, full-response status and the California
+15-point policy are unchanged. Child-frame churn and unverified workers still
+limit the full response test. Incomplete source hashes, request sets, signal
+headers, document binding or endpoint attribution cannot produce scoped counts.
+
+Each of at most eight observed workers receives one asynchronous read-only
+navigator query during existing work. The snapshot retains completed, pending
+or unavailable results, without waiting or modifying WorkerNavigator. These are
+observed values, never startup delivery proof. Frame readback freezes completed
+samples just inside the existing caller timeout, rather than discarding a valid
+main-frame sample when a child does not finish. Missing children still make the
+full-context proof incomplete; late completion cannot mutate the frozen packet.
+OneTrust's passive scope task now
+also uses the existing bounded control and privacy-link readers; canonical
+registered root selection, document binding and lane deadlines remain required.
+No preference opening, Accept/Reject recipe change, extra scan lane, retry,
+model call or timeout increase is introduced.
+
+Estimated incremental compute and evidence storage together remain below
+$1/month at 100,000 scans, disclosed before implementation under small-cost
+preapproval. Existing capture/retention caps remain in force. No deployment is
+authorized by this local implementation.
+
+Local verification scan `87f24420-8938-414c-b394-cc94e4e2b7b3` completed in
+25 seconds. Its original artifacts support a complete shared 500 ms interval:
+advertising/marketing requests 0/0 and analytics/replay requests 2/2
+(baseline/GPC). The later GPC observation retains seven verified advertising
+collection requests; the canonical California score remains 85. The CMP records
+GPC received and sale/sharing opted out. These facts do not establish downstream
+honoring or a causal traffic change. Full-context response remains indeterminate.
+
+`independent_cmp_basic_facts.v10` keeps unselected independent recovery DOM
+diagnostics from invalidating the primary consent session. This requires the
+canonical consent observation's exact primary DOM reference and loader binding;
+selected recovery, unbound primary proof, and later primary document drift still
+fail closed. No recovery evidence is promoted into a finding. Reprojecting the
+same retained local scan through the canonical publisher yields five observed
+CMP checks, one partial and seven unresolved (eight limited overall). The
+captured notice provides Your Privacy Choices and Continue, not registered
+Accept/Reject controls. Category/service controls and action checks remain
+unresolved. Focused boundary regressions, scanner/web typechecks and the actual
+local report were verified. No deployment or additional capture was used for
+this assessment correction.

@@ -1540,6 +1540,7 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
         {activity ? <p>{activity}</p> : null}
         {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
+        {!hasComparison ? <GpcActivityComparison comparison={projection.activityComparison} /> : null}
         {hasComparison ? <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
           evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]}>
           <div className="space-y-3 text-xs leading-5 text-zinc-600">

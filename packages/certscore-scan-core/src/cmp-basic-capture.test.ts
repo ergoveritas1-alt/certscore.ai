@@ -351,7 +351,7 @@ test("atomic OneTrust inventory survives a spent scheduling slice only before la
       const page = await browser.newPage();
       await page.route("https://example.test/", route => route.fulfill({ contentType: "text/html", body: "<main>Public content</main>" }));
       await page.goto("https://example.test/");
-      await page.setContent(`<main>Public content</main><script>window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:true}]}]}}};</script>`);
+      await page.setContent(`<main>Public content</main><div id="onetrust-consent-sdk"><div id="onetrust-banner-sdk" class="ot-sdk-container"><label><input type="checkbox" aria-label="Analytics">Analytics</label><a href="https://example.test/privacy">Privacy Policy</a></div><div hidden><label><input type="checkbox" aria-label="Advertising">Advertising</label></div></div><script>window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:true}]}]}}};</script>`);
       let scheduling = true, retainable = true, token = "loader", evaluations = 0;
       const locate = page.locator.bind(page);
       sub.mock.method(page, "locator", (...args) => {
@@ -371,9 +371,9 @@ test("atomic OneTrust inventory survives a spent scheduling slice only before la
       assert.equal(evaluations, 1, "No second operation starts after the scheduling slice");
       assert.equal(await page.evaluate(() => (window as unknown as { reads: number }).reads), 1);
       if (mode === "retain") {
-        assert.ok(packet); assert.equal(packet.declarations[0]?.name, "_ga"); assert.deepEqual(packet.serviceNames, ["Named Analytics"]);
+        assert.ok(packet); assert.equal(packet.controls.length, 1); assert.equal(packet.privacyLinks[0]?.access?.outcome, "reachable"); assert.equal(packet.declarations[0]?.name, "_ga"); assert.deepEqual(packet.serviceNames, ["Named Analytics"]);
         assert.ok(packet.captureProgress?.declarationsAtMs !== undefined);
-        assert.equal(packet.captureProgress?.controlsAtMs, undefined); assert.deepEqual(packet.controls, []);
+        assert.equal(typeof packet.captureProgress?.controlsAtMs, "number"); assert.equal(packet.controls[0]?.label, "Analytics");
       } else assert.equal(packet, undefined);
       await page.close();
     });

@@ -856,6 +856,23 @@ test("required-lane basics survive a cancelled optional inspection through persi
   }
   const stale = structuredClone(input); stale.domSnapshots.push({...stale.domSnapshots[0]!,capturedAtMs:200,documentIdentity:{source:"cdp_loader_id",token:"later-loader"}});
   assert.equal(deriveCmpAuditAssessment(stale)?.rows.find(row=>row.id==="services")?.status,"incomplete");
+  const recovery = structuredClone(input);
+  Object.assign(recovery.domSnapshots[0]!, {artifactId:"dom_text_pre_consent",path:"primary.txt"});
+  recovery.consentUiObservations = [{documentUrl:input.url,documentIdentity:{source:"cdp_loader_id",token:"basic-loader"},
+    evidenceRefs:[{artifactId:"dom_text_pre_consent",refId:"dom_text_pre_consent",path:"primary.txt"}]}] as CanonicalEvidenceBundle["consentUiObservations"];
+  recovery.domSnapshots.push({...recovery.domSnapshots[0]!,artifactId:"dom_text_pre_consent_recovery",path:"recovery.txt",capturedAtMs:200,documentIdentity:undefined});
+  assert.equal(deriveCmpAuditAssessment(recovery)?.rows.find(row=>row.id==="services")?.status,"observed",
+    "Unselected independent recovery diagnostics cannot invalidate the canonical primary session");
+  for (const mutate of [
+    (b:typeof recovery)=>{b.consentUiObservations=[];},
+    (b:typeof recovery)=>{b.consentUiObservations[0]!.documentIdentity!.token="recovery-loader";},
+    (b:typeof recovery)=>{b.consentUiObservations[0]!.evidenceRefs.push({artifactId:"dom_text_pre_consent_recovery",refId:"recovery",path:"recovery.txt"});},
+    (b:typeof recovery)=>{b.domSnapshots[1]!.artifactId="dom_text_pre_consent";},
+    (b:typeof recovery)=>{b.domSnapshots[0]!.path="unbound.txt";},
+  ]) {
+    const unbound = structuredClone(recovery); mutate(unbound);
+    assert.equal(deriveCmpAuditAssessment(unbound)?.rows.find(row=>row.id==="services")?.status,"incomplete");
+  }
   const deeper = bundle(); Object.assign(deeper, {completedAt:input.completedAt,domSnapshots:input.domSnapshots, cmpBasicEvidence:input.cmpBasicEvidence});
   assert.deepEqual(deriveCmpAuditAssessment(deeper)?.rows.find(row => row.id === "categories")?.inventory,
     {categories:[{name:"Analytics",checked:false}]});
