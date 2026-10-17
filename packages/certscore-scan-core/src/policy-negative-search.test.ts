@@ -21,7 +21,7 @@ const nanoAssistProvider: PolicyNanoAssistProvider = {
 };
 const body = `<main><h1>Riverside Restaurant</h1><p>${"Visit our family restaurant for lunch and dinner. Explore our seasonal menu, opening hours, reservations and local catering services. ".repeat(12)}</p></main>`;
 
-for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "observed_notice_404", "blocked", "enumeration_overflow", "uninspected_frame", "inspected_shadow", "nested_shadow_choice", "hidden_unnamed_control", "visible_unnamed_control", "loading_document"] as const) {
+for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "observed_notice_404", "blocked", "enumeration_overflow", "uninspected_frame", "opaque_frame", "same_origin_empty_frame", "same_origin_choice_frame", "named_choice_button", "inspected_shadow", "nested_shadow_choice", "hidden_unnamed_control", "visible_unnamed_control", "loading_document"] as const) {
   test(`policy negative search: ${scenario}`, { timeout: 25_000 }, async () => {
     const server = createServer((request, response) => {
       response.setHeader("content-type", "text/html");
@@ -35,7 +35,11 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
       const extra = (scenario === "observed_but_unfetchable" || scenario === "seeded_observed_but_unfetchable") ? '<footer><a href="/privacy-policy">Privacy policy</a></footer>'
         : scenario === "observed_notice_404" ? '<footer><a href="/notice">Notice at Collection</a></footer>'
         : scenario === "enumeration_overflow" ? Array.from({ length: 1001 }, (_, i) => `<button>Menu item ${i}</button>`).join("")
-        : scenario === "uninspected_frame" ? '<iframe src="about:blank"></iframe>'
+        : scenario === "uninspected_frame" ? '<iframe src="about:blank" style="display:none"></iframe>'
+        : scenario === "opaque_frame" ? '<iframe sandbox="allow-scripts" srcdoc="<p>Embedded information</p>"></iframe>'
+        : scenario === "same_origin_empty_frame" ? '<iframe srcdoc="<p>Store information</p>"></iframe>'
+        : scenario === "same_origin_choice_frame" ? '<iframe srcdoc="<a href=/choice>Your Privacy Choices</a>"></iframe>'
+        : scenario === "named_choice_button" ? '<footer><button type="button">Your Privacy Choices</button></footer>'
         : scenario === "inspected_shadow" ? '<div id="custom-footer"></div><script>document.querySelector("#custom-footer").attachShadow({mode:"open"}).innerHTML="<span>Footer</span>"</script>'
         : scenario === "nested_shadow_choice" ? '<div id="outer-host"></div><script>const root=document.querySelector("#outer-host").attachShadow({mode:"open"});root.innerHTML="<div id=inner-host></div>";root.querySelector("#inner-host").attachShadow({mode:"open"}).innerHTML="<a href=/choice>Your Privacy Choices</a>"</script>'
         : scenario === "hidden_unnamed_control" ? '<button style="display:none"></button>'
@@ -55,7 +59,7 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
           source: "canonical_legal_surface_hint" as const, url: new URL("/privacy-policy", normalizedUrl).href }] } : {}) });
       const inspection = derivePolicySurfaceInspectionOutcome({ modulesRun: [result.moduleRun], normalizedUrl,
         privacyChoiceInspection: result.privacyChoiceInspection, negativeSearchEvidence: result.negativeSearchEvidence, policySurfaceObservations: result.policySurfaceObservations });
-      if (["missing", "seeded_missing", "inspected_shadow", "hidden_unnamed_control"].includes(scenario)) {
+      if (["missing", "seeded_missing", "inspected_shadow", "hidden_unnamed_control", "same_origin_empty_frame"].includes(scenario)) {
         assert.equal(result.moduleRun.status, "completed", JSON.stringify(result.moduleRun));
         assert.ok(result.policySurfaceObservations.filter(row => row.status === "failed").length > 0,
           "Guessed URL 404s do not negate the independently completed observed-link search.");
@@ -64,8 +68,12 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(inspection.privacyChoiceInspection?.coverage,"complete");
         assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,0);
         assert.equal(inspection.privacyChoiceInspection?.documentUrl,normalizedUrl);
+        assert.equal(inspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v3");
+        if (scenario === "same_origin_empty_frame") {
+          assert.equal(inspection.privacyChoiceInspection.inspectedSameOriginFrameCount,1);
+          assert.equal(inspection.privacyChoiceInspection.uninspectedFrameCount,0);
+        }
         if (scenario === "hidden_unnamed_control") {
-          assert.equal(inspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v2");
           assert.equal(inspection.privacyChoiceInspection?.unnamedControlCount,0);
           assert.equal(inspection.privacyChoiceInspection?.hiddenUnnamedControlCount,1);
         }
@@ -82,6 +90,24 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(inspection.privacyChoiceInspection?.uninspectedShadowRootCount,0);
         assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,1);
         assert.equal(inspection.privacyChoiceInspection?.coverage,"complete");
+      } else if (scenario === "same_origin_choice_frame") {
+        assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,1);
+        assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");
+        assert.equal(inspection.privacyChoiceInspection?.uninspectedFrameCount,1);
+        if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v3") {
+          assert.equal(inspection.privacyChoiceInspection.unprojectableFrameCount,1);
+        } else assert.fail("Expected v3 frame diagnostics");
+      } else if (scenario === "named_choice_button") {
+        const choice = result.policySurfaceObservations.find(row => row.surfaceType === "your_privacy_choices");
+        assert.equal(choice?.linkVisibility,"visible");
+        assert.equal(choice?.accessibleNameSource,"text");
+        assert.equal(choice?.linkSourcePageUrl,normalizedUrl);
+        assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,1);
+      } else if (scenario === "opaque_frame") {
+        assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");
+        if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v3") {
+          assert.equal(inspection.privacyChoiceInspection.inaccessibleFrameCount,1);
+        } else assert.fail("Expected v3 frame diagnostics");
       } else if (scenario === "visible_unnamed_control") {
         assert.equal(inspection.privacyChoiceInspection?.unnamedControlCount,1);
         assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");

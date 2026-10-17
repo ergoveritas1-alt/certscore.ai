@@ -61,7 +61,31 @@ const privacyChoiceInspectionV2Schema = z.object({
   ...privacyChoiceInspectionFields,
   hiddenUnnamedControlCount: z.number().int().min(0),
 }).strict().superRefine(validateChoiceInspectionCoverage);
-export const privacyChoiceInspectionSchema = z.union([privacyChoiceInspectionV1Schema, privacyChoiceInspectionV2Schema]);
+/** V3 records bounded same-session frame coverage without changing historical conclusions. */
+const privacyChoiceInspectionV3Schema = z.object({
+  contractVersion: z.literal("certscore.privacy-choice-inspection.v3"),
+  ...privacyChoiceInspectionFields,
+  hiddenUnnamedControlCount: z.number().int().min(0),
+  frameCount: z.number().int().min(0),
+  inspectedSameOriginFrameCount: z.number().int().min(0),
+  hiddenUninspectedFrameCount: z.number().int().min(0),
+  inaccessibleFrameCount: z.number().int().min(0),
+  unreadyFrameCount: z.number().int().min(0),
+  unprojectableFrameCount: z.number().int().min(0),
+  frameBudgetLimitedCount: z.number().int().min(0),
+  namedFrameChoiceCandidateCount: z.number().int().min(0),
+  frameInspectionWorkMs: z.number().int().min(0).max(10_000),
+  frameProofWorkMs: z.number().int().min(0).max(10_000),
+}).strict().superRefine((row, ctx) => {
+  validateChoiceInspectionCoverage(row, ctx);
+  if (row.frameCount !== row.inspectedSameOriginFrameCount + row.uninspectedFrameCount ||
+      row.uninspectedFrameCount !== row.hiddenUninspectedFrameCount + row.inaccessibleFrameCount +
+        row.unreadyFrameCount + row.unprojectableFrameCount + row.frameBudgetLimitedCount ||
+      row.namedFrameChoiceCandidateCount > row.namedChoiceCandidateCount) {
+    ctx.addIssue({code: "custom", message: "Frame coverage counts must reconcile."});
+  }
+});
+export const privacyChoiceInspectionSchema = z.union([privacyChoiceInspectionV1Schema, privacyChoiceInspectionV2Schema, privacyChoiceInspectionV3Schema]);
 export type PrivacyChoiceInspection = z.infer<typeof privacyChoiceInspectionSchema>;
 
 export const CALIFORNIA_CHOICE_ABSENCE_ID = "california_privacy_choice_not_observed";

@@ -4349,7 +4349,8 @@ async function extractRenderedCandidates(
       const seenRoots = new Set<ParentNode>();
       function isVisible(element: Element): boolean {
         for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
-          const style = getComputedStyle(current);
+          const style = current.ownerDocument.defaultView?.getComputedStyle(current);
+          if (!style) return false;
           if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
               current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) return false;
         }
@@ -4419,7 +4420,12 @@ async function extractRenderedCandidates(
           const named = names.find(([, value]) => value?.trim());
           const accessibleName = normalizeText(named?.[1]).slice(0, 220);
           const interactive = element.matches("a[href],button,[role='button'],[role='link']");
-          const visibility = directAnchor || (interactive && !accessibleName) ? isVisible(element) : true;
+          // A named privacy-choice button needs the same retained visibility
+          // proof as a link before WC01 can treat it as an observed control.
+          const namedActionableControl = interactive && Boolean(accessibleName) &&
+            !element.matches(":disabled, [aria-disabled='true']") &&
+            !(element.matches("button") && element.closest("form"));
+          const visibility = directAnchor || namedActionableControl || (interactive && !accessibleName) ? isVisible(element) : true;
           if (!accessibleName && interactive) {
             if (visibility) unnamedControlCount++;
             else hiddenUnnamedControlCount++;
@@ -4438,7 +4444,7 @@ async function extractRenderedCandidates(
             cmpProvider: cmpContext.provider,
             cmpVendor: cmpContext.vendor,
             text: text.slice(0, 220),
-            ...(directAnchor ? {
+            ...(directAnchor || namedActionableControl ? {
               accessibleName,
               accessibleNameSource: named?.[0] ?? "none",
               linkVisibility,
@@ -4468,13 +4474,98 @@ async function extractRenderedCandidates(
       // or sampled candidates as a completed negative search.
       let uninspectedShadowRootCount = 0;
       let uninspectedFrameCount = 0;
+      let frameCount = 0;
+      let inspectedSameOriginFrameCount = 0;
+      let hiddenUninspectedFrameCount = 0;
+      let inaccessibleFrameCount = 0;
+      let unreadyFrameCount = 0;
+      let unprojectableFrameCount = 0;
+      let frameBudgetLimitedCount = 0;
+      let namedFrameChoiceCandidateCount = 0;
+      let frameInspectionWorkMs = 0;
+      const frameProofs: string[] = [];
+      let frameInspectionStartedAt = -1;
+      // Same-origin frames are read inside this existing page.evaluate. No new
+      // navigation, browser session, protocol round trip, or wait is introduced.
+      const inspectFrame = (element: Element): void => {
+        const frameWorkStartedAt = performance.now();
+        try {
+          if (frameInspectionStartedAt < 0) frameInspectionStartedAt = performance.now();
+          frameCount++;
+          if (!isVisible(element)) { hiddenUninspectedFrameCount++; uninspectedFrameCount++; frameProofs.push("uninspected"); return; }
+          if (frameCount > 4 || performance.now() - frameInspectionStartedAt > 20) {
+            frameBudgetLimitedCount++; uninspectedFrameCount++; frameProofs.push("uninspected"); return;
+          }
+          let frameDocument: Document | null = null;
+          try { frameDocument = (element as HTMLIFrameElement).contentDocument; } catch { /* Cross-origin frame. */ }
+          if (!frameDocument || !frameDocument.defaultView) {
+            inaccessibleFrameCount++; uninspectedFrameCount++; frameProofs.push("uninspected"); return;
+          }
+          const declaredSource = element.getAttribute("src");
+          if (frameDocument.readyState !== "complete" || !frameDocument.body ||
+              (declaredSource && !/^about:blank(?:#|$)/i.test(declaredSource) &&
+                !element.hasAttribute("srcdoc") && frameDocument.URL === "about:blank")) {
+            unreadyFrameCount++; uninspectedFrameCount++; frameProofs.push("uninspected"); return;
+          }
+          let visited = 0;
+          let complete = true;
+          let hasInteractiveControl = false;
+          const visit = (root: ParentNode): void => {
+            const walker = frameDocument!.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+            for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+              if (++visited > 400 || performance.now() - frameInspectionStartedAt > 20) { complete = false; return; }
+              const child = node as Element;
+              if (child.matches("iframe, frame")) {
+                // A nested document needs its own proof; never infer absence from
+                // the outer frame's readable DOM.
+                frameCount++; frameBudgetLimitedCount++; uninspectedFrameCount++;
+              }
+              const interactive = child.matches("a[href], button, [role='button'], [role='link']") || Boolean(hrefFromElement(child));
+              if (interactive) hasInteractiveControl = true;
+              if (child.matches("a[href], button, [role='button'], [role='link'], [aria-label], [title]")) {
+                const label = normalizeText([
+                  child.getAttribute("aria-label"),
+                  child.getAttribute("aria-labelledby")?.split(/\s+/).slice(0, 4)
+                    .map(id => child.getRootNode() instanceof Document
+                      ? frameDocument!.getElementById(id)?.textContent ?? ""
+                      : (child.getRootNode() as ShadowRoot).getElementById(id)?.textContent ?? "").join(" "),
+                  (child as HTMLElement).innerText,
+                  child.querySelector("img[alt]")?.getAttribute("alt"),
+                  child.querySelector("svg title")?.textContent,
+                  child.getAttribute("title"),
+                ].filter(Boolean).join(" ")).normalize("NFKC").toLowerCase();
+                if (!label && interactive && isVisible(child)) unnamedControlCount++;
+                else if (!label && interactive) hiddenUnnamedControlCount++;
+                else if (priorityPhrases.some(phrase => label.includes(phrase))) namedFrameChoiceCandidateCount++;
+              }
+              if (child.shadowRoot) {
+                // Open shadow content is seen here, but frame-owned controls do
+                // not yet have retained positive projection provenance.
+                hasInteractiveControl = true;
+                visit(child.shadowRoot);
+                if (!complete) return;
+              }
+            }
+          };
+          visit(frameDocument);
+          if (complete && !hasInteractiveControl && (element as HTMLIFrameElement).contentDocument === frameDocument &&
+              frameDocument.readyState === "complete") {
+            inspectedSameOriginFrameCount++;
+            frameProofs.push(`${frameDocument.URL}|${frameDocument.defaultView!.performance.timeOrigin}`);
+          } else {
+            if (complete && hasInteractiveControl) unprojectableFrameCount++;
+            else frameBudgetLimitedCount++;
+            uninspectedFrameCount++; frameProofs.push("uninspected");
+          }
+        } finally { frameInspectionWorkMs += performance.now() - frameWorkStartedAt; }
+      };
       let inspectedElementCount = 0;
       let coverageTraversalTruncated = false;
       const inspectCoverage = (root: ParentNode): void => {
         for (const element of root.querySelectorAll("*")) {
           if (coverageTraversalTruncated) return;
           if (++inspectedElementCount > 20_000) { candidateEnumerationTruncated = true; coverageTraversalTruncated = true; return; }
-          if (element.matches("iframe, frame")) uninspectedFrameCount++;
+          if (element.matches("iframe, frame")) inspectFrame(element);
           if (element.shadowRoot) {
             // Open roots can be inspected in this same bounded DOM read. The
             // old search only entered roots on named link/button hosts.
@@ -4488,7 +4579,10 @@ async function extractRenderedCandidates(
       return { candidates: output, documentUrl: document.URL, timeOrigin: performance.timeOrigin,
         language: document.documentElement.lang, unnamedControlCount, hiddenUnnamedControlCount,
         documentReady: document.readyState === "complete" && Boolean(document.body),
-        candidateEnumerationTruncated, uninspectedShadowRootCount, uninspectedFrameCount };
+        candidateEnumerationTruncated, uninspectedShadowRootCount, uninspectedFrameCount,
+        frameCount, inspectedSameOriginFrameCount, hiddenUninspectedFrameCount,
+        inaccessibleFrameCount, unreadyFrameCount, unprojectableFrameCount, frameBudgetLimitedCount,
+        namedFrameChoiceCandidateCount, frameInspectionWorkMs: Math.ceil(frameInspectionWorkMs), frameProofs };
     };
     // tsx/esbuild can emit a module-scoped function-name helper. Bind it only
     // within this serialized read, without installing anything on the target.
@@ -4507,15 +4601,36 @@ async function extractRenderedCandidates(
     let auxiliaryReadsComplete = true;
     const didomiPublisherUrl = await page.evaluate(readDidomiPublisherPolicy, undefined).catch(() => { auxiliaryReadsComplete = false; return undefined; });
 
-    const renderedPolicyRegionHtml = await page.evaluate((maxChars) => {
+    const renderedPolicyRegion = await page.evaluate((maxChars) => {
       const regionHtml = [
         document.head?.outerHTML ?? "",
         ...Array.from(document.querySelectorAll("header, nav, footer"), (element) => element.outerHTML),
       ].join("\n");
-      if (regionHtml.length <= maxChars) return regionHtml;
+      const frameProofStartedAt = performance.now();
+      const frameProofs = Array.from(document.querySelectorAll("iframe, frame"), (element, index) => {
+        if (index >= 4 || performance.now() - frameProofStartedAt > 20) return "uninspected";
+        try {
+          const frameDocument = (element as HTMLIFrameElement).contentDocument;
+          if (frameDocument?.readyState !== "complete" || !frameDocument.defaultView || !frameDocument.body) return "uninspected";
+          const frameStyle = getComputedStyle(element);
+          if (frameStyle.display === "none" || frameStyle.visibility === "hidden" ||
+              !Array.from(element.getClientRects()).some(rect => rect.width > 0 && rect.height > 0)) return "uninspected";
+          const walker = frameDocument.createTreeWalker(frameDocument, NodeFilter.SHOW_ELEMENT);
+          let visited = 0;
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            if (++visited > 400 || performance.now() - frameProofStartedAt > 20) return "uninspected";
+            const child = node as Element;
+            if (child.shadowRoot || child.matches("iframe, frame, a[href], button, [role='button'], [role='link'], [data-href], [data-url], [data-link], [onclick]")) return "uninspected";
+          }
+          return `${frameDocument.URL}|${frameDocument.defaultView.performance.timeOrigin}`;
+        } catch { return "uninspected"; }
+      });
+      const frameProofWorkMs = Math.ceil(performance.now() - frameProofStartedAt);
+      if (regionHtml.length <= maxChars) return { html: regionHtml, frameProofs, frameProofWorkMs };
       const headChars = Math.floor(maxChars * 0.5);
-      return `${regionHtml.slice(0, headChars)}\n${regionHtml.slice(-(maxChars - headChars))}`;
-    }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => { auxiliaryReadsComplete = false; return ""; });
+      return { html: `${regionHtml.slice(0, headChars)}\n${regionHtml.slice(-(maxChars - headChars))}`, frameProofs, frameProofWorkMs };
+    }, MAX_RENDERED_POLICY_DISCOVERY_HTML_CHARS).catch(() => { auxiliaryReadsComplete = false; return undefined; });
+    const renderedPolicyRegionHtml = renderedPolicyRegion?.html ?? "";
     nextStage("candidate classification");
     const renderedHtmlCandidates = renderedPolicyRegionHtml
       ? extractCandidates(
@@ -4605,15 +4720,21 @@ async function extractRenderedCandidates(
       }];
       }),
     ]);
-    const inspectionComplete = auxiliaryReadsComplete && domInspection?.documentReady &&
-      !domInspection.candidateEnumerationTruncated &&
+    const frameProofsMatch = Boolean(domInspection && renderedPolicyRegion &&
+      JSON.stringify(domInspection.frameProofs) === JSON.stringify(renderedPolicyRegion.frameProofs));
+    const namedTopLevelChoiceCandidateCount = candidates.filter(candidate =>
+      ["do_not_sell_or_share", "your_privacy_choices"].includes(candidate.deterministicSurfaceType)).length;
+    const choiceCandidateEnumerationTruncated = Boolean(domInspection?.candidateEnumerationTruncated ||
+      namedTopLevelChoiceCandidateCount + (domInspection?.namedFrameChoiceCandidateCount ?? 0) > 1000);
+    const inspectionComplete = auxiliaryReadsComplete && domInspection?.documentReady && frameProofsMatch &&
+      !choiceCandidateEnumerationTruncated &&
       domInspection.uninspectedFrameCount === 0 && domInspection.uninspectedShadowRootCount === 0 &&
       domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
       textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin &&
       assessPolicyHomepageAccess({ ok: navigationResponse?.ok() ?? false,
         status: navigationResponse?.status(), text: visibleText }) === "representative_page";
     const supportedDocumentLanguage = Boolean(domInspection?.language && PRIVACY_EVIDENCE_LOCALE_REGISTRY.some(entry => entry.locale === domInspection.language.toLowerCase().split("-")[0]));
-    const documentStable = Boolean(domInspection && domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
+    const documentStable = Boolean(domInspection && frameProofsMatch && domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
       textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin);
     const representativeDocument = assessPolicyHomepageAccess({ok: navigationResponse?.ok() ?? false, status: navigationResponse?.status(), text: visibleText}) === "representative_page";
     // Reuse the current rendered DOM read. These are positive routes only;
@@ -4634,14 +4755,21 @@ async function extractRenderedCandidates(
       } catch { return []; }
     }).filter((row, index, rows) => rows.findIndex(other => other.destinationUrl === row.destinationUrl && other.label === row.label) === index).slice(0, 12);
     const choiceInspection = domInspection ? privacyChoiceInspectionSchema.safeParse({
-      contractVersion: "certscore.privacy-choice-inspection.v2", documentUrl: renderedBaseUrl,
+      contractVersion: "certscore.privacy-choice-inspection.v3", documentUrl: renderedBaseUrl,
       capturedAt: new Date().toISOString(), sourceHash: createHash("sha256").update(JSON.stringify({domInspection, textInspection})).digest("hex"),
       scope: "rendered_named_links_and_buttons",
       coverage: inspectionComplete && supportedDocumentLanguage && domInspection.unnamedControlCount === 0 ? "complete" : "limited",
-      namedChoiceCandidateCount: candidates.filter(candidate => ["do_not_sell_or_share", "your_privacy_choices"].includes(candidate.deterministicSurfaceType)).length,
+      namedChoiceCandidateCount: Math.min(1000, namedTopLevelChoiceCandidateCount + domInspection.namedFrameChoiceCandidateCount),
       unnamedControlCount: domInspection.unnamedControlCount, hiddenUnnamedControlCount: domInspection.hiddenUnnamedControlCount,
-      candidateEnumerationTruncated: domInspection.candidateEnumerationTruncated,
+      candidateEnumerationTruncated: choiceCandidateEnumerationTruncated,
       uninspectedFrameCount: domInspection.uninspectedFrameCount, uninspectedShadowRootCount: domInspection.uninspectedShadowRootCount,
+      frameCount: domInspection.frameCount, inspectedSameOriginFrameCount: domInspection.inspectedSameOriginFrameCount,
+      hiddenUninspectedFrameCount: domInspection.hiddenUninspectedFrameCount,
+      inaccessibleFrameCount: domInspection.inaccessibleFrameCount, unreadyFrameCount: domInspection.unreadyFrameCount,
+      unprojectableFrameCount: domInspection.unprojectableFrameCount,
+      frameBudgetLimitedCount: domInspection.frameBudgetLimitedCount,
+      namedFrameChoiceCandidateCount: Math.min(1000, domInspection.namedFrameChoiceCandidateCount),
+      frameInspectionWorkMs: domInspection.frameInspectionWorkMs, frameProofWorkMs: renderedPolicyRegion?.frameProofWorkMs ?? 0,
       supportedDocumentLanguage, representativeDocument, documentStable,
       rightsMethods,
     }) : null;

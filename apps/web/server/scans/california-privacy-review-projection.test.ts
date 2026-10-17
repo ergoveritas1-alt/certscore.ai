@@ -33,6 +33,21 @@ test("California absence requires dedicated complete inspection, never an empty 
   const malformedV2 = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:{privacyChoiceInspection:{...inspection,
     contractVersion:"certscore.privacy-choice-inspection.v2"}}}),source,url)!;
   assert.equal(malformedV2.choiceSurface,"unknown");
+  const v3 = { ...inspection, contractVersion:"certscore.privacy-choice-inspection.v3", hiddenUnnamedControlCount:0,
+    frameCount:1,inspectedSameOriginFrameCount:1,uninspectedFrameCount:0,hiddenUninspectedFrameCount:0,
+    inaccessibleFrameCount:0,unreadyFrameCount:0,unprojectableFrameCount:0,frameBudgetLimitedCount:0,
+    namedFrameChoiceCandidateCount:0,frameInspectionWorkMs:1,frameProofWorkMs:1 };
+  const completeFrame = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:{privacyChoiceInspection:v3}}),source,url)!;
+  assert.equal(completeFrame.choiceSurface,"not_observed_in_inspected_scope");
+  assert.deepEqual(californiaPrivacyReviewFindingIds(completeFrame),[CALIFORNIA_CHOICE_ABSENCE_ID]);
+  const incompleteFrame = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:{privacyChoiceInspection:{...v3,
+    coverage:"limited",inspectedSameOriginFrameCount:0,uninspectedFrameCount:1,unprojectableFrameCount:1,
+    namedChoiceCandidateCount:1,namedFrameChoiceCandidateCount:1}}}),source,url)!;
+  assert.equal(incompleteFrame.choiceSurface,"unknown");
+  assert.deepEqual(californiaPrivacyReviewFindingIds(incompleteFrame),[]);
+  const malformedV3 = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:{privacyChoiceInspection:{...v3,
+    inspectedSameOriginFrameCount:0}}}),source,url)!;
+  assert.equal(malformedV3.choiceSurface,"unknown");
   const old = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection: undefined}), source, url)!;
   assert.equal(old.choiceSurface, "unknown");
   for (const patch of [{coverage:"limited"},{uninspectedFrameCount:1},{candidateEnumerationTruncated:true},{documentStable:false},{unnamedControlCount:1},{supportedDocumentLanguage:false},{namedChoiceCandidateCount:1},{documentUrl:`${url}other`},{capturedAt:"2026-10-16T11:59:00.000Z"}]) {

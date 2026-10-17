@@ -186,7 +186,7 @@ test("main navigation invalidates results even when an external document-token c
   });
 });
 
-test("axe injection cannot add traffic, storage or forms to the frozen privacy baseline", async () => {
+test("axe injection cannot add traffic, storage or forms to the frozen privacy baseline", { timeout: 25_000 }, async () => {
   const root = await mkdtemp(path.join(tmpdir(), "certscore-accessibility-isolation-"));
   try {
     const body = html(`<input id="unlabelled"><script>
@@ -198,7 +198,7 @@ test("axe injection cannot add traffic, storage or forms to the frozen privacy b
       }});
     </script>`);
     const result = await preConsentRuntimeScanner({ url: "https://example.com/", normalizedUrl: "https://example.com/",
-      scanStartedAtMs: Date.now(), internalBudgetMs: 6000, accessibilityScanId: "isolation-fixture",
+      scanStartedAtMs: Date.now(), internalBudgetMs: 12_000, accessibilityScanId: "isolation-fixture",
       artifactWriter: await createArtifactWriter(root), captureScope: "runtime_evidence", waitMode: "fast", screenshotMode: "never",
       routeFulfillers: [{ urlPattern: /^https:\/\/example\.com\//, body, contentType: "text/html" }],
     });

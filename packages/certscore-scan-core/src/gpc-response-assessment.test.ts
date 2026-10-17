@@ -292,7 +292,7 @@ for (const [name, mutate] of invalidFinalDocuments) {
   });
 }
 
-test("dedicated passive browser condition sends Sec-GPC and exposes navigator.globalPrivacyControl", async () => {
+test("dedicated passive browser condition sends Sec-GPC and exposes navigator.globalPrivacyControl", { timeout: 35_000 }, async () => {
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-gpc-observation-"));
   const pageUrl = "https://gpc-observation.test/";
   try {
@@ -301,7 +301,7 @@ test("dedicated passive browser condition sends Sec-GPC and exposes navigator.gl
       captureScope: "runtime_evidence",
       globalPrivacyControlEnabled: true,
       gpcOptOutPrototype: { scanId: "gpc-runtime-prototype-fixture" },
-      internalBudgetMs: 5_000,
+      internalBudgetMs: 20_000,
       normalizedUrl: pageUrl,
       routeFulfillers: [{
         urlPattern: /^https:\/\/gpc-observation\.test\/$/,

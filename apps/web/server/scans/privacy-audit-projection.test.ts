@@ -75,6 +75,17 @@ test("a visible direct privacy-choices link survives an insufficient cross-subdo
   assert.equal(result.controls[0]?.retrieval, "failed");
 });
 
+test("a visible named choice button is retained as a control without claiming a working opt-out", () => {
+  const result = projectPrivacyAuditEvidence(bundle([surface({
+    observationId:"button",surfaceType:"your_privacy_choices",linkText:"Your Privacy Choices",
+    url,normalizedUrl:url,linkSourcePageUrl:url,clickable:true,linkVisibility:"visible",
+    accessibleNameSource:"text",documentFetchState:"not_attempted",
+  })]),source,url)!;
+  assert.equal(result.controls.length,1);
+  assert.equal(result.controls[0]?.destinationUrl,null);
+  assert.equal(result.controls[0]?.interaction,"not_tested");
+});
+
 test("direct Cookie Settings candidates remain review context until live visibility proof is retained", () => {
   const candidate = surface({ observationId: "cookies", surfaceType: "cookie_settings",
     linkText: "Cookie Settings", url: `${url}cookie-settings`, clickable: true,
