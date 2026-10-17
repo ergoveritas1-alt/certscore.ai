@@ -6,6 +6,7 @@ export const HIDDEN_DETAILED_EVIDENCE_ROW_IDS: readonly string[] = ["reject_all_
 /** Navigation over projected finding identities only; this never determines eligibility. */
 export function findingEvidenceAnchor(id: string, presentationGroup?: unknown) {
   if (presentationGroup === "accessibility" || id === "accessibility_priority_group") return "accessibility-evidence";
+  if (id === "gpc_response") return "gpc-evidence";
   if (id === "site_integrity_cms_security") return "cms-security-evidence";
   if (id === "form_data_unexpected_destination") return "form-destination-evidence";
   if (id.startsWith("site_integrity_")) return "site-integrity-evidence";

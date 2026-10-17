@@ -1,5 +1,6 @@
 "use client";
 
+import { californiaAssessmentPresentation } from "../../lib/scans/california-assessment-presentation";
 import { selectRegulatoryReview } from "../../lib/scans/regulatory-review-catalog";
 import { REVIEW_FOCUS_LABELS } from "../../lib/scans/report-review-focus";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
@@ -57,13 +58,15 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   }, []);
   // The two policies interpret the same persisted evidence independently.
   const californiaReview = reviewFocus === "ccpa_cpra";
+  const californiaPresentation = californiaAssessmentPresentation(californiaScore?.reviewCoverage);
   const value = californiaReview ? californiaScore?.score ?? null : score?.value ?? null;
   const color = getGdprEprivacyPostureTone(value).ringColor;
   const review = reviewFocus && score?.priorityReview ? selectRegulatoryReview(score.priorityReview, reviewFocus) : null;
-  const priorities = review?.regulatory ?? score?.priorityReview;
+  const priorities = review?.topIssues ?? score?.priorityReview;
+  const highlightPriorities = review?.regulatory.length ? review.regulatory : priorities;
   const singlePage = scannedPages === 1;
   const scoreLabel = californiaReview ? "California page score" : singlePage ? "Page score" : "Site score";
-  const highlights = priorities && (!singlePage || reviewFocus) ? buildAssessmentHighlightsPresentation(priorities, singlePage ? { kind: "page" } : { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } }) : null;
+  const highlights = priorities && (!singlePage || reviewFocus) ? buildAssessmentHighlightsPresentation(highlightPriorities!, singlePage ? { kind: "page" } : { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } }) : null;
   return <section id="report-overview" aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
       <div className="flex flex-wrap items-center gap-3"><h2 className="text-xl font-semibold tracking-tight text-zinc-950">Executive overview</h2>{actions}</div>
@@ -81,13 +84,12 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
           </div>
           <div className="min-w-0 border-l border-zinc-200 pl-3 lg:pl-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{scoreLabel}</p>
-            <p className="mt-2 text-lg font-semibold text-zinc-950">{priorities ? `${priorities.length} ${reviewFocus ? REVIEW_FOCUS_LABELS[reviewFocus] : "priority"} ${priorities.length === 1 ? "issue" : "issues"}` : loadingSavedResult ? "Loading saved assessment" : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
-            {review?.other.length ? <a href="#report-other-issues" className="mt-1 block text-xs text-sky-700 underline">{review.other.length} other {review.other.length === 1 ? "issue" : "issues"}</a> : null}
+            <p className="mt-2 text-lg font-semibold text-zinc-950">{californiaReview && priorities?.length === 0 ? californiaPresentation.emptyLabel : priorities ? `${priorities.length} ${reviewFocus ? "top" : "priority"} ${priorities.length === 1 ? "issue" : "issues"}` : loadingSavedResult ? "Loading saved assessment" : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
             <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? loadingSavedResult ? "Loading sitewide page totals" : "Waiting for page outcomes" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`}</p>
           </div>
         </div>
         {!score && !californiaReview ? <p className="mt-2 text-xs text-zinc-500">{loadingSavedResult ? "The sitewide score will appear when the saved result loads." : pending ? `${singlePage ? "The page score" : "The site-wide score"} will appear when the assessment is ready.` : `${singlePage ? "Page scoring" : "Site-wide scoring"} is unavailable for this scan.`}</p> : null}
-        {californiaReview ? <p className="mt-2 text-xs leading-5 text-zinc-600">{value === null ? "California score is unavailable for this retained visit because verified review coverage is insufficient." : `California-specific scoring · starting page${californiaScore?.coverage === "limited" ? " · limited coverage" : ""}.`} This is a bounded risk signal, not a compliance grade. <a href="/scoring-review" className="text-sky-700 underline">Scoring rules</a></p> : null}
+        {californiaReview ? <p className="mt-2 text-xs leading-5 text-zinc-600">{value === null ? californiaPresentation.unavailableScore : `California-specific scoring · starting page${californiaScore?.coverage === "limited" ? " · limited coverage" : ""}.`} This is a bounded risk signal, not a compliance grade. <a href="/scoring-review" className="text-sky-700 underline">Scoring rules</a></p> : null}
         {californiaReview ? <CaliforniaCoverageSummary coverage={californiaScore?.reviewCoverage} rightsAssessment={californiaScore?.rightsAssessment} collectionNoticeAssessment={californiaScore?.collectionNoticeAssessment} saleSharingAssessment={californiaScore?.saleSharingAssessment} /> : null}
         {reviewFocus === "gdpr_eprivacy" ? <p className="mt-2 text-xs leading-5 text-zinc-600">GDPR/ePrivacy-weighted overall score. This is a risk signal, not a compliance grade. <a href="/scoring-review" className="text-sky-700 underline">Scoring rules</a></p> : null}
         {score?.limitedPages ? <p className="mt-1 text-xs text-amber-800">{score.limitedPages} {score.limitedPages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
@@ -97,7 +99,7 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
       <div className="flex min-w-0 flex-col justify-between gap-4 md:min-h-[var(--overview-height)]">
         <div data-overview-block>
         <h3 className="text-sm font-bold tracking-tight text-zinc-900">Assessment highlights</h3>
-        {reviewFocus && priorities ? <p className="mt-2 text-sm leading-6 text-zinc-600">{priorities.length ? <AssessmentHighlightsText text={highlights!.text} links={highlights!.links} /> : `No ${REVIEW_FOCUS_LABELS[reviewFocus]} priority issues were identified in the assessed evidence.`}</p> : singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={homepageVerdict ?? "The single page assessment will appear when ready."} links={homepageHighlightLinks} /></p>
+        {reviewFocus && priorities ? <p className="mt-2 text-sm leading-6 text-zinc-600">{priorities.length ? <AssessmentHighlightsText text={highlights!.text} links={highlights!.links} /> : californiaReview ? californiaPresentation.emptySummary : `No ${REVIEW_FOCUS_LABELS[reviewFocus]} priority issues were identified in the assessed evidence.`}</p> : singlePage ? <p className="mt-2 text-sm leading-6 text-zinc-600"><AssessmentHighlightsText text={homepageVerdict ?? "The single page assessment will appear when ready."} links={homepageHighlightLinks} /></p>
           : priorities ? <p className="mt-2 text-sm leading-5 text-zinc-700"><AssessmentHighlightsText text={highlights!.text} links={highlights!.links} /></p>
           : <p className="mt-2 text-sm leading-6 text-zinc-500">{loadingSavedResult ? "Loading the saved site assessment." : pending ? "Page evidence is still being assessed. The site-scan assessment will appear when ready." : "Site assessment is unavailable."}</p>}
         </div>

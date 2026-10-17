@@ -145,3 +145,17 @@ test("secondary Reject observation remains concrete when a long storage finding 
   assert.ok(result.text.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
   assert.deepEqual(findings, saved);
 });
+
+test("GPC highlights name the finding once and preserve positive evidence and uncertainty",()=>{
+  const result=buildAssessmentHighlightsPresentation([{id:"gpc_response",title:"GPC choice-enforcement risk observed",status:"Partial concern",
+    summary:"Bounded GPC observation completed. GPC was observed on the main-document request and browser property. The CMP's sale/sharing opt-out state was unavailable. 13 classified advertising, marketing, analytics or replay requests were observed with GPC, including 5 collection requests. Paired activity comparison: indeterminate.",
+    correctionSteps:["Check that GPC applies the relevant sale/sharing opt-out state and governs advertising collection."]}],page);
+  assert.equal(result.text.split("GPC choice-enforcement risk observed").length-1,1);
+  assert.match(result.text,/GPC delivery was verified/);
+  assert.match(result.text,/13 classified advertising, marketing, analytics or replay requests/);
+  assert.match(result.text,/5 collection requests/);
+  assert.match(result.text,/opt-out setting could not be read/);
+  assert.match(result.text,/comparison with GPC disabled was inconclusive/);
+  assert.equal(result.links[0]?.targetId,"gpc-evidence");
+  assert.ok(result.text.length<=ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
+});

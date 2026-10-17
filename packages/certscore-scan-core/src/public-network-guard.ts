@@ -47,8 +47,9 @@ export function publicNetworkGuardEnabled(env: Record<string, string | undefined
 
 export async function assertPublicNetworkUrl(
   input: string | URL,
-  options: { resolver?: PublicNetworkResolver } = {},
+  options: { resolver?: PublicNetworkResolver; signal?: AbortSignal | null } = {},
 ) {
+  options.signal?.throwIfAborted();
   let target: URL;
   try {
     target = input instanceof URL ? input : new URL(input);
@@ -71,12 +72,14 @@ export async function assertPublicNetworkUrl(
   }
   let answers: readonly { address: string; family: number }[];
   try {
-    answers = await (options.resolver ?? defaultResolver)(hostname);
+    answers = await abortableNetworkValidation((options.resolver ?? defaultResolver)(hostname), options.signal);
   } catch (error) {
+    options.signal?.throwIfAborted();
     // Retain only a bounded code; resolver messages may contain target details.
     const code = error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : undefined;
     throw new PublicNetworkGuardError("dns_resolution_failed", code);
   }
+  options.signal?.throwIfAborted();
   if (answers.length === 0) throw new PublicNetworkGuardError("dns_no_answers");
   if (answers.some(({ address }) => !classifyPublicTargetAddress(address).public)) {
     throw new PublicNetworkGuardError("non_public_dns_answer");
@@ -89,6 +92,7 @@ export async function installPublicNetworkGuardRoute(
   options: {
     resolver?: PublicNetworkResolver;
     env?: Record<string, string | undefined>;
+    signal?: AbortSignal;
     /** Internal diagnostics only; observer errors must never alter enforcement. */
     onRequestPhase?: (request: Request, phase: "validation_pending" | "validated" | "denied") => void;
   } = {},
@@ -111,19 +115,20 @@ export async function installPublicNetworkGuardRoute(
     }
     let validation = cache.get(origin);
     if (!validation) {
-      validation = assertPublicNetworkUrl(url, { resolver: options.resolver }).then(() => undefined);
+      validation = assertPublicNetworkUrl(url, { resolver: options.resolver, signal: options.signal }).then(() => undefined);
       cache.set(origin, validation);
     }
     let validated = false;
     try {
       await validation;
+      options.signal?.throwIfAborted();
       validated = true;
       notify(route, "validated");
       await route.fallback();
     } catch {
       if (!validated) notify(route, "denied");
       cache.delete(origin);
-      await route.abort("blockedbyclient");
+      await route.abort("blockedbyclient").catch(() => undefined);
     }
   });
 }
@@ -145,8 +150,9 @@ export async function guardedPublicFetch(
   const maxRedirects = Math.max(0, Math.min(options.maxRedirects ?? 5, 10));
   for (let redirectCount = 0; ; redirectCount += 1) {
     if (publicNetworkGuardEnabled(options.env)) {
-      await assertPublicNetworkUrl(target, { resolver: options.resolver });
+      await assertPublicNetworkUrl(target, { resolver: options.resolver, signal: init.signal });
     }
+    init.signal?.throwIfAborted();
     const response = await fetchImpl(target, { ...init, redirect: "manual" });
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     if (options.returnRedirectResponse) return response;
@@ -160,6 +166,34 @@ export async function guardedPublicFetch(
   }
 }
 
-async function defaultResolver(hostname: string) {
-  return lookup(hostname, { all: true, verbatim: true });
+/** Coalesce only simultaneous lookups, never cache an authorization or a settled answer. */
+export function createInFlightPublicNetworkResolver(resolver: PublicNetworkResolver): PublicNetworkResolver {
+  const pending = new Map<string, ReturnType<PublicNetworkResolver>>();
+  return hostname => {
+    const existing = pending.get(hostname);
+    if (existing) return existing;
+    const work = resolver(hostname).finally(() => { if (pending.get(hostname) === work) pending.delete(hostname); });
+    if (pending.size < 2000) pending.set(hostname, work);
+    return work;
+  };
+}
+
+// Simulated lanes share a process. Repeated DNS calls for a shared CDN must not
+// crowd the native resolver pool while other policy/CMP hosts wait to resolve.
+const defaultResolver = createInFlightPublicNetworkResolver(hostname => lookup(hostname, { all: true, verbatim: true }));
+
+/** Stop awaiting DNS at the caller's existing deadline; late answers cannot open a request. */
+function abortableNetworkValidation<T>(work: Promise<T>, signal?: AbortSignal | null): Promise<T> {
+  if (!signal) return work;
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      signal.removeEventListener("abort", abort);
+      reject(signal.reason ?? new DOMException("Network validation aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    // Install both handlers even after cancellation: native lookup cannot be
+    // cancelled and a late resolver failure must not become an unhandled rejection.
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+    if (signal.aborted) abort();
+  });
 }

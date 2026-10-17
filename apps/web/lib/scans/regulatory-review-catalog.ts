@@ -120,7 +120,7 @@ export function regulatoryReviewContext(id: string, focus: ReportReviewFocus) {
   return topic && context ? { ...context, topicId: topic.id, examples: context.cases.map(id => ENFORCEMENT_EXAMPLES[id]!).filter(example => example?.mode === focus) } : null;
 }
 
-/** Split and rank existing report entries only. Unmapped entries remain visible as other issues. */
+/** Rank existing entries for one issue list; framework-specific context stays separate. */
 export function selectRegulatoryReview<T extends { id: string; status: string; rank: number }>(findings: readonly T[], focus: ReportReviewFocus) {
   const relevant = findings.filter(finding => regulatoryReviewContext(finding.id, focus));
   const regulatory = [...relevant].sort((a, b) =>
@@ -130,5 +130,6 @@ export function selectRegulatoryReview<T extends { id: string; status: string; r
   const other = findings.filter(finding => finding.id !== "gpc_response" && !REGULATORY_REVIEW_TOPICS.some(topic => topic.findingIds.includes(finding.id)))
     .map((finding, index) => ({ ...finding, rank: index + 1 }));
   // A finding tied solely to the other privacy framework stays in Detailed evidence.
-  return { regulatory, other };
+  const topIssues = [...regulatory, ...other].map((finding, index) => ({ ...finding, rank: index + 1 }));
+  return { regulatory, other, topIssues };
 }

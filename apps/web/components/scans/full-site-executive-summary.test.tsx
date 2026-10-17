@@ -131,3 +131,12 @@ test("completed clean score omits the redundant scope paragraph", () => {
   assert.doesNotMatch(html, /network requests need classification review/);
   assert.doesNotMatch(html, /does not mean every policy topic was confirmed/);
 });
+
+test("empty California capture is incomplete rather than a clean zero-issue result", () => {
+  const html=renderToStaticMarkup(<FullSiteExecutiveSummary pending={false} scannedPages={1}
+    reviewFocus="ccpa_cpra" score={{...score,priorityReview:[]}}
+    californiaScore={{policyVersion:"california-regulatory-posture.v9",score:null,scope:"starting_page",coverage:"limited",assessmentSourceHash:null,deductions:[]}} />);
+  assert.match(html,/Assessment incomplete/);
+  assert.match(html,/Missing capture is not a passing result/);
+  assert.doesNotMatch(html,/0 CCPA\/CPRA issues|No CCPA\/CPRA priority issues|out of 100/);
+});

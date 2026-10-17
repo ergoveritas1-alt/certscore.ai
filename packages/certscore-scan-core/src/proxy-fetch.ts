@@ -33,7 +33,8 @@ export async function proxyFetch(
   fallback: typeof fetch = fetch,
 ): Promise<Response> {
   const target = new URL(typeof input === "string" ? input : input instanceof URL ? input : input.url);
-  if (publicNetworkGuardEnabled(env)) await assertPublicNetworkUrl(target);
+  if (publicNetworkGuardEnabled(env)) await assertPublicNetworkUrl(target, { signal: init?.signal });
+  init?.signal?.throwIfAborted();
   const proxyServer = configuredProxyServer(env);
   if (!proxyServer) return fallback(input, init);
   if (target.protocol !== "http:" && target.protocol !== "https:") {
@@ -49,7 +50,7 @@ export async function connectTlsThroughConfiguredProxy(
   env: Record<string, string | undefined> = process.env,
 ): Promise<TLSSocket | null> {
   if (publicNetworkGuardEnabled(env)) {
-    await assertPublicNetworkUrl(`https://${target.hostname}:${target.port}`);
+    await assertPublicNetworkUrl(`https://${target.hostname}:${target.port}`, { signal });
   }
   const proxyServer = configuredProxyServer(env);
   if (!proxyServer) return null;

@@ -135,3 +135,34 @@ test("route phase diagnostics distinguish pending validation without weakening o
     }
   } finally { await browser.close(); }
 });
+
+test("cancelled DNS validation cannot open a request after a late public answer", async () => {
+  const controller = new AbortController();
+  let release!: (value: {address:string;family:number}[]) => void;
+  let opened = 0;
+  const work = guardedPublicFetch("https://example.com/", {signal:controller.signal}, {
+    env:{CERTSCORE_PUBLIC_NETWORK_GUARD_FORCE:"true"},
+    resolver:()=>new Promise(resolve=>{release=resolve;}),
+    fetchImpl:(async()=>{opened++;return new Response("unexpected");}) as typeof fetch,
+  });
+  controller.abort();
+  await assert.rejects(work, {name:"AbortError"});
+  release([{address:"93.184.216.34",family:4}]);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(opened,0);
+});
+
+test("concurrent lanes share pending DNS only and revalidate later answers", async () => {
+  const {createInFlightPublicNetworkResolver}=await import("./public-network-guard.js");
+  let calls=0, release!:()=>void;
+  const pending=new Promise<void>(resolve=>{release=resolve;});
+  const resolver=createInFlightPublicNetworkResolver(async()=>{
+    const index=++calls; await pending;
+    return [{address:index === 1?"93.184.216.34":"10.0.0.1",family:4}];
+  });
+  const lanes=Array.from({length:6},()=>assertPublicNetworkUrl("https://example.com/",{resolver}));
+  assert.equal(calls,1);
+  release(); await Promise.all(lanes);
+  await assert.rejects(()=>assertPublicNetworkUrl("https://example.com/",{resolver}),PublicNetworkGuardError);
+  assert.equal(calls,2,"A completed public answer is not cached across visits");
+});

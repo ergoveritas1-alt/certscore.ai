@@ -868,6 +868,7 @@ export async function preConsentRuntimeScanner(
   }
   const webBotAuthRoute = await installWebBotAuthRoute(browserContext);
   await installPublicNetworkGuardRoute(browserContext, {
+    signal: input.signal,
     onRequestPhase: captureConsentEvidence ? (request, phase) => {
       const id = requestIds.get(request);
       if (id && (guardPhases.has(id) || guardPhases.size < 2000)) guardPhases.set(id, phase);

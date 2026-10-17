@@ -55,7 +55,9 @@ test("all context scenarios render with truthful jurisdiction, evidence and inde
     if (!context) continue;
     const html = renderToStaticMarkup(<SitePriorityReview findings={[finding, ACCESSIBILITY_PREVIEW]} reviewFocus={mode} pending={false} sitewideAvailable scannedPages={1} />);
     assert.match(html, /Why it matters:/);
-    assert.match(html, /Other issues/);
+    assert.doesNotMatch(html, /Other issues|Accessibility &amp; site review|report-other-issues/);
+    assert.equal((html.match(/id="report-top-issues"/g) ?? []).length, 1);
+    assert.match(html, /sitewide-accessibility_priority_group/);
     assert.equal(html.includes("Review the coverage below for the checks completed in this visit"), mode === "ccpa_cpra");
     for (const example of context.examples) {
       assert.ok(html.includes(example.url));
@@ -64,15 +66,15 @@ test("all context scenarios render with truthful jurisdiction, evidence and inde
     assert.equal(html.includes("Related enforcement"), context.examples.length > 0);
   }
 });
-test("California overview and priority list omit EU-only findings while retaining other issue count", () => {
+test("California overview and priority list omit EU-only findings while retaining accessibility in one top-issue count", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary score={{value:82, priorityReview:[postReject,ACCESSIBILITY_PREVIEW],scoredPages:1}} californiaScore={{policyVersion:"california-regulatory-posture.v1",score:86,scope:"starting_page",coverage:"bounded",assessmentSourceHash:"a".repeat(64),deductions:[]}} pending={false} scannedPages={1} reviewFocus="ccpa_cpra" homepageVerdict="EU-only tracking after Reject" />);
   assert.match(html, /California page score 86 out of 100/);
   assert.match(html, /California-specific scoring/);
   assert.doesNotMatch(html, /82 out of 100/);
-  assert.match(html, /0 CCPA\/CPRA issues/);
-  assert.match(html, /1 other issue/);
+  assert.match(html, /1 top issue/);
+  assert.doesNotMatch(html, /other issue|report-other-issues/);
   assert.doesNotMatch(html, /EU-only tracking after Reject/);
-  assert.match(html, /No CCPA\/CPRA priority issues/);
+  assert.doesNotMatch(html, /No CCPA\/CPRA priority issues/);
   const eu = renderToStaticMarkup(<FullSiteExecutiveSummary score={{value:82, priorityReview:[postReject,ACCESSIBILITY_PREVIEW],scoredPages:1}} pending={false} scannedPages={1} reviewFocus="gdpr_eprivacy" />);
   assert.match(eu, /Page score 82 out of 100/);
 });

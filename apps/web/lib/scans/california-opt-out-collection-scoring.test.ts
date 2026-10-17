@@ -83,6 +83,7 @@ test("GPC collection scores only the CA posture through canonical concern/policy
  partial.comparison.responseBasis="insufficient_evidence";partial.comparison.limitationKeys=["gpc_settle_not_completed"];
  const partialPackets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:parent,gpcResponseAssessment:partial}});
  assert.equal(buildCanonicalGpcResponseProjection(partialPackets)?.californiaDeductionPoints,15);
+ assert.match(buildCanonicalGpcResponseProjection(partialPackets)?.californiaScoreExplanation ?? "",/15-point California risk deduction: verified advertising collection/);
  assert.equal(deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:partialPackets}).score,85,"Partial pair and unrelated CA limits cannot hide a canonical positive deduction");
  child.reviewCoverage.scoreReady=true;child.reviewCoverage.runtimeCoverage="complete";
  const evidence={contractVersion:"certscore.sale-sharing-opt-out-evidence.v1",policyVersion:"bounded_sale_sharing_opt_out.v1",scanId:f.bundle.scanId,parentDispatchSha256:"a".repeat(64),targetUrl:CA_FIXTURE_URL,

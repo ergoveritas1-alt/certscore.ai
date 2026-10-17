@@ -8,6 +8,7 @@ import { readGpcActivityComparison } from "./gpc-activity-comparison";
 export type CanonicalGpcResponseProjection = {
   assessment: GpcResponseAssessment;
   californiaDeductionPoints: 0 | 15;
+  californiaScoreExplanation?: string | null;
   comparisonHeadline: string;
   coverageSummary: string;
   headline: string;
@@ -114,6 +115,11 @@ export function buildCanonicalGpcResponseProjection(
   const policy=deriveCaliforniaGpcResponsePolicy(parsedAssessment.data);
   const deduction=finding.scoreEffects?.some(e=>e.appliesTo === "california_posture" && e.policyVersion === policy.policyVersion &&
     e.policyKey === policy.policyKey && e.deductionPoints === policy.deductionPoints) ? policy.deductionPoints : 0;
+  const californiaScoreExplanation = deduction > 0
+    ? `${deduction}-point California risk deduction: ${policy.reasonCode === "verified_gpc_choice_contradiction"
+      ? "the site recorded GPC as received while its sale or sharing opt-out remained off"
+      : "verified advertising collection was observed with GPC enabled"}. This is a risk signal, not a finding of legal noncompliance.`
+    : null;
   const presentation = describeCanonicalGpcResponse(parsedAssessment.data);
   const observedFacts = describeGpcObservedFacts(parsedAssessment.data.contractVersion === "certscore.gpc-response-assessment.v3"
     ? parsedAssessment.data.observation : undefined);
@@ -124,6 +130,7 @@ export function buildCanonicalGpcResponseProjection(
   return {
     assessment: parsedAssessment.data,
     californiaDeductionPoints: deduction,
+    californiaScoreExplanation,
     coverageSummary: presentation.coverageSummary,
     comparisonHeadline: presentation.comparisonHeadline,
     headline: presentation.headline,

@@ -123,7 +123,7 @@ test("v3 card states the observed signal and activity without implying an establ
   if (limited.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") assert.fail("v3 fixture required");
   limited.assessment.observation.status = "limited";
   limited.headline = "Observation limited";
-  assert.equal(gpcCardActivity(limited), null);
+  assert.match(gpcCardActivity(limited)!, /71 classified tracking requests.*Capture was limited/);
   assert.equal(gpcSummaryLabel(limited), "Observation limited · Response not determined");
 });
 

@@ -16,15 +16,16 @@ export function gpcSummaryLabel(projection: GpcResponseReportProjection): string
 
 export function gpcCardActivity(projection: GpcResponseReportProjection): string | null {
   if (projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v3" ||
-    projection.assessment.observation.status !== "complete") {
+    projection.assessment.observation.status === "unavailable") {
     return null;
   }
   const { requests } = projection.assessment.observation;
-  if (!requests.complete) return null;
   const classified = requests.classifiedCount;
   const collection = requests.collectionCount;
-  if (classified === 0) return "No classified tracking requests were observed with GPC enabled.";
-  return `With GPC enabled, we observed ${classified} classified tracking request${classified === 1 ? "" : "s"}${collection > 0 ? `, including ${collection} collection request${collection === 1 ? "" : "s"}` : ""}.`;
+  const complete = projection.assessment.observation.status === "complete" && requests.complete;
+  if (classified === 0) return complete ? "No classified tracking requests were observed with GPC enabled." : null;
+  const advertising = requests.advertisingCollectionCount;
+  return `With GPC enabled, we observed ${classified} classified tracking request${classified === 1 ? "" : "s"}${collection > 0 ? `, including ${collection} collection request${collection === 1 ? "" : "s"}` : ""}.${advertising ? ` Verified advertising collection: ${advertising} request${advertising === 1 ? "" : "s"}.` : ""}${complete ? "" : " Capture was limited; these counts describe retained activity only."}`;
 }
 
 export function gpcCardResponse(projection: GpcResponseReportProjection): string {
@@ -68,6 +69,7 @@ export function buildGpcResponseReportProjection(
   return {
     assessment,
     californiaDeductionPoints: projection.californiaDeductionPoints,
+    californiaScoreExplanation: projection.californiaScoreExplanation,
     comparisonHeadline: projection.comparisonHeadline,
     coverageSummary: projection.coverageSummary,
     evidenceRefs: [

@@ -26,6 +26,17 @@ export function renderAssessmentBrief(brief: AssessmentBrief) {
       ? `Could not complete: ${namedItems.map(item => `“${item.title}”`).join(", ")}.${items!.length > namedItems.length ? " Other incomplete checks are listed in Detailed evidence." : ""}`
       : brief.coverage.state === "limited" ? "See Detailed evidence for checks that could not be completed."
         : brief.attention === "limited" ? "Review the scan coverage in Detailed evidence." : "";
+  if (primary?.id === "gpc_response" && fact) {
+    const readableFact = fact
+      .replace(/^Bounded GPC observation completed\.\s*/, "")
+      .replace("GPC was observed on the main-document request and browser property.", "GPC delivery was verified on the page request and browser setting.")
+      .replace("The CMP's sale/sharing opt-out state was unavailable.", "The consent platform’s sale/sharing opt-out setting could not be read.")
+      .replace(/\b1 collection requests\b/g, "1 collection request")
+      .replace("Paired activity comparison: indeterminate.", "The comparison with GPC disabled was inconclusive.");
+    const evidenceLead = sentence(`“${primary.readerTitle}”: ${readableFact}`);
+    const paragraph = [evidenceLead, action, limitation].filter(Boolean).join(" ");
+    if (paragraph.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) return normalizeAssessmentCopy(paragraph);
+  }
   if ([brief.lead, action, limitation].filter(Boolean).join(" ").length > ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) {
     action = "Review the supporting evidence and recommended fixes in Detailed evidence.";
   }
@@ -40,7 +51,7 @@ export function renderAssessmentBrief(brief: AssessmentBrief) {
   // Preserve scope/confidence before optional secondary context. Never cut a
   // source summary at a sentence boundary that might drop its qualification.
   if (fact && [brief.lead, sentence(fact), behaviorFits ? behaviorFact : "", action, limitation].filter(Boolean).join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) {
-    const namedFact = primary && primary.readerTitle.length <= 100
+    const namedFact = primary && primary.readerTitle.length <= 100 && !brief.lead.includes(`“${primary.readerTitle}”`)
       ? fact === sentence(primary.title) ? `“${primary.readerTitle}”` : `“${primary.readerTitle}”: ${fact}` : fact;
     sentences.push(sentence([brief.lead, sentence(namedFact), behaviorFits ? behaviorFact : "", action, limitation].filter(Boolean).join(" ").length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH ? namedFact : fact));
   }

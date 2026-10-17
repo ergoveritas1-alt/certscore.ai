@@ -1,0 +1,32 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {renderToStaticMarkup} from "react-dom/server";
+import {GpcEvidenceIndexCard} from "./shadow-scan-report";
+import type {GpcResponseReportProjection} from "./shadow-report-data";
+
+const projection = {
+  assessment:{contractVersion:"certscore.gpc-response-assessment.v3",status:"indeterminate",
+    observation:{status:"limited",registration:{sale:"unknown",sharing:"unknown"},requests:{count:20,complete:false,classifiedCount:13,collectionCount:5,advertisingCollectionCount:1}},
+    comparison:{enabledProof:{secGpcHeaderValue:"1",navigatorGlobalPrivacyControl:true,requestsWithSecGpc:20}}},
+  californiaDeductionPoints:15,
+  californiaScoreExplanation:"15-point California risk deduction: verified advertising collection was observed with GPC enabled. This is a risk signal, not a finding of legal noncompliance.",
+  observedFacts:[{label:"GPC signal",value:"Observed on the page request and in the browser"}],
+  headline:"Observation limited",comparisonHeadline:"Comparison incomplete",coverageSummary:"The paired comparison did not meet the required evidence coverage.",evidenceRefs:[],summary:"Retained positive observation",
+} as unknown as GpcResponseReportProjection;
+
+test("GPC detail exposes verified facts and CA deduction before comparison disclosure",()=>{
+  const before=structuredClone(projection);
+  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={projection} california />);
+  assert.match(html,/Risk observed · 15-point CA deduction/);
+  assert.match(html,/13 classified tracking requests, including 5 collection requests/);
+  assert.match(html,/Verified advertising collection: 1 request/);
+  assert.match(html,/Capture was limited/);
+  assert.match(html,/Observed on the page request and in the browser/);
+  assert.match(html,/sale\/sharing setting could not be determined/);
+  assert.match(html,/paired scan could not determine/);
+  assert.ok(html.indexOf("15-point California risk deduction")<html.indexOf("Comparison with GPC disabled"));
+  assert.deepEqual(projection,before);
+  const eu=renderToStaticMarkup(<GpcEvidenceIndexCard projection={projection} />);
+  assert.doesNotMatch(eu,/15-point California risk deduction|15-point CA deduction/);
+  assert.match(eu,/13 classified tracking requests/);
+});

@@ -61,7 +61,7 @@ function topicFor(finding: AssessmentHighlightFinding): { domain: Domain; topic:
   if (family === "pre_consent_storage") return { domain: "privacy", topic: "cookies and storage before consent" };
   if (family === "pre_consent_tracking") return { domain: "privacy", topic: "activity before consent" };
   if (family === "policy_transparency") return { domain: "privacy", topic: "privacy disclosures" };
-  if (family === "gpc") return { domain: "privacy", topic: "the site's response to Global Privacy Control" };
+  if (id === "gpc_response" || family === "gpc") return { domain: "privacy", topic: "the site's response to Global Privacy Control" };
   if (family === "sensitive_runtime" || family === "tracking_technology") return { domain: "privacy", topic: "tracking and data collection" };
   if (family === "embedded_third_party") return { domain: "privacy", topic: "third-party content loaded before consent" };
   if (family === "transport_security") return { domain: "security", topic: "connection security" };

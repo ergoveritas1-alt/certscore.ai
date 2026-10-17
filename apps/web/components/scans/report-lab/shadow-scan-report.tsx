@@ -1522,9 +1522,11 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
   );
 }
 
-function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: GpcResponseReportProjection; homepage?: boolean }) {
+export function GpcEvidenceIndexCard({ projection, california = false }: { projection: GpcResponseReportProjection; california?: boolean }) {
   const proof = projection.assessment.comparison.enabledProof;
   const activity = gpcCardActivity(projection);
+  const scoredRisk = california && projection.californiaDeductionPoints > 0;
+  const observation = projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? projection.assessment.observation : null;
   const evidenceJson: Record<string, unknown> = {
     assessment: projection.assessment,
     evidenceRefs: projection.evidenceRefs,
@@ -1533,14 +1535,16 @@ function GpcEvidenceIndexCard({ projection, homepage = false }: { projection: Gp
   return (
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc}
-        recap={projection.assessment.status === "indeterminate" ? "Response not determined" : projection.comparisonHeadline}
-        badge={<EvidenceHeaderStatus rows={projection.californiaDeductionPoints > 0 ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />} />
-      <div className="mt-4">
-        <DetailedEvidenceFinding title="GPC comparison" summary={gpcCardResponse(projection)}
-          badge={<EvidenceHeaderStatus rows={projection.californiaDeductionPoints > 0 ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />}
+        recap={scoredRisk ? `Risk observed · ${projection.californiaDeductionPoints}-point CA deduction` : gpcSummaryLabel(projection)}
+        badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />} />
+      <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
+        {activity ? <p>{activity}</p> : null}
+        {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
+        {observation && observation.registration.sale === "unknown" && observation.registration.sharing === "unknown" ? <p><strong>Site-recorded opt-out:</strong> The sale/sharing setting could not be determined from retained evidence.</p> : null}
+        {scoredRisk && projection.californiaScoreExplanation ? <p className="rounded-md bg-amber-50 p-3 text-amber-950">{projection.californiaScoreExplanation}</p> : null}
+        <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
           evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]}>
           <div className="space-y-3 text-xs leading-5 text-zinc-600">
-            {activity ? <p>{activity}</p> : null}
             <GpcActivityComparison comparison={projection.activityComparison} />
             <details className="group/gpc-comparison border-t border-zinc-200 pt-3">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold [&::-webkit-details-marker]:hidden">
@@ -1691,7 +1695,7 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
                 </div>
               </details>
             ) : null}
-            {GPC_CUSTOMER_RESULTS_ENABLED && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} homepage={compact} /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc} recap="Evidence unavailable" badge={<EvidenceHeaderStatus rows={[{status: "Limited"}]} />} /><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>)}
+            {GPC_CUSTOMER_RESULTS_ENABLED && (report.gpcResponse ? <GpcEvidenceIndexCard projection={report.gpcResponse} california={report.reviewFocus === "ccpa_cpra"} /> : <details id="gpc-evidence" className="group/gpc border-b border-r border-zinc-200 p-5"><EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc} recap="Evidence unavailable" badge={<EvidenceHeaderStatus rows={[{status: "Limited"}]} />} /><p className="mt-4 text-sm text-zinc-600">No verified GPC assessment is available in this report. Response remains unknown.</p></details>)}
             {report.cmsSecurity && (report.cmsSecurity.assessment.detections.length > 0 || (report.cmsSecurity.pluginInventory?.detections.length ?? 0) > 0) ? <CmsSecurityEvidence projection={report.cmsSecurity} /> : null}
           </EvidenceColumns>
         </div>
