@@ -109,7 +109,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
   const readerSummary = priority ? topFindingReaderSummary(finding) : finding.summary;
   return (
     <details className={`group border-b border-zinc-200 last:border-b-0 ${priority ? "transition-colors hover:bg-zinc-50 open:bg-white" : ""}`} id={`${idPrefix}${finding.id}`}>
-      <summary className={`grid cursor-pointer list-none gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden ${priority ? "relative grid-cols-[2.25rem_minmax(0,1fr)] items-start px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto] sm:items-center sm:px-3" : dense ? "grid-cols-[2rem_minmax(0,1fr)_auto] py-4" : "grid-cols-[2.5rem_minmax(0,1fr)] py-4 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"}`}>
+      <summary className={`grid cursor-pointer list-none gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden ${priority ? "relative grid-cols-[2.25rem_minmax(0,1fr)] items-start px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto] sm:px-3" : dense ? "grid-cols-[2rem_minmax(0,1fr)_auto] py-4" : "grid-cols-[2.5rem_minmax(0,1fr)] py-4 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"}`}>
         <span className={`${monoClass} font-semibold ${priority ? "inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-xs text-zinc-600" : "text-sm text-zinc-400"}`}>{String(finding.rank).padStart(2, "0")}</span>
         <span className={`min-w-0 ${priority ? "pr-7 sm:pr-0" : ""}`}>
           <span className={`${dense ? "text-sm" : "text-base"} block font-semibold text-zinc-950`}>{finding.title}{pages?.length ? <span className="ml-2 inline-block text-xs font-normal text-zinc-500">{pages.length === 1 && pages[0]?.homepage ? "Starting page" : `${pages.length} ${pages.length === 1 ? "page" : "pages"}`}</span> : null}</span>
@@ -117,7 +117,7 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
           {regulatoryContext ? <span className="mt-2 block max-w-3xl text-sm leading-6 text-zinc-700"><span className="font-semibold text-zinc-900">Why it matters: </span>{regulatoryContext.why}</span> : null}
           {!dense ? <span className="mt-3 inline-flex sm:hidden"><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
         </span>
-        {!dense && finding.focus ? <span className={`${priority ? "hidden self-center rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
+        {!dense && finding.focus ? <span className={`${priority ? "hidden self-start rounded-md border border-zinc-200 bg-white px-2 py-1 text-[0.65rem] font-semibold uppercase text-zinc-500 lg:block" : "hidden self-start text-xs font-medium text-zinc-500 sm:block"}`}>{finding.focus}</span> : null}
         <span className={priority ? "absolute right-2 top-3 flex items-center gap-2 sm:static" : dense ? "flex items-start gap-2" : "hidden items-start gap-2 sm:flex"}>
           {!dense ? <span className={priority ? "hidden sm:inline-flex" : ""}><StatusBadge status={finding.status} priority={finding.priority} /></span> : null}
           <DisclosureChevron className="mt-1 text-zinc-400 group-open:rotate-180" />
