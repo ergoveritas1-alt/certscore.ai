@@ -21,7 +21,7 @@ const nanoAssistProvider: PolicyNanoAssistProvider = {
 };
 const body = `<main><h1>Riverside Restaurant</h1><p>${"Visit our family restaurant for lunch and dinner. Explore our seasonal menu, opening hours, reservations and local catering services. ".repeat(12)}</p></main>`;
 
-for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "observed_notice_404", "blocked", "enumeration_overflow", "uninspected_frame", "uninspected_shadow", "loading_document"] as const) {
+for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "observed_notice_404", "blocked", "enumeration_overflow", "uninspected_frame", "inspected_shadow", "nested_shadow_choice", "hidden_unnamed_control", "visible_unnamed_control", "loading_document"] as const) {
   test(`policy negative search: ${scenario}`, { timeout: 25_000 }, async () => {
     const server = createServer((request, response) => {
       response.setHeader("content-type", "text/html");
@@ -36,7 +36,10 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         : scenario === "observed_notice_404" ? '<footer><a href="/notice">Notice at Collection</a></footer>'
         : scenario === "enumeration_overflow" ? Array.from({ length: 1001 }, (_, i) => `<button>Menu item ${i}</button>`).join("")
         : scenario === "uninspected_frame" ? '<iframe src="about:blank"></iframe>'
-        : scenario === "uninspected_shadow" ? '<div id="custom-footer"></div><script>document.querySelector("#custom-footer").attachShadow({mode:"open"}).innerHTML="<span>Footer</span>"</script>'
+        : scenario === "inspected_shadow" ? '<div id="custom-footer"></div><script>document.querySelector("#custom-footer").attachShadow({mode:"open"}).innerHTML="<span>Footer</span>"</script>'
+        : scenario === "nested_shadow_choice" ? '<div id="outer-host"></div><script>const root=document.querySelector("#outer-host").attachShadow({mode:"open"});root.innerHTML="<div id=inner-host></div>";root.querySelector("#inner-host").attachShadow({mode:"open"}).innerHTML="<a href=/choice>Your Privacy Choices</a>"</script>'
+        : scenario === "hidden_unnamed_control" ? '<button style="display:none"></button>'
+        : scenario === "visible_unnamed_control" ? '<button style="width:24px;height:24px"></button>'
         : scenario === "loading_document" ? '<script src="/pending-script"></script>' : "";
       response.end(`<html lang="en"><head><title>Riverside Restaurant</title></head><body>${body}${extra}</body></html>`);
     });
@@ -52,7 +55,7 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
           source: "canonical_legal_surface_hint" as const, url: new URL("/privacy-policy", normalizedUrl).href }] } : {}) });
       const inspection = derivePolicySurfaceInspectionOutcome({ modulesRun: [result.moduleRun], normalizedUrl,
         privacyChoiceInspection: result.privacyChoiceInspection, negativeSearchEvidence: result.negativeSearchEvidence, policySurfaceObservations: result.policySurfaceObservations });
-      if (scenario === "missing" || scenario === "seeded_missing") {
+      if (["missing", "seeded_missing", "inspected_shadow", "hidden_unnamed_control"].includes(scenario)) {
         assert.equal(result.moduleRun.status, "completed", JSON.stringify(result.moduleRun));
         assert.ok(result.policySurfaceObservations.filter(row => row.status === "failed").length > 0,
           "Guessed URL 404s do not negate the independently completed observed-link search.");
@@ -61,6 +64,11 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(inspection.privacyChoiceInspection?.coverage,"complete");
         assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,0);
         assert.equal(inspection.privacyChoiceInspection?.documentUrl,normalizedUrl);
+        if (scenario === "hidden_unnamed_control") {
+          assert.equal(inspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v2");
+          assert.equal(inspection.privacyChoiceInspection?.unnamedControlCount,0);
+          assert.equal(inspection.privacyChoiceInspection?.hiddenUnnamedControlCount,1);
+        }
       } else if (scenario === "observed_but_unfetchable" || scenario === "seeded_observed_but_unfetchable") {
         assert.equal(inspection.outcome, "privacy_policy_observed");
         assert.equal(inspection.documentRetrievalCoverageStatus, "insufficient");
@@ -70,6 +78,13 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.ok(notice, "Expected the observed named notice link to retain its fetch result.");
         assert.equal(notice.finalUrl, new URL("/notice", normalizedUrl).href);
         assert.equal(notice.fetchFailureReason, "http_error");
+      } else if (scenario === "nested_shadow_choice") {
+        assert.equal(inspection.privacyChoiceInspection?.uninspectedShadowRootCount,0);
+        assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,1);
+        assert.equal(inspection.privacyChoiceInspection?.coverage,"complete");
+      } else if (scenario === "visible_unnamed_control") {
+        assert.equal(inspection.privacyChoiceInspection?.unnamedControlCount,1);
+        assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");
       } else {
         assert.equal(inspection.outcome, "indeterminate_limited_coverage", scenario);
         assert.equal(result.negativeSearchEvidence, undefined);

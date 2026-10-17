@@ -26,6 +26,13 @@ const surface = { observationId: "dns", surfaceType: "do_not_sell_or_share", url
 
 test("California absence requires dedicated complete inspection, never an empty workpaper", () => {
   assert.deepEqual(californiaPrivacyReviewFindingIds(projectCaliforniaPrivacyReview(bundle(), source, url)), [CALIFORNIA_CHOICE_ABSENCE_ID]);
+  const v2 = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:{privacyChoiceInspection:{...inspection,
+    contractVersion:"certscore.privacy-choice-inspection.v2",hiddenUnnamedControlCount:2}}}),source,url)!;
+  assert.equal(v2.inspection?.contractVersion,"certscore.privacy-choice-inspection.v2");
+  assert.deepEqual(californiaPrivacyReviewFindingIds(v2),[CALIFORNIA_CHOICE_ABSENCE_ID]);
+  const malformedV2 = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:{privacyChoiceInspection:{...inspection,
+    contractVersion:"certscore.privacy-choice-inspection.v2"}}}),source,url)!;
+  assert.equal(malformedV2.choiceSurface,"unknown");
   const old = projectCaliforniaPrivacyReview(bundle({policySurfaceInspection: undefined}), source, url)!;
   assert.equal(old.choiceSurface, "unknown");
   for (const patch of [{coverage:"limited"},{uninspectedFrameCount:1},{candidateEnumerationTruncated:true},{documentStable:false},{unnamedControlCount:1},{supportedDocumentLanguage:false},{namedChoiceCandidateCount:1},{documentUrl:`${url}other`},{capturedAt:"2026-10-16T11:59:00.000Z"}]) {

@@ -4345,7 +4345,16 @@ async function extractRenderedCandidates(
 
       let candidateEnumerationTruncated = false;
       let unnamedControlCount = 0;
+      let hiddenUnnamedControlCount = 0;
       const seenRoots = new Set<ParentNode>();
+      function isVisible(element: Element): boolean {
+        for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
+          const style = getComputedStyle(current);
+          if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
+              current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) return false;
+        }
+        return [...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0);
+      }
       function collect(root: ParentNode, output: RawCandidate[]): void {
         if (seenRoots.has(root)) return;
         if (output.length >= maxCandidates) { candidateEnumerationTruncated = true; return; }
@@ -4409,19 +4418,13 @@ async function extractRenderedCandidates(
           ] as const;
           const named = names.find(([, value]) => value?.trim());
           const accessibleName = normalizeText(named?.[1]).slice(0, 220);
-          if (!accessibleName && element.matches("a[href],button,[role='button'],[role='link']")) unnamedControlCount++;
-          let linkVisibility: "visible" | "hidden" = "visible";
-          if (directAnchor) {
-            for (let current: Element | null = element; current; current = current.parentElement ?? (current.getRootNode() as ShadowRoot).host ?? null) {
-              const style = getComputedStyle(current);
-              if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse" || Number(style.opacity) === 0 ||
-                  current.getAttribute("aria-hidden") === "true" || current.hasAttribute("inert")) {
-                linkVisibility = "hidden";
-                break;
-              }
-            }
-            if (![...element.getClientRects()].some((rect) => rect.width > 0 && rect.height > 0)) linkVisibility = "hidden";
+          const interactive = element.matches("a[href],button,[role='button'],[role='link']");
+          const visibility = directAnchor || (interactive && !accessibleName) ? isVisible(element) : true;
+          if (!accessibleName && interactive) {
+            if (visibility) unnamedControlCount++;
+            else hiddenUnnamedControlCount++;
           }
+          const linkVisibility: "visible" | "hidden" = visibility ? "visible" : "hidden";
           const text = normalizeText([
             element.textContent,
             element.getAttribute("aria-label"),
@@ -4466,11 +4469,16 @@ async function extractRenderedCandidates(
       let uninspectedShadowRootCount = 0;
       let uninspectedFrameCount = 0;
       let inspectedElementCount = 0;
+      let coverageTraversalTruncated = false;
       const inspectCoverage = (root: ParentNode): void => {
         for (const element of root.querySelectorAll("*")) {
-          if (++inspectedElementCount > 20_000) { candidateEnumerationTruncated = true; return; }
+          if (coverageTraversalTruncated) return;
+          if (++inspectedElementCount > 20_000) { candidateEnumerationTruncated = true; coverageTraversalTruncated = true; return; }
           if (element.matches("iframe, frame")) uninspectedFrameCount++;
           if (element.shadowRoot) {
+            // Open roots can be inspected in this same bounded DOM read. The
+            // old search only entered roots on named link/button hosts.
+            if (!seenRoots.has(element.shadowRoot)) collect(element.shadowRoot, output);
             if (!seenRoots.has(element.shadowRoot)) uninspectedShadowRootCount++;
             inspectCoverage(element.shadowRoot);
           }
@@ -4478,7 +4486,7 @@ async function extractRenderedCandidates(
       };
       inspectCoverage(document);
       return { candidates: output, documentUrl: document.URL, timeOrigin: performance.timeOrigin,
-        language: document.documentElement.lang, unnamedControlCount,
+        language: document.documentElement.lang, unnamedControlCount, hiddenUnnamedControlCount,
         documentReady: document.readyState === "complete" && Boolean(document.body),
         candidateEnumerationTruncated, uninspectedShadowRootCount, uninspectedFrameCount };
     };
@@ -4626,12 +4634,13 @@ async function extractRenderedCandidates(
       } catch { return []; }
     }).filter((row, index, rows) => rows.findIndex(other => other.destinationUrl === row.destinationUrl && other.label === row.label) === index).slice(0, 12);
     const choiceInspection = domInspection ? privacyChoiceInspectionSchema.safeParse({
-      contractVersion: "certscore.privacy-choice-inspection.v1", documentUrl: renderedBaseUrl,
+      contractVersion: "certscore.privacy-choice-inspection.v2", documentUrl: renderedBaseUrl,
       capturedAt: new Date().toISOString(), sourceHash: createHash("sha256").update(JSON.stringify({domInspection, textInspection})).digest("hex"),
       scope: "rendered_named_links_and_buttons",
       coverage: inspectionComplete && supportedDocumentLanguage && domInspection.unnamedControlCount === 0 ? "complete" : "limited",
       namedChoiceCandidateCount: candidates.filter(candidate => ["do_not_sell_or_share", "your_privacy_choices"].includes(candidate.deterministicSurfaceType)).length,
-      unnamedControlCount: domInspection.unnamedControlCount, candidateEnumerationTruncated: domInspection.candidateEnumerationTruncated,
+      unnamedControlCount: domInspection.unnamedControlCount, hiddenUnnamedControlCount: domInspection.hiddenUnnamedControlCount,
+      candidateEnumerationTruncated: domInspection.candidateEnumerationTruncated,
       uninspectedFrameCount: domInspection.uninspectedFrameCount, uninspectedShadowRootCount: domInspection.uninspectedShadowRootCount,
       supportedDocumentLanguage, representativeDocument, documentStable,
       rightsMethods,

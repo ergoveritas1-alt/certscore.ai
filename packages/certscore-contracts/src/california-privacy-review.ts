@@ -20,8 +20,7 @@ const rightsMethodSchema = z.object({
 }).strict();
 
 /** Policy-lane DOM observation, independent of cookie controls and GPC. */
-export const privacyChoiceInspectionSchema = z.object({
-  contractVersion: z.literal("certscore.privacy-choice-inspection.v1"),
+const privacyChoiceInspectionFields = {
   documentUrl: safeUrl,
   capturedAt: z.string().datetime(),
   sourceHash: hash,
@@ -36,11 +35,33 @@ export const privacyChoiceInspectionSchema = z.object({
   representativeDocument: z.boolean(),
   documentStable: z.boolean(),
   rightsMethods: rightsMethodSchema.array().max(12).optional(),
-}).strict().superRefine((row, ctx) => {
+};
+function validateChoiceInspectionCoverage(row: {
+  coverage: "complete" | "limited";
+  unnamedControlCount: number;
+  candidateEnumerationTruncated: boolean;
+  uninspectedFrameCount: number;
+  uninspectedShadowRootCount: number;
+  supportedDocumentLanguage: boolean;
+  representativeDocument: boolean;
+  documentStable: boolean;
+}, ctx: z.RefinementCtx): void {
   if (row.coverage === "complete" && (row.unnamedControlCount || row.candidateEnumerationTruncated ||
       row.uninspectedFrameCount || row.uninspectedShadowRootCount || !row.supportedDocumentLanguage ||
       !row.representativeDocument || !row.documentStable)) ctx.addIssue({code: "custom", message: "Incomplete privacy-choice inspection cannot establish absence."});
-});
+}
+/** V1 retains the original all-controls count for historical records. */
+const privacyChoiceInspectionV1Schema = z.object({
+  contractVersion: z.literal("certscore.privacy-choice-inspection.v1"),
+  ...privacyChoiceInspectionFields,
+}).strict().superRefine(validateChoiceInspectionCoverage);
+/** V2 distinguishes hidden unnamed controls from visible, choice-capable ones. */
+const privacyChoiceInspectionV2Schema = z.object({
+  contractVersion: z.literal("certscore.privacy-choice-inspection.v2"),
+  ...privacyChoiceInspectionFields,
+  hiddenUnnamedControlCount: z.number().int().min(0),
+}).strict().superRefine(validateChoiceInspectionCoverage);
+export const privacyChoiceInspectionSchema = z.union([privacyChoiceInspectionV1Schema, privacyChoiceInspectionV2Schema]);
 export type PrivacyChoiceInspection = z.infer<typeof privacyChoiceInspectionSchema>;
 
 export const CALIFORNIA_CHOICE_ABSENCE_ID = "california_privacy_choice_not_observed";
