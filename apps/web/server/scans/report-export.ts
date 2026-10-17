@@ -328,7 +328,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     privacyAuditEvidence ? `${privacyAuditEvidence.controls.length} observed privacy-choice/settings surfaces${privacyAuditEvidence.contractVersion === "certscore.privacy-audit-evidence.v2" && privacyAuditEvidence.controlCandidates.length ? ` and ${privacyAuditEvidence.controlCandidates.length} link candidates needing proof` : ""}, plus ${privacyAuditEvidence.notices.length} notice documents, are retained in the bounded workpaper. Presence does not establish a working opt-out or adequate disclosure.`
       : "Verified California privacy-choice and notice evidence is unavailable; absence and disclosure adequacy remain unknown.",
     californiaScore.score === null ? californiaAssessmentPresentation(californiaScore.reviewCoverage).unavailableScore :
-      `California starting-page score: ${californiaScore.score}/100 under ${californiaScore.policyVersion}. This is a bounded risk signal, not a compliance grade.`,
+      `California starting-page score: ${californiaScore.score}/100.`,
   ];
 
   return {

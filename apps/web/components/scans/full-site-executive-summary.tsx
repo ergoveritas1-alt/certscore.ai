@@ -89,9 +89,8 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
           </div>
         </div>
         {!score && !californiaReview ? <p className="mt-2 text-xs text-zinc-500">{loadingSavedResult ? "The sitewide score will appear when the saved result loads." : pending ? `${singlePage ? "The page score" : "The site-wide score"} will appear when the assessment is ready.` : `${singlePage ? "Page scoring" : "Site-wide scoring"} is unavailable for this scan.`}</p> : null}
-        {californiaReview ? <p className="mt-2 text-xs leading-5 text-zinc-600">{value === null ? californiaPresentation.unavailableScore : `California-specific scoring · starting page${californiaScore?.coverage === "limited" ? " · limited coverage" : ""}.`} This is a bounded risk signal, not a compliance grade. <a href="/scoring-review" className="text-sky-700 underline">Scoring rules</a></p> : null}
+        {californiaReview && value === null ? <p className="mt-2 text-xs text-zinc-600">{californiaPresentation.unavailableScore}</p> : null}
         {californiaReview ? <CaliforniaCoverageSummary coverage={californiaScore?.reviewCoverage} rightsAssessment={californiaScore?.rightsAssessment} collectionNoticeAssessment={californiaScore?.collectionNoticeAssessment} saleSharingAssessment={californiaScore?.saleSharingAssessment} /> : null}
-        {reviewFocus === "gdpr_eprivacy" ? <p className="mt-2 text-xs leading-5 text-zinc-600">GDPR/ePrivacy-weighted overall score. This is a risk signal, not a compliance grade. <a href="/scoring-review" className="text-sky-700 underline">Scoring rules</a></p> : null}
         {score?.limitedPages ? <p className="mt-1 text-xs text-amber-800">{score.limitedPages} {score.limitedPages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
         </div>
         <div data-overview-block>{snapshot ?? <p className="py-3 text-sm text-zinc-500">The signal snapshot will appear when the starting-page assessment is ready.</p>}</div>

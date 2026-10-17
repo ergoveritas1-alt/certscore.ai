@@ -1,3 +1,4 @@
+import { gpcReaderSummary } from "./gpc-reader-summary";
 import { buildAssessmentBrief, normalizeAssessmentCopy, type AssessmentBrief, type AssessmentContext, type AssessmentHighlightFinding, type AssessmentScope } from "./assessment-brief";
 import { evidenceRowAnchor, findingEvidenceAnchor } from "./report-evidence-navigation";
 export type { AssessmentHighlightFinding, AssessmentContext } from "./assessment-brief";
@@ -27,12 +28,7 @@ export function renderAssessmentBrief(brief: AssessmentBrief) {
       : brief.coverage.state === "limited" ? "See Detailed evidence for checks that could not be completed."
         : brief.attention === "limited" ? "Review the scan coverage in Detailed evidence." : "";
   if (primary?.id === "gpc_response" && fact) {
-    const readableFact = fact
-      .replace(/^Bounded GPC observation completed\.\s*/, "")
-      .replace("GPC was observed on the main-document request and browser property.", "GPC delivery was verified on the page request and browser setting.")
-      .replace("The CMP's sale/sharing opt-out state was unavailable.", "The consent platform’s sale/sharing opt-out setting could not be read.")
-      .replace(/\b1 collection requests\b/g, "1 collection request")
-      .replace("Paired activity comparison: indeterminate.", "The comparison with GPC disabled was inconclusive.");
+    const readableFact = gpcReaderSummary(fact);
     const evidenceLead = sentence(`“${primary.readerTitle}”: ${readableFact}`);
     const paragraph = [evidenceLead, action, limitation].filter(Boolean).join(" ");
     if (paragraph.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH) return normalizeAssessmentCopy(paragraph);

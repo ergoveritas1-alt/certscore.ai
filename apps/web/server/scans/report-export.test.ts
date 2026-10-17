@@ -120,7 +120,7 @@ test("new California coverage and score agree across persisted report, API, JSON
   assert.equal(api.postureScores?.ccpaCpra.policyVersion,exported.californiaScore.policyVersion);
   assert.equal(exported.californiaScore.reviewCoverage?.families.length,6);
   const pdf=renderCanonicalReportPdf(exported).toString("latin1");
-  assert.match(pdf,/California coverage/);assert.match(pdf,/california-regulatory-posture.v2/);
+  assert.match(pdf,/California coverage/);assert.doesNotMatch(pdf,/california-regulatory-posture.v2|bounded risk signal|not a compliance grade/);
   assert.doesNotMatch(pdf,/review focuses on GPC/);
 });
 
@@ -140,7 +140,7 @@ test("v3 numerical score and review coverage agree in API and exports",()=>{
   assert.equal(api.postureScores?.ccpaCpra.score,100);
   assert.equal(api.postureScores?.ccpaCpra.coverageSummary?.scoreReady,true);
   assert.ok(api.postureScores?.ccpaCpra.coverageSummary?.families.some(row=>row.id === "california_rights" && row.status === "review"));
-  assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/california-regulatory-posture.v3/);
+  assert.doesNotMatch(renderCanonicalReportPdf(exported).toString("latin1"),/california-regulatory-posture.v3|bounded risk signal|not a compliance grade/);
   assert.equal(exported.gpcResponse,null);
 });
 
@@ -448,7 +448,7 @@ test("v4 negative disclosure inspection and deduction agree in canonical report,
   assert.equal(api.postureScores?.ccpaCpra.score,88);assert.equal(api.postureScores?.gdprEprivacy.score,73);
   assert.equal(exported.californiaScore.policyVersion,"california-regulatory-posture.v4");
   assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.score,88);
-  assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/california-regulatory-posture.v4/);
+  assert.doesNotMatch(renderCanonicalReportPdf(exported).toString("latin1"),/california-regulatory-posture.v4|bounded risk signal|not a compliance grade/);
   assert.equal(exported.gpcResponse,null);
 });
 

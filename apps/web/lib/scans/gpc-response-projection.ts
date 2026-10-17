@@ -1,3 +1,4 @@
+import { gpcReaderSummary } from "./gpc-reader-summary";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
 import { GPC_CUSTOMER_RESULTS_ENABLED, hasVerifiedCustomerGpcEvidence } from "./gpc-customer-policy";
 import { gpcResponseAssessmentSchema, type GpcResponseAssessment } from "@certscore/contracts";
@@ -127,7 +128,7 @@ export function buildCanonicalGpcResponseProjection(
     coverageSummary: presentation.coverageSummary,
     comparisonHeadline: presentation.comparisonHeadline,
     headline: presentation.headline,
-    summary: finding.summary,
+    summary: gpcReaderSummary(finding.summary),
     observedFacts,
     activityComparison: readGpcActivityComparison(finding.details.activityComparison, parsedAssessment.data),
   };

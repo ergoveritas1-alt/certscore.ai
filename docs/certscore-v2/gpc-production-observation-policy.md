@@ -221,3 +221,33 @@ positive-evidence provenance keep the earlier complete-observation requirement.
 Historical paired response records and their response/completeness states remain
 unchanged. The public API/OpenAPI/SDK observation contract is synchronized from
 the canonical schema; no separate MCP method or endpoint is introduced.
+
+### October 17 report clarity and terminal readback repair — local only
+
+Owner-directed report presentation now shows assessed GPC facts without an
+inconclusive paired-comparison paragraph or an unknown CMP opt-out setting.
+Canonical comparison status, limitations, proof and scoring remain retained;
+removing diagnostic prose does not establish a response or successful opt-out.
+General accessibility remains outside the California privacy score. Every
+selected top issue has explanatory context, including WCAG findings; the score
+fine print is removed from both regulatory report postures.
+
+Busy-page compaction gives main-document request/response chains a distinct
+higher retention tier than collection requests and comparison-window samples.
+Event counts and byte allowances do not increase, original window hashes are
+unchanged, and overflow still makes the comparison incomplete. A saturated
+advertising-window regression verifies navigation proof survives both caps.
+
+The GPC session's single terminal semantic read now follows existing page work
+on ordinary pages as well as sparse pages. The paired-impact freeze remains at
+its original checkpoint; the overlapping document proof stays anchored there,
+and intervening navigation invalidates it. There is no new wait, browser visit,
+readback, model call, timeout or late publication. A browser fixture verifies
+that CMP readiness reached during the existing cookie snapshot is captured by
+that single terminal read; cancellation and document-change fixtures still fail
+closed. This does not guarantee a late CMP is ready before the existing deadline.
+
+Estimated incremental compute is zero (work reordered within the same session).
+Additional retained evidence stays within existing caps; incremental storage is
+estimated below $1/month at 100,000 scans, disclosed before implementation under
+the owner's small-cost preapproval. No deployment is authorized by this entry.

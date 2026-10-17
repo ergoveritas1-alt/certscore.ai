@@ -115,16 +115,16 @@ test("v3 card states the observed signal and activity without implying an establ
     headline: "Observation complete",
   } as GpcResponseReportProjection;
 
-  assert.equal(gpcSummaryLabel(projection), "GPC signal observed · Response not determined");
+  assert.equal(gpcSummaryLabel(projection), "GPC signal observed");
   assert.equal(gpcCardActivity(projection), "With GPC enabled, we observed 71 classified tracking requests, including 6 collection requests.");
-  assert.equal(gpcCardResponse(projection), "The paired scan could not determine whether classified tracking activity changed with GPC.");
+  assert.equal(gpcCardResponse(projection), gpcCardActivity(projection));
 
   const limited = structuredClone(projection);
   if (limited.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") assert.fail("v3 fixture required");
   limited.assessment.observation.status = "limited";
   limited.headline = "Observation limited";
   assert.match(gpcCardActivity(limited)!, /71 classified tracking requests.*Capture was limited/);
-  assert.equal(gpcSummaryLabel(limited), "Observation limited · Response not determined");
+  assert.equal(gpcSummaryLabel(limited), "Observation limited");
 });
 
 test("responsive GPC card describes a retained partial reduction", async () => {

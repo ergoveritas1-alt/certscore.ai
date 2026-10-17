@@ -645,3 +645,33 @@ function lowSignalEndpointJourney(index: number): CanonicalEvidenceBundle["obser
     evidenceRefs: [],
   };
 }
+
+
+test("redirect navigation proof outranks a saturated advertising comparison window at both retention caps", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  for (const event of bundle.networkEvents) {
+    Object.assign(event, { collectionEndpointObserved: true, thirdParty: true, firstParty: false, cookieNamesSent: ["ad_id"], timestampMs: 1100 });
+  }
+  for (const index of [70, 90]) {
+    Object.assign(bundle.networkEvents[index]!, { isMainFrame: true, resourceType: "document", collectionEndpointObserved: false,
+      thirdParty: false, firstParty: true, cookieNamesSent: [], timestampMs: 900 + index });
+    bundle.networkResponseEvents[index]!.status = index === 70 ? 302 : 200;
+  }
+  bundle.networkEvents[90]!.parentRequestId = bundle.networkEvents[70]!.requestId;
+  bundle.networkEvents[90]!.redirectChainRequestIds = [bundle.networkEvents[70]!.requestId];
+  const window = bundle.networkEvents.filter(event => event.timestampMs >= 1000);
+  bundle.gpcImpactCapture = { contractVersion: "certscore.gpc-impact-capture.v1", scope: "page_http_request_attempts_after_document_commit",
+    expectedEnabled: false, captureStartedAtMs: 0, capturedAtMs: 1500, readbackDocumentToken: "loader",
+    document: { token: "loader", urlSha256: "a".repeat(64), committedAtMs: 1000, secGpc: null }, requestsDropped: 0,
+    windows: [{ durationMs: 250, requestCount: window.length, requestSetSha256: gpcImpactRequestSetHash(window) }], limitationKeys: [] };
+  for (const budget of [400 * 1024, 1]) {
+    const result = compactCanonicalEvidenceBundleForRetention(bundle, budget);
+    for (const index of [70, 90]) {
+      assert.ok(result.networkEvents.some(event => event.eventId === bundle.networkEvents[index]!.eventId));
+      assert.ok(result.networkResponseEvents.some(event => event.requestId === bundle.networkEvents[index]!.requestId));
+    }
+    assert.ok(result.networkEvents.length <= 140 && result.networkResponseEvents.length <= 100);
+    assert.equal(result.gpcImpactCapture?.retentionStatus, "incomplete");
+    assert.deepEqual(result.gpcImpactCapture?.windows, bundle.gpcImpactCapture.windows);
+  }
+});

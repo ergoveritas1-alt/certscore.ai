@@ -1,3 +1,4 @@
+import { gpcReaderSummary } from "./gpc-reader-summary";
 export const TOP_FINDING_READER_SUMMARY_VERSION = "certscore.top-finding-reader-summary.v1";
 
 type ProjectedFindingCopy = {
@@ -25,7 +26,7 @@ function factFirstWithQualification(copy: string, qualification: string) {
 
 /** Reader copy for an already-projected top finding; never derives eligibility or evidence. */
 export function topFindingReaderSummary(finding: ProjectedFindingCopy) {
-  const summary = normalize(finding.summary);
+  const summary = normalize(finding.id === "gpc_response" ? gpcReaderSummary(finding.summary) : finding.summary);
   if (!summary) return `Review the supporting evidence for “${normalize(finding.title)}”.`;
 
   // This exact projected policy summary carries internal extraction diagnostics
@@ -67,4 +68,11 @@ export function topFindingReaderSummary(finding: ProjectedFindingCopy) {
     return `Review the supporting evidence for “${normalize(finding.title)}”.`;
   }
   return summary;
+}
+
+/** Context only for already-selected findings; never creates or ranks findings. */
+export function topFindingWhyItMatters(finding: ProjectedFindingCopy): string {
+  if (/accessibility|wcag/i.test(finding.id)) return "Missing labels, low contrast and other accessibility barriers can prevent people using assistive technology from reading content or completing tasks. Review the retained WCAG examples and test the affected journeys.";
+  if (/integrity|security|transport/i.test(finding.id)) return "Security and transport weaknesses can expose visitors’ information or disrupt access to the site. Review the affected requests and pages.";
+  return "This finding identifies a potential barrier to clear information or effective visitor choices. Review the retained evidence and recommended fixes for the affected pages.";
 }

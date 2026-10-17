@@ -85,3 +85,46 @@ test("direct collection responses survive stalled asynchronous header reads",{ti
   }
  }finally{await browser.close();server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
 });
+
+
+test("the single GPC terminal read includes CMP readiness reached during existing cookie capture", { timeout: 20000 }, async t => {
+  const server = createServer((_req, res) => { res.setHeader("Content-Type", "text/html"); res.end(`<!doctype html><html><body><h1>Company information</h1><p>${"Ordinary public content and services. ".repeat(30)}</p></body></html>`); });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
+  const browser = await chromium.launch({ headless: true }), root = await mkdtemp(path.join(tmpdir(), "gpc-terminal-cmp-"));
+  const newContext = browser.newContext.bind(browser);
+  let installed = false;
+  t.mock.method(browser, "newContext", async (...args) => {
+    const context = await newContext(...args), cookies = context.cookies.bind(context);
+    t.mock.method(context, "cookies", async (...cookieArgs) => {
+      const page = context.pages()[0];
+      if (!installed && page?.url() === url) {
+        installed = true;
+        // The fixture makes the existing cookie read the readiness boundary;
+        // no new delay, request, retry or capture is introduced by the scanner.
+        await page.evaluate(() => {
+          (window as unknown as { __gpp: unknown }).__gpp = (command: string, callback: (value: unknown, success: boolean) => void) => {
+            const ping = { gppVersion: "1.1", cmpStatus: "loaded", signalStatus: "ready", sectionList: [8], applicableSections: [8],
+              parsedSections: { usca: [{ Version: 1, SaleOptOutNotice: 1, SharingOptOutNotice: 1, SaleOptOut: 1, SharingOptOut: 1 }, { GpcSegmentType: 1, Gpc: true }] } };
+            if (command === "ping") callback(ping, true);
+            if (command === "addEventListener") callback({ eventName: "listenerRegistered", data: true, listenerId: 1, pingData: ping }, true);
+          };
+        });
+      }
+      return cookies(...cookieArgs);
+    });
+    return context;
+  });
+  try {
+    const result = await preConsentRuntimeScanner({ browser, url, normalizedUrl: url, captureScope: "runtime_evidence", screenshotMode: "never", waitMode: "fast",
+      globalPrivacyControlEnabled: true, gpcOptOutPrototype: { scanId: "terminal-cmp" }, scanStartedAtMs: Date.now(), internalBudgetMs: 10000,
+      artifactWriter: await createArtifactWriter(root) });
+    assert.ok(installed);
+    assert.equal(result.gpcOptOutObservation?.gppStatus, "observed");
+    assert.equal(result.gpcOptOutObservation?.usca?.saleOptOut, 1);
+    const timings = result.moduleRun.timingBreakdown ?? [];
+    assert.equal(timings.filter(row => row.label === "GPC opt-out prototype").length, 1);
+    assert.ok(timings.findIndex(row => row.label === "cookie capture") < timings.findIndex(row => row.label === "GPC opt-out prototype"));
+    assert.ok(result.gpcImpactCapture!.capturedAtMs <= result.gpcOptOutObservation!.capturedAtMs);
+  } finally { await browser.close(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await rm(root, { recursive: true, force: true }); }
+});

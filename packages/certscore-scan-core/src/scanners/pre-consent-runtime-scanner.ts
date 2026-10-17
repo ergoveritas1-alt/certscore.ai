@@ -2384,14 +2384,11 @@ export async function preConsentRuntimeScanner(
     }
     retainedGpcSignalObservation = gpcSignalObservation;
     impactCapture?.finish(gpcSignalObservation);
-    // Sparse-page confirmation is already required later in this session. Keep
-    // its GPC listener alive through that work, then take the same single read.
-    // The overlapping document proof stays anchored here: navigation during the
-    // deferred interval invalidates it instead of being silently rebound.
-    const deferGpcFinalization = Boolean(gpcObservationSession && shouldConfirmSparsePageCandidate({
-      bodyText: pageEvidence.domText.replace(/\s+/g, " ").trim(),
-      hasSufficientFirstLayerControls: hasSufficientFirstLayerConsentControls(initialConsentObservation),
-    }));
+    // Read the GPC visit's CMP state after work this same session already owes
+    // (including cookies and sparse-page confirmation). Do not add a wait or
+    // repeat the read. Paired impact evidence remains frozen above; its document
+    // anchor is not rebound, and navigation still invalidates terminal proof.
+    const deferGpcFinalization = Boolean(gpcObservationSession);
     let gpcFinalizationStarted = false;
     const finalizeGpcEvidence = async () => {
       if (gpcFinalizationStarted) return;

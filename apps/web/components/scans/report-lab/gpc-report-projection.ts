@@ -7,11 +7,11 @@ export function gpcSummaryLabel(projection: GpcResponseReportProjection): string
     return projection.headline;
   }
   const response = projection.assessment.status === "indeterminate"
-    ? "Response not determined"
+    ? ""
     : projection.comparisonHeadline;
   return projection.assessment.observation.status === "complete"
-    ? `GPC signal observed · ${response}`
-    : `${projection.headline} · ${response}`;
+    ? ["GPC signal observed", response].filter(Boolean).join(" · ")
+    : [projection.headline, response].filter(Boolean).join(" · ");
 }
 
 export function gpcCardActivity(projection: GpcResponseReportProjection): string | null {
@@ -32,7 +32,7 @@ export function gpcCardResponse(projection: GpcResponseReportProjection): string
   if (projection.assessment.status === "no_observable_response" && projection.assessment.comparison.comparable && projection.assessment.comparison.deltas.trackers.baselineCount === 0 &&
       projection.assessment.comparison.deltas.trackers.gpcCount === 0) return projection.coverageSummary;
   if (projection.assessment.status === "indeterminate") {
-    return "The paired scan could not determine whether classified tracking activity changed with GPC.";
+    return gpcCardActivity(projection) ?? "See retained GPC observations.";
   }
   if (projection.assessment.status === "responsive") {
     const activity = projection.activityComparison?.activity;

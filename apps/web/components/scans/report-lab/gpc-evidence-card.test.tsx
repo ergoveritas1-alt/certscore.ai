@@ -22,9 +22,8 @@ test("GPC detail exposes verified facts without score deduction wording",()=>{
   assert.match(html,/Verified advertising collection: 1 request/);
   assert.match(html,/Capture was limited/);
   assert.match(html,/Observed on the page request and in the browser/);
-  assert.match(html,/sale\/sharing setting could not be determined/);
-  assert.match(html,/paired scan could not determine/);
-  assert.ok(html.indexOf("Verified advertising collection")<html.indexOf("Comparison with GPC disabled"));
+  assert.doesNotMatch(html,/sale\/sharing setting could not be determined/);
+  assert.doesNotMatch(html,/paired scan could not determine|Comparison with GPC disabled|Comparison incomplete|indeterminate/);
   assert.deepEqual(projection,before);
   const eu=renderToStaticMarkup(<GpcEvidenceIndexCard projection={projection} />);
   assert.doesNotMatch(eu,/15-point California risk deduction|15-point CA deduction/);

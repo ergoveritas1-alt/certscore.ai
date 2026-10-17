@@ -36,7 +36,7 @@ import { SitePriorityReview } from "../site-priority-review";
 import { CollectionSurfacesTable } from "../collection-surfaces-table";
 import type { FullSiteScanNoticeData } from "../../dashboard/full-site-scan-notice";
 import { afterClickCoverageLabel } from "../after-action-summary";
-import { DisclosureChevron, StatusBadge, FindingRow } from "../report-finding-row";
+import { DisclosureChevron, StatusBadge, FindingRow, EvidenceTools } from "../report-finding-row";
 import { describeSiteTechnology } from "@certscore/contracts";
 import { FullSiteWorkspace, FullSiteTiming, FullSiteRegion, FullSiteScanDuration } from "../full-site-workspace";
 import type { ReactNode } from "react";
@@ -1526,7 +1526,7 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
   const proof = projection.assessment.comparison.enabledProof;
   const activity = gpcCardActivity(projection);
   const scoredRisk = california && projection.californiaDeductionPoints > 0;
-  const observation = projection.assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? projection.assessment.observation : null;
+  const hasComparison = projection.assessment.comparison.comparable && projection.assessment.status !== "indeterminate";
   const evidenceJson: Record<string, unknown> = {
     assessment: projection.assessment,
     evidenceRefs: projection.evidenceRefs,
@@ -1540,8 +1540,7 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
         {activity ? <p>{activity}</p> : null}
         {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
-        {observation && observation.registration.sale === "unknown" && observation.registration.sharing === "unknown" ? <p><strong>Site-recorded opt-out:</strong> The sale/sharing setting could not be determined from retained evidence.</p> : null}
-        <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
+        {hasComparison ? <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
           evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]}>
           <div className="space-y-3 text-xs leading-5 text-zinc-600">
             <GpcActivityComparison comparison={projection.activityComparison} />
@@ -1556,7 +1555,7 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
               </div>
             </details>
           </div>
-        </DetailedEvidenceFinding>
+        </DetailedEvidenceFinding> : <EvidenceTools evidenceJson={{ observedFacts: projection.observedFacts, evidenceRefs: projection.evidenceRefs }} evidenceRefs={projection.evidenceRefs} correctionSteps={[]} />}
       </div>
     </details>
   );

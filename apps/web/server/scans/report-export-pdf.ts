@@ -1,3 +1,5 @@
+import { topFindingWhyItMatters } from "../../lib/scans/top-finding-reader-summary";
+import { gpcReaderSummary } from "../../lib/scans/gpc-reader-summary";
 import {hasNoQualifiedGpcActivity} from "../../lib/scans/gpc-response-projection";
 import { describeGpcObservedFacts } from "../../lib/scans/gpc-observed-facts";
 import { describeGpcActivityComparison,californiaCoverageFamilyLabel } from "@certscore/contracts";
@@ -294,11 +296,12 @@ function sectionHeading(text: string, pageBreakBefore = false): PdfLine {
 
 function findingDisplay(finding: Record<string, unknown>) {
   const presentation = record(finding.presentation);
+  const description = presentation?.findingDescription ?? presentation?.description ?? finding.summary;
   return {
     name: presentation?.findingName ?? finding.title ?? finding.unifiedFindingId ?? "Finding",
     severity: finding.severity ?? "review",
-    description: presentation?.findingDescription ?? presentation?.description ?? finding.summary,
-    why: presentation?.whyThisMatters,
+    description: finding.unifiedFindingId === "gpc_response" && typeof description === "string" ? gpcReaderSummary(description) : description,
+    why: presentation?.whyThisMatters ?? topFindingWhyItMatters({ id: String(finding.unifiedFindingId ?? ""), title: String(finding.title ?? ""), summary: String(finding.summary ?? "") }),
     fix: presentation?.suggestedFix,
     confidence: presentation?.confidenceScore,
   };
@@ -324,7 +327,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     { text: `Scan region: ${report.scan.scanFrom || "Not retained"}  |  Duration: ${formatDuration(report.scan.durationMs)}`, size: 9, kind: "caption" },
     { text: `Report generated: ${report.generatedAt}`, size: 9, kind: "caption", gapAfter: image ? 6 : 11 },
     ...wrappedLines(`${report.reviewFocusLabel} focus. ${report.reviewScope}`, { size: 9, gapAfter: 5 }),
-    ...(report.reviewFocus === "ccpa_cpra" ? wrappedLines(`California starting-page score: ${report.californiaScore.score === null ? "Unavailable" : `${report.californiaScore.score}/100`} (${report.californiaScore.policyVersion}; ${report.californiaScore.coverage} coverage). This is a bounded risk signal, not a compliance grade.`, { size: 9, gapAfter: 5 }) : []),
+    ...(report.reviewFocus === "ccpa_cpra" ? wrappedLines(`California starting-page score: ${report.californiaScore.score === null ? "Unavailable" : `${report.californiaScore.score}/100`}.`, { size: 9, gapAfter: 5 }) : []),
     ...(report.reviewFocus === "ccpa_cpra" && report.californiaScore.reviewCoverage ? wrappedLines(
       `California coverage (assuming CCPA applies): ${report.californiaScore.reviewCoverage.families.map(row=>`${row.id.replaceAll("_"," ")}: ${californiaCoverageFamilyLabel(row)}`).join("; ")}.`, {size:9,gapAfter:5}) : []),
     ...(report.reviewFocus === "ccpa_cpra" && report.californiaScore.rightsAssessment ? report.californiaScore.rightsAssessment.topics.flatMap(topic=>[
@@ -369,16 +372,17 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     }
     if (audit.truncated) lines.push(...wrappedLines("Privacy workpaper display limits apply."));
   }
-  lines.push(sectionHeading("GPC observation and comparison"));
+  lines.push(sectionHeading("GPC observations"));
   if (report.gpcResponse) {
     const gpc = report.gpcResponse;
     const facts = describeGpcObservedFacts(gpc.observation);
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
-    if (gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
-    lines.push(...wrappedLines(hasNoQualifiedGpcActivity(gpc)
-      ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."
-      : `Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpc.summary}`, { size: facts.length ? 9 : 10 }));
-    lines.push(...wrappedLines(`Comparable capture: ${gpc.comparison.comparable ? "yes" : "no"}. Signal delivery: ${gpc.comparison.delivery?.status ?? "See retained proof"}.`, { size: 9 }));
+    if (gpc.comparison.comparable && gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
+    if (gpc.comparison.comparable && gpc.status !== "indeterminate") {
+      lines.push(...wrappedLines(hasNoQualifiedGpcActivity(gpc)
+        ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."
+        : `Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpcReaderSummary(gpc.summary)}`, { size: facts.length ? 9 : 10 }));
+    }
     lines.push(...wrappedLines(`Evidence: ${gpc.evidenceUrl}. Full delivery proof and comparison deltas are available in the JSON workpaper.`, { size: 9 }));
   } else lines.push(...wrappedLines("No verified GPC assessment available; response remains unknown."));
   for (const [label, observation] of [["Accept", report.postAcceptObservation], ["Reject", report.postRefusalObservation]] as const) {

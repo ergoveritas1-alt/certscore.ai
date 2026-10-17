@@ -54,3 +54,18 @@ test("priority cards show a specific reader summary and retain canonical assessm
     assert.match(ordinaryHtml, /Partial support from scan evidence;/);
   }
 });
+
+
+test("all priority issues have context, including accessibility, and GPC detail does not repeat unavailable diagnostics", () => {
+  const base = { title: "Accessibility issues", rank: 1, summary: "Review retained WCAG examples.", status: "Observed" as const,
+    focus: "", vendors: [], evidence: [], evidenceJson: {}, correctionSteps: [] };
+  for (const id of ["accessibility_priority_group", "unmapped_priority"]) {
+    const html = renderToStaticMarkup(<FindingRow priority finding={{ ...base, id }} />);
+    assert.match(html, /Why it matters:/);
+    if (id === "accessibility_priority_group") assert.match(html, /assistive technology/);
+  }
+  const html = renderToStaticMarkup(<FindingRow priority finding={{ ...base, id: "gpc_response",
+    summary: "GPC was observed on the main-document request and browser property. The CMP's sale/sharing opt-out state was unavailable. Paired activity comparison: indeterminate." }} />);
+  assert.match(html, /GPC delivery was verified/);
+  assert.doesNotMatch(html, /indeterminate|state was unavailable|Assessment detail:/);
+});
