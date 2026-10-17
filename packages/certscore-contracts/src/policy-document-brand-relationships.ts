@@ -21,6 +21,14 @@ export type CanonicalPolicyDocumentBrandRelationship = {
 export const CANONICAL_POLICY_DOCUMENT_BRAND_RELATIONSHIPS:
   readonly CanonicalPolicyDocumentBrandRelationship[] = [
     {
+      targetDomain: "ms.now",
+      policyDomains: ["versantprivacy.com"],
+      ownerEntity: "Versant Media",
+      reasonCode: "canonical_relationship_ms_now_versant_v1",
+      validFrom: "2025-11-15",
+      source: { title:"Versant brands — MS NOW", url:"https://www.versantmedia.com/about", verifiedAt:"2026-10-17" },
+    },
+    {
       targetDomain: "arstechnica.com",
       policyDomains: ["condenast.com"],
       ownerEntity: "Condé Nast",

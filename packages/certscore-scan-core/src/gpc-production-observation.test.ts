@@ -4,6 +4,20 @@ import { createHash } from "node:crypto";
 import { gpcProductionRuntimeFixture } from "../../certscore-contracts/src/test-fixtures/gpc-production";
 import { buildGpcProductionObservation } from "./gpc-production-observation";
 
+test("bounded GPC completion uses its own representative visit independently of DOM inventory coverage", () => {
+  const bundle=gpcProductionRuntimeFixture();
+  bundle.runtimeCoverage!.coverageStatus="limited_partial";
+  bundle.scanEvidenceLaneAssessment!.lanes.homepageRuntime="limited";
+  bundle.scanLaneRuns[0]!.executionOutcome="degraded";
+  const run=()=>{const bytes=Buffer.from(JSON.stringify(bundle));return buildGpcProductionObservation({scanId:bundle.scanId,source:{bytes,pointer:{uri:"fixture.json",sizeBytes:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex")}}});};
+  assert.equal(run().status,"complete","full producer-bound request/signal completion does not assert DOM completeness");
+  bundle.scanLaneRuns[0]!.accessOutcome="access_denied";
+  assert.equal(run().status,"limited","another usable surface cannot override this GPC visit");
+  bundle.scanLaneRuns[0]!.accessOutcome="representative_page";
+  bundle.gpcObservationSession!.requestsDropped=1;
+  assert.notEqual(run().status,"complete","partial retained GPC packets remain limited");
+});
+
 test("bounded GPC activity requires endpoint attribution for each request", () => {
   for (const mode of ["endpoint", "cookie_only", "same_vendor_other_endpoint", "legacy", "ambiguous", "cookie_other_vendor"] as const) {
     const bundle = gpcProductionRuntimeFixture();

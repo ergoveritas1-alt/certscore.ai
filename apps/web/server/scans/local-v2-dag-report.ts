@@ -5668,11 +5668,6 @@ function buildMaterializedLocalV2Detail(
     bundle.policySurfaceObservations ?? [],
     canonicalDocumentUrl
   );
-  const californiaPrivacyReview = runtimeEvidenceReportable && !consentControlAssessment.scan.noGo
-    ? projectCaliforniaPrivacyReview(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl) : null;
-  if (californiaPrivacyReview && consentControlAssessment.artifactVersion === "2.2") {
-    consentControlAssessment.californiaPrivacyReview = californiaPrivacyReview;
-  }
   const gdprTransparencyEvidenceProfile = normalizeGdprTransparencyProductionEvidenceProfile(
     options.gdprTransparencyEvidenceProfile
   );
@@ -5696,6 +5691,19 @@ function buildMaterializedLocalV2Detail(
     targetUrl: canonicalDocumentUrl,
   });
   const policyTextProjection = policySurfaceSummary.policyTextEvidenceProjection;
+  const selectedPolicyIds = new Set(policyTextProjection.documents.map(document => document.observationId));
+  const californiaPolicySurfaces = policySurfaces.filter(row => selectedPolicyIds.has(row.surface.observationId) ||
+    ["california_notice","notice_at_collection"].includes(row.surface.surfaceType));
+  const californiaPolicyProjection = buildPolicyTextEvidenceProjection(californiaPolicySurfaces,options.policyTextEvidenceContext);
+  const californiaPrivacyReview = runtimeEvidenceReportable && !consentControlAssessment.scan.noGo
+    ? projectCaliforniaPrivacyReview(bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl, {
+      projection:californiaPolicyProjection,
+      texts:californiaPolicySurfaces.slice(0,8).flatMap(row => {
+        const retained = resolvePolicySurfaceTextEvidence(row.surface,options.policyTextEvidenceContext);
+        return retained?.verificationStatus === "verified" && retained.text ? [{observationId:row.surface.observationId,text:retained.text}] : [];
+      }),
+    }) : null;
+  if (californiaPrivacyReview && consentControlAssessment.artifactVersion === "2.2") consentControlAssessment.californiaPrivacyReview = californiaPrivacyReview;
   const policyTextProjectionDocuments = policyTextProjection.documents;
   console.warn(JSON.stringify({
     event: "app.scan_detail.policy_text_projection",

@@ -1254,6 +1254,19 @@ export async function policySurfaceScanner(
         ? MAX_COMMON_PATH_CANDIDATES_TO_FETCH
         : policyFetchLimit(input),
     );
+    // Do not discard a governing-policy candidate already fetched during
+    // discovery just because later footer candidates fill the bounded list.
+    // The normal ownership, text and retention checks still decide its result.
+    const warmedPrimaryCandidates=(await Promise.all(speculativeStaticFetchCandidates.map(async candidate=>{
+      if(candidate.deterministicSurfaceType!=="privacy_policy")return null;
+      const promise=policyDocumentFetchCaches.direct.get(policyDocumentFetchCacheKey(candidate.normalizedUrl));
+      const fetched=await promise?.catch(()=>undefined);
+      return fetched?.ok && assessPolicyTextQuality(fetched.text).usable?candidate:null;
+    }))).filter((candidate):candidate is PolicySurfaceCandidate=>candidate!==null);
+    if(warmedPrimaryCandidates.length) {
+      const limit=rankedCandidates.every(isCommonPathFallbackCandidate)?MAX_COMMON_PATH_CANDIDATES_TO_FETCH:policyFetchLimit(input);
+      rankedCandidates=dedupeCandidates([...warmedPrimaryCandidates,...rankedCandidates]).slice(0,limit);
+    }
     const policyResults = await fetchPolicyCandidateGroup({
       input,
       fetchCaches: policyDocumentFetchCaches,
@@ -2588,7 +2601,7 @@ async function processPolicyCandidate({
     return {
       observation: observationFromCandidate(effectiveCandidate, {
         status: "failed",
-        documentRole: documentRoleAssessment.role,
+      documentRole: documentRoleAssessment.role,
         documentRoleReasonCodes: documentRoleAssessment.reasonCodes,
         httpStatus: fetched.status,
         finalUrl: fetchedFinalUrl,
@@ -2796,6 +2809,7 @@ async function processPolicyCandidate({
   return {
     observation: observationFromCandidate(effectiveCandidate, {
       status: "fetched",
+      documentLanguage: /<html\b[^>]*\slang\s*=\s*["']([a-zA-Z-]{2,40})["']/i.exec(fetchedHtml)?.[1]?.toLowerCase(),
       documentRole: documentRoleAssessment.role,
       documentRoleReasonCodes: documentRoleAssessment.reasonCodes,
       governingPolicyBodyAssessment,
@@ -3915,7 +3929,7 @@ export function extractCandidates(baseUrl: string, html: string, visibleText: st
   const candidates: PolicySurfaceCandidate[] = [];
   const visibleTextLower = visibleText.toLowerCase();
   const cmpInspection = inspectCmpPolicyHtml(html, baseUrl);
-  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  const anchorPattern = /<a\b([^>]*)>((?:(?!<a\b)[\s\S])*?)<\/a>/gi;
   let match: RegExpExecArray | null;
   let index = 0;
   while ((match = anchorPattern.exec(html))) {
@@ -4579,6 +4593,8 @@ async function extractRenderedCandidates(
       return { candidates: output, documentUrl: document.URL, timeOrigin: performance.timeOrigin,
         language: document.documentElement.lang, unnamedControlCount, hiddenUnnamedControlCount,
         documentReady: document.readyState === "complete" && Boolean(document.body),
+        documentReadyState: document.readyState,
+        bodyPresent: Boolean(document.body),
         candidateEnumerationTruncated, uninspectedShadowRootCount, uninspectedFrameCount,
         frameCount, inspectedSameOriginFrameCount, hiddenUninspectedFrameCount,
         inaccessibleFrameCount, unreadyFrameCount, unprojectableFrameCount, frameBudgetLimitedCount,
@@ -4726,17 +4742,32 @@ async function extractRenderedCandidates(
       ["do_not_sell_or_share", "your_privacy_choices"].includes(candidate.deterministicSurfaceType)).length;
     const choiceCandidateEnumerationTruncated = Boolean(domInspection?.candidateEnumerationTruncated ||
       namedTopLevelChoiceCandidateCount + (domInspection?.namedFrameChoiceCandidateCount ?? 0) > 1000);
-    const inspectionComplete = auxiliaryReadsComplete && domInspection?.documentReady && frameProofsMatch &&
+    // Named-control inventory needs a parsed, bound DOM. Unrelated pending
+    // images must not veto a completed inventory, nor may optional CMP config
+    // reads establish its completeness. Keep policy negative-search unchanged.
+    const inventoryComplete = domInspection?.bodyPresent && domInspection.documentReadyState !== "loading" && frameProofsMatch &&
       !choiceCandidateEnumerationTruncated &&
       domInspection.uninspectedFrameCount === 0 && domInspection.uninspectedShadowRootCount === 0 &&
       domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
       textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin &&
       assessPolicyHomepageAccess({ ok: navigationResponse?.ok() ?? false,
         status: navigationResponse?.status(), text: visibleText }) === "representative_page";
+    const inspectionComplete = auxiliaryReadsComplete && domInspection?.documentReady && inventoryComplete;
     const supportedDocumentLanguage = Boolean(domInspection?.language && PRIVACY_EVIDENCE_LOCALE_REGISTRY.some(entry => entry.locale === domInspection.language.toLowerCase().split("-")[0]));
     const documentStable = Boolean(domInspection && frameProofsMatch && domInspection.documentUrl === renderedBaseUrl && page.url() === renderedBaseUrl &&
       textInspection?.documentUrl === domInspection.documentUrl && textInspection.timeOrigin === domInspection.timeOrigin);
     const representativeDocument = assessPolicyHomepageAccess({ok: navigationResponse?.ok() ?? false, status: navigationResponse?.status(), text: visibleText}) === "representative_page";
+    const limitationKeys: Array<"document_loading"|"inventory_unavailable"|"document_not_representative"|"document_binding_unverified"|
+      "candidate_inventory_truncated"|"unnamed_controls"|"frame_inventory_incomplete"|"shadow_inventory_incomplete"|"unsupported_language"> = [];
+    if (!domInspection?.bodyPresent) limitationKeys.push("inventory_unavailable");
+    if (domInspection?.documentReadyState === "loading") limitationKeys.push("document_loading");
+    if (!representativeDocument) limitationKeys.push("document_not_representative");
+    if (!documentStable) limitationKeys.push("document_binding_unverified");
+    if (choiceCandidateEnumerationTruncated) limitationKeys.push("candidate_inventory_truncated");
+    if (domInspection?.unnamedControlCount) limitationKeys.push("unnamed_controls");
+    if (domInspection?.uninspectedFrameCount) limitationKeys.push("frame_inventory_incomplete");
+    if (domInspection?.uninspectedShadowRootCount) limitationKeys.push("shadow_inventory_incomplete");
+    if (!supportedDocumentLanguage) limitationKeys.push("unsupported_language");
     // Reuse the current rendered DOM read. These are positive routes only;
     // neither an empty list nor a visible link verifies a usable request flow.
     const rightsMethods = rawCandidates.flatMap(candidate => {
@@ -4755,10 +4786,11 @@ async function extractRenderedCandidates(
       } catch { return []; }
     }).filter((row, index, rows) => rows.findIndex(other => other.destinationUrl === row.destinationUrl && other.label === row.label) === index).slice(0, 12);
     const choiceInspection = domInspection ? privacyChoiceInspectionSchema.safeParse({
-      contractVersion: "certscore.privacy-choice-inspection.v3", documentUrl: renderedBaseUrl,
+      contractVersion: "certscore.privacy-choice-inspection.v5", homepageAccessPolicy: "representative_homepage.v1", documentUrl: renderedBaseUrl,
+      readinessPolicy: "document_bound_dom_inventory.v1", documentReadyState:domInspection.documentReadyState, limitationKeys,
       capturedAt: new Date().toISOString(), sourceHash: createHash("sha256").update(JSON.stringify({domInspection, textInspection})).digest("hex"),
       scope: "rendered_named_links_and_buttons",
-      coverage: inspectionComplete && supportedDocumentLanguage && domInspection.unnamedControlCount === 0 ? "complete" : "limited",
+      coverage: inventoryComplete && limitationKeys.length === 0 ? "complete" : "limited",
       namedChoiceCandidateCount: Math.min(1000, namedTopLevelChoiceCandidateCount + domInspection.namedFrameChoiceCandidateCount),
       unnamedControlCount: domInspection.unnamedControlCount, hiddenUnnamedControlCount: domInspection.hiddenUnnamedControlCount,
       candidateEnumerationTruncated: choiceCandidateEnumerationTruncated,
@@ -6611,6 +6643,7 @@ function observationFromCandidate(
     retrievedAt: input.retrievedAt,
     effectiveDate: input.effectiveDate,
     directlyLinkedFromScannedPage: input.directlyLinkedFromScannedPage ?? directlyLinkedFromScannedPage,
+    documentLanguage: input.documentLanguage,
     translationApplied: input.translationApplied ?? false,
     translationTargetLanguage: input.translationTargetLanguage,
     textExcerpt: input.textExcerpt,
@@ -7991,7 +8024,7 @@ function extractOneTrustNoticePayloadText(payload: unknown): string | null {
 
 function extractPolicyLinksFromHtml(html: string, baseUrl: string): string[] {
   const links: Array<{ url: string; text: string }> = [];
-  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  const anchorPattern = /<a\b([^>]*)>((?:(?!<a\b)[\s\S])*?)<\/a>/gi;
   let match: RegExpExecArray | null;
   while ((match = anchorPattern.exec(html))) {
     const href = attr(match[1] ?? "", "href");
@@ -8055,7 +8088,14 @@ export function assessPolicyHomepageAccess(homepage: Pick<FetchTextResult, "ok" 
   if (!homepage.ok || homepage.status === undefined || homepage.status < 200 || homepage.status >= 300) return "unknown";
   const quality = assessPolicyTextQuality(homepage.text);
   if (quality.reason === "low_quality_access_challenge") return "bot_challenge";
-  return quality.usable ? "representative_page" : "unknown";
+  // A homepage is allowed to be marketing/navigation content. Article 13's
+  // non-policy-text rejection must not make an otherwise usable visit unknown.
+  // Keep code/config, challenge, error and sparse documents fail-closed.
+  const text = homepage.text.replace(/\s+/g, " ").trim();
+  if (quality.reason && quality.reason !== "low_quality_non_policy_text") return "unknown";
+  if ((text.match(/\p{L}/gu) ?? []).length < 80 ||
+      /^(?:(?:error\s*)?(?:404|500|502|503)\b|page not found\b|this site can.t be reached\b|access denied\b|service unavailable\b|internal server error\b)/i.test(text)) return "unknown";
+  return "representative_page";
 }
 
 function policyFetchRedirectChain(result: FetchTextResult): string[] {
@@ -8179,14 +8219,19 @@ function policyDocumentFetchCacheKey(value: string): string {
 
 
 
-async function fetchText(
+export async function fetchText(
   url: string,
   timeoutMs: number,
   signal?: AbortSignal,
   options: { allowHttpTransportFallback?: boolean } = {},
 ): Promise<FetchTextResult> {
   const startedAtMs = Date.now();
-  const primary = await fetchTextOnce(url, timeoutMs, signal);
+  const fallbackUrl = wwwFallbackUrlForPolicyFetch(url);
+  // Reserve part of the same deadline for the already-supported www candidate.
+  // Previously a stalled apex spent the whole budget, then the fallback received
+  // only a 500ms overrun and could never retrieve an otherwise reachable policy.
+  const primaryTimeoutMs = fallbackUrl && timeoutMs >= 1_500 ? Math.floor(timeoutMs / 2) : timeoutMs;
+  const primary = await fetchTextOnce(url, primaryTimeoutMs, signal);
   if (primary.ok || primary.status !== undefined) {
     return primary;
   }
@@ -8202,12 +8247,12 @@ async function fetchText(
     }
   }
 
-  const fallbackUrl = wwwFallbackUrlForPolicyFetch(url);
-  if (!fallbackUrl) {
+  if (!fallbackUrl || signal?.aborted) {
     return { ...(httpFallbackResult ?? primary), attempts };
   }
 
-  const remainingTimeoutMs = Math.max(500, timeoutMs - (Date.now() - startedAtMs));
+  const remainingTimeoutMs = timeoutMs - (Date.now() - startedAtMs);
+  if (remainingTimeoutMs < 500) return { ...(httpFallbackResult ?? primary), attempts };
   const fallback = await fetchTextOnce(fallbackUrl, remainingTimeoutMs, signal);
   return {
     ...fallback,
@@ -10655,7 +10700,7 @@ async function fetchBestCanonicalPolicyDocumentText(input: {
 function canonicalPolicyDocumentUrlsFromHtml(html: string, baseUrl: string): string[] {
   const anchors: Array<{ url: string; score: number }> = [];
   const cmpInspection = inspectCmpPolicyHtml(html, baseUrl);
-  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  const anchorPattern = /<a\b([^>]*)>((?:(?!<a\b)[\s\S])*?)<\/a>/gi;
   let match: RegExpExecArray | null;
   while ((match = anchorPattern.exec(html))) {
     if (!cmpInspection.anchorOffsets.has(match.index) || cmpInspection.anchors.get(match.index)?.vendor) continue;

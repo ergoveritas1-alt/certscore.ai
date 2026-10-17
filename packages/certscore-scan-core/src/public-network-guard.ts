@@ -4,7 +4,7 @@ import {
   assertPublicTargetHostname,
   classifyPublicTargetAddress,
 } from "@website-signal-risk-scanner/shared";
-import type { BrowserContext, Page, Route } from "playwright";
+import type { BrowserContext, Page, Request, Route } from "playwright";
 
 export const PUBLIC_NETWORK_GUARD_ERROR_CODE = "unsafe_target_blocked" as const;
 
@@ -86,16 +86,26 @@ export async function assertPublicNetworkUrl(
 
 export async function installPublicNetworkGuardRoute(
   context: BrowserContext | Page,
-  options: { resolver?: PublicNetworkResolver; env?: Record<string, string | undefined> } = {},
+  options: {
+    resolver?: PublicNetworkResolver;
+    env?: Record<string, string | undefined>;
+    /** Internal diagnostics only; observer errors must never alter enforcement. */
+    onRequestPhase?: (request: Request, phase: "validation_pending" | "validated" | "denied") => void;
+  } = {},
 ) {
   if (!publicNetworkGuardEnabled(options.env)) return;
+  const notify = (route: Route, phase: "validation_pending" | "validated" | "denied") => {
+    try { options.onRequestPhase?.(route.request(), phase); } catch { /* Diagnostics are not policy. */ }
+  };
   const cache = new Map<string, Promise<void>>();
   await context.route("**/*", async (route: Route) => {
     const url = route.request().url();
+    notify(route, "validation_pending");
     let origin: string;
     try {
       origin = new URL(url).origin;
     } catch {
+      notify(route, "denied");
       await route.abort("blockedbyclient");
       return;
     }
@@ -104,10 +114,14 @@ export async function installPublicNetworkGuardRoute(
       validation = assertPublicNetworkUrl(url, { resolver: options.resolver }).then(() => undefined);
       cache.set(origin, validation);
     }
+    let validated = false;
     try {
       await validation;
+      validated = true;
+      notify(route, "validated");
       await route.fallback();
     } catch {
+      if (!validated) notify(route, "denied");
       cache.delete(origin);
       await route.abort("blockedbyclient");
     }

@@ -989,6 +989,7 @@ export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2Sca
     return null;
   }
   const assessment = projection.assessment;
+  if (assessment.contractVersion === "certscore.gpc-response-assessment.v3" && assessment.observation.scanId && assessment.observation.scanId !== scanRecord.scan.id) return null;
   return {
     contractVersion: assessment.contractVersion,
     ...(assessment.contractVersion === "certscore.gpc-response-assessment.v3" ? { observation: assessment.observation } : {}),
@@ -1021,7 +1022,7 @@ export function deriveApiV2GpcResponse(scanRecord: ScanDetailResponse): ApiV2Sca
       } : {}),
     },
     californiaPolicy: {
-      applied: projection.californiaDeductionPoints === 15,
+      applied: projection.californiaDeductionPoints > 0,
       deductionPoints: projection.californiaDeductionPoints,
     },
     evidenceUrl: absoluteUrl(`/api/v2/scans/${scanRecord.scan.id}/findings/gpc_response`),

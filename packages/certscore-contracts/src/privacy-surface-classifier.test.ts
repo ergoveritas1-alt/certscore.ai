@@ -507,3 +507,13 @@ test("policy generators and templates cannot masquerade as governing notices",()
  for(const path of ["/our-privacy-policy/","/privacy-policy-generator/privacy-policy","/products/privacy-policy"])
   assert.equal(classifyPrivacySurface({url:`https://example.test${path}`,linkText:"Our Privacy Policy"}).surfaceType,"privacy_policy",path);
 });
+
+test('CA Notice needs independent privacy context',()=>{
+ assert.equal(classifyPrivacySurface({linkText:'CA Notice'}).surfaceType,'unknown');
+ assert.equal(classifyPrivacySurface({linkText:'CA Notice',surroundingText:'Privacy Policy Your Privacy Choices'}).surfaceType,'california_notice');
+});
+
+test('privacy rights application forms do not masquerade as governing policy supplements',()=>{
+ assert.equal(classifyPrivacySurface({linkText:'online form',url:'https://publisher.example/privacy/app-form'}).surfaceType,'unknown');
+ assert.equal(classifyPrivacySurface({linkText:'California Notice',url:'https://publisher.example/privacy/california'}).surfaceType,'california_notice');
+});

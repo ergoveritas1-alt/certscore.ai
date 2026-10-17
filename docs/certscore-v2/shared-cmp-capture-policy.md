@@ -1,6 +1,16 @@
 # Shared CMP capture and source coverage
 
+Release authorization, October 17, 2026: the owner requested preparation and
+deployment once ready. Earlier local-only/hold statements below describe prior
+verification stages. Release remains subject to canonical AWS readiness checks;
+existing observation, scoring and approved cost bounds are unchanged.
+
 Local implementation, October 15, 2026. No production deployment is authorized.
+
+The October 17 owner-approved conditional initialization allowance is documented
+in [Conditional passive CMP initialization settling](cmp-initialization-settle-policy.md).
+It supersedes earlier no-additional-settle wording only for that bounded,
+consent-proof-only initialization wait; other capture and scoring rules remain.
 
 ## Early retained checkpoints
 
@@ -185,3 +195,91 @@ checks do not establish the historical cause or a fresh Ireland browser result.
 The successfully exported central ledger still marks OneTrust blocked, and the
 canonical selector excludes it. No fresh contact was made. Human review is
 required before re-enablement under the calibration program.
+
+### October 17 redirected and inactive CMP capture — local only
+
+Passive packets now mark `documentBindingPolicy=passive_final_document.v1` when
+retaining facts from the verified final document after navigation. Keep the
+original target URL separately, bind every checkpoint to the same final URL and
+loader, and validate the packet against the canonical latest consent-lane DOM
+snapshot during WC01 assessment. Privacy-link origin checks use that final
+document. Historical unmarked checkpoints preserve exact-target semantics.
+This authorizes no interaction and does not broaden Accept, Reject or the disabled
+Options/Customize lane's exact-target action gates.
+
+The single existing opportunistic CMP read can start on high-confidence canonical
+CMP runtime recognition as well as visible first-layer controls. It may retain
+already-loaded configuration from a registered inactive scope without relabeling
+it visible, complete or adequate. The 350ms slice, current-document checks,
+original lane deadline, one-read limit and publication closure remain unchanged.
+No additional browser, fetch, model, retry or wait is added. Additional bounded
+read CPU is estimated below $0.50/month at 100,000 scans, disclosed before
+proceeding. The owner-disabled Options/Customize click lane stays disabled.
+
+### October 17 passive read scheduling and transport retention — local only
+
+Loader requests and wrapper stubs identify an installed CMP but must not spend
+its single passive configuration read immediately. Visible control evidence or
+a registered configuration API root can schedule the read; loader-only evidence
+waits for completion of the already-required late visual/inventory work. The read still
+verifies the actual registered scope/API and final document/loader itself.
+There is no extra evaluation, retry, polling window, wait or browser visit.
+
+Canonical compaction now retains CMP observation source-event references and
+exact matching loader response references as priorities within the unchanged
+byte/event bounds. Missing response rows never become transport failure or
+successful initialization. A bounded internal `cmp_transport.v1` timing entry
+separately counts observed requests, responses, request failures and unresolved
+requests using exact request identities. Failure diagnostics retain only bounded
+Chromium codes or `other`; no raw error text, URL, header or cookie value.
+These counters do not create findings or score effects.
+
+Local verification scan `2beded64-6c67-47d5-821a-c98a79310457` retained two
+OneTrust requests, zero matching responses, zero recorded failures and two
+unresolved requests at freeze. No usable configuration API or first-layer
+controls were retained. The scheduling repair does not establish why the
+transport stalled, nor resolve these unknowns into absence. Options/Customize
+remains disabled. This scan has 12 unassessed CMP checks (the prior scan had ten:
+its banner/Reject inspection was more complete).
+
+The new visit verifies GPC delivery but retains no qualifying successful
+advertising collection response. Its limited-coverage CA score is 100/100;
+this is not evidence of GPC honoring or improved compliance. The prior local
+85/100 report retains its separate successful advertising response and 15-point
+deduction. Neither historical report was rewritten. One public verification
+scan was run, estimated below $0.10; diagnostic storage is estimated below
+$0.01/month at 100,000 scans. Scheduling/retention stay within existing limits
+and have no expected recurring increase. Nothing deployed.
+
+
+The additional local diagnostic scan `63922dda-d493-4ed7-ae5b-90ca233da1fd`
+retained six CMP requests with six responses, none failed/unresolved, and six
+successful network-guard validations. The guard observer is diagnostic-only,
+bounded to 2,000 request identities in the consent lane, and cannot change
+validation, cached decisions, routing or fail-closed behavior even if it throws.
+Request-path counters add no DNS lookup or browser call. Total new diagnostic
+storage is estimated below $0.02/month at 100,000 scans.
+
+The OneTrust loader/configuration arrived late; the probe retained only
+OptanonWrapper, and the one passive read preceded complete SDK initialization.
+Loader-only scheduling now waits through the existing late visual/inventory
+work and overlaps its unchanged single 350ms slice with remaining geometry.
+Visible controls / registered API-root scheduling remain available earlier.
+No extra settle, read, join or timeout was added. This final scheduling
+adjustment passed local fixture tests; its live coverage effect is unconfirmed.
+
+Two bounded dependency diagnostics returned HTTP 200 for the exact retained
+OneTrust loader (139ms) and bootstrap JSON (134ms). These are independent
+operational diagnostics, never scan evidence or report backfill. The 5,529-byte
+bootstrap has no Groups or DomainData cookie inventory; retaining it cannot
+resolve cookie/service declarations. No network-body inventory integration was
+implemented and no supplemental configuration was fetched by the scanner.
+
+The latest actual report scores 85/100 with limited coverage and one canonical
+15-point GPC deduction. Original retained GPC bytes and the exact /id request's
+Sec-GPC:1 and HTTP200 response were independently verified. It still has 12
+unassessed CMP checks. The broad paired response remains indeterminate. The
+earlier 100/100 partial visit and earlier 85/100 proof remain unchanged.
+Both new scan contacts were centrally persisted under distinct idempotent keys.
+Two local verification scans plus two bounded static dependency diagnostics
+were estimated below $0.22 total. Nothing deployed.

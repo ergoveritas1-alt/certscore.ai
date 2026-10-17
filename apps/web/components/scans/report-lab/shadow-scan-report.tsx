@@ -1276,7 +1276,7 @@ function TriageVariant({ report }: { report: ShadowReportData }) {
                 <h2 className="mt-1 text-2xl font-semibold text-zinc-950">Review these findings first</h2>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`${monoClass} rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700 xl:hidden`}>{report.reviewFocus === "ccpa_cpra" ? report.californiaScore?.score === null || report.californiaScore?.score === undefined ? "CA pending" : `${report.californiaScore.score}/100` : `${report.score.value}/100`}</span>
+                <span className={`${monoClass} rounded-md border border-zinc-300 px-2 py-1 text-xs font-semibold text-zinc-700 xl:hidden`}>{report.reviewFocus === "ccpa_cpra" ? report.californiaScore?.score === null || report.californiaScore?.score === undefined ? "CA unavailable" : `${report.californiaScore.score}/100` : `${report.score.value}/100`}</span>
                 <span className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 text-xs font-semibold text-zinc-600">{report.findings.length} {report.findings.length === 1 ? "finding" : "findings"} to review</span>
               </div>
             </div>

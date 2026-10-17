@@ -55,6 +55,44 @@ const REPORT_PUBLICATION_CHECK: Check = {
     "apps/web/server/scans/local-action-packet-mirror.test.ts"],
 };
 
+const CALIFORNIA_REVIEW_CHECK: Check = {
+  key: "california-review-coverage",
+  label: "California assessment, canonical score, report/export and homepage access contracts",
+  command: ["pnpm","exec","tsx","--tsconfig","apps/web/tsconfig.test.json","--test",
+    "apps/web/server/scans/california-review-coverage-projection.test.ts",
+    "apps/web/server/scans/california-collection-notice-matching.test.ts",
+    "apps/web/server/scans/runtime-storage-purpose-assessment.test.ts",
+    "packages/certscore-vendor-resolver/src/runtime-script-facts.test.ts",
+    "packages/certscore-scan-core/src/runtime-script-evidence.test.ts",
+    "packages/certscore-contracts/src/california-clause-assessment.test.ts",
+    "packages/certscore-contracts/src/california-sale-sharing-assessment.test.ts",
+    "apps/web/server/scans/california-privacy-review-projection.test.ts",
+    "apps/web/server/scans/report-export.test.ts",
+    "apps/web/lib/scans/regulatory-review-catalog.test.tsx",
+    "apps/web/lib/scans/california-opt-out-collection-scoring.test.ts",
+    "apps/web/server/scans/cmp-audit-assessment-projector.test.ts",
+    "apps/web/components/scans/cmp-details.test.tsx",
+    "apps/web/components/scans/collection-surfaces-table.test.tsx",
+    "packages/certscore-scan-core/src/policy-terminal-access.test.ts",
+    "scripts/audit-california-capture-cohort.test.ts"],
+};
+
+const CMP_INITIALIZATION_CAPTURE_CHECK: Check = {
+  key: "cmp-initialization-capture",
+  label: "bounded passive CMP initialization, SDK readiness and retained transport",
+  command: ["pnpm", "exec", "tsx", "--tsconfig", "tsconfig.base.json", "--test", "--test-concurrency=1",
+    "packages/certscore-scan-core/src/cmp-initialization-settle.test.ts",
+    "packages/certscore-scan-core/src/cmp-basic-capture.test.ts",
+    "packages/certscore-scan-core/src/termly-network-inventory.test.ts",
+    "packages/certscore-scan-core/src/gpc-matched-settle.test.ts",
+    "packages/certscore-scan-core/src/gpc-production-observation.test.ts",
+    "packages/certscore-scan-core/src/policy-anchor-binding.test.ts",
+    "packages/certscore-scan-core/src/policy-document-ownership.test.ts",
+    "packages/certscore-scan-core/src/policy-response-body.test.ts",
+    "packages/certscore-scan-core/src/public-network-guard.test.ts",
+    "packages/shared/src/known-cmps.test.ts"],
+};
+
 const RUNTIME_GRAPH_CAPTURE_CHECK: Check = {
   key: "runtime-graph-capture",
   label: "runtime graph browser, correlation, retention and deadline regressions",
@@ -170,6 +208,8 @@ const ROOT_FULL_CHECKS: Check[] = [
   REPORT_PUBLICATION_CHECK,
   RUNTIME_GRAPH_RELEASE_CHECK,
   RUNTIME_GRAPH_CAPTURE_CHECK,
+  CALIFORNIA_REVIEW_CHECK,
+  CMP_INITIALIZATION_CAPTURE_CHECK,
   REPRESENTATIVE_PROOF_CHECK,
   {
     key: "deploy-topology",
@@ -272,6 +312,7 @@ const TARGETS: Target[] = [
       file.startsWith("packages/ui/") ||
       file.startsWith("packages/validation-shared/"),
     checks: [
+      CALIFORNIA_REVIEW_CHECK,
       RUNTIME_GRAPH_RELEASE_CHECK,
       SCAN_NO_GO_RELEASE_CHECK,
       ACCESSIBILITY_SCORING_CHECK,
@@ -351,8 +392,10 @@ const TARGETS: Target[] = [
       file.startsWith("scripts/local-v2-dag-lambda/") ||
       file === ".github/workflows/v2-regulatory-gold-corpus.yml",
     checks: [
+      CALIFORNIA_REVIEW_CHECK,
       ACCESSIBILITY_AUDIT_CHECK,
       RUNTIME_GRAPH_CAPTURE_CHECK,
+      CMP_INITIALIZATION_CAPTURE_CHECK,
       REPRESENTATIVE_PROOF_CHECK,
       {
         key: "scan-core-typecheck",

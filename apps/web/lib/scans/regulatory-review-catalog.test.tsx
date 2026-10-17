@@ -28,7 +28,7 @@ test("every catalog identity is unique and cases match the selected jurisdiction
   const ids = REGULATORY_REVIEW_TOPICS.flatMap(topic => topic.findingIds);
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.gdpr_eprivacy).length, 31);
-  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.ccpa_cpra).length, 6);
+  assert.equal(REGULATORY_REVIEW_TOPICS.filter(topic => topic.contexts.ccpa_cpra).length, 8);
   for (const topic of REGULATORY_REVIEW_TOPICS) for (const mode of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
     for (const caseId of topic.contexts[mode]?.cases ?? []) assert.equal(ENFORCEMENT_EXAMPLES[caseId]?.mode, mode, `${topic.id}: ${caseId}`);
     const context = regulatoryReviewContext(topic.findingIds[0]!, mode);
@@ -81,4 +81,57 @@ test("all mapped findings remain available without a 30-item truncation", () => 
   const result = selectRegulatoryReview(eu,"gdpr_eprivacy");
   assert.equal(result.regulatory.length, 31);
   assert.deepEqual(result.regulatory.map(row => row.rank), Array.from({length:31},(_,i)=>i+1));
+});
+
+test("California coverage separates supported evidence from unresolved review areas",async()=>{
+  const {CaliforniaCoverageSummary}=await import("../../components/scans/regulatory-review-focus");
+  const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("../../server/scans/california-review-coverage.fixture");
+  const {projectCaliforniaPrivacyReview}=await import("../../server/scans/california-privacy-review-projection");
+  const f=californiaCoverageFixture("Privacy Policy. We use personal information to provide services. We retain personal information for as long as necessary. To exercise privacy rights contact privacy@example.test.");
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v3";
+  const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  if(review.contractVersion === "certscore.california-privacy-review.v1")throw new Error("coverage expected");
+  const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={review.reviewCoverage}/>);
+  assert.match(html,/supported/);assert.match(html,/to review/);assert.doesNotMatch(html,/evidence in 6 of 6/);
+});
+
+test("California coverage exposes canonical rights clauses and collection matching without presenting compliance passes",async()=>{
+  const {CaliforniaCoverageSummary}=await import("../../components/scans/regulatory-review-focus");
+  const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("../../server/scans/california-review-coverage.fixture");
+  const {projectCaliforniaPrivacyReview}=await import("../../server/scans/california-privacy-review-projection");
+  const f=californiaCoverageFixture("Privacy Policy. We give the individual access to personal information upon request. A customer may request correction of inaccurate personal information. We retain records until no longer necessary. Such information is destroyed or erased.");
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v5";f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
+  const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  if(review.contractVersion!=="certscore.california-privacy-review.v5")throw new Error("v5 expected");
+  const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment}/>);
+  assert.match(html,/Rights clause assessment/);assert.match(html,/Rights wording retained/);assert.match(html,/Excluded retention\/security wording/);
+  assert.match(html,/Collection-notice matching/);assert.match(html,/legal adequacy remain unassessed/);assert.doesNotMatch(html,/compliant|passed all/i);
+});
+
+test("v6 coverage distinguishes assessed gaps and renders retained sale/sharing claims",async()=>{
+  const {CaliforniaCoverageSummary}=await import("../../components/scans/regulatory-review-focus");
+  const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("../../server/scans/california-review-coverage.fixture");
+  const {projectCaliforniaPrivacyReview}=await import("../../server/scans/california-privacy-review-projection");
+  const f=californiaCoverageFixture("Privacy Policy. We give the individual access to personal information upon request. A customer may request correction of personal information. We share personal information with service providers for billing.");
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v6";f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
+  const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  if(review.contractVersion!=="certscore.california-privacy-review.v6")throw new Error("v6 expected");
+  const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment} saleSharingAssessment={review.saleSharingAssessment}/>);
+  assert.match(html,/1 assessed gap/);assert.match(html,/Assessed: disclosure gaps found/);assert.match(html,/Sale\/sharing clause assessment/);
+  assert.match(html,/operational disclosures: described/);assert.doesNotMatch(html,/compliant|passed all/i);
+});
+
+test("v7 labels completed assessments independently of follow-up and separates technical lookup rows",async()=>{
+  const {CaliforniaCoverageSummary}=await import("../../components/scans/regulatory-review-focus");
+  const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("../../server/scans/california-review-coverage.fixture");
+  const {projectCaliforniaPrivacyReview}=await import("../../server/scans/california-privacy-review-projection");
+  const f=californiaCoverageFixture("Privacy Policy. We give the individual access to personal information upon request. A customer may request correction of personal information. We share personal information with service providers for billing. We use cookies for analytics.");
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v7";f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
+  f.bundle.cookieEvents=[{eventId:"cookie",scenario:"fresh_pre_consent",documentUrl:CA_FIXTURE_URL,cookieName:"sid",cookiePurpose:"unknown"}] as never;
+  f.bundle.networkEvents=[{eventId:"contact",scenario:"fresh_pre_consent",documentUrl:CA_FIXTURE_URL,thirdParty:true}] as never;
+  const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  if(review.contractVersion!=="certscore.california-privacy-review.v7")throw new Error("v7 expected");
+  const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment} saleSharingAssessment={review.saleSharingAssessment}/>);
+  assert.match(html,/3 assessed/);assert.match(html,/3 partial/);assert.match(html,/Policy text assessed · recipient roles unresolved/);assert.match(html,/Page inspection complete · obligation unresolved/);
+  assert.match(html,/Technical product lookups/);assert.match(html,/Category: wording retained · Purpose: unresolved/);assert.doesNotMatch(html,/0 of 7|compliant|passed all/i);
 });

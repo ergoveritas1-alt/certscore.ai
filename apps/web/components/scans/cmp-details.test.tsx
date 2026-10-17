@@ -301,3 +301,14 @@ test("grouped incomplete CMP checks show their specific canonical capture failur
   assert.match(html,/Reject: the banner did not become ready for interaction/);
   assert.match(html,/Incomplete/);
 });
+
+test('CMP details keeps supported results prominent and retains every unassessed check in one disclosure',async()=>{
+ const {CmpDetails}=await import('./cmp-details');
+ const audit=projectCmpAudit({scanId:'scan-1',consentControlAssessment:observedControlAssessment,consentVendor:'OneTrust'});
+ const statuses=audit.rows.map(row=>({id:row.id,status:row.status}));
+ const html=renderToStaticMarkup(<CmpDetails audit={audit} vendor="OneTrust" />);
+ assert.match(html,/data-cmp-unassessed-checks/);assert.match(html,/Not assessed · \d+ checks/);
+ const folded=html.slice(html.indexOf('data-cmp-unassessed-checks'));
+ for(const row of audit.rows.filter(row=>row.status==='Not assessed'&&!row.supportingEvidence))assert.match(folded,new RegExp(`id="cmp-criterion-${row.id}"`));
+ assert.deepEqual(audit.rows.map(row=>({id:row.id,status:row.status})),statuses,'Grouping changes no canonical assessment status');
+});

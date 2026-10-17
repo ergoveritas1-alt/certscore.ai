@@ -47,7 +47,7 @@ import {
 } from "@certscore/contracts";
 import { isExplicitBlockingChallengeText } from "./consent-geometry-access.js";
 import { resolveCanonicalVendor, resolveVendorObservations } from "@certscore/vendor-resolver";
-import type { ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
+import { isKnownCmpInfrastructureHost, type ScanNoGoReasonCode } from "@website-signal-risk-scanner/shared";
 import { chromium, type Browser } from "playwright";
 import { createArtifactWriter, type ArtifactWriter } from "./artifact-writer.js";
 import { withBoundedCookieInitiatorMetadata } from "./bounded-initiator-url.js";
@@ -503,7 +503,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     (lateConsentGeometryShadowEnabled ? LATE_CONSENT_GEOMETRY_SHADOW_BUDGET_MS : 0);
   let latestPreConsentLifecycleCheckpoint: {
     atMs: number;
-    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation";
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation" | "passive_quiet_gate_started";
     status: "started" | "completed";
   } | undefined;
   let preConsentRuntimePreviewDelivered = false;
@@ -1360,6 +1360,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     normalizedUrl,
     negativeSearchEvidence: policySurfaceResult?.negativeSearchEvidence,
     privacyChoiceInspection: policySurfaceResult?.privacyChoiceInspection,
+    californiaReviewPolicy: "california-privacy-review.v10",
     modulesRun: boundedModulesRun,
     policySurfaceObservations: policySurfaceResult?.policySurfaceObservations ?? [],
   });
@@ -1367,6 +1368,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
     accessibilityAudit: preConsentResult.accessibilityAudit,
     cmpBasicEvidence: preConsentResult.cmpBasicEvidence,
     resourceInventoryContext,
+    runtimeScriptEvidence: preConsentResult.runtimeScriptEvidence,
+    storageReadTrace: preConsentResult.storageReadTrace,
     runtimeEvidenceGraphs: preConsentResult.runtimeEvidenceGraph ? [preConsentResult.runtimeEvidenceGraph] : undefined,
     scanId,
     url: input.url,
@@ -1602,11 +1605,33 @@ export function compactCanonicalEvidenceBundleForRetention(
     return finishRetention(compacted);
   }
 
-  const referencedEventIds = collectReferencedEventIds(compacted);
+  const { referencedEventIds, cmpEventIds } = collectReferencedEventPriorities(compacted);
+  // Keep navigation proof and request/response pairs together. A referenced
+  // subresource must not evict the final document or a collection response.
+  // The existing event/byte bounds still apply; incomplete windows stay limited.
+  const protectedEventIds = new Set<string>();
+  const captureDocument = compacted.gpcImpactCapture?.document;
+  const windowEnd = captureDocument && compacted.gpcImpactCapture?.windows.length
+    ? captureDocument.committedAtMs + Math.max(...compacted.gpcImpactCapture.windows.map(window => window.durationMs)) : null;
+  const windowEvents = captureDocument && windowEnd !== null ? compacted.networkEvents.filter(event =>
+    event.timestampMs >= captureDocument.committedAtMs && event.timestampMs < windowEnd) : [];
+  // Small windows still use the existing additive restoration allowance.
+  const prioritizeWindow = serializedBytes(windowEvents) > 16 * 1024;
+  const protectedRequestIds = new Set<string>();
+  for (const event of compacted.networkEvents) {
+    if (event.isMainFrame && event.resourceType === "document" || event.collectionEndpointObserved ||
+        prioritizeWindow && captureDocument && windowEnd !== null && event.timestampMs >= captureDocument.committedAtMs && event.timestampMs < windowEnd) {
+      protectedEventIds.add(event.eventId);
+      protectedRequestIds.add(event.requestId);
+    }
+  }
+  for (const response of compacted.networkResponseEvents) {
+    if (response.requestId && protectedRequestIds.has(response.requestId)) protectedEventIds.add(response.eventId);
+  }
   compacted = canonicalEvidenceBundleSchema.parse({
     ...compacted,
-    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140),
-    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 100),
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 140, protectedEventIds, cmpEventIds),
+    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 100, protectedEventIds, cmpEventIds),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 80),
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 60),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 80),
@@ -1618,8 +1643,8 @@ export function compactCanonicalEvidenceBundleForRetention(
 
   return finishRetention(canonicalEvidenceBundleSchema.parse({
     ...compacted,
-    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80),
-    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 60),
+    networkEvents: retainPriorityEvents(compacted.networkEvents, referencedEventIds, 80, protectedEventIds, cmpEventIds),
+    networkResponseEvents: retainPriorityEvents(compacted.networkResponseEvents, referencedEventIds, 60, protectedEventIds, cmpEventIds),
     scriptEvents: retainPriorityEvents(compacted.scriptEvents, referencedEventIds, 40),
     iframeEvents: retainPriorityEvents(compacted.iframeEvents, referencedEventIds, 40),
     runtimeTimeline: retainPriorityEvents(compacted.runtimeTimeline, referencedEventIds, 40),
@@ -1774,7 +1799,7 @@ export function summarizeSiteResourceSizes(networkResponseEvents: NetworkRespons
   };
 }
 
-function collectReferencedEventIds(bundle: CanonicalEvidenceBundle): Set<string> {
+function collectReferencedEventPriorities(bundle: CanonicalEvidenceBundle): { referencedEventIds: Set<string>; cmpEventIds: Set<string> } {
   const ids = new Set<string>();
   for (const journey of bundle.observedJourneys) {
     if (journey.entryPointSourceEventId) {
@@ -1804,6 +1829,29 @@ function collectReferencedEventIds(bundle: CanonicalEvidenceBundle): Set<string>
       }
     }
   }
+  // CMP identification can survive compaction while its loader response is
+  // discarded. Keep only exact observed request/response links; never infer a
+  // transport failure or successful SDK initialization from missing rows.
+  const cmpEventIds = new Set<string>();
+  for (const observation of bundle.cmpRuntimeObservations) {
+    for (const signal of observation.signals) if (signal.sourceEventId) cmpEventIds.add(signal.sourceEventId);
+    for (const ref of observation.evidenceRefs) if (ref.eventId) cmpEventIds.add(ref.eventId);
+  }
+  // Initialization continues after the earlier CMP identity probe. Retain
+  // already-observed canonical CMP traffic too, so late SDK/configuration
+  // requests are not discarded just because that probe could not reference them.
+  // This changes retention only; it creates no CMP observation or finding.
+  for (const request of bundle.networkEvents) {
+    if (isKnownCmpInfrastructureHost(request.hostname)) cmpEventIds.add(request.eventId);
+  }
+  for (const id of cmpEventIds) ids.add(id);
+  const cmpRequestIds = new Set(bundle.networkEvents.filter(request => cmpEventIds.has(request.eventId)).map(request => request.requestId));
+  for (const response of bundle.networkResponseEvents) {
+    if (response.requestId && cmpRequestIds.has(response.requestId)) {
+      ids.add(response.eventId);
+      cmpEventIds.add(response.eventId);
+    }
+  }
   for (const observation of bundle.consentUiObservations) {
     for (const ref of observation.evidenceRefs ?? []) {
       if (ref.eventId) {
@@ -1811,19 +1859,22 @@ function collectReferencedEventIds(bundle: CanonicalEvidenceBundle): Set<string>
       }
     }
   }
-  return ids;
+  return { referencedEventIds: ids, cmpEventIds };
 }
 
 function retainPriorityEvents<T extends RetainableRuntimeEvent>(
   events: T[],
   referencedEventIds: Set<string>,
   maxEvents: number,
+  protectedEventIds: Set<string> = new Set(),
+  cmpEventIds: Set<string> = new Set(),
 ): T[] {
   if (events.length <= maxEvents) {
     return events;
   }
   return [...events]
-    .map((event, index) => ({ event, index, score: retentionPriorityScore(event, referencedEventIds, index, events.length) }))
+    .map((event, index) => ({ event, index, score: retentionPriorityScore(event, referencedEventIds, index, events.length) +
+      (protectedEventIds.has(event.eventId) ? 10_000 : cmpEventIds.has(event.eventId) ? 2_000 : 0) }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .slice(0, maxEvents)
     .sort((left, right) => left.index - right.index)

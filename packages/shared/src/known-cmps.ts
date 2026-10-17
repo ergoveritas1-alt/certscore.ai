@@ -91,6 +91,12 @@ export type KnownCmpDefinition = {
     rootSelector: string; controlSelector: string; panelSelector: string; contentReadySelector: string; shadowContentSelector?: string; sdkPath: string[] };
   /** Read-only inventory adapter for already-loaded vendor configuration. */
   preferenceInventory?: "cookieyes_loaded_configuration.v1";
+  /** Critical passive initialization assets only; never telemetry endpoints or
+   * an interaction recipe. Used to bound settling of an already-observed load. */
+  passiveInitializationRequests?: {
+    version: "onetrust_initialization_requests.v1";
+    endpoints: Array<{ origin: string; path: RegExp; resourceTypes: Array<"script" | "xhr" | "fetch"> }>;
+  };
   /** Existing passive page-link budget, after visual work and with restored scroll. */
   passivePrivacyLinkInspection?: "same_origin_after_visual.v1";
   /** Bounded response capture; no request, getter, panel opening or consent state. */
@@ -179,6 +185,8 @@ export type KnownCmpDefinition = {
   domSelectors?: string[];
   evidenceTreatment: KnownCmpEvidenceTreatment;
   globalNames?: string[];
+  /** Read-only loaded configuration identity; never a visible/actionable scope. */
+  passiveConfigurationApi?: "OneTrust.GetDomainData";
   iframePatterns?: RegExp[];
   interactionDocumentationUrls?: string[];
   interactionRisks?: Array<
@@ -437,6 +445,15 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     domSelectors: ["#onetrust-banner-sdk", "#onetrust-consent-sdk", "#ot-sdk-btn", ".ot-sdk-container"],
     evidenceTreatment: "cmp_infrastructure",
     globalNames: ["OneTrust", "Optanon", "OptanonWrapper"],
+    passiveConfigurationApi: "OneTrust.GetDomainData",
+    passiveInitializationRequests: {
+      version: "onetrust_initialization_requests.v1",
+      endpoints: [
+        { origin: "https://cdn.cookielaw.org", path: /^\/consent\/[a-f0-9-]{36}\/(?:otSDKStub\.js|[A-Za-z0-9-]{2,40}\.json)$/, resourceTypes: ["script", "xhr", "fetch"] },
+        { origin: "https://cdn.cookielaw.org", path: /^\/scripttemplates\/(?:(?:new|old)\/scripttemplates\/)?(?:otSDKStub\.js|[A-Za-z0-9._-]{1,40}\/(?:otBannerSdk\.js|sri-hashes\.json))$/, resourceTypes: ["script", "xhr", "fetch"] },
+        { origin: "https://geolocation.onetrust.com", path: /^\/cookieconsentpub\/v1\/geo\/location(?:\/dnsfeed)?$/, resourceTypes: ["xhr", "fetch"] },
+      ],
+    },
     reopenControlHints: ["cookie settings", "privacy choices", "do not sell or share", "onetrust"],
     rejectControlSelectors: [
       "#onetrust-reject-all-handler",

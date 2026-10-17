@@ -28,6 +28,8 @@ export function gpcCardActivity(projection: GpcResponseReportProjection): string
 }
 
 export function gpcCardResponse(projection: GpcResponseReportProjection): string {
+  if (projection.assessment.status === "no_observable_response" && projection.assessment.comparison.comparable && projection.assessment.comparison.deltas.trackers.baselineCount === 0 &&
+      projection.assessment.comparison.deltas.trackers.gpcCount === 0) return projection.coverageSummary;
   if (projection.assessment.status === "indeterminate") {
     return "The paired scan could not determine whether classified tracking activity changed with GPC.";
   }

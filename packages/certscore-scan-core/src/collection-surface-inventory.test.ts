@@ -65,6 +65,9 @@ test("German contact labels have bounded semantics without matching incidental p
 });
 
 test("classifies canonical collection semantics without retaining values", () => {
+  assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, {inputType:"text",label:"search",autocompleteToken:"off"})),"search");
+  assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, {inputType:"text",label:"Research participant name"})),"unknown");
+  assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, {inputType:"text",label:"Search",autocompleteToken:"email"})),"unknown","Conflicting collection metadata remains unresolved");
   assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, { autocompleteToken: "url", label: "Website URL to scan" })), "website_url");
   assert.equal(classifyCollectionSurfaceSemanticCategory(row(0, { inputType: "email", label: "Correo electrónico" })), "email");
   assert.equal(classifyCollectionSurfaceSemanticCategory(row(1, { label: "Social Security Number" })), "social_security_number");

@@ -3,7 +3,7 @@ import { getPersistedCanonicalReportProjection } from "../../server/scans/persis
 import { preConsentBrowserStorageProjectionSchema } from "@certscore/contracts";
 import { INVENTORY_METRIC_LABELS, inventoryMetricFamily } from "./inventory-resource-semantics";
 import { getDomain as getTldtsDomain, getHostname as getTldtsHostname } from "tldts";
-import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
+import { apiRuntimeEvidenceGraphProjectionSchema, projectCustomerRuntimeGraph } from "@certscore/api-contracts";
 import { z } from "zod";
 import {
   isCanonicalIdSyncEndpoint,
@@ -1802,7 +1802,7 @@ export function buildRuntimeInventoryProjectionFromScan(scanRecord: ScanDetailRe
   }), ...embedRows, ...storageRows];
 
   return {
-    runtimeEvidenceGraph: graphProjection.success && graphProjection.data.scanId === scanRecord.scan.id ? graphProjection.data : undefined,
+    runtimeEvidenceGraph: graphProjection.success && graphProjection.data.scanId === scanRecord.scan.id ? projectCustomerRuntimeGraph(graphProjection.data) : undefined,
     cookieRows,
     dataFlows,
     requestRows,

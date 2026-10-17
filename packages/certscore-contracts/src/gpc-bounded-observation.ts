@@ -4,18 +4,23 @@ const axis = z.enum(["opted_out", "not_opted_out", "unknown"]);
 /** Facts within a retained window. Completion is never an opt-out or compliance decision. */
 export const gpcBoundedObservationSchema = z.object({
   contractVersion: z.literal("certscore.gpc-bounded-observation.v1"),
+  scanId: z.string().min(1).max(200).optional(),
   scope: z.literal("main_document_and_retained_http_requests"),
   status: z.enum(["complete", "limited", "unavailable"]),
   sourceSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   sessionSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
   documentUrlSha256: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  positiveEvidence: z.object({ policyVersion: z.literal("gpc_positive_evidence.v1"), representativeDocument: z.boolean() }).strict().optional(),
   delivery: z.object({ httpHeaderRetained: z.boolean(), mainNavigatorReadbackRetained: z.boolean(), fullContextVerified: z.boolean() }).strict(),
   semanticProbe: z.enum(["observed", "unsupported", "unavailable", "not_ready", "invalid", "incomplete"]),
   registration: z.object({ basis: z.literal("current_recorded_state"), sale: axis, sharing: axis,
     cmpGpcSignal: z.enum(["received", "not_received", "unknown"]), causedByGpc: z.literal("not_established") }).strict(),
   acknowledgment: z.object({ observed: z.boolean(), captureComplete: z.boolean() }).strict(),
   requests: z.object({ count, blockedBeforeTransmissionCount: count, complete: z.boolean(), fromMs: count.nullable(), documentCommittedAtMs: count.nullable(), throughMs: count.nullable(),
-    classifiedCount: count, collectionCount: count, evidenceIds: z.array(z.string().min(1).max(160)).max(100), samplesTruncated: z.boolean() }).strict(),
+    classifiedCount: count, collectionCount: count,
+    advertisingCollectionCount: count.optional(),
+    advertisingCollectionEvidenceIds: z.array(z.string().min(1).max(160)).max(100).optional(),
+    evidenceIds: z.array(z.string().min(1).max(160)).max(100), samplesTruncated: z.boolean() }).strict(),
   limitationKeys: z.array(z.string().min(1).max(160)).max(32),
   scoreEffect: z.literal("none"), legalInterpretation: z.literal("not_assessed"),
 }).strict().superRefine((o, ctx) => {
@@ -24,6 +29,11 @@ export const gpcBoundedObservationSchema = z.object({
       !["observed", "unsupported", "unavailable"].includes(o.semanticProbe) || o.limitationKeys.length > 0 ||
       o.requests.throughMs === null || o.requests.documentCommittedAtMs === null || o.requests.fromMs === null ||
       o.requests.throughMs - Math.max(o.requests.fromMs, o.requests.documentCommittedAtMs) < 250)) ||
+    ((o.requests.advertisingCollectionCount !== undefined || o.requests.advertisingCollectionEvidenceIds !== undefined) &&
+      (o.requests.advertisingCollectionCount === undefined || !o.requests.advertisingCollectionEvidenceIds ||
+       o.requests.advertisingCollectionCount > o.requests.collectionCount ||
+       o.requests.advertisingCollectionEvidenceIds.length !== Math.min(100,o.requests.advertisingCollectionCount) ||
+       new Set(o.requests.advertisingCollectionEvidenceIds).size !== o.requests.advertisingCollectionEvidenceIds.length)) ||
     o.requests.blockedBeforeTransmissionCount > o.requests.count ||
     o.requests.collectionCount > o.requests.classifiedCount || o.requests.classifiedCount > o.requests.count - o.requests.blockedBeforeTransmissionCount ||
     o.requests.evidenceIds.length !== Math.min(100, o.requests.classifiedCount) ||

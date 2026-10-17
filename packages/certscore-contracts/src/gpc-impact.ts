@@ -15,12 +15,26 @@ export const gpcImpactCaptureSchema = z.object({
   document: z.object({ token: z.string().min(1).max(160), urlSha256: hash,
     committedAtMs: time, secGpc: z.string().max(8).nullable() }).strict().nullable(),
   requestsDropped: time,
+  // Optional on historical records. New producers freeze this metadata at the
+  // same signal readback; it adds no wait and cannot repair a changed document.
+  quietCheckpoint: z.object({
+    contractVersion: z.literal("certscore.gpc-comparison-quiet.v1"),
+    documentToken: z.string().min(1).max(160), signalReadbackAtMs: time,
+    quietForMs: time, inFlightRequestCount: time,
+  }).strict().optional(),
   retentionStatus: z.enum(["incomplete"]).optional(),
   invalidationReasons: z.array(z.enum(["document_requested_after_commit", "document_recommitted", "commit_binding_mismatch", "same_document_url_changed", "same_document_identity_unverified", "renderer_crash", "unspecified"])).max(7).optional(),
   windows: z.array(z.object({ durationMs: z.union([z.literal(250), z.literal(500), z.literal(1000)]),
     requestCount: time, requestSetSha256: hash }).strict()).max(3),
   limitationKeys: z.array(z.string().min(1).max(160)).max(16),
 }).strict().superRefine((c, ctx) => {
+  if (c.quietCheckpoint && (!c.document || c.readbackDocumentToken !== c.document.token ||
+      c.quietCheckpoint.documentToken !== c.document.token ||
+      c.quietCheckpoint.signalReadbackAtMs < c.document.committedAtMs ||
+      c.quietCheckpoint.signalReadbackAtMs > c.capturedAtMs ||
+      c.quietCheckpoint.quietForMs > c.quietCheckpoint.signalReadbackAtMs - c.document.committedAtMs)) {
+    ctx.addIssue({code: "custom", message: "Quiet checkpoint requires this capture's document-bound readback."});
+  }
   if (c.capturedAtMs < c.captureStartedAtMs ||
       (c.document && (c.document.committedAtMs < c.captureStartedAtMs || c.document.committedAtMs > c.capturedAtMs)) ||
       new Set(c.windows.map(w => w.durationMs)).size !== c.windows.length ||

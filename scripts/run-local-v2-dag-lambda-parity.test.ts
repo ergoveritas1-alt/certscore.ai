@@ -4,6 +4,19 @@ import { readFile } from "node:fs/promises";
 import { parseArgs } from "./run-local-v2-dag-lambda-parity";
 import { buildLocalV2DagSimulatedLambdaArgs } from "../apps/web/server/scans/local-v2-dag-lambda-simulated-dispatch";
 
+test("local scan carries the exact sale/sharing observer authorization through CLI parsing",()=>{
+  const saleSharingOptOut={policyVersion:"bounded_sale_sharing_opt_out.v1" as const,enabled:true as const,scanId:"scan-opt-out",exactTargetUrl:"https://example.test/"};
+  const args=buildLocalV2DagSimulatedLambdaArgs({artifactDir:"artifacts/local-v2-dag-lambda-simulated",outPath:"artifacts/local-v2-dag-lambda-simulated/summary.json",
+    payload:{awsRegion:"us-west-1",profile:"standard",scanId:"scan-opt-out",targetUrl:"https://example.test/",saleSharingOptOut}});
+  const cli=args.slice(args.indexOf("--")+1);
+  assert.deepEqual(parseArgs(cli).saleSharingOptOut,saleSharingOptOut);
+  for(const [flag,value] of [["--scan-id","other-scan"],["--target-url","https://another.test/"]]){
+    const changed=[...cli];changed[changed.indexOf(flag)+1]=value;
+    assert.throws(()=>parseArgs(changed),/must match the local scan ID and exact target/);
+  }
+  assert.equal(parseArgs([]).saleSharingOptOut,null);
+});
+
 test("simulated Lambda round-trips runtime graph configuration through CLI parsing", () => {
   for (const mode of ["capture_only", "project"] as const) {
     const runtimeGraph = {

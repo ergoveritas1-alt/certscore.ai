@@ -27,6 +27,7 @@ test("isolated California observer confirms explicit choice; cookie Reject, gene
       assert.ok(saleSharingOptOutEvidenceSchema.safeParse(packet).success);
       if(mode==="valid" || mode==="activity"){
         assert.equal(packet.status,"complete",JSON.stringify(packet));assert.equal(packet.registration,"confirmed");assert.equal(packet.actionCount,2);assert.equal(clicks,1);assert.equal(packet.observationWindowMs,500);
+        if(mode==="activity")assert.ok(packet.requests[0]?.collectionEvidence,"exact advertising collector has typed registry proof");
         assert.equal(packet.requests.length,mode==="activity"?1:0,JSON.stringify(packet));assert.doesNotMatch(JSON.stringify(packet),/secret|never-retain/);
       }else{
         assert.notEqual(packet.status,"complete",JSON.stringify(packet));assert.equal(packet.captureComplete,false);assert.deepEqual(packet.requests,[]);

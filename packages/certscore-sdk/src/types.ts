@@ -302,7 +302,9 @@ export interface GpcResponse {
 export interface PostureScores {
   contractVersion: "certscore.posture-scores.v1";
   gdprEprivacy: { posture: "gdpr_eprivacy"; score: number | null; policyVersion: string | null; coverage: "scored" | "unavailable"; scope: "starting_page" };
-  ccpaCpra: { posture: "ccpa_cpra"; score: number | null; policyVersion: "california-regulatory-posture.v1"; coverage: "bounded" | "limited" | "unavailable"; scope: "starting_page" };
+  ccpaCpra: { posture: "ccpa_cpra"; score: number | null; policyVersion: string; coverage: "bounded" | "limited" | "unavailable"; scope: "starting_page";
+    coverageSummary?: {postureBasis:"assuming_ccpa_applies";evidenceFamilies:number;totalFamilies:6;scoreReady:boolean;
+      families:Array<{id:string;status:"observed"|"assessed_gap"|"review"|"unknown"|"not_triggered_in_scope";assessmentState?:"completed"|"partial"|"limited";followUp?:"none"|"purpose"|"notice_association"|"recipient_roles"|"applicability"|"choice_execution"|"interpretation"|"capture"}>}; };
 }
 
 export interface ScanResource extends ScanCreationMetadata {

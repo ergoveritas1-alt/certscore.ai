@@ -58,6 +58,7 @@ for (const [count, locale, firstName, negativeChoice] of [
         onInventoryPage: async page => { values = await page.locator('input:not([type="submit"])').evaluateAll(inputs => inputs.map(input => (input as HTMLInputElement).value)); },
       });
       assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
+      assert.equal(result.storageSnapshots[0]?.scenario,"fresh_pre_consent","Retained browser storage must carry its baseline capture scenario");
       assert.deepEqual(interactions, [], "inventory and image capture must not fill, focus, click or submit controls");
       assert.deepEqual(submissions, []);
       assert.deepEqual(values, Array.from({ length: count }, (_, i) => `private-value-${i}`));
@@ -87,6 +88,7 @@ for (const [count, locale, firstName, negativeChoice] of [
       } else {
         assert.equal(inventory.coverage.status, "complete");
         assert.equal(inventory.forms[0]?.retainedFieldCount, 3);
+        assert.deepEqual(inventory.forms[0]?.privacyDisclosure,{version:2,excerpts:[],truncated:false},"A completed empty notice inspection is retained separately from missing capture");
         assert.equal(result.collectionSurfaceSnapshots?.[0]?.status, "available");
       }
     } finally {

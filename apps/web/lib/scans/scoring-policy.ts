@@ -18,7 +18,7 @@ export const SCORING_FAMILIES = {
   transport_security: { label: "Transport", cap: 20 },
   site_integrity: { label: "Site integrity", cap: 40 },
   accessibility: { label: "Accessibility (WCAG)", cap: 12 },
-  gpc: { label: "GPC (suspended)", cap: 0 },
+  gpc: { label: "GPC (California posture only)", cap: 0 },
 } as const;
 export type ScoringRule = {
   id: string; anchor: string; label: string; family: keyof typeof SCORING_FAMILIES;
@@ -58,3 +58,29 @@ export function scoringRuleDescription(rule: ScoringRule) {
   const identity = rule.identity;
   return identity ? `First ${identity.unit}: ${identity.first} · second: ${identity.second} · each additional: ${identity.subsequentEach}` : String(rule.points);
 }
+
+/** California posture has an independent registry. Historical schedules are
+ * retained; new disclosure deductions apply only to v4 typed inspections. */
+export const CALIFORNIA_OPT_OUT_COLLECTION_POINTS = 15 as const;
+export const CALIFORNIA_SCORING_POLICY_VERSION = "california-regulatory-posture.v9" as const;
+export const CALIFORNIA_SCORING_RULES_V1 = [
+  {findingId:"california_sale_sharing_opt_out_activity",policyKey:"california.opt_out_activity",points:18,label:"Activity after a recorded sale/sharing opt-out"},
+  {findingId:"california_privacy_choice_destination_error",policyKey:"california.choice_destination_error",points:14,label:"Privacy-choice destination unavailable"},
+  {findingId:"california_notice_at_collection_destination_error",policyKey:"california.notice_destination_error",points:10,label:"Notice-at-collection destination unavailable"},
+  {findingId:"california_rights_information_destination_error",policyKey:"california.rights_destination_error",points:10,label:"California rights-information destination unavailable"},
+  {findingId:"california_privacy_choice_not_observed",policyKey:"california.named_choice_not_observed",points:6,label:"Named sale/sharing choice not identified in a complete inspection"},
+] as const;
+export const CALIFORNIA_SCORING_RULES_V2_V3 = CALIFORNIA_SCORING_RULES_V1.filter(row=>row.findingId !== "california_privacy_choice_not_observed");
+export const CALIFORNIA_SCORING_RULES_V4_V7 = [...CALIFORNIA_SCORING_RULES_V2_V3,
+  {findingId:"california_rights_disclosure_not_observed",policyKey:"california.rights_disclosure_not_observed",points:12,
+    label:"Core rights disclosure not found in completely inspected policy text"},
+] as const;
+export const CALIFORNIA_SHARED_NOTICE_POINTS = 10;
+
+/** Advertising-classified contacts remain review evidence. Only verified
+ * collection carries the shared California choice-enforcement risk weight. */
+export const CALIFORNIA_SCORING_RULES = [...CALIFORNIA_SCORING_RULES_V4_V7.filter(
+  row => row.findingId !== "california_sale_sharing_opt_out_activity"),
+  {findingId:"california_sale_sharing_opt_out_activity",policyKey:"california.opt_out_collection",points:CALIFORNIA_OPT_OUT_COLLECTION_POINTS,
+    label:"Verified advertising collection after a sale/sharing opt-out"},
+] as const;

@@ -1,6 +1,7 @@
+import {CALIFORNIA_OPT_OUT_COLLECTION_POINTS} from "./scoring-policy";
 import { gpcResponseAssessmentSchema, type GpcResponseAssessment } from "@certscore/contracts";
 
-export const CALIFORNIA_GPC_RESPONSE_POLICY_VERSION = "california-gpc-response.v2-suspended" as const;
+export const CALIFORNIA_GPC_RESPONSE_POLICY_VERSION = "california-gpc-response.v4-positive-evidence" as const;
 export const CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS = 15 as const;
 export const CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY =
   "california.gpc_response.qualifying_activity_not_suppressed" as const;
@@ -9,7 +10,7 @@ export const CANONICAL_OVERALL_SCORE_VERSION = "overall-posture.v11" as const;
 
 export type CaliforniaGpcResponsePolicyAssessment = {
   assessmentStatus: "checked" | "gap_observed" | "needs_evidence" | "not_applicable" | "review_signal";
-  deductionPoints: 0 | typeof CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS;
+  deductionPoints: 0 | typeof CALIFORNIA_OPT_OUT_COLLECTION_POINTS | typeof CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS;
   eligibleActivity: {
     baseline: string[];
     persistedUnderGpc: string[];
@@ -19,6 +20,9 @@ export type CaliforniaGpcResponsePolicyAssessment = {
   policyVersion: typeof CALIFORNIA_GPC_RESPONSE_POLICY_VERSION | "california-gpc-response.v1";
   reasonCode:
     | "gpc_customer_policy_suspended"
+    | "verified_gpc_advertising_collection"
+    | "verified_gpc_choice_contradiction"
+    | "no_verified_gpc_advertising_collection"
     | "comparable_gpc_no_qualifying_suppression"
     | "comparable_gpc_partial_qualifying_suppression"
     | "comparable_gpc_qualifying_activity_suppressed"
@@ -132,9 +136,25 @@ export function deriveHistoricalCaliforniaGpcResponsePolicy(
   };
 }
 
-/** Current policy: no GPC score or compliance assessment is customer-eligible. */
-export function deriveCaliforniaGpcResponsePolicy(_assessment: GpcResponseAssessment): CaliforniaGpcResponsePolicyAssessment {
-  return { policyKey: CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY, policyVersion: CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,
-    assessmentStatus: "not_applicable", deductionPoints: 0, scoreEffect: "none", reasonCode: "gpc_customer_policy_suspended",
-    eligibleActivity: { baseline: [], persistedUnderGpc: [], suppressedUnderGpc: [] } };
+/** Risk scoring uses verified collection facts, never vendor presence or a
+ * failure-to-change label. A risk deduction is not a finding of legal sale/sharing. */
+export function deriveCaliforniaGpcResponsePolicy(assessment: unknown): CaliforniaGpcResponsePolicyAssessment {
+  const parsed=gpcResponseAssessmentSchema.safeParse(assessment);
+  const a=parsed.success?parsed.data:null;
+  const o=a?.contractVersion === "certscore.gpc-response-assessment.v3"?a.observation:null;
+  // A retained positive event does not require proving that every other event
+  // was captured. Keep full-pair response/completeness independent of that fact.
+  const verified=Boolean(a && a.contractVersion === "certscore.gpc-response-assessment.v3" && o &&
+    o.status !== "unavailable" && o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained &&
+    o.sourceSha256 && o.sessionSha256 && o.documentUrlSha256 && Boolean(o.scanId) &&
+    o.sourceSha256 === a.comparison.gpcArtifact?.sha256 &&
+    (o.positiveEvidence?.representativeDocument || o.status === "complete" && o.delivery.fullContextVerified && o.requests.complete));
+  const collection=verified && (o?.requests.advertisingCollectionCount ?? 0)>0 && Boolean(o?.requests.advertisingCollectionEvidenceIds?.length);
+  const contradiction=verified && o?.semanticProbe === "observed" && o.registration.cmpGpcSignal === "received" &&
+    (o.registration.sale === "not_opted_out" || o.registration.sharing === "not_opted_out");
+  const eligible=collection || contradiction;
+  return {policyKey:CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY,policyVersion:CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,
+    assessmentStatus:eligible?"review_signal":"needs_evidence",deductionPoints:eligible?CALIFORNIA_OPT_OUT_COLLECTION_POINTS:0,
+    scoreEffect:eligible?"deduction":"none",reasonCode:contradiction?"verified_gpc_choice_contradiction":collection?"verified_gpc_advertising_collection":"no_verified_gpc_advertising_collection",
+    eligibleActivity:{baseline:[],persistedUnderGpc:contradiction?["gpc_received_but_applicable_opt_out_off"]:collection?o!.requests.advertisingCollectionEvidenceIds!:[],suppressedUnderGpc:[]}};
 }

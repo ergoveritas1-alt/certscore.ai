@@ -98,7 +98,7 @@ test("canonical persisted consent child -> concern policy -> unified -> Californ
   assert.deepEqual(projectCaliforniaRegulatoryPriorities(packets).map(row=>row.id),[CALIFORNIA_CHOICE_ABSENCE_ID]);
   const score = deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:packets});
   assert.equal(score.score,94);
-  assert.equal(score.policyVersion,CALIFORNIA_REGULATORY_SCORE_VERSION);
+  assert.equal(score.policyVersion,"california-regulatory-posture.v1");
   assert.equal(score.coverage,"bounded");
   assert.equal(packets.find(row=>row.unifiedFindingId===CALIFORNIA_CHOICE_ABSENCE_ID)?.scoreEffects?.[0]?.appliesTo,"california_posture");
   assert.ok(packets.every(row=>!(row.scoreEffects??[]).some(effect=>effect.appliesTo==="certscore_overall")));
@@ -159,4 +159,24 @@ test("verified opt-out bytes project only through the persisted assessment; tamp
   for(const patch of [{registration:"unconfirmed"},{before:{sectionId:8,sale:1,sharing:1}},{completedAt:observation.confirmedAt},{truncated:true},{documentToken:null}]) assert.equal(saleSharingOptOutEvidenceSchema.safeParse({...observation,...patch}).success,false);
   const noActivity=projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:undefined,saleSharingOptOut:verifiedOptOut({...observation,requests:[]})}),source,url)!;
   assert.equal(noActivity.optOutEffectiveness,"bounded_observation");assert.deepEqual(californiaPrivacyReviewFindingIds(noActivity),[]);
+});
+
+test("new CA vendor-only opt-out activity remains reportable review with no score effect",async()=>{
+  const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("./california-review-coverage.fixture");
+  for(const version of ["v9","v10"] as const){
+    const f=californiaCoverageFixture();
+    f.bundle.policySurfaceInspection!.californiaReviewPolicy=`california-privacy-review.${version}`;
+    f.bundle.policySurfaceObservations.forEach(row=>{row.documentLanguage="en";});
+    const e=optOutEvidence();e.scanId=f.bundle.scanId;e.targetUrl=CA_FIXTURE_URL;
+    e.startedAt=e.startedAt.replace("10-16","10-17");e.completedAt=e.completedAt.replace("10-16","10-17");e.confirmedAt=e.confirmedAt!.replace("10-16","10-17");
+    f.bundle.saleSharingOptOut=verifiedOptOut(e) as never;
+    const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+    const parent=deriveConsentControlAssessment({scan:{scanId:f.bundle.scanId,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+    const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:parent}});
+    const finding=packets.find(row=>row.unifiedFindingId === CALIFORNIA_OPT_OUT_ACTIVITY_ID)!;
+    assert.equal(finding.presentationDecision.status,"surface");
+    assert.equal(finding.scoreEffects?.length ?? 0,version === "v9"?1:0);
+    const score=deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:packets});
+    assert.equal(score.score,version === "v9"?82:100);
+  }
 });

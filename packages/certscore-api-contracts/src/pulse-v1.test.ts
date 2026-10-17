@@ -542,7 +542,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   };
   walk(document.paths);
 
-  assert.equal(document.info.version, "0.1.14");
+  assert.equal(document.info.version, "0.1.15");
   assert.equal(document.components.schemas.Scan.properties.postureScores.$ref, "#/components/schemas/PostureScores");
   assert.equal(document.components.schemas.ScanJob.properties.postureScores.$ref, "#/components/schemas/PostureScores");
   assert.equal(document.paths["/api/v2/scans/{scanId}/report-evidence"].get.operationId, "getReportEvidencePage");

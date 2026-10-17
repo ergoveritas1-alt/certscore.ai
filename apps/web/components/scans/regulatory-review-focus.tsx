@@ -4,6 +4,82 @@ import type { PrivacyAuditEvidence, ReportReviewFocus } from "@certscore/api-con
 import { REVIEW_FOCUS_LABELS } from "../../lib/scans/report-review-focus";
 import { californiaPrivacyEvidence, PRIVACY_CONTROL_LABELS as controlLabels, PRIVACY_TOPIC_LABELS as topicLabels } from "../../lib/scans/california-privacy-evidence";
 import { EvidenceSectionHeader } from "./evidence-section-header";
+import { CALIFORNIA_REVIEW_FAMILY_LABELS,californiaCoverageFamilyLabel, type CaliforniaReviewCoverage, type CaliforniaRightsClauseAssessment, type CaliforniaCollectionNoticeAssessment,type CaliforniaCollectionNoticeV2,type CaliforniaCollectionNoticeV3,type CaliforniaCollectionNoticeV4,type CaliforniaCollectionNoticeV5,type RuntimeStoragePurposeV2,type RuntimeScriptEvidence,type CaliforniaSaleSharingAssessment } from "@certscore/contracts";
+
+type CollectionPoint=(CaliforniaCollectionNoticeAssessment|CaliforniaCollectionNoticeV2|CaliforniaCollectionNoticeV3|CaliforniaCollectionNoticeV4|CaliforniaCollectionNoticeV5)["points"][number];
+function CollectionNoticePoint({point}:{point:CollectionPoint}) {
+  const technical="assessmentScope" in point && point.assessmentScope === "technical_context";
+  const label=technical?point.technicalMatch === "exact_name_retained"?"Product mention retained":point.technicalMatch === "not_assessed"?"Product attribution unresolved":"Product mention not retained":
+    point.status === "matched_text"?"Category/purpose text matched":point.status === "policy_text_only"?"Partial wording retained":point.status === "not_matched"?"Wording not located":"Limited";
+  return <div className="mt-2"><strong>{point.label}: {label}</strong>
+    <p>{point.reason}</p>{"categoryMatch" in point && !technical?<p>Category: {point.categoryMatch.replaceAll("_"," ")} · Purpose: {point.purposeMatch.replaceAll("_"," ")} · Association: {point.association.replaceAll("_"," ")}</p>:
+      "purposeMatch" in point && !technical?<p>Purpose: {point.purposeMatch.replaceAll("_"," ")}{point.recipientMatch!=="not_assessed"?` · Recipient: ${point.recipientMatch.replaceAll("_"," ")}`:""}{point.scope === "resource_contact_only"?" · Resource contact only":""}</p>:null}
+    {"purposeBasis" in point&&point.purposeBasis === "declared_only"?<p>Purpose evidence: website declaration</p>:null}
+    {point.passages.map((passage,index)=><blockquote key={index} className="mt-1 border-l-2 border-zinc-200 pl-2">{passage.excerpt}</blockquote>)}
+  </div>;
+}
+
+function StoragePurposeItem({item,sources}:{item:RuntimeStoragePurposeV2["items"][number];sources:RuntimeScriptEvidence[]}) {
+  const declared=item.declaredPurpose;
+  const purpose=item.purpose!=="unknown"?item.purpose:declared&&declared.purpose!=="unknown"?`Declared ${declared.purpose} use`:"Unresolved";
+  return <div className="mt-2"><strong>{item.name} · {item.kind}</strong><p>Purpose: {purpose}{item.dataOrigin === "document_referrer"?" · Data source: document.referrer":""}</p>
+    <p>{declared&&item.purpose === "unknown"?"Named-cookie purpose wording retained in the website’s declaration.":item.reason}</p>
+    {declared?<blockquote className="mt-1 border-l-2 border-zinc-200 pl-2"><strong>Website declaration: </strong>{declared.passage.excerpt}</blockquote>:null}
+    {item.readUse?<div className="mt-2"><strong>Storage-read/use trace</strong><p>{item.readUse.reason}</p>
+      {item.readUse.reads.map(read=><p key={read.evidenceRef}>{read.context.replaceAll("_"," ")} · {read.count} {read.count===1?"read":"reads"} · {read.valueState === "empty"?"empty value":read.valueState === "nonempty"?"non-empty value; contents omitted":read.valueState} · {read.callerUrl}:{read.line}:{read.column}</p>)}
+    </div>:null}
+    {sources.filter(source=>source.sourceSha256===item.sourceSha256).flatMap(source=>source.facts.filter(fact=>fact.name===item.name||fact.keySource === "enumerated_storage_key"&&item.readUse?.reads.some(read=>read.sourceSha256===source.sourceSha256&&fact.callsite&&read.line===fact.callsite.line&&read.column>=fact.callsite.column&&read.column<fact.callsite.endColumn)).flatMap(fact=>fact.excerpts)).map((excerpt,index)=><pre key={index} className="mt-1 whitespace-pre-wrap break-all rounded bg-zinc-50 p-2 text-[11px]"><code>{excerpt.text}</code></pre>)}
+    <p className="text-zinc-500">{item.basis.replaceAll("_"," ")}{item.sourceSha256?` · Source ${item.sourceSha256.slice(0,12)}`:""}</p>
+  </div>;
+}
+
+export function CaliforniaCoverageSummary({coverage,rightsAssessment,collectionNoticeAssessment,saleSharingAssessment}:{coverage?:CaliforniaReviewCoverage;
+  rightsAssessment?:CaliforniaRightsClauseAssessment;collectionNoticeAssessment?:CaliforniaCollectionNoticeAssessment|CaliforniaCollectionNoticeV2|CaliforniaCollectionNoticeV3|CaliforniaCollectionNoticeV4|CaliforniaCollectionNoticeV5;saleSharingAssessment?:CaliforniaSaleSharingAssessment}) {
+  if (!coverage) return null;
+  const supported = coverage.families.filter(row=>row.status === "observed" || row.status === "not_triggered_in_scope").length;
+  const review = coverage.families.filter(row=>row.status === "review").length;
+  const limited = coverage.families.filter(row=>row.status === "unknown").length;
+  const gaps=coverage.families.filter(row=>row.status === "assessed_gap").length;
+  const completed=coverage.contractVersion === "certscore.california-review-coverage.v4"?coverage.families.filter(row=>row.assessmentState === "completed").length:null;
+  const partial=coverage.contractVersion === "certscore.california-review-coverage.v4"?coverage.families.filter(row=>row.assessmentState === "partial").length:0;
+  const technicalPoints=(collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v3" || (collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v4" || collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v5"))?collectionNoticeAssessment.points.filter(point=>point.assessmentScope === "technical_context"):[];
+  return <details className="mt-2 text-xs leading-5 text-zinc-600" data-california-coverage>
+    <summary className="cursor-pointer font-medium">California coverage: {completed!==null?<>{completed} assessed{partial?` · ${partial} partial`:""}{gaps?` · ${gaps} ${gaps===1?"gap":"gaps"}`:""}</>:<>{supported} supported{gaps?` · ${gaps} assessed ${gaps===1?"gap":"gaps"}`:""} · {review} to review</>}{limited ? ` · ${limited} limited` : ""}</summary>
+    <p className="mt-2">Assessed against CCPA/CPRA requirements assuming the law applies. Business applicability is undetermined.</p>
+    <dl className="mt-2 space-y-2">{coverage.families.map(row=><div key={row.id}>
+      <dt className="font-semibold">{CALIFORNIA_REVIEW_FAMILY_LABELS[row.id]} · {californiaCoverageFamilyLabel(row)}</dt>
+      <dd>{row.reason}</dd>
+    </div>)}</dl>
+    {rightsAssessment ? <details className="mt-3" data-california-rights-clauses><summary className="cursor-pointer font-medium">Rights clause assessment</summary>
+      <p className="mt-1">General consumer wording is distinguished from California-specific wording. Retention or security text does not establish a consumer deletion right.</p>
+      {rightsAssessment.topics.map(topic=><div key={topic.topic} className="mt-2"><strong>{topic.topic.replaceAll("_"," ")}: {topic.status === "disclosed" ? "Rights wording retained" : topic.status === "not_observed" ? "Not observed" : "Needs interpretation"}</strong>
+        <p>{topic.reason}</p>{topic.status === "disclosed" ? <p>{topic.context.replaceAll("_"," ")}</p> : null}
+        {topic.passages.map((passage,index)=><blockquote key={index} className="mt-1 border-l-2 border-zinc-200 pl-2">{passage.excerpt}</blockquote>)}
+        {topic.excludedPassages.length ? <details className="mt-1"><summary className="cursor-pointer">Excluded retention/security wording</summary>{topic.excludedPassages.map((passage,index)=><blockquote key={index} className="mt-1 border-l-2 border-zinc-200 pl-2">{passage.excerpt}</blockquote>)}</details> : null}
+      </div>)}
+    </details> : null}
+    {saleSharingAssessment ? <details className="mt-3" data-california-sale-sharing-clauses><summary className="cursor-pointer font-medium">Sale/sharing clause assessment</summary>
+      <p className="mt-1">Policy claims are assessed separately for sale, advertising-related sharing, operational disclosures and analytics. Recipient legal roles and actual practices remain separate.</p>
+      {saleSharingAssessment.topics.map(topic=><div key={topic.topic} className="mt-2"><strong>{topic.topic.replaceAll("_"," ")}: {topic.status.replaceAll("_"," ")}</strong>
+        <p>{topic.reason}</p>{topic.passages.map((passage,index)=><blockquote key={index} className="mt-1 border-l-2 border-zinc-200 pl-2">{passage.excerpt}</blockquote>)}
+      </div>)}
+    </details> : null}
+    {collectionNoticeAssessment ? <details className="mt-3" data-california-collection-matching><summary className="cursor-pointer font-medium">Collection-notice matching</summary>
+      <p className="mt-1">Matches compare observed fields or activity with retained notice text and its association. Notice timing and legal adequacy remain unassessed.</p>
+      {collectionNoticeAssessment.points.filter(point=>!("assessmentScope" in point) || point.assessmentScope!=="technical_context").map(point=><CollectionNoticePoint key={point.id} point={point}/>)}
+      {(collectionNoticeAssessment.contractVersion === "certscore.california-collection-notice-matching.v4" || collectionNoticeAssessment.contractVersion === "certscore.california-collection-notice-matching.v5")?<details className="mt-3" data-runtime-storage-purposes><summary className="cursor-pointer font-medium">Cookie/storage purpose evidence</summary>
+        {collectionNoticeAssessment.runtimePurposeAssessment.items.map(item=><StoragePurposeItem key={`${item.kind}:${item.name}`} item={item} sources={collectionNoticeAssessment.runtimePurposeAssessment.retainedSources}/>)}
+      </details>:null}
+      {technicalPoints.length?<details className="mt-3" data-california-technical-context><summary className="cursor-pointer font-medium">Technical product lookups · {technicalPoints.length}</summary>
+        {technicalPoints.map(point=><CollectionNoticePoint key={point.id} point={point}/>)}</details>:null}
+      {!collectionNoticeAssessment.points.length ? <p className="mt-2">No collection points were available for matching in this retained inventory.</p> : null}
+    </details> : null}
+    {coverage.topics.length ? <details className="mt-2"><summary className="cursor-pointer">Retained policy passages</summary>
+      {coverage.topics.map((row,index)=><blockquote className="mt-2 border-l-2 border-zinc-200 pl-2" key={`${row.topic}-${index}`}>
+        <strong>{row.topic.replaceAll("_"," ")}</strong>: {row.excerpt}
+      </blockquote>)}</details> : null}
+  </details>;
+}
 
 export function RegulatoryReviewFocus({ focus }: { focus: ReportReviewFocus }) {
   return <form method="get" aria-label="Review focus" className="inline-flex shrink-0 items-center gap-3 border-b border-zinc-200 text-xs">

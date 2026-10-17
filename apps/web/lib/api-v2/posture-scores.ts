@@ -27,6 +27,11 @@ export function buildApiV2PostureScores(input: {
       policyVersion: california?.policyVersion ?? CALIFORNIA_REGULATORY_SCORE_VERSION,
       coverage: california?.coverage ?? "unavailable",
       scope: "starting_page",
+      ...(california?.reviewCoverage ? {coverageSummary:{postureBasis:california.reviewCoverage.postureBasis,
+        evidenceFamilies:california.reviewCoverage.families.filter(row=>row.status !== "unknown").length,
+        totalFamilies:6,scoreReady:california.reviewCoverage.scoreReady,
+        families:california.reviewCoverage.families.map(row=>({id:row.id,status:row.status,...("assessmentState" in row?{assessmentState:row.assessmentState,followUp:row.followUp}:{})})),
+      }} : {}),
     },
   });
 }

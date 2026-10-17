@@ -4545,7 +4545,7 @@ function buildCaliforniaPrivacyReviewConcerns(runtimeArtifacts: Record<string, u
   const projection = readCaliforniaPrivacyReviewFromConsent(assessment);
   if (!projection) return [];
   return californiaPrivacyReviewFindingIds(projection).map(id => {
-    const copy = californiaPrivacyReviewCopy(id);
+    const copy = californiaPrivacyReviewCopy(id, projection);
     return buildConcernFromSharedInput({categoryId: "privacy", originType: "runtime_artifact", originKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`,
       title: copy.title, description: copy.description, observedValue: copy.description, severity: "medium",
       sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `${CALIFORNIA_PRIVACY_REVIEW_SIGNAL}.${id}`, signalLabel: copy.title,

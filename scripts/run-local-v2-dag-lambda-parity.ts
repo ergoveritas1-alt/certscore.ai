@@ -3,6 +3,7 @@ import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promise
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runtimeGraphDispatchSchema, type RuntimeGraphDispatch } from "../packages/certscore-contracts/src/runtime-evidence-graph";
+import { saleSharingOptOutDispatchSchema, type SaleSharingOptOutDispatch } from "../packages/certscore-contracts/src/sale-sharing-opt-out";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SendMessageCommand } from "@aws-sdk/client-sqs";
 import { InvokeCommand } from "@aws-sdk/client-lambda";
@@ -30,6 +31,7 @@ type Args = {
   gpcConfig: Record<string, unknown> | null;
   gpcEnabled: boolean;
   runtimeGraph: RuntimeGraphDispatch | null;
+  saleSharingOptOut: SaleSharingOptOutDispatch | null;
   messageStreamPath: string | null;
   outPath: string;
   profile: "full" | "standard" | "tiny";
@@ -243,7 +245,8 @@ async function main() {
     "CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE",
     "SCAN_EGRESS_LABEL",
     "SCAN_PROXY_ENABLED",
-    "SCAN_PROXY_SERVER"
+    "SCAN_PROXY_SERVER",
+    "CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED"
   ]);
 
   try {
@@ -278,6 +281,7 @@ async function main() {
     process.env.CERTSCORE_V2_DAG_LAMBDA_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS = String(LOCAL_V2_DAG_LAMBDA_DEFAULT_PRECONSENT_VISUAL_FALLBACK_DEADLINE_MS);
     process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_CONCURRENCY = "1";
     process.env.CERTSCORE_V2_DAG_LAMBDA_SCENARIO_RESOURCE_MODE = "cmp_safe";
+    if (args.saleSharingOptOut) process.env.CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED = "1";
     if (args.postRefusalEnabled) {
       process.env[POST_REFUSAL_REJECT_WORKER_FEATURE_FLAG] = "1";
     } else {
@@ -305,6 +309,7 @@ async function main() {
       profile: args.profile,
       ...(args.debugOverrides ? { debugOverrides: args.debugOverrides } : {}),
       ...(args.runtimeGraph ? { runtimeGraph: args.runtimeGraph } : {}),
+      ...(args.saleSharingOptOut ? {saleSharingOptOut:args.saleSharingOptOut} : {}),
       ...(args.gpcEnabled && args.gpcConfig
         ? { gpcObservation: args.gpcConfig }
         : {}),
@@ -531,6 +536,7 @@ export function parseArgs(argv: string[]): Args {
     gpcConfig: null,
     gpcEnabled: false,
     runtimeGraph: null,
+    saleSharingOptOut: null,
     messageStreamPath: null,
     outPath: "artifacts/local-v2-dag-lambda-parity/latest.json",
     profile: "full",
@@ -566,6 +572,8 @@ export function parseArgs(argv: string[]): Args {
       args.runtimeGraph = runtimeGraphDispatchSchema.parse(
         parseJsonObjectArg(requiredValue(argv, ++index, arg), arg),
       );
+    } else if (arg === "--sale-sharing-opt-out-config") {
+      args.saleSharingOptOut = saleSharingOptOutDispatchSchema.parse(parseJsonObjectArg(requiredValue(argv, ++index, arg), arg));
     } else if (arg === "--message-stream") {
       args.messageStreamPath = requiredValue(argv, ++index, arg);
     } else if (arg === "--no-debug-overrides") {
@@ -598,6 +606,9 @@ export function parseArgs(argv: string[]): Args {
   if (args.runtimeGraph && args.runtimeGraph.scanId !== args.scanId) {
     throw new Error("Runtime graph configuration must match the local scan ID.");
   }
+  if (args.saleSharingOptOut && (args.saleSharingOptOut.scanId !== args.scanId || args.saleSharingOptOut.exactTargetUrl !== args.targetUrl)) {
+    throw new Error("Sale/sharing observation must match the local scan ID and exact target.");
+  }
   return args;
 }
 
@@ -613,6 +624,7 @@ function printUsage() {
     "  --aws-region <region>    eu-central-1, eu-west-1, or us-west-1. Default: eu-central-1",
     "  --profile <profile>      full, standard, or tiny. Default: full",
     "  --gpc-config <json>       Enable the passive GPC lane with the typed WC01 dispatch configuration.",
+    "  --sale-sharing-opt-out-config <json> Preserve the exact-target bounded observer authorization.",
     "  --runtime-graph-config <json> Preserve the typed WC01 relationship-capture configuration for this scan.",
     "  --post-refusal           Enable the local four-lane Reject Path barrier.",
     "  --post-refusal-config <json> Enable Reject Path with the typed WC01 dispatch configuration.",

@@ -64,7 +64,8 @@ export const collectionSurfaceFieldSchema = z.object({
 });
 
 export const formPrivacyDisclosureSchema = z.object({
-  version: z.literal(1),
+  // V2 retains completed empty inspections; historical v1 empties do not prove absence.
+  version: z.union([z.literal(1),z.literal(2)]),
   excerpts: z.array(z.object({
     text: z.string().min(1).max(600),
     association: z.enum(["inside_form", "adjacent_notice", "described_by"]),

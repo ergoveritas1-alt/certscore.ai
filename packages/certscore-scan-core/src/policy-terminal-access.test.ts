@@ -18,3 +18,13 @@ test("terminal navigation contract preserves legacy absence and rejects positive
   for (const terminalHttpStatus of [null, 301, 403]) assert.equal(siteFacingNavigationDiagnosticsSchema.safeParse({ ...legacy, terminalAccess: "representative_page", terminalHttpStatus }).success, false);
   assert.equal(siteFacingNavigationDiagnosticsSchema.safeParse({ ...legacy, terminalAccess: "representative_page", terminalHttpStatus: 200 }).success, true);
 });
+
+test("ordinary homepages pass without privacy-policy prose; error, challenge, code and sparse pages stay limited", () => {
+  const homepage = "Internet Telephone Television Business Solutions. Better Internet for Your Community. Our company offers fast connections and local support. ".repeat(8) + " Privacy Policy Cookie Settings";
+  assert.equal(assessPolicyHomepageAccess({ok:true,status:200,text:homepage}),"representative_page");
+  for (const text of ["Loading", "404 Page not found. "+homepage, "Service unavailable. "+homepage,
+    "Client challenge. A required part of this site couldn't load. Please check your connection. "+homepage]) {
+    assert.notEqual(assessPolicyHomepageAccess({ok:true,status:200,text}),"representative_page",text.slice(0,60));
+  }
+  assert.equal(assessPolicyHomepageAccess({ok:true,status:200,text:"const config = {}; function() { return false; }".repeat(30)}),"unknown");
+});

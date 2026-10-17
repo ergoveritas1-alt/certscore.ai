@@ -332,3 +332,10 @@ test("localized policy headings are not owner entities", () => {
   }
   assert.equal(classifyPolicyDocumentOwnership({documentTitle: "Datenschutz – Pferdeklinik-Roentorf.de", documentUrl: "https://clinic.example/privacy", targetUrl: "https://clinic.example", text: "Privacy policy"}).documentOwnerEntity, "Pferdeklinik Roentorf de");
 });
+
+test('the final MS NOW domain retains its verified Versant policy affiliation with scan-date bounds',()=>{
+ const input={targetUrl:'https://www.ms.now/',documentUrl:'https://www.versantprivacy.com/privacy',documentTitle:'Privacy Policy | VERSANT MEDIA',text:'Versant Media, LLC and its affiliates collect personal data when you use our services.',observedAt:'2026-10-17T12:00:00Z'};
+ assert.equal(classifyPolicyDocumentOwnership(input).targetRelationship,'first_party_brand');
+ assert.notEqual(classifyPolicyDocumentOwnership({...input,observedAt:'2025-01-01T00:00:00Z'}).targetRelationship,'first_party_brand');
+ assert.notEqual(classifyPolicyDocumentOwnership({...input,targetUrl:'https://unrelated.test/'}).targetRelationship,'first_party_brand');
+});

@@ -23,6 +23,11 @@ export const gpcBoundedObservationOpenApi = {
       "const": "certscore.gpc-bounded-observation.v1",
       "type": "string"
     },
+    "scanId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "scope": {
       "const": "main_document_and_retained_http_requests",
       "type": "string"
@@ -67,6 +72,23 @@ export const gpcBoundedObservationOpenApi = {
           "type": "null"
         }
       ]
+    },
+    "positiveEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policyVersion",
+        "representativeDocument"
+      ],
+      "properties": {
+        "policyVersion": {
+          "const": "gpc_positive_evidence.v1",
+          "type": "string"
+        },
+        "representativeDocument": {
+          "type": "boolean"
+        }
+      }
     },
     "delivery": {
       "type": "object",
@@ -227,6 +249,19 @@ export const gpcBoundedObservationOpenApi = {
         "collectionCount": {
           "type": "integer",
           "minimum": 0
+        },
+        "advertisingCollectionCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "advertisingCollectionEvidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "maxItems": 100
         },
         "evidenceIds": {
           "type": "array",

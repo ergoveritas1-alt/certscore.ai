@@ -1,6 +1,7 @@
+import {hasNoQualifiedGpcActivity} from "../../lib/scans/gpc-response-projection";
 import { siteIntegrityScoreDescription } from "../../lib/scans/site-integrity-score-policy";
 import { describeGpcObservedFacts } from "../../lib/scans/gpc-observed-facts";
-import { describeGpcActivityComparison } from "@certscore/contracts";
+import { describeGpcActivityComparison,californiaCoverageFamilyLabel } from "@certscore/contracts";
 import { consentInspectionNotice } from "../../lib/scans/consent-inspection-presentation";
 import type { CanonicalReportExport } from "./report-export";
 import { deflateSync, inflateSync } from "node:zlib";
@@ -325,6 +326,23 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     { text: `Report generated: ${report.generatedAt}`, size: 9, kind: "caption", gapAfter: image ? 6 : 11 },
     ...wrappedLines(`${report.reviewFocusLabel} focus. ${report.reviewScope}`, { size: 9, gapAfter: 5 }),
     ...(report.reviewFocus === "ccpa_cpra" ? wrappedLines(`California starting-page score: ${report.californiaScore.score === null ? "Unavailable" : `${report.californiaScore.score}/100`} (${report.californiaScore.policyVersion}; ${report.californiaScore.coverage} coverage). This is a bounded risk signal, not a compliance grade.`, { size: 9, gapAfter: 5 }) : []),
+    ...(report.reviewFocus === "ccpa_cpra" && report.californiaScore.reviewCoverage ? wrappedLines(
+      `California coverage (assuming CCPA applies): ${report.californiaScore.reviewCoverage.families.map(row=>`${row.id.replaceAll("_"," ")}: ${californiaCoverageFamilyLabel(row)}`).join("; ")}.`, {size:9,gapAfter:5}) : []),
+    ...(report.reviewFocus === "ccpa_cpra" && report.californiaScore.rightsAssessment ? report.californiaScore.rightsAssessment.topics.flatMap(topic=>[
+      ...wrappedLines(`Rights clause - ${topic.topic.replaceAll("_"," ")}: ${topic.status.replaceAll("_"," ")}. ${topic.reason}`,{size:9,gapAfter:4}),
+      ...topic.passages.flatMap(passage=>wrappedLines(passage.excerpt,{size:8,gapAfter:3})),
+    ]) : []),
+    ...(report.reviewFocus === "ccpa_cpra" && (report.californiaScore.collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v4" || report.californiaScore.collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v5") ? report.californiaScore.collectionNoticeAssessment.runtimePurposeAssessment.items.flatMap(item=>wrappedLines(`Storage purpose - ${item.name} (${item.kind}): ${item.purpose}; data source ${item.dataOrigin.replaceAll("_"," ")}. ${item.reason}`,{size:9,gapAfter:4})) : []),
+    ...(report.reviewFocus === "ccpa_cpra" && report.californiaScore.collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v5" ? report.californiaScore.collectionNoticeAssessment.runtimePurposeAssessment.items.flatMap(item=>[
+      ...(item.declaredPurpose?wrappedLines(`Website declaration - ${item.name}: declared ${item.declaredPurpose.purpose}. ${item.declaredPurpose.passage.excerpt}`,{size:9,gapAfter:4}):[]),
+      ...(item.readUse?wrappedLines(`Storage read/use - ${item.name}: ${item.readUse.reason} ${item.readUse.reads.map(read=>`${read.context.replaceAll("_"," ")}; ${read.count} reads; value ${read.valueState}`).join(". ")}`,{size:9,gapAfter:4}):[]),
+    ]) : []),
+    ...(report.reviewFocus === "ccpa_cpra" && report.californiaScore.collectionNoticeAssessment ? report.californiaScore.collectionNoticeAssessment.points.flatMap(point=>
+      wrappedLines(`${"assessmentScope" in point && point.assessmentScope === "technical_context"?"Technical product lookup":"Collection-notice matching"} - ${point.label}: ${"categoryMatch" in point?`category ${point.categoryMatch.replaceAll("_"," ")}; purpose ${point.purposeMatch.replaceAll("_"," ")}`:point.status.replaceAll("_"," ")}. ${point.reason}`,{size:9,gapAfter:4})) : []),
+    ...(report.reviewFocus === "ccpa_cpra" && report.californiaScore.saleSharingAssessment ? report.californiaScore.saleSharingAssessment.topics.flatMap(topic=>[
+      ...wrappedLines(`Sale/sharing clause - ${topic.topic.replaceAll("_"," ")}: ${topic.status.replaceAll("_"," ")}. ${topic.reason}`,{size:9,gapAfter:4}),
+      ...topic.passages.flatMap(passage=>wrappedLines(passage.excerpt,{size:8,gapAfter:3})),
+    ]) : []),
     ...(image
       ? [
           { text: "Captured page evidence", size: 9, bold: true, kind: "caption" as const, gapAfter: 3 },
@@ -358,7 +376,9 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     const facts = describeGpcObservedFacts(gpc.observation);
     for (const fact of facts) lines.push(...wrappedLines(`${fact.label}: ${fact.value}`));
     if (gpc.activityComparison) lines.push(...wrappedLines(describeGpcActivityComparison(gpc.activityComparison)));
-    lines.push(...wrappedLines(`Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpc.summary}`, { size: facts.length ? 9 : 10 }));
+    lines.push(...wrappedLines(hasNoQualifiedGpcActivity(gpc)
+      ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."
+      : `Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpc.summary}`, { size: facts.length ? 9 : 10 }));
     lines.push(...wrappedLines(`Comparable capture: ${gpc.comparison.comparable ? "yes" : "no"}. Signal delivery: ${gpc.comparison.delivery?.status ?? "See retained proof"}. California policy deduction: ${gpc.californiaPolicy.deductionPoints}.`, { size: 9 }));
     lines.push(...wrappedLines(`Evidence: ${gpc.evidenceUrl}. Full delivery proof and comparison deltas are available in the JSON workpaper.`, { size: 9 }));
   } else lines.push(...wrappedLines("No verified GPC assessment available; response remains unknown."));

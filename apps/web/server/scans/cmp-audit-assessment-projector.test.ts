@@ -834,6 +834,16 @@ test("required-lane basics survive a cancelled optional inspection through persi
   }
   assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.status, "partially_assessed");
   assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.cookieComparison?.declarationInventoryComplete, false);
+  const redirected=structuredClone(input);
+  redirected.cmpBasicEvidence!.documentBindingPolicy="passive_final_document.v1";
+  redirected.cmpBasicEvidence!.documentUrl="https://redirected.example/";
+  redirected.domSnapshots[0]!.url="https://redirected.example/";
+  assert.equal(deriveCmpAuditAssessment(redirected)?.rows.find(row=>row.id==="services")?.status,"observed",
+    "Verified passive facts follow the retained final loader while the scan target remains original");
+  delete redirected.cmpBasicEvidence!.documentBindingPolicy;
+  redirected.cmpBasicEvidence!.captureProgress={version:"cmp_capture_checkpoints.v1",documentToken:"basic-loader",controlsAtMs:100,declarationsAtMs:100,privacyLinksAtMs:100};
+  assert.equal(deriveCmpAuditAssessment(redirected)?.rows.find(row=>row.id==="services")?.status,"incomplete",
+    "Historical exact-target packets cannot silently borrow redirected proof");
   const assessment = consentControlAssessmentSchema.parse({ ...observedControlAssessment, cmpAudit: audit });
   const concerns = buildNormalizedConcerns({ runtimeArtifacts: { consentControlAssessment: assessment }, reviewFindingCandidates: [], validationFindings: [] });
   const projected = projectCmpAudit({ scanId: input.scanId, consentControlAssessment: assessment, normalizedConcerns: concerns });

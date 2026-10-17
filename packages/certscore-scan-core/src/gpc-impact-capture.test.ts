@@ -50,3 +50,16 @@ test("invalidation reasons cannot coexist with usable windows", () => {
   const result = setup().finish();
   assert.equal(gpcImpactCaptureSchema.safeParse({ ...result, invalidationReasons: ["renderer_crash"] }).success, false);
 });
+
+test("quiet checkpoint freezes existing activity at the signal readback without a wait", () => {
+  const b=gpcRuntimeFixture({enabled:true});let now=0;
+  const capture=createGpcImpactCapture({expectedEnabled:true,now:()=>now,
+    quietSnapshot:()=>({quietForMs:400,inFlightRequestCount:0})});
+  capture.documentRequested({type:"Document",frameId:"main",loaderId:"loader",request:{url:b.url,headers:{"Sec-GPC":"1"}}},"main");
+  now=100;capture.documentCommitted({loaderId:"loader",url:b.url});capture.bindReadback("loader");
+  now=1100;
+  const result=capture.finish({...b.gpcSignalObservation!,capturedAtMs:1000});
+  assert.deepEqual(result.quietCheckpoint,{contractVersion:"certscore.gpc-comparison-quiet.v1",documentToken:"loader",signalReadbackAtMs:1000,quietForMs:300,inFlightRequestCount:0});
+  assert.strictEqual(capture.finish(),result);
+  assert.equal(gpcImpactCaptureSchema.safeParse({...result,quietCheckpoint:{...result.quietCheckpoint,documentToken:"other"}}).success,false);
+});

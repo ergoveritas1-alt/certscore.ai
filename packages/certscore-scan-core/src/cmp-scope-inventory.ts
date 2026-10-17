@@ -11,12 +11,12 @@ export function cmpInventoryScopeSelector(definition: KnownCmpDefinition): strin
     : definition.domSelectors!.join(","));
 }
 
-/** One existing all-vendor DOM read. Configuration lookup is bounded and uses
- * own data properties only: no getters, API calls, network, or additional wait. */
+/** One existing all-vendor DOM read. Configuration lookup uses own-data roots and bounded prototype data methods:
+ * no getters, API calls, network, or additional wait. */
 export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinition[]) {
-  const entries = definitions.map(d => ({ selector: d.preferenceScopeSelector ?? d.preferenceInspection?.entranceSelector ?? d.domSelectors!.join(","), path: d.configuredConsentCookiePath, domains: d.domains }));
+  const entries = definitions.map(d => ({ selector: d.preferenceScopeSelector ?? d.preferenceInspection?.entranceSelector ?? d.domSelectors!.join(","), path: d.configuredConsentCookiePath, domains: d.domains, configurationApi:d.passiveConfigurationApi }));
   return page.locator(entries.map(entry => entry.selector).join(",")).evaluateAll((nodes, entries) => {
-    const empty = { overflow: nodes.length > 1000, indices: [] as number[], scopeStates: [] as Array<{ index: number; state: "visible" | "inactive" | "unverified" }>, revealed: false, runtimeIdentified: false, configuredConsentCookies: [] as Array<{ version: "cmp_configured_cookie_identity.v1"; configurationPath: string; name: string }> };
+    const empty = { overflow: nodes.length > 1000, indices: [] as number[], configurationIndices:[] as number[], scopeStates: [] as Array<{ index: number; state: "visible" | "inactive" | "unverified" }>, revealed: false, runtimeIdentified: false, configuredConsentCookies: [] as Array<{ version: "cmp_configured_cookie_identity.v1"; configurationPath: string; name: string }> };
     if (empty.overflow) return empty;
     const matched = entries.flatMap((entry, index) => nodes.some(node => node.ownerDocument === document && node.matches(entry.selector)) ? [index] : []);
     const deadline = performance.now() + 50;
@@ -60,7 +60,28 @@ export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinitio
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       value = descriptor && "value" in descriptor ? descriptor.value : undefined;
     }
-    return { ...empty, indices, scopeStates, runtimeIdentified, revealed: (window as unknown as { __certscoreBorlabsPassiveReveal?: boolean }).__certscoreBorlabsPassiveReveal === true,
+    const configurationIndices=entries.flatMap((entry,index)=>{
+      if(!entry.configurationApi)return [];
+      let candidate:unknown=window;
+      const parts=entry.configurationApi.split('.');
+      for(const [position,part] of parts.entries()) {
+        if(!candidate || (typeof candidate!=="object" && typeof candidate!=="function"))return [];
+        let owner:object|null=candidate;
+        let descriptor=Object.getOwnPropertyDescriptor(owner,part);
+        // A documented SDK method may be a class-prototype data method. Only
+        // the final registered method gets this bounded lookup; roots still
+        // require own data properties, and a shadowing accessor fails closed.
+        if(position===parts.length-1)for(let depth=0;!descriptor && owner && depth<4;depth++) {
+          owner=Object.getPrototypeOf(owner);
+          if(owner===Object.prototype || owner===Function.prototype)break;
+          if(owner)descriptor=Object.getOwnPropertyDescriptor(owner,part);
+        }
+        if(!descriptor || !("value" in descriptor))return [];
+        candidate=descriptor.value;
+      }
+      return typeof candidate==="function"?[index]:[];
+    });
+    return { ...empty, indices, configurationIndices, scopeStates, runtimeIdentified, revealed: (window as unknown as { __certscoreBorlabsPassiveReveal?: boolean }).__certscoreBorlabsPassiveReveal === true,
       configuredConsentCookies: path && typeof value === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(value)
         ? [{ version: "cmp_configured_cookie_identity.v1" as const, configurationPath: path, name: value }] : [],
     };

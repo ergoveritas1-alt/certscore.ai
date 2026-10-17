@@ -1,7 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium } from "playwright";
-import { captureCmpBasicEvidence, finishPassiveCmpPrivacyLinks } from "./cmp-basic-capture.js";
+import { captureCmpBasicEvidence, isCmpBasicCaptureReady, summarizeCmpTransport, finishPassiveCmpPrivacyLinks } from "./cmp-basic-capture.js";
+
+test("loader and wrapper recognition reserve the single passive read until the existing late visual/inventory work", () => {
+  const observation = {
+    observationId: "cmp-loader", observedAtMs: 10, sourceScanner: "pre_consent_runtime",
+    scenario: "fresh_pre_consent", consentStateAtTime: "pre_consent" as const,
+    entity: "OneTrust", vendor: "OneTrust", confidence: 0.95, directVsInferred: "direct" as const,
+    evidenceRefs: [], signals: [
+      { signalType: "script_url" as const, matchedField: "hostname", matchedValueRedacted: "cdn.cookielaw.org", confidence: 0.95, resolverBasis: [] },
+      { signalType: "global" as const, matchedField: "global_name", matchedValueRedacted: "OptanonWrapper", confidence: 0.95, resolverBasis: [] },
+    ],
+  };
+  const input = { controlsObserved: false, lateInspectionComplete: false, runtimeObservations: [observation] };
+  assert.equal(isCmpBasicCaptureReady(input), false, "A loader plus a wrapper is not the loaded configuration API");
+  assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true }), true, "Use the original read once the existing late inspection completes");
+  assert.equal(isCmpBasicCaptureReady({ ...input, controlsObserved: true }), true);
+  const domOnly = { ...observation, signals: [{ ...observation.signals[0]!, signalType: "dom_selector" as const }] };
+  assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [domOnly] }), false, "Installed markup is not a ready SDK");
+  assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [domOnly], lateInspectionComplete: true }), true);
+  const api = { ...observation, signals: [{ ...observation.signals[1]!, matchedValueRedacted: "OneTrust" }] };
+  assert.equal(isCmpBasicCaptureReady({ ...input, runtimeObservations: [api] }), true, "Registered API root can schedule; capture still validates the actual API");
+  assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true, runtimeObservations: [{ ...api, directVsInferred: "inferred" }] }), false);
+  assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true, runtimeObservations: [{ ...api, confidence: 0.4 }] }), false);
+  assert.equal(isCmpBasicCaptureReady({ ...input, lateInspectionComplete: true, runtimeObservations: [] }), false);
+});
+
+test("CMP transport diagnostics join exact request identities and keep missing responses unresolved", () => {
+  const observation = { signals: [1, 2, 3, 4].map(id => ({ signalType: "script_url", sourceEventId: `net_${id}` })) };
+  const input = {
+    observations: [observation],
+    requests: [1, 2, 3, 4].map(id => ({ eventId: `net_${id}`, requestId: `req_${id}` })),
+    responses: [{ requestId: "req_1" }],
+    failures: [{ requestId: "req_2", failureText: "net::ERR_ABORTED" }, { requestId: "req_4", failureText: "private URL or resolver message" }],
+  } as Parameters<typeof summarizeCmpTransport>[0];
+  assert.deepEqual(summarizeCmpTransport(input), { version: "cmp_transport.v1", requests: 4, responses: 1,
+    failed: 2, unresolved: 1, failureCodes: ["ERR_ABORTED", "other"] });
+  assert.deepEqual(summarizeCmpTransport({ ...input, failures: [] }).failureCodes, []);
+});
 
 test("deferred Cookiebot policy access checks the page after visual capture, restores scroll, and rejects foreign or changed documents",async()=>{
   const browser=await chromium.launch({headless:true});
@@ -234,4 +271,74 @@ test("Termly consent-proof schedules the registered public-policy read after vis
   assert.ok(timing.reduce((n,t)=>n+t.durationMs,0)<=350,JSON.stringify(timing));
   assert.ok(!requests.includes('/our-privacy-policy/'));assert.ok(!requests.includes('/unexpected-options'));
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});}
+});
+
+test("passive CMP facts bind a redirected final document without broadening action authorization", async () => {
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();
+    await page.route('https://final.example.test/',route=>route.fulfill({contentType:'text/html',body:`<div id="onetrust-banner-sdk"><label><input type="checkbox">Analytics</label></div><script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:true}]}]})};window.actions=0;document.addEventListener('click',()=>window.actions++);</script>`}));
+    await page.goto('https://final.example.test/');
+    const input={page,scanId:'redirect-fixture',targetUrl:'https://original.example.test/',scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:'loader-final'}),isCurrent:()=>true};
+    const packet=await captureCmpBasicEvidence(input);
+    assert.ok(packet);assert.equal(packet.targetUrl,input.targetUrl);assert.equal(packet.documentUrl,page.url());
+    assert.equal(packet.documentBindingPolicy,'passive_final_document.v1');assert.equal(packet.declarations[0]?.name,'_ga');
+    assert.equal(await page.evaluate(()=>(window as any).actions),0);
+    let reads=0;
+    assert.equal(await captureCmpBasicEvidence({...input,readBinding:()=>({url:page.url(),token:++reads===1?'loader-final':'changed-loader'})}),undefined);
+  } finally {await browser.close();}
+});
+
+test("a recognized CMP with an inactive banner retains loaded facts without claiming visible controls", {timeout:20000}, async () => {
+  const {createServer}=await import('node:http');
+  const {mkdtemp,rm}=await import('node:fs/promises');
+  const {tmpdir}=await import('node:os');
+  const {createArtifactWriter}=await import('./artifact-writer.js');
+  const {preConsentRuntimeScanner}=await import('./scanners/pre-consent-runtime-scanner.js');
+  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(`<html><body><main>Public page content.</main><div id="onetrust-banner-sdk" hidden></div><script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:true}]}]})};</script></body></html>`);});
+  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const url=`http://127.0.0.1:${(server.address() as {port:number}).port}/`,root=await mkdtemp(`${tmpdir()}/cmp-inactive-`);
+  try {
+    const result=await preConsentRuntimeScanner({url,normalizedUrl:url,scanStartedAtMs:Date.now(),internalBudgetMs:6000,
+      cmpBasicScanId:'inactive-fixture',artifactWriter:await createArtifactWriter(root),captureScope:'consent_proof',screenshotMode:'always'});
+    assert.ok(result.cmpBasicEvidence,JSON.stringify(result.moduleRun.timingBreakdown?.filter(row=>row.label==='passive CMP basics')));
+    assert.deepEqual(result.cmpBasicEvidence.controls,[]);
+    assert.deepEqual(result.cmpBasicEvidence.declarations.map(row=>row.name),['_ga']);
+    assert.equal(result.moduleRun.timingBreakdown?.filter(row=>row.label==='passive CMP basics').length,1);
+  } finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});
+
+test('registered loaded OneTrust data survives an absent banner without fabricating visible controls',async()=>{
+ const browser=await chromium.launch({headless:true});
+ try{
+  const page=await browser.newPage();await page.setContent(`<main>Page without a banner.</main><script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:true}]}]})};</script>`);
+  const input={page,scanId:'sdk-only',targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:'sdk-loader'}),isCurrent:()=>true};
+  const packet=await captureCmpBasicEvidence(input);assert.ok(packet);assert.deepEqual(packet.controls,[]);assert.deepEqual(packet.privacyLinks,[]);assert.deepEqual(packet.declarations.map(row=>row.name),['_ga']);
+  await page.evaluate(()=>Object.defineProperty(window,'OneTrust',{configurable:true,get(){throw Error('Getter must not be invoked')}}));
+  assert.equal(await captureCmpBasicEvidence(input),undefined);
+ }finally{await browser.close();}
+});
+
+
+test("configuration-only SDK discovery supports bounded class methods while refusing getters and global prototypes", async () => {
+  const browser=await chromium.launch({headless:true});
+  try {
+    const page=await browser.newPage();
+    const input={page,scanId:"sdk-prototype",targetUrl:page.url(),scanStartedAtMs:Date.now(),readBinding:()=>({url:page.url(),token:"loader"}),isCurrent:()=>true};
+    await page.setContent(`<main>Public page without a consent dialog.</main><script>window.OneTrust=new class {GetDomainData(){return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:true}]}]}}}();</script>`);
+    assert.deepEqual((await captureCmpBasicEvidence(input))?.declarations.map(row=>row.name),["_ga"]);
+    for(const mode of ["own-getter","prototype-getter","root-getter","global-prototype"]) {
+      await page.setContent(`<main>Public page</main><script>window.reads=0;window.OneTrust={};</script>`);
+      await page.evaluate(`((mode)=>{
+        const w=window;const getter=()=>{w.reads++;return ()=>({Groups:[]});};
+        if(mode==='own-getter')Object.defineProperty(w.OneTrust,'GetDomainData',{get:getter});
+        if(mode==='prototype-getter')Object.setPrototypeOf(w.OneTrust,Object.defineProperty({},'GetDomainData',{get:getter}));
+        if(mode==='root-getter')Object.defineProperty(w,'OneTrust',{get:getter,configurable:true});
+        if(mode==='global-prototype')Object.defineProperty(Object.prototype,'GetDomainData',{value:()=>({Groups:[]}),configurable:true});
+      })(${JSON.stringify(mode)})`);
+      assert.equal(await captureCmpBasicEvidence(input),undefined,mode);
+      assert.equal(await page.evaluate(()=>(window as any).reads),0,mode);
+      await page.evaluate(()=>{delete (Object.prototype as any).GetDomainData;delete (window as any).OneTrust;});
+    }
+  } finally {await browser.close();}
 });

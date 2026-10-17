@@ -5,6 +5,9 @@ import {
 } from "./passive-evidence-quiet-window.js";
 
 export const RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS = 10_000;
+/** Owner-approved October 17: same post-timeout opportunity in both passive lanes. */
+export const PAIRED_RUNTIME_SETTLE_MAX_MS = 3_000;
+export const PAIRED_RUNTIME_SETTLE_POLICY = "matched_passive_settle.v1";
 
 export type RuntimeDocumentSettleResult = {
   elapsedMs: number;

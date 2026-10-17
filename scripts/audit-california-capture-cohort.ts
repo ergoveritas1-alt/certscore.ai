@@ -30,6 +30,7 @@ export function summarizeCaliforniaCapture(rows: CohortRow[]) {
     const workpaperCandidateCount = number(workpaper.candidateCount);
     const named = number(inspection.namedChoiceCandidateCount);
     const namedInFrames = number(inspection.namedFrameChoiceCandidateCount);
+    const reviewCoverage = record(california.reviewCoverage);
     return {
       scanId: row.scanId,
       hostname: row.hostname,
@@ -38,6 +39,9 @@ export function summarizeCaliforniaCapture(rows: CohortRow[]) {
       reportStatus: row.reportStatus,
       optOutConfigured: row.optOutConfigured === true,
       assessmentPresent: row.california !== null,
+      assessmentVersion: typeof california.contractVersion === "string" ? california.contractVersion : null,
+      californiaScoreReady: reviewCoverage.scoreReady === true,
+      coverageFamilies: array(reviewCoverage.families).map(record).map(row=>({id:row.id,status:row.status})),
       inspectionVersion: typeof inspection.contractVersion === "string" ? inspection.contractVersion : null,
       inspectionCoverage: typeof inspection.coverage === "string" ? inspection.coverage : null,
       choiceSurface: typeof california.choiceSurface === "string" ? california.choiceSurface : null,
@@ -65,12 +69,14 @@ export function summarizeCaliforniaCapture(rows: CohortRow[]) {
     scanStatuses: countBy(details.map(row => row.scanStatus)),
     reportStatuses: countBy(details.map(row => row.reportStatus)),
     assessments: details.filter(row => row.assessmentPresent).length,
+    assessmentVersions: countBy(details.map(row=>row.assessmentVersion)),
+    scoreReadyAssessments: details.filter(row=>row.californiaScoreReady).length,
     inspectionVersions: countBy(details.map(row => row.inspectionVersion)),
     inspectionCoverage: countBy(details.map(row => row.inspectionCoverage)),
     choiceSurfaces: countBy(details.map(row => row.choiceSurface)),
     scansWithUninspectedFrames: details.filter(row => row.uninspectedFrames > 0).length,
     scansWithCandidatesNeedingTrace: details.filter(row => row.topLevelCandidateNeedsTrace > 0).length,
-    frameWorkP95Ms: p95(details.filter(row => row.inspectionVersion === "certscore.privacy-choice-inspection.v3").map(row => row.frameWorkMs)),
+    frameWorkP95Ms: p95(details.filter(row => ["certscore.privacy-choice-inspection.v3","certscore.privacy-choice-inspection.v4","certscore.privacy-choice-inspection.v5"].includes(row.inspectionVersion ?? "")).map(row => row.frameWorkMs)),
     verifiedChoiceControls: details.reduce((sum, row) => sum + row.verifiedChoiceControls, 0),
     optOutStatuses: countBy(details.map(row => row.optOutStatus)),
     configuredWithoutVerifiedOptOutEvidence: details.filter(row => row.optOutConfigured && row.optOutStatus === null).length,
@@ -86,6 +92,12 @@ async function main() {
     select s.id, d.hostname, s.created_at, s.status, ss.report_projection_status,
       (s.scan_config_json #>> '{execution,v2DagLambda,saleSharingOptOutEnabled}') = 'true' as opt_out_configured,
       case when ss.consent_control_assessment #> '{californiaPrivacyReview}' is not null then jsonb_build_object(
+        'contractVersion', ss.consent_control_assessment #>> '{californiaPrivacyReview,contractVersion}',
+        'reviewCoverage', jsonb_build_object(
+          'scoreReady', ss.consent_control_assessment #> '{californiaPrivacyReview,reviewCoverage,scoreReady}',
+          'families', (select coalesce(jsonb_agg(jsonb_build_object('id', family->'id', 'status', family->'status')), '[]'::jsonb)
+            from jsonb_array_elements(coalesce(ss.consent_control_assessment #> '{californiaPrivacyReview,reviewCoverage,families}', '[]'::jsonb)) family)
+        ),
         'choiceSurface', ss.consent_control_assessment #>> '{californiaPrivacyReview,choiceSurface}',
         'controlCount', jsonb_array_length(coalesce(ss.consent_control_assessment #> '{californiaPrivacyReview,controls}', '[]'::jsonb)),
         'optOutEffectiveness', ss.consent_control_assessment #>> '{californiaPrivacyReview,optOutEffectiveness}',

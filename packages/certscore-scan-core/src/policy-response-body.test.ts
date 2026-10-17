@@ -15,7 +15,25 @@ import {
   policyResponseTransportForEnvironment,
   readBoundedResponseBody,
   requestBoundedPolicyResponse,
+  fetchText,
 } from "./scanners/policy-surface-scanner.js";
+
+test("stalled apex policy fetch leaves the existing www recovery time inside the original deadline", async t => {
+  const calls:string[]=[];
+  t.mock.method(globalThis,"fetch",async (url:unknown,init?:RequestInit)=>{
+    calls.push(String(url));
+    if(String(url)==="https://policy-fixture.test/privacy")return new Promise<Response>((_resolve,reject)=>{
+      init!.signal!.addEventListener("abort",()=>reject(new DOMException("aborted","AbortError")),{once:true});
+    });
+    return new Response("<html><body><h1>Privacy Policy</h1><p>We collect contact information to provide services. You can request access, correction and deletion of your personal information.</p></body></html>",{headers:{"content-type":"text/html"}});
+  });
+  const started=Date.now();
+  const result=await fetchText("https://policy-fixture.test/privacy",2_000);
+  assert.equal(result.ok,true);
+  assert.deepEqual(calls,["https://policy-fixture.test/privacy","https://www.policy-fixture.test/privacy"]);
+  assert.ok(Date.now()-started<2_100);
+  assert.equal(result.attempts?.length,2);
+});
 
 test("policy response decoding supports bounded gzip, Brotli, and deflate bodies", () => {
   const policy = new TextEncoder().encode(

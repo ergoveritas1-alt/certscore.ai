@@ -323,7 +323,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
   const executiveSummary = buildExecutiveSummary({ assessment, checklistPresentation: canonical.checklistPresentation,
     findings: findings.filter(finding => finding.unifiedFindingId !== SITE_INTEGRITY_FINDING_ID) });
   if (focus === "ccpa_cpra") executiveSummary.sentences = [
-    "CCPA/CPRA review focuses on GPC response, observed privacy choices, retained notices and tracking inventory.",
+    "CCPA/CPRA review assesses privacy notices, California rights, request methods, collection notices, sale/sharing disclosures and choices.",
     privacyAuditEvidence ? `${privacyAuditEvidence.controls.length} observed privacy-choice/settings surfaces${privacyAuditEvidence.contractVersion === "certscore.privacy-audit-evidence.v2" && privacyAuditEvidence.controlCandidates.length ? ` and ${privacyAuditEvidence.controlCandidates.length} link candidates needing proof` : ""}, plus ${privacyAuditEvidence.notices.length} notice documents, are retained in the bounded workpaper. Presence does not establish a working opt-out or adequate disclosure.`
       : "Verified California privacy-choice and notice evidence is unavailable; absence and disclosure adequacy remain unknown.",
     californiaScore.score === null ? "California score is unavailable because verified review coverage is insufficient. The overall score uses GDPR/ePrivacy-weighted rules." :

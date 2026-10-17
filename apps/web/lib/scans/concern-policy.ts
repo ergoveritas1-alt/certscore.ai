@@ -1,3 +1,4 @@
+import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
 import { readAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { cmpAuditRowsEqual } from "@certscore/contracts";
@@ -2612,7 +2613,7 @@ export function deriveConcernPolicy(input: {
     const assessment = readCaliforniaPrivacyReviewFromConsent(input.rawEvidence?.consentControlAssessment);
     return {allowedNarrativeTier: "moderate", externalSurfacingEligibility: eligible ? "eligible" : "suppress",
       promotionEligibility: eligible ? "eligible" : "blocked", negativeEvidenceFlags: [], regulatoryChecklistEligibility: "none",
-      scoreEffects: eligible && assessment ? californiaFindingScoreEffect(input.concern.suggestedUnifiedFindingId!, assessment.sourceHash) : []};
+      scoreEffects: eligible && assessment ? californiaFindingScoreEffect(input.concern.suggestedUnifiedFindingId!, assessment.sourceHash, assessment.contractVersion, assessment) : []};
   }
   if (input.concern.suggestedUnifiedFindingId === SITE_INTEGRITY_FINDING_ID) {
     const eligible = input.concern.originType === "runtime_artifact" && qualifiesSiteIntegrityReview(input.rawEvidence?.siteIntegrity);
@@ -2722,7 +2723,7 @@ export function deriveConcernPolicy(input: {
       : null;
     const scoreEffects: NormalizedConcernScoreEffect[] = californiaPolicy?.scoreEffect === "deduction" && typedAssessment
       ? [{
-          appliesTo: "certscore_overall",
+          appliesTo: "california_posture",
           deductionPoints: californiaPolicy.deductionPoints,
           evidenceRefs: [
             typedAssessment.comparison.baselineArtifact?.uri ?? "",
@@ -2742,9 +2743,9 @@ export function deriveConcernPolicy(input: {
       getFirstString(input.rawEvidence, ["legalInterpretation"]) === "not_assessed";
     return {
       allowedNarrativeTier: validAssessment && (status !== "indeterminate" || (typedAssessment?.contractVersion === "certscore.gpc-response-assessment.v3" && typedAssessment.observation.status === "complete")) ? "moderate" : "weak",
-      externalSurfacingEligibility: validAssessment ? "audit_only" : "suppress",
+      externalSurfacingEligibility: validAssessment ? hasVerifiedCustomerGpcEvidence(typedAssessment) ? "eligible" : "audit_only" : "suppress",
       negativeEvidenceFlags: [],
-      promotionEligibility: validAssessment ? "internal_only" : "blocked",
+      promotionEligibility: validAssessment ? hasVerifiedCustomerGpcEvidence(typedAssessment) ? "eligible" : "internal_only" : "blocked",
       regulatoryChecklistEligibility: "none",
       ...(validAssessment && scoreEffects.length > 0 ? { scoreEffects } : {}),
     };

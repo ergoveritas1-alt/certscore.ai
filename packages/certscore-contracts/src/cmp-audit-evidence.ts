@@ -218,6 +218,7 @@ export type CmpPreferencesEvidence = z.infer<typeof cmpPreferencesEvidenceSchema
 export const cmpBasicEvidenceSchema = z.object({
   contractVersion: z.enum(["certscore.cmp-basic-evidence.v1", "certscore.cmp-basic-evidence.v2", "certscore.cmp-basic-evidence.v3", "certscore.cmp-basic-evidence.v4", "certscore.cmp-basic-evidence.v5"]),
   sourceLane: z.literal("consent_proof"),
+  documentBindingPolicy: z.literal("passive_final_document.v1").optional(),
   scanId: z.string().min(1).max(160), targetUrl: z.string().url().max(2000),
   documentUrl: z.string().url().max(2000), documentToken: z.string().min(1).max(160),
   capturedAtMs: z.number().finite().nonnegative(),
@@ -251,7 +252,8 @@ export const cmpBasicEvidenceSchema = z.object({
   limitations: z.array(z.string().min(1).max(120)).max(8),
 }).strict().superRefine((packet,ctx)=>{
   const progress=packet.captureProgress;
-  if (progress && (progress.documentToken!==packet.documentToken || packet.documentUrl!==packet.targetUrl ||
+  const documentBound = packet.documentUrl === packet.targetUrl || packet.documentBindingPolicy === "passive_final_document.v1" && /^https?:$/.test(new URL(packet.documentUrl).protocol);
+  if (progress && (progress.documentToken!==packet.documentToken || !documentBound ||
       [progress.controlsAtMs,progress.declarationsAtMs,progress.privacyLinksAtMs].some(at=>at!==undefined && at>packet.capturedAtMs) ||
       packet.controls.length>0 && progress.controlsAtMs===undefined ||
       (packet.declarations.length>0 || packet.serviceNames.length>0 || packet.inventoryManifest) && progress.declarationsAtMs===undefined ||
@@ -266,8 +268,8 @@ export const cmpBasicEvidenceSchema = z.object({
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Passive compact inventory requires its canonical configured source."});
   const loadedDeclarations=packet.declarations.filter(row=>row.source==="cmp_loaded_inventory");
   if (packet.privacyLinkInspection && (!progress || progress.privacyLinksAtMs===undefined ||
-      packet.privacyLinkInspection.documentToken!==packet.documentToken || packet.documentUrl!==packet.targetUrl ||
-      packet.privacyLinks.some(link=>{try{return new URL(link.url).origin!==new URL(packet.targetUrl).origin;}catch{return true;}})))
+      packet.privacyLinkInspection.documentToken!==packet.documentToken || !documentBound ||
+      packet.privacyLinks.some(link=>{try{return new URL(link.url).origin!==new URL(packet.documentUrl).origin;}catch{return true;}})))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Public privacy links require a completed same-origin document checkpoint."});
   const hasLoaded=Boolean(packet.loadedInventory || packet.loadedInventoryBinding || loadedDeclarations.length);
   if (["certscore.cmp-basic-evidence.v2", "certscore.cmp-basic-evidence.v3"].includes(packet.contractVersion) || hasLoaded) {
@@ -289,7 +291,7 @@ export const cmpBasicEvidenceSchema = z.object({
     const network=packet.networkCookieInventory;
     if(packet.contractVersion!=="certscore.cmp-basic-evidence.v5" || packet.provider!=="Termly" || !network ||
       network.documentToken!==packet.documentToken || network.documentUrl!==packet.documentUrl ||
-      packet.documentUrl!==packet.targetUrl || network.completedAtMs>packet.capturedAtMs ||
+      !documentBound || network.completedAtMs>packet.capturedAtMs ||
       !progress || progress.declarationsAtMs!==network.completedAtMs || packet.loadedInventory || packet.sdkServiceInventory || packet.serviceNames.length ||
       JSON.stringify(packet.declarations)!==JSON.stringify(network && projectNetworkCmpCookies(network)) ||
       JSON.stringify(packet.inventoryManifest)!==JSON.stringify(network?.inventoryManifest))
@@ -298,7 +300,7 @@ export const cmpBasicEvidenceSchema = z.object({
   if (packet.contractVersion === "certscore.cmp-basic-evidence.v4" || packet.sdkServiceInventory) {
     if (packet.contractVersion !== "certscore.cmp-basic-evidence.v4" || packet.provider !== "Didomi" || !packet.sdkServiceInventory ||
         !progress || progress.declarationsAtMs === undefined || packet.sdkServiceInventory.documentToken !== packet.documentToken ||
-        packet.documentUrl !== packet.targetUrl || packet.declarations.length || packet.loadedInventory || packet.inventoryManifest || packet.serviceDisclosures?.length ||
+        !documentBound || packet.declarations.length || packet.loadedInventory || packet.inventoryManifest || packet.serviceDisclosures?.length ||
         !packet.limitations.includes("loaded_configuration_not_visibility_proof") || !packet.limitations.includes("service_inventory_not_complete") ||
         JSON.stringify(packet.serviceNames) !== JSON.stringify(packet.sdkServiceInventory ? projectSdkCmpServices(packet.sdkServiceInventory) : []))
       ctx.addIssue({code: z.ZodIssueCode.custom, message: "Passive SDK services require exact v4 provider, source, document and partial name projection"});

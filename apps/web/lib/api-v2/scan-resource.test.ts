@@ -24,7 +24,7 @@ import {
 import { buildRuntimeInventoryProjectionFromScan } from "../scans/runtime-inventory-projection";
 import type { ScanDetailResponse } from "../../server/scans/get-scan-by-id";
 import { SCAN_NO_GO_REASON_CODES, SCAN_NO_GO_REASON_PRESENTATIONS } from "@website-signal-risk-scanner/shared";
-import { apiV2GpcResponseSchema, apiV2PreConsentCookiesTrackersSchema } from "@certscore/api-contracts";
+import { apiV2GpcResponseSchema, apiV2PreConsentCookiesTrackersSchema, projectCustomerRuntimeGraph } from "@certscore/api-contracts";
 import { gpcRuntimeFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime";
 import servicePurposeFixtures from "../../../../packages/certscore-contracts/src/test-fixtures/vendor-service-purpose-v1.json";
 import { resolveCanonicalVendorLabel } from "@certscore/vendor-resolver";
@@ -149,11 +149,13 @@ test("retained graph survives verified artifact/reference persistence through in
   assert.ok(hydrated);
   const resolved = await hydrateRuntimeGraphForRead({ ...record, runtimeArtifacts: hydrated.runtimeArtifacts }, { read: async () => artifact, environment: { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "on" } });
   record.runtimeArtifacts = resolved.runtimeArtifacts;
-  assert.deepEqual(record.runtimeArtifacts?.runtimeEvidenceGraphProjection, JSON.parse(JSON.stringify(graph)));
+  assert.deepEqual(record.runtimeArtifacts?.runtimeEvidenceGraphProjection, projectCustomerRuntimeGraph(JSON.parse(JSON.stringify(graph))));
   const inventory = buildRuntimeInventoryProjectionFromScan(record);
   const api = buildApiV2PreConsentCookiesTrackers(record);
   assert.deepEqual(api.runtimeEvidenceGraph, inventory.runtimeEvidenceGraph);
   assert.deepEqual(apiV2PreConsentCookiesTrackersSchema.parse(api).runtimeEvidenceGraph, inventory.runtimeEvidenceGraph);
+  assert.ok(!api.runtimeEvidenceGraph?.graphs.some(item => item.scenario === "gpc"));
+  assert.ok(!api.runtimeEvidenceGraph?.limitations.some(reason => reason.startsWith("gpc:")));
   assert.ok(!JSON.stringify(api).includes("NOT_PUBLIC"));
   assert.equal(buildApiV2ScanResource(record).score, baseline.score);
   assert.deepEqual(record.validationFindings, fixture().validationFindings);
@@ -417,7 +419,9 @@ for (const scenario of ["no_observable_response", "responsive", "indeterminate",
     assert.equal(concerns.length, 1);
     const expectedDeduction = outcome === "no_observable_response" && scenario !== "late_journey" ? 15 : 0;
     const report = buildGpcResponseReportProjection(findings);
-    assert.equal(report,null);
+    const eligible = scenario !== "indeterminate" && scenario !== "stale_redirect";
+    assert.equal(Boolean(report),eligible);
+    assert.equal(report?.californiaDeductionPoints ?? 0,0);
     assert.ok(finding.details?.family === "privacy_signal" && finding.details.kind === "gpc_response");
     assert.deepEqual(finding.details.assessment,assessment);
     assert.equal(finding.scoreEffects?.length ?? 0,0);
@@ -434,8 +438,9 @@ for (const scenario of ["no_observable_response", "responsive", "indeterminate",
     const publicRecord = { ...record, ...hydrated, scan: record.scan };
     const resource = buildApiV2ScanResource(publicRecord);
     const status = buildApiV2ScanStatus(publicRecord, { canonicalScan: resource });
-    assert.equal(resource.gpcResponse,null);
-    assert.equal(status.gpcResponse,null);
+    assert.equal(Boolean(resource.gpcResponse),eligible);
+    assert.equal(Boolean(status.gpcResponse),eligible);
+    assert.equal(resource.gpcResponse?.californiaPolicy.deductionPoints ?? 0,0);
     assert.ok(hydrated.runtimeArtifacts?.gpcResponseAssessment);
 
   });
@@ -1735,6 +1740,10 @@ test("known incomplete scans retain their status and same-ID polling guidance", 
 
 test("GPC v3 independent observation survives actual persisted report hydration and public resource/status projection", () => {
   const gpc = gpcProductionRuntimeFixture();
+  gpc.scanId=gpcCanonicalFixture().scan.id;
+  gpc.gpcObservationSession!.scanId=gpc.scanId;
+  gpc.gpcObservationSession!.semanticObservation!.scanId=gpc.scanId;
+  gpc.gpcPrototypeSessionBinding!.sessionSha256=createHash("sha256").update(JSON.stringify(gpc.gpcObservationSession)).digest("hex");
   gpc.gpcSignalObservation!.workerCount = 1;
   const bytes = Buffer.from(JSON.stringify(gpc));
   const pointer = { uri: "s3://fixture/gpc.json", sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length };
@@ -1754,8 +1763,8 @@ test("GPC v3 independent observation survives actual persisted report hydration 
   assert.ok(hydrated);
   const publicRecord = { ...record, ...hydrated, scan: record.scan };
   const resource = buildApiV2ScanResource(publicRecord);
-  assert.equal(resource.gpcResponse,null);
-  assert.equal(buildApiV2ScanStatus(publicRecord,{canonicalScan:resource}).gpcResponse,null);
+  assert.equal(resource.gpcResponse?.observation?.status,"complete");
+  assert.equal(buildApiV2ScanStatus(publicRecord,{canonicalScan:resource}).gpcResponse?.californiaPolicy.deductionPoints,0);
   assert.deepEqual(hydrated.runtimeArtifacts?.gpcResponseAssessment,assessment);
 
 });

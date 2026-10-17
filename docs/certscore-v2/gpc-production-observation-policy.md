@@ -1,5 +1,10 @@
 # GPC bounded observation in production
 
+Release authorization, October 17, 2026: the owner requested preparation and
+deployment once ready. Earlier local-only/hold statements below describe prior
+verification stages. Release remains subject to canonical AWS readiness checks;
+existing observation, scoring and approved cost bounds are unchanged.
+
 Owner-authorized September 11, 2026. This integration follows the request to finish
 the disabled prototype, test it locally, and deploy through the canonical AWS
 workflow. Incremental compute and evidence storage are approved up to $5/month at
@@ -123,3 +128,96 @@ review is model-assisted engineering review, not independent human adjudication.
 Do not report an independently measured false-positive/false-negative or GPC
 honoring rate from a completion benchmark. Any later stronger interpretation or
 new scoring policy requires its own evidence and approval.
+
+### October 17 matched passive settling — local approval
+
+The owner approved up to **$50/month incremental at 100,000 scans/month** for
+`matched_passive_settle.v1`, superseding the earlier prohibition on additional
+settling only within this bounded scope. The approved implementation/testing is
+local; deployment still requires separate authorization.
+
+After the initial passive quiet gate times out, both runtime-evidence and GPC
+may use up to **3,000 additional milliseconds** to await pending page activity and
+complete the existing 250ms quiet requirement. The allowance does not depend on
+a form screenshot reviewer or whether GPC is enabled. Quiet pages skip it. It
+uses the existing browser/session/request tracker and stays inside the existing
+module/parent deadline with the same atomic-inventory reserve. No lane, invocation,
+retry, model call or late publication is added.
+
+Preserve the earlier loading-parser and baseline form-readiness allowance by
+subtracting time already consumed by matched settling from its existing ten-second
+cap. A parsed pending-only GPC visit stops after three seconds; it cannot borrow
+the form allowance. Cancellation, document changes, crashes, capture overflow or
+unverified delivery continue to fail closed. The new settling policy and cap are
+included in both conditions' browser-protocol fingerprint. The existing source-
+bound quiet checkpoint proves whether capture actually settled; timing success
+alone never upgrades evidence or creates a finding.
+
+Cost estimate uses the repository-controlled 3,008 MB Lambda configuration and
+$0.0000166667/GB-second compute planning rate. A conservative bound of three extra
+seconds in each passive worker and coordinator is about **$44.06/month** at
+100,000 scans. The owner-approved $50 ceiling includes bounded incremental evidence
+storage and rounding. Actual cost depends on how many visits need the allowance
+and whether the coordinator is already awaiting another lane. Additional report
+latency is at most the three-second allowance attributable to this change, often
+absorbed by parallel work. Existing parser/form recovery budgets are unchanged.
+
+A completed pair with zero classified tracking in both visits is presented as
+"No qualifying tracking activity observed." This describes the retained result;
+it does not establish GPC honoring or a lack of activity outside the capture.
+The owner-approved 15-point California choice-enforcement risk policy remains
+independent and uses verified direct collection or recorded-choice contradiction
+through the canonical concern/policy/finding path.
+
+### October 17 capture retention repairs — local verification
+
+Keep final redirected main-document and classified collection request/response
+identities ahead of lower-priority samples during the existing bounded core
+compaction. Large GPC window packets compete within that same budget; small
+packets retain the existing bounded additive restoration. Overflow remains an
+explicit limitation. Capture the response's directly observed HTTP status and
+request identity synchronously, before asynchronous header metadata reads. The
+optional response `metadataCapture` distinguishes pending, complete and limited
+metadata; a pending read does not prove absent headers or cookies.
+
+An independently retained GPC bounded observation uses its own verified lane's
+representative-page access, challenge state and execution outcome. Unrelated DOM
+inventory incompleteness does not invalidate an otherwise complete producer-bound
+GPC session. The original byte/session/document/delivery/completion invariants
+remain required. This does not relax paired comparison or advertising-collection
+eligibility, and it does not make missing capture scoreable.
+
+Policy retrieval divides its existing request allowance between a stalled apex
+and its already-supported WWW fallback. Both remain within the original deadline;
+there is no extra candidate, retry allowance or model call. More frequent use of
+that existing fallback is estimated below $0.10/month additional network spend
+at 100,000 scans, disclosed before implementation. Matched settling remains
+within the separately approved $50/month ceiling. These repairs are local only;
+no deployment is authorized by this entry.
+
+### October 17 owner-requested positive-evidence scoring — local only
+
+The owner requested that an incomplete overall pass must not hide a supported
+GPC deduction. New producer assessments retain optional
+`positiveEvidence.policyVersion=gpc_positive_evidence.v1` and the independently
+verified representative-document state. WC01 policy
+`california-gpc-response.v4-positive-evidence` accepts a source/session/document-
+bound positive advertising collection event or retained acknowledged-GPC/current-
+opt-out contradiction independently of unrelated request drops, frame/worker
+coverage, and paired-comparison completion. Main-document header and navigator
+readback remain required. Advertising collection still requires exact canonical
+endpoint attribution and a directly retained successful response; a library,
+unresolved request, failed response, unknown signal or blocked/unverifiable visit
+is insufficient. This is a 15-point California risk effect through canonical
+concern/policy/finding projection, not a legal determination.
+
+California posture policy v9 keeps supported deductions numeric when unrelated
+coverage is limited. A checksum-verified complete governing-policy source also supports a bounded
+numeric score while unrelated coverage stays limited. Missing or truncated
+policy alone cannot support a clean score. This does not invent absence findings,
+change weights or remove the 15-point choice-family cap.
+Existing persisted score generations remain unchanged. Legacy observations lacking
+positive-evidence provenance keep the earlier complete-observation requirement.
+Historical paired response records and their response/completeness states remain
+unchanged. The public API/OpenAPI/SDK observation contract is synchronized from
+the canonical schema; no separate MCP method or endpoint is introduced.

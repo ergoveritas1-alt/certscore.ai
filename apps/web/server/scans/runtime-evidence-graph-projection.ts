@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { apiRuntimeEvidenceGraphProjectionSchema, type ApiRuntimeEvidenceGraph, type ApiRuntimeEvidenceGraphProjection } from "@certscore/api-contracts";
+import { apiRuntimeEvidenceGraphProjectionSchema, projectCustomerRuntimeGraph as customerRuntimeGraph, type ApiRuntimeEvidenceGraph, type ApiRuntimeEvidenceGraphProjection } from "@certscore/api-contracts";
+export {customerRuntimeGraph};
 import { verifyRuntimeEvidenceGraph, type CanonicalEvidenceBundle, type RuntimeEvidenceGraph, type RuntimeGraphNode } from "@certscore/contracts";
 import { CANONICAL_VENDOR_RESOLVER_VERSION, findCanonicalVendorMention, resolveVendorObservations, type VendorResolverInput } from "@certscore/vendor-resolver";
 
@@ -8,15 +9,21 @@ export type RuntimeGraphPolicyDocument = { text: string; evidenceRef: string; te
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 export function applyRuntimeGraphPresentationSwitch<T extends Record<string, unknown> | null>(artifacts: T, environment: Record<string, string | undefined>): T {
-  if (!artifacts || environment.CERTSCORE_RUNTIME_GRAPH_PRESENTATION === "on") return artifacts;
+  if (!artifacts) return artifacts;
+  if (environment.CERTSCORE_RUNTIME_GRAPH_PRESENTATION === "on") {
+    const graph = apiRuntimeEvidenceGraphProjectionSchema.safeParse(artifacts.runtimeEvidenceGraphProjection);
+    if (!graph.success || !graph.data.graphs.some(row=>row.scenario === "gpc") && !graph.data.limitations.some(row=>row.startsWith("gpc:"))) return artifacts;
+    return {...artifacts,runtimeEvidenceGraphProjection:customerRuntimeGraph(graph.data)};
+  }
   const { runtimeEvidenceGraphProjection: _graph, runtimeEvidenceGraphReference: _reference, ...retained } = artifacts;
   return retained as T;
 }
 
 /** Read-time copy only: never alter the retained payload, its checksum, or a shared cache entry. */
 export function presentRuntimeGraphForRead<T extends { runtimeArtifacts: Record<string, unknown> | null } | null>(record: T, environment: Record<string, string | undefined>): T {
-  if (!record || environment.CERTSCORE_RUNTIME_GRAPH_PRESENTATION === "on") return record;
-  return { ...record, runtimeArtifacts: applyRuntimeGraphPresentationSwitch(record.runtimeArtifacts, environment) } as T;
+  if (!record) return record;
+  const runtimeArtifacts=applyRuntimeGraphPresentationSwitch(record.runtimeArtifacts,environment);
+  return runtimeArtifacts === record.runtimeArtifacts ? record : {...record,runtimeArtifacts} as T;
 }
 
 /** Inventory-only projection. This module does not construct concerns, findings, severity or scores. */

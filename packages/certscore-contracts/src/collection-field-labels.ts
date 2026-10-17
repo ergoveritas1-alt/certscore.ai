@@ -6,6 +6,7 @@ export function normalizeCollectionFieldLabel(value: string) {
 }
 
 const LABELS: Partial<Record<CollectionSurfaceSemanticCategory, readonly string[]>> = {
+  search: ['search', 'site search', 'search this site', 'search the site', 'search website', 'search query', 'search terms'],
   name: ['name', 'full name', 'first name', 'last name', 'given name', 'surname', 'vorname', 'nachname', 'familienname', 'vor- und nachname', 'vor und nachname', 'vor- & nachname', 'prénom', 'nom', 'nom de famille', 'nombre', 'apellidos', 'nombre completo', 'nome', 'cognome', 'nome completo', 'sobrenome', 'apelido', 'voornaam', 'achternaam', 'naam'],
   email: ['email', 'e-mail', 'email address', 'e-mail address', 'e-mail-adresse', 'emailadresse', 'courriel', 'adresse e-mail', 'adresse électronique', 'correo electrónico', 'correo electronico', 'posta elettronica', 'indirizzo email', 'correio eletrónico', 'correio eletrônico', 'endereço de e-mail', 'e-mailadres', 'emailadres'],
   phone: ['phone', 'phone number', 'telephone', 'telephone number', 'mobile', 'mobile number', 'telefon', 'telefonnummer', 'mobiltelefonnummer', 'mobilnummer', 'handynummer', 'handy', 'firma telefonnummer', 'privat telefonnummer', 'geschäftlich telefonnummer', 'téléphone', 'numéro de téléphone', 'teléfono', 'telefono', 'número de teléfono', 'numero di telefono', 'cellulare', 'telefone', 'telemóvel', 'celular', 'número de telefone', 'telefoon', 'telefoonnummer', 'mobiel nummer'],

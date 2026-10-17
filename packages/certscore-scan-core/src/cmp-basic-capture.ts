@@ -1,5 +1,5 @@
 import { cmpInventoryScopeSelector, readCmpScopeInventory } from "./cmp-scope-inventory.js";
-import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, projectSdkCmpServices, type CmpBasicEvidence } from "@certscore/contracts";
+import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, projectSdkCmpServices, type CmpBasicEvidence, type CmpRuntimeObservation, type NetworkEvent, type NetworkResponseEvent } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { Page } from "playwright";
 import { readBorlabsPreferenceInventory, readPreferenceControls, classifyControls } from "./cmp-preferences-observer.js";
@@ -9,6 +9,53 @@ import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-li
 import { readPassiveCookiebotLoadedInventory } from "./cookiebot-loaded-inventory.js";
 import { readPassiveConsentmanagerLoadedInventory } from "./consentmanager-loaded-inventory.js";
 import { readPassiveDidomiServiceInventory } from "./didomi-service-inventory.js";
+
+/** Loader requests and wrapper stubs identify an installation, not a ready SDK.
+ * Reserve the single passive read for visible controls, a registered API root,
+ * or completion of the existing late visual/inventory work. This is scheduling only;
+ * capture must still verify its own scope, API and document binding. */
+export function isCmpBasicCaptureReady(input: {
+  controlsObserved: boolean;
+  runtimeObservations: CmpRuntimeObservation[];
+  lateInspectionComplete: boolean;
+}): boolean {
+  if (input.controlsObserved) return true;
+  return input.runtimeObservations.some(observation =>
+    observation.confidence >= 0.9 && observation.directVsInferred === "direct" &&
+    observation.signals.some(signal => {
+      if (signal.confidence < 0.85) return false;
+      if (input.lateInspectionComplete && ["script_url", "global", "network_request", "dom_selector"].includes(signal.signalType)) return true;
+      return signal.signalType === "global" && KNOWN_CMP_REGISTRY.some(definition =>
+        definition.passiveConfigurationApi?.split(".")[0] === signal.matchedValueRedacted);
+    })
+  );
+}
+
+/** Internal transport counters only. Missing response metadata is unresolved,
+ * never a failed load or a finding. Join using the original request identity. */
+export function summarizeCmpTransport(input: {
+  observations: CmpRuntimeObservation[];
+  requests: NetworkEvent[];
+  responses: NetworkResponseEvent[];
+  failures: Array<{ requestId?: string; failureText?: string }>;
+}) {
+  const ids = new Set(input.observations.flatMap(observation => observation.signals
+    .filter(signal => signal.signalType === "script_url" || signal.signalType === "network_request")
+    .flatMap(signal => signal.sourceEventId ? [signal.sourceEventId] : [])));
+  const requests = input.requests.filter(request => ids.has(request.eventId));
+  const responded = new Set(input.responses.flatMap(response => response.requestId ? [response.requestId] : []));
+  const failed = new Map(input.failures.flatMap(failure => failure.requestId ? [[failure.requestId, failure.failureText] as const] : []));
+  const codes = new Set<string>();
+  for (const request of requests) if (failed.has(request.requestId)) {
+    const raw = failed.get(request.requestId) ?? "";
+    codes.add(/^net::ERR_[A-Z_]{1,50}$/.test(raw) ? raw.slice(5) : "other");
+  }
+  return { version: "cmp_transport.v1", requests: requests.length,
+    responses: requests.filter(request => responded.has(request.requestId)).length,
+    failed: requests.filter(request => failed.has(request.requestId)).length,
+    unresolved: requests.filter(request => !responded.has(request.requestId) && !failed.has(request.requestId)).length,
+    failureCodes: [...codes].sort().slice(0, 2) };
+}
 
 /** Opportunistic read in the existing consent-proof visit. No action, wait,
  * navigation, retry or late join. The caller retains only a settled, loader-bound
@@ -28,7 +75,8 @@ export async function captureCmpBasicEvidence(input: {
   const definitions = KNOWN_CMP_REGISTRY.filter(d => d.domSelectors?.length || d.preferenceScopeSelector);
   const scopes = definitions.map(cmpInventoryScopeSelector);
   const scopeInventory = await readCmpScopeInventory(page, definitions);
-  const indices = scopeInventory.indices;
+  const configurationOnly=scopeInventory.indices.length===0 && scopeInventory.configurationIndices.length===1;
+  const indices = configurationOnly?scopeInventory.configurationIndices:scopeInventory.indices;
   if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   if (indices.length !== 1) { input.onOutcome?.(indices.length ? "ambiguous_registry_scopes" : "registered_scope_unavailable"); return undefined; }
   const index = indices[0]!, definition = definitions[index]!;
@@ -36,6 +84,7 @@ export async function captureCmpBasicEvidence(input: {
     input.onOutcome?.("ambiguous_passive_container"); return undefined;
   }
   const packet:CmpBasicEvidence={contractVersion:"certscore.cmp-basic-evidence.v1",sourceLane:"consent_proof",scanId:input.scanId,
+    documentBindingPolicy:"passive_final_document.v1",
     targetUrl:input.targetUrl,documentUrl:before.url,documentToken:before.token,capturedAtMs:Date.now()-input.scanStartedAtMs,
     provider:definition.canonicalName,configuredConsentCookies:scopeInventory.configuredConsentCookies,
     controls:[],privacyLinks:[],declarations:[],serviceNames:[],
@@ -44,13 +93,13 @@ export async function captureCmpBasicEvidence(input: {
   let retained:CmpBasicEvidence|undefined;
   const checkpoint=()=>{
     const after=input.readBinding();
-    if(!input.isCurrent() || before.url!==input.targetUrl || before.url!==after.url || before.token!==after.token) return false;
+    if(!input.isCurrent() || before.url!==after.url || before.token!==after.token) return false;
     packet.capturedAtMs=Date.now()-input.scanStartedAtMs;
     retained=cmpBasicEvidenceSchema.parse(structuredClone(packet));
     input.onCheckpoint?.(retained);return true;
   };
   // Protect the minimal visible-control packet before descriptions or links.
-  const rawControls=await readPreferenceControls(page.locator(scopes[index]!),definition.preferenceCategoryInventory,definition.initialOptionalOffCloseObservation?.inputSelector);
+  const rawControls=configurationOnly?{controls:[],overflow:false}:await readPreferenceControls(page.locator(scopes[index]!),definition.preferenceCategoryInventory,definition.initialOptionalOffCloseObservation?.inputSelector);
   packet.controls=classifyControls(rawControls.controls);
   packet.captureProgress!.controlsAtMs=Date.now()-input.scanStartedAtMs;
   if(rawControls.overflow) packet.limitations.push("control_inventory_overflow");
@@ -94,6 +143,7 @@ export async function captureCmpBasicEvidence(input: {
   }
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
   if (input.deferPublicPrivacyLinks && definition.passivePrivacyLinkInspection==="same_origin_after_visual.v1") return retained;
+  if(configurationOnly)return retained;
   const privacyScope=page.locator(scopes[index]!).locator("a[href]");
   const links=await privacyScope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
     label:(node.getAttribute("aria-label")??node.textContent??"").trim().slice(0,160)})));
@@ -116,13 +166,13 @@ export async function finishPassiveCmpPrivacyLinks(input: {
   readBinding:()=>{url:string;token?:string}; isCurrent:()=>boolean;
 }):Promise<CmpBasicEvidence|undefined> {
   const {packet,page}=input;
-  const bound=()=>{const current=input.readBinding();return input.isCurrent() && current.url===packet.targetUrl && current.token===packet.documentToken;};
+  const bound=()=>{const current=input.readBinding();return input.isCurrent() && current.url===packet.documentUrl && current.token===packet.documentToken;};
   if (!bound()) return undefined;
   const scope=page.locator('a[href]');
   const links=await scope.evaluateAll(nodes=>nodes.slice(0,300).map((node,index)=>({index,url:(node as HTMLAnchorElement).href,
     label:(node.getAttribute('aria-label')??node.textContent??'').trim().slice(0,160)})));
   if(!bound())return undefined;
-  const origin=new URL(packet.targetUrl).origin;
+  const origin=new URL(packet.documentUrl).origin;
   const candidates=privacyPolicyLinkCandidates(links.filter(link=>{try{return new URL(link.url).origin===origin;}catch{return false;}}));
   const privacyLinks=(await scope.evaluateAll(readPrivacyLinkAccess,{candidates,allowOneDocumentScroll:true}))
     .map(({url,hitTargetBeforeAction,access})=>({url,hitTargetBeforeAction,access}));

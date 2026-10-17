@@ -70,3 +70,12 @@ export const apiRuntimeEvidenceGraphProjectionSchema = z.object({
 });
 export type ApiRuntimeEvidenceGraphProjection = z.infer<typeof apiRuntimeEvidenceGraphProjectionSchema>;
 export type ApiRuntimeEvidenceGraph = z.infer<typeof apiRuntimeEvidenceGraphSchema>;
+
+/** Customer reportability only. Original retained artifacts and caches stay intact. */
+export function projectCustomerRuntimeGraph(projection:ApiRuntimeEvidenceGraphProjection):ApiRuntimeEvidenceGraphProjection {
+  if (!projection.graphs.some(graph=>graph.scenario === "gpc") && !projection.limitations.some(reason=>reason.startsWith("gpc:"))) return projection;
+  const graphs=projection.graphs.filter(graph=>graph.scenario !== "gpc");
+  const limitations=projection.limitations.filter(reason=>!reason.startsWith("gpc:"));
+  return {...projection,graphs,limitations,status:projection.details ? projection.status :
+    graphs.length ? graphs.some(graph=>graph.coverage.status !== "complete") || limitations.length ? "limited":"available":"unavailable"};
+}

@@ -21,14 +21,14 @@ const nanoAssistProvider: PolicyNanoAssistProvider = {
 };
 const body = `<main><h1>Riverside Restaurant</h1><p>${"Visit our family restaurant for lunch and dinner. Explore our seasonal menu, opening hours, reservations and local catering services. ".repeat(12)}</p></main>`;
 
-for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "observed_notice_404", "blocked", "enumeration_overflow", "uninspected_frame", "opaque_frame", "same_origin_empty_frame", "same_origin_choice_frame", "named_choice_button", "inspected_shadow", "nested_shadow_choice", "hidden_unnamed_control", "visible_unnamed_control", "loading_document"] as const) {
+for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetchable", "observed_but_unfetchable", "observed_notice_404", "blocked", "enumeration_overflow", "uninspected_frame", "opaque_frame", "same_origin_empty_frame", "same_origin_choice_frame", "named_choice_button", "inspected_shadow", "nested_shadow_choice", "hidden_unnamed_control", "visible_unnamed_control", "loading_document", "interactive_document"] as const) {
   test(`policy negative search: ${scenario}`, { timeout: 25_000 }, async () => {
     const server = createServer((request, response) => {
       response.setHeader("content-type", "text/html");
-      if (request.url !== "/" && request.url !== "/pending-script") {
+      if (request.url !== "/" && request.url !== "/pending-script" && request.url !== "/pending-image") {
         response.statusCode = 404; response.end("Not found"); return;
       }
-      if (request.url === "/pending-script") return;
+      if (request.url === "/pending-script" || request.url === "/pending-image") return;
       if (scenario === "blocked") {
         response.statusCode = 403; response.end("Access denied"); return;
       }
@@ -44,6 +44,7 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         : scenario === "nested_shadow_choice" ? '<div id="outer-host"></div><script>const root=document.querySelector("#outer-host").attachShadow({mode:"open"});root.innerHTML="<div id=inner-host></div>";root.querySelector("#inner-host").attachShadow({mode:"open"}).innerHTML="<a href=/choice>Your Privacy Choices</a>"</script>'
         : scenario === "hidden_unnamed_control" ? '<button style="display:none"></button>'
         : scenario === "visible_unnamed_control" ? '<button style="width:24px;height:24px"></button>'
+        : scenario === "interactive_document" ? '<img src="/pending-image" alt="Store illustration">'
         : scenario === "loading_document" ? '<script src="/pending-script"></script>' : "";
       response.end(`<html lang="en"><head><title>Riverside Restaurant</title></head><body>${body}${extra}</body></html>`);
     });
@@ -68,7 +69,7 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(inspection.privacyChoiceInspection?.coverage,"complete");
         assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,0);
         assert.equal(inspection.privacyChoiceInspection?.documentUrl,normalizedUrl);
-        assert.equal(inspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v3");
+        assert.equal(inspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v5");
         if (scenario === "same_origin_empty_frame") {
           assert.equal(inspection.privacyChoiceInspection.inspectedSameOriginFrameCount,1);
           assert.equal(inspection.privacyChoiceInspection.uninspectedFrameCount,0);
@@ -81,6 +82,8 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(inspection.outcome, "privacy_policy_observed");
         assert.equal(inspection.documentRetrievalCoverageStatus, "insufficient");
         assert.equal(result.negativeSearchEvidence, undefined);
+        assert.equal(inspection.privacyChoiceInspection?.representativeDocument,true,"ordinary marketing homepage with a delayed footer policy label remains representative");
+        assert.equal(inspection.privacyChoiceInspection?.coverage,"complete");
       } else if (scenario === "observed_notice_404") {
         const notice = result.policySurfaceObservations.find(row => row.surfaceType === "notice_at_collection" && row.status === "failed" && row.httpStatus === 404);
         assert.ok(notice, "Expected the observed named notice link to retain its fetch result.");
@@ -94,7 +97,7 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,1);
         assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");
         assert.equal(inspection.privacyChoiceInspection?.uninspectedFrameCount,1);
-        if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v3") {
+        if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v5") {
           assert.equal(inspection.privacyChoiceInspection.unprojectableFrameCount,1);
         } else assert.fail("Expected v3 frame diagnostics");
       } else if (scenario === "named_choice_button") {
@@ -105,9 +108,17 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
         assert.equal(inspection.privacyChoiceInspection?.namedChoiceCandidateCount,1);
       } else if (scenario === "opaque_frame") {
         assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");
-        if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v3") {
+        if (inspection.privacyChoiceInspection?.contractVersion === "certscore.privacy-choice-inspection.v5") {
           assert.equal(inspection.privacyChoiceInspection.inaccessibleFrameCount,1);
         } else assert.fail("Expected v3 frame diagnostics");
+      } else if (scenario === "interactive_document") {
+        const proof=inspection.privacyChoiceInspection;
+        assert.equal(proof?.contractVersion,"certscore.privacy-choice-inspection.v5");
+        if (proof?.contractVersion!=="certscore.privacy-choice-inspection.v5") throw new Error("Expected v5 proof");
+        assert.equal(proof.documentReadyState,"interactive");
+        assert.equal(proof.coverage,"complete");
+        assert.deepEqual(proof.limitationKeys,[]);
+        assert.equal(result.negativeSearchEvidence,undefined,"Policy negative-search readiness stays unchanged");
       } else if (scenario === "visible_unnamed_control") {
         assert.equal(inspection.privacyChoiceInspection?.unnamedControlCount,1);
         assert.equal(inspection.privacyChoiceInspection?.coverage,"limited");
@@ -122,3 +133,23 @@ for (const scenario of ["missing", "seeded_missing", "seeded_observed_but_unfetc
     }
   });
 }
+
+test("policy document language comes from retained fetched HTML, not homepage or link locale",{timeout:25000},async()=>{
+  const server=createServer((request,response)=>{
+    response.setHeader("content-type","text/html");
+    if(request.url === "/") response.end(`<!doctype html><html lang="en"><body>${body}<footer><a href="/privacy-policy">Privacy Policy</a></footer></body></html>`);
+    else if(request.url === "/privacy-policy") response.end(`<!doctype html><html data-lang="en" lang="fr"><head><title>Privacy Policy</title></head><body><h1>Privacy Policy</h1><p>${"Our privacy policy describes how we collect personal information to provide services, retain records and respond to access requests. ".repeat(12)}</p></body></html>`);
+    else {response.statusCode=404;response.end("Not found");}
+  });
+  server.listen(0,"127.0.0.1");await once(server,"listening");
+  const address=server.address();assert.ok(address && typeof address === "object");
+  const normalizedUrl=`http://127.0.0.1:${address.port}/`;
+  const root=await mkdtemp(path.join(tmpdir(),"policy-language-"));
+  try {
+    const result=await policySurfaceScanner({url:normalizedUrl,normalizedUrl,scanStartedAtMs:Date.now(),internalBudgetMs:12000,discoveryMode:"fast",
+      artifactWriter:await createArtifactWriter(root),nanoAssistProvider});
+    const policy=result.policySurfaceObservations.find(row=>row.url.endsWith("/privacy-policy") && row.status === "fetched");
+    assert.ok(policy,"Observed policy should be fetched");
+    assert.equal(policy.documentLanguage,"fr","Homepage English or data-lang cannot establish the policy's language");
+  }finally {server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(root,{recursive:true,force:true});}
+});

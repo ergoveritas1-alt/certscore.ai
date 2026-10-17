@@ -132,6 +132,12 @@ test("form summary exposes disclosure and screenshot status with compact post-cl
   assert.doesNotMatch(html,/Fields captured|Page observation 1 of|Declared destination|Captured on page/);
   const withNotice=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form:{...row.form,privacyDisclosure:{version:1,truncated:false,excerpts:[{text:"Personal data is used for support.",association:"inside_form",links:[]}]}}}]}/>);
   assert.match(withNotice,/View privacy disclosure: Contact us/);
+  const inspected=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form:{...row.form,privacyDisclosure:{version:2,truncated:false,excerpts:[]}}}]}/>);
+  assert.match(inspected,/>Not observed<\/span>/);
+  const legacyEmpty=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form:{...row.form,privacyDisclosure:{version:1,truncated:false,excerpts:[]}}}]}/>);
+  assert.doesNotMatch(legacyEmpty,/>Not observed<\/span>/,"Historical empty packets cannot acquire absence proof");
+  const limited=renderToStaticMarkup(<CollectionSurfacesTable rows={[{...row,form:{...row.form,privacyDisclosure:{version:2,truncated:true,excerpts:[]}}}]}/>);
+  assert.match(limited,/>Limited capture<\/span>/);
 });
 
 test("privacy disclosure is the last summary column and stays aligned with its cell", () => {

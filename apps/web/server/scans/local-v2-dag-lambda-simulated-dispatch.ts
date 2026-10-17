@@ -91,7 +91,7 @@ class LocalDiskS3ReadClient {
 
 type LocalParityArgsPayload = Pick<
   LocalV2DagLambdaDispatchPayload,
-  "resourceInventoryCrawl" | "resourceInventoryDiscovery" | "awsRegion" | "debugOverrides" | "gpcObservation" | "postAcceptObservation" | "postRefusalObservation" | "runtimeGraph" | "profile" | "scanId" | "targetUrl"
+  "resourceInventoryCrawl" | "resourceInventoryDiscovery" | "awsRegion" | "debugOverrides" | "gpcObservation" | "postAcceptObservation" | "postRefusalObservation" | "saleSharingOptOut" | "runtimeGraph" | "profile" | "scanId" | "targetUrl"
 >;
 
 export function buildLocalV2DagSimulatedLambdaArgs(input: {
@@ -143,6 +143,9 @@ export function buildLocalV2DagSimulatedLambdaArgs(input: {
   }
   if (input.payload.postAcceptObservation?.enabled === true) {
     args.push("--post-accept-config", JSON.stringify(input.payload.postAcceptObservation));
+  }
+  if (input.payload.saleSharingOptOut?.enabled === true) {
+    args.push("--sale-sharing-opt-out-config", JSON.stringify(input.payload.saleSharingOptOut));
   }
   return args;
 }

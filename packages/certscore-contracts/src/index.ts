@@ -1,3 +1,7 @@
+import {storageReadTraceSchema} from "./storage-read-trace";
+export * from "./storage-read-trace";
+import {runtimeScriptEvidenceSchema} from "./runtime-storage-purpose";
+export * from "./runtime-storage-purpose";
 import { verifiedSaleSharingOptOutSchema, saleSharingOptOutLaneOutcomeSchema, type SaleSharingOptOutLaneOutcome, type VerifiedSaleSharingOptOut } from "./sale-sharing-opt-out";
 export * from "./sale-sharing-opt-out";
 import { cookieClassificationSchema } from "./cookie-classification";
@@ -558,6 +562,7 @@ export const networkEventSchema = runtimeEvidenceEventSchema.extend({
 
 export const networkResponseEventSchema = runtimeEvidenceEventSchema.extend({
   eventType: z.literal("network_response"),
+  metadataCapture: z.enum(["pending", "complete", "limited"]).optional(),
   requestId: z.string().optional(),
   responseUrl: z.string(),
   normalizedUrl: z.string().optional(),
@@ -662,6 +667,7 @@ export const storageCaptureContextSchema = z.object({
 });
 
 export const storageSnapshotSchema = z.object({
+  scenario:z.string().min(1).max(80).optional(),
   captureContext: storageCaptureContextSchema.optional(),
   artifactId: z.string(),
   capturedAtMs: z.number().int().nonnegative(),
@@ -2004,6 +2010,7 @@ export const policySurfaceObservationSchema = z.object({
   retrievedAt: z.string().datetime().optional(),
   effectiveDate: z.string().max(80).optional(),
   directlyLinkedFromScannedPage: z.boolean().optional(),
+  documentLanguage: z.string().min(1).max(40).optional(),
   translationApplied: z.boolean().optional(),
   translationTargetLanguage: z.string().max(40).optional(),
   textExcerpt: z.string().optional(),
@@ -2608,6 +2615,7 @@ export const policyNegativeSearchEvidenceSchema: z.ZodType<PolicyNegativeSearchE
 });
 
 export const policySurfaceInspectionOutcomeSchema = z.object({
+  californiaReviewPolicy: z.enum(["california-privacy-review.v2","california-privacy-review.v3","california-privacy-review.v4","california-privacy-review.v5","california-privacy-review.v6","california-privacy-review.v7","california-privacy-review.v8","california-privacy-review.v9","california-privacy-review.v10"]).optional(),
   privacyChoiceInspection: privacyChoiceInspectionSchema.optional(),
   outcome: z.enum([
     "privacy_policy_observed",
@@ -2663,6 +2671,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
   normalizedUrl?: string;
   negativeSearchEvidence?: PolicyNegativeSearchEvidence;
   privacyChoiceInspection?: PrivacyChoiceInspection;
+  californiaReviewPolicy?: "california-privacy-review.v2" | "california-privacy-review.v3" | "california-privacy-review.v4" | "california-privacy-review.v5" | "california-privacy-review.v6" | "california-privacy-review.v7" | "california-privacy-review.v8" | "california-privacy-review.v9" | "california-privacy-review.v10";
   policySurfaceObservations?: z.infer<typeof policySurfaceObservationSchema>[];
 }) {
   const observations = input.policySurfaceObservations ?? [];
@@ -2737,6 +2746,7 @@ export function derivePolicySurfaceInspectionOutcome(input: {
       : "indeterminate_limited_coverage" as const;
 
   return policySurfaceInspectionOutcomeSchema.parse({
+    californiaReviewPolicy: input.californiaReviewPolicy,
     privacyChoiceInspection: input.privacyChoiceInspection,
     outcome,
     ...(negativeSearchCoverageVerified ? { negativeSearchEvidence } : {}),
@@ -3477,6 +3487,8 @@ const canonicalEvidenceBundleObjectSchema = z.object({
   cookieSnapshots: z.array(cookieSnapshotSchema),
   storageSnapshots: z.array(storageSnapshotSchema),
   scriptEvents: z.array(scriptEventSchema),
+  runtimeScriptEvidence: z.array(runtimeScriptEvidenceSchema).max(8).optional(),
+  storageReadTrace: storageReadTraceSchema.optional(),
   iframeEvents: z.array(iframeEventSchema),
   consentUiObservations: z.array(canonicalConsentUiObservationSchema),
   collectionSurfaceObservations: z.array(collectionSurfaceObservationSchema).default([]),

@@ -164,10 +164,7 @@ export type UnifiedFindingDetails =
       family: "privacy_signal";
       kind: "gpc_response";
       activityComparison?: import("@certscore/contracts").GpcActivityComparison;
-      assessment: Pick<
-        GpcResponseAssessment,
-        "contractVersion" | "generatedAt" | "status" | "findingTitle" | "scoreEffect" | "legalInterpretation" | "comparison"
-      >;
+      assessment: GpcResponseAssessment;
     }
   | {
       family: "consent_tracking";

@@ -1,6 +1,7 @@
+import { createCmpInitializationTracker, CMP_INITIALIZATION_SETTLE_POLICY } from "../cmp-initialization-settle.js";
 import {installPassiveTermlyInventoryCapture} from "../termly-network-inventory.js";
 import {cmpBasicEvidenceSchema,projectNetworkCmpCookies} from "@certscore/contracts";
-import { captureCmpBasicEvidence, finishPassiveCmpPrivacyLinks, usesDeferredPassivePrivacyLinks } from "../cmp-basic-capture.js";
+import { captureCmpBasicEvidence, isCmpBasicCaptureReady, summarizeCmpTransport, finishPassiveCmpPrivacyLinks, usesDeferredPassivePrivacyLinks } from "../cmp-basic-capture.js";
 import type { CmpBasicEvidence } from "@certscore/contracts";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
 import { EVIDENCE_WORK_POLICY, optionalEvidenceAllowance } from "../evidence-work-budget.js";
@@ -139,6 +140,7 @@ import {
 } from "../passive-evidence-quiet-window.js";
 import {
   RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS,
+  PAIRED_RUNTIME_SETTLE_MAX_MS,
   waitForLoadingRuntimeDocument,
   type RuntimeDocumentSettleResult,
 } from "../runtime-document-settle.js";
@@ -282,7 +284,7 @@ export interface PreConsentRuntimeScannerInput {
   retainRenderedPolicyRecoverySession?: boolean;
   onLifecycleCheckpoint?: (checkpoint: {
     atMs: number;
-    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation";
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation" | "passive_quiet_gate_started";
     status: "started" | "completed";
   }) => void;
   signal?: AbortSignal;
@@ -569,6 +571,8 @@ export interface PreConsentRuntimeScannerResult {
   gpcImpactCapture?: GpcImpactCapture;
   gpcImpactSemanticObservation?: GpcOptOutObservation;
   runtimeEvidenceGraph?: RuntimeEvidenceGraph;
+  runtimeScriptEvidence?: import("@certscore/contracts").RuntimeScriptEvidence[];
+  storageReadTrace?: import("@certscore/contracts").StorageReadTrace;
   moduleRun: ScanModuleRun;
   runtimeTimeline: RuntimeEvidenceEvent[];
   networkEvents: NetworkEvent[];
@@ -626,7 +630,7 @@ export async function preConsentRuntimeScanner(
   const moduleDeadlineAtMs = moduleStartedAtMs + input.internalBudgetMs;
   const moduleStartedAt = new Date(moduleStartedAtMs).toISOString();
   const lifecycleCheckpoint = (
-    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation",
+    label: "scanner_started" | "browser_launch" | "browser_context" | "probe_install" | "page_navigation" | "passive_quiet_gate_started",
     status: "started" | "completed",
   ) => {
     try {
@@ -644,8 +648,10 @@ export async function preConsentRuntimeScanner(
   const captureRenderedPolicyEvidence = captureScope === "combined";
   const requiredAccessibility = Boolean(input.accessibilityScanId && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only");
   const requiredTailReserveMs = requiredAccessibility ? ACCESSIBILITY_AUDIT_BUDGET_MS : 0;
+  const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
   const impactCapture = captureScope === "runtime_evidence" && input.executionProfile !== "inventory_only" ? createGpcImpactCapture({
     expectedEnabled: input.globalPrivacyControlEnabled === true, now: () => elapsed(input.scanStartedAtMs),
+    quietSnapshot: () => passiveEvidenceActivity.snapshot(),
   }) : undefined;
   const screenshotMode = captureConsentEvidence
     ? input.screenshotMode ?? "always"
@@ -660,14 +666,15 @@ export async function preConsentRuntimeScanner(
   const scriptEvents: ScriptEvent[] = [];
   const iframeEvents: IframeEvent[] = [];
   const browserApiAccessEvents: RuntimeEvidenceEvent[] = [];
-  const failedHttpRequests: Array<{ url: string; resourceType?: string; failureText?: string; pageUrl?: string }> = [];
+  const failedHttpRequests: Array<{ requestId?: string; url: string; resourceType?: string; failureText?: string; pageUrl?: string }> = [];
   const mixedContentConsoleMessages: string[] = [];
   const vendorResolverInputs: VendorResolverInput[] = [];
   const runtimeErrors: string[] = [];
   const screenshotErrors: string[] = [];
   const navigationNotes: string[] = [];
-  const passiveEvidenceActivity = createPassiveEvidenceActivityTracker();
+
   const requestIds = new WeakMap<Request, string>();
+  const guardPhases = new Map<string, "validation_pending" | "validated" | "denied">();
   const requestEvents = new WeakMap<Request, NetworkEvent>();
   const pendingResponseCaptures = new Set<Promise<void>>();
   let responseCaptureFinalized = false;
@@ -716,6 +723,11 @@ export async function preConsentRuntimeScanner(
   });
   lifecycleCheckpoint("browser_context", "completed");
   const page = context.newPage;
+  const cmpInitialization = captureScope === "consent_proof" ? createCmpInitializationTracker({
+    readBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token }),
+    isCurrent: () => !input.signal?.aborted && remainingModuleBudgetMs() > 0,
+    signal: input.signal,
+  }) : undefined;
   if (input.captureScope === "consent_proof") await installBorlabsDeferredDialogReveal(page);
   let prominenceSettleAttempted = false;
   const settleConsentProminence = async (pairObserved: boolean) => {
@@ -734,7 +746,7 @@ export async function preConsentRuntimeScanner(
   };
   const browserContext = context.newContext;
   let consentFrameRevision = 0;
-  const recordConsentFrameChange = () => { consentFrameRevision += 1; };
+  const recordConsentFrameChange = () => { consentFrameRevision += 1; cmpInitialization?.notifyBindingChanged(); };
   page.on("framenavigated", recordConsentFrameChange);
   page.on("frameattached", recordConsentFrameChange);
   page.on("framedetached", recordConsentFrameChange);
@@ -855,7 +867,12 @@ export async function preConsentRuntimeScanner(
     });
   }
   const webBotAuthRoute = await installWebBotAuthRoute(browserContext);
-  await installPublicNetworkGuardRoute(browserContext);
+  await installPublicNetworkGuardRoute(browserContext, {
+    onRequestPhase: captureConsentEvidence ? (request, phase) => {
+      const id = requestIds.get(request);
+      if (id && (guardPhases.has(id) || guardPhases.size < 2000)) guardPhases.set(id, phase);
+    } : undefined,
+  });
 
   const formTracing = captureScope === "runtime_evidence" ? await installFormDestinationTracing(page, input.scanStartedAtMs, () => currentBrowserDocumentIdentity(page)).catch(() => null) : null;
 
@@ -975,6 +992,7 @@ export async function preConsentRuntimeScanner(
     if (googleConsentMode) event.googleConsentMode = googleConsentMode;
     formTracing?.request(requestId, requestUrl, request.method(), event.timestampMs, request.postData(), currentBrowserDocumentIdentity(page)?.token ?? "");
     networkEvents.push(event);
+    cmpInitialization?.recordRequest(event);
     impactCapture?.recordRequest(event);
     gpcObservationSession?.recordRequest(event, request);
     requestEvents.set(request, event);
@@ -997,6 +1015,7 @@ export async function preConsentRuntimeScanner(
 
   page.on("response", (response) => {
     const formRequestId = requestIds.get(response.request());
+    cmpInitialization?.recordResponse(formRequestId, response.status());
     if (formRequestId) formTracing?.status(formRequestId, "response_observed");
     if (responseCaptureFinalized) return;
     if (isHttpUrl(response.url())) passiveEvidenceActivity.noteActivity();
@@ -1006,11 +1025,17 @@ export async function preConsentRuntimeScanner(
     pendingResponseCaptures.add(capture);
   });
   page.on("requestfinished", (request) => {
+    if (!responseCaptureFinalized) {
+      cmpInitialization?.finish(requestIds.get(request), "completed");
+      if (cmpInitialization) startCmpBasicCapture();
+    }
     if (isHttpUrl(request.url())) passiveEvidenceActivity.markRequestFinished(request);
   });
   page.on("requestfailed", (request) => {
     if (responseCaptureFinalized) return;
     const formRequestId = requestIds.get(request);
+    cmpInitialization?.finish(formRequestId, "failed");
+    if (cmpInitialization) startCmpBasicCapture();
     if (formRequestId) formTracing?.status(formRequestId, "failed");
     const requestUrl = request.url();
     if (!isHttpUrl(requestUrl)) {
@@ -1018,6 +1043,7 @@ export async function preConsentRuntimeScanner(
     }
     passiveEvidenceActivity.markRequestFinished(request);
     failedHttpRequests.push({
+      requestId: requestIds.get(request),
       failureText: request.failure()?.errorText,
       pageUrl: request.frame().url() === "about:blank" ? page.url() : request.frame().url(),
       resourceType: request.resourceType(),
@@ -1106,6 +1132,7 @@ export async function preConsentRuntimeScanner(
   let retainedConsentUiObservation: ConsentUiObservation | undefined;
   let retainedCmpBasicEvidence: CmpBasicEvidence | undefined;
   let cmpBasicCaptureStarted = false;
+  let cmpBasicLateInspectionComplete = false;
   let cmpBasicCaptureClosed=false;
   let cmpBasicCaptureElapsedMs=350;
   const currentCmpBasicEvidence = () => {
@@ -1121,12 +1148,24 @@ export async function preConsentRuntimeScanner(
       if(parsed.success)retainedCmpBasicEvidence=parsed.data;
     }
     cmpBasicCaptureClosed=true;
+    cmpInitialization?.close();
     const identity = currentBrowserDocumentIdentity(page);
     return retainedCmpBasicEvidence?.documentToken === identity?.token && retainedCmpBasicEvidence?.documentUrl === page.url()
       ? retainedCmpBasicEvidence : undefined;
   };
   const startCmpBasicCapture = () => {
-    if (!retainedConsentUiObservation?.controls.some(control => control.visible !== false) || !input.cmpBasicScanId || !captureConsentEvidence || cmpBasicCaptureStarted || remainingModuleBudgetMs() < 250) return;
+    if (cmpBasicCaptureClosed || !input.cmpBasicScanId || !captureConsentEvidence || cmpBasicCaptureStarted || remainingModuleBudgetMs() < 250) return;
+    const readiness = {
+      controlsObserved: retainedConsentUiObservation?.controls.some(control => control.visible !== false) ?? false,
+      runtimeObservations: retainedCmpRuntimeObservations,
+      lateInspectionComplete: cmpBasicLateInspectionComplete,
+    };
+    if (!isCmpBasicCaptureReady(readiness)) return;
+    // Keep the one read available while a registered SDK/configuration request
+    // is pending. Existing finish events may schedule it during normal remaining
+    // proof work; they never add a read, wait, retry or late publication.
+    if (!isCmpBasicCaptureReady({ ...readiness, lateInspectionComplete: false }) &&
+        (cmpInitialization?.snapshot().pending ?? 0) > 0) return;
     cmpBasicCaptureStarted = true;
     const basicStartedAt = Date.now();
     const deadline = basicStartedAt + Math.min(remainingModuleBudgetMs(), 350);
@@ -1765,6 +1804,7 @@ export async function preConsentRuntimeScanner(
         "Dedicated consent-proof lane does not duplicate runtime transport capture.",
       );
     }
+    lifecycleCheckpoint("passive_quiet_gate_started", "started");
     let evidenceQuietCompleted = false;
     const evidenceQuietPromise = recordTiming(
       timingBreakdown,
@@ -2260,16 +2300,30 @@ export async function preConsentRuntimeScanner(
         timingBreakdown,
         "runtime loading document settle",
         "Loading documents or an unfinished initial request gate: await DOMContentLoaded and the existing 250ms request quiet interval, capped at 10000ms inside existing deadlines.",
-        () => waitForLoadingRuntimeDocument({
-          // Form image capture is owned by baseline runtime. Do not extend the
-          // independently frozen GPC comparison or non-visual runtime protocol.
-          awaitPendingActivity: !input.globalPrivacyControlEnabled &&
-            Boolean(input.formSnapshotReviewer) && initialQuietResult.status === "timed_out",
-          page,
-          signal: input.signal,
-          timeoutMs: Math.min(RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS, remainingModuleBudgetMs() - 2_500),
-          tracker: passiveEvidenceActivity,
-        }),
+        async () => {
+          const settleStarted=Date.now();
+          const originalAllowance=Math.min(RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS,remainingModuleBudgetMs()-2_500);
+          const awaitFormActivity=!input.globalPrivacyControlEnabled && Boolean(input.formSnapshotReviewer);
+          if (initialQuietResult.status === "timed_out") {
+            const paired=await recordTiming(timingBreakdown,
+              "paired passive comparison settle",
+              "Both baseline and GPC may finish pending activity for at most 3000ms after the first gate times out; stop at verified 250ms quiet without another session or retry.",
+              () => waitForLoadingRuntimeDocument({page,signal:input.signal,
+                timeoutMs:Math.min(PAIRED_RUNTIME_SETTLE_MAX_MS,originalAllowance),
+                tracker:passiveEvidenceActivity,awaitPendingActivity:true}),
+              value=>value.status === "already_ready"?"skipped":value.status === "settled"?"completed":value.status === "timed_out"?"timed_out":"failed");
+            if (paired.status !== "timed_out" || (paired.pendingActivityOnly && !awaitFormActivity)) return paired;
+            const continuationBudget=Math.min(originalAllowance-(Date.now()-settleStarted),remainingModuleBudgetMs()-2_500);
+            if (continuationBudget <= 0) return paired;
+            // Keep the prior parser/form allowance, subtracting time already
+            // spent above. GPC's parsed pending-only case stops after 3 seconds.
+            const continuation=await waitForLoadingRuntimeDocument({page,signal:input.signal,
+              timeoutMs:continuationBudget,tracker:passiveEvidenceActivity,awaitPendingActivity:awaitFormActivity});
+            return {...continuation,elapsedMs:Date.now()-settleStarted};
+          }
+          return waitForLoadingRuntimeDocument({page,signal:input.signal,timeoutMs:originalAllowance,
+            tracker:passiveEvidenceActivity});
+        },
         result => result.status === "already_ready" ? "skipped"
           : result.status === "settled" ? "completed"
           : result.status === "timed_out" ? "timed_out" : "failed",
@@ -2877,6 +2931,7 @@ export async function preConsentRuntimeScanner(
         cmpRuntimeObservations,
         initialObservation: consentObservation,
         navigationStartedAtMs,
+        settlePendingCmpInitialization: cmpInitialization ? deadline => cmpInitialization.waitForReady(deadline) : undefined,
         resolveStablePartialProofPacket,
         stablePartialProofPacket: stablePartialProofPacketBeforeAdaptiveGate,
         beforeInventory: revealDeferredDialog,
@@ -3432,6 +3487,12 @@ export async function preConsentRuntimeScanner(
         "Protected settled same-document viewport evidence is already paired with a completed typed first-layer control inventory; below-fold geometry can still request a bounded full-page capture later.",
       );
     }
+    // Loader-only recognition must not consume its one read while the SDK is
+    // still initializing. Reuse the already-required late visual/inventory work,
+    // then overlap the same 350ms read with the remaining geometry/finalization.
+    // There is no retry, extra settle, join or extension of the module deadline.
+    cmpBasicLateInspectionComplete = true;
+    startCmpBasicCapture();
     const completedGeometryNegativeWithOnlyRejectedNonSurfaceCandidates =
       consentObservation.controls.length === 0 &&
       consentObservation.inventoryOutcome === "complete_empty" &&
@@ -4324,6 +4385,22 @@ export async function preConsentRuntimeScanner(
       // evidence is already frozen and audited before any masking begins.
       if (!formPixelWorkCompleted) await boundedCleanup(pixelWork, Math.max(0, optionalDeadline - Date.now()));
     }
+    if (cmpInitialization) recordInstantTiming(timingBreakdown, "passive CMP initialization", JSON.stringify(cmpInitialization.snapshot()));
+    if (captureConsentEvidence && retainedCmpRuntimeObservations.length) {
+      const cmpSourceIds = new Set(retainedCmpRuntimeObservations.flatMap(observation => observation.signals.flatMap(signal =>
+        signal.sourceEventId ? [signal.sourceEventId] : [])));
+      const cmpRequests = networkEvents.filter(request => cmpSourceIds.has(request.eventId));
+      recordInstantTiming(timingBreakdown, "passive CMP guard", JSON.stringify({ version: "cmp_guard.v1",
+        pending: cmpRequests.filter(request => guardPhases.get(request.requestId) === "validation_pending").length,
+        validated: cmpRequests.filter(request => guardPhases.get(request.requestId) === "validated").length,
+        denied: cmpRequests.filter(request => guardPhases.get(request.requestId) === "denied").length,
+        unknown: cmpRequests.filter(request => !guardPhases.has(request.requestId)).length,
+      }));
+      recordInstantTiming(timingBreakdown, "passive CMP transport", JSON.stringify(summarizeCmpTransport({
+        observations: retainedCmpRuntimeObservations, requests: networkEvents,
+        responses: networkResponseEvents, failures: failedHttpRequests,
+      })));
+    }
     recordInstantTiming(timingBreakdown, "evidence work priority", JSON.stringify({
       policy: EVIDENCE_WORK_POLICY.version, requiredAccessibility,
       accessibilityBudgetMs: requiredAccessibility ? accessibilityBudgetMs : 0,
@@ -4365,6 +4442,8 @@ export async function preConsentRuntimeScanner(
       cmpBasicEvidence: currentCmpBasicEvidence(),
       collectionSurfaceSnapshots,
       runtimeEvidenceGraph: finalizedProxyGraph ?? finishGraph(),
+      runtimeScriptEvidence: graphCapture?.scriptEvidence(),
+      storageReadTrace: graphCapture?.storageReadTrace(),
       moduleRun: {
         moduleName: "preConsentRuntimeScanner",
         status: runtimeErrors.length > 0 || screenshotErrors.length > 0 ? "partial" : "completed",
@@ -4589,13 +4668,29 @@ export async function preConsentRuntimeScanner(
       return;
     }
 
-    const headers = await response.allHeaders().catch(() => response.headers());
     const request = response.request();
     const requestId = requestIds.get(request);
     const requestEvent = requestEvents.get(request);
     const hostname = getHostname(responseUrl) ?? undefined;
     const registrableDomain = getRegistrableDomain(hostname) ?? undefined;
     const party = classifyHostnameParty(hostname, firstPartyHostname);
+    // Status and request identity are already observed by the response event.
+    // Retain them before any asynchronous header/destination read can stall.
+    // Empty metadata here is not proof that no Set-Cookie header was sent.
+    const responseEvent: NetworkResponseEvent = {
+      eventId: nextId("resp"), eventType: "network_response", requestId, metadataCapture: "pending",
+      timestampMs: elapsed(input.scanStartedAtMs), sourceScanner: SOURCE_SCANNER,
+      scenario: SCENARIO, consentStateAtTime: "pre_consent", pagePhase: "initial_navigation",
+      url: responseUrl, responseUrl, hostname, registrableDomain,
+      firstParty: party === "first_party", thirdParty: party === "third_party",
+      topLevelUrl: page.url() === "about:blank" ? input.normalizedUrl : page.url(),
+      documentUrl: requestEvent?.documentUrl, evidenceRefs: [], confidence: 0.95, directVsInferred: "direct",
+      status: response.status(), setCookieHeaders: [], setCookieMetadata: [], cookieNamesSet: [],
+      cacheHeaders: {}, accessControlHeaders: {},
+    };
+    networkResponseEvents.push(responseEvent);
+    let headersComplete = true;
+    const headers = await response.allHeaders().catch(() => { headersComplete = false; return response.headers(); });
     // Retain the bounded main-frame navigation chain, including cross-registrable-domain
     // canonical redirects such as allegro.com -> allegro.pl. Subresources and child
     // frames remain excluded from target infrastructure attribution.
@@ -4607,6 +4702,7 @@ export async function preConsentRuntimeScanner(
       });
     }
     const setCookieHeaders = await response.headerValues("set-cookie").catch(() => {
+      headersComplete = false;
       const setCookieHeader = headers["set-cookie"];
       return setCookieHeader ? [setCookieHeader] : [];
     });
@@ -4622,26 +4718,8 @@ export async function preConsentRuntimeScanner(
       .filter((metadata) => isValidSetCookieDomainForResponse(metadata.domain, hostname));
     const safeHeaders = safeResponseHeaders(headers);
     const timing = responseTiming(response);
-    const responseEvent: NetworkResponseEvent = {
-      eventId: nextId("resp"),
-      eventType: "network_response",
-      requestId,
-      timestampMs: elapsed(input.scanStartedAtMs),
-      sourceScanner: SOURCE_SCANNER,
-      scenario: SCENARIO,
-      consentStateAtTime: "pre_consent",
-      pagePhase: "initial_navigation",
-      url: responseUrl,
-      hostname,
-      registrableDomain,
-      firstParty: party === "first_party",
-      thirdParty: party === "third_party",
-      topLevelUrl: page.url() === "about:blank" ? input.normalizedUrl : page.url(),
-      documentUrl: requestEvent?.documentUrl,
-      evidenceRefs: [],
-      confidence: 0.95,
-      directVsInferred: "direct",
-      responseUrl,
+    Object.assign(responseEvent, {
+      metadataCapture: headersComplete ? "complete" : "limited",
       normalizedUrl: normalizeUrlSafely(responseUrl),
       status: response.status(),
       contentType: headers["content-type"],
@@ -4660,7 +4738,7 @@ export async function preConsentRuntimeScanner(
         "access-control-expose-headers",
       ]),
       timing,
-    };
+    });
     const enrichment = retainDirectResponseWithOptionalEnrichment({
       rows: networkResponseEvents, direct: responseEvent, finalized: () => responseCaptureFinalized,
       enrichments: [
@@ -4963,6 +5041,7 @@ function isContextClosedError(error: unknown): boolean {
 
 function emptyStorageSnapshot(scanStartedAtMs: number, url: string): StorageSnapshot {
   return {
+    scenario: SCENARIO,
     artifactId: "storage_snapshot_pre_consent",
     capturedAtMs: elapsed(scanStartedAtMs),
     consentStateAtTime: "pre_consent",
@@ -5885,14 +5964,14 @@ export async function captureConsolidatedPageEvidenceSnapshot(page: Page, captur
     // Public notice text only: never read entered values or page-wide footer text.
     let disclosureBytes = 0;
     let disclosureRemainingMs = 5;
-    const disclosureCache = new WeakMap<Element, { version: 1; excerpts: Array<{ text: string; association: "inside_form" | "adjacent_notice" | "described_by"; links: Array<{ label: string; url: string }> }>; truncated: boolean }>();
+    const disclosureCache = new WeakMap<Element, { version: 2; excerpts: Array<{ text: string; association: "inside_form" | "adjacent_notice" | "described_by"; links: Array<{ label: string; url: string }> }>; truncated: boolean }>();
     const disclosureFor = (group: Element | null) => {
       if (!group) return undefined;
       const cached = disclosureCache.get(group);
-      if (cached) return cached.excerpts.length ? cached : undefined;
-      const result: NonNullable<ReturnType<typeof disclosureCache.get>> = { version: 1, excerpts: [], truncated: false };
+      if (cached) return cached;
+      const result: NonNullable<ReturnType<typeof disclosureCache.get>> = { version: 2, excerpts: [], truncated: false };
       disclosureCache.set(group, result);
-      if (disclosureRemainingMs <= 0) return undefined;
+      if (disclosureRemainingMs <= 0) { result.truncated = true; return result; }
       const disclosureStarted = performance.now();
       const disclosureDeadline = disclosureStarted + disclosureRemainingMs;
       try {
@@ -5900,7 +5979,9 @@ export async function captureConsolidatedPageEvidenceSnapshot(page: Page, captur
         const blocks = group.querySelectorAll('p, label, small, [role="note"], a[href]');
         for (let i = 0; i < Math.min(blocks.length, 40); i++) candidates.push({ node: blocks[i]!, association: "inside_form" });
         result.truncated = blocks.length > 40;
-        for (const id of (group.getAttribute("aria-describedby") ?? "").split(/\s+/).slice(0, 4)) {
+        const describedByIds=(group.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
+        if(describedByIds.length>4) result.truncated=true;
+        for (const id of describedByIds.slice(0, 4)) {
           const node = document.getElementById(id);
           if (node) candidates.push({ node, association: "described_by" });
         }
@@ -5926,6 +6007,7 @@ export async function captureConsolidatedPageEvidenceSnapshot(page: Page, captur
             pieces.push((textNode.textContent ?? "").slice(0, 700));
           }
           const original = pieces.join(" ").replace(/\s+/g, " ").trim();
+          if (visited >= 80) result.truncated = true;
           const normalized = original.toLocaleLowerCase();
           if (!original || !privacyHints.some(hint => normalized.includes(hint))) continue;
           if (result.excerpts.length >= 2) { result.truncated = true; break; }
@@ -5953,7 +6035,9 @@ export async function captureConsolidatedPageEvidenceSnapshot(page: Page, captur
           result.truncated = next.truncated;
           retained.push(node);
         }
-        return result.excerpts.length ? result : undefined;
+        // Preserve a completed empty inspection separately from unavailable or
+        // truncated capture. This is scoped form evidence, not a legal finding.
+        return result;
       } finally {
         // Share five milliseconds of disclosure work across forms. Layout and
         // ordinary field inspection between calls must not spend that budget.
@@ -6280,6 +6364,7 @@ function consolidatedPageEvidenceFromSnapshot(
   },
 ) {
   const storageSnapshot: StorageSnapshot = {
+    scenario: SCENARIO,
     artifactId: "storage_snapshot_pre_consent",
     capturedAtMs: elapsed(input.scanStartedAtMs),
     consentStateAtTime: "pre_consent",
@@ -6454,6 +6539,7 @@ async function captureStorageSnapshot(
   }).catch(() => ({ localStorageEntries: {}, sessionStorageEntries: {}, localStorageKeys: [] as string[], sessionStorageKeys: [] as string[], pageUrl: url, storageOrigin: null }));
 
   return {
+    scenario: SCENARIO,
     artifactId: "storage_snapshot_pre_consent",
     capturedAtMs: elapsed(scanStartedAtMs),
     consentStateAtTime: "pre_consent",
@@ -6887,11 +6973,12 @@ async function readConsentGateSemanticCheckpoint(input: {
   } finally { retention.close(); }
 }
 
-async function detectConsentUiWithAdaptiveCmpGates(input: {
+export async function detectConsentUiWithAdaptiveCmpGates(input: {
   auditHoldout?: boolean;
   cmpRuntimeObservations: CmpRuntimeObservation[];
   initialObservation: ConsentUiObservation;
   navigationStartedAtMs: number;
+  settlePendingCmpInitialization?: (deadlineAtMs: number) => Promise<{ outcome: string; durationMs: number }>;
   stablePartialProofPacket: boolean;
   resolveStablePartialProofPacket?: (observation: ConsentUiObservation) => boolean;
   onTenSecondGate?: () => Promise<ConsentUiObservation>;
@@ -7110,6 +7197,17 @@ async function detectConsentUiWithAdaptiveCmpGates(input: {
       checkpointMs >= CONSENT_GATE_STRONG_CMP_FLOOR_MS &&
       current.controls.length === 0
     ) {
+      if (input.settlePendingCmpInitialization) {
+        const settled = await input.settlePendingCmpInitialization(Math.min(
+          input.deadlineAtMs, input.navigationStartedAtMs + CONSENT_GATE_HARD_CAP_MS,
+        ));
+        if (settled.durationMs > 0) input.timingBreakdown.push({
+          label: "conditional CMP initialization settle",
+          durationMs: settled.durationMs,
+          outcome: settled.outcome === "settled" ? "completed" : settled.outcome === "budget_exhausted" ? "timed_out" : "skipped",
+          detail: `${CMP_INITIALIZATION_SETTLE_POLICY.version}; outcome=${settled.outcome}; maximumWaitMs=${CMP_INITIALIZATION_SETTLE_POLICY.maxWaitMs}; hardCapMs=${CONSENT_GATE_HARD_CAP_MS}`,
+        });
+      }
       return finish(snapshot, gate, "strong_cmp_no_control_progress_exit", progress);
     }
     if (

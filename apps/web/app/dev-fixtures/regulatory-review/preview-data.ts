@@ -4,6 +4,8 @@ import type { CaliforniaPrivacyReview } from "@certscore/contracts";
 
 // Presentation fixtures only: no observation, concern, finding, score or scan is persisted.
 const summaries: Record<string, string> = {
+  "california-gpc-choice":"The illustrative canonical finding retains verified GPC receipt with an applicable opt-out remaining off. Review how the recorded choice reaches relevant services.",
+  "california-rights-disclosure":"Complete retained English policy inspection found no candidate wording for a core privacy-rights disclosure topic. The California posture assumes CCPA applies; request handling remains untested.",
   "california-opt-out-activity": "Advertising-classified responses were retained after an explicit, recorded sale/sharing opt-out in this illustrative 500 ms window. Legal sale/sharing status requires review.",
   "california-choice": "A complete inspection found no named sale/sharing choice in rendered links and buttons. Applicability and alternative methods still need review.",
   "california-destination": "The retained privacy-choice destination returned HTTP 404 in this illustrative result.",

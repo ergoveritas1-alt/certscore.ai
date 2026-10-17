@@ -163,3 +163,17 @@ test("a short-window measurement stays hidden while its original evidence is pre
   assert.equal(buildGpcResponseReportProjection([before]), null);
   assert.deepEqual(finding.scoreEffects, before.scoreEffects);
 });
+
+test("a complete empty pair reports no qualifying activity rather than a failed or unverified response",async()=>{
+  const {gpcRuntimeFixture}=await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const {buildGpcResponseAssessment}=await import("../../../../../packages/certscore-scan-core/src/gpc-response-assessment");
+  const pointer={uri:"s3://fixture/base.json",sha256:"a".repeat(64),sizeBytes:100};
+  const assessment=buildGpcResponseAssessment({baseline:gpcRuntimeFixture({enabled:false}),gpc:gpcRuntimeFixture({enabled:true}),
+    baselineArtifact:pointer,gpcArtifact:{...pointer,uri:"s3://fixture/gpc.json"}});
+  const presentation=describeCanonicalGpcResponse(assessment);
+  assert.equal(assessment.comparison.comparable,true);
+  assert.equal(presentation.comparisonHeadline,"No qualifying tracking activity observed");
+  assert.doesNotMatch(presentation.coverageSummary,/honor|compliant|ignored|incomplete/i);
+  const limited=structuredClone(assessment);limited.comparison.comparable=false;limited.status="indeterminate";
+  assert.notEqual(describeCanonicalGpcResponse(limited).comparisonHeadline,presentation.comparisonHeadline);
+});

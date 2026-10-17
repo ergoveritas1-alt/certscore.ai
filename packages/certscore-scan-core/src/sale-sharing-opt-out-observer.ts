@@ -1,11 +1,13 @@
+import {createHash} from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 import { classifyConsentControlLabel, saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, type SaleSharingOptOutDispatch, type SaleSharingOptOutEvidence } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
-import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import { CANONICAL_VENDOR_RESOLVER_VERSION, resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
 import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 import { dispatchLocatorClickWithVerifiedGeometry } from "./cmp-control-actionability.js";
+import {isCollectionEndpoint} from "./scanners/pre-consent-runtime-scanner.js";
 import { parseGpcGppPing } from "./gpc-gpp-parser.js";
 
 /** Explicit visitor choice only. No GPC injection, cookie Reject, arbitrary form,
@@ -20,6 +22,7 @@ export async function runSaleSharingOptOutObserver(input: {
     actionCount:0,submitted:false,registration:"not_attempted",confirmedAt:null,before:null,after:null,
     observationWindowMs:0,captureComplete:false,truncated:false,requests:[],limitations:[]};
   let browser=input.browser, context:BrowserContext|undefined, expired=false, changed=false;
+  let stage: "browser_launch"|"context_setup"|"navigation"|"document_binding"|"recipe_inspection"|"choice_action"|"post_choice_capture" = "browser_launch";
   const cancel=()=>{expired=true;void context?.close().catch(()=>undefined);if(!input.browser)void browser?.close().catch(()=>undefined);};
   const timer=setTimeout(cancel,SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS);
   input.signal?.addEventListener("abort",cancel,{once:true});
@@ -27,6 +30,7 @@ export async function runSaleSharingOptOutObserver(input: {
   try {
     remaining();
     browser??=await chromium.launch({...chromiumLaunchOptions({headless:true}),timeout:remaining()});
+    stage="context_setup";
     remaining(); context=await browser.newContext(chromiumContextOptions());remaining();
     await installWebBotAuthRoute(context);await installPublicNetworkGuardRoute(context);
     const page=await context.newPage();page.setDefaultTimeout(remaining());
@@ -35,13 +39,16 @@ export async function runSaleSharingOptOutObserver(input: {
       else await route.fallback();
     });
     context.on("page",newPage=>{if(newPage!==page)void newPage.close();});
+    stage="navigation";
     const response=await page.goto(config.exactTargetUrl,{waitUntil:"domcontentloaded",timeout:remaining()});
     if(!response || response.status()>=400 || page.url()!==config.exactTargetUrl)throw new Error("document_access_or_target_mismatch");
+    stage="document_binding";
     const cdp=await context.newCDPSession(page);await cdp.send("Page.enable");
     packet.documentToken=(await cdp.send("Page.getFrameTree")).frameTree.frame.loaderId;
     cdp.on("Page.frameNavigated",({frame})=>{if(!frame.parentId && frame.loaderId!==packet.documentToken)changed=true;});
     const bound=async()=>{remaining();if(changed||page.url()!==config.exactTargetUrl || (await cdp.send("Page.getFrameTree")).frameTree.frame.loaderId!==packet.documentToken)throw new Error("document_changed");};
     const readDecision=async()=>{await bound();const value=await readSaleSharingDecision(page);await bound();return value;};
+    stage="recipe_inspection";
     const matches=[];
     for(const definition of KNOWN_CMP_REGISTRY.filter(row=>row.saleSharingOptOut)){
       const recipe=definition.saleSharingOptOut!;
@@ -61,6 +68,7 @@ export async function runSaleSharingOptOutObserver(input: {
       const classified=classifyConsentControlLabel({label,usage:"action",hasConsentContext:true,hasPreferenceContext:true});
       return classified.intent==="privacy_opt_out" && classified.matchStrength==="direct" && (!submit || recipe.submitLabels.includes(normalized));
     };
+    stage="choice_action";
     const dialog=page.locator(recipe.dialogSelector);
     if(await dialog.count()!==1 || !await dialog.isVisible()){
       const entrance=page.locator(recipe.entranceSelector);
@@ -80,6 +88,7 @@ export async function runSaleSharingOptOutObserver(input: {
     await dispatchLocatorClickWithVerifiedGeometry(submit,remaining(),()=>{remaining();if(changed||page.url()!==config.exactTargetUrl)throw new Error("document_changed");});packet.submitted=true;await bound();
     packet.after=await readDecision();
     if(!packet.after || packet.after.sectionId!==packet.before.sectionId || packet.after.sale!==1 || packet.after.sharing!==1){packet.status="limited";packet.limitations.push("sale_sharing_registration_unconfirmed");return finish();}
+    stage="post_choice_capture";
     const confirmed=Date.now();packet.registration="confirmed";packet.confirmedAt=new Date(confirmed).toISOString();
     // Only request dispatches after the confirmation grace period are retained.
     // Host/vendor/purpose only: no query, path, body, cookie or personal values.
@@ -94,7 +103,12 @@ export async function runSaleSharingOptOutObserver(input: {
         const vendor=resolveCanonicalVendor({type:"request",url:request.url(),sourceScanner:"sale-sharing-opt-out",matchSource:"network_request"}).observation;
         if(!vendor || vendor.purpose !== "advertising" || vendor.confidence < 0.9)return;
         if(packet.requests.length===32){packet.truncated=true;return;}
-        packet.requests.push({hostname:url.hostname,vendor:vendor.vendor,purpose:vendor.purpose as "advertising",msAfterConfirmation:elapsed,httpStatus:response.status()});
+        packet.requests.push({hostname:url.hostname,vendor:vendor.vendor,purpose:vendor.purpose as "advertising",msAfterConfirmation:elapsed,httpStatus:response.status(),
+          ...(response.status() < 400 && request.method() !== "OPTIONS" && url.protocol === "https:" &&
+            vendor.registryAttribution?.matchKind === "endpoint" && isCollectionEndpoint(request.url(),request.resourceType()).observed ? {
+              collectionEvidence:{contractVersion:"canonical_advertising_collection.v1" as const,
+                endpointSha256:createHash("sha256").update(request.url()).digest("hex"),registryVersion:CANONICAL_VENDOR_RESOLVER_VERSION,
+                ruleIds:vendor.registryAttribution.ruleIds.slice(0,16)}} : {})});
       }catch{/* Unclassifiable traffic is not an eligible finding. */}
     });
     await page.waitForTimeout(750);await bound();
@@ -102,9 +116,10 @@ export async function runSaleSharingOptOutObserver(input: {
     if(!terminal || terminal.sectionId!==packet.after.sectionId || terminal.sale!==1 || terminal.sharing!==1)throw new Error("decision_changed_during_capture");
     packet.observationWindowMs=500;packet.captureComplete=true;packet.status=packet.truncated?"limited":"complete";
     if(packet.truncated)packet.limitations.push("request_capture_truncated");
-  }catch{
+  }catch(error){
     packet.status="limited";packet.captureComplete=false;packet.requests=[];
-    packet.limitations.push(changed?"document_changed":"observation_incomplete");
+    const budgetExpired=expired || Date.now()>=deadline || (error instanceof Error && error.name === "TimeoutError");
+    packet.limitations.push(changed?"document_changed":input.signal?.aborted?"observation_cancelled":budgetExpired?`${stage}_budget_exhausted`:`${stage}_failed`);
     if(changed){packet.registration=packet.submitted?"unconfirmed":"not_attempted";packet.confirmedAt=null;packet.before=null;packet.after=null;packet.documentToken=null;}
   }finally{clearTimeout(timer);input.signal?.removeEventListener("abort",cancel);await context?.close().catch(()=>undefined);if(!input.browser)await browser?.close().catch(()=>undefined);}
   return finish();

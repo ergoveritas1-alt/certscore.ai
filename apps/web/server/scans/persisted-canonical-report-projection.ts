@@ -1,3 +1,4 @@
+import {hasVerifiedCustomerGpcEvidence} from "../../lib/scans/gpc-customer-policy";
 import { preserveRetainedRejectClickCapture } from "../../lib/scans/retained-reject-click-capture";
 import { projectConsentControlReport, type ConsentControlReport } from "../../lib/scans/consent-control-report";
 import { isAfterActionReportEligible, retainedConsentAssessment } from "../../lib/scans/after-action-report-eligibility";
@@ -136,6 +137,12 @@ export function getPersistedCanonicalReportProjection(
     isRecord(root.runtimeArtifacts) ? root.runtimeArtifacts.postRefusalEvidenceProjection : undefined,
   );
 
+  const customerFindings = (rows: UnifiedFindingDisplayPacket[]) => rows.flatMap(row => {
+    if (row.unifiedFindingId !== "gpc_response") return [row];
+    return row.details?.family === "privacy_signal" && row.details.kind === "gpc_response" && hasVerifiedCustomerGpcEvidence(row.details.assessment)
+      ? [{...row,scoreEffects:row.scoreEffects?.filter(effect=>effect.appliesTo === "california_posture") ?? []}] : [];
+  });
+  const keptIds = new Set(customerFindings(candidate.globalUnifiedFindings as UnifiedFindingDisplayPacket[]).map(row=>row.unifiedFindingId));
   if (usesIndexedEvidence) {
     const globalById = new Map(
       (candidate.globalUnifiedFindings as UnifiedFindingDisplayPacket[]).map((finding) => [
@@ -153,17 +160,17 @@ export function getPersistedCanonicalReportProjection(
       consentControlSummary: projectConsentControlReport(retainedConsentAssessment(scanRecord), scanRecord.scan.id),
       checklistRows: getReportableGdprEprivacyCoverageItems(checklistRows, { consentControlAssessment: retainedConsentAssessment(scanRecord) }),
       checklistPresentation: reportChecklistPresentation(candidate.checklistPresentation, retainedConsentAssessment(scanRecord)),
-      ownerUnifiedFindingIds: (candidate.ownerUnifiedFindingIds as string[]).filter(id => id !== "gpc_response"),
-      ownerUnifiedFindings: ownerUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
-      globalUnifiedFindings: candidate.globalUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
+      ownerUnifiedFindingIds: (candidate.ownerUnifiedFindingIds as string[]).filter(id => keptIds.has(id as UnifiedFindingDisplayPacket["unifiedFindingId"])),
+      ownerUnifiedFindings: customerFindings(ownerUnifiedFindings),
+      globalUnifiedFindings: customerFindings(candidate.globalUnifiedFindings as UnifiedFindingDisplayPacket[]),
       topFindingIds: candidate.topFindingIds.filter(id => id !== "gpc_response"),
     } as PersistedCanonicalReportProjection;
   }
 
   return {
     ...candidate,
-    ownerUnifiedFindings: candidate.ownerUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
-    globalUnifiedFindings: candidate.globalUnifiedFindings.filter(row => row.unifiedFindingId !== "gpc_response"),
+    ownerUnifiedFindings: customerFindings(candidate.ownerUnifiedFindings as UnifiedFindingDisplayPacket[]),
+    globalUnifiedFindings: customerFindings(candidate.globalUnifiedFindings as UnifiedFindingDisplayPacket[]),
     topFindingIds: candidate.topFindingIds.filter(id => id !== "gpc_response"),
     consentControlSummary: projectConsentControlReport(retainedConsentAssessment(scanRecord), scanRecord.scan.id),
     checklistRows: getReportableGdprEprivacyCoverageItems(checklistRows, { consentControlAssessment: retainedConsentAssessment(scanRecord) }),

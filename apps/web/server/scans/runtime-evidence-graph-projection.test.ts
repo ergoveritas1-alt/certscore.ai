@@ -45,6 +45,19 @@ test("historical scans expose graph unavailability without creating absence find
   assert.ok(!JSON.stringify(result).includes("gap_observed"));
 });
 
+test("customer graph reads exclude GPC while preserving original retained packets and baseline evidence",()=>{
+  const graph=projectRuntimeEvidenceGraphs(fixture());
+  graph.graphs.push({...graph.graphs[0]!,scenario:"gpc",captureId:"scan:gpc_observation"});
+  graph.limitations.push("gpc:comparison_unavailable");
+  const retained={runtimeArtifacts:{runtimeEvidenceGraphProjection:graph},score:73};
+  const before=JSON.stringify(retained);
+  const shown=presentRuntimeGraphForRead(retained,{CERTSCORE_RUNTIME_GRAPH_PRESENTATION:"on"});
+  assert.ok(shown.runtimeArtifacts.runtimeEvidenceGraphProjection.graphs.every(row=>row.scenario!=="gpc"));
+  assert.ok(shown.runtimeArtifacts.runtimeEvidenceGraphProjection.limitations.every(row=>!row.startsWith("gpc:")));
+  assert.equal(shown.runtimeArtifacts.runtimeEvidenceGraphProjection.graphs[0]!.sourceHash,graph.graphs[0]!.sourceHash);
+  assert.equal(JSON.stringify(retained),before);assert.equal(shown.score,73);
+});
+
 test("presentation disable applies to a copy of persisted or cached reports and can be reversed without data loss", () => {
   const retained = { runtimeArtifacts: { runtimeEvidenceGraphProjection: projectRuntimeEvidenceGraphs(fixture()), existingEvidence: { keep: true } }, score: 73 };
   const before = JSON.stringify(retained);
@@ -59,7 +72,10 @@ test("presentation disable applies to a copy of persisted or cached reports and 
     assert.equal("runtimeEvidenceGraphProjection" in hidden.runtimeArtifacts, false);
     assert.equal(JSON.stringify(retained), before);
   }
-  assert.equal(presentRuntimeGraphForRead(retained, { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "on" }), retained);
+  const restored=presentRuntimeGraphForRead(retained, { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "on" });
+  assert.deepEqual(restored.runtimeArtifacts.runtimeEvidenceGraphProjection.graphs,retained.runtimeArtifacts.runtimeEvidenceGraphProjection.graphs);
+  assert.ok(restored.runtimeArtifacts.runtimeEvidenceGraphProjection.limitations.every(reason=>!reason.startsWith("gpc:")));
+  assert.equal(JSON.stringify(retained),before);
 });
 
 test("public graph rejects raw values, unsafe URLs and dangling identities", () => {

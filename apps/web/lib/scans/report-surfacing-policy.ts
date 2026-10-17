@@ -1,3 +1,4 @@
+import {hasVerifiedCustomerGpcEvidence} from "./gpc-customer-policy";
 import { FORM_DESTINATION_FINDING_ID, qualifiesFormDestinationReview } from "@certscore/contracts";
 import { CMS_SECURITY_FINDING_ID, qualifiesCmsSecurityReview } from "@certscore/contracts";
 import { CALIFORNIA_PRIVACY_REVIEW_IDS, californiaPrivacyReviewFindingIds } from "@certscore/contracts";
@@ -1831,14 +1832,19 @@ function overrideDecision(
 function applyFindingSpecificRules(context: PolicyEvaluationContext) {
   const { packet, decision } = context;
   if (packet.unifiedFindingId === "gpc_response") {
-    overrideDecision(decision, { state: "suppressed", lane: "suppressed", tier: "support", reason: "GPC customer results suspended by owner policy; retained internally.", ruleId: "evidence.context.keep_review" });
+    const eligible = packet.details?.family === "privacy_signal" && packet.details.kind === "gpc_response" &&
+      hasVerifiedCustomerGpcEvidence(packet.details.assessment) &&
+      packet.concernContext?.promotionEligibilities.includes("eligible") &&
+      packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
+    overrideDecision(decision, { state: eligible ? "support_only" : "suppressed", lane: eligible ? "main" : "suppressed", tier: "support",
+      reason: eligible ? "Verified GPC evidence; California deductions follow canonical concern policy." : "GPC delivery evidence is not verified.", ruleId: "evidence.context.keep_review" });
     return;
   }
   if (CALIFORNIA_PRIVACY_REVIEW_IDS.some(id => id === packet.unifiedFindingId)) {
     const eligible = packet.details?.family === "california_privacy_review" && californiaPrivacyReviewFindingIds(packet.details.projection).includes(packet.unifiedFindingId) &&
       packet.concernContext?.promotionEligibilities.includes("eligible") && packet.concernContext?.externalSurfacingEligibilities.includes("eligible");
     overrideDecision(decision, {state: eligible ? "review" : "suppressed", lane: eligible ? "main" : "suppressed", tier: "headline",
-      reason: "Verified California privacy-choice assessment; factual review only, no legal conclusion or score effect.", ruleId: "evidence.context.keep_review"});
+      reason: "Verified California privacy assessment; scoped factual findings with versioned California-only score effects where eligible.", ruleId: "evidence.context.keep_review"});
     return;
   }
   if (packet.unifiedFindingId === FORM_DESTINATION_FINDING_ID) {

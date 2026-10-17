@@ -184,7 +184,7 @@ export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcRespo
       (determinate && (c.delivery.status !== "verified" || c.coverage.status !== "complete" ||
         !c.baselineArtifact || !c.gpcArtifact || c.enabledProof.navigatorGlobalPrivacyControl !== true ||
         c.enabledProof.secGpcHeaderValue !== "1" || c.enabledProof.requestsWithSecGpc < 1)) ||
-      (!determinate && (response.californiaPolicy.applied || c.responseBasis !== "insufficient_evidence"))) {
+      (!determinate && c.responseBasis !== "insufficient_evidence")) {
       context.addIssue({ code: z.ZodIssueCode.custom, message: "GPC v2 delivery, coverage and outcome must agree." });
     }
     for (const delta of Object.values(c.deltas)) {
@@ -206,7 +206,17 @@ export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcRespo
       context.addIssue({ code: z.ZodIssueCode.custom, message: "GPC v2 outcome must match its comparison evidence." });
     }
   }
-  if (response.californiaPolicy.applied !== (response.californiaPolicy.deductionPoints === 15)) {
+  if (response.contractVersion === "certscore.gpc-response-assessment.v3" && response.californiaPolicy.applied) {
+    const o=response.observation;
+    const direct=o && o.status === "complete" && o.sourceSha256 === response.comparison.gpcArtifact?.sha256 &&
+      Boolean(o.scanId) && o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained &&
+      o.delivery.fullContextVerified && o.requests.complete &&
+      (((o.requests.advertisingCollectionCount ?? 0)>0 && Boolean(o.requests.advertisingCollectionEvidenceIds?.length)) ||
+        (o.semanticProbe === "observed" && o.registration.cmpGpcSignal === "received" &&
+          (o.registration.sale === "not_opted_out" || o.registration.sharing === "not_opted_out")));
+    if (!direct) context.addIssue({code:"custom",message:"California risk scoring requires verified direct GPC evidence."});
+  }
+  if (response.californiaPolicy.applied !== (response.californiaPolicy.deductionPoints > 0)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: "California GPC policy application must match its deduction.",

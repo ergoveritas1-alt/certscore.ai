@@ -189,8 +189,22 @@ export function buildGpcResponseAssessment(input: {
       coverageLimits.add(`${label}_web_storage_inventory_incomplete`);
     }
     const runtime = bundle?.modulesRun.find((module) => module.moduleName === "preConsentRuntimeScanner");
-    if (runtime?.status !== "completed" || !runtime.timingBreakdown?.some((timing) =>
-      timing.label === "passive evidence quiet wait" && timing.outcome === "completed")) coverageLimits.add(`${label}_settle_not_completed`);
+    const capture = bundle?.gpcImpactCapture;
+    const checkpoint = capture?.quietCheckpoint;
+    const proof = retainedSignal(bundle);
+    // New capture proof is authoritative for new records, including an explicit
+    // busy checkpoint. Historical records keep their original initial-gate rule.
+    const settled = checkpoint ? Boolean(capture && proof &&
+      capture.limitationKeys.length === 0 && !capture.retentionStatus &&
+      (capture.invalidationReasons?.length ?? 0) === 0 &&
+      capture.document?.token === capture.readbackDocumentToken &&
+      checkpoint.documentToken === capture.document?.token &&
+      capture.document?.urlSha256 === proof.documentUrlSha256 &&
+      capture.expectedEnabled === proof.expectedEnabled &&
+      checkpoint.signalReadbackAtMs === proof.capturedAtMs &&
+      checkpoint.inFlightRequestCount === 0 && checkpoint.quietForMs >= 250) :
+      runtime?.timingBreakdown?.some(timing => timing.label === "passive evidence quiet wait" && timing.outcome === "completed");
+    if (runtime?.status !== "completed" || !settled) coverageLimits.add(`${label}_settle_not_completed`);
   }
   const throughMs = baselineProof && gpcProof ? Math.min(
     baselineProof.capturedAtMs - baselineProof.documentStartedAtMs, gpcProof.capturedAtMs - gpcProof.documentStartedAtMs) : null;

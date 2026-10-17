@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertPublicNetworkUrl, guardedPublicFetch, PublicNetworkGuardError } from "./public-network-guard.js";
+import { assertPublicNetworkUrl, guardedPublicFetch, installPublicNetworkGuardRoute, PublicNetworkGuardError } from "./public-network-guard.js";
 
 test("runtime guard accepts only all-public DNS answers", async () => {
   await assert.doesNotReject(() => assertPublicNetworkUrl("https://example.com/path", {
@@ -106,4 +106,32 @@ test("DNS failures retain bounded internal reasons without changing fail-closed 
     });
     assert.equal(calls,1,'diagnostics must not retry DNS');
   }
+});
+
+
+test("route phase diagnostics distinguish pending validation without weakening or repeating the guard", async () => {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const denied of [false, true]) {
+      const context = await browser.newContext();
+      const phases: string[] = [];
+      let release!: () => void, lookups = 0, opened = 0;
+      const pending = new Promise<void>(resolve => { release = resolve; });
+      await context.route("https://guard-fixture.test/**", async route => { opened++; await route.fulfill({ body: "fixture" }); });
+      await installPublicNetworkGuardRoute(context, { env: { CERTSCORE_PUBLIC_NETWORK_GUARD_FORCE: "true" },
+        resolver: async () => { lookups++; await pending; return [{ address: denied ? "127.0.0.1" : "93.184.216.34", family: 4 }]; },
+        onRequestPhase: (_request, phase) => { phases.push(phase); if (phase !== "validation_pending") throw new Error("Observer failure"); },
+      });
+      const page = await context.newPage();
+      const navigation = page.goto("https://guard-fixture.test/", { timeout: 3000 }).catch(() => null);
+      for (let count = 0; !phases.length && count < 100; count++) await new Promise(resolve => setTimeout(resolve, 5));
+      assert.deepEqual(phases, ["validation_pending"]);
+      assert.equal(opened, 0, "No network before public validation");
+      release(); await navigation;
+      assert.deepEqual(phases, ["validation_pending", denied ? "denied" : "validated"]);
+      assert.equal(lookups, 1); assert.equal(opened, denied ? 0 : 1);
+      await context.close();
+    }
+  } finally { await browser.close(); }
 });

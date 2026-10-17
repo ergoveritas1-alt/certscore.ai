@@ -14,7 +14,7 @@ import { buildGpcResponseReportProjection } from "../../components/scans/report-
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 import { gpcActivityComparisonFixture } from "../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison";
 
-test("verified bytes → typed persisted v3 → normalized concern/policy → unified internal record preserves complete observation while report/API are hidden with indeterminate comparison and no score", () => {
+test("verified bytes → typed persisted v3 → normalized concern/policy → unified finding restores verified observation to report/API with indeterminate comparison and no score", () => {
   const gpc = gpcProductionRuntimeFixture();
   gpc.gpcSignalObservation!.workerCount = 1;
   const bytes = Buffer.from(JSON.stringify(gpc));
@@ -29,13 +29,14 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
   const findings = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
     runtimeArtifacts: { gpcResponseAssessment: persisted } });
   const projection = buildCanonicalGpcResponseProjection(findings);
-  assert.equal(projection,null);
+  assert.ok(projection);
+  assert.equal(projection.californiaDeductionPoints,0);
   assert.deepEqual(projectCaliforniaRegulatoryPriorities(findings), []);
-  assert.equal(buildGpcResponseReportProjection(findings),null);
+  assert.ok(buildGpcResponseReportProjection(findings));
   const retained = findings.find(f=>f.unifiedFindingId === "gpc_response")!;
   assert.ok(retained.details?.family === "privacy_signal" && retained.details.kind === "gpc_response");
   assert.deepEqual(retained.details.assessment,persisted);
-  assert.notEqual(retained.presentationDecision.status,"surface");
+  assert.equal(retained.presentationDecision.status,"surface");
   assert.equal(retained.scoreEffects?.length ?? 0,0);
   const { baselineArtifact, gpcArtifact, delivery, evidenceRefs, ...c } = assessment.comparison;
   const publicResult = apiV2GpcResponseSchema.parse({ contractVersion: assessment.contractVersion, status: assessment.status,
@@ -59,7 +60,7 @@ test("verified bytes → typed persisted v3 → normalized concern/policy → un
   const withActivity = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
     runtimeArtifacts: { gpcResponseAssessment: persisted, gpcActivityComparison: activityComparison } });
   const projectedActivity = buildCanonicalGpcResponseProjection(withActivity);
-  assert.equal(projectedActivity,null);
+  assert.deepEqual(projectedActivity?.activityComparison,activityComparison);
   assert.deepEqual(withActivity.map(f => f.scoreEffects), findings.map(f => f.scoreEffects));
   assert.deepEqual(apiV2GpcResponseSchema.parse({ ...publicResult, activityComparison }).activityComparison, activityComparison);
   assert.equal(apiV2GpcResponseSchema.safeParse({ ...publicResult, activityComparison: { ...activityComparison,
@@ -90,7 +91,7 @@ test("quiet-window limits do not downgrade a verified observation, and observati
     const findings = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map(),
       runtimeArtifacts: { gpcResponseAssessment: persisted } });
     const projection = buildGpcResponseReportProjection(findings);
-    assert.equal(projection,null);
+    assert.ok(projection, "verified paired delivery remains reportable independently of observation completion");
     assert.deepEqual(projectCaliforniaRegulatoryPriorities(findings), []);
     const retained=findings.find(f=>f.unifiedFindingId === "gpc_response")!;
     assert.ok(retained.details?.family === "privacy_signal" && retained.details.kind === "gpc_response");

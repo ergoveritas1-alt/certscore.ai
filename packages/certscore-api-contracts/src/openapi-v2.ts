@@ -48,7 +48,12 @@ const postureScoresOpenApi = {
     ccpaCpra: { type: "object", additionalProperties: false,
       required: ["posture", "score", "policyVersion", "coverage", "scope"],
       properties: { posture: { type: "string", const: "ccpa_cpra" }, score: { type: ["integer", "null"], minimum: 0, maximum: 100 },
-        policyVersion: { type: "string", const: "california-regulatory-posture.v1" },
+        policyVersion: { type: "string", minLength: 1 },
+        coverageSummary: {type:"object",additionalProperties:false,required:["postureBasis","evidenceFamilies","totalFamilies","scoreReady","families"],properties:{
+          postureBasis:{type:"string",const:"assuming_ccpa_applies"},evidenceFamilies:{type:"integer",minimum:0,maximum:6},totalFamilies:{type:"integer",const:6},scoreReady:{type:"boolean"},
+          families:{type:"array",minItems:6,maxItems:6,items:{type:"object",additionalProperties:false,required:["id","status"],properties:{id:{type:"string"},status:{type:"string",enum:["observed","assessed_gap","review","unknown","not_triggered_in_scope"]},
+            assessmentState:{type:"string",enum:["completed","partial","limited"]},followUp:{type:"string",enum:["none","purpose","notice_association","recipient_roles","applicability","choice_execution","interpretation","capture"]}}}},
+        }},
         coverage: { type: "string", enum: ["bounded", "limited", "unavailable"] }, scope: { type: "string", const: "starting_page" } } },
   },
 } as const;

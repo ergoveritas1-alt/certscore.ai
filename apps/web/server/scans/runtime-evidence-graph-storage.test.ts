@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { apiRuntimeEvidenceGraphProjectionSchema } from "@certscore/api-contracts";
 import { runtimeGraphUiFixture } from "../../components/scans/runtime-evidence-graph-ui-fixture";
 import type { ScanDetailResponse } from "./get-scan-by-id";
+import { customerRuntimeGraph } from "./runtime-evidence-graph-projection";
 
 const require = createRequire(import.meta.url);
 const serverOnlyPath = require.resolve("server-only");
@@ -37,7 +38,8 @@ test("publication retains one immutable bounded graph and only a small reference
   assert.ok(!JSON.stringify(compact).includes("s3://"));
   assert.deepEqual(compact.snapshot, record.snapshot);
   const hydrated = await hydrateRuntimeGraphForRead(compact, { read: async () => body, environment: { CERTSCORE_RUNTIME_GRAPH_PRESENTATION: "on" } });
-  assert.deepEqual(hydrated.runtimeArtifacts?.runtimeEvidenceGraphProjection, record.runtimeArtifacts?.runtimeEvidenceGraphProjection);
+  assert.deepEqual(hydrated.runtimeArtifacts?.runtimeEvidenceGraphProjection, customerRuntimeGraph(original));
+  assert.ok(original.graphs.some(graph=>graph.scenario === "gpc"),"original retained evidence stays intact");
   assert.equal(apiRuntimeEvidenceGraphProjectionSchema.parse(compact.runtimeArtifacts?.runtimeEvidenceGraphProjection).graphs.length, 0, "read must not mutate cached report");
   const repeated = await externalizeRuntimeGraphForPersistence(compact, { write: async () => { assert.fail("repeat publication must reuse reference"); } });
   assert.equal(repeated, compact);

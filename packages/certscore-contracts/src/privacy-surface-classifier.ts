@@ -98,6 +98,8 @@ const CORE_PRIVACY_SURFACE_PHRASE_OVERRIDES: PrivacySurfacePhrase[] = [
     direct("do_not_sell_or_share", "do not share"),
     direct("notice_at_collection", "notice at collection"),
     direct("california_notice", "california privacy notice"),
+    direct("california_notice", "california notice"),
+    { surfaceType:"california_notice", phrase:"ca notice", strength:"equivalent", requiresPrivacyContext:true },
     direct("california_notice", "state privacy rights"),
     direct("california_notice", "state privacy policy"),
     direct("terms", "terms"),
@@ -400,7 +402,7 @@ export function nonPolicyDocumentReason(input: PrivacySurfaceClassifierInput): s
   const label = normalizePrivacySurfaceText(input.title || input.linkText);
   let path = "";
   try { path = decodeURIComponent(new URL(input.url ?? "").pathname).toLowerCase().replace(/\/$/, ""); } catch {}
-  if (/\/(?:privacy|data-subject|dsar)[-_]requests?$/.test(path) || /^(?:submit (?:a |your )?)?(?:privacy|data subject|data access) request$/.test(label)) return "privacy_request_surface_not_policy_document";
+  if (/\/(?:privacy|data-subject|dsar)[-_]requests?$/.test(path) || /\/(?:privacy|data-subject|dsar)\/(?:app|request)[-_]form$/.test(path) || /^(?:submit (?:a |your )?)?(?:privacy|data subject|data access) request$/.test(label)) return "privacy_request_surface_not_policy_document";
   // The terminal slug identifies a policy creation/reference product. A policy
   // document below that product (for example /privacy-policy-generator/privacy)
   // is still eligible; surrounding marketing text does not veto real notices.

@@ -1,10 +1,6 @@
-import { GPC_CUSTOMER_RESULTS_ENABLED } from "./gpc-customer-policy";
+import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
+import { GPC_CUSTOMER_RESULTS_ENABLED, hasVerifiedCustomerGpcEvidence } from "./gpc-customer-policy";
 import { gpcResponseAssessmentSchema, type GpcResponseAssessment } from "@certscore/contracts";
-import {
-  CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS,
-  CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY,
-  CALIFORNIA_GPC_RESPONSE_POLICY_VERSION,
-} from "./california-gpc-response-policy";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { describeGpcObservedFacts } from "./gpc-observed-facts";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
@@ -49,7 +45,16 @@ function comparisonCoverageSummary(assessment: GpcResponseAssessment) {
   return `${prefix}The paired comparison did not meet the required evidence coverage, so no response conclusion was made.`;
 }
 
+export function hasNoQualifiedGpcActivity(assessment: {comparison:{comparable:boolean;deltas:{trackers:{baselineCount:number;gpcCount:number}}}}) {
+  return assessment.comparison.comparable && assessment.comparison.deltas.trackers.baselineCount === 0 &&
+    assessment.comparison.deltas.trackers.gpcCount === 0;
+}
+
 function describeResponseComparison(assessment: GpcResponseAssessment) {
+  if (hasNoQualifiedGpcActivity(assessment)) return {
+    headline:"No qualifying tracking activity observed",
+    coverageSummary:"The completed matched visits observed no classified tracking activity in either condition. There was no qualifying activity whose suppression could be tested.",
+  };
   if (assessment.status === "responsive") {
     return {
       coverageSummary: comparisonCoverageSummary(assessment),
@@ -102,17 +107,13 @@ export function buildCanonicalGpcResponseProjection(
   }
 
   const parsedAssessment = gpcResponseAssessmentSchema.safeParse(finding.details.assessment);
-  if (!parsedAssessment.success) {
+  if (!parsedAssessment.success || !hasVerifiedCustomerGpcEvidence(parsedAssessment.data)) {
     return null;
   }
 
-  const californiaDeduction = finding.scoreEffects?.find((effect) =>
-    effect.appliesTo === "certscore_overall" &&
-    effect.framework === "california" &&
-    effect.policyKey === CALIFORNIA_GPC_NO_SUPPRESSION_POLICY_KEY &&
-    effect.policyVersion === CALIFORNIA_GPC_RESPONSE_POLICY_VERSION &&
-    effect.deductionPoints === CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS
-  );
+  const policy=deriveCaliforniaGpcResponsePolicy(parsedAssessment.data);
+  const deduction=finding.scoreEffects?.some(e=>e.appliesTo === "california_posture" && e.policyVersion === policy.policyVersion &&
+    e.policyKey === policy.policyKey && e.deductionPoints === policy.deductionPoints) ? policy.deductionPoints : 0;
   const presentation = describeCanonicalGpcResponse(parsedAssessment.data);
   const observedFacts = describeGpcObservedFacts(parsedAssessment.data.contractVersion === "certscore.gpc-response-assessment.v3"
     ? parsedAssessment.data.observation : undefined);
@@ -122,9 +123,7 @@ export function buildCanonicalGpcResponseProjection(
 
   return {
     assessment: parsedAssessment.data,
-    californiaDeductionPoints: californiaDeduction
-      ? CALIFORNIA_GPC_NO_SUPPRESSION_DEDUCTION_POINTS
-      : 0,
+    californiaDeductionPoints: deduction,
     coverageSummary: presentation.coverageSummary,
     comparisonHeadline: presentation.comparisonHeadline,
     headline: presentation.headline,

@@ -22,7 +22,7 @@ function project(schema: z.ZodTypeAny): { ts: string; json: any } {
   if (schema instanceof z.ZodArray) { const p = project(schema.element); return { ts: `Array<${p.ts}>`, json: { type: "array", items: p.json, ...(schema._def.maxLength ? { maxItems: schema._def.maxLength.value } : {}) } }; }
   if (schema instanceof z.ZodObject) {
     const entries = Object.entries(schema.shape).map(([key, value]) => [key, project(value as z.ZodTypeAny)] as const);
-    return { ts: `{ ${entries.map(([key,p]) => `${key}: ${p.ts};`).join(" ")} }`, json: { type: "object", additionalProperties: false, required: entries.filter(([key]) => !schema.shape[key].isOptional()).map(([key]) => key), properties: Object.fromEntries(entries.map(([key,p]) => [key,p.json])) } };
+    return { ts: `{ ${entries.map(([key,p]) => `${key}${schema.shape[key].isOptional() ? "?" : ""}: ${p.ts};`).join(" ")} }`, json: { type: "object", additionalProperties: false, required: entries.filter(([key]) => !schema.shape[key].isOptional()).map(([key]) => key), properties: Object.fromEntries(entries.map(([key,p]) => [key,p.json])) } };
   }
   throw Error(`Unsupported schema type ${schema._def.typeName}`);
 }

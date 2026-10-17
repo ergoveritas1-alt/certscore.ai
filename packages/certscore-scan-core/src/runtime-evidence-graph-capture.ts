@@ -1,3 +1,5 @@
+import {extractRuntimeScriptFacts} from "@certscore/vendor-resolver";
+import {storageReadTraceSchema,type StorageReadTrace,type RuntimeScriptEvidence} from "@certscore/contracts";
 import { randomBytes } from "node:crypto";
 import type { CDPSession, Page } from "playwright";
 import type { RuntimeEvidenceGraph, RuntimeGraphVerificationDiagnostic } from "@certscore/contracts";
@@ -35,12 +37,21 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
     browserVersion: page.context().browser()?.version().slice(0, 100) ?? "unknown" });
   const nonce = randomBytes(24).toString("hex");
   const binding = `__certscore_graph_${randomBytes(8).toString("hex")}`;
+  // Keep the native read wrapper identical across paired sessions; only baseline
+  // observations are retained. GPC interpretation/scoring is unchanged.
   // tsx fixture runs preserve function names with this inert helper; tsc production output does not need it.
-  const source = `(() => { const __name = (fn) => fn; return (${installPageProbe.toString()})(${JSON.stringify({ binding, nonce })}); })()`;
+  const source = `(() => { const __name = (fn) => fn; return (${installPageProbe.toString()})(${JSON.stringify({ binding, nonce, traceStorageReads: true })}); })()`;
   const tasks = new Set<Promise<unknown>>();
   const children = new Map<string, Wire>();
   const contexts = new Map<string, { session: string; wire: Wire; contextId: number }>();
   const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
+  const scriptEvidence: RuntimeScriptEvidence[] = [];
+  const storageReads:StorageReadTrace["observations"]=[];
+  let readLimitReached=false;
+  let finalizedReads:StorageReadTrace|undefined;
+  const sourceResponses = new Map<string, {url:string;documentUrl:string;loaderId:string;frameId:string;type:string}>();
+  let sourceReads=0, sourceBytes=0;
+  const sourceUrl=(value:string)=>{try{const u=new URL(value);if(!["http:","https:"].includes(u.protocol)||u.username||u.password)return;u.search="";u.hash="";return u.toString().length<=600?u.toString():undefined;}catch{return;}};
   const cleanups: Array<() => void> = [];
   let root: CDPSession | undefined;
   let commandId = 0;
@@ -62,6 +73,19 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
       if (params.name !== binding || typeof params.payload !== "string" || params.payload.length > 8192) return;
       const value = JSON.parse(params.payload);
       if (value?.nonce !== nonce) { builder.limit("untrusted_probe_rejected"); return; }
+      if(value.operation === "storage_read" || value.operation === "storage_read_limit"){
+        if(input.scenario!=="pre_consent"||session!=="main")return;
+        if(value.operation === "storage_read_limit"){readLimitReached=true;return;}
+        const document=builder.documentBinding(session,params.executionContextId);
+        const callerUrl=sourceUrl(value.caller?.url);
+        if(!document||!callerUrl)return;
+        const candidate={id:`storage-read-${storageReads.length+1}`,...document,storageType:value.storageType,name:value.name,callerUrl,line:value.caller?.line,column:value.caller?.column,outcome:value.success === true?"returned":"threw",valueState:value.valueState,count:1};
+        const parsed=storageReadTraceSchema.shape.observations.element.safeParse(candidate);if(!parsed.success)return;
+        const same=storageReads.find(row=>row.documentId===parsed.data.documentId&&row.frameId===parsed.data.frameId&&row.storageType===parsed.data.storageType&&row.name===parsed.data.name&&row.callerUrl===callerUrl&&row.line===parsed.data.line&&row.column===parsed.data.column&&row.outcome===parsed.data.outcome&&row.valueState===parsed.data.valueState);
+        if(same){same.count=Math.min(64,same.count+1);return;}
+        if(storageReads.length>=32){readLimitReached=true;return;}
+        storageReads.push(parsed.data);return;
+      }
       builder.probe(session, params.executionContextId, value);
     } else if (method === "Target.attachedToTarget") {
       const childId = String(params.sessionId);
@@ -105,12 +129,37 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
       if (method === "Runtime.executionContextDestroyed") contexts.delete(`${session}:${params.executionContextId}`);
       if (method === "Runtime.executionContextsCleared") for (const key of contexts.keys()) if (key.startsWith(`${session}:`)) contexts.delete(key);
       builder.handle(session, method, params);
+      // Capture already-loaded source only in the baseline main session. No fetch,
+      // extra browser pass, terminal wait or late mutation is permitted.
+      if(session === "main" && input.scenario === "pre_consent" && method === "Network.responseReceived" && sourceResponses.size<12){
+        const url=sourceUrl(params.response?.url),documentUrl=sourceUrl(params.type === "Document"?params.response?.url:page.url());
+        if(url&&documentUrl&&["Document","Script"].includes(params.type)&&new URL(url).origin === new URL(documentUrl).origin&&params.loaderId&&params.frameId)
+          sourceResponses.set(params.requestId,{url,documentUrl,loaderId:params.loaderId,frameId:params.frameId,type:params.type});
+      }
+      if(session === "main" && method === "Network.loadingFinished"){
+        const row=sourceResponses.get(params.requestId);sourceResponses.delete(params.requestId);
+        if(row&&sourceReads<3&&sourceBytes<2_097_152&&Number(params.encodedDataLength)>0&&Number(params.encodedDataLength)<=1_048_576){
+          sourceReads++;
+          track(wire.send("Network.getResponseBody",{requestId:params.requestId}).then(result=>{
+            if(frozen||typeof result.body!=="string"||result.body.length>1_400_000)return;
+            const bytes=Buffer.from(result.body,result.base64Encoded?"base64":"utf8");
+            if(bytes.length>1_048_576||sourceBytes+bytes.length>2_097_152)return;sourceBytes+=bytes.length;
+            const source=bytes.toString("utf8");
+            const sources=row.type === "Script"?[source]:Array.from(source.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)).filter(match=>! /\bsrc\s*=/i.test(match[1]!) && ! /\btype\s*=\s*["'](?:application\/ld\+json|application\/json)/i.test(match[1]!)).slice(0,8).map(match=>match[2]!).filter(text=>text.length<=32_768);
+            for(const text of sources){
+              if(frozen||scriptEvidence.length>=8)return;
+              const packet=extractRuntimeScriptFacts(text,{scanId:input.scanId,scenario:"pre_consent",documentUrl:row.documentUrl,documentId:row.loaderId,frameId:row.frameId,scriptUrl:row.url,sourceKind:row.type === "Script"?"loaded_script":"inline_script"});
+              if(packet)scriptEvidence.push(packet);
+            }
+          }).catch(()=>undefined));
+        }
+      }
     }
   });
 
   async function enable(session: string, wire: Wire, documentTarget: boolean) {
     await Promise.all([
-      wire.send("Network.enable", { maxTotalBufferSize: 0, maxResourceBufferSize: 0, maxPostDataSize: 0 }),
+      wire.send("Network.enable", { maxTotalBufferSize: session === "main" && input.scenario === "pre_consent" ? 2_097_152 : 0, maxResourceBufferSize: session === "main" && input.scenario === "pre_consent" ? 1_048_576 : 0, maxPostDataSize: 0 }),
       wire.send("Runtime.enable"),
       // No Debugger.enable or deep asynchronous stack recording; Network initiators supply bounded stacks.
       wire.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: false }).catch(() => builder.limit("related_target_attachment_unavailable")),
@@ -148,6 +197,8 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
   setupMs = performance.now() - started;
 
   return {
+    scriptEvidence: () => scriptEvidence.slice(),
+    storageReadTrace: () => finalizedReads,
     confirmAction: (at: number) => builder.confirmAction(at),
     /** Reuse raw in-memory browser snapshots already captured by the owning lane. */
     cookies: (cookies: unknown[]) => guard(() => builder.snapshot(cookies.map((raw) => {
@@ -168,6 +219,7 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
     finish: (reason?: string): RuntimeEvidenceGraph | undefined => {
       if (frozen) return final;
       frozen = true;
+      if(input.scenario === "pre_consent")finalizedReads=storageReadTraceSchema.parse({contractVersion:"certscore.storage-read-trace.v1",scanId:input.scanId,captureId:input.captureId,scenario:"pre_consent",limitReached:readLimitReached,observations:storageReads});
       try {
         if (reason) builder.limit(reason);
         try {
@@ -191,7 +243,7 @@ export async function installRuntimeGraphCapture(page: Page, input: RuntimeGraph
 }
 
 /** Serializes into the page: only data primitives are inspected, native coercions are never repeated. */
-function installPageProbe({ binding, nonce }: { binding: string; nonce: string }) {
+function installPageProbe({ binding, nonce, traceStorageReads }: { binding: string; nonce: string; traceStorageReads:boolean }) {
   const root = globalThis as any;
   const sink = root[binding];
   if (typeof sink !== "function") return;
@@ -199,6 +251,7 @@ function installPageProbe({ binding, nonce }: { binding: string; nonce: string }
   const nativeApply = Reflect.apply;
   const NativeError = Error;
   const NativeString = String;
+  const NativeNumber = Number;
   const ownDescriptor = Object.getOwnPropertyDescriptor;
   const create = Object.create;
   const keys = Object.keys;
@@ -231,6 +284,11 @@ function installPageProbe({ binding, nonce }: { binding: string; nonce: string }
     return result;
   };
   let count = 0;
+  let readAttempts=0,readEmissions=0;
+  let readCaller:{url:string;line:number;column:number}|undefined;
+  const emitRead=(row:Record<string,unknown>)=>{
+    try{if(readEmissions++<65)sink(stringify(inert({...row,nonce})));}catch{/* Preserve native behavior. */}
+  };
   const emit = (row: Record<string, unknown>) => {
     try {
       if (++count > 200) { if (count === 201) sink(stringify(inert({ nonce, operation: "overflow" }))); return; }
@@ -238,13 +296,14 @@ function installPageProbe({ binding, nonce }: { binding: string; nonce: string }
     } catch { /* Page behavior unaffected. */ }
   };
   const stack = () => {
+    readCaller=undefined;
     if (ownDescriptor(NativeError, "prepareStackTrace")) { emit({ operation: "stack_unavailable" }); return []; }
     try {
       const text = NativeString(new NativeError().stack ?? ""); const urls: string[] = [];
       let start = 0;
       for (let line = 0; line < 14 && start < text.length; line++) {
         const end = indexOf(text, "\n", start); const segment = slice(text, start, end < 0 ? text.length : end);
-        if (line >= 2) { const match = nativeApply(nativeExec, /(https?:\/\/[^\s)]+):\d+:\d+/, [segment]); if (match?.[1]) urls[urls.length] = match[1]; }
+        if (line >= 2) { const match = nativeApply(nativeExec, /(https?:\/\/[^\s)]+):(\d+):(\d+)/, [segment]); if (match?.[1]) {urls[urls.length] = match[1];if(!readCaller)readCaller={url:match[1],line:NativeNumber(match[2]),column:NativeNumber(match[3])};} }
         if (end < 0) break; start = end + 1;
       }
       return urls;
@@ -284,6 +343,23 @@ function installPageProbe({ binding, nonce }: { binding: string; nonce: string }
           emit({ operation: "js_set", ...cookieMetadata(value), success: true, stack: caller }); return result;
         } catch (error) { emit({ operation: "js_set", ...cookieMetadata(value), success: false, stack: caller }); throw error; }
       } });
+    }
+    if(traceStorageReads&&root.top===root){
+      const descriptor=ownDescriptor(Storage.prototype,"getItem");
+      if(descriptor?.configurable&&typeof descriptor.value === "function"){
+        const original=descriptor.value;
+        Object.defineProperty(Storage.prototype,"getItem",{...descriptor,value:function(...args:unknown[]){
+          if(readAttempts++>=64){if(readAttempts===65)emitRead({operation:"storage_read_limit"});return nativeApply(original,this,args);}
+          stack();const caller=readCaller;
+          const storageType=this === localStorageObject?"localStorage":this === sessionStorageObject?"sessionStorage":undefined;
+          const name=typeof args[0] === "string"&&args[0].length<=240?args[0]:undefined;
+          try{
+            const result=nativeApply(original,this,args);
+            if(caller&&storageType&&name)emitRead({operation:"storage_read",storageType,name,caller,success:true,valueState:result===null?"absent":result === ""?"empty":typeof result === "string"?"nonempty":"unknown"});
+            return result;
+          }catch(error){if(caller&&storageType&&name)emitRead({operation:"storage_read",storageType,name,caller,success:false,valueState:"unknown"});throw error;}
+        }});
+      }
     }
     for (const operation of ["setItem", "removeItem", "clear"] as const) {
       const descriptor = ownDescriptor(Storage.prototype, operation);

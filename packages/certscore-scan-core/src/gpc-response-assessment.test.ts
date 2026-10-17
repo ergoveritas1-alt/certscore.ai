@@ -479,3 +479,26 @@ for (const lane of ["baseline", "gpc"] as const) test(`bounded ${lane} storage c
   assert.ok(result.comparison.limitationKeys.includes(`${lane}_web_storage_inventory_incomplete`));
   assert.ok(result.comparison.deltas.webStorage.baselineOnlyCount + result.comparison.deltas.webStorage.gpcOnlyCount > 0, "keep observed sampled keys as descriptive evidence");
 });
+
+test("new document-bound freeze proof resolves an early timeout; busy or mismatched proof remains limited",()=>{
+  const b=gpcRuntimeFixture({enabled:false}),g=gpcRuntimeFixture({enabled:true});
+  for(const row of [b,g]){
+    row.modulesRun[0]!.timingBreakdown![0]!.outcome="timed_out";
+    row.gpcImpactCapture={contractVersion:"certscore.gpc-impact-capture.v1",scope:"page_http_request_attempts_after_document_commit",
+      expectedEnabled:row.gpcSignalObservation!.expectedEnabled,captureStartedAtMs:0,capturedAtMs:1000,
+      readbackDocumentToken:"loader",document:{token:"loader",urlSha256:row.gpcSignalObservation!.documentUrlSha256,committedAtMs:0,secGpc:row.gpcSignalObservation!.expectedEnabled?"1":null},
+      requestsDropped:0,windows:[],limitationKeys:[],quietCheckpoint:{contractVersion:"certscore.gpc-comparison-quiet.v1",documentToken:"loader",signalReadbackAtMs:1000,quietForMs:250,inFlightRequestCount:0}};
+  }
+  assert.equal(assess(b,g).comparison.comparable,true);
+  for(const defect of ["busy","recent","token","time","invalidated"]){
+    const changed=structuredClone(g),c=changed.gpcImpactCapture!;
+    if(defect==="busy")c.quietCheckpoint!.inFlightRequestCount=1;
+    if(defect==="recent")c.quietCheckpoint!.quietForMs=249;
+    if(defect==="token")c.quietCheckpoint!.documentToken="other";
+    if(defect==="time")c.quietCheckpoint!.signalReadbackAtMs=999;
+    if(defect==="invalidated")c.invalidationReasons=["document_recommitted"];
+    assert.equal(assess(b,changed).status,"indeterminate",defect);
+  }
+  const historical=structuredClone(g);delete historical.gpcImpactCapture;
+  assert.equal(assess(b,historical).status,"indeterminate","historical timeout retains its meaning");
+});

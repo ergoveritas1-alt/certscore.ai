@@ -333,6 +333,13 @@ export class RuntimeEvidenceGraphBuilder {
     return createHmac("sha256", this.valueKey).update(JSON.stringify([cookie.name, string(cookie.domain), cookie.hostOnly, cookie.path, cookie.partitionKey, cookie.partitionKeyOpaque])).digest("hex");
   }
 
+  /** Read-only binding for separately bounded passive observations. */
+  documentBinding(session:string,executionContextId:number) {
+    const context=this.contexts.get(`${session}:${executionContextId}`);
+    const document=context?.documentId?this.nodes.get(context.documentId):undefined;
+    return document?.url&&document.documentId&&context?.frameId?{documentUrl:document.url,documentId:document.documentId,frameId:context.frameId}:undefined;
+  }
+
   probe(session: string, executionContextId: number, raw: unknown) {
     if (this.frozen) return;
     const row = record(raw); const context = this.contexts.get(`${session}:${executionContextId}`);

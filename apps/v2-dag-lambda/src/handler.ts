@@ -1,4 +1,4 @@
-import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
+import { saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS, type SaleSharingOptOutDispatch } from "@certscore/contracts";
 import { cmpPreferenceBudgetMs, cmpPreferenceDispatchSchema, cmpPreferencesEvidenceSchema, CMP_PREFERENCE_JOIN_MS, CMP_PREFERENCE_POLICY_VERSION, type CmpPreferenceDispatch } from "@certscore/contracts";
 import { actionWorkerCheckpoints } from "./action-worker-checkpoints.js";
 import { createOpenAiScreenshotSafetyClassifier as createFormSnapshotSafetyClassifier } from "./screenshot-safety";
@@ -4523,6 +4523,8 @@ export function mergeLocalV2DagLambdaEvidenceLaneBundles(input: {
     cookieSnapshots: runtimeEvidence.cookieSnapshots,
     storageSnapshots: runtimeEvidence.storageSnapshots,
     scriptEvents: runtimeEvidence.scriptEvents,
+    runtimeScriptEvidence: runtimeEvidence.runtimeScriptEvidence,
+    storageReadTrace: runtimeEvidence.storageReadTrace,
     iframeEvents: runtimeEvidence.iframeEvents,
     collectionSurfaceInventory: runtimeEvidence.collectionSurfaceInventory,
     accessibilityAudit: runtimeEvidence.accessibilityAudit,
@@ -5663,6 +5665,8 @@ export function buildVerifiedPolicyEvidencePacket(input: {
     policySurfaceInspection: derivePolicySurfaceInspectionOutcome({
       normalizedUrl: new URL(input.payload.targetUrl).toString(),
       negativeSearchEvidence: input.result.negativeSearchEvidence,
+      privacyChoiceInspection: input.result.privacyChoiceInspection,
+      californiaReviewPolicy: "california-privacy-review.v10",
       modulesRun: [input.result.moduleRun],
       policySurfaceObservations,
     }),
@@ -6097,8 +6101,8 @@ export async function handler(event: unknown, options: HandlerOptions = {}) {
     if (evidenceWorker && payload.workerLane === "sale_sharing_opt_out") {
       const elapsed = Math.max(0, Date.now() - handlerStartedAtMs);
       handlerSafetyTimeoutMs = Math.min(handlerSafetyTimeoutMs, SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS);
-      scannerWorkTimeoutMs = Math.max(10, 3000 - elapsed);
-      artifactChainTimeoutMs = Math.max(10, 4000 - elapsed);
+      scannerWorkTimeoutMs = Math.max(10, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS - elapsed);
+      artifactChainTimeoutMs = Math.max(10, SALE_SHARING_OPT_OUT_ARTIFACT_BUDGET_MS - elapsed);
     }
     if (evidenceWorker && payload.workerLane === "cmp_preferences") {
       // Bound the entire worker, including a stalled browser shutdown/upload,

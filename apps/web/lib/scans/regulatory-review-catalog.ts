@@ -60,9 +60,15 @@ export const REGULATORY_REVIEW_TOPICS: RegulatoryReviewTopic[] = [
   { id: "california-collection-notice-link", title: "Notice-at-collection link unavailable", findingIds: ["california_notice_at_collection_destination_error"], contexts: { ccpa_cpra: {
     why: "People should be able to read the applicable notice when information is collected. A confirmed missing named destination calls for repair and a check of the actual collection point.",
     rule: "CCPA §1798.100; regulations §7012", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf", cases: ["tractorSupply"], priority: 98 } } },
+  { id: "california-rights-disclosure", title:"Core rights disclosure not identified", findingIds:["california_rights_disclosure_not_observed"], contexts:{ccpa_cpra:{
+    why:"A business covered by CCPA/CPRA must explain applicable consumer rights. The retained inspection identifies rights not described as consumer rights in the complete policy; it does not establish how the business handles requests.",
+    rule:"CCPA §1798.130; regulations §7011",ruleUrl:"https://cppa.ca.gov/regulations/",cases:[],priority:98}}},
   { id: "california-rights-information-link", title: "California rights-information link unavailable", findingIds: ["california_rights_information_destination_error"], contexts: { ccpa_cpra: {
     why: "People need accessible information about their California rights and how to use them. A confirmed missing named destination deserves review alongside any other available request methods.",
     rule: "CCPA §1798.130; regulations §§7011, 7020", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf", cases: ["tractorSupply", "honda"], priority: 97 } } },
+  { id: "california-gpc-choice", title: "GPC choice-enforcement risk", findingIds: ["gpc_response"], contexts: { ccpa_cpra: {
+    why: "GPC communicates a sale/sharing opt-out. Verified advertising collection or an acknowledged signal with the applicable opt-out remaining off warrants checking whether the site and its services apply that choice.",
+    rule: "CCPA §1798.135; regulations §§7025–7026", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_updates_cyber_risk_admt_appr_text.pdf", cases: ["sephora"], priority: 100 } } },
   { id: "california-opt-out-activity", title: "Activity after a sale/sharing opt-out", findingIds: ["california_sale_sharing_opt_out_activity"], contexts: { ccpa_cpra: {
     why: "An applicable sale/sharing opt-out must take effect for relevant data flows. Review whether the observed requests actually involve sale or sharing and whether the visitor’s recorded choice is applied by those services.",
     rule: "CCPA §1798.120; regulations §7026", ruleUrl: "https://cppa.ca.gov/regulations/pdf/ccpa_statute_eff_20260101.pdf", cases: ["tractorSupply"], priority: 100 } } },

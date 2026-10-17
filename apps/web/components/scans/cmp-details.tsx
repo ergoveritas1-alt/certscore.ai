@@ -48,6 +48,9 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
   const visibleGroups = (audit?.limitationGroups ?? []).map(group => ({ ...group,
     criterionIds: group.criterionIds.filter(id => displayed.has(id)),
   })).filter(group => group.criterionIds.length);
+  const unassessedRows = defaultRows.filter(row => row.status === "Not assessed" &&
+    !row.supportingEvidence && !grouped.has(row.id));
+  const foldedUnassessed = new Set(unassessedRows.length > 1 ? unassessedRows.map(row => row.id) : []);
   const renderRow = (row: CmpAuditRow) => {
     const source = evidenceRows.find(source => row.sourceIds.includes(source.id) || evidenceRowAnchor(source.id) === row.evidenceAnchor);
     const { id, label, status, detail, sourceIds, supportingEvidence } = row;
@@ -98,7 +101,14 @@ export function CmpDetails({ audit, vendor, compact = false, children, evidenceR
       </div> : null}
       {experience.mode === "cmp_details" ? <h4 className="mt-4 text-xs font-semibold text-zinc-600">Consent management audit · {rows.length} criteria</h4> : null}
       {defaultRows.length ? <div className="mt-2 divide-y divide-zinc-200 border-t border-zinc-200">
-        {defaultRows.filter(row => !grouped.has(row.id)).map(renderRow)}
+        {defaultRows.filter(row => !grouped.has(row.id) && !foldedUnassessed.has(row.id)).map(renderRow)}
+        {foldedUnassessed.size ? <details className="group/cmp-unassessed py-3" data-cmp-unassessed-checks>
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-700 [&::-webkit-details-marker]:hidden">
+            <span>Not assessed · {foldedUnassessed.size} checks</span>
+            <DisclosureChevron className="text-zinc-400 group-open/cmp-unassessed:rotate-180" />
+          </summary>
+          <div className="mt-2 divide-y divide-zinc-200">{unassessedRows.map(renderRow)}</div>
+        </details> : null}
         {visibleGroups.map(group => <details key={group.id} id={`cmp-limitation-${group.id}`} className="group/cmp-limitation py-3">
           <summary className="cursor-pointer list-none text-sm font-semibold text-zinc-800 [&::-webkit-details-marker]:hidden">
             <span className="flex items-start justify-between gap-3"><span>{group.title}<span className="mt-1 block text-xs font-normal text-zinc-500">{`${group.criterionIds.length} ${group.criterionIds.length === 1 ? "check" : "checks"} · View affected checks`}</span></span><span className="flex shrink-0 items-center gap-2"><EvidenceStatusBadge label="Incomplete" tone="limited" /><DisclosureChevron className="text-zinc-400 group-open/cmp-limitation:rotate-180" /></span></span>

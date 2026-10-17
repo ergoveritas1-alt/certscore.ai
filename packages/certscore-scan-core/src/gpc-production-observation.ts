@@ -1,3 +1,4 @@
+import {resolveCanonicalVendor} from "@certscore/vendor-resolver";
 import { createHash } from "node:crypto";
 import {
   canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
@@ -25,9 +26,11 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     sourceBound: Boolean(bundle?.gpcPrototypeSessionBinding), evidenceRefs: bundle && source ? [source.pointer] : [] });
   // An independently blocked GPC lane cannot borrow representative access from
   // the baseline lane. Keep its directly retained facts, but limit completion.
+  const lane = bundle?.scanLaneRuns.find(run => run.laneId === "gpc_observation");
   const representative = bundle?.scanNoGoAssessment?.decision !== "no_go" &&
     bundle?.scanEvidenceLaneAssessment?.outcome !== "no_go" &&
-    bundle?.scanEvidenceLaneAssessment?.lanes.homepageRuntime === "usable";
+    (lane ? lane.accessOutcome === "representative_page" && !lane.challengeDetected &&
+      lane.executionOutcome !== "failed" : bundle?.scanEvidenceLaneAssessment?.lanes.homepageRuntime === "usable");
   const limitationKeys = [...result.limitations, ...(!representative ? ["representative_access_not_verified"] : [])];
   const semantic = result.documentBound ? session?.semanticObservation : null;
   const state = semantic?.gppStatus === "observed" ? result.currentSaleSharingState : null;
@@ -50,18 +53,28 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       request.urlSha256 === gpcDocumentHash(event.requestUrl) && request.timestampMs === event.timestampMs &&
       event.timestampMs >= session!.mainDocument!.committedAtMs && event.timestampMs <= session!.captureEndedAtMs;
   });
+  const advertisingCollection = classified.filter(event => {
+    if (!event.collectionEndpointObserved || event.method === "OPTIONS" || !/^https:/.test(event.requestUrl)) return false;
+    const status = bundle?.networkResponseEvents.find(row=>row.requestId === event.requestId)?.status;
+    if (status === undefined || status < 200 || status >= 400) return false;
+    const resolved=resolveCanonicalVendor({type:"request",url:event.requestUrl,sourceScanner:"gpc_observation",matchSource:"network_request"}).observation;
+    return resolved && resolved.confidence >= 0.9 && ["advertising","marketing"].includes(resolved.purpose) &&
+      resolved.registryAttribution?.matchKind === "endpoint";
+  });
   return gpcBoundedObservationSchema.parse({
-    contractVersion: "certscore.gpc-bounded-observation.v1", scope: "main_document_and_retained_http_requests",
+    contractVersion: "certscore.gpc-bounded-observation.v1", scanId:input.scanId, scope: "main_document_and_retained_http_requests",
     status: result.completed && representative ? "complete" : result.sourceVerified ? "limited" : "unavailable",
     sourceSha256: source?.pointer.sha256 ?? null,
     sessionSha256: result.sourceVerified ? bundle!.gpcPrototypeSessionBinding!.sessionSha256 : null,
     documentUrlSha256: result.documentBound ? session!.mainDocument!.documentUrlSha256 : null,
+    positiveEvidence: { policyVersion: "gpc_positive_evidence.v1", representativeDocument: Boolean(result.sourceVerified && result.documentBound && representative) },
     delivery: result.delivery, semanticProbe: semantic?.gppStatus ?? "incomplete",
     registration: { basis: "current_recorded_state", sale: axis(state?.saleNotice, state?.saleOptOut), sharing: axis(state?.sharingNotice, state?.sharingOptOut),
       cmpGpcSignal: state?.gpc === true ? "received" : state?.gpc === false ? "not_received" : "unknown", causedByGpc: "not_established" },
     acknowledgment: { observed: result.acknowledgmentObserved, captureComplete: result.acknowledgmentCaptureComplete },
     requests: { count: result.requestCapture.count, blockedBeforeTransmissionCount: result.requestCapture.blockedBeforeTransmissionCount, complete: result.requestCapture.complete,
       fromMs: result.requestCapture.fromMs, documentCommittedAtMs: result.requestCapture.documentCommittedAtMs, throughMs: result.requestCapture.throughMs,
+      advertisingCollectionCount: advertisingCollection.length, advertisingCollectionEvidenceIds: advertisingCollection.slice(0,100).map(row=>row.eventId),
       classifiedCount: classified.length, collectionCount: classified.filter(r => r.collectionEndpointObserved).length,
       evidenceIds: classified.slice(0, 100).map(r => r.eventId), samplesTruncated: classified.length > 100 },
     limitationKeys, scoreEffect: "none", legalInterpretation: "not_assessed",

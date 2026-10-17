@@ -65,6 +65,80 @@ test("canonical bundle retention keeps report-critical evidence under 400 KB exc
   assert.equal(compacted.observedJourneys.some((journey) => journey.attributionStatus === "site_owned_infrastructure"), false);
 });
 
+test("busy-page retention preserves redirected document proof, bounded GPC windows and collection responses", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  for (const [index, status] of [[70, 302], [90, 200]] as const) {
+    Object.assign(bundle.networkEvents[index]!, { isMainFrame: true, resourceType: "document", collectionEndpointObserved: false });
+    bundle.networkResponseEvents[index]!.status = status;
+  }
+  bundle.networkEvents[90]!.parentRequestId = bundle.networkEvents[70]!.requestId;
+  bundle.networkEvents[90]!.redirectChainRequestIds = [bundle.networkEvents[70]!.requestId];
+  bundle.networkEvents[120]!.collectionEndpointObserved = true;
+  bundle.networkResponseEvents[120]!.status = 204;
+  bundle.gpcImpactCapture = { contractVersion: "certscore.gpc-impact-capture.v1", scope: "page_http_request_attempts_after_document_commit",
+    expectedEnabled: false, captureStartedAtMs: 0, capturedAtMs: 1500, readbackDocumentToken: "loader",
+    document: { token: "loader", urlSha256: "a".repeat(64), committedAtMs: 940, secGpc: null }, requestsDropped: 0,
+    windows: [{ durationMs: 250, requestCount: 40, requestSetSha256: gpcImpactRequestSetHash(bundle.networkEvents.filter(event=>event.timestampMs>=940&&event.timestampMs<1190)) }], limitationKeys: [] };
+  const result = compactCanonicalEvidenceBundleForRetention(bundle);
+  for (const index of [70, 90, 120]) {
+    assert.ok(result.networkEvents.some(event=>event.eventId === bundle.networkEvents[index]!.eventId));
+    assert.ok(result.networkResponseEvents.some(event=>event.requestId === bundle.networkEvents[index]!.requestId));
+  }
+  assert.equal(result.gpcImpactCapture?.retentionStatus, undefined);
+  assert.ok(result.networkEvents.length<=140);
+  assert.ok(Buffer.byteLength(JSON.stringify(result))<=400*1024);
+});
+
+test("busy-page retention preserves exact CMP loader response pairs without synthesizing missing responses", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  const [completed, pending] = [bundle.networkEvents[70]!, bundle.networkEvents[90]!];
+  // These otherwise-unreferenced middle events are displaced by the bounded
+  // first/last samples. A CMP observation must retain their exact transport proof.
+  bundle.cmpRuntimeObservations = [{
+    observationId: "cmp-loader", observedAtMs: 1000, sourceScanner: "pre_consent_runtime",
+    scenario: "fresh_pre_consent", consentStateAtTime: "pre_consent", entity: "OneTrust", vendor: "OneTrust",
+    confidence: 0.95, directVsInferred: "direct", evidenceRefs: [],
+    signals: [completed, pending].map(event => ({ signalType: "script_url", matchedField: "hostname",
+      matchedValueRedacted: event.hostname, sourceEventId: event.eventId, confidence: 0.95, resolverBasis: [] })),
+  }];
+  const original = structuredClone(bundle.networkResponseEvents[70]!);
+  bundle.networkResponseEvents = bundle.networkResponseEvents.filter(event => event.requestId !== pending.requestId);
+  const result = compactCanonicalEvidenceBundleForRetention(bundle);
+  assert.ok(result.networkEvents.some(event => event.eventId === completed.eventId));
+  assert.ok(result.networkEvents.some(event => event.eventId === pending.eventId));
+  assert.ok(result.networkResponseEvents.some(event => event.eventId === original.eventId && event.requestId === original.requestId && event.status === original.status));
+  assert.equal(result.networkResponseEvents.some(event => event.requestId === pending.requestId), false);
+  assert.deepEqual(result.cmpRuntimeObservations, bundle.cmpRuntimeObservations);
+  assert.ok(result.networkEvents.length <= 140 && result.networkResponseEvents.length <= 100);
+  assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 400 * 1024);
+});
+
+test("late canonical CMP initialization survives compaction without an earlier probe reference", () => {
+  const bundle = oversizedGoogleLikeBundle();
+  const late = bundle.networkEvents[90]!;
+  Object.assign(late, { hostname: "cdn.cookielaw.org", registrableDomain: "cookielaw.org", thirdParty: true, firstParty: false,
+    resourceType: "script", url: "https://cdn.cookielaw.org/scripttemplates/202509.1.0/otBannerSdk.js",
+    requestUrl: "https://cdn.cookielaw.org/scripttemplates/202509.1.0/otBannerSdk.js" });
+  const response = bundle.networkResponseEvents[90]!;
+  Object.assign(response, { hostname: late.hostname, url: late.url, responseUrl: late.url, status: 200 });
+  // A publisher can reference every routine request. CMP priority must beat
+  // that traffic, while the separate navigation/collection tier stays higher.
+  bundle.consentUiObservations[0]!.evidenceRefs = bundle.networkEvents.map(event => ({
+    refId: `busy_${event.eventId}`, eventId: event.eventId, eventType: "network_request", label: "Retained request",
+  }));
+  for (const event of bundle.networkEvents) if (event !== late) {
+    event.thirdParty = true; event.firstParty = false; event.cookieNamesSent = ["identifier"];
+  }
+  const originalObservations = structuredClone(bundle.cmpRuntimeObservations);
+  const originalSignals = structuredClone(bundle.derivedRuntimeSignals);
+  const result = compactCanonicalEvidenceBundleForRetention(bundle);
+  assert.ok(result.networkEvents.some(event => event.eventId === late.eventId));
+  assert.ok(result.networkResponseEvents.some(event => event.requestId === late.requestId && event.status === 200));
+  assert.deepEqual(result.cmpRuntimeObservations, originalObservations, "Retention cannot create CMP observations");
+  assert.equal(result.derivedRuntimeSignals.preConsentTrackingObserved, originalSignals.preConsentTrackingObserved);
+  assert.ok(Buffer.byteLength(JSON.stringify(result)) <= 400 * 1024);
+});
+
 test("canonical bundle retention does not convert CMP-only activity into pre-consent tracking", () => {
   const bundle = oversizedGoogleLikeBundle();
   const cookieJourney = bundle.observedJourneys.find((journey) => journey.displayName === "NID");

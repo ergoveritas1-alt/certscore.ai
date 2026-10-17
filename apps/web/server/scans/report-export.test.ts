@@ -16,6 +16,8 @@ import { deriveConsentControlAssessment } from "@certscore/contracts";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 import { buildApiV2ScanResource, buildApiV2ScanStatus } from "../../lib/api-v2/scan-resource";
+import {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL} from "./california-review-coverage.fixture";
+import {projectCaliforniaPrivacyReview} from "./california-privacy-review-projection";
 
 function scanRecord(): ScanDetailResponse {
   const scanId = "00000000-0000-0000-0000-000000000001";
@@ -102,6 +104,44 @@ test("California export carries its own versioned starting-page score", () => {
   assert.equal(resource.postureScores?.gdprEprivacy.score,resource.score);
   assert.deepEqual(status.postureScores,resource.postureScores);
   assert.match(renderCanonicalReportPdf(ca).toString("latin1"),/California starting-page score: 100\/100/);
+});
+
+test("new California coverage and score agree across persisted report, API, JSON and PDF",()=>{
+  const record=scanRecord();const f=californiaCoverageFixture();f.bundle.scanId=record.scan.id;f.policyEvidence.projection.scanId=record.scan.id;
+  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  const parent=deriveConsentControlAssessment({scan:{scanId:record.scan.id,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+  record.runtimeArtifacts={...record.runtimeArtifacts,consentControlAssessment:parent};
+  record.accessPostureSummary={} as ScanDetailResponse["accessPostureSummary"];
+  record.snapshot={report_projection_status:"ready",certscore_overall:73,score_version:"overall-posture.v11"} as ScanDetailResponse["snapshot"];
+  const exported=buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
+  const api=buildApiV2ScanResource(record);
+  assert.equal(exported.californiaScore.score,100);assert.equal(api.postureScores?.ccpaCpra.score,100);
+  assert.equal(api.postureScores?.ccpaCpra.coverageSummary?.evidenceFamilies,6);
+  assert.equal(api.postureScores?.ccpaCpra.policyVersion,exported.californiaScore.policyVersion);
+  assert.equal(exported.californiaScore.reviewCoverage?.families.length,6);
+  const pdf=renderCanonicalReportPdf(exported).toString("latin1");
+  assert.match(pdf,/California coverage/);assert.match(pdf,/california-regulatory-posture.v2/);
+  assert.doesNotMatch(pdf,/review focuses on GPC/);
+});
+
+test("v3 numerical score and review coverage agree in API and exports",()=>{
+  const record=scanRecord();const f=californiaCoverageFixture("Canadian Privacy Policy. To exercise your privacy rights, contact privacy@example.test. We use personal information to provide requested services.");
+  f.bundle.scanId=record.scan.id;f.policyEvidence.projection.scanId=record.scan.id;
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v3";
+  f.bundle.collectionSurfaceInventory!.scenario="fresh_pre_consent";
+  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  const parent=deriveConsentControlAssessment({scan:{scanId:record.scan.id,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+  record.runtimeArtifacts={...record.runtimeArtifacts,consentControlAssessment:parent};
+  record.accessPostureSummary={} as ScanDetailResponse["accessPostureSummary"];
+  record.snapshot={report_projection_status:"ready",certscore_overall:73,score_version:"overall-posture.v11"} as ScanDetailResponse["snapshot"];
+  const exported=buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
+  const api=buildApiV2ScanResource(record);
+  assert.equal(exported.californiaScore.score,100);assert.equal(exported.californiaScore.coverage,"limited");
+  assert.equal(api.postureScores?.ccpaCpra.score,100);
+  assert.equal(api.postureScores?.ccpaCpra.coverageSummary?.scoreReady,true);
+  assert.ok(api.postureScores?.ccpaCpra.coverageSummary?.families.some(row=>row.id === "california_rights" && row.status === "review"));
+  assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/california-regulatory-posture.v3/);
+  assert.equal(exported.gpcResponse,null);
 });
 
 test("exports omit speculative action lanes but preserve independently verified clicks", () => {
@@ -347,7 +387,7 @@ test("projects GDPR Transparency and retained collection assessments into separa
   assert.equal(readPersistedScanReportProjection({ scan: scan.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);
 });
 
-test("bounded GPC measurements remain retained but hidden from both customer review focuses", async () => {
+test("verified bounded GPC measurements survive both customer review focuses without scoring", async () => {
   const { gpcRuntimeFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
   const { gpcActivityComparisonFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
   const { buildGpcResponseAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-response-assessment");
@@ -374,14 +414,66 @@ test("bounded GPC measurements remain retained but hidden from both customer rev
   assert.ok(restored);
   const eu = buildCanonicalReportExport(restored, undefined, "gdpr_eprivacy")!;
   const ca = buildCanonicalReportExport(restored, undefined, "ccpa_cpra")!;
-  assert.equal(eu.gpcResponse, null);
-  assert.equal(ca.gpcResponse, null);
+  assert.ok(eu.gpcResponse);
+  assert.ok(ca.gpcResponse);
+  assert.equal(ca.gpcResponse.californiaPolicy.deductionPoints,0);
   const { renderPulseMarkdown } = await import("../../lib/pulse/markdown");
   const markdown = renderPulseMarkdown({ domain: "example.test", scanId: scan.scan.id, scanStatus: "completed", gpcResponse: ca.gpcResponse, topFindings: [], links: {}, summary: {} });
-  assert.doesNotMatch(markdown, /Baseline -> GPC/);
+  assert.match(markdown, /Baseline -> GPC/);
   const pdf = renderCanonicalReportPdf(ca).toString("latin1");
-  assert.doesNotMatch(pdf, /Baseline -> GPC/);
+  assert.match(pdf, /Baseline -> GPC/);
+  assert.match(pdf, /No qualifying tracking activity observed/);
   assert.match(pdf, /California starting-page score: Unavailable/);
   const foreign = { ...restored, scan: { ...restored.scan, id: "foreign-scan" } };
   assert.equal(buildCanonicalReportExport(foreign), null, "a report cannot be rebound to a different scan");
+});
+
+test("v4 negative disclosure inspection and deduction agree in canonical report, API, JSON and PDF",()=>{
+  const record=scanRecord();const f=californiaCoverageFixture("Privacy Policy. Access your personal information, correct inaccuracies and request erasure. Contact privacy@example.test to exercise rights.");
+  f.bundle.scanId=record.scan.id;f.policyEvidence.projection.scanId=record.scan.id;
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v4";
+  f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
+  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  const parent=deriveConsentControlAssessment({scan:{scanId:record.scan.id,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+  record.runtimeArtifacts={...record.runtimeArtifacts,consentControlAssessment:parent};
+  const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:record.runtimeArtifacts});
+  const canonical=(record as unknown as {canonicalReportProjection:{ownerUnifiedFindings:typeof packets;globalUnifiedFindings:typeof packets}}).canonicalReportProjection;
+  canonical.ownerUnifiedFindings=packets;
+  canonical.globalUnifiedFindings=packets;
+  record.accessPostureSummary={} as ScanDetailResponse["accessPostureSummary"];
+  record.snapshot={report_projection_status:"ready",certscore_overall:73,score_version:"overall-posture.v11"} as ScanDetailResponse["snapshot"];
+  const exported=buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
+  const api=buildApiV2ScanResource(record);
+  assert.equal(exported.californiaScore.score,88);assert.equal(exported.californiaScore.deductions.length,1);
+  assert.equal(api.postureScores?.ccpaCpra.score,88);assert.equal(api.postureScores?.gdprEprivacy.score,73);
+  assert.equal(exported.californiaScore.policyVersion,"california-regulatory-posture.v4");
+  assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.score,88);
+  assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/california-regulatory-posture.v4/);
+  assert.equal(exported.gpcResponse,null);
+});
+
+for(const version of ["v5","v6","v7","v8","v9","v10"] as const) test(`${version} clause and collection assessments retain evidence consistently across score, API and exports`,()=>{
+  const record=scanRecord();const f=californiaCoverageFixture("Privacy Policy. We give the individual access to personal information upon request. A customer may request correction of inaccurate personal information. We retain records until they are no longer necessary. Such information is destroyed or erased.");
+  f.bundle.scanId=record.scan.id;f.policyEvidence.projection.scanId=record.scan.id;
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy=`california-privacy-review.${version}`;
+  f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
+  const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+  const parent=deriveConsentControlAssessment({scan:{scanId:record.scan.id,finalUrl:CA_FIXTURE_URL}});parent.californiaPrivacyReview=child;
+  record.runtimeArtifacts={...record.runtimeArtifacts,consentControlAssessment:parent};
+  const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:record.runtimeArtifacts});
+  const canonical=(record as unknown as {canonicalReportProjection:{ownerUnifiedFindings:typeof packets;globalUnifiedFindings:typeof packets}}).canonicalReportProjection;
+  canonical.ownerUnifiedFindings=packets;canonical.globalUnifiedFindings=packets;
+  record.accessPostureSummary={} as ScanDetailResponse["accessPostureSummary"];
+  record.snapshot={report_projection_status:"ready",certscore_overall:73,score_version:"overall-posture.v11"} as ScanDetailResponse["snapshot"];
+  const exported=buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
+  assert.equal(exported.californiaScore.score,88);assert.equal(exported.californiaScore.deductions.length,1);
+  assert.equal(exported.californiaScore.policyVersion,`california-regulatory-posture.${version === "v10"?"v8":(version === "v8" || version === "v9")?"v7":version}`);
+  assert.equal(exported.californiaScore.rightsAssessment?.topics.find(row=>row.topic === "right_to_delete")!.status,"not_observed");
+  assert.equal(exported.californiaScore.collectionNoticeAssessment?.inventoryComplete,true);
+  const api=buildApiV2ScanResource(record);assert.equal(api.postureScores?.ccpaCpra.score,88);assert.equal(api.postureScores?.gdprEprivacy.score,73);
+  assert.equal(api.postureScores?.ccpaCpra.policyVersion,`california-regulatory-posture.${version === "v10"?"v8":(version === "v8" || version === "v9")?"v7":version}`);
+  assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/Rights clause/);
+  assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.rightsAssessment.topics.length,4);
+  assert.equal(exported.gpcResponse,null);
+  if(version === "v6" || version === "v7" || version === "v8" || version === "v9" || version === "v10"){assert.ok(exported.californiaScore.saleSharingAssessment);assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/Sale\/sharing clause/);}
 });

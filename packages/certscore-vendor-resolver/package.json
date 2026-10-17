@@ -15,6 +15,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@certscore/contracts": "workspace:*"
+    "@certscore/contracts": "workspace:*",
+    "acorn": "8.15.0"
   }
 }

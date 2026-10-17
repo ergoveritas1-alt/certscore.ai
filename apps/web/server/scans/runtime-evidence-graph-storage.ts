@@ -5,6 +5,7 @@ import { getS3Client, getStorageBucketName } from "@website-signal-risk-scanner/
 import { apiRuntimeEvidenceGraphProjectionSchema, type ApiRuntimeEvidenceGraphProjection } from "@certscore/api-contracts";
 import { z } from "zod";
 import type { ScanDetailResponse } from "./get-scan-by-id";
+import { customerRuntimeGraph } from "./runtime-evidence-graph-projection";
 
 const MAX_BYTES = 768 * 1024;
 const digest = (body: Buffer) => createHash("sha256").update(body).digest("hex");
@@ -90,7 +91,8 @@ export async function hydrateRuntimeGraphForRead(record: ScanDetailResponse, dep
     return { ...record, runtimeArtifacts: artifacts };
   }
   const parsed = apiRuntimeEvidenceGraphProjectionSchema.safeParse(record.runtimeArtifacts?.runtimeEvidenceGraphProjection);
-  if (!parsed.success || !parsed.data.details) return record;
+  if (!parsed.success) return record;
+  if (!parsed.data.details) return {...record,runtimeArtifacts:{...record.runtimeArtifacts,runtimeEvidenceGraphProjection:customerRuntimeGraph(parsed.data)}};
   const projection = parsed.data;
   const parsedReference = referenceSchema.safeParse(record.runtimeArtifacts?.runtimeEvidenceGraphReference);
   let resolved = unavailable(projection, "relationship_artifact_unverified");
@@ -106,5 +108,5 @@ export async function hydrateRuntimeGraphForRead(record: ScanDetailResponse, dep
       if (!dependencies.read) { cache.delete(key); cache.set(key, body); while (cache.size > 32) cache.delete(cache.keys().next().value!); }
     } catch { /* Fail closed without logging untrusted body, URLs, or secrets. No automatic rescan/republication. */ }
   }
-  return { ...record, runtimeArtifacts: { ...record.runtimeArtifacts, runtimeEvidenceGraphProjection: resolved } };
+  return { ...record, runtimeArtifacts: { ...record.runtimeArtifacts, runtimeEvidenceGraphProjection: customerRuntimeGraph(resolved) } };
 }

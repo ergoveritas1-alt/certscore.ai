@@ -113,7 +113,7 @@ export function retainDirectResponseWithOptionalEnrichment<T extends object>(inp
   finalized: () => boolean;
 }): Promise<void> {
   if (input.finalized()) return Promise.resolve();
-  input.rows.push(input.direct);
+  if (!input.rows.includes(input.direct)) input.rows.push(input.direct);
   const commit = (enrichment: Partial<T>, onCommit?: () => void) => {
     if (input.finalized()) return false;
     Object.assign(input.direct, enrichment);

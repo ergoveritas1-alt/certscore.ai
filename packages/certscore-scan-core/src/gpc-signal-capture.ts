@@ -1,3 +1,4 @@
+import {PAIRED_RUNTIME_SETTLE_POLICY,PAIRED_RUNTIME_SETTLE_MAX_MS} from "./runtime-document-settle.js";
 import { createHash } from "node:crypto";
 import type { BrowserContext, Page, Worker } from "playwright";
 import { gpcSignalObservationSchema, type GpcSignalObservation, type BrowserDocumentIdentity } from "@certscore/contracts";
@@ -29,6 +30,7 @@ export function createGpcSignalCapture(input: {
   input.page.on("worker", (worker) => workers.add(worker));
   input.context.on("serviceworker", (worker) => workers.add(worker));
   const contextConfigSha256 = createHash("sha256").update(JSON.stringify({
+    pairedSettlePolicy:PAIRED_RUNTIME_SETTLE_POLICY,pairedSettleMaxMs:PAIRED_RUNTIME_SETTLE_MAX_MS,
     context: chromiumContextOptions(), waitMode: input.waitMode ?? "default", internalBudgetMs: input.internalBudgetMs,
   })).digest("hex");
 

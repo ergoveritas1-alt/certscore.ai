@@ -4973,6 +4973,11 @@ test("policy-lane negative-search proof survives the hash-bound early handoff", 
     artifactRefs: [], policySurfaceObservations: [],
     moduleRun: { moduleName: "policySurfaceScanner", status: "completed", evidenceRefs: [],
       startedAt: "2026-10-11T00:00:00Z", durationMs: 1000, errors: [] },
+    privacyChoiceInspection:{contractVersion:"certscore.privacy-choice-inspection.v4",homepageAccessPolicy:"representative_homepage.v1",
+      documentUrl:requestedUrl,capturedAt:new Date().toISOString(),sourceHash:"c".repeat(64),scope:"rendered_named_links_and_buttons",coverage:"complete",
+      namedChoiceCandidateCount:0,unnamedControlCount:0,hiddenUnnamedControlCount:0,candidateEnumerationTruncated:false,uninspectedFrameCount:0,uninspectedShadowRootCount:0,
+      supportedDocumentLanguage:true,representativeDocument:true,documentStable:true,frameCount:0,inspectedSameOriginFrameCount:0,hiddenUninspectedFrameCount:0,
+      inaccessibleFrameCount:0,unreadyFrameCount:0,unprojectableFrameCount:0,frameBudgetLimitedCount:0,namedFrameChoiceCandidateCount:0,frameInspectionWorkMs:0,frameProofWorkMs:0},
     negativeSearchEvidence: {
       contractVersion: "certscore.policy-negative-search.v1", requestedUrl,
       staticDocumentUrl: requestedUrl, renderedDocumentUrl: requestedUrl,
@@ -4983,6 +4988,8 @@ test("policy-lane negative-search proof survives the hash-bound early handoff", 
     },
   } });
   assert.equal(packet.policySurfaceInspection.outcome, "no_privacy_policy_observed_complete_coverage");
+  assert.equal(packet.policySurfaceInspection.californiaReviewPolicy,"california-privacy-review.v3");
+  assert.equal(packet.policySurfaceInspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v4");
   assert.ok(packet.policySurfaceInspection.negativeSearchEvidence);
   const { sourceHash, ...unsigned } = packet;
   assert.equal(sourceHash, createHash("sha256").update(JSON.stringify(unsigned)).digest("hex"));
@@ -5218,3 +5225,27 @@ for(const optOut of ["complete","hang","wrong_hash","wrong_target"] as const) fo
     }
   });
 }
+
+test("sale/sharing worker retains a terminal packet through cleanup within its existing five-second cap",{timeout:7000},async()=>{
+  const root=await mkdtemp(path.join(os.tmpdir(),"optout-artifact-reserve-"));
+  let publications=0;
+  try {
+    const result=await handler(validPayload({orchestrationMode:"worker",workerLane:"sale_sharing_opt_out",parentDispatchSha256:"e".repeat(64),
+      saleSharingOptOut:{policyVersion:"bounded_sale_sharing_opt_out.v1",enabled:true,scanId:"scan-local-1",exactTargetUrl:"https://example.com/"}}),{
+      workspaceRoot:root,
+      runArtifactChain:async(_payload,options)=>{
+        await new Promise(resolve=>setTimeout(resolve,2800));
+        options.onScanCoreComplete?.();
+        // A terminal capture's cleanup/upload previously raced the four-second
+        // artifact deadline even though the worker still had approved reserve.
+        await new Promise(resolve=>setTimeout(resolve,1350));
+        options.artifactSignal?.throwIfAborted();
+        return {artifactPointers:{saleSharingOptOutPacketUri:"s3://test-bucket/verified.json"},artifactMetadata:{saleSharingOptOutPacketUri:{sha256:"a".repeat(64),sizeBytes:100}},phaseTimings:[]};
+      },sqsClient:{async send(){publications++;return {$metadata:{}};}},
+    });
+    assert.equal(result.status,"completed");
+    assert.equal(result.workerLane,"sale_sharing_opt_out");
+    assert.equal(result.artifactPointers?.saleSharingOptOutPacketUri,"s3://test-bucket/verified.json");
+    assert.equal(publications,0,"Worker never independently publishes a customer report");
+  } finally {await rm(root,{recursive:true,force:true});}
+});
