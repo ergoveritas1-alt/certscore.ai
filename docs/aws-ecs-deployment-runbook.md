@@ -121,6 +121,15 @@ original Docker Hub and public ECR manifest digests match, retain both ARM64 and
 AMD64 support, and run a local BuildKit conversion smoke test plus deployment
 contract checks. Keep required CI checks and exact-image promotion unchanged.
 
+Validation builds may recover once from an exact public Node mirror manifest
+`429` using `scripts/build-with-pinned-node-fallback.mjs`. The helper verifies the
+same approved digest at its original Docker Official Image source before making
+a temporary source policy for that build. It preserves all build arguments and
+the checked-in policy, and fails closed on mismatched or unavailable proof,
+cancellation, unrelated errors, or a failed second build. This does not change
+Node/Chromium versions, runtime-base approval, image provenance or deployment
+health checks. Successful primary builds add no registry call.
+
 The required web CI typecheck runs route type generation and the complete web
 TypeScript check before the image build. Only its successful output supplies
 `WEB_TYPECHECK_VERIFIED_SHA`; Next.js reuses that check only when it exactly
