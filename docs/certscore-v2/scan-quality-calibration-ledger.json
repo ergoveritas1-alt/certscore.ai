@@ -32,8 +32,8 @@
     },
     "https://msnbc.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-14T21:13:07.760Z",
-      "lastContactAt": "2026-10-17T21:13:07.760Z",
+      "cooldownUntil": "2026-11-14T21:54:15.874Z",
+      "lastContactAt": "2026-10-17T21:54:15.874Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1273,7 +1273,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-17T21:13:43.838Z",
+  "updatedAt": "2026-10-17T21:54:39.105Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",
