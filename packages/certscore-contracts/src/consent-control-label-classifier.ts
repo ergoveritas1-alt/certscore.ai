@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v18";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v19";
 
 export type ConsentControlIntent =
   | "accept"
@@ -1212,6 +1212,15 @@ function classifyConsentControlLabelInternal(
   }
   if (NON_ACTIONABLE_REFERENCE_PATTERN.test(normalizedLabel)) {
     return unknown(["non_actionable_reference_label"]);
+  }
+  // An exact named-CMP notice control may acknowledge Terms and an updated
+  // policy. That wording supplies no cookie-consent action or registration.
+  const noticeContext=input.scopeKind==="dialog" && input.scopeText?.trim()?normalizeConsentControlText(input.scopeText):normalizedContext;
+  if(input.usage!=="action" && input.observationRecipe==="onetrust.notice_continue.v1" && normalizedLabel==="continue" &&
+    /\bby continuing,? you agree to our terms\b/.test(noticeContext) &&
+    /\backnowledge that our (?:updated )?privacy policy applies\b/.test(noticeContext) &&
+    !/\b(?:consent|agree) to (?:the use of |these |all |our )?(?:cookies|tracking)\b/.test(noticeContext)) {
+    return {...unknown(["notice_acknowledgment_only","observation_only_label"]),semanticRole:"ambiguous_acknowledgment",contextSatisfied:hasConsentContext};
   }
   if (/^(?:close|close modal|dismiss|×|x)$/i.test(normalizedLabel)) {
     return {

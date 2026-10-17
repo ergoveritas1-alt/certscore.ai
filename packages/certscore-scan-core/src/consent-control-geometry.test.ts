@@ -682,6 +682,19 @@ test("classifies NBC-style visible Continue button as first-layer accept when co
   assert.equal(continueButton?.decisionStatus, "confirmed_visible");
 });
 
+test("OneTrust Terms/privacy acknowledgment and structural banner region do not become unresolved cookie decisions",async()=>{
+  const artifact=await captureFixture(`<script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>
+    <div id="onetrust-consent-sdk"><div id="onetrust-banner-sdk" role="region" aria-label="Cookie banner" style="position:fixed;bottom:0;background:white;padding:20px">
+    <div role="dialog" aria-label="Privacy"><div id="onetrust-policy-text"><p>This site is now part of Versant. By continuing, you agree to our <a href="/terms">Terms</a>. You also acknowledge that our updated <a href="/privacy">Privacy Policy</a> applies, including your existing data. For info on your data rights, click Your Privacy Choices. We use tools for analytics and advertising.</p></div>
+    <div id="onetrust-button-group"><button id="onetrust-pc-btn-handler">Your Privacy Choices</button><button id="onetrust-accept-btn-handler">Continue</button></div></div></div></div>`);
+  const acknowledgment=findCandidate(artifact,"Continue")!;
+  assert.equal(acknowledgment.actionType,"other");
+  assert.ok(acknowledgment.classifierReasonCodes?.includes("notice_acknowledgment_only"));
+  assert.equal(artifact.controlInspection?.candidates.find(c=>c.candidateId===acknowledgment.candidateId)?.role,"information");
+  assert.equal(artifact.summary.firstLayerAccept,false);assert.equal(artifact.summary.firstLayerReject,false);
+  assert.equal(artifact.summary.limitations.includes("unresolved_visible_consent_decision"),false);
+});
+
 test("captures Ci Media Cloud-style OneTrust accept, reject, and manage controls", async () => {
   const artifact = await captureFixture(`
     <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js"></script>

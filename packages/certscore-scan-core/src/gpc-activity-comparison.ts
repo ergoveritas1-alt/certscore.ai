@@ -6,7 +6,7 @@ export function buildGpcActivityComparison(input: {
   scanId: string; baseline?: GpcImpactSource; gpc?: GpcImpactSource;
 }): GpcActivityComparison | undefined {
   const pageHttpOnly = [input.baseline, input.gpc].every(source =>
-    readVerifiedGpcImpactSource(source)?.gpcImpactCapture?.comparisonPolicy === "page_http_signal.v1");
+    ["page_http_signal.v1", "page_http_signal.v2"].includes(readVerifiedGpcImpactSource(source)?.gpcImpactCapture?.comparisonPolicy ?? ""));
   const result = buildGpcImpactAssessment({ ...input, pageHttpOnly });
   if (result.status !== "measured" || !result.activity) return undefined;
   const project = (activity: NonNullable<typeof result.activity>["advertisingMarketing"]) => ({
@@ -14,7 +14,7 @@ export function buildGpcActivityComparison(input: {
     baselineServices: activity.baselineCount, gpcServices: activity.gpcCount,
   });
   const parsed = gpcActivityComparisonSchema.safeParse({
-    contractVersion: "certscore.gpc-activity-comparison.v1", ...(pageHttpOnly ? { evidencePolicy: "page_http_signal.v1" } : {}), scanId: result.scanId,
+    contractVersion: "certscore.gpc-activity-comparison.v1", ...(pageHttpOnly ? { evidencePolicy: readVerifiedGpcImpactSource(input.gpc)?.gpcImpactCapture?.comparisonPolicy } : {}), scanId: result.scanId,
     status: "measured", scope: "matched_post_commit_request_window", durationMs: result.durationMs,
     sourceHashes: result.sourceHashes,
     activity: { advertisingMarketing: project(result.activity.advertisingMarketing), analyticsReplay: project(result.activity.analyticsReplay) },

@@ -10,6 +10,8 @@ import { buildGpcActivityComparison } from "./gpc-activity-comparison";
 import { buildGpcResponseAssessment } from "./gpc-response-assessment";
 import { resolveVendorObservations } from "@certscore/vendor-resolver";
 import { gpcEndpointEvidence } from "./gpc-vendor-evidence";
+import {retainGpcComparisonLedger} from "./gpc-comparison-ledger";
+import {gpcImpactRequestSetHash} from "./gpc-impact-capture";
 
 function source(bundle: CanonicalEvidenceBundle) {
   const bytes = Buffer.from(JSON.stringify(bundle));
@@ -34,6 +36,34 @@ function fixture(enabled: boolean, names: string[], end = 1500) {
   bundle.modulesRun[0]!.timingBreakdown![0]!.outcome = "timed_out";
   return canonicalEvidenceBundleSchema.parse(bundle);
 }
+
+test("compact producer ledger preserves five-second late advertising comparisons after raw samples are pruned",()=>{
+  const baseline=fixture(false,["Late ad"]),gpc=fixture(true,["Late ad"]);
+  for(const b of [baseline,gpc]) {
+    b.networkEvents[1]!.timestampMs=4200;
+    b.networkEvents[1]!.collectionEndpointObserved=true;
+    b.completedAt="2026-09-05T12:00:07.000Z";
+    b.gpcSignalObservation!.capturedAtMs=6000;
+    Object.assign(b.gpcImpactCapture!,{comparisonPolicy:"page_http_signal.v2",capturedAtMs:6000});
+    b.gpcImpactCapture!.windows=[500,3000,5000].map(durationMs=>({durationMs:durationMs as 500|3000|5000,
+      requestCount:b.networkEvents.filter(e=>e.timestampMs>=1&&e.timestampMs<1+durationMs).length,
+      requestSetSha256:gpcImpactRequestSetHash(b.networkEvents.filter(e=>e.timestampMs>=1&&e.timestampMs<1+durationMs))}));
+    b.gpcImpactCapture=retainGpcComparisonLedger(b);
+    b.networkEvents=b.networkEvents.filter(e=>e.isMainFrame);
+    b.normalizedVendorObservations=[];
+    b.gpcImpactCapture!.retentionStatus="incomplete";
+  }
+  const run=()=>buildGpcActivityComparison({scanId:baseline.scanId,baseline:source(baseline),gpc:source(gpc)});
+  assert.equal(run()?.durationMs,5000);
+  assert.deepEqual(run()?.activity.advertisingMarketing,{baselineRequests:1,gpcRequests:1,baselineServices:1,gpcServices:1});
+  const original=structuredClone(gpc);
+  gpc.gpcImpactCapture!.requestLedger!.rows[0]!.secGpc=null;
+  assert.notEqual(run()?.durationMs,5000,"Missing signal proof cannot establish the long interval");
+  Object.assign(gpc,structuredClone(original));gpc.gpcImpactCapture!.requestLedger!.rows.pop();
+  assert.notEqual(run()?.durationMs,5000,"Missing request cannot establish the long interval");
+  Object.assign(gpc,structuredClone(original));gpc.gpcImpactCapture!.requestLedger!.rows[0]!.attributionUnknown=true;
+  assert.equal(run(),undefined,"Unverified relevant endpoint attribution remains limited");
+});
 
 test("canonical resolver preserves cookie association separately from endpoint match", () => {
   const observations = resolveVendorObservations([

@@ -16,5 +16,7 @@ test("measured requests and duration appear directly, without a response claim",
   assert.doesNotMatch(html, /<details|honored|suppressed|compliant|%/i);
   comparison.activity.advertisingMarketing = { baselineRequests: 0, gpcRequests: 0, baselineServices: 0, gpcServices: 0 };
   assert.doesNotMatch(renderToStaticMarkup(<GpcActivityComparison comparison={comparison} />), /NaN|%|suppressed/);
+  comparison.durationMs=5000;
+  assert.match(renderToStaticMarkup(<GpcActivityComparison comparison={comparison} />), /First 5 seconds after each document commit/);
   assert.equal(renderToStaticMarkup(<GpcActivityComparison />), "");
 });

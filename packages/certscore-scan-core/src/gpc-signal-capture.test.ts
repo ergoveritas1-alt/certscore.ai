@@ -76,3 +76,13 @@ test("slow child readback preserves the completed main frame inside the existing
   finishChild?.();await Promise.resolve();
   assert.equal(proof?.frames.length,1,"Late child completion cannot modify frozen evidence");
 });
+
+test("a child URL becoming empty cannot discard verified main-frame signal proof",async()=>{
+  const f=fixture(true);
+  const evaluate=f.child.evaluate.bind(f.child);
+  f.child.evaluate=async()=>{const sample=await evaluate();f.child.currentUrl="";return sample;};
+  const proof=await f.capture.snapshot();
+  assert.ok(proof?.frames.some(frame=>frame.mainFrame&&frame.navigatorValue===true));
+  assert.ok(proof?.limitationKeys.includes("frame_url_changed_during_readback"));
+  assert.equal(f.evaluations(),2,"No retry or additional frame read");
+});

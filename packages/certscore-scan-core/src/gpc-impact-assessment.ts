@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalEvidenceBundleSchema, gpcImpactAssessmentSchema, type CanonicalEvidenceBundle, type GpcImpactCapture, type GpcImpactAssessment, type NetworkEvent } from "@certscore/contracts";
-import { gpcImpactRequestSetHash } from "./gpc-impact-capture.js";
+import { gpcImpactRequestSetHash, gpcImpactIdentityHash } from "./gpc-impact-capture.js";
 import { evaluateGpcObservationSession } from "./gpc-observation-completion.js";
 import { retainedFinalDocumentRequest } from "./gpc-response-assessment.js";
 import { gpcEndpointEvidence } from "./gpc-vendor-evidence.js";
@@ -13,6 +13,11 @@ export function readVerifiedGpcImpactSource(source: GpcImpactSource | undefined)
     return canonicalEvidenceBundleSchema.parse(JSON.parse(Buffer.from(source.bytes).toString("utf8")));
   } catch { return null; }
 }
+function ledgerFor(bundle: CanonicalEvidenceBundle, ms:number) {
+  const c=bundle.gpcImpactCapture;
+  return c?.comparisonPolicy==="page_http_signal.v2" && c.document && c.requestLedger
+    ? c.requestLedger.rows.filter(r=>r.timestampMs>=c.document!.committedAtMs && r.timestampMs<c.document!.committedAtMs+ms) : undefined;
+}
 function eventsFor(bundle: CanonicalEvidenceBundle, capture: GpcImpactCapture, ms: number) {
   const start = capture.document!.committedAtMs;
   return bundle.networkEvents.filter(e => e.timestampMs >= start && e.timestampMs < start + ms);
@@ -24,7 +29,7 @@ function validSignal(bundle: CanonicalEvidenceBundle, enabled: boolean, scanId: 
     bundle.scanLaneRuns[0]?.region === bundle.region && c && c.expectedEnabled === enabled && c.document && p && p.expectedEnabled === enabled &&
     c.document.urlSha256 === p.documentUrlSha256 && c.document.token === c.readbackDocumentToken &&
     (enabled ? c.document.secGpc === "1" : c.document.secGpc === null) &&
-    (pageHttpOnly ? c.comparisonPolicy === "page_http_signal.v1" &&
+    (pageHttpOnly ? ["page_http_signal.v1", "page_http_signal.v2"].includes(c.comparisonPolicy ?? "") &&
       Boolean(retainedFinalDocumentRequest(bundle, p)?.requestHeaders) &&
       (enabled ? retainedFinalDocumentRequest(bundle, p)?.requestHeaders?.secGpc === "1" : retainedFinalDocumentRequest(bundle, p)?.requestHeaders?.secGpc === undefined) &&
       !p.limitationKeys.some(key => ["document_changed_during_readback", "prototype_document_identity_unverified"].includes(key)) :
@@ -68,6 +73,10 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   const verifiedWindow = (b: CanonicalEvidenceBundle, ms: number) => {
     const c = b.gpcImpactCapture!, w = c.windows.find(w => w.durationMs === ms);
     if (!c.document || !w) return false;
+    const ledger=ledgerFor(b,ms);
+    if(ledger)return w.requestCount===ledger.length && new Set(ledger.map(r=>r.eventId)).size===ledger.length &&
+      gpcImpactIdentityHash(ledger)===w.requestSetSha256 && (b.gpcSignalObservation?.capturedAtMs??-1)>=c.document.committedAtMs+ms &&
+      ledger.every(r=>r.headersVerified && (c.expectedEnabled?r.secGpc==="1":r.secGpc===null));
     const events = eventsFor(b, c, ms);
     return w.requestCount === events.length && new Set(events.map(e => e.eventId)).size === events.length &&
       w.requestSetSha256 === gpcImpactRequestSetHash(events) && (b.gpcSignalObservation?.capturedAtMs ?? -1) >= c.document.committedAtMs + ms &&
@@ -79,6 +88,8 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   if (!horizon) limits.push("common_window_unavailable");
   for (const [label, bundle] of [["baseline", baseline], ["gpc", gpc]] as const) {
     if (!bundle?.gpcImpactCapture?.document || !horizon) continue;
+    const ledger=pageHttpOnly?ledgerFor(bundle,horizon):undefined;
+    if(ledger){if(ledger.some(r=>r.attributionUnknown))limits.push(`${label}_endpoint_attribution_unverified`);continue;}
     const ids = new Set(eventsFor(bundle, bundle.gpcImpactCapture, horizon).map(event => event.eventId));
     if (bundle.normalizedVendorObservations.some(v => ["advertising", "marketing", "analytics", "session_replay"].includes(v.purpose) &&
       v.matchedEvidenceIds.some(id => ids.has(id) && gpcEndpointEvidence(v, id) === "unknown"))) limits.push(`${label}_endpoint_attribution_unverified`);
@@ -132,8 +143,14 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
   if (limits.length || !horizon || !baseline || !gpc || !bc || !gc) return gpcImpactAssessmentSchema.parse({ ...common,
     status: "insufficient_evidence", durationMs: null, requestAttempts: null, activity: null, limitationKeys: limits });
   const be = eventsFor(baseline, bc, horizon), ge = eventsFor(gpc, gc, horizon);
+  const measuredInventory=(bundle:CanonicalEvidenceBundle,events:NetworkEvent[],purposes:string[])=>{
+    const ledger=pageHttpOnly?ledgerFor(bundle,horizon):undefined;
+    if(!ledger)return inventory(bundle,events,new Set(purposes));
+    const ids=(r:typeof ledger[number])=>[...(purposes.includes("advertising")?r.advertising:[]),...(purposes.includes("analytics")?r.analytics:[])];
+    return {identities:new Set(ledger.flatMap(ids)),requests:ledger.filter(r=>ids(r).length>0).length,collectionRequests:ledger.filter(r=>ids(r).length>0&&r.collection).length};
+  };
   const compare = (purposes: string[]) => {
-    const b = inventory(baseline, be, new Set(purposes)), g = inventory(gpc, ge, new Set(purposes));
+    const b = measuredInventory(baseline,be,purposes), g = measuredInventory(gpc,ge,purposes);
     const sharedCount = [...b.identities].filter(id => g.identities.has(id)).length;
     const baselineCount = b.identities.size, gpcCount = g.identities.size;
     return { baselineCount, gpcCount, sharedCount, removedCount: baselineCount - sharedCount, newCount: gpcCount - sharedCount,
@@ -142,7 +159,7 @@ export function buildGpcImpactAssessment(input: { scanId: string; baseline?: Gpc
       baselineRequests: b.requests, gpcRequests: g.requests, baselineCollectionRequests: b.collectionRequests, gpcCollectionRequests: g.collectionRequests };
   };
   return gpcImpactAssessmentSchema.parse({ ...common, status: "measured", durationMs: horizon,
-    requestAttempts: { baseline: be.length, gpc: ge.length }, activity: {
+    requestAttempts: { baseline: (pageHttpOnly?ledgerFor(baseline,horizon)?.length:undefined)??be.length, gpc: (pageHttpOnly?ledgerFor(gpc,horizon)?.length:undefined)??ge.length }, activity: {
       advertisingMarketing: compare(["advertising", "marketing"]), analyticsReplay: compare(["analytics", "session_replay"]),
       trackers: compare(["advertising", "marketing", "analytics", "session_replay"]),
     }, limitationKeys: [] });

@@ -677,6 +677,7 @@ test("current limited structural proof vetoes broad complete-empty absence but p
   assert.ok(limited.limitations.some(x => x.code === "structured_inspection_incomplete"));
   input.geometry.candidates = [candidate({ actionType: "accept_all", label: "Accept all", documentToken: "doc-token" })];
   assert.equal(deriveConsentControlAssessment(input).controls.accept.state, "observed");
+  assert.equal(deriveConsentControlAssessment(input).surface.status,"observed_actionable","Verified positive control evidence proves the surface exists without resolving unknown controls");
   assert.equal(deriveConsentControlAssessment(input).controls.reject.state, "unknown");
 
   // Earlier incomplete auxiliary geometry must not erase a later complete,

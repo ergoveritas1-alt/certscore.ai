@@ -80,17 +80,18 @@ export function createGpcSignalCapture(input: {
       const main = samples.find((sample) => sample?.mainFrame);
       if (!main) return undefined;
       const limitationKeys: string[] = [];
+      const safeCurrentHash=(value:string)=>{try{return gpcDocumentHash(value);}catch{return undefined;}};
       if (frames.length > 32 || samples.some((sample) => !sample)) limitationKeys.push("frame_signal_readback_incomplete");
       if (samples.some((sample) => sample && sample.navigatorValue !== input.enabled)) limitationKeys.push("navigator_signal_mismatch");
       // Window init scripts do not run in WorkerNavigator. Do not retrofit a
       // running worker and misrepresent that as preference delivery at startup.
       if (workers.size > 0) limitationKeys.push("worker_navigator_delivery_unverified");
-      if (gpcDocumentHash(input.page.url()) !== main.documentUrlSha256) limitationKeys.push("document_changed_during_readback");
+      if (safeCurrentHash(input.page.url()) !== main.documentUrlSha256) limitationKeys.push("document_changed_during_readback");
       const finalFrames = input.page.frames();
       const attached = finalFrames.some((frame) => !frames.includes(frame));
       const detached = frames.some((frame) => !finalFrames.includes(frame));
       const urlChanged = frames.some((frame, index) => finalFrames.includes(frame) &&
-        samples[index] && gpcDocumentHash(frame.url()) !== samples[index]!.documentUrlSha256);
+        samples[index] && safeCurrentHash(frame.url()) !== samples[index]!.documentUrlSha256);
       if (attached || detached || urlChanged) {
         limitationKeys.push("frames_changed_during_readback");
         // Explain the failed inventory using existing reads only. These are

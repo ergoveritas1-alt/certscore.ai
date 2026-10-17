@@ -1309,3 +1309,12 @@ test("Didomi descriptive Agree aria label requires exact wording and consent con
     assert.equal(classifyConsentControlLabel({label: label + suffix, usage: "action", hasConsentContext: true}).intent, "unknown");
   }
 });
+test("registered Continue acknowledges Terms/privacy updates without becoming a cookie consent action",()=>{
+  const input={label:"Continue",observationRecipe:"onetrust.notice_continue.v1",hasConsentContext:true,
+    contextText:"By continuing, you agree to our Terms. You also acknowledge that our updated Privacy Policy applies, including your existing data."};
+  assert.ok(classifyConsentControlLabel(input).reasonCodes.includes("notice_acknowledgment_only"));
+  assert.equal(classifyConsentControlLabel(input).intent,"unknown");
+  assert.equal(classifyConsentControlLabel({...input,usage:"action"}).reasonCodes.includes("notice_acknowledgment_only"),false);
+  for(const patch of [{observationRecipe:undefined},{contextText:"Continue to checkout"},{contextText:input.contextText+" You consent to cookies."}])
+    assert.equal(classifyConsentControlLabel({...input,...patch}).reasonCodes.includes("notice_acknowledgment_only"),false);
+});

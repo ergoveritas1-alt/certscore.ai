@@ -2602,9 +2602,10 @@ export async function preConsentRuntimeScanner(
     const cookieCaptureCompletedAtMs=elapsed(input.scanStartedAtMs);
     const cookieCaptureAfter={url:page.url(),documentIdentity:currentBrowserDocumentIdentity(page)};
     const cookieCaptureCoverage=captureScope==="runtime_evidence" && !input.globalPrivacyControlEnabled &&
-      cookieCaptureSucceeded && !effectiveSignal?.aborted && cookieCaptureBefore.url===input.normalizedUrl &&
+      cookieCaptureSucceeded && !effectiveSignal?.aborted && /^https?:\/\//.test(cookieCaptureBefore.url) &&
       cookieCaptureBefore.documentIdentity?.source==="cdp_loader_id" && cookieCaptureBefore.documentIdentity.token && sameDocumentCaptureBinding(cookieCaptureBefore,cookieCaptureAfter)
       ? {version:"bound_cookie_snapshot.v1" as const,scope:"browser_context_point_in_time" as const,
+        documentBindingPolicy:"passive_final_document.v1" as const,
         targetUrl:input.normalizedUrl,documentUrl:cookieCaptureAfter.url,documentToken:cookieCaptureBefore.documentIdentity.token,
         startedAtMs:cookieCaptureStartedAtMs,completedAtMs:cookieCaptureCompletedAtMs,status:"completed" as const} : undefined;
     const documentCookieWrites = graphCapture ? [] : await readCookieWriteProbe(page);

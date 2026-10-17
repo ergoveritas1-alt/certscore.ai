@@ -23,9 +23,9 @@ export function gpcCardActivity(projection: GpcResponseReportProjection): string
   const classified = requests.classifiedCount;
   const collection = requests.collectionCount;
   const complete = projection.assessment.observation.status === "complete" && requests.complete;
-  if (classified === 0) return complete ? "No classified tracking requests were observed with GPC enabled." : null;
+  if (classified === 0) return complete ? "No classified tracking requests were identified in the retained GPC sample." : null;
   const advertising = requests.advertisingCollectionCount;
-  return `With GPC enabled, we observed ${classified} classified tracking request${classified === 1 ? "" : "s"}${collection > 0 ? `, including ${collection} collection request${collection === 1 ? "" : "s"}` : ""}.${advertising ? ` Verified advertising collection: ${advertising} request${advertising === 1 ? "" : "s"}.` : ""}${complete ? "" : " Capture was limited; these counts describe retained activity only."}`;
+  return `Retained GPC request sample: ${classified} classified tracking request${classified === 1 ? "" : "s"}${collection > 0 ? `, including ${collection} collection request${collection === 1 ? "" : "s"}` : ""}.${advertising ? ` Verified advertising collection: ${advertising} request${advertising === 1 ? "" : "s"}.` : ""}${complete ? "" : " Capture was limited; these counts describe retained activity only."}`;
 }
 
 export function gpcCardResponse(projection: GpcResponseReportProjection): string {

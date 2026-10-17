@@ -227,6 +227,8 @@ export const cmpBasicEvidenceSchema = z.object({
   privacyLinks: cmpPreferencesEvidenceSchema.innerType().shape.privacyLinks,
   declarations: cmpPreferencesEvidenceSchema.innerType().shape.declarations,
   serviceNames: z.array(z.string().min(1).max(240)).max(100),
+  configuredCategories: z.array(z.string().min(1).max(240)).max(64).optional(),
+  visibleInventory: cmpVisibleInventorySchema.optional(),
   sdkServiceInventory: cmpSdkServiceInventorySchema.optional(),
   networkCookieInventory: cmpNetworkCookieInventorySchema.optional(),
   configuredConsentCookies: configuredConsentCookiesSchema.optional(),
@@ -252,6 +254,8 @@ export const cmpBasicEvidenceSchema = z.object({
   limitations: z.array(z.string().min(1).max(120)).max(8),
 }).strict().superRefine((packet,ctx)=>{
   const progress=packet.captureProgress;
+  if(packet.configuredCategories && (packet.provider!=="OneTrust" || progress?.declarationsAtMs===undefined))ctx.addIssue({code:"custom",message:"Configured categories require the bound OneTrust inventory checkpoint"});
+  if(packet.visibleInventory && progress?.controlsAtMs===undefined)ctx.addIssue({code:"custom",message:"Visible tables require the bound control checkpoint"});
   const documentBound = packet.documentUrl === packet.targetUrl || packet.documentBindingPolicy === "passive_final_document.v1" && /^https?:$/.test(new URL(packet.documentUrl).protocol);
   if (progress && (progress.documentToken!==packet.documentToken || !documentBound ||
       [progress.controlsAtMs,progress.declarationsAtMs,progress.privacyLinksAtMs].some(at=>at!==undefined && at>packet.capturedAtMs) ||

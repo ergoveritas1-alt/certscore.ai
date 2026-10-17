@@ -116,7 +116,7 @@ test("v3 card states the observed signal and activity without implying an establ
   } as GpcResponseReportProjection;
 
   assert.equal(gpcSummaryLabel(projection), "GPC signal observed");
-  assert.equal(gpcCardActivity(projection), "With GPC enabled, we observed 71 classified tracking requests, including 6 collection requests.");
+  assert.equal(gpcCardActivity(projection), "Retained GPC request sample: 71 classified tracking requests, including 6 collection requests.");
   assert.equal(gpcCardResponse(projection), gpcCardActivity(projection));
 
   const limited = structuredClone(projection);

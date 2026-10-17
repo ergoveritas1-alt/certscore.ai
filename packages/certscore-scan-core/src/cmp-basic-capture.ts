@@ -1,3 +1,4 @@
+import {projectVisibleCmpInventoryRead} from "./cmp-visible-inventory.js";
 import { cmpInventoryScopeSelector, readCmpScopeInventory } from "./cmp-scope-inventory.js";
 import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, projectSdkCmpServices, type CmpBasicEvidence, type CmpRuntimeObservation, type NetworkEvent, type NetworkResponseEvent } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
@@ -101,7 +102,8 @@ export async function captureCmpBasicEvidence(input: {
     input.onCheckpoint?.(retained);return true;
   };
   if (scopeInventory.surface && !definition.initialOptionalOffCloseObservation) {
-    const { controls, links } = scopeInventory.surface;
+    const { controls, links, visibleInventory } = scopeInventory.surface;
+    if(visibleInventory?.records.length)packet.visibleInventory=projectVisibleCmpInventoryRead(visibleInventory);
     packet.controls = classifyControls(controls.controls);
     packet.captureProgress!.controlsAtMs = Date.now() - input.scanStartedAtMs;
     if (controls.overflow) packet.limitations.push("control_inventory_overflow");
@@ -111,6 +113,7 @@ export async function captureCmpBasicEvidence(input: {
   }
   const inlineInventory = definition.canonicalName === "OneTrust" ? scopeInventory.oneTrustInventory : undefined;
   if (inlineInventory) {
+    packet.configuredCategories = inlineInventory.categories.slice(0,64);
     packet.declarations = inlineInventory.declarations;
     packet.serviceNames = inlineInventory.services.filter(Boolean);
     packet.serviceDisclosures = inlineInventory.serviceDisclosures;

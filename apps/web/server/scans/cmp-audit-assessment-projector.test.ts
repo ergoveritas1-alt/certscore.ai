@@ -27,6 +27,12 @@ test("verified cookie snapshot coverage is independent of unfinished DOM loading
   assert.match(audit.rows.find(row=>row.id==="declared_not_found")!.detail,/point-in-time/);
   assert.equal(audit.rows.find(row=>row.id==="found_not_declared")?.status,"partially_assessed");
   assert.deepEqual(input,original);
+  const redirect=structuredClone(input);
+  Object.assign(redirect.cookieSnapshots![0]!.captureCoverage!,{documentUrl:"https://redirected.test/",documentBindingPolicy:"passive_final_document.v1"});
+  redirect.runtimeMetadataSnapshots![0]!.url="https://redirected.test/";
+  assert.equal(deriveCmpAuditAssessment(redirect)!.rows.find(row=>row.id==="declared_not_found")!.status,"observed");
+  delete redirect.cookieSnapshots![0]!.captureCoverage!.documentBindingPolicy;
+  assert.notEqual(deriveCmpAuditAssessment(redirect)!.rows.find(row=>row.id==="declared_not_found")!.status,"observed");
   const diagnosticVisit=structuredClone(input);Object.assign(diagnosticVisit.scanLaneRuns![0]!,{accessOutcome:"bot_challenge",challengeDetected:true,challengeType:"potential_security_challenge",executionOutcome:"success"});
   diagnosticVisit.scanNoGoAssessment={status:"available",version:"scan-no-go-assessment-v1",decision:"continue_with_diagnostics",scanNoGoConfidence:0.72,reasonCodes:["potential_security_challenge"],corroboratorCodes:[],contradictorCodes:[],evidenceRefs:[],supportingSignals:{blockingFrameChallengeObserved:false}};
   assert.equal(deriveCmpAuditAssessment(diagnosticVisit)!.rows.find(row=>row.id==="declared_not_found")?.status,"observed","Canonical continued diagnostic visits may retain a completed factual snapshot comparison");
@@ -650,6 +656,21 @@ test("v5 baseline CMP expiry survives preference/action failure with exact ident
   assert.equal(deriveCmpAuditAssessment(input)!.rows.find(row => row.id === "duration")!.inventory, undefined);
 });
 
+test("CMP expiry follows the verified final runtime document, never a foreign or unbound redirect",()=>{
+  const input=bundle();input.completedAt="2026-10-13T00:00:10.000Z";
+  input.cookieSnapshots=[{capturedAtMs:1500,consentStateAtTime:"pre_consent",cookies:[{name:"OptanonConsent",domain:".redirected.test",path:"/",expires:Date.parse(input.startedAt)/1000+86400}],
+    captureCoverage:{version:"bound_cookie_snapshot.v1",scope:"browser_context_point_in_time",targetUrl:input.url,documentUrl:"https://www.redirected.test/",documentBindingPolicy:"passive_final_document.v1",documentToken:"final-loader",startedAtMs:1400,completedAtMs:1500,status:"completed"}}] as CanonicalEvidenceBundle["cookieSnapshots"];
+  input.runtimeMetadataSnapshots=[{url:"https://www.redirected.test/",capturedAtMs:1500,consentStateAtTime:"pre_consent",documentIdentity:{source:"cdp_loader_id",token:"final-loader"}}] as CanonicalEvidenceBundle["runtimeMetadataSnapshots"];
+  assert.equal(deriveCmpAuditAssessment(input)!.rows.find(r=>r.id==="duration")!.status,"observed");
+  for(const mutate of [
+    (b:typeof input)=>{b.runtimeMetadataSnapshots![0]!.documentIdentity!.token="other";},
+    (b:typeof input)=>{b.cookieSnapshots![0]!.captureCoverage!.targetUrl="https://foreign.test/";},
+    (b:typeof input)=>{delete b.cookieSnapshots![0]!.captureCoverage!.documentBindingPolicy;},
+    (b:typeof input)=>{b.cookieSnapshots![0]!.captureCoverage!.completedAtMs=1501;},
+    (b:typeof input)=>{b.cookieSnapshots![0]!.cookies[0]!.domain=".foreign.test";},
+  ]){const invalid=structuredClone(input);mutate(invalid);assert.notEqual(deriveCmpAuditAssessment(invalid)!.rows.find(r=>r.id==="duration")!.status,"observed");}
+});
+
 test("v5 partial inventories retain named services, incomplete details and neutral matches through policy", () => {
   const input = bundle(), packet = input.cmpPreferencesEvidence!;
   packet.checkpoints = { version: "cmp_partial_capture.v1", documentToken: packet.documentToken!, declarations: true, controls: true, controlsSurface: "preferences", privacyLinks: true };
@@ -832,6 +853,13 @@ test("required-lane basics survive a cancelled optional inspection through persi
     const row = audit.rows.find(row => row.id === id)!;
     assert.equal(row.status, "observed", id); assert.equal(row.limitation, undefined); assert.ok(row.evidenceRefs.includes("CanonicalEvidenceBundle.json#cmpBasicEvidence"));
   }
+  const configured=structuredClone(input);
+  configured.cmpBasicEvidence!.provider="OneTrust";configured.cmpBasicEvidence!.controls=[];
+  configured.cmpBasicEvidence!.configuredCategories=["Analytics"];
+  configured.cmpBasicEvidence!.captureProgress={version:"cmp_capture_checkpoints.v1",documentToken:"basic-loader",controlsAtMs:100,declarationsAtMs:100,privacyLinksAtMs:100};
+  const category=deriveCmpAuditAssessment(configured)!.rows.find(row=>row.id==="categories")!;
+  assert.equal(category.status,"partially_assessed");assert.match(category.detail,/controls were not verified/);
+  assert.deepEqual(category.inventory?.categories,[{name:"Analytics",checked:null}]);
   assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.status, "partially_assessed");
   assert.equal(audit.rows.find(row => row.id === "found_not_declared")?.cookieComparison?.declarationInventoryComplete, false);
   const redirected=structuredClone(input);

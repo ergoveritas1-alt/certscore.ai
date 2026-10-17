@@ -340,3 +340,60 @@ Accept/Reject controls. Category/service controls and action checks remain
 unresolved. Focused boundary regressions, scanner/web typechecks and the actual
 local report were verified. No deployment or additional capture was used for
 this assessment correction.
+
+### October 17 owner-requested 3–5 second comparison — local only
+
+`page_http_signal.v2` adds 3000/5000 ms intervals within the existing passive
+visit. Before sample compaction, `gpc_compact_requests.v1` freezes at most 1000
+request identities inside a 64 KiB allowance, without URLs or header values.
+Each row retains the original event/time/URL hash, actual signal-presence proof,
+canonical endpoint-attributed service identity hashes and collection status.
+Original window count/hash, verified original artifact bytes, document binding,
+matched protocol/region and actual main-document/navigator delivery remain
+required. The assessor chooses the longest independently complete common
+interval. Missing rows, missing signal proof or unknown relevant attribution
+cannot produce a measured interval. Full-context response and the approved
+California scoring remain independent and unchanged. Ordinary raw request
+samples, collection proof and existing artifact byte caps remain in force.
+
+A malformed/empty child-frame URL at final readback now limits that frame
+instead of throwing away completed main-frame proof. Invalid main-document
+identity still fails closed. No new read, retry, wait, lane or model call is
+added. Incremental compute/storage is estimated below $1/month at 100,000 scans,
+disclosed before implementation. No deployment is authorized.
+
+The same local work preserves redirect-bound cookie snapshot proof under
+`passive_final_document.v1`; expiry assessment matches the verified final
+document and exact cookie scope rather than the submitted hostname. Malformed,
+foreign, stale or unbound proof remains unknown. OneTrust's registered Continue
+control with explicit Terms/privacy-update acknowledgment is informational for
+inspection and never an Accept/Reject action. Canonical classification retains
+this observation with source provenance; structural/frame limits remain intact.
+`verified_control_presence.v1` preserves surface presence when the canonical
+assessment already verifies a first-layer control on the matched document.
+Incomplete frame inspection still leaves unobserved controls unknown and
+coverage limited; it cannot erase positive presence or create absence.
+Configured category names remain partially assessed until visible selectable
+controls are verified. Existing bounded visible inventory readers now share
+the passive scope read, allowing explicitly labelled cookie/service tables to
+be retained without opening a preference panel. The owner-disabled Options
+worker remains off; no preference-setting or notice acknowledgment is clicked.
+
+Verification: local scan `cabd940b-5114-47e8-a331-9630a6e807a8` completed in
+31 seconds and projects a measured 5000 ms comparison: advertising/marketing
+requests 30 -> 27 (14 services in both visits), analytics/replay 39 -> 32
+(seven services in both). The longer GPC observation retains five verified
+advertising collection requests, GPC receipt and both recorded opt-outs on.
+The canonical California score is 85; counts do not establish causal response
+or downstream honoring. CMP details contain six observed checks, two partial
+and five unresolved. The verified redirected expiry is shown, nine configured
+categories remain partial, and Continue retains the informational acknowledgment
+role without unresolved cookie-decision intents. Full-frame inspection remains
+limited, so no negative control conclusion or prominence applicability is
+invented. Individual service controls/list remain unassessed with the separate
+Options worker disabled. Focused canonical boundary, browser, retention and UI
+tests plus scanner/web typechecks and generated-contract parity passed. Three
+owner-directed local scans were retained and recorded centrally; none was a
+blocked-target retry. No deployment was performed.
+
+Report wording distinguishes retained classified samples from complete matched-interval counts. Both consume canonical projections; no report-only finding, status upgrade or scoring path is introduced.

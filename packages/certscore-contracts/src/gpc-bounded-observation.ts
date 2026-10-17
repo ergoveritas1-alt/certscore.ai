@@ -53,7 +53,7 @@ export function describeGpcBoundedObservation(o: GpcBoundedObservation): string 
     ? "The CMP's sale/sharing opt-out state was unavailable."
     : `CMP-recorded sale state: ${o.registration.sale.replaceAll("_", " ")}; sharing state: ${o.registration.sharing.replaceAll("_", " ")}. GPC causation is not established.`;
   const activity = o.requests.classifiedCount > 0
-    ? `${o.requests.classifiedCount} classified advertising, marketing, analytics or replay requests were observed with GPC, including ${o.requests.collectionCount} collection requests.`
-    : o.requests.complete ? "No qualifying classified requests were observed in this bounded capture." : "Request coverage was limited.";
+    ? `Retained GPC request samples include ${o.requests.classifiedCount} classified advertising, marketing, analytics or replay requests, including ${o.requests.collectionCount} collection requests.`
+    : o.requests.complete ? "No qualifying classified requests were identified in the retained GPC samples." : "Request coverage was limited.";
   return `${o.status === "complete" ? "Bounded GPC observation completed." : "Bounded GPC observation was limited."} ${delivery} ${state} ${activity}`;
 }

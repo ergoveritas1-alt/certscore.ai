@@ -425,6 +425,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#onetrust-accept-btn-handler"],
     canonicalName: "OneTrust",
+    observationControlRecipes: [{recipeId:"onetrust.notice_continue.v1",controlSelector:"#onetrust-accept-btn-handler",containerSelectors:["#onetrust-button-group","#onetrust-banner-sdk"]}],
     saleSharingOptOut: { version: "onetrust.explicit_sale_share.v1", entranceSelector: "#ot-sdk-btn.ot-sdk-show-settings", dialogSelector: "#onetrust-pc-sdk",
       submitSelector: "button.save-preference-btn-handler.onetrust-close-btn-handler", submitLabels: ["do not sell or share my personal information"],
       documentationUrls: ["https://developer.onetrust.com/onetrust/docs/common-custom-css", "https://developer.onetrust.com/onetrust/docs/iab-ccpa-us-privacy-string"] },

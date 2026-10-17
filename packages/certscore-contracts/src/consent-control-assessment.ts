@@ -643,7 +643,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
     )
   ));
   const assessmentBlocked = noGo || documentStatus !== "matched";
-  const surfaceStatus = assessmentBlocked
+  let surfaceStatus = assessmentBlocked
     ? "unknown"
     : actionable
       ? "observed_actionable"
@@ -694,6 +694,11 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
       result.reasonCodes = ["assessment_blocked", ...reasons].slice(0, 16);
     }
   }
+  // A verified first-layer control proves the surface exists even when other
+  // frames prevent a complete negative inventory. Keep all unknown controls
+  // and coverage limits; presence is independent of inspection completeness.
+  if(surfaceStatus==="unknown" && !assessmentBlocked && documentStatus==="matched" &&
+    Object.values(firstLayerResults).some(result=>result.state==="observed" && result.layer==="first_layer")) surfaceStatus="observed_actionable";
   const containsUnknownControl = Object.values(firstLayerResults).some((result) => result.state === "unknown");
   const assessmentComplete = !assessmentBlocked &&
     effectiveCoverageStatus === "complete" &&
@@ -703,6 +708,7 @@ export function deriveConsentControlAssessment(input: ConsentControlAssessmentIn
   const firstObservedAtMs = observations.find((observation) => observation.likelyPresent)?.observedAtMs ?? null;
   const lastObservedAtMs = observations.at(-1)?.observedAtMs ?? input.geometry?.observedAtMs ?? null;
   const sourceInput = {
+    positiveSurfacePolicy:"verified_control_presence.v1",
     capturePolicyVersion: CONSENT_CONTROL_CAPTURE_POLICY_VERSION,
     registryVersion: CONSENT_CONTROL_LABEL_REGISTRY_VERSION,
     evidencePolicy: CONSENT_CONTROL_EVIDENCE_POLICY,

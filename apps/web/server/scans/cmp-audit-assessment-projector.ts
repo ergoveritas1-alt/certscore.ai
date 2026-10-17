@@ -159,7 +159,17 @@ function applyClientFacts(bundle: CanonicalEvidenceBundle, set: AuditSet, rows: 
   const baseline = bundle.runtimeCoverage?.coverageStatus === "usable" && Number.isFinite(Date.parse(bundle.startedAt))
     ? bundle.cookieSnapshots?.filter(snapshot => snapshot.consentStateAtTime === "pre_consent" && Number.isFinite(snapshot.capturedAtMs) && snapshot.capturedAtMs >= 0)
       .reduce<NonNullable<CanonicalEvidenceBundle["cookieSnapshots"]>[number] | undefined>((latest, snapshot) => !latest || snapshot.capturedAtMs > latest.capturedAtMs ? snapshot : latest, undefined) : undefined;
-  const host = (() => { try { return new URL(bundle.url).hostname.toLowerCase(); } catch { return ""; } })();
+  const capture = baseline?.captureCoverage;
+  const end=Date.parse(bundle.completedAt)-Date.parse(bundle.startedAt);
+  const boundFinalDocument=capture?.version==="bound_cookie_snapshot.v1" && capture.status==="completed" && capture.targetUrl===bundle.url &&
+    (capture.documentUrl===capture.targetUrl || capture.documentBindingPolicy==="passive_final_document.v1") &&
+    capture.startedAtMs>=0 && capture.completedAtMs>=capture.startedAtMs && capture.completedAtMs<=baseline!.capturedAtMs && baseline!.capturedAtMs<=end &&
+    bundle.scanNoGoAssessment?.decision!=="no_go" && bundle.runtimeMetadataSnapshots?.some(document=>
+      document.url===capture.documentUrl && document.documentIdentity?.source==="cdp_loader_id" && document.documentIdentity.token===capture.documentToken &&
+      document.consentStateAtTime==="pre_consent" && document.capturedAtMs>=0 && document.capturedAtMs<=end);
+  // Cookie scope follows the verified loaded document across redirects. A
+  // malformed new proof cannot fall back to an original-target host match.
+  const host = (() => { try { return capture && !boundFinalDocument ? "" : new URL(boundFinalDocument?capture!.documentUrl:bundle.url).hostname.toLowerCase(); } catch { return ""; } })();
   const baselineExpiries = (baseline?.cookies ?? []).flatMap(cookie => {
     if (!knownCookie(cookie.name) || typeof cookie.domain !== "string" || typeof cookie.path !== "string" || typeof cookie.expires !== "number" || !Number.isFinite(cookie.expires)) return [];
     const domain = cookie.domain.replace(/^\./, "").toLowerCase();
@@ -351,7 +361,8 @@ function boundCookieSnapshot(bundle:CanonicalEvidenceBundle) {
   return bundle.cookieSnapshots?.filter(snapshot=>{
     const proof=snapshot.captureCoverage;
     return proof?.version==="bound_cookie_snapshot.v1" && proof.status==="completed" && proof.scope==="browser_context_point_in_time" &&
-      proof.startedAtMs>=0 && proof.completedAtMs>=proof.startedAtMs && proof.targetUrl===bundle.url && proof.documentUrl===bundle.url &&
+      proof.startedAtMs>=0 && proof.completedAtMs>=proof.startedAtMs && proof.targetUrl===bundle.url &&
+      (proof.documentUrl===bundle.url || proof.documentBindingPolicy==="passive_final_document.v1" && /^https?:$/.test(new URL(proof.documentUrl).protocol)) &&
       snapshot.consentStateAtTime==="pre_consent" && Number.isFinite(duration) &&
       proof.completedAtMs<=snapshot.capturedAtMs && snapshot.capturedAtMs<=duration &&
       bundle.runtimeMetadataSnapshots?.some(document=>document.url===proof.documentUrl &&
@@ -587,6 +598,10 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   const basicPrivacyUsable=!basic.captureProgress || basic.captureProgress.privacyLinksAtMs!==undefined;
   applyInventoryFacts(bundle, { ...basic, controlInventoryComplete: false, declarationInventoryComplete: false },
     {controlsUsable:basicControlsUsable,declarationsUsable:basicDeclarationsUsable,privacyUsable:basicPrivacyUsable,usable:false}, candidates,set,observations);
+  if(basicDeclarationsUsable && basic.configuredCategories?.length && candidates.find(row=>row.id==="categories")?.status!=="observed") {
+    set("categories","partially_assessed",`${basic.configuredCategories.length} categories named in the CMP configuration. Selectable category controls were not verified.`);
+    candidates.find(row=>row.id==="categories")!.inventory={categories:basic.configuredCategories.map(name=>({name,checked:null}))};
+  }
   const basicExpiries = applyClientFacts(bundle, set, candidates, observations, configuredCookieNames(basic.provider, basic.configuredConsentCookies));
   if (basicExpiries.length) candidates.find(row => row.id === "duration")!.inventory = { expiries: basicExpiries };
   if (basicDeclarationsUsable && basic.serviceNames.length) {
@@ -618,6 +633,6 @@ export function deriveCmpAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
     if (expiries.length) assessment.rows.find(row => row.id === "duration")!.inventory = { expiries };
     applyChoiceActivity(bundle, assign, assessment.rows, observations.filter(capture => capture.networkCompleted)); applyActionLimitations(bundle, assessment.rows); applyVisualLimitations(bundle, assessment.rows, geometry);
   }
-  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v10", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
+  assessment.sourceSha256 = createHash("sha256").update(JSON.stringify({ policy: "independent_cmp_basic_facts.v11", originalSourceSha256: original?.sourceSha256, basic, rows: assessment.rows })).digest("hex");
   return cmpAuditAssessmentSchema.parse(assessment);
 }

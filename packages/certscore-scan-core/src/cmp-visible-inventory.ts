@@ -6,6 +6,9 @@ import { cmpVisibleInventorySchema, cookieDisclosureColumn } from "@certscore/co
  * the locator; each record keeps its own explicit labels and values. */
 export async function readVisibleCmpInventory(panel: Locator) {
   const raw = await panel.locator('table, [role="table"], dl').evaluateAll(readVisibleInventoryInDocument);
+  return projectVisibleCmpInventoryRead(raw);
+}
+export function projectVisibleCmpInventoryRead(raw:ReturnType<typeof readVisibleInventoryInDocument>) {
   const records = [];
   let unresolvedRecords = raw.unresolvedRecords;
   for (const record of raw.records) {

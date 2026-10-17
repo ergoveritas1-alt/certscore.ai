@@ -4,7 +4,10 @@ import { gpcDocumentHash } from "./gpc-signal-capture.js";
 
 type RequestIdentity = Pick<NetworkEvent, "eventId" | "timestampMs" | "requestUrl">;
 export function gpcImpactRequestSetHash(events: RequestIdentity[]) {
-  return createHash("sha256").update(JSON.stringify(events.map(e => [e.eventId, e.timestampMs, gpcDocumentHash(e.requestUrl)])
+  return gpcImpactIdentityHash(events.map(e => ({eventId:e.eventId,timestampMs:e.timestampMs,urlSha256:gpcDocumentHash(e.requestUrl)})));
+}
+export function gpcImpactIdentityHash(events: Array<{eventId:string;timestampMs:number;urlSha256:string}>) {
+  return createHash("sha256").update(JSON.stringify(events.map(e => [e.eventId, e.timestampMs, e.urlSha256])
     .sort((a, b) => String(a[0]).localeCompare(String(b[0]))))).digest("hex");
 }
 
@@ -80,7 +83,7 @@ export function createGpcImpactCapture(input: { expectedEnabled: boolean; now: (
       } : undefined;
       frozen = gpcImpactCaptureSchema.parse({ contractVersion: "certscore.gpc-impact-capture.v1", scope: "page_http_request_attempts_after_document_commit",
         ...(quietCheckpoint ? {quietCheckpoint} : {}),
-        comparisonPolicy: "page_http_signal.v1", expectedEnabled: input.expectedEnabled, captureStartedAtMs: startedAt, capturedAtMs, readbackDocumentToken, document, requestsDropped, windows, limitationKeys: limits, invalidationReasons: [...invalidationReasons] });
+        comparisonPolicy: "page_http_signal.v2", expectedEnabled: input.expectedEnabled, captureStartedAtMs: startedAt, capturedAtMs, readbackDocumentToken, document, requestsDropped, windows, limitationKeys: limits, invalidationReasons: [...invalidationReasons] });
       return frozen;
     },
   };

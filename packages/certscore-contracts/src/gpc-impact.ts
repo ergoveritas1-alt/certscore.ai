@@ -2,7 +2,9 @@ import { z } from "zod";
 
 const time = z.number().int().nonnegative();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
-export const GPC_IMPACT_HORIZONS_MS = [250, 500, 1000] as const;
+const horizon = z.union([z.literal(250), z.literal(500), z.literal(1000), z.literal(3000), z.literal(5000)]);
+const compactRequest = z.object({eventId:z.string().min(1).max(160),timestampMs:time,urlSha256:hash,headersVerified:z.boolean(),secGpc:z.enum(["1","other"]).nullable(),advertising:z.array(hash).max(8),analytics:z.array(hash).max(8),collection:z.boolean(),attributionUnknown:z.boolean()}).strict();
+export const GPC_IMPACT_HORIZONS_MS = [250, 500, 1000, 3000, 5000] as const;
 
 /** Producer evidence about complete fixed intervals. It does not assert that GPC
  * caused a change and does not replace the historical quiet-window assessment. */
@@ -10,12 +12,13 @@ export const gpcImpactCaptureSchema = z.object({
   contractVersion: z.literal("certscore.gpc-impact-capture.v1"),
   scope: z.literal("page_http_request_attempts_after_document_commit"),
   expectedEnabled: z.boolean(),
-  comparisonPolicy: z.literal("page_http_signal.v1").optional(),
+  comparisonPolicy: z.enum(["page_http_signal.v1", "page_http_signal.v2"]).optional(),
   captureStartedAtMs: time, capturedAtMs: time,
   readbackDocumentToken: z.string().min(1).max(160).nullable(),
   document: z.object({ token: z.string().min(1).max(160), urlSha256: hash,
     committedAtMs: time, secGpc: z.string().max(8).nullable() }).strict().nullable(),
   requestsDropped: time,
+  requestLedger: z.object({policyVersion:z.literal("gpc_compact_requests.v1"),rows:z.array(compactRequest).max(1000)}).strict().optional(),
   // Optional on historical records. New producers freeze this metadata at the
   // same signal readback; it adds no wait and cannot repair a changed document.
   quietCheckpoint: z.object({
@@ -25,8 +28,8 @@ export const gpcImpactCaptureSchema = z.object({
   }).strict().optional(),
   retentionStatus: z.enum(["incomplete"]).optional(),
   invalidationReasons: z.array(z.enum(["document_requested_after_commit", "document_recommitted", "commit_binding_mismatch", "same_document_url_changed", "same_document_identity_unverified", "renderer_crash", "unspecified"])).max(7).optional(),
-  windows: z.array(z.object({ durationMs: z.union([z.literal(250), z.literal(500), z.literal(1000)]),
-    requestCount: time, requestSetSha256: hash }).strict()).max(3),
+  windows: z.array(z.object({ durationMs: horizon,
+    requestCount: time, requestSetSha256: hash }).strict()).max(5),
   limitationKeys: z.array(z.string().min(1).max(160)).max(16),
 }).strict().superRefine((c, ctx) => {
   if (c.quietCheckpoint && (!c.document || c.readbackDocumentToken !== c.document.token ||
@@ -82,7 +85,7 @@ export const gpcImpactAssessmentSchema = z.object({
     sharingChange: z.enum(["opt_out_appeared", "opt_out_disappeared", "unchanged", "unknown"]),
     limitationKeys: z.array(z.string().min(1).max(160)).max(16),
   }).strict().optional(),
-  durationMs: z.union([z.literal(250), z.literal(500), z.literal(1000)]).nullable(),
+  durationMs: horizon.nullable(),
   sourceHashes: z.object({ baseline: hash.nullable(), gpc: hash.nullable() }).strict(),
   requestAttempts: z.object({ baseline: time, gpc: time }).strict().nullable(),
   activity: z.object({ advertisingMarketing: activity, analyticsReplay: activity, trackers: activity }).strict().nullable(),

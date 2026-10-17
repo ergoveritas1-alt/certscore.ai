@@ -9,11 +9,11 @@ const activity = z.object({
 /** Approved measured facts only. Independent of response eligibility and scoring. */
 export const gpcActivityComparisonSchema = z.object({
   contractVersion: z.literal("certscore.gpc-activity-comparison.v1"),
-  evidencePolicy: z.literal("page_http_signal.v1").optional(),
+  evidencePolicy: z.enum(["page_http_signal.v1", "page_http_signal.v2"]).optional(),
   scanId: z.string().min(1).max(200),
   status: z.literal("measured"),
   scope: z.literal("matched_post_commit_request_window"),
-  durationMs: z.union([z.literal(250), z.literal(500), z.literal(1000)]),
+  durationMs: z.union([z.literal(250), z.literal(500), z.literal(1000), z.literal(3000), z.literal(5000)]),
   sourceHashes: z.object({ baseline: z.string().regex(/^[a-f0-9]{64}$/), gpc: z.string().regex(/^[a-f0-9]{64}$/) }).strict(),
   activity: z.object({ advertisingMarketing: activity, analyticsReplay: activity }).strict(),
   scoreEffect: z.literal("none"),

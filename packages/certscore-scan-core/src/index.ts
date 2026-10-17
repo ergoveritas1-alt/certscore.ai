@@ -1,3 +1,4 @@
+import {retainGpcComparisonLedger} from "./gpc-comparison-ledger.js";
 import { buildScanEvidenceLaneAssessment } from "./scan-evidence-lane-assessment.js";
 import { unavailableAccessibilityAudit } from "./accessibility-audit.js";
 import { ACCESSIBILITY_AUDIT_BUDGET_MS } from "@certscore/contracts";
@@ -1546,6 +1547,7 @@ export function compactCanonicalEvidenceBundleForRetention(
   const retainedJourneys = bundle.observedJourneys.filter((journey) => !isLowSignalEndpointJourney(journey));
   let compacted = canonicalEvidenceBundleSchema.parse({
     ...bundle,
+    gpcImpactCapture: retainGpcComparisonLedger(bundle),
     modulesRun: bundle.modulesRun.map(boundModuleRunTimingBreakdown),
     runtimeTimeline: bundle.runtimeTimeline
       .filter((event) => !typedEventIds.has(event.eventId))
@@ -1623,8 +1625,8 @@ export function compactCanonicalEvidenceBundleForRetention(
   // longest window may exceed the final 80-request budget; retain a complete
   // shorter one, leaving at least 20 slots for navigation/collection evidence.
   const comparisonWindowEventIds = new Set<string>();
-  if (compacted.gpcImpactCapture?.comparisonPolicy === "page_http_signal.v1" && captureDocument) {
-    const eligible = compacted.gpcImpactCapture.windows.map(window => ({ window, events: windowEvents.filter(event =>
+  if (["page_http_signal.v1", "page_http_signal.v2"].includes(compacted.gpcImpactCapture?.comparisonPolicy ?? "") && captureDocument) {
+    const eligible = compacted.gpcImpactCapture!.windows.map(window => ({ window, events: windowEvents.filter(event =>
       event.timestampMs < captureDocument.committedAtMs + window.durationMs) })).filter(row => row.events.length <= 60);
     const selected = eligible.at(-1);
     if (selected) for (const event of selected.events) comparisonWindowEventIds.add(event.eventId);

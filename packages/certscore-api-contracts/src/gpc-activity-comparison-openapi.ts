@@ -19,8 +19,11 @@ export const gpcActivityComparisonOpenApi = {
       "type": "string"
     },
     "evidencePolicy": {
-      "const": "page_http_signal.v1",
-      "type": "string"
+      "type": "string",
+      "enum": [
+        "page_http_signal.v1",
+        "page_http_signal.v2"
+      ]
     },
     "scanId": {
       "type": "string",
@@ -47,6 +50,14 @@ export const gpcActivityComparisonOpenApi = {
         },
         {
           "const": 1000,
+          "type": "number"
+        },
+        {
+          "const": 3000,
+          "type": "number"
+        },
+        {
+          "const": 5000,
           "type": "number"
         }
       ]

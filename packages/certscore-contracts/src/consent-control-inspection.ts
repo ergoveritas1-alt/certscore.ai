@@ -87,6 +87,9 @@ export function classifyConsentInspectionRole(c: {
     return { role: "selection_submit", unresolvedIntents: ["reject"] };
   }
   if (c.classifierReasonCodes?.includes("matched_dismiss")) return { role: "dismiss", unresolvedIntents: [] };
+  if (c.classifierReasonCodes?.includes("notice_acknowledgment_only") && c.label?.trim().toLowerCase()==="continue" &&
+    c.selectorHint==="#onetrust-accept-btn-handler" && ["#onetrust-button-group","#onetrust-banner-sdk"].includes(c.containerSelectorHint??""))
+    return {role:"information",unresolvedIntents:[]};
   if (c.classifierReasonCodes?.some(r => r === "variant_reject_with_payment" || r === "variant_reject_with_subscription")) {
     return { role: "decision", unresolvedIntents: [] };
   }
@@ -99,7 +102,7 @@ export function classifyConsentInspectionRole(c: {
     if (c.classifierReasonCodes?.includes("unverified_preferences_navigation")) return { role: "information", unresolvedIntents: ["options"] };
     if (c.tagName === "div" && !["button", "link"].includes(c.role ?? "") &&
         c.selectorHint === "#onetrust-banner-sdk" && c.containerSelectorHint === "#onetrust-banner-sdk" &&
-        c.ariaLabel === "You must interact with the banner to dismiss it.") {
+        (c.ariaLabel === "You must interact with the banner to dismiss it." || c.role==="region" && c.ariaLabel==="Cookie banner")) {
       return { role: "information", unresolvedIntents: [] };
     }
     if (c.tagName === "a" && c.containerSelectorHint === "#onetrust-policy" &&
