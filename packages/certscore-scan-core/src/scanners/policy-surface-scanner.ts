@@ -1254,11 +1254,13 @@ export async function policySurfaceScanner(
         ? MAX_COMMON_PATH_CANDIDATES_TO_FETCH
         : policyFetchLimit(input),
     );
-    // Do not discard a governing-policy candidate already fetched during
+    // Do not discard an observed governing-policy candidate already fetched during
     // discovery just because later footer candidates fill the bounded list.
     // The normal ownership, text and retention checks still decide its result.
     const warmedPrimaryCandidates=(await Promise.all(speculativeStaticFetchCandidates.map(async candidate=>{
-      if(candidate.deterministicSurfaceType!=="privacy_policy")return null;
+      // A warmed guessed path must not displace observed locale documents or
+      // suppress the normal bounded common-path fallback.
+      if(candidate.deterministicSurfaceType!=="privacy_policy" || isCommonPathFallbackCandidate(candidate))return null;
       const promise=policyDocumentFetchCaches.direct.get(policyDocumentFetchCacheKey(candidate.normalizedUrl));
       const fetched=await promise?.catch(()=>undefined);
       return fetched?.ok && assessPolicyTextQuality(fetched.text).usable?candidate:null;
