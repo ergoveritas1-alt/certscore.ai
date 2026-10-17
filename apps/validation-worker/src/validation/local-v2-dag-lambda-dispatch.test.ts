@@ -40,6 +40,49 @@ test("durable publisher reconstructs the typed regional dispatch from the commit
   });
 });
 
+test("durable publisher forwards the approved sale/sharing observer for every eligible regional scan", () => {
+  for (const [scanFrom, awsRegion] of [
+    ["eu_ie", "eu-west-1"], ["eu_de", "eu-central-1"], ["california", "us-west-1"],
+  ] as const) {
+    const scanId = `4f75b34a-9755-468d-b8f9-${awsRegion.replace(/[^a-z0-9]/g, "").padEnd(12, "0").slice(0, 12)}`;
+    const scanConfig = {
+      hostname: "example.com",
+      normalizedUrl: "https://example.com/privacy",
+      scanFrom,
+      execution: { v2DagLambda: {
+        awsRegion,
+        contractVersion: "certscore.v2.lambda-dag-dispatch.v1",
+        functionName: "certscore-v2-dag-local-lambda",
+        orchestrationMode: "sharded",
+        saleSharingOptOutEnabled: true,
+        saleSharingOptOutRolloutMode: "all_eligible",
+        processor: "local-certscore-v2-dag-parallel-v1",
+        resultHandoff: "sqs",
+        resultQueueUrl: `https://sqs.${awsRegion}.amazonaws.com/123/results`,
+        scannerRuntime: "certscore-v2-dag-parallel-path",
+        targetEnvironment: "production",
+        vpcMode: "vpc",
+      } },
+    };
+    const build = (patch: Record<string, unknown> = {}) =>
+      buildDurableLocalV2DagLambdaDispatchPayload({ scanId, scanConfig: {
+        ...scanConfig,
+        ...patch,
+        execution: { v2DagLambda: { ...scanConfig.execution.v2DagLambda,
+          ...((patch.execution as { v2DagLambda?: Record<string, unknown> } | undefined)?.v2DagLambda ?? {}) } },
+      } });
+    assert.deepEqual(build().saleSharingOptOut, {
+      policyVersion: "bounded_sale_sharing_opt_out.v1", enabled: true,
+      scanId, exactTargetUrl: "https://example.com/privacy",
+    });
+    assert.equal(build({ execution: { v2DagLambda: { saleSharingOptOutEnabled: false } } }).saleSharingOptOut, undefined);
+    assert.equal(build({ execution: { v2DagLambda: { saleSharingOptOutRolloutMode: "off" } } }).saleSharingOptOut, undefined);
+    assert.equal(build({ execution: { v2DagLambda: { orchestrationMode: "single" } } }).saleSharingOptOut, undefined);
+    assert.equal(build({ normalizedUrl: "http://example.com/privacy" }).saleSharingOptOut, undefined);
+    assert.equal(build({ hostname: "other.example" }).saleSharingOptOut, undefined);
+  }
+});
+
 test("durable publisher fails closed for malformed committed dispatch intent", () => {
   assert.throws(() => buildDurableLocalV2DagLambdaDispatchPayload({
     scanId: "4f75b34a-9755-468d-b8f9-bec6042e94d7",
