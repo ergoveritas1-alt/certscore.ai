@@ -69,7 +69,6 @@ export function buildGpcResponseReportProjection(
   return {
     assessment,
     californiaDeductionPoints: projection.californiaDeductionPoints,
-    californiaScoreExplanation: projection.californiaScoreExplanation,
     comparisonHeadline: projection.comparisonHeadline,
     coverageSummary: projection.coverageSummary,
     evidenceRefs: [

@@ -1535,13 +1535,12 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
   return (
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc}
-        recap={scoredRisk ? `Risk observed · ${projection.californiaDeductionPoints}-point CA deduction` : gpcSummaryLabel(projection)}
+        recap={scoredRisk ? "Risk observed" : gpcSummaryLabel(projection)}
         badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />} />
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
         {activity ? <p>{activity}</p> : null}
         {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
         {observation && observation.registration.sale === "unknown" && observation.registration.sharing === "unknown" ? <p><strong>Site-recorded opt-out:</strong> The sale/sharing setting could not be determined from retained evidence.</p> : null}
-        {scoredRisk && projection.californiaScoreExplanation ? <p className="rounded-md bg-amber-50 p-3 text-amber-950">{projection.californiaScoreExplanation}</p> : null}
         <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
           evidenceJson={evidenceJson} evidenceRefs={projection.evidenceRefs} correctionSteps={[]}>
           <div className="space-y-3 text-xs leading-5 text-zinc-600">

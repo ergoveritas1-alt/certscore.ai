@@ -381,7 +381,7 @@ test("projects GDPR Transparency and retained collection assessments into separa
   assert.doesNotMatch(report.executiveSummary.sentences.join(" "), /separate site-integrity observation/);
   const pdf = renderCanonicalReportPdf(report).toString("latin1");
   assert.match(pdf, /Site integrity - High priority/);
-  assert.match(pdf, /27-point score deduction/);
+  assert.doesNotMatch(pdf, /score deduction|policy deduction|27-point/);
   assert.equal(report.appendix.siteIntegrity?.scoreEffects?.[0]?.deductionPoints, 27);
   assert.match(pdf, /pharmacy.example/);
   assert.equal(readPersistedScanReportProjection({ scan: scan.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);

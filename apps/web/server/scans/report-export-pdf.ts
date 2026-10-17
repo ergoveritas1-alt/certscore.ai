@@ -1,5 +1,4 @@
 import {hasNoQualifiedGpcActivity} from "../../lib/scans/gpc-response-projection";
-import { siteIntegrityScoreDescription } from "../../lib/scans/site-integrity-score-policy";
 import { describeGpcObservedFacts } from "../../lib/scans/gpc-observed-facts";
 import { describeGpcActivityComparison,californiaCoverageFamilyLabel } from "@certscore/contracts";
 import { consentInspectionNotice } from "../../lib/scans/consent-inspection-presentation";
@@ -379,7 +378,7 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
     lines.push(...wrappedLines(hasNoQualifiedGpcActivity(gpc)
       ? "GPC comparison: No qualifying tracking activity observed in either completed matched visit."
       : `Comparison: ${gpc.status.replaceAll("_", " ")}. ${gpc.summary}`, { size: facts.length ? 9 : 10 }));
-    lines.push(...wrappedLines(`Comparable capture: ${gpc.comparison.comparable ? "yes" : "no"}. Signal delivery: ${gpc.comparison.delivery?.status ?? "See retained proof"}. California policy deduction: ${gpc.californiaPolicy.deductionPoints}.`, { size: 9 }));
+    lines.push(...wrappedLines(`Comparable capture: ${gpc.comparison.comparable ? "yes" : "no"}. Signal delivery: ${gpc.comparison.delivery?.status ?? "See retained proof"}.`, { size: 9 }));
     lines.push(...wrappedLines(`Evidence: ${gpc.evidenceUrl}. Full delivery proof and comparison deltas are available in the JSON workpaper.`, { size: 9 }));
   } else lines.push(...wrappedLines("No verified GPC assessment available; response remains unknown."));
   for (const [label, observation] of [["Accept", report.postAcceptObservation], ["Reject", report.postRefusalObservation]] as const) {
@@ -411,8 +410,6 @@ function reportLines(report: CanonicalReportExport, image: PdfImage | null): Pdf
 
   const siteIntegrity = report.appendix.siteIntegritySite;
   if (siteIntegrity) lines.push(sectionHeading("Site integrity coverage"), ...wrappedLines(`${siteIntegrity.coverage.filter(page => page.status !== "unavailable").length} of ${siteIntegrity.coverage.length} scanned pages have retained capture.`), ...siteIntegrity.coverage.flatMap(page => wrappedLines(`${page.url} | ${page.status}`)));
-  const integrityFindings = siteIntegrity?.findings ?? (report.appendix.siteIntegrity ? [report.appendix.siteIntegrity] : []);
-  if (integrityFindings.length) lines.push(...wrappedLines(siteIntegrityScoreDescription(integrityFindings.flatMap(finding => finding.scoreEffects ?? []))));
   for (const integrity of siteIntegrity?.findings ?? (report.appendix.siteIntegrity ? [report.appendix.siteIntegrity] : [])) {
     const evidence = integrity.evidence;
     lines.push(sectionHeading("Site integrity - High priority"),

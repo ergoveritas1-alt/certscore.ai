@@ -138,7 +138,6 @@ export type GpcResponseReportProjection = {
   observedFacts: Array<{ label: string; value: string }>;
   assessment: GpcResponseAssessment;
   californiaDeductionPoints: 0 | 15;
-  californiaScoreExplanation?: string | null;
   comparisonHeadline: string;
   coverageSummary: string;
   evidenceRefs: string[];
