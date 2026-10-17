@@ -3,7 +3,6 @@ import { cmpBasicEvidenceSchema, projectLoadedCmpInventory, projectSdkCmpService
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import type { Page } from "playwright";
 import { readBorlabsPreferenceInventory, readPreferenceControls, classifyControls } from "./cmp-preferences-observer.js";
-import { readOneTrustPreferenceInventory } from "./onetrust-preference-inventory.js";
 import { readCookieYesPreferenceInventory } from "./cookieyes-preference-inventory.js";
 import { readPrivacyLinkAccess, privacyPolicyLinkCandidates } from "./privacy-link-access.js";
 import { readPassiveCookiebotLoadedInventory } from "./cookiebot-loaded-inventory.js";
@@ -64,6 +63,8 @@ export async function captureCmpBasicEvidence(input: {
   page: Page; scanId: string; targetUrl: string; scanStartedAtMs: number;
   readBinding: () => { url: string; token?: string };
   isCurrent: () => boolean;
+  /** Retain a completed in-flight read only until the original lane closes. */
+  isRetainable?: () => boolean;
   onOutcome?: (reason: string) => void;
   onCheckpoint?: (packet:CmpBasicEvidence)=>void;
   deferPublicPrivacyLinks?: boolean;
@@ -74,12 +75,13 @@ export async function captureCmpBasicEvidence(input: {
   if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   const definitions = KNOWN_CMP_REGISTRY.filter(d => d.domSelectors?.length || d.preferenceScopeSelector);
   const scopes = definitions.map(cmpInventoryScopeSelector);
-  const scopeInventory = await readCmpScopeInventory(page, definitions);
+  const scopeInventory = await readCmpScopeInventory(page, definitions, true);
   const configurationOnly=scopeInventory.indices.length===0 && scopeInventory.configurationIndices.length===1;
   const indices = configurationOnly?scopeInventory.configurationIndices:scopeInventory.indices;
-  if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
+  if (!(input.isRetainable ?? input.isCurrent)()) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   if (indices.length !== 1) { input.onOutcome?.(indices.length ? "ambiguous_registry_scopes" : "registered_scope_unavailable"); return undefined; }
   const index = indices[0]!, definition = definitions[index]!;
+  if (!input.isCurrent() && !scopeInventory.oneTrustInventory) { input.onOutcome?.("capture_slice_exhausted"); return undefined; }
   if (definition.initialOptionalOffCloseObservation && await page.locator(scopes[index]!).count() !== 1) {
     input.onOutcome?.("ambiguous_passive_container"); return undefined;
   }
@@ -93,11 +95,25 @@ export async function captureCmpBasicEvidence(input: {
   let retained:CmpBasicEvidence|undefined;
   const checkpoint=()=>{
     const after=input.readBinding();
-    if(!input.isCurrent() || before.url!==after.url || before.token!==after.token) return false;
+    if(!(input.isRetainable ?? input.isCurrent)() || before.url!==after.url || before.token!==after.token) return false;
     packet.capturedAtMs=Date.now()-input.scanStartedAtMs;
     retained=cmpBasicEvidenceSchema.parse(structuredClone(packet));
     input.onCheckpoint?.(retained);return true;
   };
+  const inlineInventory = definition.canonicalName === "OneTrust" ? scopeInventory.oneTrustInventory : undefined;
+  if (inlineInventory) {
+    packet.declarations = inlineInventory.declarations;
+    packet.serviceNames = inlineInventory.services.filter(Boolean);
+    packet.serviceDisclosures = inlineInventory.serviceDisclosures;
+    packet.inventoryManifest = inlineInventory.inventoryManifest;
+    packet.captureProgress!.declarationsAtMs = Date.now() - input.scanStartedAtMs;
+    packet.limitations.push("loaded_configuration_not_visibility_proof");
+    if (inlineInventory.truncated) packet.limitations.push("cmp_inventory_bounded");
+    if (!checkpoint()) return undefined;
+  }
+  // No new operation may start after the short scheduling slice expires. A
+  // completed atomic inventory can still survive inside its original lane.
+  if (!input.isCurrent()) { input.onOutcome?.("capture_slice_exhausted"); return retained; }
   // Protect the minimal visible-control packet before descriptions or links.
   const rawControls=configurationOnly?{controls:[],overflow:false}:await readPreferenceControls(page.locator(scopes[index]!),definition.preferenceCategoryInventory,definition.initialOptionalOffCloseObservation?.inputSelector);
   packet.controls=classifyControls(rawControls.controls);
@@ -105,7 +121,7 @@ export async function captureCmpBasicEvidence(input: {
   if(rawControls.overflow) packet.limitations.push("control_inventory_overflow");
   if(!checkpoint() || !input.isCurrent()) {input.onOutcome?.("capture_slice_exhausted");return retained;}
   const inventory=definition.preferenceInspection?.kind==="borlabs_v3" ? await readBorlabsPreferenceInventory(page)
-    : definition.canonicalName==="OneTrust" ? await readOneTrustPreferenceInventory(page)
+    : definition.canonicalName==="OneTrust" ? inlineInventory
     : definition.preferenceInventory==="cookieyes_loaded_configuration.v1" ? await readCookieYesPreferenceInventory(page) : undefined;
   packet.declarations=inventory?.declarations??[];packet.serviceNames=inventory?.services.filter(Boolean)??[];
   packet.serviceDisclosures=inventory && "serviceDisclosures" in inventory ? inventory.serviceDisclosures : undefined;

@@ -251,3 +251,30 @@ Estimated incremental compute is zero (work reordered within the same session).
 Additional retained evidence stays within existing caps; incremental storage is
 estimated below $1/month at 100,000 scans, disclosed before implementation under
 the owner's small-cost preapproval. No deployment is authorized by this entry.
+
+### October 17 local MSNBC verification and bounded capture repairs
+
+An exact-URL `history.replaceState` event no longer ends the existing passive
+settling allowance when the verified document loader is unchanged. Real document
+requests, URL/loader changes, cancellation and lane deadlines still end capture.
+This uses the previously approved matched-settling allowance, with no new wait,
+session, timeout, model call or retry.
+
+The passive OneTrust inventory now shares the existing scope-read browser task.
+A completed document-bound inventory survives expiry of the short scheduling
+slice while its original lane remains active. No new operation begins after
+slice expiry; a closed lane or changed document rejects the result. Loaded
+configuration never proves control visibility, category choices or privacy-link
+reachability. Existing evidence bounds remain unchanged. Incremental storage is
+estimated below $1/month at 100,000 scans and was disclosed before implementation.
+
+Local scan `9d70b487-91ea-4bb8-825f-ad39767fa92f` captures GPC receipt and both
+sale/sharing opt-outs on; the baseline records both off. Four verified advertising
+collection requests remain observed with GPC, producing the canonical California
+score of 85. CMP detail coverage improves from 11 to 9 limited checks out of 13.
+The full paired traffic response remains indeterminate because both visits lack
+the required quiet interval and full-context signal verification. These limits
+remain canonical; the observed CMP state does not establish downstream honoring.
+Browser fixtures cover history events, real navigation cancellation, atomic
+inventory retention and closed/stale rejection. Focused canonical projection
+regressions and scanner/web typechecks pass. No deployment is authorized here.

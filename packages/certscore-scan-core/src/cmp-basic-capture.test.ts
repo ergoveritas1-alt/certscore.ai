@@ -342,3 +342,40 @@ test("configuration-only SDK discovery supports bounded class methods while refu
     }
   } finally {await browser.close();}
 });
+
+
+test("atomic OneTrust inventory survives a spent scheduling slice only before lane closure on the same document", async t => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const mode of ["retain", "closed", "navigation"] as const) await t.test(mode, async sub => {
+      const page = await browser.newPage();
+      await page.route("https://example.test/", route => route.fulfill({ contentType: "text/html", body: "<main>Public content</main>" }));
+      await page.goto("https://example.test/");
+      await page.setContent(`<main>Public content</main><script>window.reads=0;window.OneTrust={GetDomainData:()=>{window.reads++;return {Groups:[{CustomGroupId:'C0002',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],FirstPartyCookies:[{Name:'_ga',description:'Audience measurement',IsSession:true}]}]}}};</script>`);
+      let scheduling = true, retainable = true, token = "loader", evaluations = 0;
+      const locate = page.locator.bind(page);
+      sub.mock.method(page, "locator", (...args) => {
+        const locator = locate(...args), evaluate = locator.evaluateAll.bind(locator);
+        sub.mock.method(locator, "evaluateAll", async (...evaluateArgs) => {
+          evaluations++;
+          const value = await evaluate(...evaluateArgs);
+          scheduling = false;
+          if (mode === "closed") retainable = false;
+          if (mode === "navigation") token = "new-loader";
+          return value;
+        });
+        return locator;
+      });
+      const packet = await captureCmpBasicEvidence({ page, scanId: "atomic-cmp", targetUrl: "https://example.test/", scanStartedAtMs: Date.now(),
+        readBinding: () => ({ url: page.url(), token }), isCurrent: () => scheduling, isRetainable: () => retainable });
+      assert.equal(evaluations, 1, "No second operation starts after the scheduling slice");
+      assert.equal(await page.evaluate(() => (window as unknown as { reads: number }).reads), 1);
+      if (mode === "retain") {
+        assert.ok(packet); assert.equal(packet.declarations[0]?.name, "_ga"); assert.deepEqual(packet.serviceNames, ["Named Analytics"]);
+        assert.ok(packet.captureProgress?.declarationsAtMs !== undefined);
+        assert.equal(packet.captureProgress?.controlsAtMs, undefined); assert.deepEqual(packet.controls, []);
+      } else assert.equal(packet, undefined);
+      await page.close();
+    });
+  } finally { await browser.close(); }
+});

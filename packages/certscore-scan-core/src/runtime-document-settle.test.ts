@@ -19,6 +19,7 @@ function assertClean(events: EventEmitter) {
   assert.equal(events.listenerCount("domcontentloaded"), 0);
   assert.equal(events.listenerCount("framenavigated"), 0);
   assert.equal(events.listenerCount("close"), 0);
+  assert.equal(events.listenerCount("request"), 0);
 }
 
 test("parsed runtime documents skip the extra wait and quiet interval", async () => {
@@ -157,4 +158,39 @@ test("DOMContentLoaded and request quiet can settle while the readiness read is 
   for (let i = 0; i < 10; i++) t.mock.timers.tick(25);
   assert.deepEqual(await promise, { elapsedMs: 1_500, status: "settled" });
   assertClean(events);
+});
+
+
+test("exact-URL history with a verified unchanged loader does not prematurely stop settling", async t => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const { page, events, frame } = fixturePage("complete");
+  const tracker = createPassiveEvidenceActivityTracker();
+  const request = {};
+  tracker.markRequestStarted(request);
+  const promise = waitForLoadingRuntimeDocument({ page, timeoutMs: 3000, tracker, awaitPendingActivity: true,
+    readDocumentBinding: () => ({ url: "https://example.test/", token: "loader" }) });
+  await Promise.resolve();
+  t.mock.timers.tick(300);
+  events.emit("framenavigated", frame);
+  let completed = false; void promise.then(() => { completed = true; });
+  await Promise.resolve(); assert.equal(completed, false);
+  tracker.markRequestFinished(request);
+  for (let i = 0; i < 10; i++) t.mock.timers.tick(25);
+  assert.equal((await promise).status, "settled"); assertClean(events);
+});
+
+for (const change of ["reload", "url", "loader", "late_loader"] as const) test(`settling still cancels on ${change}`, async t => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const { page, events, frame } = fixturePage("complete");
+  const tracker = createPassiveEvidenceActivityTracker(); tracker.markRequestStarted({});
+  let binding = { url: "https://example.test/", token: "loader" };
+  const promise = waitForLoadingRuntimeDocument({ page, timeoutMs: 3000, tracker, awaitPendingActivity: true, readDocumentBinding: () => binding });
+  await Promise.resolve();
+  if (change === "reload") events.emit("request", { isNavigationRequest: () => true, frame: () => frame });
+  else {
+    if (change === "late_loader") events.emit("framenavigated", frame);
+    binding = { url: change === "url" ? "https://example.test/new" : binding.url, token: change === "url" ? binding.token : "new-loader" };
+    if (change === "late_loader") t.mock.timers.tick(25); else events.emit("framenavigated", frame);
+  }
+  assert.equal((await promise).status, "document_changed"); assertClean(events);
 });

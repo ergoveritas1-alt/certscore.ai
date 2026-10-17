@@ -1,3 +1,6 @@
+import { readOneTrustInventoryInDocument } from "./onetrust-preference-inventory.js";
+import { parseNamedCmpPartnerDisclosure } from "@certscore/contracts";
+import { captureCmpNameManifest } from "./cmp-inventory-manifest-capture.js";
 import type { Page } from "playwright";
 import type { KnownCmpDefinition } from "@website-signal-risk-scanner/shared";
 
@@ -11,12 +14,13 @@ export function cmpInventoryScopeSelector(definition: KnownCmpDefinition): strin
     : definition.domSelectors!.join(","));
 }
 
-/** One existing all-vendor DOM read. Configuration lookup uses own-data roots and bounded prototype data methods:
- * no getters, API calls, network, or additional wait. */
-export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinition[]) {
-  const entries = definitions.map(d => ({ selector: d.preferenceScopeSelector ?? d.preferenceInspection?.entranceSelector ?? d.domSelectors!.join(","), path: d.configuredConsentCookiePath, domains: d.domains, configurationApi:d.passiveConfigurationApi }));
-  return page.locator(entries.map(entry => entry.selector).join(",")).evaluateAll((nodes, entries) => {
-    const empty = { overflow: nodes.length > 1000, indices: [] as number[], configurationIndices:[] as number[], scopeStates: [] as Array<{ index: number; state: "visible" | "inactive" | "unverified" }>, revealed: false, runtimeIdentified: false, configuredConsentCookies: [] as Array<{ version: "cmp_configured_cookie_identity.v1"; configurationPath: string; name: string }> };
+/** One existing all-vendor DOM read. Configuration lookup uses own-data roots
+ * and bounded prototype data methods, without getters or additional waits.
+ * The optional OneTrust inventory reuses its registered read-only SDK call. */
+export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinition[], captureOneTrustInventory = false) {
+  const entries = definitions.map(d => ({ name: d.canonicalName, selector: d.preferenceScopeSelector ?? d.preferenceInspection?.entranceSelector ?? d.domSelectors!.join(","), path: d.configuredConsentCookiePath, domains: d.domains, configurationApi:d.passiveConfigurationApi }));
+  const read = (nodes: Element[], entries: Array<{ name: string; selector: string; path?: string; domains: readonly string[]; configurationApi?: string }>, readOneTrust?: () => ReturnType<typeof readOneTrustInventoryInDocument>) => {
+    const empty = { overflow: nodes.length > 1000, indices: [] as number[], configurationIndices:[] as number[], scopeStates: [] as Array<{ index: number; state: "visible" | "inactive" | "unverified" }>, revealed: false, runtimeIdentified: false, oneTrustInventory: undefined as ReturnType<typeof readOneTrustInventoryInDocument>, configuredConsentCookies: [] as Array<{ version: "cmp_configured_cookie_identity.v1"; configurationPath: string; name: string }> };
     if (empty.overflow) return empty;
     const matched = entries.flatMap((entry, index) => nodes.some(node => node.ownerDocument === document && node.matches(entry.selector)) ? [index] : []);
     const deadline = performance.now() + 50;
@@ -81,9 +85,20 @@ export function readCmpScopeInventory(page: Page, definitions: KnownCmpDefinitio
       }
       return typeof candidate==="function"?[index]:[];
     });
-    return { ...empty, indices, configurationIndices, scopeStates, runtimeIdentified, revealed: (window as unknown as { __certscoreBorlabsPassiveReveal?: boolean }).__certscoreBorlabsPassiveReveal === true,
+    const selected = indices.length === 0 ? configurationIndices : indices;
+    const oneTrustInventory = selected.length === 1 && entries[selected[0]!]!.name === "OneTrust" && configurationIndices.includes(selected[0]!)
+      ? readOneTrust?.() : undefined;
+    return { ...empty, oneTrustInventory, indices, configurationIndices, scopeStates, runtimeIdentified, revealed: (window as unknown as { __certscoreBorlabsPassiveReveal?: boolean }).__certscoreBorlabsPassiveReveal === true,
       configuredConsentCookies: path && typeof value === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(value)
         ? [{ version: "cmp_configured_cookie_identity.v1" as const, configurationPath: path, name: value }] : [],
     };
-  }, entries);
+  };
+  // Reuse the existing bounded OneTrust parser in the same browser task. Other
+  // callers retain scope-only behavior, and ambiguous/provider-mismatched scopes
+  // never receive another CMP's configuration.
+  const inventory = captureOneTrustInventory
+    ? `() => (${readOneTrustInventoryInDocument.toString()})(${parseNamedCmpPartnerDisclosure.toString()},${captureCmpNameManifest.toString()})`
+    : "undefined";
+  return page.locator(entries.map(entry => entry.selector).join(",")).evaluateAll<ReturnType<typeof read>, typeof entries>(
+    new Function("nodes", "entries", `const __name = (fn) => fn; return (${read.toString()})(nodes, entries, ${inventory});`) as (nodes: Element[], values: typeof entries) => ReturnType<typeof read>, entries);
 }

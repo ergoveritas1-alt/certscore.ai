@@ -1176,8 +1176,9 @@ export async function preConsentRuntimeScanner(
       scanStartedAtMs: input.scanStartedAtMs,
       readBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token }),
       isCurrent: () => !cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now() < deadline,
+      isRetainable: () => !cmpBasicCaptureClosed && !effectiveSignal?.aborted && remainingModuleBudgetMs() > 0,
       onOutcome: reason => { basicOutcome = reason; },
-      onCheckpoint: packet => { if(!cmpBasicCaptureClosed && !effectiveSignal?.aborted && Date.now()<deadline) retainedCmpBasicEvidence=packet; },
+      onCheckpoint: packet => { if(!cmpBasicCaptureClosed && !effectiveSignal?.aborted && remainingModuleBudgetMs()>0) retainedCmpBasicEvidence=packet; },
     }).then(packet => {
       cmpBasicCaptureElapsedMs=Date.now()-basicStartedAt;
       if(cmpBasicCaptureClosed) return;
@@ -2311,7 +2312,8 @@ export async function preConsentRuntimeScanner(
               "Both baseline and GPC may finish pending activity for at most 3000ms after the first gate times out; stop at verified 250ms quiet without another session or retry.",
               () => waitForLoadingRuntimeDocument({page,signal:input.signal,
                 timeoutMs:Math.min(PAIRED_RUNTIME_SETTLE_MAX_MS,originalAllowance),
-                tracker:passiveEvidenceActivity,awaitPendingActivity:true}),
+                tracker:passiveEvidenceActivity,awaitPendingActivity:true,
+                readDocumentBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token })}),
               value=>value.status === "already_ready"?"skipped":value.status === "settled"?"completed":value.status === "timed_out"?"timed_out":"failed");
             if (paired.status !== "timed_out" || (paired.pendingActivityOnly && !awaitFormActivity)) return paired;
             const continuationBudget=Math.min(originalAllowance-(Date.now()-settleStarted),remainingModuleBudgetMs()-2_500);
@@ -2319,11 +2321,13 @@ export async function preConsentRuntimeScanner(
             // Keep the prior parser/form allowance, subtracting time already
             // spent above. GPC's parsed pending-only case stops after 3 seconds.
             const continuation=await waitForLoadingRuntimeDocument({page,signal:input.signal,
-              timeoutMs:continuationBudget,tracker:passiveEvidenceActivity,awaitPendingActivity:awaitFormActivity});
+              timeoutMs:continuationBudget,tracker:passiveEvidenceActivity,awaitPendingActivity:awaitFormActivity,
+              readDocumentBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token })});
             return {...continuation,elapsedMs:Date.now()-settleStarted};
           }
           return waitForLoadingRuntimeDocument({page,signal:input.signal,timeoutMs:originalAllowance,
-            tracker:passiveEvidenceActivity});
+            tracker:passiveEvidenceActivity,
+            readDocumentBinding: () => ({ url: page.url(), token: currentBrowserDocumentIdentity(page)?.token })});
         },
         result => result.status === "already_ready" ? "skipped"
           : result.status === "settled" ? "completed"

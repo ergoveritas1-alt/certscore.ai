@@ -1,4 +1,4 @@
-import type { Frame, Page } from "playwright";
+import type { Frame, Page, Request } from "playwright";
 import {
   PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS,
   type PassiveEvidenceActivityTracker,
@@ -18,12 +18,18 @@ export type RuntimeDocumentSettleResult = {
 /** One passive allowance for an unfinished parser or timed-out request gate. */
 export function waitForLoadingRuntimeDocument(input: {
   awaitPendingActivity?: boolean;
+  readDocumentBinding?: () => { url: string; token?: string };
   page: Page;
   signal?: AbortSignal;
   timeoutMs: number;
   tracker: PassiveEvidenceActivityTracker;
 }): Promise<RuntimeDocumentSettleResult> {
   const startedAtMs = Date.now();
+  const initialBinding = input.readDocumentBinding?.();
+  const sameDocument = () => {
+    const current = input.readDocumentBinding?.();
+    return Boolean(initialBinding?.token && current?.token === initialBinding.token && current.url === initialBinding.url);
+  };
   const timeoutMs = Math.max(0, Math.min(input.timeoutMs, RUNTIME_LOADING_DOCUMENT_SETTLE_MAX_MS));
   if (input.signal?.aborted || timeoutMs === 0) {
     return Promise.resolve({ elapsedMs: 0, status: input.signal?.aborted ? "cancelled" : "timed_out" });
@@ -41,6 +47,7 @@ export function waitForLoadingRuntimeDocument(input: {
       if (pollTimer) clearTimeout(pollTimer);
       input.page.off("domcontentloaded", onParsed);
       input.page.off("framenavigated", onNavigation);
+      input.page.off("request", onRequest);
       input.page.off("close", onClose);
       input.signal?.removeEventListener("abort", onAbort);
       resolve({ elapsedMs: Math.max(0, Date.now() - startedAtMs), status,
@@ -48,6 +55,7 @@ export function waitForLoadingRuntimeDocument(input: {
     };
     const checkQuiet = () => {
       if (finished) return;
+      if (initialBinding?.token && !sameDocument()) return finish("document_changed");
       const snapshot = input.tracker.snapshot();
       if (parsed && snapshot.inFlightRequestCount === 0 &&
           snapshot.quietForMs >= PASSIVE_EVIDENCE_INITIAL_QUIET_WINDOW_MS) {
@@ -63,7 +71,14 @@ export function waitForLoadingRuntimeDocument(input: {
       input.tracker.noteActivity();
     };
     const onNavigation = (frame: Frame) => {
-      if (frame === input.page.mainFrame()) finish("document_changed");
+      // Playwright also emits this for history.replaceState with the exact
+      // same URL. Keep the existing allowance only with the original loader.
+      if (frame === input.page.mainFrame() && !sameDocument()) finish("document_changed");
+    };
+    const onRequest = (request: Request) => {
+      // A real navigation (including a same-URL reload) cancels before the
+      // commit event, even if the CDP loader update has not arrived yet.
+      if (request.isNavigationRequest() && request.frame() === input.page.mainFrame()) finish("document_changed");
     };
     const onClose = () => finish("unavailable");
     const onAbort = () => finish("cancelled");
@@ -72,6 +87,7 @@ export function waitForLoadingRuntimeDocument(input: {
     // Subscribe before the read so DOMContentLoaded cannot fall between them.
     input.page.on("domcontentloaded", onParsed);
     input.page.on("framenavigated", onNavigation);
+    input.page.on("request", onRequest);
     input.page.on("close", onClose);
     input.signal?.addEventListener("abort", onAbort, { once: true });
     // A busy parser can delay evaluate itself. Give that read the same bounded
@@ -80,6 +96,7 @@ export function waitForLoadingRuntimeDocument(input: {
     checkQuiet();
     void input.page.evaluate(() => document.readyState).then(state => {
       if (finished) return;
+      if (initialBinding?.token && !sameDocument()) return finish("document_changed");
       if (state !== "loading" && !parsed) {
         const activity = input.tracker.snapshot();
         if (input.awaitPendingActivity && (activity.inFlightRequestCount > 0 ||

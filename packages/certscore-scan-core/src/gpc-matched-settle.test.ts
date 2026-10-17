@@ -12,7 +12,7 @@ import {createPassiveEvidenceActivityTracker} from "./passive-evidence-quiet-win
 import {EventEmitter} from "node:events";
 import type {Page} from "playwright";
 
-test("both passive conditions retain activity dispatched after a late script finishes beyond the initial gate",{timeout:30000},async()=>{
+test("both passive conditions retain late activity across same-document history updates beyond the initial gate",{timeout:30000},async()=>{
  const timers=new Set<ReturnType<typeof setTimeout>>();
  let pendingResponse: import("node:http").ServerResponse|undefined;
  const server=createServer((req,res)=>{
@@ -20,7 +20,7 @@ test("both passive conditions retain activity dispatched after a late script fin
   if(req.url === "/late-script"){
    pendingResponse=res;return;
   }
-  res.setHeader("Content-Type","text/html");res.end(`<!doctype html><html lang="en"><body><h1>Public site information</h1><p>${"Ordinary public content. ".repeat(30)}</p><script>fetch('/late-script').then(r=>r.json()).then(()=>fetch('https://www.facebook.com/tr/?id=fixture&ev=PageView'));</script></body></html>`);
+  res.setHeader("Content-Type","text/html");res.end(`<!doctype html><html lang="en"><body><h1>Public site information</h1><p>${"Ordinary public content. ".repeat(30)}</p><script>setTimeout(()=>history.replaceState(null,'',location.href),2000);fetch('/late-script').then(r=>r.json()).then(()=>fetch('https://www.facebook.com/tr/?id=fixture&ev=PageView'));</script></body></html>`);
  });
  await new Promise<void>(r=>server.listen(0,"127.0.0.1",r));
  const url=`http://127.0.0.1:${(server.address() as import("node:net").AddressInfo).port}/`;
