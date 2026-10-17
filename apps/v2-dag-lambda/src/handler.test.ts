@@ -4988,7 +4988,7 @@ test("policy-lane negative-search proof survives the hash-bound early handoff", 
     },
   } });
   assert.equal(packet.policySurfaceInspection.outcome, "no_privacy_policy_observed_complete_coverage");
-  assert.equal(packet.policySurfaceInspection.californiaReviewPolicy,"california-privacy-review.v3");
+  assert.equal(packet.policySurfaceInspection.californiaReviewPolicy,"california-privacy-review.v10");
   assert.equal(packet.policySurfaceInspection.privacyChoiceInspection?.contractVersion,"certscore.privacy-choice-inspection.v4");
   assert.ok(packet.policySurfaceInspection.negativeSearchEvidence);
   const { sourceHash, ...unsigned } = packet;
