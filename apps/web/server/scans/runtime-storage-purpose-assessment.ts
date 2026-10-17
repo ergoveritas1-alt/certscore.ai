@@ -1,4 +1,4 @@
-import {classifyDeclaredCookiePurpose} from "@certscore/vendor-resolver";
+import {classifyDeclaredCookiePurpose} from "@certscore/vendor-resolver/runtime-script-facts";
 import {runtimeStoragePurposeV2Schema,storageReadTraceSchema,cookieSnapshotSchema,type RuntimeStoragePurposeV2,type CaliforniaPolicyDocument} from "@certscore/contracts";
 import {createHash} from "node:crypto";
 import {runtimeStoragePurposeAssessmentSchema,runtimeScriptEvidenceSchema,verifyRuntimeEvidenceGraph,type CanonicalEvidenceBundle,type RuntimeStoragePurposeAssessment} from "@certscore/contracts";

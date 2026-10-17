@@ -63,6 +63,7 @@ const CALIFORNIA_REVIEW_CHECK: Check = {
     "apps/web/server/scans/california-collection-notice-matching.test.ts",
     "apps/web/server/scans/runtime-storage-purpose-assessment.test.ts",
     "packages/certscore-vendor-resolver/src/runtime-script-facts.test.ts",
+    "packages/certscore-vendor-resolver/src/client-boundary.test.ts",
     "packages/certscore-scan-core/src/runtime-script-evidence.test.ts",
     "packages/certscore-contracts/src/california-clause-assessment.test.ts",
     "packages/certscore-contracts/src/california-sale-sharing-assessment.test.ts",

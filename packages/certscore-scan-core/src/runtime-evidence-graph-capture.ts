@@ -1,4 +1,4 @@
-import {extractRuntimeScriptFacts} from "@certscore/vendor-resolver";
+import {extractRuntimeScriptFacts} from "@certscore/vendor-resolver/runtime-script-facts";
 import {storageReadTraceSchema,type StorageReadTrace,type RuntimeScriptEvidence} from "@certscore/contracts";
 import { randomBytes } from "node:crypto";
 import type { CDPSession, Page } from "playwright";

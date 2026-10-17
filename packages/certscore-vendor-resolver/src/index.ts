@@ -6175,5 +6175,3 @@ export function resolveCanonicalCookieClassification(name: string, context: Pick
     category: knowledge.category, essentiality: knowledge.essentiality, documentedPurposes: knowledge.documentedPurposes ?? [],
     ruleId: knowledge.ruleId ?? "unresolved", provider });
 }
-
-export {extractRuntimeScriptFacts,classifyDeclaredCookiePurpose} from "./runtime-script-facts";
