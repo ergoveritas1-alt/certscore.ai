@@ -13,4 +13,10 @@ test("AWS deployment enables only the owner-approved bounded coverage policy", a
   assert.match(parity, /\["Read-only preferences worker", env\.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, "1"\]/);
   assert.match(parity, /\["Preference coverage budget", env\.CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY, "coverage_25_gb_seconds.v1"\]/);
   assert.match(parity, /\["Navigation-menu accessibility inspection", env\.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED, "1"\]/);
+  const promotion = deployment.indexOf("const results = await Promise.all(SCANNER_REGIONS.map(async (region)");
+  const coverage = deployment.indexOf("await applyScannerRuntimeConfiguration(true)");
+  assert.ok(promotion > 0 && coverage > promotion);
+  assert.ok(coverage < deployment.indexOf('details.regionParity = "passed"'));
+  assert.match(deployment, /async function applyScannerRuntimeConfiguration\(enableCoverage = false\)/);
+  assert.match(deployment, /enableCoverage \? SCANNER_COVERAGE_ENVIRONMENT : \{\}/);
 });

@@ -59,10 +59,6 @@ const SCANNER_MEMORY_SIZE = 3008;
 const SCANNER_FUNCTION_NAME = "certscore-v2-dag-local-lambda";
 const SCANNER_WEB_BOT_AUTH_SECRET_ID = "consentcheck/web-bot-auth-private-key-pem";
 const SCANNER_IDENTITY_ENVIRONMENT = {
-  // Owner-authorized bounded read-only coverage rollout; legacy budgets are not enabled.
-  CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED: "1",
-  CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY: "coverage_25_gb_seconds.v1",
-  CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED: "1",
   CERTSCORE_POST_ACCEPT_WORKER_ENABLED: "1",
   CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED: "1",
   CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED: "1",
@@ -75,6 +71,12 @@ const SCANNER_IDENTITY_ENVIRONMENT = {
   WEB_BOT_AUTH_INCLUDE_NONCE: "1",
   WEB_BOT_AUTH_SIGNATURE_AGENT_URL:
     "https://consentcheck.site/.well-known/http-message-signatures-directory",
+} as const;
+// Enable only after every scanner image supports the bounded policy.
+const SCANNER_COVERAGE_ENVIRONMENT = {
+  CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED: "1",
+  CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY: "coverage_25_gb_seconds.v1",
+  CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED: "1",
 } as const;
 const WEB_WORKFLOW = "web-aws-ecs-deploy.yml";
 const VALIDATION_WORKFLOW = "validation-aws-deploy.yml";
@@ -542,6 +544,7 @@ async function deployScanners(input: { pushRuntimeBase: boolean; ref: string }):
         };
       }));
 
+      await applyScannerRuntimeConfiguration(true);
       const details: Record<string, string> = {
         runtimeBase
       };
@@ -584,9 +587,10 @@ async function readScannerWebBotAuthPrivateKey() {
   return privateKeyPem;
 }
 
-async function applyScannerRuntimeConfiguration() {
+async function applyScannerRuntimeConfiguration(enableCoverage = false) {
   console.log(`Applying ${SCANNER_MEMORY_SIZE} MB memory and verified ConsentCheck identity before image promotion.`);
   const privateKeyPem = await readScannerWebBotAuthPrivateKey();
+  const requiredEnvironment = { ...SCANNER_IDENTITY_ENVIRONMENT, ...(enableCoverage ? SCANNER_COVERAGE_ENVIRONMENT : {}) };
   const results = await Promise.all(SCANNER_REGIONS.flatMap(region => [SCANNER_FUNCTION_NAME, `${SCANNER_FUNCTION_NAME}-inventory`].map(async (functionName) => {
     const current = await run([
       "aws", "lambda", "get-function-configuration",
@@ -605,11 +609,11 @@ async function applyScannerRuntimeConfiguration() {
     const currentVariables = currentPayload.Variables ?? {};
     const nextVariables = {
       ...currentVariables,
-      ...SCANNER_IDENTITY_ENVIRONMENT,
+      ...requiredEnvironment,
       WEB_BOT_AUTH_PRIVATE_KEY_PEM: privateKeyPem,
     };
     const identityChanged = Object.entries({
-      ...SCANNER_IDENTITY_ENVIRONMENT,
+      ...requiredEnvironment,
       WEB_BOT_AUTH_PRIVATE_KEY_PEM: privateKeyPem,
     }).some(([key, value]) => currentVariables[key] !== value);
     const memoryChanged = currentPayload.MemorySize !== SCANNER_MEMORY_SIZE;
@@ -655,7 +659,7 @@ async function applyScannerRuntimeConfiguration() {
       Variables?: Record<string, string>;
     };
     const verifiedVariables = payload.Variables ?? {};
-    const identityConverged = Object.entries(SCANNER_IDENTITY_ENVIRONMENT)
+    const identityConverged = Object.entries(requiredEnvironment)
       .every(([key, value]) => verifiedVariables[key] === value) &&
       verifiedVariables.WEB_BOT_AUTH_PRIVATE_KEY_PEM === privateKeyPem;
     if (
