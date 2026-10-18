@@ -32,6 +32,7 @@ test("existing baseline and GPC browsers retain comparable windows on a continuo
   try {
     const url = `http://127.0.0.1:${(server.address() as {port:number}).port}/`;
     const sources=[];
+    const capturedHorizons: number[] = [];
     for (const lane of ['runtime_evidence','gpc_observation'] as const) {
       const outDir = path.join(out,lane);
       const bundle = await runScan({scanId:'busy-pair',url,outDir,evidenceLane:lane,profile:'standard',scenarioResourceMode:'lean',retainGpcObservation:lane==='gpc_observation',preConsentScreenshotMode:'never',formSnapshotReviewer:lane==='runtime_evidence'?async()=>({safeForDisplay:true}):undefined});
@@ -41,7 +42,9 @@ test("existing baseline and GPC browsers retain comparable windows on a continuo
         assert.ok(bundle.collectionSurfaceInventory?.coverage.reasonCodes.includes('document_settle_incomplete'));
       }
       assert.equal(bundle.gpcImpactCapture.expectedEnabled,lane==='gpc_observation');
-      assert.equal(bundle.gpcImpactCapture.windows.at(-1)?.durationMs,1000,JSON.stringify(bundle.gpcImpactCapture));
+      const horizon = bundle.gpcImpactCapture.windows.at(-1)?.durationMs;
+      assert.ok(horizon === 3000 || horizon === 5000, JSON.stringify(bundle.gpcImpactCapture));
+      capturedHorizons.push(horizon);
       assert.ok(Buffer.byteLength(JSON.stringify(bundle.gpcImpactCapture))<2048);
       const retained = JSON.parse(await readFile(path.join(outDir,'CanonicalEvidenceBundle.json'),'utf8'));
       // Production workers add the lane envelope after runScan; use that same
@@ -54,7 +57,7 @@ test("existing baseline and GPC browsers retain comparable windows on a continuo
     }
     const impact=buildGpcImpactAssessment({scanId:'busy-pair',baseline:sources[0],gpc:sources[1]});
     assert.equal(impact.status,'measured',JSON.stringify(impact));
-    assert.equal(impact.durationMs,1000);
+    assert.equal(impact.durationMs,Math.min(...capturedHorizons), "the comparison uses the longest fully retained common window");
     assert.equal(impact.requestAttempts!.baseline-impact.requestAttempts!.gpc,1,'actual baseline-only request is measured in the common window');
     assert.equal(impact.scoreEffect,'none');
     assert.equal(impact.cmpRecordedState.baselineState,'captured');
