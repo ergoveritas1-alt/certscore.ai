@@ -76,7 +76,7 @@ test("California overview and priority list omit EU-only findings while retainin
   assert.doesNotMatch(html, /EU-only tracking after Reject/);
   assert.doesNotMatch(html, /No CCPA\/CPRA priority issues/);
   const eu = renderToStaticMarkup(<FullSiteExecutiveSummary score={{value:82, priorityReview:[postReject,ACCESSIBILITY_PREVIEW],scoredPages:1}} pending={false} scannedPages={1} reviewFocus="gdpr_eprivacy" />);
-  assert.match(eu, /Page score 82 out of 100/);
+  assert.match(eu, /Score 82 out of 100/);
 });
 test("all mapped findings remain available without a 30-item truncation", () => {
   const eu = REGULATORY_PREVIEW_FINDINGS.filter(finding => regulatoryReviewContext(finding.id,"gdpr_eprivacy"));
