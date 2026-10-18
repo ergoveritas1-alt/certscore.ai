@@ -79,7 +79,7 @@ function gpcAssessment(status: "responsive" | "no_observable_response" | "indete
   };
 }
 
-test("projects one neutral GPC finding and attaches only the qualified California deduction", () => {
+test("projects legacy GPC observations without inventing a qualifying collection deduction", () => {
   for (const status of ["responsive", "no_observable_response", "indeterminate"] as const) {
     const packets = buildUnifiedFindingPackets({
       reviewFindingCandidates: [],
@@ -95,8 +95,8 @@ test("projects one neutral GPC finding and attaches only the qualified Californi
       status === "no_observable_response" ? "No observable GPC response" : "GPC response",
     );
     assert.equal(packet.evidence?.flags?.includes("score_effect:none") ?? false, false);
-    assert.equal(packet.scoreEffects?.[0]?.deductionPoints ?? 0, status === "no_observable_response" ? 15 : 0);
-    assert.equal(packet.scoreEffects?.[0]?.framework ?? null, status === "no_observable_response" ? "california" : null);
+    assert.equal(packet.scoreEffects?.[0]?.deductionPoints ?? 0, 0);
+    assert.equal(packet.scoreEffects?.[0]?.framework ?? null, null);
     assert.equal(packet.details?.family, "privacy_signal");
     assert.equal(
       packet.details?.family === "privacy_signal"

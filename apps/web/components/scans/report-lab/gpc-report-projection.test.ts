@@ -127,13 +127,13 @@ test("v3 card states the observed signal and activity without implying an establ
   assert.equal(gpcSummaryLabel(limited), "Observation limited");
 });
 
-test("responsive GPC card describes a retained partial reduction", async () => {
+test("responsive GPC card describes the measured request counts", async () => {
   const { gpcActivityComparisonFixture } = await import("../../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
   const projection = {
     assessment: { status: "responsive" },
     activityComparison: gpcActivityComparisonFixture(),
   } as GpcResponseReportProjection;
-  assert.equal(gpcCardResponse(projection), "The paired scan observed a partial reduction in classified tracking activity with GPC.");
+  assert.equal(gpcCardResponse(projection), "Over the same 1-second interval after page commit, advertising/marketing requests: 2 without GPC and 1 with GPC; analytics/replay requests: 1 without GPC and 1 with GPC.");
   projection.activityComparison!.activity.advertisingMarketing.baselineRequests = 1;
   projection.activityComparison!.activity.advertisingMarketing.gpcRequests = 0;
   projection.activityComparison!.activity.analyticsReplay.baselineRequests = 5;

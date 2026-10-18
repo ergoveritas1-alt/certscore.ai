@@ -467,11 +467,11 @@ for(const version of ["v5","v6","v7","v8","v9","v10"] as const) test(`${version}
   record.snapshot={report_projection_status:"ready",certscore_overall:73,score_version:"overall-posture.v11"} as ScanDetailResponse["snapshot"];
   const exported=buildCanonicalReportExport(record,undefined,"ccpa_cpra")!;
   assert.equal(exported.californiaScore.score,88);assert.equal(exported.californiaScore.deductions.length,1);
-  assert.equal(exported.californiaScore.policyVersion,`california-regulatory-posture.${version === "v10"?"v9":(version === "v8" || version === "v9")?"v7":version}`);
+  assert.equal(exported.californiaScore.policyVersion,`california-regulatory-posture.${version === "v10"?"v11-wcag":(version === "v8" || version === "v9")?"v7":version}`);
   assert.equal(exported.californiaScore.rightsAssessment?.topics.find(row=>row.topic === "right_to_delete")!.status,"not_observed");
   assert.equal(exported.californiaScore.collectionNoticeAssessment?.inventoryComplete,true);
   const api=buildApiV2ScanResource(record);assert.equal(api.postureScores?.ccpaCpra.score,88);assert.equal(api.postureScores?.gdprEprivacy.score,73);
-  assert.equal(api.postureScores?.ccpaCpra.policyVersion,`california-regulatory-posture.${version === "v10"?"v9":(version === "v8" || version === "v9")?"v7":version}`);
+  assert.equal(api.postureScores?.ccpaCpra.policyVersion,`california-regulatory-posture.${version === "v10"?"v11-wcag":(version === "v8" || version === "v9")?"v7":version}`);
   assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/Rights clause/);
   assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.rightsAssessment.topics.length,4);
   assert.equal(exported.gpcResponse,null);
