@@ -569,7 +569,7 @@ test("API v2 draft OpenAPI locks resource path and operation names", () => {
   );
   const gpc = document.components.schemas.GpcResponse;
   assert.equal(gpc.properties.activityComparison.properties.scoreEffect.const, "none");
-  assert.deepEqual(gpc.properties.activityComparison.properties.durationMs.anyOf.map((value: { const: number }) => value.const), [250, 500, 1000]);
+  assert.deepEqual(gpc.properties.activityComparison.properties.durationMs.anyOf.map((value: { const: number }) => value.const), [250, 500, 1000, 3000, 5000]);
   assert.equal(gpc.properties.activityComparison.properties.activity.properties.analyticsReplay.properties.gpcRequests.maximum, 5000);
   assert.equal(gpc.required.includes("activityComparison"), false);
   assert.deepEqual(gpc.properties.contractVersion.enum, ["certscore.gpc-response-assessment.v1", "certscore.gpc-response-assessment.v2", "certscore.gpc-response-assessment.v3"]);
