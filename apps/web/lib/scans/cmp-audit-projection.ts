@@ -234,6 +234,7 @@ export function projectCmpAudit(input: {
     // Preserve the more specific canonical failure reason when neither path is usable.
     if (row.id === "implementation" && row.status === "not_assessed" && rejectCoverage?.assessmentStatus === "coverage_limitation") continue;
     if (concern) set(row.id, { status: labels[row.status], limitation: row.limitation,
+      ...(row.id === "categories" && row.inventory?.privacyChoices?.length ? {label:"Privacy choices available"} : {}),
       detail: restrictedCookieScope ? "Cookie names were compared with the captured CMP list; see retained evidence."
         : restrictedDurationScope ? "CMP cookie expiry was captured; see retained evidence."
         : restrictedExpiryScope ? "CMP cookie descriptions were captured; see retained evidence."

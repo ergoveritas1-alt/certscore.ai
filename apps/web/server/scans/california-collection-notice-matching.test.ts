@@ -96,3 +96,14 @@ test("v2 separates cookie matches from browser storage and preserves search and 
   f.bundle.normalizedVendorObservations!.push({...vendor,registryAttribution:{serviceId:"conflicting"}} as never);
   assert.equal(matchCaliforniaCollectionNoticesV2(input).points.find(point=>point.kind === "third_party_resources")!.status,"limited");
 });
+
+test("cookie purposes retain an adjacent cookie-bound clause without borrowing unrelated uses",async()=>{
+  const {matchCaliforniaCollectionNoticesV4}=await import("./california-collection-notice-matching");
+  const f=setup();f.bundle.cookieEvents=[{eventId:"cookie",scenario:"fresh_pre_consent",documentUrl:CA_FIXTURE_URL,cookieName:"analytics_cookie",cookiePurpose:"analytics"}] as never;
+  for(const text of ["We use cookies. These cookies measure site traffic for analytics.","We use cookies. We use medical records for analytics.","We use cookies. These cookies do not collect analytics."]){
+    const input={bundle:f.bundle,documentUrl:CA_FIXTURE_URL,sourceHash:"a".repeat(64),inventoryComplete:true,policyComplete:true,documents:[{evidenceRef:"policy-text:policy",url:policyUrl,textSha256:createHash("sha256").update(text).digest("hex"),text}]};
+    const cookie=matchCaliforniaCollectionNoticesV4(input).points.find(point=>point.kind==="cookies")!;
+    assert.equal(cookie.purposeMatch,text.includes('measure site')?"wording_retained":"not_observed");
+    for(const passage of cookie.passages)assert.equal(text.slice(passage.start,passage.end),passage.excerpt);
+  }
+});

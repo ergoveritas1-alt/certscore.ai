@@ -1,3 +1,4 @@
+import {cmpPreferenceAccessibilityProjectionSchema} from "@certscore/contracts";
 import type { ApiAccessibilityAuditSummary } from "@certscore/api-contracts";
 import { accessibilityAuditProjectionSchema, isAccessibilityAuditLimited, type AccessibilityAuditObservation, type AccessibilityAuditProjection } from "@certscore/contracts";
 
@@ -31,7 +32,7 @@ export function withAccessibilityAuditCoverage<T extends { status: string; summa
 }
 
 /** Compatibility rows are derived once from typed observations, never from scores or counts alone. */
-export function accessibilityExamples(observation?: AccessibilityAuditObservation) {
+export function accessibilityExamples(observation?: Pick<AccessibilityAuditObservation,"documentUrl"|"violations">) {
   return (observation?.violations ?? []).map(rule => ({
     ruleCode: rule.ruleId, ruleGroup: rule.tags.filter(tag => /^wcag/.test(tag)).join(", "),
     impact: rule.impact, severity: rule.impact === "critical" || rule.impact === "serious" ? "high" : rule.impact === "moderate" ? "medium" : "low",
@@ -41,4 +42,8 @@ export function accessibilityExamples(observation?: AccessibilityAuditObservatio
     })),
     representativeSelectors: rule.representativeNodes.flatMap(node => node.selectors.map(selector => Array.isArray(selector) ? selector.join(" >>> ") : selector)).slice(0, 5),
   }));
+}
+
+export function readPreferenceAccessibilityAudit(value:unknown){
+ const parsed=cmpPreferenceAccessibilityProjectionSchema.safeParse(value);return parsed.success?parsed.data:null;
 }

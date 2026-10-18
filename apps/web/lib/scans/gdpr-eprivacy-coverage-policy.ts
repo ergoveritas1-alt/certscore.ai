@@ -7450,7 +7450,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     return makeOutcome(
       config.rowId,
       "No match found",
-      `CertScore retained a usable policy but found no sufficiently direct matching passage for ${config.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`,
+      `CertScore.ai retained a usable policy but found no sufficiently direct matching passage for ${config.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`,
       evidenceRefs,
       {
         retainedEvidence
@@ -7462,7 +7462,7 @@ function buildGdprTransparencyArticle13ConcernOutcome(
     return makeOutcome(
       config.rowId,
       "Not confirmed",
-      "CertScore retained policy evidence related to automated processing, personalization, or profiling, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
+      "CertScore.ai retained policy evidence related to automated processing, personalization, or profiling, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
       evidenceRefs,
       {
         retainedEvidence: {
@@ -8972,7 +8972,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     return makeOutcome(
       config.rowId,
       "Not confirmed",
-      "CertScore retained automated-processing, personalization, or profiling-adjacent language, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
+      "CertScore.ai retained automated-processing, personalization, or profiling-adjacent language, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
       [
         "Evidence: automated processing or personalization language",
         `Excerpt: ${automatedGeneralTextMatchEvidence}`,
@@ -8998,7 +8998,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
       return makeOutcome(
         config.rowId,
         "Not confirmed",
-        "CertScore retained partial automated-processing or profiling evidence, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
+        "CertScore.ai retained partial automated-processing or profiling evidence, but did not confirm a sufficiently direct automated decision-making/profiling disclosure. This does not establish that the disclosure is absent.",
         [
           `Evidence: partial ${config.label}`,
           getString(article13Signal, ["evidenceText", "evidence_text"])
@@ -9354,7 +9354,7 @@ function derivePolicyDisclosureOutcome(input: GdprEprivacyCoveragePolicyInput, c
     config.rowId,
     config.rowId === "automated_decision_making_profiling_disclosure" ? "Not confirmed" : "Gap observed",
     config.rowId === "automated_decision_making_profiling_disclosure"
-      ? `CertScore found no sufficiently direct matching passage for ${config.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`
+      ? `CertScore.ai found no sufficiently direct matching passage for ${config.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`
       : `${config.label} was expected for Article 13 transparency review but was not observed in retained privacy-policy evidence.`,
     ["Evidence: retained privacy policy text reviewed"],
     {

@@ -180,3 +180,19 @@ test("new CA vendor-only opt-out activity remains reportable review with no scor
     assert.equal(score.score,version === "v9"?82:100);
   }
 });
+
+test('verified linked-page opt-out control is positive retained evidence without a tested execution or inferred homepage absence',()=>{
+ const packet={contractVersion:'certscore.cmp-preferences-evidence.v1',policyVersion:'bounded_cmp_preferences.v1',scanId:'scan-fixture',parentDispatchSha256:'a'.repeat(64),targetUrl:url,finalUrl:url+'settings',documentToken:'linked',
+  startedAt:'2026-10-16T11:59:59.700Z',completedAt:'2026-10-16T12:00:01.500Z',status:'completed',
+  support:{state:'partial',provider:null,recipeVersion:'bounded_cmp_preferences.v1',reason:'read_only_linked_privacy_preferences'},action:{count:0,intent:'options',label:null,opened:false},
+  linkedPreferenceNavigation:{policyVersion:'read_only_linked_preferences.v1',sourceUrl:url,sourceDocumentToken:'parent',label:'Privacy Settings',destinationUrl:url+'settings',documentToken:'linked'},
+  controls:[{label:'Do Not Sell or Share My Personal Information (Opt Out)',kind:'unclassified',enabled:true,checked:false}],controlInventoryComplete:false,privacyLinks:[],declarations:[],declarationInventoryComplete:false,limitations:[],
+  checkpoints:{version:'cmp_partial_capture.v1',documentToken:'linked',privacyLinks:false,declarations:false,controls:true,controlsSurface:'preferences'},inspectionDiagnostic:{revision:'cmp_preferences.v17',budgetMs:6510,phase:'preference_inventory'}};
+ const result=projectCaliforniaPrivacyReview(bundle({cmpPreferencesEvidence:packet}),source,url)!;
+ assert.equal(result.choiceSurface,'observed');assert.equal(result.controls[0]?.kind,'do_not_sell_or_share');assert.match(result.controls[0]!.evidenceRef,/CmpPreferencesEvidencePacket/);
+ assert.equal(result.optOutEffectiveness,'not_assessed');assert.equal(result.scoreEffect,'none');assert.deepEqual(californiaPrivacyReviewFindingIds(result),[]);
+ for(const change of [{startedAt:'2026-10-16T11:59:54.000Z'},{scanId:'wrong'},{targetUrl:'https://other.test/'},{linkedPreferenceNavigation:{...packet.linkedPreferenceNavigation,destinationUrl:'https://external.test/settings'}}]){
+  const limited=projectCaliforniaPrivacyReview(bundle({policySurfaceInspection:undefined,cmpPreferencesEvidence:{...packet,...change}}),source,url)!;
+  assert.equal(limited.choiceSurface,'unknown');assert.equal(limited.controls.length,0);
+ }
+});

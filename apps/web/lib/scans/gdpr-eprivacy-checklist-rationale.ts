@@ -41,9 +41,9 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
 
   if (evidenceLabel === "No match found") {
     if (item.id === "legal_basis_disclosure_observed") {
-      return "CertScore retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent.";
+      return "CertScore.ai retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent.";
     }
-    return `CertScore retained a usable policy surface but found no sufficiently direct passage for ${item.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`;
+    return `CertScore.ai retained a usable policy surface but found no sufficiently direct passage for ${item.label.toLowerCase()} during automated analysis. This does not establish that the disclosure is absent.`;
   }
 
   if (evidenceLabel === "Not testable") {
@@ -355,7 +355,7 @@ function getSpecificChecklistRowRationale(item: GdprEprivacyCoverageChecklistIte
     }
     if ((item.assessmentStatus === "review_signal" || item.status === "Review signal") &&
         item.criticalEvidence.statusBasis?.startsWith("A first-layer GDPR/ePrivacy cookie consent surface was retained with an accept option and non-essential cookie/purpose text, but no same-layer reject")) {
-      return "A first-layer consent surface had an accept option and non-essential cookie/purpose text, but no same-layer refusal option was retained. This describes first-layer availability only; CertScore did not run a consent flow.";
+      return "A first-layer consent surface had an accept option and non-essential cookie/purpose text, but no same-layer refusal option was retained. This describes first-layer availability only; CertScore.ai did not run a consent flow.";
     }
   }
 

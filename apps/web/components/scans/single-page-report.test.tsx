@@ -4,12 +4,12 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ReportInventorySummary } from "./report-inventory-summary";
 import { FullSiteExecutiveSummary } from "./full-site-executive-summary";
-import { EvidenceDirectory } from "./report-lab/shadow-scan-report";
+import { EvidenceDirectory, SignalSnapshot } from "./report-lab/shadow-scan-report";
 import { SHADOW_REPORT } from "./report-lab/shadow-report-data";
 
 test("single-page overview uses the shared report card and keeps every retained classification in technical details", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary scannedPages={1} pending={false} score={{ value: 56, priorityReview: [], scoredPages: 1, limitedPages: 0 }} homepageVerdict="Retained page assessment" inventorySummary={<ReportInventorySummary metrics={[{ label: "Embedded content", value: 3, counts: { nonEssential: 0, review: 1, contextual: 2, essential: 0 } }]} />} />);
-  assert.match(html, /Page score 56 out of 100/);
+  assert.match(html, /Score 56 out of 100/);
   assert.match(html, /1 page scanned/);
   assert.match(html, /Retained page assessment/);
   for (const label of ["Non-essential", "Classification review", "Contextual", "Essential"]) assert.ok(html.includes(label));
@@ -23,4 +23,16 @@ test("compact single-page evidence retains actual checks without a crawl context
   assert.match(html, /JSON evidence/);
   assert.doesNotMatch(html, /Sitewide assessment unavailable|Verified sitewide evidence is not available/);
   for (const row of SHADOW_REPORT.trackingExternalRows) assert.ok(html.includes(`id="evidence-row-${row.id}"`));
+});
+
+
+test("single-page snapshots omit Starting page context and the visible score label", () => {
+  const report = { ...SHADOW_REPORT, fullSite: undefined };
+  const html = renderToStaticMarkup(<SignalSnapshot report={report} />);
+  assert.match(html, /Signal Snapshot/);
+  assert.doesNotMatch(html, /Starting page/);
+  for (const reviewFocus of ["gdpr_eprivacy", "ccpa_cpra"] as const) {
+    const overview = renderToStaticMarkup(<FullSiteExecutiveSummary reviewFocus={reviewFocus} pending={false} scannedPages={1} score={{value:71,priorityReview:[],scoredPages:1}} />);
+    assert.doesNotMatch(overview, />Page score<|>California page score<|>California score<|>Score</);
+  }
 });

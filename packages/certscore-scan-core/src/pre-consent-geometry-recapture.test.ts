@@ -861,9 +861,9 @@ test("pre-consent scanner retains a proof screenshot for deeply nested animated 
     });
 
     assert.equal(result.moduleRun.status, "completed", result.moduleRun.errors.join("; "));
-    assert.equal(
-      result.moduleRun.timingBreakdown?.find((entry) => entry.label === "early screenshot capture")?.outcome,
-      "completed",
+    assert.ok(
+      ["completed", "recovered"].includes(result.moduleRun.timingBreakdown?.find((entry) => entry.label === "early screenshot capture")?.outcome ?? ""),
+      "A successful bounded compatibility capture also retains a real proof screenshot",
     );
     assert.equal(result.consentUiObservations[0]?.acceptControlObserved, true);
     assert.equal(result.consentUiObservations[0]?.rejectControlObserved, true);

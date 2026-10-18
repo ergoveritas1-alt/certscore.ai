@@ -147,7 +147,8 @@ test("Pulse markdown surfaces GPC, Accept Path, and Reject Path results", () => 
 
   assert.match(markdown, /GPC response: No observable GPC response; status: No Observable Response/);
   assert.match(markdown, /Sec-GPC: 1 proof retained on 2 request\(s\)/);
-  assert.match(markdown, /California scoring path: 15-point GPC deduction applied/);
+  assert.match(markdown, /California privacy-choice enforcement risk observed/);
+  assert.doesNotMatch(markdown, /15-point GPC deduction/);
   assert.match(markdown, /Accept Path: Accept was confirmed/);
   assert.match(markdown, /Reject Path: Reject was confirmed/);
   assert.doesNotMatch(markdown, /GPC violation|GPC not honored/i);

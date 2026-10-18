@@ -68,6 +68,7 @@ export const publicCmpAuditSchema = z.object({
   }).strict().refine(value => value.requests.length <= value.requestCount && value.nonEssentialRequestCount <= value.requestCount && value.requests.filter(row => row.nonEssential).length <= value.nonEssentialRequestCount, "Activity counts must agree with retained requests")).max(2).refine(values => new Set(values.map(value => value.action)).size === values.length, "One activity window per action").optional(),
 
         expiries: z.array(observedCookieExpirySchema).max(4).optional(),
+        privacyChoices: z.array(z.object({label:z.string().min(1).max(240),enabled:z.boolean(),checked:z.boolean().nullable()}).strict()).min(1).max(100).optional(),
         categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
         services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure", "cmp_visible_inventory", "cmp_loaded_inventory"]), sourceRef: z.string().max(120).optional() }).strict()).max(100).optional(),
         serviceDisclosures: z.array(z.object({ version: z.literal("cmp_named_partner_disclosure.v1"), excerpt: z.string().min(1).max(600), names: z.array(z.string().min(1).max(80)).min(1).max(20) }).strict()).max(1).optional(),
@@ -86,6 +87,8 @@ export const publicCmpAuditSchema = z.object({
     const comparison = row.supportingEvidence?.cookieComparison;
     if (comparison && (comparison.possibleTemplateNameCount ?? 0) > comparison.unmatchedNameCount)
       context.addIssue({ code: z.ZodIssueCode.custom, message: "Possible template candidates are a subset of unverified matches." });
+    if (inventory?.privacyChoices && (row.id !== "categories" || row.status !== "Partially assessed"))
+      context.addIssue({code:z.ZodIssueCode.custom,message:"Linked privacy choices retain their separate partial scope."});
     if ((inventory?.consentStorage && row.id !== "consent_record") || (inventory?.choiceActivity && row.id !== "implementation") ||
       (audit.version !== "cmp_audit_report.v3" && (comparison?.possibleTemplateNameCount !== undefined || comparison?.omittedAfterAcceptCookieCount !== undefined || inventory?.consentStorage || inventory?.choiceActivity || inventory?.declarations?.some(item => item.inferredPurpose || item.observedExpiry) || inventory?.cookies?.some(item => item.possibleTemplateMatch || item.observedExpiry))))
       context.addIssue({ code: z.ZodIssueCode.custom, message: "After-click facts and inferred purpose require their v3 criteria." });

@@ -1,4 +1,5 @@
 import { buildFirstLayerRejectPathProjection } from "./scan-report-consent-projection";
+import {sanitizeEvidenceRequestUrl, sanitizeEvidenceRequestPath} from "@certscore/contracts";
 import { projectGoogleConsentModeRequest } from "../../lib/scans/google-consent-mode-assessment";
 import { reportArtifactIdentityKey, verifyReportArtifactTransfer } from "../../../../packages/shared/src/report-artifact-transfer";
 import { withVerifiedConsentVisualSource } from "./consent-visual-provenance";
@@ -16,7 +17,7 @@ import { projectSiteIntegrity } from "./site-integrity-projection";
 import { projectOriginBoundBrowserStorage } from "./pre-consent-browser-storage-projection";
 import { retainedCookieInventoryIdentity } from "../../lib/scans/retained-cookie-inventory-identity";
 import { projectSiteMetadata } from "./site-metadata-projection";
-import { projectAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-projection";
+import { projectAccessibilityAudit, projectPreferenceAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-projection";
 import "server-only";
 import { retainedPolicySectionHeading } from "../../lib/scans/retained-policy-source";
 import { projectRuntimeEvidenceGraphs } from "./runtime-evidence-graph-projection";
@@ -2161,7 +2162,7 @@ function buildVendorResolverInputs(bundle: Partial<Pick<CanonicalEvidenceBundle,
         refId: `ref_${event.eventId}`,
         eventId: event.eventId,
         eventType: event.eventType,
-        url: requestUrl(event as Record<string, unknown>) ?? undefined
+        url: sanitizeEvidenceRequestUrl(requestUrl(event as Record<string, unknown>))
       },
       hostname: event.hostname ?? hostnameFromUrl(requestUrl(event as Record<string, unknown>)) ?? undefined,
       matchSource: "network_request" as const,
@@ -2178,7 +2179,7 @@ function buildVendorResolverInputs(bundle: Partial<Pick<CanonicalEvidenceBundle,
         refId: `ref_${event.eventId}`,
         eventId: event.eventId,
         eventType: event.eventType,
-        url: firstString(event.scriptUrl, event.url) ?? undefined
+        url: sanitizeEvidenceRequestUrl(firstString(event.scriptUrl, event.url))
       },
       hostname: event.hostname ?? hostnameFromUrl(firstString(event.scriptUrl, event.url)) ?? undefined,
       matchSource: "script_url" as const,
@@ -2195,7 +2196,7 @@ function buildVendorResolverInputs(bundle: Partial<Pick<CanonicalEvidenceBundle,
         refId: `ref_${event.eventId}`,
         eventId: event.eventId,
         eventType: event.eventType,
-        url: firstString(event.frameUrl, event.url) ?? undefined
+        url: sanitizeEvidenceRequestUrl(firstString(event.frameUrl, event.url))
       },
       hostname: event.hostname ?? hostnameFromUrl(firstString(event.frameUrl, event.url)) ?? undefined,
       matchSource: "iframe_url" as const,
@@ -2418,7 +2419,7 @@ function sanitizeIframeEvents(bundle: Pick<CanonicalEvidenceBundle, "iframeEvent
     return {
       consentStateAtTime: event.consentStateAtTime,
       frameName: firstString(event.frameName),
-      frameUrl,
+      frameUrl: retainedRequestUrlSample(frameUrl),
       hostname,
       preConsent: event.consentStateAtTime === "pre_consent",
       thirdParty: hostname ? !sameSite(hostname, rootDomain) : false,
@@ -2548,7 +2549,7 @@ export function summarizeEmbeddedContentEvidence(
     .map((event) => ({
       evidenceType: "iframe",
       vendorName: findRuntimeRequestOwner(event.frameUrl)?.vendor ?? null,
-      frameUrl: event.frameUrl,
+      frameUrl: retainedRequestUrlSample(event.frameUrl),
       hostname: event.hostname,
       initiatorType: "iframe",
       resourceType: "iframe",
@@ -2571,7 +2572,7 @@ export function summarizeEmbeddedContentEvidence(
       pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
         Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
       referrerSent: Boolean(event.requestHeaders?.referer),
-      requestUrl: requestUrl(event),
+      requestUrl: retainedRequestUrlSample(requestUrl(event)),
       resourceType: event.resourceType,
       timestampMs: event.timestampMs
     }));
@@ -2759,7 +2760,7 @@ function summarizeSessionReplayEvidence(
     firstSeenMs,
     libraryOnly: observed && requestUrls.every((url) => /(?:script|tag|recorder|hotjar|fullstory|logrocket|clarity\.ms\/tag)/i.test(url)),
     preConsentObserved: observed,
-    requestUrls: requestUrls.slice(0, 10),
+    requestUrls: requestUrls.slice(0, 10).map(url => sanitizeEvidenceRequestUrl(url)).filter((url):url is string=>Boolean(url)),
     vendors: vendors.slice(0, 10)
   };
 }
@@ -5089,24 +5090,14 @@ export function retainedRequestEssentiality(
 function retainedRequestPathSample(value: string | null | undefined) {
   if (!value) return null;
   try {
-    return new URL(value).pathname.slice(0, 240);
+    return sanitizeEvidenceRequestPath(new URL(value).pathname).slice(0, 240);
   } catch {
     return null;
   }
 }
 
 function retainedRequestUrlSample(value: string | null | undefined) {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value);
-    const redactedQuery = [...parsed.searchParams.keys()]
-      .slice(0, 16)
-      .map((key) => `${encodeURIComponent(key)}=[redacted]`)
-      .join("&");
-    return `${parsed.origin}${parsed.pathname}${redactedQuery ? `?${redactedQuery}` : ""}`.slice(0, 640);
-  } catch {
-    return null;
-  }
+  return sanitizeEvidenceRequestUrl(value)?.slice(0,640) ?? null;
 }
 
 const LOCAL_V2_HARD_NO_GO_TEXT_PATTERN =
@@ -5832,7 +5823,7 @@ function buildMaterializedLocalV2Detail(
             pageUrlSharedViaReferrer: typeof event.requestHeaders?.referer === "string" &&
               Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
             referrerSent: Boolean(event.requestHeaders?.referer),
-            requestUrl: retainedRequestUrlSample(url) ?? url,
+            requestUrl: retainedRequestUrlSample(url),
             regulatoryRelevance: matchedVendor.regulatoryRelevance,
             resourceType: event.resourceType,
             responseObserved: correlatedResponses.length > 0,
@@ -6020,11 +6011,11 @@ function buildMaterializedLocalV2Detail(
         Boolean(hostnameFromUrl(event.topLevelUrl) && event.requestHeaders.referer.includes(hostnameFromUrl(event.topLevelUrl) ?? "")),
       preConsent: event.consentStateAtTime === "pre_consent",
       referrerSent: Boolean(event.requestHeaders?.referer),
-      requestUrl: requestUrl(event),
+      requestUrl: retainedRequestUrlSample(requestUrl(event)),
       resourceType: event.resourceType,
       thirdParty: event.thirdParty === true || event.isThirdParty === true,
       timestampMs: event.timestampMs,
-      url: requestUrl(event)
+      url: retainedRequestUrlSample(requestUrl(event))
     })),
     endpointJurisdictionEvidence,
     sensitiveThirdPartyTrackingCorrelation,
@@ -6176,6 +6167,7 @@ function buildMaterializedLocalV2Detail(
     ...inheritedRuntimeArtifacts,
     accessibilityAudit: projectAccessibilityAudit(bundle, options.policyTextEvidenceContext?.sourceBundle,
       runtimeEvidenceReportable ? getLocalV2AccessibilityDocumentUrl(bundle, canonicalDocumentUrl) : null),
+    preferenceAccessibilityAudit: projectPreferenceAccessibilityAudit(bundle, options.policyTextEvidenceContext?.sourceBundle),
     privacyAuditEvidence: runtimeEvidenceReportable ? projectPrivacyAuditEvidenceForMaterialization(
       bundle, options.policyTextEvidenceContext?.sourceBundle, canonicalDocumentUrl,
       inheritedRuntimeArtifacts.privacyAuditEvidence,

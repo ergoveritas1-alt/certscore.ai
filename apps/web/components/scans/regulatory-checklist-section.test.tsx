@@ -55,7 +55,7 @@ test("RegulatoryChecklistSection can render baseline privacy options for non-adm
   assert.match(html, /GDPR\/ePrivacy/);
   assert.match(html, /Regulatory Diagnostics/);
   assert.match(html, /Privacy-law applicability context/);
-  assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
+  assert.match(html, /Applicability can depend on business facts or visitor geography CertScore.ai has not verified/);
   assert.match(html, /aria-label="Collapse Regulatory Diagnostics"/);
   assert.doesNotMatch(html, /CCPA\/CPRA/);
   assert.ok(html.indexOf("Collapse Regulatory Diagnostics") < indexOfTabLabel(html, "GDPR/ePrivacy"));
@@ -72,7 +72,7 @@ test("RegulatoryChecklistSection can render all checklist options for admin view
   assert.match(html, /GDPR\/ePrivacy/);
   assert.match(html, /Regulatory Diagnostics/);
   assert.match(html, /Privacy-law applicability context/);
-  assert.match(html, /Applicability can depend on business facts or visitor geography CertScore has not verified/);
+  assert.match(html, /Applicability can depend on business facts or visitor geography CertScore.ai has not verified/);
   assert.match(html, /aria-label="Collapse Regulatory Diagnostics"/);
   assert.doesNotMatch(html, /CCPA\/CPRA/);
   assert.ok(html.indexOf("Collapse Regulatory Diagnostics") < indexOfTabLabel(html, "GDPR/ePrivacy"));

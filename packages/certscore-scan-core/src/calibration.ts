@@ -15,6 +15,7 @@ export interface CalibrationInput {
 }
 
 export type CalibrationScanner = (input: {
+  policyStopAfterAccessBlock?: boolean;
   url: string;
   profile: ScanProfile["profileId"];
   outDir: string;
@@ -106,6 +107,7 @@ export async function runCalibration(input: CalibrationInput): Promise<Calibrati
         url,
         profile: input.profile,
         outDir: siteOutDir,
+        policyStopAfterAccessBlock:true,
       });
       const inspection = await inspectBundle(bundle);
       results.push(summaryForBundle(url, siteOutDir, bundle, inspection));

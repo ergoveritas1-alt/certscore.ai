@@ -31,6 +31,7 @@ function AccessibilityExample({ node }: { node: AccessibilityRuleObservation["re
     && explanation.includes(`contrast ratio of ${contrast.requiredContrastRatio}`);
   return <div className="min-w-0 space-y-2 border-l-2 border-zinc-200 pl-3">
     <p className="break-words font-mono text-[0.68rem]">{node.selectors.map(selector => Array.isArray(selector) ? selector.join(" >>> ") : selector).join(", ")}</p>
+    {node.captureState === "opened_navigation_menu" ? <p>Observed in an opened navigation menu.</p> : null}
     <p className="whitespace-pre-line break-words">{explanation}</p>
     {node.colorContrast && !contrastAlreadyDescribed ? <p>Contrast ratio: {node.colorContrast.contrastRatio ?? "Not captured"}; required: {node.colorContrast.requiredContrastRatio ?? "Not captured"}.</p> : null}
     <pre className="max-w-full overflow-x-auto rounded bg-zinc-50 p-2 text-[0.68rem]">{node.htmlSnippet}</pre>

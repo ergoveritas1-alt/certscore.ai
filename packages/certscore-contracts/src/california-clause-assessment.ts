@@ -11,6 +11,8 @@ export type CaliforniaPassage = z.infer<typeof californiaPassageSchema>;
 
 export const californiaRightsClauseAssessmentSchema=z.object({
   contractVersion:z.literal("certscore.california-rights-clauses.v1"),sourceBundleSha256:z.string().regex(/^[a-f0-9]{64}$/),
+  assessmentPolicyVersion:z.literal("rights_section_context.v2").optional(),
+  sourceCoverage:z.object({policyVersion:z.enum(["verified_positive_clauses.v1","verified_positive_clauses.v2"]),status:z.literal("partial"),documents:z.array(z.object({evidenceRef:z.string().min(1).max(240),textSha256:z.string().regex(/^[a-f0-9]{64}$/),inspectedChars:z.number().int().positive().max(160000)}).strict()).min(1).max(8)}).strict().optional(),
   topics:z.array(z.object({topic:z.enum(CALIFORNIA_RIGHTS_TOPICS),status:z.enum(["disclosed","not_observed","review"]),
     context:z.enum(["general_consumer_wording","california_wording","other_jurisdiction_only","unresolved"]),
     candidateClauseCount:z.number().int().nonnegative(),excludedClauseCount:z.number().int().nonnegative(),unresolvedClauseCount:z.number().int().nonnegative(),
@@ -18,6 +20,7 @@ export const californiaRightsClauseAssessmentSchema=z.object({
     excludedPassages:z.array(californiaPassageSchema).max(2),
   }).strict()).length(4),
 }).strict().superRefine((row,ctx)=>{
+  if(row.sourceCoverage && row.topics.some(topic=>topic.status==="not_observed"))ctx.addIssue({code:"custom",message:"Partial clause capture cannot establish absence."});
   if(new Set(row.topics.map(topic=>topic.topic)).size!==4 || row.topics.some(topic=>topic.status === "disclosed" && !topic.passages.length || topic.excludedClauseCount>topic.candidateClauseCount || topic.unresolvedClauseCount>topic.candidateClauseCount-topic.excludedClauseCount || topic.status === "not_observed" && topic.candidateClauseCount !== topic.excludedClauseCount))
     ctx.addIssue({code:"custom",message:"Every rights topic requires a unique, evidence-bound conclusion."});
 });
@@ -114,17 +117,47 @@ export function retainedCaliforniaPassage(clause:ReturnType<typeof californiaPol
     end:clause.start+offset+excerpt.length,excerpt};
 }
 
+function rightsScope(clause:ReturnType<typeof californiaPolicyClauses>[number]):"other"|"california"|"general" {
+  // Preserve the operative audience across sentence/list boundaries in retained
+  // flattened policy text. A keyword elsewhere in the site navigation is not a
+  // consumer grant. Later explicit California/US grants reset a foreign scope.
+  const context=clause.document.text.slice(Math.max(0,clause.start-3000),clause.start+clause.text.length);
+  const last=(pattern:RegExp)=>[...context.matchAll(pattern)].at(-1)?.index??-1;
+  const other=last(/\b(?:International Users|Your Colorado and Oregon Privacy Choices|(?:Oregon|Colorado|Canadian|European|EU|UK) residents|If you are (?:a (?:Colorado or Oregon|Colorado|Oregon|Canadian|European|EU|UK) resident|located[^.!?]{0,160}outside the United States)|The MHMD Act provides[^.!?]{0,90}rights|(?:Individual Rights[^.!?]{0,100})?(?:Under (?:the )?(?:EU )?(?:GDPR|PIPL)|Rights Under the PIPL))\b/gi);
+  const ca=last(/\b(?:Rights for California Residents|(?:If you are|As) a California resident|California (?:Privacy Rights|Consumer Privacy Act)|under the (?:CCPA|CPRA))\b/gi);
+  const us=last(/\b(?:U\.S\. privacy laws provide consumers|If you are a U\.S\. consumer|we (?:extend|provide|offer) (?:these|the same) rights to all)\b/gi);
+  return other>Math.max(ca,us)?"other":ca>us?"california":"general";
+}
+
+/** A short list entry may inherit an explicit rights grant, never an unrelated
+ * mention of rights elsewhere in the document. Evidence offsets still point to
+ * the original clause; inherited context is used only for interpretation. */
+function rightsClauseWording(clause:ReturnType<typeof californiaPolicyClauses>[number]) {
+  const before=clause.document.text.slice(Math.max(0,clause.start-1200),clause.start);
+  const grant=/\b(?:you|consumers?|residents?|individual(?: data subjects?)?)\b[^.!?]{0,180}\b(?:may have|have|has|will be afforded)\s+(?:(?:the|these|following)\s+){0,3}(?:privacy\s+)?rights?(?:\s+to)?\s*:/gi;
+  const lead=[...(before+clause.text).matchAll(grant)].at(-1);
+  // Inherit through a compact list only. A numbered new section or a new
+  // collection/retention/security heading terminates the grant.
+  const tail=lead?before.slice(lead.index!+lead[0].length):"";
+  const inherited=Boolean(lead && !/\b(?:\d+\.\s+(?:How|What|When|Contact|Changes)|(?:Data|Information) (?:Retention|Security)|How (?:We|to))\b/i.test(tail));
+  const listStart=lead?Math.max(0,lead.index!+lead[0].length-before.length):0;
+  const wording=clause.text.slice(listStart).replace(/\bright to\s*:\s*/gi,"right to ").trim();
+  return {text:inherited?`You have the right to ${wording}`:wording,inherited};
+}
+
 /** Content wording only. General consumer wording is retained independently of
  * California legal applicability; a heading containing 'California' is not required. */
-export function assessCaliforniaRightsClauses(documents:CaliforniaPolicyDocument[],sourceBundleSha256:string):CaliforniaRightsClauseAssessment {
+export function assessCaliforniaRightsClauses(documents:CaliforniaPolicyDocument[],sourceBundleSha256:string, options:{completeCoverage?:boolean;positivePassageLanguage?:boolean}={}):CaliforniaRightsClauseAssessment {
   const clauses=californiaPolicyClauses(documents);
+  const completeCoverage = options.positivePassageLanguage ? false : options.completeCoverage;
   const patterns={
-    right_to_know:/\b(?:right to (?:know|access)|(?:upon request|on request).{0,150}(?:access|copy|account of)|(?:give|provide|afford).{0,70}(?:individual|customer|consumer|you).{0,70}access|(?:you|customer|consumer|individual).{0,70}(?:request|obtain).{0,70}(?:copy|access))\b/i,
-    right_to_delete:/\b(?:right to (?:request )?(?:delet\w*|eras\w*|be forgotten)|(?:you|customer|consumer|individual).{0,100}(?:request|ask).{0,100}(?:delet\w*|eras\w*|remov\w*)|(?:upon|on) request.{0,120}(?:delet\w*|eras\w*|remov\w*))\b/i,
-    right_to_correct:/\b(?:right to (?:request )?(?:correct\w*|rectif\w*)|(?:you|customer|consumer|individual).{0,140}(?:challenge|request|ask).{0,140}(?:accura\w*|correct\w*|rectif\w*|amend\w*)|(?:upon|on) request.{0,140}(?:correct\w*|rectif\w*|amend\w*))\b/i,
-    non_discrimination:/\b(?:will not|do not|won.t|shall not).{0,35}(?:discrimin\w*|retaliat\w*|penal\w*)|\bright to (?:equal treatment|non.discrimination)\b/i,
+    right_to_know:/\b(?:right to (?:know|access)|right to request.{0,90}(?:provide|disclose).{0,90}personal (?:information|data)|(?:upon request|on request).{0,150}(?:access|copy|account of)|(?:give|provide|afford).{0,70}(?:individual|customer|consumer|you).{0,70}access|(?:you|customer|consumer|individual).{0,70}(?:request|obtain).{0,70}(?:copy|access))\b/i,
+    right_to_delete:/\b(?:right to (?:(?:request(?:,\s*on legitimate grounds,)?|ask that we) )?(?:delet\w*|eras\w*|be forgotten)|(?:you|customer|consumer|individual).{0,100}(?:request|ask).{0,100}(?:delet\w*|eras\w*|remov\w*)|(?:upon|on) request.{0,120}(?:delet\w*|eras\w*|remov\w*))\b/i,
+    right_to_correct:/\b(?:right(?:,\s*in certain circumstances,)? to (?:(?:request(?: that we)?|ask that we) )?(?:correct\w*|rectif\w*)|(?:you|customer|consumer|individual).{0,140}(?:challenge|request|ask).{0,140}(?:accura\w*|correct\w*|rectif\w*|amend\w*)|(?:upon|on) request.{0,140}(?:correct\w*|rectif\w*|amend\w*)|\bCorrection\s+Request that we (?:amend|update))\b/i,
+    non_discrimination:/\b(?:you will not receive discriminatory treatment|(?:we )?(?:will not|do not|won.t|shall not|may not).{0,35}(?:discrimin\w*|retaliat\w*|penal\w*))|\bright (?:to (?:equal treatment|non.discrimination|not be discriminated against)|not to (?:be discriminated against|receive discriminatory treatment))\b/i,
   };
-  return californiaRightsClauseAssessmentSchema.parse({contractVersion:"certscore.california-rights-clauses.v1",sourceBundleSha256,
+  return californiaRightsClauseAssessmentSchema.parse({contractVersion:"certscore.california-rights-clauses.v1",assessmentPolicyVersion:"rights_section_context.v2",sourceBundleSha256,
+    ...(completeCoverage===false?{sourceCoverage:{policyVersion:options.positivePassageLanguage?"verified_positive_clauses.v2":"verified_positive_clauses.v1",status:"partial",documents:documents.map(document=>({evidenceRef:document.evidenceRef,textSha256:document.textSha256,inspectedChars:document.text.length}))}}:{}),
     topics:CALIFORNIA_RIGHTS_TOPICS.map(topic=>{
       const candidates=clauses.filter(clause=>inspectCaliforniaRightsConcepts([clause.text]).find(row=>row.topic === topic)!.candidateCount>0);
       const excluded:typeof candidates=[];const relevant:typeof candidates=[];
@@ -137,14 +170,17 @@ export function assessCaliforniaRightsClauses(documents:CaliforniaPolicyDocument
           /\b(?:destroy\w*|destruc\w*|eras\w*|anonym\w*)\b/i.test(clause.text);
         (retention?excluded:relevant).push(clause);
       }
-      const grants=relevant.filter(clause=>clause.text.length<=2000 && patterns[topic].test(clause.text) &&
+      const grants=relevant.filter(clause=>{const wording=rightsClauseWording(clause);const text=wording.text;return clause.text.length<=2000 && patterns[topic].test(text) &&
+        (topic!=="right_to_know" || !/\baccess to (?:certain )?(?:areas|features|services|platforms)\b/i.test(clause.text)) &&
+        (topic!=="right_to_know" || (()=>{const match=patterns[topic].exec(text)!;return /\b(?:personal (?:information|data)|that information|the information)\b/i.test(text.slice(Math.max(0,match.index-80),match.index+match[0].length+180)) || wording.inherited && /\b(?:your information|information about you)\b/i.test(clause.text);})()) &&
         (topic !== "non_discrimination" || /\b(?:exercis\w*|privacy rights|those rights)\b/i.test(clause.text)) &&
-        /\b(?:personal (?:information|data)|privacy rights|those rights|that information|the information)\b/i.test(clause.text) &&
-        !/\b(?:not entitled|do not have|cannot exercise|waive|may not provide|cannot provide|only (?:eu|european|canadian|uk) residents)\b/i.test(clause.text));
-      const general=grants.filter(clause=>! /\b(?:under (?:pipeda|gdpr)|(?:canadian|european|uk|eu) (?:residents|consumers|law)|residents of (?:canada|europe))\b/i.test(clause.text));
-      const status=general.length?"disclosed":relevant.length?"review":"not_observed";
-      return {topic,status,candidateClauseCount:candidates.length,excludedClauseCount:excluded.length,unresolvedClauseCount:relevant.length-general.length,context:general.length ? general.some(clause=>/\b(?:california|ccpa|cpra)\b/i.test(clause.text))?"california_wording":"general_consumer_wording":grants.length?"other_jurisdiction_only":"unresolved",
-        reason:status === "disclosed"?"Consumer-rights wording retained; scope, exceptions and California adequacy remain separate checks.":status === "review"?"Candidate wording requires interpretation; no missing-right conclusion is inferred.":excluded.length?"Only retention/security wording was found; it does not describe a consumer-request right.":"No candidate rights wording in the completely inspected English policy documents.",
-        passages:(general.length?general:relevant).slice(0,2).map(clause=>retainedCaliforniaPassage(clause,patterns[topic])),excludedPassages:excluded.slice(0,2).map(clause=>retainedCaliforniaPassage(clause,patterns[topic]))};
+        (/\b(?:personal (?:information|data)|privacy rights|(?:your|those|these) rights|that information|the information)\b/i.test(clause.text) || wording.inherited && /\byour information\b|\binformation about you\b/i.test(clause.text)) &&
+        !/\b(?:not entitled|do not have|cannot exercise|waive|may not provide|cannot provide|only (?:eu|european|canadian|uk) residents)\b/i.test(clause.text);});
+      const general=grants.filter(clause=>rightsScope(clause)!=="other" && ! /\b(?:under (?:pipeda|gdpr)|(?:canadian|european|uk|eu) (?:residents|consumers|law)|residents of (?:canada|europe))\b/i.test(clause.text))
+        .sort((a,b)=>Number(!/\bright to\b/i.test(a.text))-Number(!/\bright to\b/i.test(b.text)) || a.text.length-b.text.length || a.start-b.start);
+      const status=general.length?"disclosed":relevant.length || completeCoverage===false?"review":"not_observed";
+      return {topic,status,candidateClauseCount:candidates.length,excludedClauseCount:excluded.length,unresolvedClauseCount:relevant.length-general.length,context:general.length ? general.some(clause=>rightsScope(clause)==="california"||/\b(?:california|ccpa|cpra)\b/i.test(clause.text))?"california_wording":"general_consumer_wording":grants.some(clause=>rightsScope(clause)==="other"||/\b(?:gdpr|pipeda|european|canadian)\b/i.test(clause.text))?"other_jurisdiction_only":"unresolved",
+        reason:status === "disclosed"?"Consumer-rights wording retained; scope, exceptions and California adequacy remain separate checks.":status === "review"?completeCoverage===false?"Verified positive passages inspected; unresolved supplements prevent a missing-right conclusion.":"Candidate wording requires interpretation; no missing-right conclusion is inferred.":excluded.length?"Only retention/security wording was found; it does not describe a consumer-request right.":"No candidate rights wording in the completely inspected English policy documents.",
+        passages:(general.length?general:grants.length?grants:relevant).slice(0,2).map(clause=>retainedCaliforniaPassage(clause,patterns[topic])),excludedPassages:excluded.slice(0,2).map(clause=>retainedCaliforniaPassage(clause,patterns[topic]))};
     })});
 }

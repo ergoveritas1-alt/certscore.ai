@@ -65,7 +65,7 @@ import type {
 } from "./shadow-report-data";
 import { buildAssessmentHighlightsPresentation } from "../../../lib/scans/assessment-highlights";
 import { HIDDEN_DETAILED_EVIDENCE_ROW_IDS } from "../../../lib/scans/report-evidence-navigation";
-import { buildGpcResponseReportProjection } from "./gpc-report-projection";
+import { buildGpcResponseReportProjection, projectGpcTimeline } from "./gpc-report-projection";
 
 const CHECKLIST_GROUPS = {
   consent: new Set([
@@ -906,6 +906,7 @@ export function buildTimelineReportModel(scanRecord: ScanDetailResponse, reviewe
     policySurfaceLinkObserved: getPolicySurfaceLinkObserved(runtimeArtifacts),
     verifiedPolicyDocumentUrls: verifiedPolicyDocumentUrls(runtimeArtifacts),
     gpcResponse,
+    gpcTimeline: projectGpcTimeline(gpcResponse),
     gpcLaneStatus,
     californiaPrivacyReview,
     californiaScore,

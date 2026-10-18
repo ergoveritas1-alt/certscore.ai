@@ -294,7 +294,9 @@ export interface GpcResponse {
   };
   californiaPolicy: {
     applied: boolean;
-    deductionPoints: 0 | 15;
+    /** Eligible GPC contribution, not an additive charge. The CA score unions
+     * recipients with explicit opt-out evidence under one shared family total. */
+    deductionPoints: 0 | 15 | 25 | 32 | 37 | 40 | 43 | 45 | 47;
   };
   evidenceUrl: string;
 }

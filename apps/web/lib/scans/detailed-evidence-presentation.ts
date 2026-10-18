@@ -2,7 +2,7 @@ export type EvidenceSummaryRow = { status: string; priority?: "high" };
 export const EVIDENCE_SECTION_TITLES = {
   cmp: "CMP details", consent: "Consent choices", tracking: "Tracking & embeds", policy: "Policies & disclosures",
   runtime: "Cookies & tracking", transport: "Connection security", accessibility: "Accessibility (WCAG)",
-  cms: "CMS & version", gpc: "Global Privacy Control", privacy: "California privacy choices",
+  cms: "CMS & version", gpc: "Global Privacy Control", privacy: "California privacy review",
 } as const;
 export const EVIDENCE_SECTION_ORDER = ["cmp", "consent", "tracking", "policy", "accessibility", "runtime", "privacy", "transport", "gpc", "cms"] as const;
 /** Summarize existing row statuses only; never promote missing evidence to a concern. */

@@ -87,15 +87,15 @@ test("large lists retain their full source count internally without filling the 
   assert.doesNotMatch(copy, /1,000 priority|Issue 4/);
 });
 
-test("incomplete checks are named and linked without inventing a manual-review requirement", () => {
+test("incomplete checks remain in the retained brief rather than the site assessment", () => {
   const context = { coverage: { state: "limited" as const, limitedCount: 2,
     items: [{ id: "privacy_notice_availability", title: "Privacy-policy discovery" }, { id: "transport_security_tls_certificate", title: "Website certificate" }] } };
   const before = structuredClone(context);
   const result = buildAssessmentHighlightsPresentation([], page, context);
-  assert.match(result.text, /Could not complete: “Privacy-policy discovery”, “Website certificate”/);
-  assert.deepEqual(result.links, [{ label: "“Privacy-policy discovery”", targetId: "evidence-row-privacy_notice_availability" },
-    { label: "“Website certificate”", targetId: "evidence-row-transport_security_tls_certificate" }]);
-  assert.doesNotMatch(result.text, /checklist item|technically limited|verify.*manually/);
+  assert.equal(result.text, "Review the retained evidence for this visit.");
+  assert.deepEqual(result.links, []);
+  assert.deepEqual(buildAssessmentBrief([], page, context).coverage, context.coverage);
+  assert.doesNotMatch(result.text, /Could not complete|Privacy-policy discovery|Website certificate|no priority issues/i);
   assert.deepEqual(context, before);
 });
 
@@ -117,11 +117,13 @@ test("accessibility groups name existing member findings and link the shared evi
   assert.deepEqual(finding, before);
 });
 
-test("many incomplete checks preserve the paragraph budget and keep a shared evidence link", () => {
+test("many incomplete checks do not crowd out established observations or the action", () => {
   const result = buildAssessmentHighlightsPresentation([privacy], page, { coverage: { state: "limited", items:
     Array.from({ length: 20 }, (_, i) => ({ id: `check-${i}`, title: `Check ${i}: ${"Long title ".repeat(8)}` })) } });
   assert.ok(result.text.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
-  assert.ok(result.links.some(link => link.targetId === "evidence"));
+  assert.match(result.text, /Privacy policy not found/);
+  assert.ok(result.text.includes(privacy.correctionSteps[0]!));
+  assert.doesNotMatch(result.text, /Could not complete|incomplete checks|Check 0/);
 });
 
 test("secondary Reject observation remains concrete when a long storage finding leads the summary", () => {
@@ -138,12 +140,46 @@ test("secondary Reject observation remains concrete when a long storage finding 
   const brief = buildAssessmentBrief(findings, page, context);
   const result = buildAssessmentHighlightsPresentation(findings, page, context);
   assert.equal(brief.primary?.id, findings[0]!.id);
-  assert.ok(result.text.includes(findings[1]!.summary!));
-  assert.match(result.text, /Could not complete: “Pre-consent non-essential tracking”/);
+  assert.ok(result.text.includes(findings[1]!.summary!.replace("Partial support from scan evidence; ", "")));
+  assert.doesNotMatch(result.text, /Could not complete|Essentiality was not confirmed|Partial support from scan evidence/);
   assert.doesNotMatch(result.text, /confirmed Reject|failed to reject|ignored Reject/);
   assert.ok(result.links.some(link => link.label === "“Post-choice tracking reduction”"));
   assert.ok(result.text.length <= ASSESSMENT_HIGHLIGHTS_MAX_LENGTH);
   assert.deepEqual(findings, saved);
+});
+
+test("GPC site assessment keeps verified facts and omits causation and capture disclaimers", () => {
+  const findings = [{ id: "gpc_response", title: "GPC choice-enforcement risk observed", status: "Partial concern",
+    summary: "Bounded GPC observation completed. GPC was observed on the main-document request and browser property. CMP-recorded sale state: opted out; sharing state: opted out. GPC causation is not established. Retained GPC request samples include 27 classified advertising, marketing, analytics or replay requests, including 22 collection requests.",
+    correctionSteps: ["Check that GPC applies the relevant sale/sharing opt-out state and governs advertising collection."] }];
+  const before = structuredClone(findings);
+  for (const scope of [page, { kind: "site", scannedPages: 10 } as const]) {
+    const result = buildAssessmentHighlightsPresentation(findings, scope, { coverage: { state: "limited", items: [{ id: "cmp", title: "CMP capture" }] } });
+    assert.match(result.text, /GPC delivery was verified/);
+    assert.match(result.text, /CMP-recorded sale state: opted out; sharing state: opted out/);
+    assert.match(result.text, /27 classified.*22 collection requests/);
+    assert.doesNotMatch(result.text, /causation|limited|incomplete|could not|not established/i);
+    assert.doesNotMatch(result.text, /GPC caused|GPC honored|compliant/i);
+    assert.equal(result.text.split(findings[0]!.title).length - 1, 1);
+    assert.equal(result.links[0]?.targetId, "gpc-evidence");
+  }
+  assert.deepEqual(findings, before);
+  assert.ok(buildAssessmentBrief(findings, page).primary!.summary.includes("GPC causation is not established."));
+});
+
+test("partial GPC facts never become verified delivery or a known opt-out state", () => {
+  for (const [states, expected] of [
+    ["sale state: unknown; sharing state: unknown", ""],
+    ["sale state: unknown; sharing state: opted out", "CMP-recorded sharing state: opted out"],
+    ["sale state: not opted out; sharing state: unknown", "CMP-recorded sale state: not opted out"],
+  ]) {
+    const result = buildAssessmentHighlightsPresentation([{ id: "gpc_response", title: "GPC choice-enforcement risk observed",
+      summary: `Bounded GPC observation was limited. Main-document GPC delivery was not fully verified. CMP-recorded ${states}. GPC causation is not established. Retained GPC request samples include 2 classified advertising, marketing, analytics or replay requests, including 1 collection requests.` }], page);
+    assert.match(result.text, /2 classified.*1 collection request/);
+    assert.doesNotMatch(result.text, /causation|unknown|limited|delivery was verified|not fully verified/);
+    if (expected) assert.ok(result.text.includes(expected));
+    else assert.doesNotMatch(result.text, /CMP-recorded/);
+  }
 });
 
 test("GPC highlights name the finding once and preserve assessed facts without unavailable comparison prose",()=>{

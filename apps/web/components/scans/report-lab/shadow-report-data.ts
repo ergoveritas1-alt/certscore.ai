@@ -137,7 +137,7 @@ export type GpcResponseReportProjection = {
   activityComparison?: import("@certscore/contracts").GpcActivityComparison;
   observedFacts: Array<{ label: string; value: string }>;
   assessment: GpcResponseAssessment;
-  californiaDeductionPoints: 0 | 15;
+  californiaDeductionPoints: 0 | 15 | 25 | 32 | 37 | 40 | 43 | 45 | 47;
   comparisonHeadline: string;
   coverageSummary: string;
   evidenceRefs: string[];
@@ -211,6 +211,7 @@ export type ShadowReportData = {
   acceptPath?: ExecutiveAcceptPathProjection | null;
   choicePathComparison?: ChoicePathComparison | null;
   rejectPath?: ExecutiveRejectPathProjection | null;
+  gpcTimeline?: ActionTimelineProjection | null;
   actionTimelines?: { accept: ActionTimelineProjection | null; reject: ActionTimelineProjection | null };
   coverage: {
     concern: number;

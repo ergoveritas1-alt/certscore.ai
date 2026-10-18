@@ -66,7 +66,7 @@ test("importance and coverage remain independent", () => {
   assert.equal(brief.attention, "attention");
   assert.equal(brief.coverage.state, "limited");
   const copy = buildAssessmentHighlights([reject], page, context);
-  assert.match(copy, /See Detailed evidence for checks that could not be completed/);
+  assert.doesNotMatch(copy, /checks that could not be completed|scan coverage|Could not complete/);
   assert.ok(copy.includes(reject.summary));
 });
 
@@ -75,8 +75,7 @@ test("completed and limited empty assessments never claim legal compliance", () 
   const limited = buildAssessmentBrief([], page, { score: 100, coverage: { state: "limited", limitedCount: 3 } });
   assert.equal(complete.attention, "no_priority_observed");
   assert.equal(limited.attention, "limited");
-  assert.match(buildAssessmentHighlights([], page, { coverage: limited.coverage }), /See Detailed evidence for checks that could not be completed/);
-  assert.equal(buildAssessmentHighlights([], page, { coverage: limited.coverage }).match(/Detailed evidence/g)?.length, 1);
+  assert.equal(buildAssessmentHighlights([], page, { coverage: limited.coverage }), "Review the retained evidence for this visit.");
   assert.doesNotMatch(`${complete.lead} ${limited.lead}`, /compliant|secure|no risk|passed|all clear/i);
 });
 

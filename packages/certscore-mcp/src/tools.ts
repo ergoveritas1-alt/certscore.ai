@@ -1593,8 +1593,8 @@ export function scanBundleText(bundle: Record<string, any>, options: { toolProfi
     const proof = gpcResponse.comparison?.enabledProof;
     const californiaPolicy = gpcResponse.californiaPolicy;
     append(`GPC response: ${gpcResponse.findingTitle ?? "GPC response"}; status=${gpcResponse.status ?? "indeterminate"}; Sec-GPC: 1 proof retained on ${proof?.requestsWithSecGpc ?? 0} request(s).`);
-    if (californiaPolicy?.applied === true && californiaPolicy.deductionPoints === 15) {
-      append("California scoring policy: −15 points. This score effect is separate from the jurisdiction-neutral GPC comparison.");
+    if (californiaPolicy?.applied === true && californiaPolicy.deductionPoints > 0) {
+      append("California privacy-choice enforcement risk observed.");
     }
   }
   const postAccept = bundle.postAcceptObservation && typeof bundle.postAcceptObservation === "object" && !Array.isArray(bundle.postAcceptObservation)

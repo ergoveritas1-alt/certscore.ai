@@ -1,3 +1,7 @@
+import { EvidenceJumpLink } from "./evidence-jump-link";
+import { DisclosureChevron } from "./report-finding-row";
+import { CaliforniaReviewCoverage as CaliforniaChoiceInspection } from "./california-review-coverage";
+import type { CaliforniaPrivacyReview } from "@certscore/contracts";
 import { EvidenceHeaderStatus } from "./evidence-header-status";
 import React from "react";
 import type { PrivacyAuditEvidence, ReportReviewFocus } from "@certscore/api-contracts";
@@ -33,18 +37,44 @@ function StoragePurposeItem({item,sources}:{item:RuntimeStoragePurposeV2["items"
   </div>;
 }
 
-export function CaliforniaCoverageSummary({coverage,rightsAssessment,collectionNoticeAssessment,saleSharingAssessment}:{coverage?:CaliforniaReviewCoverage;
-  rightsAssessment?:CaliforniaRightsClauseAssessment;collectionNoticeAssessment?:CaliforniaCollectionNoticeAssessment|CaliforniaCollectionNoticeV2|CaliforniaCollectionNoticeV3|CaliforniaCollectionNoticeV4|CaliforniaCollectionNoticeV5;saleSharingAssessment?:CaliforniaSaleSharingAssessment}) {
-  if (!coverage) return null;
+type CaliforniaCoverageProps = {coverage?:CaliforniaReviewCoverage;
+  rightsAssessment?:CaliforniaRightsClauseAssessment;collectionNoticeAssessment?:CaliforniaCollectionNoticeAssessment|CaliforniaCollectionNoticeV2|CaliforniaCollectionNoticeV3|CaliforniaCollectionNoticeV4|CaliforniaCollectionNoticeV5;saleSharingAssessment?:CaliforniaSaleSharingAssessment};
+
+function californiaCoverageLabel(coverage: CaliforniaReviewCoverage) {
   const supported = coverage.families.filter(row=>row.status === "observed" || row.status === "not_triggered_in_scope").length;
   const review = coverage.families.filter(row=>row.status === "review").length;
   const limited = coverage.families.filter(row=>row.status === "unknown").length;
-  const gaps=coverage.families.filter(row=>row.status === "assessed_gap").length;
-  const completed=coverage.contractVersion === "certscore.california-review-coverage.v4"?coverage.families.filter(row=>row.assessmentState === "completed").length:null;
-  const partial=coverage.contractVersion === "certscore.california-review-coverage.v4"?coverage.families.filter(row=>row.assessmentState === "partial").length:0;
+  const gaps = coverage.families.filter(row=>row.status === "assessed_gap").length;
+  if (coverage.contractVersion === "certscore.california-review-coverage.v4") {
+    const completed = coverage.families.filter(row=>row.assessmentState === "completed").length;
+    const partial = coverage.families.filter(row=>row.assessmentState === "partial").length;
+    return `${completed} assessed${partial ? ` · ${partial} partial` : ""}${gaps ? ` · ${gaps} ${gaps === 1 ? "gap" : "gaps"}` : ""}${limited ? ` · ${limited} limited` : ""}`;
+  }
+  return `${supported} supported${gaps ? ` · ${gaps} assessed ${gaps === 1 ? "gap" : "gaps"}` : ""} · ${review} to review${limited ? ` · ${limited} limited` : ""}`;
+}
+
+export function CaliforniaCoverageSummary({coverage}: Pick<CaliforniaCoverageProps, "coverage">) {
+  if (!coverage) return null;
+  const assessed = coverage.contractVersion === "certscore.california-review-coverage.v4"
+    ? coverage.families.filter(row=>row.assessmentState === "completed").length
+    : coverage.families.filter(row=>row.status === "observed" || row.status === "not_triggered_in_scope").length;
+  return <details className="group/signal border-b border-zinc-200 py-2" data-california-coverage>
+    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-xs leading-4 [&::-webkit-details-marker]:hidden">
+      <span className="text-xs font-medium text-zinc-500">California coverage</span>
+      <span className="flex items-center gap-2 text-xs font-semibold text-zinc-800">{assessed} {coverage.contractVersion === "certscore.california-review-coverage.v4" ? "assessed" : "supported"}<DisclosureChevron className="text-zinc-400 group-open/signal:rotate-180" /></span>
+    </summary>
+    <div className="mt-3 space-y-2 text-xs leading-5 text-zinc-600">
+      <p>{californiaCoverageLabel(coverage)}</p>
+      <EvidenceJumpLink targetId="california-privacy-evidence" className="inline-block text-xs">View California privacy review ↓</EvidenceJumpLink>
+    </div>
+  </details>;
+}
+
+export function CaliforniaCoverageDetails({coverage,rightsAssessment,collectionNoticeAssessment,saleSharingAssessment}: CaliforniaCoverageProps) {
+  if (!coverage) return null;
   const technicalPoints=(collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v3" || (collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v4" || collectionNoticeAssessment?.contractVersion === "certscore.california-collection-notice-matching.v5"))?collectionNoticeAssessment.points.filter(point=>point.assessmentScope === "technical_context"):[];
-  return <details className="mt-2 text-xs leading-5 text-zinc-600" data-california-coverage>
-    <summary className="cursor-pointer font-medium">California coverage: {completed!==null?<>{completed} assessed{partial?` · ${partial} partial`:""}{gaps?` · ${gaps} ${gaps===1?"gap":"gaps"}`:""}</>:<>{supported} supported{gaps?` · ${gaps} assessed ${gaps===1?"gap":"gaps"}`:""} · {review} to review</>}{limited ? ` · ${limited} limited` : ""}</summary>
+  return <section className="text-xs leading-5 text-zinc-600" data-california-assessment-coverage>
+    <h3 className="font-semibold text-sm text-zinc-800">Assessment coverage</h3>
     <p className="mt-2">Assessed against CCPA/CPRA requirements assuming the law applies. Business applicability is undetermined.</p>
     <dl className="mt-2 space-y-2">{coverage.families.map(row=><div key={row.id}>
       <dt className="font-semibold">{CALIFORNIA_REVIEW_FAMILY_LABELS[row.id]} · {californiaCoverageFamilyLabel(row)}</dt>
@@ -78,7 +108,7 @@ export function CaliforniaCoverageSummary({coverage,rightsAssessment,collectionN
       {coverage.topics.map((row,index)=><blockquote className="mt-2 border-l-2 border-zinc-200 pl-2" key={`${row.topic}-${index}`}>
         <strong>{row.topic.replaceAll("_"," ")}</strong>: {row.excerpt}
       </blockquote>)}</details> : null}
-  </details>;
+  </section>;
 }
 
 export function RegulatoryReviewFocus({ focus }: { focus: ReportReviewFocus }) {
@@ -88,46 +118,65 @@ export function RegulatoryReviewFocus({ focus }: { focus: ReportReviewFocus }) {
     </form>;
 }
 
-export function CaliforniaPrivacyWorkpaper({ evidence: retainedEvidence, focus, scanId }: { evidence?: PrivacyAuditEvidence | null; focus: ReportReviewFocus; scanId?: string }) {
+export function CaliforniaPrivacyWorkpaper({ evidence: retainedEvidence, focus, scanId, assessment, gpcAvailable = false, homepage = false, ...coverageProps }: CaliforniaCoverageProps & {
+  evidence?: PrivacyAuditEvidence | null; focus: ReportReviewFocus; scanId?: string;
+  assessment?: CaliforniaPrivacyReview | null; gpcAvailable?: boolean; homepage?: boolean;
+}) {
   if (focus !== "ccpa_cpra") return null;
   const { evidence, candidates, section } = californiaPrivacyEvidence(retainedEvidence, scanId);
   const topics = evidence ? [...new Set(evidence.notices.flatMap(notice => notice.passages.map(passage => passage.topic)))] : [];
+  const rightsLabels = { right_to_know: "Access", right_to_delete: "Deletion", right_to_correct: "Correction", non_discrimination: "Non-discrimination" } as const;
+  const rights = coverageProps.rightsAssessment?.topics.filter(topic => topic.status === "disclosed" && topic.passages.length)
+    .map(topic => rightsLabels[topic.topic]) ?? [];
+  const choices = [...new Set(evidence?.controls.map(control => control.label) ?? [])];
   return <details id="california-privacy-evidence" className="group/privacy-choices border-b border-r border-zinc-200 p-5">
     <EvidenceSectionHeader title={section.title}
       recap={section.recap}
       badge={<EvidenceHeaderStatus rows={section.displayStatus === "Limited" ? [{status: "Limited"}] : section.displayStatus === "Review" ? [{status: "Needs review"}] : []} />} />
-    <p className="mt-1 text-xs text-zinc-500">{evidence ? `${evidence.controls.length} observed ${evidence.controls.length === 1 ? "choice" : "choices"}${candidates.length ? ` · ${candidates.length} ${candidates.length === 1 ? "link" : "links"} to review` : ""} · ${evidence.notices.length} ${evidence.notices.length === 1 ? "notice" : "notices"}${topics.length ? ` · ${topics.length} ${topics.length === 1 ? "topic" : "topics"} found` : ""}` : "Evidence unavailable"}</p>
-    <div className="mt-4 space-y-4 text-sm text-zinc-700">
-      {!evidence ? <p>No verified privacy-choice or notice evidence was retained for this scan. This does not establish that these items are absent.</p> : <>
-        <p>{evidence.controls.length ? `${evidence.controls.length} visible, named privacy-choice ${evidence.controls.length === 1 ? "link was" : "links were"} verified on this page.` : "No privacy-choice link was verified in this capture."}{topics.length ? ` Retained notice text covers ${topics.map(topic => topicLabels[topic].toLowerCase()).join(", ")}.` : ""}</p>
-        <dl className="space-y-2">{Object.entries(controlLabels).map(([kind, label]) => {
-          const rows = evidence.controls.filter(row => row.kind === kind);
-          const pending = candidates.filter(row => row.kind === kind);
-          return <div key={kind}><dt className="font-semibold">{label}</dt><dd>{rows.map(row => <div key={row.evidenceRef} className="mt-1">
-            <span>Observed: “{row.label}” · {row.placement.replaceAll("_", " ")}</span>
-            {row.destinationUrl ? <a className="ml-2 break-all text-sky-800 underline" href={row.destinationUrl} target="_blank" rel="noreferrer">View destination</a> : <span> · No separate HTTP destination retained</span>}
-            <p className="text-xs text-zinc-500">{row.retrieval === "fetched" ? "Destination page retrieved" : row.retrieval === "not_attempted" ? "Destination page not fetched" : `Destination fetch ${row.retrieval.replaceAll("_", " ")}`} · Evidence: {row.evidenceRef}</p>
-          </div>)}{pending.map(row => <div key={row.evidenceRef} className="mt-1 text-zinc-600">
-            <span>Link identified: “{row.label}” · {row.verification === "visibility_unverified" ? "visibility not verified" : "accessible name not verified"}.</span>
-            <a className="ml-2 break-all text-sky-800 underline" href={row.destinationUrl} target="_blank" rel="noreferrer">Retained destination</a>
-            <p className="text-xs text-zinc-500">Visitor-facing choice not confirmed. Evidence: {row.evidenceRef}</p>
-          </div>)}{!rows.length && !pending.length ? "No retained evidence; absence was not verified." : null}</dd></div>;
-        })}</dl>
-        <div><h3 className="font-semibold">Notice topics found</h3>
-          {!evidence.notices.length ? <p className="mt-2">No verified, target-owned notice text available in this workpaper.</p> : evidence.notices.map(notice => <div className="mt-3 border-t border-zinc-100 pt-3" key={notice.evidenceRef}>
-            <a className="break-all text-sky-800 underline" href={notice.url} target="_blank" rel="noreferrer">{notice.kind.replaceAll("_", " ")}</a>
-            <p className="text-xs text-zinc-500">{notice.passages.length} {notice.passages.length === 1 ? "topic" : "topics"} located · {notice.directlyLinkedFromScannedPage ? "Linked from the scanned page" : "Direct link not established"}</p>
-            {notice.passages.length ? <><p className="mt-2 text-xs">{notice.passages.map(passage => topicLabels[passage.topic]).join(" · ")}</p>
-              <details className="mt-2 text-xs text-zinc-500"><summary className="cursor-pointer">View retained passages</summary>
-                {notice.passages.map(passage => <div className="mt-2" key={passage.topic}><p className="font-semibold">{topicLabels[passage.topic]}</p><blockquote className="mt-1 border-l-2 border-zinc-200 pl-3 leading-5">{passage.excerpt}</blockquote></div>)}
-              </details></> : null}
-            {!notice.passages.length ? <p className="text-xs">No supported topic passage located in the retained excerpt.</p> : null}
-          </div>)}
+    <div className="mt-4 space-y-3 text-sm text-zinc-700">
+      <dl className="space-y-2 text-xs leading-5" data-california-review-summary>
+        {choices.length ? <div><dt className="font-semibold text-zinc-800">Choices found</dt><dd>{choices.join(" · ")}</dd></div> : null}
+        {topics.length ? <div><dt className="font-semibold text-zinc-800">Disclosures captured</dt><dd>{topics.map(topic => topicLabels[topic]).join(" · ")}</dd></div> : null}
+        {rights.length ? <div><dt className="font-semibold text-zinc-800">Rights wording found</dt><dd>{rights.join(" · ")}</dd></div> : null}
+      </dl>
+      {!choices.length && !topics.length && !rights.length ? <p className="text-xs text-zinc-600">{evidence ? "Capture details are available below." : "No verified evidence retained for this visit."}</p> : null}
+      {gpcAvailable ? <p className="text-xs"><EvidenceJumpLink targetId="gpc-evidence" className="text-sky-800 underline">View GPC evidence ↓</EvidenceJumpLink></p> : null}
+      <details className="border-t border-zinc-200 pt-3 text-xs" data-california-review-details>
+        <summary className="cursor-pointer font-medium text-zinc-600">Evidence &amp; assessment details</summary>
+        <div className="mt-4 space-y-6">
+          <CaliforniaCoverageDetails {...coverageProps} />
+          <CaliforniaChoiceInspection assessment={assessment && (!scanId || assessment.scanId === scanId) ? assessment : undefined} homepage={homepage} />
+          {!evidence ? <p>No verified privacy-choice or notice evidence was retained for this scan. This does not establish that these items are absent.</p> : <>
+            <dl className="space-y-2">{Object.entries(controlLabels).map(([kind, label]) => {
+              const rows = evidence.controls.filter(row => row.kind === kind);
+              const pending = candidates.filter(row => row.kind === kind);
+              return <div key={kind}><dt className="font-semibold">{label}</dt><dd>{rows.map(row => <div key={row.evidenceRef} className="mt-1">
+                <span>Observed: “{row.label}” · {row.placement.replaceAll("_", " ")}</span>
+                {row.destinationUrl ? <a className="ml-2 break-all text-sky-800 underline" href={row.destinationUrl} target="_blank" rel="noreferrer">View destination</a> : <span> · No separate HTTP destination retained</span>}
+                <p className="text-xs text-zinc-500">{row.retrieval === "fetched" ? "Destination page retrieved" : row.retrieval === "not_attempted" ? "Destination page not fetched" : `Destination fetch ${row.retrieval.replaceAll("_", " ")}`} · Evidence: {row.evidenceRef}</p>
+              </div>)}{pending.map(row => <div key={row.evidenceRef} className="mt-1 text-zinc-600">
+                <span>Link identified: “{row.label}” · {row.verification === "visibility_unverified" ? "visibility not verified" : "accessible name not verified"}.</span>
+                <a className="ml-2 break-all text-sky-800 underline" href={row.destinationUrl} target="_blank" rel="noreferrer">Retained destination</a>
+                <p className="text-xs text-zinc-500">Visitor-facing choice not confirmed. Evidence: {row.evidenceRef}</p>
+              </div>)}{!rows.length && !pending.length ? "No retained evidence; absence was not verified." : null}</dd></div>;
+            })}</dl>
+            <div><h3 className="font-semibold">Notice topics found</h3>
+              {!evidence.notices.length ? <p className="mt-2">No verified, target-owned notice text available in this workpaper.</p> : evidence.notices.map(notice => <div className="mt-3 border-t border-zinc-100 pt-3" key={notice.evidenceRef}>
+                <a className="break-all text-sky-800 underline" href={notice.url} target="_blank" rel="noreferrer">{notice.kind.replaceAll("_", " ")}</a>
+                <p className="text-xs text-zinc-500">{notice.passages.length} {notice.passages.length === 1 ? "topic" : "topics"} located · {notice.directlyLinkedFromScannedPage ? "Linked from the scanned page" : "Direct link not established"}</p>
+                {notice.passages.length ? <><p className="mt-2 text-xs">{notice.passages.map(passage => topicLabels[passage.topic]).join(" · ")}</p>
+                  <details className="mt-2 text-xs text-zinc-500"><summary className="cursor-pointer">View retained passages</summary>
+                    {notice.passages.map(passage => <div className="mt-2" key={passage.topic}><p className="font-semibold">{topicLabels[passage.topic]}</p><blockquote className="mt-1 border-l-2 border-zinc-200 pl-3 leading-5">{passage.excerpt}</blockquote></div>)}
+                  </details></> : null}
+                {!notice.passages.length ? <p className="text-xs">No supported topic passage located in the retained excerpt.</p> : null}
+              </div>)}
+            </div>
+            {evidence.truncated ? <p>Display limits apply; this workpaper is not an exhaustive inventory of privacy surfaces.</p> : null}
+            <details className="border-t border-zinc-200 pt-3 text-xs text-zinc-500"><summary className="cursor-pointer">Evidence scope</summary><p className="mt-2">This passive scan verifies visible links, retained destinations, and located notice topics. It does not submit opt-out choices or determine whether the notice is complete.</p></details>
+            <details className="border-t border-zinc-200 pt-3 text-xs text-zinc-500"><summary className="cursor-pointer">Evidence provenance</summary><p className="mt-2 break-all">Captured {evidence.capturedAt} · Source SHA-256: {evidence.sourceHash}</p></details>
+          </>}
         </div>
-        {evidence.truncated ? <p>Display limits apply; this workpaper is not an exhaustive inventory of privacy surfaces.</p> : null}
-        <details className="border-t border-zinc-200 pt-3 text-xs text-zinc-500"><summary className="cursor-pointer">Evidence scope</summary><p className="mt-2">This passive scan verifies visible links, retained destinations, and located notice topics. It does not submit opt-out choices or determine whether the notice is complete.</p></details>
-        <details className="border-t border-zinc-200 pt-3 text-xs text-zinc-500"><summary className="cursor-pointer">Evidence provenance</summary><p className="mt-2 break-all">Captured {evidence.capturedAt} · Source SHA-256: {evidence.sourceHash}</p></details>
-      </>}
+      </details>
     </div>
   </details>;
 }

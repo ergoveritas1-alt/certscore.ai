@@ -1304,7 +1304,8 @@ test("scan bundle surfaces the typed GPC response and keeps California scoring s
   assert.equal(bundle.gpcResponse?.status, "no_observable_response");
   assert.match(text, /GPC response: No observable GPC response; status=no_observable_response/);
   assert.match(text, /Sec-GPC: 1 proof retained on 2 request\(s\)/);
-  assert.match(text, /California scoring policy: −15 points/);
+  assert.match(text, /California privacy-choice enforcement risk observed/);
+  assert.doesNotMatch(text, /−15 points/);
   assert.match(bundle.interpretationGuidance.statement, /do not call the result a GPC violation or claim GPC was honored or not honored/i);
   assert.doesNotThrow(() => mcpScanBundleOutputSchema.parse(bundle));
 });

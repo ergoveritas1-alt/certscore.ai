@@ -1,3 +1,4 @@
+export { classifyCanonicalCollectionEndpoint, isCanonicalAdvertisingCollectionCandidate, COLLECTION_ENDPOINT_POLICY_VERSION } from "./collection-endpoints";
 import { cookieClassificationSchema, type CookieClassification } from "@certscore/contracts";
 import { COOKIE_PURPOSE_POLICY, resolveCanonicalCookieKnowledge as cookieKnowledge, type CanonicalCookieContext } from "./cookie-knowledge-base";
 import type {
@@ -32,7 +33,7 @@ export {
 
 export { resolveCanonicalVendorHeadquarters, VENDOR_HEADQUARTERS_VERSION, VENDOR_HEADQUARTERS_REFERENCES, type VendorHeadquartersReference } from "./vendor-headquarters";
 
-export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-14-fullstory-endpoint-v1";
+export const CANONICAL_VENDOR_RESOLVER_VERSION = "certscore-vendor-resolver-2026-10-18-collection-roles-v6";
 export const COOKIE_PROVIDER_RESOLVER_VERSION = "certscore-cookie-provider-2026-10-15-v3";
 
 export type VendorResolverEvidenceType =
@@ -604,7 +605,9 @@ const rules: VendorRule[] = [
     confidence: 0.94,
     hostPatterns: [/\.amazon-adsystem\.com$/i, /^aax\.amazon-adsystem\.com$/i],
     excludeHostPatterns: [/^c\.amazon-adsystem\.com$/i, /\.aps\.amazon-adsystem\.com$/i],
-    urlPatterns: [/\/e\/dt\b/i, /\/x\/px\//i],
+    urlPatterns: [/\/e\/dt\b/i, /\/x\/px\//i,
+      /^https:\/\/aax\.amazon-adsystem\.com\/e\/dtb\/bid(?:\/|\?|$)/i,
+      /^https:\/\/s\.amazon-adsystem\.com\/iu3(?:[/?#]|$)/i],
     cookiePatterns: [/^ad-id$/i, /^ad-privacy$/i],
     basisLabel: "amazon_ads_endpoint_or_cookie",
   },
@@ -661,7 +664,10 @@ const rules: VendorRule[] = [
     regulatoryRelevance: ["consent", "advertising", "cross_site_tracking"],
     confidence: 0.94,
     hostPatterns: [/(?:^|\.)criteo\.com$/i, /(?:^|\.)criteo\.net$/i],
-    urlPatterns: [/\/r\/d/i, /\/dis\/dis\.aspx/i],
+    urlPatterns: [/\/r\/d/i, /\/dis\/dis\.aspx/i,
+      // Retained first-party identity synchronization endpoints. Require the
+      // exact vendor hosts/path and a nonempty ID; names alone are insufficient.
+      /^https:\/\/gum(?:\.us)?\.criteo\.com\/fpm\/(?:init|sid)\?(?:[^#]*&)?first_party_id=[^&#]+(?:&|$)/i],
     cookiePatterns: [/^cto_bundle$/i],
     suppressCookieMatchedHostname: true,
     storageKeyPatterns: [/criteo/i],
@@ -1989,6 +1995,9 @@ const rules: VendorRule[] = [
       /\/gampad\//i,
       // Floodlight activity URLs belong to the more specific rule above.
       /\/pcs\/activeview\b/i,
+      // Cookie-matching pixel; a partner-frame or SDK download alone does not
+      // receive this endpoint attribution.
+      /^https:\/\/cm\.g\.doubleclick\.net\/pixel(?:[/?#]|$)/i,
     ],
     cookiePatterns: [/^IDE$/i, /^test_cookie$/i],
     requireHostPatternForCookieMatch: true,

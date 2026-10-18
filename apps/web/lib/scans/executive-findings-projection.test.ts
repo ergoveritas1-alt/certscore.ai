@@ -4321,7 +4321,7 @@ test("keeps retention and accessibility findings in top findings when canonical 
               pageUrl: "https://example.com/",
               party: "third_party",
               sourceRequestUrl: "https://connect.facebook.net/en_US/fbevents.js",
-              thresholdBasis: "540 days observed against CertScore cookie retention review thresholds.",
+              thresholdBasis: "540 days observed against CertScore.ai cookie retention review thresholds.",
               vendor: "Meta"
             })
           ]

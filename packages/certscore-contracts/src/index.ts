@@ -1,3 +1,5 @@
+import {captureFailureDiagnosticSchema, type CaptureFailureDiagnostic} from "./capture-failure-diagnostic";
+export * from "./capture-failure-diagnostic";
 import {storageReadTraceSchema} from "./storage-read-trace";
 export * from "./storage-read-trace";
 import {runtimeScriptEvidenceSchema} from "./runtime-storage-purpose";
@@ -843,7 +845,8 @@ export const consentUiObservationSchema = z.object({
       control.domBinding.documentUrl !== observation.documentUrl ||
       control.domBinding.documentIdentity.source !== observation.documentIdentity?.source ||
       control.domBinding.documentIdentity.token !== observation.documentIdentity?.token)))
-    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Native AX binding must retain the observed document identity."});
+    ctx.addIssue({code: z.ZodIssueCode.custom, message: "Native AX binding must retain the observed document identity.",
+      path:["controls"],params:{invariant:"native_ax_observation_document_binding"}});
 });
 
 export const collectionSurfaceObservationSchema = z.object({
@@ -3542,7 +3545,7 @@ const canonicalEvidenceBundleBaseSchema: z.ZodType<z.output<typeof canonicalEvid
 });
 
 // Keep the large legacy contract named, preserving defaults and input types while adding a bounded extension.
-type CmpBundleExtension = { saleSharingOptOut?: VerifiedSaleSharingOptOut; saleSharingOptOutLaneOutcome?: SaleSharingOptOutLaneOutcome; cmpBasicEvidence?: CmpBasicEvidence; cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
+type CmpBundleExtension = { saleSharingOptOut?: VerifiedSaleSharingOptOut; saleSharingOptOutLaneOutcome?: SaleSharingOptOutLaneOutcome; cmpBasicEvidence?: CmpBasicEvidence; cmpPreferencesEvidence?: CmpPreferencesEvidence; cmpPreferenceLaneOutcome?: { diagnostic?: CaptureFailureDiagnostic; status: "joined" | "limited"; startedAt: string; completedAt: string; limitationCode?: "preference_budget_exhausted" | "preference_worker_failed" | "preference_inspection_cancelled" } };
 export const canonicalEvidenceBundleSchema: z.ZodType<
   z.output<typeof canonicalEvidenceBundleBaseSchema> & CmpBundleExtension & { runtimeEvidenceGraphs?: RuntimeEvidenceGraph[]; runtimeEvidenceGraphDiagnostics?: RuntimeGraphVerificationDiagnostic[] },
   z.ZodTypeDef,
@@ -3552,7 +3555,7 @@ export const canonicalEvidenceBundleSchema: z.ZodType<
   saleSharingOptOutLaneOutcome: saleSharingOptOutLaneOutcomeSchema.optional(),
   cmpBasicEvidence: cmpBasicEvidenceSchema.optional(),
   cmpPreferencesEvidence: cmpPreferencesEvidenceSchema.optional(),
-  cmpPreferenceLaneOutcome: z.object({ status: z.enum(["joined", "limited"]), startedAt: z.string().datetime(), completedAt: z.string().datetime(), limitationCode: z.enum(["preference_budget_exhausted", "preference_worker_failed", "preference_inspection_cancelled"]).optional() }).optional(),
+  cmpPreferenceLaneOutcome: z.object({ diagnostic: captureFailureDiagnosticSchema.optional(), status: z.enum(["joined", "limited"]), startedAt: z.string().datetime(), completedAt: z.string().datetime(), limitationCode: z.enum(["preference_budget_exhausted", "preference_worker_failed", "preference_inspection_cancelled"]).optional() }).optional(),
   runtimeEvidenceGraphs: z.array(canonicalRuntimeEvidenceGraphSchema).max(RUNTIME_EVIDENCE_GRAPH_LIMITS.graphs).optional(),
   runtimeEvidenceGraphDiagnostics: z.array(runtimeGraphVerificationDiagnosticSchema).max(4).optional(),
 })));
@@ -3798,3 +3801,5 @@ export * from "./observed-action-source-proof";
 export * from "./measurement-request-evidence";
 
 export * from "./cmp-network-cookie-inventory";
+export * from "./evidence-request-url";
+export * from "./policy-supplement-materiality";

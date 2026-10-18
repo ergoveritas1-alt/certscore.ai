@@ -29,3 +29,32 @@ test("GPC detail exposes verified facts without score deduction wording",()=>{
   assert.doesNotMatch(eu,/15-point California risk deduction|15-point CA deduction/);
   assert.match(eu,/13 classified tracking requests/);
 });
+
+test("GPC detail groups qualifying recipients and shows retained request timing without deduction copy",()=>{
+  const timed=structuredClone(projection);
+  if(timed.assessment.contractVersion !== "certscore.gpc-response-assessment.v3")throw Error('v3 required');
+  timed.assessment.observation.requests.advertisingCollectionRecipients={contractVersion:'canonical_collection_recipients.v1',resolverVersion:'fixture',rows:[
+    {entityId:'ent_5262e317b747',label:'Adobe Inc.',evidenceId:'request-a',observedAtMs:1655},
+    {entityId:'ent_5262e317b747',label:'Adobe Inc.',evidenceId:'request-b',observedAtMs:3200},
+  ]};
+  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={timed} california />);
+  assert.match(html,/Adobe Inc\./);assert.match(html,/2 collection requests/);
+  assert.match(html,/1\.66/);assert.match(html,/3\.20/);assert.match(html,/after GPC visit start/);
+  assert.equal((html.match(/Adobe Inc\./g)??[]).length,1);
+  assert.doesNotMatch(html,/deduct|penalt|15.point/i);
+  delete timed.assessment.observation.requests.advertisingCollectionRecipients.rows[0]!.observedAtMs;
+  delete timed.assessment.observation.requests.advertisingCollectionRecipients.rows[1]!.observedAtMs;
+  const legacy=renderToStaticMarkup(<GpcEvidenceIndexCard projection={timed} california />);
+  assert.match(legacy,/Adobe Inc\./);assert.doesNotMatch(legacy,/after GPC visit start/);
+});
+
+test("verified five-second activity remains visible when the independent quiet-page response is indeterminate",()=>{
+ const measured=structuredClone(projection);
+ measured.activityComparison={contractVersion:'certscore.gpc-activity-comparison.v1',evidencePolicy:'page_http_signal.v2',scanId:'fixture',status:'measured',scope:'matched_post_commit_request_window',durationMs:5000,
+   sourceHashes:{baseline:'a'.repeat(64),gpc:'b'.repeat(64)},activity:{advertisingMarketing:{baselineRequests:24,gpcRequests:18,baselineServices:13,gpcServices:10},analyticsReplay:{baselineRequests:1,gpcRequests:1,baselineServices:1,gpcServices:1}},scoreEffect:'none',causedByGpc:'not_established'};
+ measured.observedFacts.push({label:'5-second matched comparison',value:'Over the same 5-second interval after page commit, advertising/marketing requests: 24 without GPC and 18 with GPC; analytics/replay requests: 1 without GPC and 1 with GPC.'});
+ const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={measured} california />);
+ assert.match(html,/5-second/);assert.match(html,/24 without GPC and 18 with GPC/);
+ assert.doesNotMatch(html,/Comparison incomplete|GPC is honored|deduct|penalt/i);
+ assert.equal(measured.assessment.status,'indeterminate');
+});

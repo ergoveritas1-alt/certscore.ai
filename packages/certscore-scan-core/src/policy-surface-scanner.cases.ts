@@ -2797,7 +2797,7 @@ test("policySurfaceScanner classifies expected policy and control surfaces", asy
         observation.status === "fetched" &&
         observation.observedTopics.includes(topic),
       );
-      assert.ok(surface, `${page} should observe ${surfaceType} with ${topic}`);
+      assert.ok(surface, `${page} should observe ${surfaceType} with ${topic}: ${JSON.stringify(result.policySurfaceObservations.map(s=>({type:s.surfaceType,url:s.normalizedUrl,status:s.status,fetch:s.documentFetchState,eval:s.documentEvaluationState,topics:s.observedTopics})))}`);
     });
   }
 });
@@ -4697,7 +4697,7 @@ test("policySurfaceScanner sends delayed global footer links to Nano before comm
   }, { enableNanoPolicyAssist: true, nanoAssistProvider });
 });
 
-test("policySurfaceScanner retains secondary CCPA and GPC policy surfaces when Nano only ranks privacy policy", async () => {
+test("policySurfaceScanner prioritizes one secondary CCPA and GPC notice when Nano only ranks privacy policy", async () => {
   const nanoAssistProvider: PolicyNanoAssistProvider = {
     async classifyLinks(input) {
       const privacy = input.candidates.find((candidate) =>
@@ -4736,8 +4736,9 @@ test("policySurfaceScanner retains secondary CCPA and GPC policy surfaces when N
     );
 
     assert.ok(privacy);
-    assert.ok(cookie);
+    assert.equal(cookie, undefined, "The one-supplement ceiling prioritizes the California notice over the cookie supplement");
     assert.ok(statePrivacy);
+    assert.ok(statePrivacy.selectionReasonCodes?.includes("single_supplement_fetch_limit"));
     assert.equal(statePrivacy.observedTopics.includes("notice_at_collection"), true);
     assert.equal(statePrivacy.observedTopics.includes("global_privacy_control"), true);
     assert.equal(statePrivacy.observedTopics.includes("do_not_sell_or_share"), true);

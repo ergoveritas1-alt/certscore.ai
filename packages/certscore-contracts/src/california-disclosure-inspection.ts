@@ -27,7 +27,7 @@ export type CaliforniaDisclosureInspection = z.infer<typeof californiaDisclosure
 // negative evidence. Destruction/erasure in retention text also blocks a deletion
 // absence conclusion, even though it does not establish the consumer right.
 const CANDIDATE_CONCEPTS = {
-  right_to_know: /\b(?:access\w*|know\w*|portab\w*|cop(?:y|ies)|disclos\w*)\b/gi,
+  right_to_know: /\b(?:access\w*|know\w*|portab\w*|cop(?:y|ies)|disclos\w*|right to request.{0,90}(?:provide|disclose).{0,90}personal (?:information|data))\b/gi,
   right_to_delete: /\b(?:delet\w*|eras\w*|destroy\w*|destruc\w*|remov\w*|forg(?:e|o)t\w*)\b/gi,
   right_to_correct: /\b(?:correct\w*|rectif\w*|accura\w*|updat\w*|amend\w*|fix\w*|mistak\w*)\b/gi,
   non_discrimination: /\b(?:discrimin\w*|retaliat\w*|penal\w*|equal\w*|same (?:prices?|services?|quality|treatment)|different (?:prices?|rates?|quality)|adverse treatment|less favou?rable|(?:deny|denying|refuse|refusing) (?:you )?(?:goods|services)|(?:worse|lower) (?:service|quality)|(?:treat\w*|charg\w*|prices?|fees?|incentiv\w*|benefit\w*).{0,160}(?:exercis\w*|privacy (?:rights|request))|(?:exercis\w*|using|use of).{0,60}(?:rights|choices).{0,160}(?:affect\w*|chang\w*|modif\w*|influenc\w*|impact\w*|alter\w*|result\w*|prejudic\w*|consequenc\w*))\b/gi,

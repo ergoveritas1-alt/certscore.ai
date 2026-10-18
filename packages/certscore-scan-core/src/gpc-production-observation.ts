@@ -1,4 +1,4 @@
-import {resolveCanonicalVendor} from "@certscore/vendor-resolver";
+import {isCanonicalAdvertisingCollectionCandidate, resolveCanonicalVendor, CANONICAL_VENDOR_RESOLVER_VERSION} from "@certscore/vendor-resolver";
 import { createHash } from "node:crypto";
 import {
   canonicalEvidenceBundleSchema, gpcBoundedObservationSchema, gpcResponseAssessmentV3Schema,
@@ -53,13 +53,16 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
       request.urlSha256 === gpcDocumentHash(event.requestUrl) && request.timestampMs === event.timestampMs &&
       event.timestampMs >= session!.mainDocument!.committedAtMs && event.timestampMs <= session!.captureEndedAtMs;
   });
+  const collectionRecipients = new Map<string, {evidenceId:string;entityId:string;label:string;observedAtMs:number}>();
   const advertisingCollection = classified.filter(event => {
-    if (!event.collectionEndpointObserved || event.method === "OPTIONS" || !/^https:/.test(event.requestUrl)) return false;
+    if (!event.collectionEndpointObserved || !isCanonicalAdvertisingCollectionCandidate(event.requestUrl, event.resourceType) || event.method === "OPTIONS" || !/^https:/.test(event.requestUrl)) return false;
     const status = bundle?.networkResponseEvents.find(row=>row.requestId === event.requestId)?.status;
     if (status === undefined || status < 200 || status >= 400) return false;
     const resolved=resolveCanonicalVendor({type:"request",url:event.requestUrl,sourceScanner:"gpc_observation",matchSource:"network_request"}).observation;
-    return resolved && resolved.confidence >= 0.9 && ["advertising","marketing"].includes(resolved.purpose) &&
+    const qualified = resolved && resolved.confidence >= 0.9 && ["advertising","marketing"].includes(resolved.purpose) &&
       resolved.registryAttribution?.matchKind === "endpoint";
+    if (qualified) collectionRecipients.set(event.eventId, { evidenceId:event.eventId, entityId:resolved.registryAttribution!.entityId, label:resolved.entity, observedAtMs:event.timestampMs });
+    return qualified;
   });
   return gpcBoundedObservationSchema.parse({
     contractVersion: "certscore.gpc-bounded-observation.v1", scanId:input.scanId, scope: "main_document_and_retained_http_requests",
@@ -75,6 +78,8 @@ export function buildGpcProductionObservation(input: { scanId: string; source?: 
     requests: { count: result.requestCapture.count, blockedBeforeTransmissionCount: result.requestCapture.blockedBeforeTransmissionCount, complete: result.requestCapture.complete,
       fromMs: result.requestCapture.fromMs, documentCommittedAtMs: result.requestCapture.documentCommittedAtMs, throughMs: result.requestCapture.throughMs,
       advertisingCollectionCount: advertisingCollection.length, advertisingCollectionEvidenceIds: advertisingCollection.slice(0,100).map(row=>row.eventId),
+      advertisingCollectionRecipients: { contractVersion: "canonical_collection_recipients.v1", resolverVersion: CANONICAL_VENDOR_RESOLVER_VERSION,
+        rows: advertisingCollection.slice(0,100).map(event => collectionRecipients.get(event.eventId)!) },
       classifiedCount: classified.length, collectionCount: classified.filter(r => r.collectionEndpointObserved).length,
       evidenceIds: classified.slice(0, 100).map(r => r.eventId), samplesTruncated: classified.length > 100 },
     limitationKeys, scoreEffect: "none", legalInterpretation: "not_assessed",

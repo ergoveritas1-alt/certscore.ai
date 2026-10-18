@@ -44,3 +44,15 @@ test("partial retained paths still offer both action tabs",()=>{
  const html=renderToStaticMarkup(<ReportPageEventTimeline events={[]} accept={{...path,coverage:"limited"}} reject={{...path,coverage:"limited"}}/>);
  assert.match(html,/>Accept<\/button>/);assert.match(html,/>Reject<\/button>/);
 });
+
+
+test("GPC joins the right-aligned timeline switcher independently of action controls", () => {
+  for (const accept of [null,path]) for (const reject of [null,path]) {
+    const html = renderToStaticMarkup(<ReportPageEventTimeline events={[]} accept={accept} reject={reject} gpc={{...path,clockLabel:"Times from GPC visit start"}} />);
+    assert.match(html, /ml-auto flex shrink-0 gap-1/);
+    assert.match(html, />GPC<\/button>/);
+    assert.equal(html.includes(">Accept</button>"), !!accept);
+    assert.equal(html.includes(">Reject</button>"), !!reject);
+    assert.match(html, /aria-pressed="true"[^>]*>Pre-consent/);
+  }
+});

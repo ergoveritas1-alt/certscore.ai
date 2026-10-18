@@ -77,7 +77,7 @@ test("getEvidenceLabel presents a neutral canonical policy no-match result disti
   assert.equal(getAssessmentDirection(item), "neutral_signal");
   assert.equal(
     getGdprEprivacyCoverageChecklistRowRationaleForAudit(item),
-    "CertScore retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent."
+    "CertScore.ai retained a usable privacy policy but found no sufficiently direct legal-basis passage during automated analysis. This does not establish that the disclosure is absent."
   );
 
   const html = renderToStaticMarkup(createElement(GdprEprivacyCoverageChecklistCard, {
@@ -185,11 +185,11 @@ function makeSessionReplayItem(): GdprEprivacyCoverageChecklistItem {
     ],
     evidenceState: "observed",
     explanation:
-      "CertScore observed session replay or behavioral analytics vendors not observed pre-consent in retained evidence, including Microsoft Clarity, Hotjar, and Contentsquare. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
+      "CertScore.ai observed session replay or behavioral analytics vendors not observed pre-consent in retained evidence, including Microsoft Clarity, Hotjar, and Contentsquare. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
     id: "session_replay_fingerprinting_review",
     label: "Session replay / behavioral analytics",
     note:
-      "CertScore observed session replay or behavioral analytics vendors not observed pre-consent in retained evidence, including Microsoft Clarity, Hotjar, and Contentsquare. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
+      "CertScore.ai observed session replay or behavioral analytics vendors not observed pre-consent in retained evidence, including Microsoft Clarity, Hotjar, and Contentsquare. Because these tools can capture user interaction behavior, review consent timing, disclosure, masking/exclusion settings, sensitive-page coverage, and withdrawal controls.",
     status: "Review signal",
     subchecks: [
       {
@@ -553,7 +553,7 @@ test("GdprEprivacyCoverageChecklistCard describes extraction-limited Article 13 
         signalObserved: "not_confirmed_extraction_limited"
       },
       statusBasis:
-        "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence."
+        "A privacy-policy surface was found, but CertScore.ai did not extract enough usable policy text to confirm this disclosure from retained evidence."
     },
     evidenceState: "observed",
     id: "processing_purposes_disclosure",
@@ -1536,7 +1536,7 @@ test("GdprEprivacyCoverageChecklistCard makes policy no-match decisions inferabl
               signalObserved: "not_observed_with_sufficient_coverage"
             },
             statusBasis:
-              "CertScore retained a usable policy but found no sufficiently direct matching passage for international transfer disclosure during automated analysis. This does not establish that the disclosure is absent."
+              "CertScore.ai retained a usable policy but found no sufficiently direct matching passage for international transfer disclosure during automated analysis. This does not establish that the disclosure is absent."
           },
           evidenceState: "not_observed",
           id: "international_transfers_disclosure",

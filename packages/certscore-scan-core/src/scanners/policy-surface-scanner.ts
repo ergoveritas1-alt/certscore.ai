@@ -1,3 +1,4 @@
+import { locateCaliforniaReviewTopics } from "@certscore/contracts";
 import { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonicalPolicyUrlIdentity, policySurfaceObservationKey } from "../policy-surface-projection.js";
 export { applyGoverningPolicySelection, mergePolicySurfaceObservations, canonicalPolicyUrlIdentity } from "../policy-surface-projection.js";
 import {
@@ -11,6 +12,7 @@ import {
   assessArticle13PolicyTextQuality,
   canonicalPolicyDocumentBrandRelationship,
   classifyConsentSurfaceText,
+  classifyConsentControlLabel,
   classifyGdprSupplementLink,
   classifyGdprTransparencyTopics,
   type GdprTransparencyTopicMatch,
@@ -153,6 +155,8 @@ export interface PolicySurfaceScannerInput {
     url: string;
   }>;
   discoveryMode?: "full" | "fast";
+  /** Calibration contact ceiling; normal customer recovery is unchanged. */
+  stopAfterAccessBlock?: boolean;
   /**
    * Ephemeral same-origin page used to establish the browser session before a
    * retained rendered policy link is retried. This is runtime-only recovery
@@ -418,6 +422,8 @@ interface PolicySurfaceTextArtifactBudget {
 
 interface PolicyDocumentFetchCaches {
   earlyIndexChildClaimed?: boolean;
+  warmedCaliforniaSupplement?: PolicySurfaceCandidate;
+  collapsedCaliforniaRecoveryClaimed?: boolean;
   analysis: Map<string, unknown>;
   browserRuntime: PolicyBrowserRuntime;
   diagnostics: PolicyFetchDiagnosticsCollector;
@@ -457,6 +463,12 @@ interface PolicyFetchAttemptDiagnostic {
   decodingOutcome?: "identity" | "gzip" | "br" | "deflate" | "failed" | "too_large";
 }
 
+type LegalDisclosureRecoveryDiagnostic = {
+  version:"legal_disclosure_recovery.v1";
+  stage:"browser_start"|"navigation"|"document_ready"|"disclosure_inventory"|"disclosure_binding"|"disclosure_click"|"disclosure_readback"|"text_capture"|"completed";
+  candidateCount?:number; expanded?:boolean;
+};
+
 interface PolicyFetchDiagnostic {
   stage: "homepage" | "candidate_direct" | "candidate_rendered";
   candidateUrl?: string;
@@ -466,9 +478,25 @@ interface PolicyFetchDiagnostic {
   httpStatus?: number;
   failureReason?: Exclude<PolicyFetchAttemptOutcome, "fetched">;
   attempts: PolicyFetchAttemptDiagnostic[];
+  recoveryDiagnostic?:LegalDisclosureRecoveryDiagnostic;
 }
 
 interface PolicyFetchDiagnosticsCollector {
+  oneHopSelections?: Array<{
+    policyVersion: "one_hop_selection.v2";
+    parentUrl: string;
+    selectedUrls: string[];
+    candidates: Array<{
+      url: string;
+      surfaceType: PolicySurfaceObservation["surfaceType"];
+      score: number;
+      fetchable: boolean;
+      traversalDepth?: number;
+      parentOriginMatches: boolean;
+      selected: boolean;
+      reasonCodes: string[];
+    }>;
+  }>;
   deterministicAnalysisCacheHits?: number;
   homepageFetch?: PolicyFetchDiagnostic;
   failedFetches: PolicyFetchDiagnostic[];
@@ -614,6 +642,8 @@ export async function policySurfaceScanner(
     scanSignal: input.signal,
   };
 
+  if(input.stopAfterAccessBlock||process.env.CERTSCORE_CALIBRATION_STOP_AFTER_ACCESS_BLOCK==="1")blockBoundPolicyFetchCaches.add(policyDocumentFetchCaches.direct);
+
   const retainFailureDiagnostics = async () => {
     if (artifactRefs.some((artifactRef) => artifactRef.artifactId === "policy_surface_capture_diagnostics")) {
       return null;
@@ -676,6 +706,11 @@ export async function policySurfaceScanner(
       stage: "homepage",
       result: homepage,
     });
+    if(blockBoundPolicyFetchCaches.has(policyDocumentFetchCaches.direct)&&isPolicyAccessBlock(homepage)){
+      blockedPolicyFetchCaches.add(policyDocumentFetchCaches.direct);
+      await retainFailureDiagnostics();
+      return {artifactRefs,policySurfaceObservations:observations,moduleRun:withSiteFacingNavigation(moduleRun("partial",moduleStartedAt,moduleStartedAtMs,["Policy calibration contact stopped after an access block."],timingBreakdown))};
+    }
     const homepageFinalUrl = [...(homepage.attempts ?? [])]
       .reverse()
       .find((attempt) => attempt.outcome === "fetched")?.finalUrl;
@@ -1429,6 +1464,8 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
   observations: PolicySurfaceObservation[];
   timingBreakdown: NonNullable<ScanModuleRun["timingBreakdown"]>;
 }> {
+  if((input.scannerInput.stopAfterAccessBlock||process.env.CERTSCORE_CALIBRATION_STOP_AFTER_ACCESS_BLOCK==="1")&&
+    input.existingObservations.some(row=>[401,403,429,451].includes(row.httpStatus??0)))return {artifactRefs:[],observations:[],timingBreakdown:[]};
   const targetSite = getRegistrableDomainFromUrl(input.scannerInput.normalizedUrl);
   const usableTargetPrivacyDocumentRetained = input.existingObservations.some((observation) =>
     observation.surfaceType === "privacy_policy" &&
@@ -1483,6 +1520,7 @@ export async function recoverPolicyDocumentsFromRetainedRenderedLinks(input: {
     runRenderedFetch: createConcurrencyLimiter(POLICY_RENDERED_FETCH_CONCURRENCY),
     scanSignal: input.scannerInput.signal,
   };
+  if(input.scannerInput.stopAfterAccessBlock||process.env.CERTSCORE_CALIBRATION_STOP_AFTER_ACCESS_BLOCK==="1")blockBoundPolicyFetchCaches.add(fetchCaches.direct);
   try {
     const existingKeys = new Set(input.existingObservations
       .filter((observation) => observation.status === "fetched")
@@ -1664,6 +1702,7 @@ async function writePolicyCaptureDiagnostics(input: {
     staticCandidateCount: input.staticCandidateCount,
     renderedCandidateCount: input.renderedCandidateCount,
     commonPathFallbackUsed: input.commonPathFallbackUsed,
+    oneHopSelections: input.policyFetchDiagnostics.oneHopSelections ?? [],
     fetchedCount: fetchedObservations.length,
     failedCandidateCount: input.observations.filter((observation) => observation.status === "failed").length,
     funnel: {
@@ -1737,6 +1776,7 @@ function recordPolicyFetchDiagnostic(
       ? { failureReason: failedAttempt.outcome as Exclude<PolicyFetchAttemptOutcome, "fetched"> }
       : {}),
     attempts,
+    ...(input.result.recoveryDiagnostic ? {recoveryDiagnostic:input.result.recoveryDiagnostic} : {}),
   };
   if (input.stage === "homepage") {
     collector.homepageFetch = diagnostic;
@@ -1889,10 +1929,14 @@ async function fetchPolicyCandidateGroup(input: {
           // The index has already selected this exact one-hop policy child.
           // Reuse this worker slot before unrelated guessed URLs consume the
           // shared deadline; remove it from the later supplemental queue.
-          const child = result.secondaryCandidates[0];
+          const child = result.secondaryCandidates.find(candidate => candidate.selectionReasonCodes?.includes("deterministic_california_supplement_selection"))
+            ?? result.secondaryCandidates[0];
           if (candidate.traversalDepth !== 1 && !input.fetchCaches.earlyIndexChildClaimed &&
-              result.observation.documentRole === "policy_index" &&
+              (result.observation.documentRole === "policy_index" ||
+                result.observation.documentRole === "policy_document" && child?.selectionReasonCodes?.includes("deterministic_california_supplement_selection")) &&
               result.secondaryCandidates.length === 1 && child &&
+              (child.selectionReasonCodes?.includes("deterministic_california_supplement_selection") ||
+                !toFetch.some(primary => policyDocumentFetchCacheKey(primary.normalizedUrl) === policyDocumentFetchCacheKey(child.normalizedUrl))) &&
               isBoundedSameOriginPolicySupplement(child)) {
             input.fetchCaches.earlyIndexChildClaimed = true;
             const childResult = await processPolicyCandidateBeforeDeadline({
@@ -1902,7 +1946,7 @@ async function fetchPolicyCandidateGroup(input: {
               policySurfaceTextArtifactBudget: input.policySurfaceTextArtifactBudget,
               suppressCommonPathRenderedRecovery: true,
             });
-            return { ...result, secondaryCandidates: [],
+            return { ...result, secondaryCandidates: result.secondaryCandidates.filter(candidate => candidate !== child),
               artifactRefs: [...result.artifactRefs, ...childResult.artifactRefs],
               secondaryCandidateObservations: [...(result.secondaryCandidateObservations ?? []), childResult.observation,
                 ...(childResult.secondaryCandidateObservations ?? [])],
@@ -1948,6 +1992,11 @@ async function processLatePrefetchedPolicyCandidates(input: {
       result.observation.status === "fetched" &&
       result.observation.documentEvaluationState === "usable"
     ) {
+      const child=input.fetchCaches.warmedCaliforniaSupplement;
+      if(child && !results.some(row=>row.observation.normalizedUrl===child.normalizedUrl) &&
+         input.fetchCaches.direct.has(policyDocumentFetchCacheKey(child.normalizedUrl))) {
+        results.push(await processPolicyCandidateBeforeDeadline({...input,candidate:child,candidateIndex:0,prefetchedOnly:true}));
+      }
       break;
     }
     if (deadlineRemainingMs(input.input.absoluteDeadlineAtMs) < 1_000) {
@@ -1965,11 +2014,12 @@ export function prioritizePolicyCandidateEvaluation(
     .filter((candidate) => !isObviousCommercePolicyFalsePositive(candidate))
     .map((candidate, originalIndex) => ({ candidate, originalIndex }))
     .sort((left, right) =>
+      californiaDocumentPriority(left.candidate) - californiaDocumentPriority(right.candidate) ||
       surfacePriority(left.candidate.deterministicSurfaceType) - surfacePriority(right.candidate.deterministicSurfaceType) ||
       policyCandidateDiscoveryPriority(left.candidate) - policyCandidateDiscoveryPriority(right.candidate) ||
       commonPathEvaluationPriority(left.candidate) - commonPathEvaluationPriority(right.candidate) ||
-      policyCandidateProtectionPriority(left.candidate) - policyCandidateProtectionPriority(right.candidate) ||
       policyDocumentScopePriority(left.candidate) - policyDocumentScopePriority(right.candidate) ||
+      policyCandidateProtectionPriority(left.candidate) - policyCandidateProtectionPriority(right.candidate) ||
       policyCandidateQualityScore(right.candidate) - policyCandidateQualityScore(left.candidate) ||
       right.candidate.deterministicScore - left.candidate.deterministicScore ||
       left.originalIndex - right.originalIndex
@@ -1992,7 +2042,7 @@ function policyDocumentScopePriority(candidate: PolicySurfaceCandidate): number 
   const label = normalizeWhitespace(candidate.linkText).toLowerCase();
   if (/^(?:privacy|data protection) (?:policy|notice)$/.test(label)) return 0;
   if (
-    /\b(?:consumer health|children(?:'s)?|child privacy|state privacy|biometric|employee|applicant|job candidate)\b/.test(label)
+    /\b(?:consumer health|health (?:privacy|data)|children(?:'s)?|child privacy|state privacy|biometric|employee|applicant|job candidate)\b/.test(label)
   ) {
     return 2;
   }
@@ -2160,6 +2210,9 @@ async function processPolicyCandidate({
   prefetchedOnly,
   suppressCommonPathRenderedRecovery,
 }: ProcessPolicyCandidateInput): Promise<ProcessPolicyCandidateResult> {
+  if(blockedPolicyFetchCaches.has(fetchCaches.direct) && !fetchCaches.direct.has(policyDocumentFetchCacheKey(candidate.normalizedUrl))) {
+    return {observation:observationFromCandidate(candidate,{status:"observed",confidence:candidate.deterministicScore,selectionReasonCodes:[...(candidate.selectionReasonCodes??[]),"not_attempted_after_access_block"]}),artifactRefs:[],secondaryCandidates:[]};
+  }
   if (candidate.observationOnly) {
     return {
       observation: observationFromCandidate(candidate, {
@@ -2256,7 +2309,7 @@ async function processPolicyCandidate({
     result: fetched,
     candidate,
   });
-  if (!fetched.ok && !boundedSameOriginSupplement) {
+  if (!fetched.ok && !boundedSameOriginSupplement && !blockedPolicyFetchCaches.has(fetchCaches.direct)) {
     const canonicalHostVariant = canonicalWwwPolicyUrlVariant(candidate.normalizedUrl);
     if (canonicalHostVariant && shouldRetryCanonicalPolicyHost(candidate.normalizedUrl, fetched.attempts ?? [])) {
       const variantFetched = await recordPolicyTiming(
@@ -2282,7 +2335,7 @@ async function processPolicyCandidate({
   if (processingProgress) {
     processingProgress.documentFetched = true;
   }
-  if (!fetched.ok && shouldTryRenderedPolicyDocumentFetch({
+  if (!fetched.ok && !blockedPolicyFetchCaches.has(fetchCaches.direct) && shouldTryRenderedPolicyDocumentFetch({
     candidate,
     candidateIndex,
     input,
@@ -2319,6 +2372,7 @@ async function processPolicyCandidate({
     }
   }
   if (!fetched.ok) {
+    if(fetched.accessBlockedEarlier)return {observation:observationFromCandidate(candidate,{status:"observed",confidence:candidate.deterministicScore,selectionReasonCodes:[...(candidate.selectionReasonCodes??[]),"not_attempted_after_access_block"]}),artifactRefs:[],secondaryCandidates:[]};
     const failedAttempt = [...(fetched.attempts ?? [])].reverse().find((attempt) => attempt.outcome !== "fetched");
     const exactMissingDestination = failedAttempt?.outcome === "http_error" &&
       [404, 410].includes(failedAttempt.httpStatus ?? 0) &&
@@ -2376,6 +2430,7 @@ async function processPolicyCandidate({
       /\b(?:privacy|policy)\s+center\b/i.test(`${title ?? ""} ${fetched.text.slice(0, 1_000)}`);
     if (indexShape) {
       const earlySelection = await selectOneHopPolicyIndexChildren({
+        diagnostics: fetchCaches.diagnostics,
         input,
         indexCandidate: effectiveCandidate,
         indexTitle: title,
@@ -2448,6 +2503,18 @@ async function processPolicyCandidate({
       }
     }
   }
+  // A completed direct challenge response is terminal for this candidate.
+  // Do not spend the rendered-recovery slot or follow its privacy footer links.
+  if (assessPolicyTextQuality(visibleText).reason === "low_quality_access_challenge") {
+    return {
+      observation: observationFromCandidate(candidate, {
+        status: "failed", httpStatus: fetched.status, finalUrl: fetchedFinalUrl,
+        redirectChain: policyFetchRedirectChain(fetched), fetchFailureReason: "low_quality_access_challenge",
+        title, textExcerpt: boundedExcerpt(visibleText, []),
+        confidence: Math.max(0.35, candidate.assisted?.confidence ?? candidate.deterministicScore),
+      }), artifactRefs: [], secondaryCandidates: [],
+    };
+  }
   const urlOnlyStubResolution = boundedAfterSoftBudget || boundedSameOriginSupplement || explicitPrimaryPolicyIndex
     ? undefined
     : await recordPolicyTiming(
@@ -2482,16 +2549,28 @@ async function processPolicyCandidate({
     candidateIndex,
     hasObservedPrivacyPolicyCandidate: suppressCommonPathRenderedRecovery === true,
   });
+  const recoveryMemoryMb = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ??
+    (process.env.AWS_LAMBDA_FUNCTION_NAME ? "NaN" : "3008"));
+  // At most 14.6875 GB-seconds including the 200 ms cleanup reserve: below
+  // the approved $25/month ceiling even if all 100,000 scans need recovery.
+  const collapsedRecoveryTotalMs = Number.isFinite(recoveryMemoryMb) && recoveryMemoryMb >= 512
+    ? Math.floor(Math.min(5_000, 5_000 * 3008 / recoveryMemoryMb, remainingMs(input, moduleStartedAtMs))) : 0;
+  const collapsedCaliforniaRecovery = collapsedRecoveryTotalMs >= 1_000 && !fetchCaches.collapsedCaliforniaRecoveryClaimed &&
+    !boundedAfterSoftBudget && !protectedObservedFetch && !boundedSameOriginSupplement &&
+    effectiveCandidate.deterministicSurfaceType === "privacy_policy" &&
+    remainingMs(input, moduleStartedAtMs) >= 2_000 &&
+    (hasCollapsedCaliforniaDisclosure(fetchedHtml) || hasCaliforniaNoticeOutline(visibleText));
   // Redirect normalization can recompute sameOrigin against the scan target.
   // Preserve the original child budget instead of reopening browser recovery.
-  if (!boundedSameOriginSupplement && !explicitPrimaryPolicyIndex && renderedLowQualityFallbackWithinBudget && shouldTryRenderedPolicyDocumentTextFallback({
+  if (!boundedSameOriginSupplement && !explicitPrimaryPolicyIndex && renderedLowQualityFallbackWithinBudget && (collapsedCaliforniaRecovery || shouldTryRenderedPolicyDocumentTextFallback({
     candidate: effectiveCandidate,
     documentFormat: fetched.documentFormat,
     input,
     moduleStartedAtMs,
     protectedObservedFetch,
     visibleText,
-  })) {
+  }))) {
+    if (collapsedCaliforniaRecovery) fetchCaches.collapsedCaliforniaRecoveryClaimed = true;
     fetchCaches.diagnostics.renderedRecoveryAttempts += 1;
     const renderedFetched = await recordPolicyTiming(
       timingBreakdown,
@@ -2499,9 +2578,10 @@ async function processPolicyCandidate({
       `Fetch ${effectiveCandidate.deterministicSurfaceType} candidate document through bounded browser-rendered navigation after direct fetch retained only low-quality text.`,
       () => fetchRenderedPolicyDocumentSingleFlight(fetchCaches, {
         input,
-        linkContext: renderedPolicyLinkContext(input, effectiveCandidate),
+        linkContext: collapsedCaliforniaRecovery ? undefined : renderedPolicyLinkContext(input, effectiveCandidate),
         url: effectiveCandidate.normalizedUrl,
-        timeoutMs: protectedObservedFetch
+        ...(collapsedCaliforniaRecovery ? { hardDeadlineAtMs: Date.now() + collapsedRecoveryTotalMs - 200 } : {}),
+        timeoutMs: collapsedCaliforniaRecovery ? collapsedRecoveryTotalMs - 200 : protectedObservedFetch
           ? Math.min(
               POLICY_PROTECTED_RENDERED_FETCH_TIMEOUT_MS,
               remainingProtectedPolicyFetchMs(input, moduleStartedAtMs),
@@ -2584,6 +2664,7 @@ async function processPolicyCandidate({
   });
   if (!textQuality.usable || !documentSubstance.matchesExpectedSurface || guessedThinPrivacyDocument) {
     const childSelection = await selectOneHopPolicyIndexChildren({
+      diagnostics: fetchCaches.diagnostics,
       input,
       indexCandidate: effectiveCandidate,
       indexTitle: title,
@@ -2750,6 +2831,7 @@ async function processPolicyCandidate({
   }
 
   const childSelection = await selectOneHopPolicyIndexChildren({
+    diagnostics: fetchCaches.diagnostics,
     input,
     indexCandidate: effectiveCandidate,
     indexTitle: title,
@@ -2872,6 +2954,88 @@ export function shouldUseRenderedLowQualityFallbackSlot(input: {
     input.candidateIndex < MAX_RENDERED_COMMON_PATH_LOW_QUALITY_FALLBACKS;
 }
 
+/** A retained legal-disclosure control is a capture cue, never a rights claim. */
+export function hasCollapsedCaliforniaDisclosure(html: string): boolean {
+  return [...html.matchAll(/<(button|summary)\b([^>]*)>([\s\S]*?)<\/\1>/gi)].some(([, tag, attributes, body]) =>
+    (tag?.toLowerCase() === "summary" || /\baria-controls\s*=/.test(attributes ?? "") &&
+      /\baria-expanded\s*=\s*["']false["']/i.test(attributes ?? "")) &&
+    /\bCalifornia\b/i.test(htmlToVisibleText(body ?? "")) &&
+    /\b(?:privacy|CCPA|consumer|rights|notice)\b/i.test(htmlToVisibleText(body ?? "")));
+}
+
+/** Adjacent regional headings without the intervening notice body indicate a
+ * document-capture opportunity. They never establish missing disclosures. */
+export function hasCaliforniaNoticeOutline(text: string): boolean {
+  return /\bCalifornia\s+Consumer\s+Privacy\s+Act\s*(?:\(CCPA\))?\s+Notice\s+\d+[.)]?\s+General\s+Data\s+Protection\s+Regulation\s*(?:\(GDPR\))?\s+Notice/i.test(normalizeWhitespace(text));
+}
+
+/** Expands one legal-text disclosure, never a privacy preference or form. */
+export async function expandCaliforniaNoticeText(page: Page, deadlineAtMs: number, diagnostic?:LegalDisclosureRecoveryDiagnostic): Promise<boolean> {
+  if (deadlineAtMs - Date.now() < 300) return false;
+  // A substantive introduction can arrive before the streamed regional
+  // accordions. Wait for the exact disclosure, not merely 500 body characters.
+  await page.waitForFunction(() => [...document.querySelectorAll('main button,article button,[role="main"] button')].some(node =>
+    !node.closest('form,nav,header,footer,[role="dialog"],[role="alertdialog"]') &&
+    node.getAttribute('aria-expanded')==='false' &&
+    /^(?:\d+[.)]?\s*)?California\s+Consumer\s+Privacy\s+Act\s*(?:\(CCPA\))?\s+Notice\s*$/i.test((node.textContent??'').replace(/\s+/g,' ').trim()) &&
+    node.getBoundingClientRect().height>0),undefined,
+    {timeout:Math.max(1,Math.min(2000,deadlineAtMs-Date.now()-750))}).catch(()=>undefined);
+  if(diagnostic)diagnostic.stage="disclosure_inventory";
+  const candidates = await page.locator('main button[aria-expanded="false"], article button[aria-expanded="false"], [role="main"] button[aria-expanded="false"]')
+    .evaluateAll(nodes => nodes.length > 100 ? [] : nodes.flatMap(node => {
+      const label=(node.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (node.closest('form, nav, header, footer, [role="dialog"], [role="alertdialog"]') ||
+        !/^(?:\d+[.)]?\s*)?California\s+Consumer\s+Privacy\s+Act\s*(?:\(CCPA\))?\s+Notice\s*$/i.test(label)) return [];
+      const controls=node.getAttribute('aria-controls');
+      if(controls) return [{label,controls,itemValue:null as string|null}];
+      // Some Radix accordions override the generated trigger ID and omit
+      // aria-controls. Require the exact owning item, stable value/trigger ID,
+      // and one closed region; a nearby heading alone cannot authorize a click.
+      const item=node.closest('[data-slot="accordion-item"][data-accordion-section="true"]');
+      const value=item?.getAttribute('data-accordion-value');
+      const regions=item?.querySelectorAll(':scope > [data-slot="accordion-content"][role="region"][hidden][data-state="closed"]');
+      return node.getAttribute('data-slot')==='accordion-trigger' && value && value===node.id &&
+        item?.querySelectorAll('[data-slot="accordion-trigger"]').length===1 && regions?.length===1 && regions[0]?.id
+        ? [{label,controls:regions[0].id,itemValue:value}] : [];
+    }));
+  if(diagnostic){diagnostic.candidateCount=candidates.length;diagnostic.stage="disclosure_binding";}
+  if (candidates.length !== 1 || !candidates[0]?.controls || deadlineAtMs - Date.now() < 250) return false;
+  const candidate = candidates[0];
+  const control = page.getByRole('button', { name: candidate.label, exact: true });
+  if (await control.count() !== 1 || !await control.isVisible() || !await control.isEnabled()) return false;
+  const url = page.url();
+  const session = await page.context().newCDPSession(page);
+  try {
+    const loader = (await session.send('Page.getFrameTree')).frameTree.frame.loaderId;
+    if (candidate.itemValue === null) {
+      if (await control.getAttribute('aria-controls') !== candidate.controls) return false;
+    } else if (!await control.evaluate((node, expected) => {
+      const item=node.closest('[data-slot="accordion-item"][data-accordion-section="true"]');
+      const regions=item?.querySelectorAll(':scope > [data-slot="accordion-content"][role="region"][hidden]');
+      return node.id===expected.itemValue && item?.getAttribute('data-accordion-value')===expected.itemValue &&
+        regions?.length===1 && regions[0]?.id===expected.controls;
+    },candidate)) return false;
+    if(diagnostic)diagnostic.stage="disclosure_click";
+    // Long policy pages can enable smooth scrolling. Its animation can consume
+    // the entire actionability allowance before this exact legal-text trigger
+    // reaches the viewport. Scroll instantly, then keep the ordinary visible,
+    // enabled and hit-target checks for the single permitted click.
+    await control.evaluate(node=>node.scrollIntoView({behavior:"instant",block:"center"}));
+    await control.click({timeout:Math.max(1,Math.min(500,deadlineAtMs-Date.now()))});
+    if (page.url() !== url || (await session.send('Page.getFrameTree')).frameTree.frame.loaderId !== loader)
+      throw new Error('policy_disclosure_document_changed');
+    if(diagnostic)diagnostic.stage="disclosure_readback";
+    await page.waitForFunction(label=>[...document.querySelectorAll('button')].some(node=>
+      (node.textContent??'').replace(/\s+/g,' ').trim()===label && node.getAttribute('aria-expanded')==='true'),candidate.label,
+      {timeout:Math.max(1,Math.min(1000,deadlineAtMs-Date.now()-200))}).catch(()=>undefined);
+    if(page.url()!==url || (await session.send('Page.getFrameTree')).frameTree.frame.loaderId!==loader)
+      throw new Error('policy_disclosure_document_changed');
+    const expanded=await control.getAttribute('aria-expanded') === 'true';
+    if(diagnostic)diagnostic.expanded=expanded;
+    return expanded;
+  } finally { await session.detach().catch(()=>undefined); }
+}
+
 export function policyDocumentMatchesExpectedSurface(input: {
   surfaceType: PolicySurfaceObservation["surfaceType"];
   text: string;
@@ -2891,7 +3055,8 @@ export type PolicyDocumentSubstanceAssessment = {
     | "substantive_privacy_signals"
     | "substantive_topic_match"
     | "surface_specific_signal"
-    | "unrestricted_surface";
+    | "unrestricted_surface"
+    | "regional_notice_substance_unverified";
 };
 
 /**
@@ -2965,6 +3130,11 @@ export function assessPolicyDocumentSubstance(input: {
     return obviousNavigationShellSignals < 2
       ? { matchesExpectedSurface: true, reasonCode: "multilingual_policy_reviewable" }
       : { matchesExpectedSurface: false, reasonCode: "obvious_navigation_shell" };
+  }
+  if (["california_notice", "notice_at_collection"].includes(input.surfaceType)) {
+    const topics = locateCaliforniaReviewTopics(input.text, { californiaNotice: input.surfaceType === "california_notice" }).topics;
+    const substantive = new Set(topics.map(row => row.topic)).size >= 2;
+    return { matchesExpectedSurface: substantive, reasonCode: substantive ? "substantive_privacy_signals" : "regional_notice_substance_unverified" };
   }
   if (input.surfaceType === "cookie_policy") {
     const cookieSignal = /\b(?:cookie|browser storage|local storage|tracking technolog)\b/i.test(normalized);
@@ -3141,7 +3311,7 @@ function renderedPolicyLinkContext(
   };
 }
 
-async function fetchRenderedPolicyDocumentText(input: {
+export async function fetchRenderedPolicyDocumentText(input: {
   browserRuntime: PolicyBrowserRuntime;
   input: PolicySurfaceScannerInput;
   linkContext?: {
@@ -3153,6 +3323,7 @@ async function fetchRenderedPolicyDocumentText(input: {
   primeSession?: boolean;
   url: string;
   timeoutMs: number;
+  hardDeadlineAtMs?: number;
   allowRetainedPageRetry?: boolean;
 }): Promise<FetchTextResult> {
   let context: Awaited<ReturnType<Browser["newContext"]>> | undefined;
@@ -3160,14 +3331,22 @@ async function fetchRenderedPolicyDocumentText(input: {
   let releaseAbortContext: (() => void) | undefined;
   let retainedRecoveryPage: Page | undefined;
   let page: Page | undefined;
+  const recoveryDiagnostic:LegalDisclosureRecoveryDiagnostic|undefined=input.hardDeadlineAtMs===undefined?undefined:{version:"legal_disclosure_recovery.v1",stage:"browser_start"};
+  const captureController = new AbortController();
+  const captureTimer = input.hardDeadlineAtMs === undefined ? undefined : setTimeout(() => {
+    captureController.abort();
+    void context?.close().catch(() => undefined);
+  }, Math.max(1, input.hardDeadlineAtMs - Date.now()));
   try {
     const browser = await input.browserRuntime.getBrowser();
+    captureController.signal.throwIfAborted();
     retainedRecoveryPage = input.linkContext && input.input.renderedRecoveryPage
       ? input.input.renderedRecoveryPage
       : undefined;
     if (!retainedRecoveryPage) {
       context = await browser.newContext(chromiumContextOptions());
-      releaseAbortContext = bindAbortSignalToBrowserContext(context, input.input.signal);
+      releaseAbortContext = bindAbortSignalToBrowserContext(context,
+        AbortSignal.any([captureController.signal, ...(input.input.signal ? [input.input.signal] : [])]));
       await installWebBotAuthRoute(context);
       await installPublicNetworkGuardRoute(context);
       page = await context.newPage();
@@ -3182,7 +3361,7 @@ async function fetchRenderedPolicyDocumentText(input: {
     } else {
       page = retainedRecoveryPage;
     }
-    const navigationDeadlineAtMs = Date.now() + Math.max(1_000, input.timeoutMs);
+    const navigationDeadlineAtMs = input.hardDeadlineAtMs ?? Date.now() + Math.max(1_000, input.timeoutMs);
     const sessionPrimerUrl = input.linkContext?.pageUrl ?? (
       input.primeSession ? input.input.renderedRecoverySessionPrimerUrl : undefined
     );
@@ -3204,6 +3383,7 @@ async function fetchRenderedPolicyDocumentText(input: {
         timeout: Math.min(750, Math.max(250, navigationDeadlineAtMs - Date.now())),
       }).catch(() => undefined);
     }
+    if(recoveryDiagnostic)recoveryDiagnostic.stage="navigation";
     const targetNavigationTimeoutMs = Math.max(1_000, navigationDeadlineAtMs - Date.now());
     const clickNavigation = input.linkContext &&
       sessionPrimerUrl &&
@@ -3226,7 +3406,8 @@ async function fetchRenderedPolicyDocumentText(input: {
           waitUntil: "commit",
           timeout: targetNavigationTimeoutMs,
         });
-    await page.waitForLoadState("networkidle", {
+    if(recoveryDiagnostic)recoveryDiagnostic.stage="document_ready";
+    if (input.hardDeadlineAtMs === undefined) await page.waitForLoadState("networkidle", {
       timeout: Math.min(1_000, Math.max(500, input.timeoutMs)),
     }).catch(() => undefined);
     await page.waitForFunction(
@@ -3246,7 +3427,10 @@ async function fetchRenderedPolicyDocumentText(input: {
       undefined,
       { timeout: Math.min(1_500, Math.max(500, input.timeoutMs)) },
     ).catch(() => undefined);
-    await page.waitForTimeout(Math.min(750, Math.max(250, input.timeoutMs)));
+    if (input.hardDeadlineAtMs !== undefined) await expandCaliforniaNoticeText(page, input.hardDeadlineAtMs,recoveryDiagnostic);
+    await page.waitForTimeout(input.hardDeadlineAtMs === undefined ? Math.min(750, Math.max(250, input.timeoutMs))
+      : Math.max(0, Math.min(250, input.hardDeadlineAtMs - Date.now() - 250)));
+    if(recoveryDiagnostic)recoveryDiagnostic.stage="text_capture";
     const html = await page.content().catch(() => "");
     const bodyText = await page.locator("body").innerText({ timeout: 1_000 }).catch(() => "");
     const semanticTextCandidates = await renderedPolicySemanticTextCandidates(page);
@@ -3254,6 +3438,7 @@ async function fetchRenderedPolicyDocumentText(input: {
       bodyText,
       ...semanticTextCandidates,
     ]);
+    if(recoveryDiagnostic)recoveryDiagnostic.stage="completed";
     const status = response?.status();
     const attemptBase = {
       mode: "rendered" as const,
@@ -3264,7 +3449,8 @@ async function fetchRenderedPolicyDocumentText(input: {
     };
     if (!text) {
       return {
-        attempts: [{
+        recoveryDiagnostic,
+      attempts: [{
           ...attemptBase,
           outcome: response ? "empty_rendered_body" : "navigation_no_response",
         }],
@@ -3278,6 +3464,7 @@ async function fetchRenderedPolicyDocumentText(input: {
       ? normalizeRenderedPolicyResponseSizes(await response.request().sizes().catch(() => undefined))
       : {};
     return {
+      recoveryDiagnostic,
       attempts: [{
         ...attemptBase,
         ...responseSizes,
@@ -3294,7 +3481,7 @@ async function fetchRenderedPolicyDocumentText(input: {
     };
   } catch (error) {
     if (
-      input.allowRetainedPageRetry !== false &&
+      input.hardDeadlineAtMs === undefined && input.allowRetainedPageRetry !== false &&
       retainedRecoveryPage &&
       page === retainedRecoveryPage
     ) {
@@ -3328,6 +3515,7 @@ async function fetchRenderedPolicyDocumentText(input: {
       }
     }
     return {
+      recoveryDiagnostic,
       attempts: [{
         mode: "rendered",
         requestedUrl: input.url,
@@ -3339,9 +3527,16 @@ async function fetchRenderedPolicyDocumentText(input: {
       text: "",
     };
   } finally {
+    if (captureTimer) clearTimeout(captureTimer);
     releaseAbortContext?.();
     await sameContextRecoveryPage?.close().catch(() => undefined);
-    await context?.close().catch(() => undefined);
+    const close = context?.close().catch(() => undefined);
+    if (input.hardDeadlineAtMs === undefined) await close;
+    else {
+      let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([close, new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 200); })]);
+      if (cleanupTimer) clearTimeout(cleanupTimer);
+    }
   }
 }
 
@@ -3880,9 +4075,23 @@ async function warmPolicyDocumentFetchCache(input: {
         remainingPolicyFetchMs(input.input, input.moduleStartedAtMs),
         input.input.signal,
       );
-      // Prepare only already-fetched deterministic text: no child fetches,
-      // browser work, models, artifacts, ownership decisions or candidate promotion.
+      // A unique deterministic California child uses the existing one-hop
+      // slot while footer discovery runs, rather than losing that selected
+      // fetch when discovery reaches its soft deadline. No model or new slot.
       if (!fetched.ok || input.input.signal?.aborted || deadlineRemainingMs(input.input.absoluteDeadlineAtMs) < 250) return;
+      if(candidate.deterministicSurfaceType==="privacy_policy" && !input.fetchCaches.warmedCaliforniaSupplement && !isCommonPathFallbackCandidate(candidate)) {
+        const parentUrl=successfulPolicyFetchFinalUrl(fetched,candidate.normalizedUrl);
+        const children=highValueSecondaryCandidatesFromPolicyPage(parentUrl,fetched.html??fetched.text,fetched.text);
+        if(children.some(child=>californiaDocumentPriority({...child,traversalDepth:1})===0) && !children.some(isMaterialGdprNoticeSupplementCandidate)) {
+          const selected=await selectOneHopPolicyIndexChildren({input:input.input,indexCandidate:{...candidate,normalizedUrl:parentUrl},indexText:fetched.text,candidates:children});
+          const child=selected.fetchCandidates.find(child=>child.selectionReasonCodes?.includes("deterministic_california_supplement_selection"));
+          if(child && !input.fetchCaches.warmedCaliforniaSupplement) {
+            input.fetchCaches.warmedCaliforniaSupplement=child;
+            await fetchPolicyDocumentSingleFlight(input.fetchCaches.direct,child.normalizedUrl,
+              Math.min(POLICY_SUPPLEMENTAL_FETCH_TIMEOUT_MS,remainingPolicyFetchMs(input.input,input.moduleStartedAtMs)),input.input.signal).catch(()=>undefined);
+          }
+        }
+      }
       await recordPolicyTiming(input.timingBreakdown, "static policy analysis warmup",
         "Content-bound deterministic section/fact preparation overlaps rendered discovery; selected document and analysis mode must match before reuse.", async () => {
           const late = input.input.internalBudgetMs <= POLICY_FAST_RENDERED_DISCOVERY_TIMEOUT_MS;
@@ -3957,7 +4166,7 @@ export function extractCandidates(baseUrl: string, html: string, visibleText: st
       url: normalizedUrl,
       surroundingText: surroundingTextExcerpt,
     });
-    const deterministic = allowGdprNoticeSupplement && isGdprNoticeSupplementLink(candidateText, normalizedUrl, surroundingTextExcerpt ?? "")
+    const deterministic = allowGdprNoticeSupplement && !["california_notice", "notice_at_collection"].includes(deterministicBase.surfaceType) && isGdprNoticeSupplementLink(candidateText, normalizedUrl, surroundingTextExcerpt ?? "")
       ? {
           ...deterministicBase,
           surfaceType: "privacy_policy" as const,
@@ -4700,7 +4909,7 @@ async function extractRenderedCandidates(
         matchStrength: deterministic.matchStrength,
         linkText: candidate.text,
       });
-      if (!fetchable && !isPreferenceControlSurface(deterministic.surfaceType, candidate.text)) {
+      if (!fetchable && !["california_notice", "notice_at_collection"].includes(deterministic.surfaceType) && !isPreferenceControlSurface(deterministic.surfaceType, candidate.text)) {
         return [];
       }
       const observationOnly = !fetchable || isObservationOnlyPreferenceControl(deterministic.surfaceType, candidate.text);
@@ -5233,6 +5442,7 @@ function deterministicFetchFallback(candidates: PolicySurfaceCandidate[]): Polic
     )
     .sort((left, right) =>
       surfacePriority(left.deterministicSurfaceType) - surfacePriority(right.deterministicSurfaceType) ||
+      policyDocumentScopePriority(left) - policyDocumentScopePriority(right) ||
       materialPolicySupplementPriority(left) - materialPolicySupplementPriority(right) ||
       policyCandidateDiscoveryPriority(left) - policyCandidateDiscoveryPriority(right) ||
       policyCandidateProtectionPriority(left) - policyCandidateProtectionPriority(right) ||
@@ -5716,7 +5926,7 @@ function uniqueEvidenceRefs(values: EvidenceRef[]): EvidenceRef[] {
   });
 }
 
-function highValueSecondaryCandidatesFromPolicyPage(
+export function highValueSecondaryCandidatesFromPolicyPage(
   baseUrl: string,
   html: string,
   visibleText: string,
@@ -5725,6 +5935,7 @@ function highValueSecondaryCandidatesFromPolicyPage(
     ...extractCandidates(baseUrl, html, visibleText, true),
     ...extractControlCandidates(baseUrl, html, visibleText),
   ]).filter((candidate) =>
+    canonicalPolicyUrlIdentity(candidate.normalizedUrl).replace(/\/+$/, "") !== canonicalPolicyUrlIdentity(baseUrl).replace(/\/+$/, "") &&
     isHighValuePolicySupplement(candidate) &&
     isSameOriginPolicyPageSupplement(baseUrl, candidate)
   );
@@ -5739,8 +5950,8 @@ function isMaterialGdprNoticeSupplementCandidate(
 
 function isBoundedSameOriginPolicySupplement(candidate: PolicySurfaceCandidate): boolean {
   return candidate.traversalDepth === 1 &&
-    candidate.deterministicSurfaceType === "privacy_policy" &&
-    candidate.sameOrigin &&
+    ["privacy_policy", "california_notice", "notice_at_collection"].includes(candidate.deterministicSurfaceType) &&
+    (candidate.parentSurfaceUrl ? sameOrigin(candidate.parentSurfaceUrl, candidate.normalizedUrl) : candidate.sameOrigin) &&
     candidate.fetchable &&
     Math.max(candidate.assisted?.confidence ?? 0, candidate.deterministicScore) >= 0.72;
 }
@@ -5749,7 +5960,7 @@ function retainAtMostOneBoundedPolicySupplement(
   candidates: PolicySurfaceCandidate[],
 ): PolicySurfaceCandidate[] {
   let boundedSupplementRetained = false;
-  return candidates.filter((candidate) => {
+  return [...candidates].sort((a,b)=>californiaDocumentPriority(a)-californiaDocumentPriority(b)).filter((candidate) => {
     if (!isBoundedSameOriginPolicySupplement(candidate)) {
       return true;
     }
@@ -5761,13 +5972,45 @@ function retainAtMostOneBoundedPolicySupplement(
   });
 }
 
-async function selectOneHopPolicyIndexChildren(input: {
+type OneHopPolicySelectionInput = {
   input: PolicySurfaceScannerInput;
   indexCandidate: PolicySurfaceCandidate;
   indexTitle?: string;
   indexText: string;
   candidates: PolicySurfaceCandidate[];
-}): Promise<{
+  diagnostics?: PolicyFetchDiagnosticsCollector;
+};
+
+export async function selectOneHopPolicyIndexChildren(input: OneHopPolicySelectionInput) {
+  const selection = await selectOneHopPolicyIndexChildrenInternal(input);
+  if (input.diagnostics) {
+    const records = input.diagnostics.oneHopSelections ??= [];
+    if (records.length < 12) {
+      const selected = new Set(selection.fetchCandidates.map(candidate => candidate.normalizedUrl));
+      const candidates = [...selection.fetchCandidates, ...selection.observedChildCandidates]
+        .sort((left, right) => californiaDocumentPriority(left) - californiaDocumentPriority(right))
+        .slice(0, 16);
+      records.push({
+        policyVersion: "one_hop_selection.v2",
+        parentUrl: input.indexCandidate.normalizedUrl,
+        selectedUrls: [...selected].slice(0, 8),
+        candidates: candidates.map(candidate => ({
+          url: candidate.normalizedUrl,
+          surfaceType: candidate.deterministicSurfaceType,
+          score: Math.max(candidate.assisted?.confidence ?? 0, candidate.deterministicScore),
+          fetchable: candidate.fetchable,
+          traversalDepth: candidate.traversalDepth,
+          parentOriginMatches: sameOrigin(input.indexCandidate.normalizedUrl, candidate.normalizedUrl),
+          selected: selected.has(candidate.normalizedUrl),
+          reasonCodes: (candidate.selectionReasonCodes ?? []).slice(0, 16),
+        })),
+      });
+    }
+  }
+  return selection;
+}
+
+async function selectOneHopPolicyIndexChildrenInternal(input: OneHopPolicySelectionInput): Promise<{
   fetchCandidates: PolicySurfaceCandidate[];
   observedChildCandidates: PolicySurfaceCandidate[];
 }> {
@@ -5824,6 +6067,22 @@ async function selectOneHopPolicyIndexChildren(input: {
     };
   }
 
+  const californiaSupplement = privacyCandidates.filter(candidate => californiaDocumentPriority(candidate) === 0)
+    .sort((a,b)=>b.deterministicScore-a.deterministicScore || a.normalizedUrl.localeCompare(b.normalizedUrl))[0];
+  if (californiaSupplement && !privacyCandidates.some(isMaterialGdprNoticeSupplementCandidate)) {
+    return {
+      fetchCandidates: [{
+        ...californiaSupplement,
+        selectionReasonCodes: uniqueStrings([
+          ...(californiaSupplement.selectionReasonCodes ?? []),
+          "deterministic_california_supplement_selection",
+        ]),
+      }],
+      observedChildCandidates: allPrivacyCandidates
+        .filter(candidate => candidate.candidateId !== californiaSupplement.candidateId)
+        .map(markUnselectedPrivacyIndexChild),
+    };
+  }
   const materialGdprSupplements = privacyCandidates
     .filter(isMaterialGdprNoticeSupplementCandidate)
     .sort((left, right) =>
@@ -6043,7 +6302,7 @@ function selectRegionalPrivacyDocument(
 function privacyIndexPrivacyChildCandidate(
   candidate: PolicySurfaceCandidate,
 ): PolicySurfaceCandidate | undefined {
-  if (candidate.deterministicSurfaceType === "privacy_policy") return candidate;
+  if (["privacy_policy", "california_notice", "notice_at_collection"].includes(candidate.deterministicSurfaceType)) return candidate;
   if (
     candidate.deterministicSurfaceType !== "cookie_policy" ||
     !candidate.deterministicClassifierReasonCodes.includes("variant_combined_privacy_cookie_surface")
@@ -6096,6 +6355,12 @@ function markUnselectedPrivacyIndexChild(
     selectionReasonCodes: uniqueStrings([
       ...(candidate.selectionReasonCodes ?? []),
       "not_selected_for_bounded_fetch",
+      ...(candidate.traversalDepth !== 1 ? ["supplement_traversal_depth_ineligible"] : []),
+      ...(!["privacy_policy", "california_notice", "notice_at_collection"].includes(candidate.deterministicSurfaceType)
+        ? ["supplement_surface_type_ineligible"] : []),
+      ...(candidate.parentSurfaceUrl && !sameOrigin(candidate.parentSurfaceUrl,candidate.normalizedUrl) ? ["supplement_parent_origin_mismatch"] : []),
+      ...(!candidate.fetchable ? ["supplement_not_fetchable"] : []),
+      ...(Math.max(candidate.assisted?.confidence ?? 0,candidate.deterministicScore)<0.72 ? ["supplement_confidence_below_threshold"] : []),
     ]),
   };
 }
@@ -6137,8 +6402,12 @@ export function assessGoverningPolicyBodyEvidence(input: {
     !input.candidate.deterministicClassifierReasonCodes.includes(
       "variant_combined_privacy_terms_surface",
     );
+  const regionalNoticeCandidate = ["california_notice", "notice_at_collection"].includes(input.candidate.deterministicSurfaceType) &&
+    (["direct", "equivalent"].includes(input.candidate.deterministicMatchStrength ?? "") ||
+      input.candidate.deterministicClassifierReasonCodes.some(reason => ["match_strength_direct", "match_strength_equivalent"].includes(reason))) &&
+    input.candidate.deterministicClassifierReasonCodes.includes("context_satisfied");
   const exactPolicyCandidate = isExactPolicyDocumentCandidate(input.candidate) ||
-    classifierConfirmedStandalonePolicyCandidate;
+    classifierConfirmedStandalonePolicyCandidate || regionalNoticeCandidate;
   const textCoverageComplete = input.documentTextCoverageStatus === "complete";
   const substantiveAssessment = input.documentSubstance.reasonCode === "substantive_topic_match" ||
     input.documentSubstance.reasonCode === "substantive_privacy_signals";
@@ -6235,8 +6504,21 @@ export function assessPolicyDocumentRoleForChildSelection(
   role: "policy_document" | "policy_index" | "unknown";
   reasonCodes: string[];
 } {
+  if (["california_notice", "notice_at_collection"].includes(candidate.deterministicSurfaceType)) {
+    // Regional notices must prove an owned, substantive, completely retained
+    // body upstream. A link label or guessed route alone cannot qualify.
+    return options.governingPolicyBodyAssessment?.state === "substantive"
+      ? { role: "policy_document", reasonCodes: ["substantive_regional_privacy_notice_body_retained"] }
+      : { role: "unknown", reasonCodes: ["regional_notice_body_not_verified"] };
+  }
   if (candidate.deterministicSurfaceType !== "privacy_policy") {
     return { role: "unknown", reasonCodes: ["non_privacy_surface_document_role_unknown"] };
+  }
+  const body=options.governingPolicyBodyAssessment;
+  if(body?.state==="insufficient" && body.canonicalContextTermCount===0 &&
+      (options.substantiveDisclosureSignalCount??body.substantiveDisclosureSignalCount)===0 &&
+      (options.evidenceBoundObservedTopicCount??body.evidenceBoundObservedTopicCount)===0) {
+    return {role:"unknown",reasonCodes:["retained_document_has_no_substantive_privacy_body"]};
   }
   const nonPolicyRole = nonPolicyDocumentReason({ url: candidate.normalizedUrl, linkText: candidate.linkText });
   if (nonPolicyRole) return { role: "unknown", reasonCodes: [nonPolicyRole] };
@@ -6382,6 +6664,11 @@ function isHighValuePolicySupplement(candidate: PolicySurfaceCandidate): boolean
   ].includes(candidate.deterministicSurfaceType);
 }
 
+function californiaDocumentPriority(candidate: PolicySurfaceCandidate): number {
+  return ["california_notice", "notice_at_collection"].includes(candidate.deterministicSurfaceType) ||
+    candidate.deterministicSurfaceType === "privacy_policy" && candidate.traversalDepth === 1 && /california|ccpa|ca-consumer-privacy/.test(safeUrlPath(candidate.normalizedUrl).toLowerCase()) ? 0 : 1;
+}
+
 function surfacePriority(surfaceType: PolicySurfaceObservation["surfaceType"]): number {
   const index = [
     "privacy_policy",
@@ -6442,7 +6729,7 @@ async function rankCandidatesWithRequiredNano(
     [...byId.values()]
       .filter((candidate) =>
         !isObviousCommercePolicyFalsePositive(candidate) &&
-        (isExactPolicyDocumentCandidate(candidate) ||
+        (["california_notice", "notice_at_collection"].includes(candidate.deterministicSurfaceType) && candidate.deterministicMatchStrength === "direct" || isExactPolicyDocumentCandidate(candidate) ||
           (candidate.seedSource === "prior_scan_hint" &&
             candidate.deterministicSurfaceType === "privacy_policy" &&
             candidate.fetchable &&
@@ -6608,7 +6895,7 @@ function observationFromCandidate(
     parentObservationId: candidate.parentObservationId,
     parentSurfaceUrl: candidate.parentSurfaceUrl,
     traversalDepth: candidate.traversalDepth ?? 0,
-    selectionReasonCodes: candidate.selectionReasonCodes ?? [],
+    selectionReasonCodes: input.selectionReasonCodes ?? candidate.selectionReasonCodes ?? [],
     selector: candidate.selector,
     surroundingTextExcerpt: candidate.surroundingTextExcerpt,
     discoveryMethod: candidate.discoveryMethod,
@@ -7078,11 +7365,13 @@ function localeHintsFromDocumentLanguage(
 }
 
 function isPreferenceControlSurface(surfaceType: PolicySurfaceObservation["surfaceType"], value: string): boolean {
+  if(["privacy_policy","california_notice","notice_at_collection"].includes(surfaceType))return false;
   return isPreferenceControlSurfaceType(surfaceType) ||
     isPreferenceControlSurfaceType(classifySurface({ linkText: value }).surfaceType);
 }
 
 function isObservationOnlyPreferenceControl(surfaceType: PolicySurfaceObservation["surfaceType"], value: string): boolean {
+  if(["privacy_policy","california_notice","notice_at_collection"].includes(surfaceType))return false;
   return isObservationOnlyPreferenceControlSurfaceType(surfaceType) ||
     isObservationOnlyPreferenceControlSurfaceType(classifySurface({ linkText: value }).surfaceType);
 }
@@ -8075,6 +8364,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 type FetchTextResult = {
+  recoveryDiagnostic?:LegalDisclosureRecoveryDiagnostic;
+  accessBlockedEarlier?: boolean;
   bodyTruncated?: boolean;
   attempts?: PolicyFetchAttemptDiagnostic[];
   documentFormat?: "pdf" | "text";
@@ -8083,6 +8374,15 @@ type FetchTextResult = {
   status?: number;
   text: string;
 };
+
+// Run-scoped caches also define the contact boundary. Preserve work already in
+// flight, but never start a variant, child or rendered recovery after a block.
+const blockBoundPolicyFetchCaches = new WeakSet<Map<string,Promise<FetchTextResult>>>();
+const blockedPolicyFetchCaches = new WeakSet<Map<string,Promise<FetchTextResult>>>();
+const policyFetchBlocked = ():FetchTextResult=>({ok:false,text:"",accessBlockedEarlier:true,attempts:[]});
+function isPolicyAccessBlock(result:FetchTextResult) {
+ return [401,403,429,451].includes(result.status??0) || assessPolicyTextQuality(result.text).reason==="low_quality_access_challenge";
+}
 
 /** Homepage access only: later policy-subpage success cannot replace this outcome. */
 export function assessPolicyHomepageAccess(homepage: Pick<FetchTextResult, "ok" | "status" | "text">): NonNullable<ScanModuleRun["siteFacingNavigation"]>["terminalAccess"] {
@@ -8153,7 +8453,11 @@ function fetchPolicyDocumentSingleFlight(
   if (existing) {
     return existing;
   }
-  const pending = fetchText(url, timeoutMs, signal);
+  if(blockedPolicyFetchCaches.has(cache))return Promise.resolve(policyFetchBlocked());
+  const pending = fetchText(url, timeoutMs, signal).then(result=>{
+    if(blockBoundPolicyFetchCaches.has(cache)&&isPolicyAccessBlock(result))blockedPolicyFetchCaches.add(cache);
+    return result;
+  });
   cache.set(key, pending);
   return pending;
 }
@@ -8193,6 +8497,7 @@ function fetchRenderedPolicyDocumentSingleFlight(
     primeSession?: boolean;
     url: string;
     timeoutMs: number;
+    hardDeadlineAtMs?: number;
   },
 ): Promise<FetchTextResult> {
   // Keep failure-recovery and low-quality-text rendering in separate buckets:
@@ -8207,10 +8512,12 @@ function fetchRenderedPolicyDocumentSingleFlight(
   if (existing) {
     return existing;
   }
-  const pending = fetchCaches.runRenderedFetch(() => fetchRenderedPolicyDocumentText({
-    ...input,
-    browserRuntime: fetchCaches.browserRuntime,
-  }));
+  const pending = fetchCaches.runRenderedFetch(async () => {
+    if(blockedPolicyFetchCaches.has(fetchCaches.direct))return policyFetchBlocked();
+    const result=await fetchRenderedPolicyDocumentText({...input,browserRuntime:fetchCaches.browserRuntime});
+    if(blockBoundPolicyFetchCaches.has(fetchCaches.direct)&&isPolicyAccessBlock(result))blockedPolicyFetchCaches.add(fetchCaches.direct);
+    return result;
+  });
   fetchCaches.rendered.set(key, pending);
   return pending;
 }
@@ -8359,13 +8666,15 @@ async function fetchTextOnce(url: string, timeoutMs: number, parentSignal?: Abor
         text: "",
       };
     }
+    const decodedText = decodeFetchedPolicyText(decodedBody.body, contentType);
+    const retainedHtml = compactPolicyResponseHtml(decodedText);
     return {
       attempts: [{ ...attemptBase, ...decodingAttempt, outcome: "fetched" }],
-      bodyTruncated: truncated || decodeFetchedPolicyText(decodedBody.body, contentType).length > MAX_FETCHED_TEXT_CHARS,
+      bodyTruncated: truncated || retainedHtml.length > MAX_FETCHED_TEXT_CHARS,
       documentFormat: "text",
       ok: true,
       status: response.status,
-      text: boundedFetchedText(decodeFetchedPolicyText(decodedBody.body, contentType), MAX_FETCHED_TEXT_CHARS),
+      text: boundedFetchedText(retainedHtml, MAX_FETCHED_TEXT_CHARS),
     };
   } catch (error) {
     const outcome: PolicyFetchAttemptOutcome =
@@ -10326,6 +10635,16 @@ function isCanonicalConsentSurfaceHtmlBlock(block: string) {
     /\bclass=["'][^"']*(?:^|[\s_-])hidden(?:[\s_-][^"']*)?["']/i.test(openingTag);
   const structuralConsentSurface = /\b(?:id|class|role)=["'][^"']*(?:consent|cmp|cookie[-_]?banner|preference[-_]?center|privacy[-_]?choices?|(?:^|[\s_-])banner(?:[\s_-]|$))[^"']*["']/i.test(openingTag);
   if (structuralConsentSurface) {
+    const text=htmlToVisibleText(block);
+    const disclosureTopics=locateCaliforniaReviewTopics(text).topics.length;
+    const decisionControls=[...block.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/gi)].some(match=>{
+      const result=classifyConsentControlLabel({label:htmlToVisibleText(match[0]),hasConsentContext:true,usage:"observation"});
+      return ["accept","reject","necessary_only"].includes(result.intent);
+    });
+    // A legal disclosure can be titled "Privacy choices" and contain a
+    // collapsed rights list. The section name alone is not a CMP surface.
+    if(text.length>=500 && (disclosureTopics>=2||gdprTransparencyTopicMatchCount(text)>=2) &&
+       !decisionControls && !/<(?:input|select|textarea)\b/i.test(block)) return false;
     return true;
   }
   if (!structurallyHidden && !/^<dialog\b/i.test(openingTag)) {
@@ -10423,7 +10742,7 @@ function collectStructuredPolicyTextValues(value: unknown, texts: string[], keyH
   }
 }
 
-async function renderedPolicySemanticTextCandidates(page: Page): Promise<string[]> {
+export async function renderedPolicySemanticTextCandidates(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const selectors = [
       "main",
@@ -10444,6 +10763,24 @@ async function renderedPolicySemanticTextCandidates(page: Page): Promise<string[
         const text = (element as HTMLElement).innerText?.replace(/\s+/g, " ").trim();
         if (text && text.length >= 120) {
           texts.push(text);
+          // Read already-rendered disclosure panels even while collapsed. No
+          // click, request, choice change or additional settling is required.
+          // Bound each panel through its actual ARIA relationship and retain
+          // the owning semantic document, never an unrelated hidden template.
+          if(element.matches('main,article,[role="main"]')) {
+            const panels=Array.from(element.querySelectorAll('[aria-controls]')).slice(0,32).flatMap(control=>{
+              if(control.closest('form,nav,header,footer,[role="dialog"],[role="alertdialog"]'))return [];
+              const id=control.getAttribute('aria-controls');if(!id||id.length>160)return [];
+              const matches=document.querySelectorAll(`#${CSS.escape(id)}`);
+              if(matches.length!==1)return [];
+              const panel=matches[0]!;
+              if(!element.contains(panel)||panel.querySelector('input,select,textarea,form')||panel.matches('dialog,[role="dialog"],[role="alertdialog"]'))return [];
+              return [panel];
+            });
+            const details=Array.from(element.querySelectorAll('details')).slice(0,32).filter(panel=>!panel.querySelector('input,select,textarea,form'));
+            const additions=Array.from(new Set([...panels,...details])).map(panel=>panel.textContent?.replace(/\s+/g,' ').trim()??'').filter(value=>value.length>=80&&!text.includes(value)).slice(0,32);
+            if(additions.length)texts.push(`${text} ${additions.join(' ')}`.slice(0,256000));
+          }
         }
       }
     }
@@ -10451,7 +10788,7 @@ async function renderedPolicySemanticTextCandidates(page: Page): Promise<string[
   }).catch(() => []);
 }
 
-function bestRenderedPolicyDocumentText(html: string, textCandidates: string[]): string {
+export function bestRenderedPolicyDocumentText(html: string, textCandidates: string[]): string {
   const policyHtml = stripCanonicalConsentSurfaceHtml(html);
   const sanitizedTextCandidates = (policyHtml === html ? textCandidates : textCandidates.slice(1))
     .map(stripConsentSurfacePreambleFromPolicyText);
@@ -10505,6 +10842,8 @@ function shouldAdoptPolicyDocumentText(
   const candidateQuality = assessPolicyTextQuality(candidateText);
   const candidateTopicCount = gdprTransparencyTopicMatchCount(candidateText);
   const currentTopicCount = gdprTransparencyTopicMatchCount(currentText);
+  if(candidateQuality.usable && candidateText.includes(currentText) && candidateText.length>=currentText.length+120 &&
+      candidateTopicCount>=currentTopicCount && candidateScore>=currentScore-20) return true;
   if (
     options.allowTopicDominant &&
     candidateTopicCount > currentTopicCount &&
@@ -10795,6 +11134,18 @@ function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+/** Preserve the complete source DOM before large application bundles consume
+ * the retained HTML allowance. This removes executable/style bytes, not body
+ * text, links, disclosure panels or structured policy metadata. No script runs. */
+export function compactPolicyResponseHtml(value: string): string {
+  if (value.length <= MAX_FETCHED_TEXT_CHARS || !/<(?:html|body|main)\b/i.test(value)) return value;
+  return value
+    .replace(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi, (block, attrs: string, source: string) =>
+      /type\s*=\s*["']application\/ld\+json["']/i.test(attrs) || /\b(?:articleBody|privacyPolicy|privacyNotice)\b/i.test(source.slice(0,20_000)) ? block : " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi," ")
+    .replace(/<!--(?:[\s\S]*?)-->/g," ");
+}
+
 function boundedFetchedText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
     return value;
@@ -10954,6 +11305,7 @@ export function isFetchablePolicyUrlForPolicySurface(
   if (sameOrigin(baseUrl, url)) {
     return true;
   }
+  if (["california_notice", "notice_at_collection"].includes(surfaceType ?? "") && /notice-at-collection|california|ccpa|ca-consumer-privacy/i.test(url)) return true;
   if (surfaceType === "terms") {
     return /terms|legal|conditions|user-agreement|service-agreement/i.test(url);
   }
@@ -10998,7 +11350,7 @@ export function isFetchablePolicyCandidateForPolicySurface(input: {
   }
 
   if (
-    !["privacy_policy", "cookie_policy"].includes(input.surfaceType ?? "unknown") ||
+    !["privacy_policy", "cookie_policy", "california_notice", "notice_at_collection"].includes(input.surfaceType ?? "unknown") ||
     input.matchStrength !== "direct"
   ) {
     return false;

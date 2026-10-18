@@ -1,4 +1,5 @@
 import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import {sanitizeEvidenceRequestUrl, sanitizeEvidenceRequestPath} from "@certscore/contracts";
 import type { GoogleConsentModeAssessment } from "@certscore/contracts";
 import { readRetainedGoogleConsentMode } from "./google-consent-mode-assessment";
 import { getReportUrlQueryKeys, stripReportUrlAnnotation } from "./report-facing-page-url";
@@ -210,18 +211,7 @@ function hostMatches(hostname: string, domain: string) {
 }
 
 function safeEvidenceUrl(value: string) {
-  try {
-    const url = new URL(stripReportUrlAnnotation(value));
-    url.username = "";
-    url.password = "";
-    if (url.search) {
-      url.search = "?redacted=1";
-    }
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return stripReportUrlAnnotation(value).replace(/[?#].*$/, "").slice(0, 500);
-  }
+  return sanitizeEvidenceRequestUrl(stripReportUrlAnnotation(value), {query:"marker"}) ?? "https://invalid.example/_redacted_";
 }
 
 const HOST_BOUND_VENDOR_DOMAINS: Array<{ pattern: RegExp; domains: string[] }> = [
@@ -535,7 +525,7 @@ export function buildPromotionGradePreconsentRequests(input: {
       redirectChain: getStringArray(row, ["redirectChain", "redirect_chain"]).slice(0, 8).map(safeEvidenceUrl),
       resourceType: getString(row, ["resourceType", "resource_type"]),
       method: getString(row, ["method", "requestMethod", "request_method"]),
-      pathSample: getString(row, ["pathSample", "path_sample", "path"]),
+      pathSample: getString(row, ["pathSample", "path_sample", "path"]) ? sanitizeEvidenceRequestPath(getString(row, ["pathSample", "path_sample", "path"])!) : null,
       cookieHeaderPresent: getBoolean(row, ["cookieHeaderPresent", "cookie_header_present"]),
       cookieNamesSent: getStringArray(row, ["cookieNamesSent", "cookie_names_sent"]).slice(0, 24),
       identifierLikeParametersObserved: getBoolean(row, ["identifierLikeParametersObserved", "identifier_like_parameters_observed", "hasIdentifierLikeParameters"]),

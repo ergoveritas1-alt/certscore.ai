@@ -150,6 +150,9 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
         rows={inventory.expiries.map(cookie => [cookie.visit, <CmpInventoryIdentity name={cookie.name} kind="cookie" />, formatRemainingDays(cookie.remainingSeconds)])} />
       <p>Time remaining when the cookie was captured.</p>
     </> : null}
+    {inventory?.privacyChoices?.length ? <CmpInventoryTable label={`Privacy choices · ${inventory.privacyChoices.length}`} columns={["Choice", "Availability", "Captured setting"]}
+      copyRows={inventory.privacyChoices.map(choice=>[choice.label,choice.enabled ? "Enabled" : "Inactive",choice.checked===null ? "Not captured" : choice.checked ? "Selected" : "Not selected"])}
+      rows={inventory.privacyChoices.map(choice=>[choice.label,choice.enabled ? "Enabled" : "Inactive",choice.checked===null ? "Not captured" : choice.checked ? "Selected" : "Not selected"])} /> : null}
     {inventory?.categories?.length ? <CmpInventoryTable label={`Category choices · ${inventory.categories.length}`} columns={["Category", "Captured setting"]}
       copyRows={inventory.categories.map(category => [category.name, category.checked === null ? "Not captured" : category.checked ? "On" : "Off"])}
       rows={inventory.categories.map(category => [category.name, category.checked === null ? "Not captured" : category.checked ? "On" : "Off"])} /> : null}
@@ -165,7 +168,7 @@ function CmpSupportingEvidence({ evidence }: { evidence: NonNullable<CmpAuditRow
         rows={inventory.declarations.map(cookie => [<CmpInventoryIdentity name={cookie.name} kind="cookie" />, cookie.purpose || "Not captured", ...(inventory.declarations!.some(item => item.inferredPurpose) ? [cookie.inferredPurpose?.category.replaceAll("_", " ") ?? "Unclassified"] : []), disclosureText(cookie.duration) || "Not captured", ...(inventory.declarations!.some(item => item.observedExpiry) ? [cookie.observedExpiry ? `${formatRemainingDays(cookie.observedExpiry.remainingSeconds)} days` : "—"] : [])])} />
       {inventory.declarations.some(cookie => cookie.observedExpiry) ? <p>Time remaining was measured after the Accept click, separately from CMP-stated retention.</p> : null}
     </> : null}
-    {inventory?.declarations?.some(cookie => cookie.inferredPurpose) ? <p>Inferred purposes use CertScore’s cookie registry, separately from the CMP’s descriptions.</p> : null}
+    {inventory?.declarations?.some(cookie => cookie.inferredPurpose) ? <p>Inferred purposes use CertScore.ai’s cookie registry, separately from the CMP’s descriptions.</p> : null}
     {inventory?.cookies?.length && !cookies ? <CookieMatchTable entries={inventory.cookies} /> : null}
     {comparison ? <>
       <CmpInventoryTable label="Accept / Reject comparison" columns={["Control", "Size (px)", "Fill contrast"]}

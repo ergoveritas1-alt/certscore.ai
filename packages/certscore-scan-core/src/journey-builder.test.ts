@@ -975,3 +975,9 @@ function vendorObservation(input: {
     matchedCookieNames: input.matchedCookieNames ?? [],
   };
 }
+
+test("first-party identifier parameter is classified without retaining its value", () => {
+  const signals = querySignalsFromUrl("https://gum.criteo.com/fpm/init?first_party_id=private-value&first_party_domain=example.test");
+  assert.deepEqual(signals.identifierParamNames, ["first_party_id"]);
+  assert.doesNotMatch(JSON.stringify(signals), /private-value/);
+});

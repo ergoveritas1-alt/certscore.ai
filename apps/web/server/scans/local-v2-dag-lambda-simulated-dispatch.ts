@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
@@ -213,7 +213,11 @@ export async function dispatchLocalV2DagSimulatedLambdaScan(input: {
   });
   let executionError: unknown = null;
   try {
-    await execution;
+    const output = await execution;
+    if (process.env.CERTSCORE_LOCAL_CAPTURE_DIAGNOSTICS === "1") {
+      const trace = `${output.stdout}\n${output.stderr}`.split("\n").filter(line => line.startsWith("LOCAL_CAPTURE_FAILURE ")).slice(0, 12).join("\n");
+      await writeFile(path.join(root, artifactDir, payload.scanId, "LocalCaptureDiagnostics.log"), trace);
+    }
   } catch (error) {
     executionError = error;
   }

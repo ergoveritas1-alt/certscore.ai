@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import {privacySupplementExclusion} from "@certscore/contracts";
 import { californiaCoverageSchema, classifyPrivacySurface, collectionSurfaceInventorySchema, isCurrentCaliforniaChoiceInspection, locateCaliforniaReviewTopics, policyTextEvidenceProjectionSchema,
   type CaliforniaPrivacyReview, type CaliforniaReviewCoverage, type CanonicalEvidenceBundle, type PolicyTextEvidenceProjection } from "@certscore/contracts";
 
@@ -16,12 +17,14 @@ export function projectCaliforniaReviewCoverage(bundle: CanonicalEvidenceBundle,
   const parsed = policyTextEvidenceProjectionSchema.safeParse(evidence?.projection);
   const projection = parsed.success && parsed.data.scanId === bundle.scanId && parsed.data.sourceBundle.sha256 === sourceHash &&
     parsed.data.sourceBundle.verificationStatus === "verified" ? parsed.data : null;
+  const excludedSupplement=(surface:CanonicalEvidenceBundle["policySurfaceObservations"][number])=>privacySupplementExclusion(surface,
+    bundle.policySurfaceObservations.find(parent=>parent.observationId===surface.parentObservationId)?.normalizedUrl);
   const scopedDocuments=(projection?.documents ?? []).filter(document=>{
     const surface=bundle.policySurfaceObservations.find(row=>row.observationId===document.observationId);
     // Guessed paths that do not exist and unrelated terms do not make the
     // separately retained governing privacy notice incomplete. Unknown sources
     // still fail closed; this never waives an observed material supplement.
-    return surface?.surfaceType!=="terms" && !(surface?.discoveryMethod==="guessed_common_path" &&
+    return surface?.surfaceType!=="terms" && !(surface && excludedSupplement(surface)) && !(surface?.discoveryMethod==="guessed_common_path" &&
       surface.linkObservationState!=="observed" && surface.documentFetchState==="failed" && [404,410].includes(surface.httpStatus??0));
   });
   const documents = scopedDocuments.filter(document => document.artifactVerificationStatus === "verified" &&
@@ -47,6 +50,7 @@ export function projectCaliforniaReviewCoverage(bundle: CanonicalEvidenceBundle,
   const refs = documents.map(document => document.evidenceRef);
   const unresolvedSupplement = bundle.policySurfaceObservations?.some(surface=>surface.traversalDepth === 1 &&
     ["privacy_policy","california_notice","notice_at_collection"].includes(surface.surfaceType) &&
+    !excludedSupplement(surface) &&
     !surface.selectionReasonCodes?.some(reason=>["policy_index_child_confirmed_irrelevant","specialized_notice_for_different_audience","not_material_to_target_privacy_notice"].includes(reason)) &&
     !documents.some(document=>document.evidenceRef === `policy-text:${surface.observationId}` && document.complete));
   const policyComplete = !unresolvedSupplement && documents.length > 0 && documents.every(document => document.complete) &&

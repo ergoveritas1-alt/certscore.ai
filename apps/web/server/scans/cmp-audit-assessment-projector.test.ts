@@ -1609,3 +1609,28 @@ test("Termly passive public policy hit tests survive canonical persistence witho
  delete input.cmpPreferencesEvidence;
  input.cmpBasicEvidence.privacyLinks[0]!.url='https://foreign.test/privacy';assert.equal(deriveCmpAuditAssessment(input),undefined);
 });
+
+test('verified linked privacy choices survive persistence and canonical concern policy without becoming cookie categories or score effects',()=>{
+ const input=bundle();
+ input.cmpPreferencesEvidence=cmpPreferencesEvidenceSchema.parse({...input.cmpPreferencesEvidence,
+   finalUrl:'https://example.com/settings',documentToken:'linked-loader',
+   inspectionDiagnostic:{revision:'cmp_preferences.v17',budgetMs:6510,phase:'preference_inventory'},
+   linkedPreferenceNavigation:{policyVersion:'read_only_linked_preferences.v1',sourceUrl:input.url,sourceDocumentToken:'parent-loader',label:'Privacy Settings',destinationUrl:'https://example.com/settings',documentToken:'linked-loader'},
+   action:{count:0,intent:'options',label:null,opened:false},support:{state:'partial',provider:null,recipeVersion:'bounded_cmp_preferences.v1',reason:'read_only_linked_privacy_preferences'},
+   controls:[{label:'Accept Standard Advertising Settings (Opt In)',kind:'unclassified',enabled:true,checked:true},{label:'Do Not Sell or Share My Personal Information (Opt Out)',kind:'unclassified',enabled:true,checked:false}],
+   controlInventoryComplete:false,declarations:[],privacyLinks:[],
+   checkpoints:{version:'cmp_partial_capture.v1',documentToken:'linked-loader',privacyLinks:false,declarations:false,controls:true,controlsSurface:'preferences'},
+ });
+ const audit=deriveCmpAuditAssessment(input)!;const row=audit.rows.find(row=>row.id==='categories')!;
+ assert.equal(row.status,'partially_assessed');assert.equal(row.inventory?.privacyChoices?.length,2);assert.equal(row.inventory?.categories,undefined);
+ const assessment=consentControlAssessmentSchema.parse({...observedControlAssessment,cmpAudit:audit});
+ const persisted=withPersistedFirstLayerConsentEvidence({consentControlAssessment:assessment},{consent_control_assessment:assessment})!;
+ const concerns=buildNormalizedConcerns({runtimeArtifacts:persisted,reviewFindingCandidates:[],validationFindings:[]});
+ const cmp=concerns.filter(concern=>concern.originKey.startsWith('consent.cmp_audit.'));
+ assert.ok(cmp.every(concern=>(concern.scoreEffects?.length??0)===0));
+ const report=projectCmpAudit({scanId:'scan-1',consentControlAssessment:assessment,normalizedConcerns:concerns});
+ const projected=report.rows.find(row=>row.id==='categories')!;
+ assert.equal(projected.label,'Privacy choices available');assert.equal(projected.status,'Partially assessed');assert.deepEqual(projected.supportingEvidence?.inventory?.privacyChoices,row.inventory?.privacyChoices);
+ const forged=structuredClone(input);forged.cmpPreferencesEvidence!.linkedPreferenceNavigation!.destinationUrl='https://external.test/settings';
+ assert.equal(deriveCmpAuditAssessment(forged),undefined);
+});

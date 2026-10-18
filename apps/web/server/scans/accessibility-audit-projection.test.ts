@@ -3,10 +3,10 @@ import test from "node:test";
 import { createRequire } from "node:module";
 import type { CanonicalEvidenceBundle } from "@certscore/contracts";
 import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
-import { projectAccessibilityAudit, projectAdditionalPageAccessibilityAudit } from "./accessibility-audit-projection";
+import { projectAccessibilityAudit, projectAdditionalPageAccessibilityAudit, projectPreferenceAccessibilityAudit } from "./accessibility-audit-projection";
 import { createHash } from "node:crypto";
 import type { CrawlObservation } from "@website-signal-risk-scanner/shared";
-import { accessibilityDeductionBreakdown } from "../../lib/scans/accessibility-score-policy";
+import { accessibilityDeductionBreakdown,buildAccessibilityScoreEffects } from "../../lib/scans/accessibility-score-policy";
 import { buildNormalizedConcerns } from "../../lib/scans/normalized-concerns";
 import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findings";
 import { projectAccessibilityAuditSummary } from "../../lib/scans/accessibility-audit-evidence";
@@ -312,4 +312,32 @@ test("main-document positives survive canonical persistence while child-frame co
   const drifted=structuredClone(input);drifted.runtimeMetadataSnapshots![0]!.documentIdentity!.token="foreign";
   const rejected=projectAccessibilityAudit(drifted,source,audit.documentUrl)!;
   assert.equal(rejected.observation.frameCoverage,undefined);assert.deepEqual(rejected.observation.violations,[]);
+});
+
+
+test("opened preference accessibility preserves its lane through concerns, shared WCAG scoring and binding rejection",()=>{
+ const input=bundle(),a=accessibilityAuditFixture();input.url=a.documentUrl;
+ const packet={contractVersion:"certscore.cmp-preferences-evidence.v1",policyVersion:"bounded_cmp_preferences.v1",scanId:input.scanId,parentDispatchSha256:"b".repeat(64),
+  targetUrl:input.url,finalUrl:input.url,documentToken:"preference-loader",startedAt:input.startedAt,completedAt:input.completedAt,status:"completed",
+  support:{state:"partial",provider:"HubSpot Consent Banner",recipeVersion:"hubspot_preferences.v2",reason:"bounded_visible_preference_inspection"},
+  action:{count:1,intent:"options",label:"Manage Cookies",opened:true},controls:[],controlInventoryComplete:false,privacyLinks:[],declarations:[],declarationInventoryComplete:false,limitations:[],
+  checkpoints:{version:"cmp_partial_capture.v1",documentToken:"preference-loader",privacyLinks:true,declarations:true,controls:true,controlsSurface:"preferences"},
+  inspectionDiagnostic:{revision:"cmp_preferences.v13",budgetMs:17000,phase:"completed",surfaceBinding:{version:"cmp_surface_binding.v1",mode:"registered_deferred",priorMatches:0,outcome:"opened",verification:{version:"cmp_panel_verification.v1",result:"verified",role:"alertdialog"}}},
+  accessibilityAudit:{contractVersion:"certscore.cmp-preference-accessibility.v1",scanId:input.scanId,sourceLane:"cmp_preferences",scope:"opened_preference_panel",documentUrl:input.url,documentToken:"preference-loader",panelSelector:"#preferences",engine:"axe-core",engineVersion:a.engineVersion,status:"completed",positiveFindingsOnly:true,
+    startedAt:"2026-10-09T12:00:07.000Z",completedAt:"2026-10-09T12:00:07.200Z",durationMs:200,rulesEvaluated:["button-name"],violations:[a.violations.find(r=>r.ruleId==="button-name")!],reviewItems:[]}};
+ input.cmpPreferencesEvidence=packet as never;
+ const preferenceAccessibilityAudit=projectPreferenceAccessibilityAudit(input,source);assert.ok(preferenceAccessibilityAudit);
+ const runtimeArtifacts={preferenceAccessibilityAudit};
+ const concerns=buildNormalizedConcerns({runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[]});assert.equal(concerns.length,1);assert.equal(concerns[0]!.categoryId,"accessibility");
+ const proof=concerns[0]!.evidenceBundle.rawEvidence!.accessibilityAuditProvenance as Record<string,unknown>;assert.equal(proof.sourceLane,"cmp_preferences");assert.equal(proof.scope,"opened_preference_panel");
+ assert.equal(buildAccessibilityScoreEffects("semantic_labeling_accessibility_issue",concerns[0]!.evidenceBundle.rawEvidence).length,1,JSON.stringify(concerns[0]!.evidenceBundle.rawEvidence));
+ const findings=buildUnifiedFindingDisplayPackets({runtimeArtifacts,reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+ assert.ok(findings.some(f=>f.unifiedFindingId==="semantic_labeling_accessibility_issue"));assert.equal(accessibilityDeductionBreakdown(findings.flatMap(f=>f.scoreEffects??[])).deductionPoints,4,JSON.stringify({concerns,findings}));
+ const withMain={...runtimeArtifacts,accessibilityAudit:projectAccessibilityAudit(input,source,a.documentUrl)};
+ const duplicate=buildUnifiedFindingDisplayPackets({runtimeArtifacts:withMain,reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map()});
+ assert.ok(accessibilityDeductionBreakdown(duplicate.flatMap(f=>f.scoreEffects??[])).deductionPoints<=12);
+ assert.equal(projectPreferenceAccessibilityAudit(input,{...source,verificationStatus:"unverified"}),null);
+ for(const patch of [{documentToken:"other"},{finalUrl:"https://other.test/"},{action:{...packet.action,opened:false}},{checkpoints:{...packet.checkpoints,controlsSurface:"first_layer"}}]){
+  assert.equal(projectPreferenceAccessibilityAudit({...input,cmpPreferencesEvidence:{...packet,...patch}} as never,source),null);
+ }
 });

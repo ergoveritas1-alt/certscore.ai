@@ -19,7 +19,7 @@ test("review selector is compact and exposes both focus choices", () => {
 test("California evidence is scoped to CCPA and remains compact when unavailable", () => {
   assert.equal(renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="gdpr_eprivacy" />), "");
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" />);
-  assert.match(html, /California privacy choices/);
+  assert.match(html, /California privacy review/);
   assert.match(html, /Evidence unavailable/);
   assert.match(html, /does not establish that these items are absent/);
   assert.doesNotMatch(html, /<details[^>]+open=|0 retained choices/);
@@ -38,11 +38,12 @@ test("retained California choices and notices remain accessible only in CCPA foc
   };
   assert.equal(renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="gdpr_eprivacy" evidence={evidence} />), "");
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" evidence={evidence} />);
-  assert.match(html, /1 observed choice · 1 notice · 1 topic found/);
+  assert.match(html, /1 choice · 1 notice/);
   assert.match(html, /href="https:\/\/example.test\/choices"/);
   assert.match(html, /You can request deletion/);
-  assert.match(html, /1 visible, named privacy-choice link was verified/);
-  assert.match(html, /Retained notice text covers privacy rights/);
+  assert.match(html, /Choices found/);
+  assert.match(html, /Disclosures captured/);
+  assert.match(html, /Privacy rights/);
   assert.match(html, /View retained passages/);
   assert.match(html, /Evidence scope/);
   assert.doesNotMatch(html, /Opt-out functionality and notice completeness were not tested/);
@@ -61,7 +62,7 @@ test("California evidence distinguishes identified links from verified visitor-f
       evidenceRef: "policy-surface:cookies", verification: "visibility_unverified" }],
   };
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" evidence={evidence} />);
-  assert.match(html, /0 observed choices · 1 link to review · 0 notices/);
+  assert.match(html, /0 choices · 0 notices/);
   assert.match(html, /Link identified: “Cookie Settings” · visibility not verified/);
   assert.doesNotMatch(html, /Observed: “Cookie Settings”/);
 });
@@ -84,4 +85,39 @@ test("privacy workpaper rejects evidence bound to another report", () => {
   const html = renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" scanId="current" evidence={{ ...evidence, controls: [], notices: [] }} />);
   assert.match(html, /Evidence unavailable/);
   assert.doesNotMatch(html, /Source SHA-256/);
+});
+
+
+test("California coverage has one linked summary and one complete evidence review without mutating assessments", async () => {
+  const {CaliforniaCoverageSummary} = await import("./regulatory-review-focus");
+  const {SitePriorityReview} = await import("./site-priority-review");
+  const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL} = await import("../../server/scans/california-review-coverage.fixture");
+  const {projectCaliforniaPrivacyReview} = await import("../../server/scans/california-privacy-review-projection");
+  const fixture = californiaCoverageFixture("Privacy Policy. California residents may request access, correction and deletion of personal information. We share personal information with service providers for billing. We use cookies for analytics.");
+  fixture.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v7";
+  fixture.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
+  const assessment=projectCaliforniaPrivacyReview(fixture.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,fixture.policyEvidence)!;
+  if(assessment.contractVersion!=="certscore.california-privacy-review.v7")throw Error("v7 expected");
+  const before=structuredClone(assessment);
+  const summary=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={assessment.reviewCoverage}/>);
+  assert.match(summary,/href="#california-privacy-evidence"/);
+  assert.equal((summary.match(/>California coverage</g)??[]).length,1);
+  assert.match(summary,/<details[^>]+group\/signal/);
+  assert.match(summary,/View California privacy review/);
+  assert.doesNotMatch(summary,/Rights clause assessment|Sale\/sharing clause assessment|Collection-notice matching/);
+  const detail=renderToStaticMarkup(<CaliforniaPrivacyWorkpaper focus="ccpa_cpra" scanId={assessment.scanId} assessment={assessment}
+    coverage={assessment.reviewCoverage} rightsAssessment={assessment.rightsAssessment} saleSharingAssessment={assessment.saleSharingAssessment}
+    collectionNoticeAssessment={assessment.collectionNoticeAssessment} gpcAvailable/>);
+  assert.equal((detail.match(/id="california-privacy-evidence"/g)??[]).length,1);
+  for(const label of ["California privacy review","Assessment coverage","Rights clause assessment","Sale/sharing clause assessment","Collection-notice matching","Choice and request inspection","Sale/sharing choice inspection","Request routes on the scanned page"])assert.ok(detail.includes(label),label);
+  assert.match(detail,/href="#gpc-evidence"/);
+  const initial=detail.split("data-california-review-details")[0]!;
+  assert.doesNotMatch(initial,/Rights wording found/);
+  assert.doesNotMatch(initial,/Business applicability|unassessed|not determined|incomplete|Rights clause assessment|Assessment coverage|Source SHA-256/i);
+  assert.match(detail,/Evidence &amp; assessment details/);
+  assert.doesNotMatch(detail,/<details[^>]+open=/);
+  assert.doesNotMatch(detail,/California review coverage|California coverage:|score deduction|point deduction/i);
+  const top=renderToStaticMarkup(<SitePriorityReview findings={[]} pending={false} sitewideAvailable scannedPages={1} reviewFocus="ccpa_cpra" californiaAssessment={assessment}/>);
+  assert.doesNotMatch(top,/data-testid="california-choice-inspection"|California review coverage/);
+  assert.deepEqual(assessment,before);
 });

@@ -61,6 +61,7 @@ export const SEMANTIC_LABELING_ACCESSIBILITY_RULE_IDS = new Set([
   "aria-treeitem-name",
   "button-name",
   "input-button-name",
+  "label-content-name-mismatch",
   "label",
   "link-name",
   "select-name"
@@ -76,6 +77,7 @@ const STRONG_SEMANTIC_LABELING_RULE_IDS = new Set([
   "aria-treeitem-name",
   "button-name",
   "input-button-name",
+  "label-content-name-mismatch",
   "label",
   "select-name"
 ]);
@@ -215,7 +217,7 @@ export function describeAccessibilityEvidence(findingId: string, examples: Acces
   if (relevant.length === 0) return null;
   const scope = getAccessibilityEvidenceScope(relevant);
   const scopeText = scope.pageCount > 0
-    ? ` on ${scope.pageCount} tested ${isCertScoreCanaryOnly(relevant) ? "CertScore canary " : ""}${scope.pageCount === 1 ? "page" : "pages"}` : "";
+    ? ` on ${scope.pageCount} tested ${isCertScoreCanaryOnly(relevant) ? "CertScore.ai canary " : ""}${scope.pageCount === 1 ? "page" : "pages"}` : "";
   const countText = scope.affectedNodes !== null
     ? ` (${scope.affectedNodes} element ${scope.affectedNodes === 1 ? "failure" : "failures"})` : "";
   const explanations = [...new Set(relevant.flatMap(example => {
@@ -236,7 +238,7 @@ export function describeVisualContrastEvidence(examples: AccessibilityRuleExampl
   const linkDistinction = rules.includes("link-in-text-block");
   const hasTextContrast = rules.some(rule => rule === "color-contrast" || rule === "color-contrast-enhanced");
   const scopeText = scope.pageCount > 0
-    ? ` on ${scope.pageCount} tested ${isCertScoreCanaryOnly(examples) ? "CertScore canary " : ""}${scope.pageCount === 1 ? "page" : "pages"}`
+    ? ` on ${scope.pageCount} tested ${isCertScoreCanaryOnly(examples) ? "CertScore.ai canary " : ""}${scope.pageCount === 1 ? "page" : "pages"}`
     : "";
   const countText = scope.affectedNodes !== null ? ` (${scope.affectedNodes} element ${scope.affectedNodes === 1 ? "failure" : "failures"})` : "";
   const measurements = new Set<string>();

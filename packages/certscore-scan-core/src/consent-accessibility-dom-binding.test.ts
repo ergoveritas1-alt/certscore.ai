@@ -3,10 +3,27 @@ import test from "node:test";
 import { chromium, type CDPSession } from "playwright";
 import { bindAccessibilityNodesToDom, AX_DOM_BINDING_MAX_NODES } from "./consent-accessibility-dom-binding.js";
 import { consentControlsFromAccessibilityTree, filterAccessibilityTreeToFirstLayer, type ConsentAccessibilityTreeNode } from "./scanners/pre-consent-runtime-scanner.js";
+import {buildConsentUiObservationFromEvidence,mergeConsentUiObservations} from "./scanners/pre-consent-runtime-scanner.js";
+import {consentUiObservationSchema} from "@certscore/contracts";
 
 const document = {url: "https://fixture.certscore.ai/", identity: {source: "cdp_loader_id" as const, token: "loader-1"}};
 const node = (id = 1): ConsentAccessibilityTreeNode => ({nodeId: String(id), backendDOMNodeId: id,
   visibilityEvidence: "box_model_verified", role: {value: "button"}, name: {value: "Accept all"}});
+
+test("same-loader URL transitions cannot merge native controls into a different observed URL",()=>{
+ const control={label:'Accept all',actionType:'accept_all' as const,tagName:'button',selectorHint:'ax:1',visible:true,
+  visibilityEvidence:'box_model_verified' as const,consentContextEvidence:'local_surface' as const,classifierReasonCodes:[],
+  domBinding:{version:'ax_backend_dom_binding.v1' as const,axNodeId:'1',backendNodeId:1,nodeType:1 as const,tagName:'button',documentUrl:document.url,documentIdentity:document.identity}};
+ const input={controls:[control],documentUrl:document.url,documentIdentity:document.identity,text:'We use cookies',scanStartedAtMs:Date.now()};
+ const valid=buildConsentUiObservationFromEvidence(input);assert.equal(consentUiObservationSchema.safeParse(valid).success,true);
+ const changed=buildConsentUiObservationFromEvidence({...input,documentUrl:document.url+'#updated'});
+ assert.equal(changed.controls.length,0);assert.equal(changed.inventoryOutcome,'document_mismatch');
+ assert.equal(changed.captureStatus,'incomplete');assert.equal(consentUiObservationSchema.safeParse(changed).success,true);
+ const merged=mergeConsentUiObservations({...valid,observedAtMs:10},{...changed,observedAtMs:20},'fixture');
+ assert.equal(merged.controls.length,0);assert.equal(merged.inventoryOutcome,'document_mismatch');
+ assert.equal(consentUiObservationSchema.safeParse(merged).success,true);
+ const same=mergeConsentUiObservations(valid,{...valid,observedAtMs:30},'fixture');assert.equal(same.controls.length,1);
+});
 
 test("native AX binding requires exact backend identity and bounded element metadata", async () => {
   for (const mode of ["valid", "wrong-node", "text-node", "invalid-tag", "failed"]) {

@@ -13,6 +13,16 @@ function assess(fixture=californiaCoverageFixture()) {
   const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:{consentControlAssessment:parent}});
   return {child,packets,score:deriveCaliforniaRegulatoryScore({assessment:child,checklistRows:[],unifiedFindings:packets})};
 }
+test("nonmaterial translations and unrelated links do not invalidate verified governing text; missing CA supplements still limit",()=>{
+ const f=californiaCoverageFixture();const parent=f.bundle.policySurfaceObservations[0]!;
+ for(const [i,label,path]of [[0,"Deutsch","/de/privacy-policy"],[1,"Modern Slavery Statement","/privacy-pages/uk/modern-slavery-statement"],[2,"UK Editorial Complaints Policy","/privacy-pages/uk/complaints/policy"]] as const)
+  f.bundle.policySurfaceObservations.push({...parent,observationId:`alternate-${i}`,surfaceType:"privacy_policy",parentObservationId:parent.observationId,traversalDepth:1,
+   linkText:label,url:new URL(path,parent.normalizedUrl).href,normalizedUrl:new URL(path,parent.normalizedUrl).href,status:"observed",documentFetchState:"not_attempted"});
+ assert.equal(assess(f).score.score,100);
+ const alternate=f.bundle.policySurfaceObservations.at(-1)!;
+ f.bundle.policySurfaceObservations.push({...alternate,observationId:"material-ca",surfaceType:"california_notice",linkText:"California Privacy Supplement",url:new URL('/california',parent.normalizedUrl).href});
+ assert.equal(assess(f).score.score,null);
+});
 test("v3 scores completed real-world capture while disclosure questions remain review",()=>{
   const f=californiaCoverageFixture("Canadian Privacy Policy. We retain personal information only as long as necessary. To exercise your privacy rights, contact privacy@example.test.");
   f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v3";
@@ -271,7 +281,7 @@ test("v10 keeps rights scoring while vendor-only opt-out requests are review-onl
   f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
   const {child,score}=assess(f);
   assert.equal(child.contractVersion,"certscore.california-privacy-review.v10");
-  assert.equal(score.policyVersion,"california-regulatory-posture.v9");assert.equal(score.score,88);
+  assert.equal(score.policyVersion,"california-regulatory-posture.v11-wcag");assert.equal(score.score,88);
   assert.deepEqual(californiaFindingScoreEffect("california_sale_sharing_opt_out_activity","evidence","certscore.california-privacy-review.v10"),[]);
   assert.equal(californiaFindingScoreEffect("california_sale_sharing_opt_out_activity","evidence","certscore.california-privacy-review.v9")[0]!.deductionPoints,18);
   assert.equal(californiaFindingScoreEffect("california_sale_sharing_opt_out_activity","evidence","certscore.california-privacy-review.v9")[0]!.policyVersion,"california-regulatory-posture.v7");
@@ -295,4 +305,35 @@ test('unobserved guessed 404 paths do not invalidate a separately verified gover
  f.bundle.policySurfaceObservations.push({...f.bundle.policySurfaceObservations[0]!,observationId:'guessed-missing',discoveryMethod:'guessed_common_path',linkObservationState:'candidate',status:'failed',documentFetchState:'failed',httpStatus:404});
  policyTextEvidenceProjectionSchema.parse(f.policyEvidence.projection);
  const {child,score}=assess(f);assert.ok(child,"Canonical child must remain valid");assert.ok(score.reviewCoverage && "captureCoverage" in score.reviewCoverage);assert.equal(score.reviewCoverage.captureCoverage.policyTextComplete,true);assert.equal(score.score,100);
+});
+
+test("positive rights clauses remain assessable with a missing governing supplement, without absence or score effects",()=>{
+ const f=californiaCoverageFixture("California Privacy Notice. You have the right to access your personal information. You have the right to ask that we delete your personal information. You have the right to ask that we correct your personal information. We will not retaliate against you for exercising your rights.");
+ f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";
+ for(const surface of f.bundle.policySurfaceObservations)surface.documentLanguage="en";
+ f.bundle.policySurfaceObservations.push({...f.bundle.policySurfaceObservations[0]!,observationId:'unfetched-supplement',url:CA_FIXTURE_URL+'california-more',surfaceType:'california_notice',traversalDepth:1,parentObservationId:'policy',status:'observed',documentFetchState:'not_attempted'});
+ const {child,score}=assess(f);
+ assert.ok(child.contractVersion === "certscore.california-privacy-review.v10");
+ assert.equal(child.disclosureInspection,undefined);
+ assert.ok(child.rightsAssessment?.topics.every(topic=>topic.status==='disclosed'));
+ assert.equal(child.rightsAssessment?.sourceCoverage?.status,'partial');
+ assert.equal(californiaPrivacyReviewSchema.safeParse(child).success,true);
+ assert.equal(score.score,100);assert.deepEqual(score.deductions,[]);
+ const forged=structuredClone(child);forged.rightsAssessment!.topics[1]!.status='not_observed';assert.equal(californiaPrivacyReviewSchema.safeParse(forged).success,false);
+});
+
+test("v10 retains explicit English rights passages without a language tag, without negative conclusions",()=>{
+ const f=californiaCoverageFixture("California Privacy Notice. As a California resident, you have the right to know the personal information we collected. You have the right to request deletion of your personal information. You have the right to correct inaccurate personal information. You have the right not to be discriminated against for exercising these rights.");
+ f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";
+ for(const surface of f.bundle.policySurfaceObservations)surface.documentLanguage=undefined;
+ const {child,score}=assess(f);assert.ok(child.contractVersion === "certscore.california-privacy-review.v10");
+ assert.equal(child.disclosureInspection,undefined);
+ assert.equal(child.rightsAssessment?.sourceCoverage?.policyVersion,"verified_positive_clauses.v2");
+ assert.ok(child.rightsAssessment?.topics.every(topic=>topic.status==='disclosed'));
+ assert.deepEqual(score.deductions,[]);assert.equal(californiaPrivacyReviewSchema.safeParse(child).success,true);
+ for(const mutate of [
+  (row:typeof f)=>{row.bundle.policySurfaceObservations.forEach(s=>{s.documentLanguage='fr';});},
+  (row:typeof f)=>{row.bundle.policySurfaceObservations.forEach(s=>{s.translationApplied=true;});},
+  (row:typeof f)=>{row.policyEvidence.texts.forEach(t=>{t.text+=' drift';});},
+ ]) {const copy=structuredClone(f);mutate(copy);const result=assess(copy);assert.ok(!result.child || !('rightsAssessment' in result.child) || !result.child.rightsAssessment?.topics.some(t=>t.status==='disclosed'));assert.deepEqual(result.score.deductions,[]);}
 });

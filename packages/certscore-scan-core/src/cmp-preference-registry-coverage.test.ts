@@ -53,7 +53,7 @@ test('an unidentified CMP returns verified basic checkpoints before the optional
   assert.equal(packet.status,'limited');
   assert.equal(packet.support.reason,'cmp_not_identified_after_bounded_readiness');
   assert.equal(packet.action.count,0);assert.equal(packet.controlInventoryComplete,false);
-  assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction,true);
+  assert.equal(packet.privacyLinks[0]?.hitTargetBeforeAction,true,JSON.stringify(packet));
   assert.equal(packet.checkpoints?.privacyLinks,true);
  }finally{if(memory===undefined)delete process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE;else process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE=memory;await new Promise<void>(resolve=>server.close(()=>resolve()));}
 });

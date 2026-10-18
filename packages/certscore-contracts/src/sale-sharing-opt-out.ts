@@ -1,3 +1,4 @@
+import {captureFailureDiagnosticSchema} from "./capture-failure-diagnostic";
 import { z } from "zod";
 export const SALE_SHARING_OPT_OUT_POLICY = "bounded_sale_sharing_opt_out.v1" as const;
 export const SALE_SHARING_OPT_OUT_WORKER_BUDGET_MS = 5_000;
@@ -24,6 +25,7 @@ export const saleSharingOptOutEvidenceSchema = z.object({
   requests:z.array(z.object({hostname:z.string().min(1).max(255).regex(/^[a-z0-9.-]+$/i), vendor:z.string().min(1).max(160),purpose:z.enum(["advertising","marketing"]), httpStatus:z.number().int().min(200).max(599), msAfterConfirmation:z.number().int().min(250).max(750),
     collectionEvidence:z.object({contractVersion:z.literal("canonical_advertising_collection.v1"),endpointSha256:hash,
       registryVersion:z.string().min(1).max(200),ruleIds:z.array(z.string().min(1).max(200)).min(1).max(16)}).strict().optional()}).strict()).max(32),
+  executionDiagnostic:captureFailureDiagnosticSchema.optional(),
   limitations:z.array(z.string().min(1).max(100)).max(12),
 }).strict().superRefine((p,ctx)=>{
   const confirmed=p.registration==="confirmed";
@@ -42,5 +44,5 @@ export const verifiedSaleSharingOptOutSchema=z.object({
 }).strict();
 export type VerifiedSaleSharingOptOut=z.infer<typeof verifiedSaleSharingOptOutSchema>;
 
-export const saleSharingOptOutLaneOutcomeSchema=z.object({status:z.enum(["joined","limited"]),startedAt:z.string().datetime(),completedAt:z.string().datetime(),limitationCode:z.enum(["opt_out_budget_exhausted","opt_out_worker_failed","opt_out_inspection_cancelled"]).optional()}).strict();
+export const saleSharingOptOutLaneOutcomeSchema=z.object({diagnostic:captureFailureDiagnosticSchema.optional(),status:z.enum(["joined","limited"]),startedAt:z.string().datetime(),completedAt:z.string().datetime(),limitationCode:z.enum(["opt_out_budget_exhausted","opt_out_worker_failed","opt_out_inspection_cancelled"]).optional()}).strict();
 export type SaleSharingOptOutLaneOutcome=z.infer<typeof saleSharingOptOutLaneOutcomeSchema>;

@@ -527,6 +527,9 @@ function assessPolicyTextQuality(
   const gdprTransparencyTopicMatchCount = classifyGdprTransparencyTopics({ text: normalized.slice(0, 40_000) }).matches.length;
   const accessChallengeSignalCount = [
     /\bclient challenge\b/i,
+    // Short challenge interstitials can contain real privacy footer links.
+    // Those links must not turn a robot check into usable notice text.
+    ...(normalized.length < 2500 ? [/\brobot or human\s*\?/i, /\b(?:activate|press|click)\s+and\s+hold\b.{0,80}\b(?:confirm|verify)\b.{0,40}\bhuman\b/i] : []),
     /\ba required part of this site couldn[’']t load\b/i,
     /\bdisable any ad blockers\b/i,
     /\bplease check your connection\b/i,

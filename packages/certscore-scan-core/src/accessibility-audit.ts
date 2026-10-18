@@ -1,7 +1,7 @@
 import axe, { type AxeResults, type Result, type NodeResult } from "axe-core";
 import type { Page } from "playwright";
 import {
-  ACCESSIBILITY_AUDIT_BUDGET_MS, ACCESSIBILITY_AUDIT_VERSION, ACCESSIBILITY_LIMITS,
+  describeCaptureFailure, type CaptureFailureDiagnostic, ACCESSIBILITY_AUDIT_BUDGET_MS, ACCESSIBILITY_AUDIT_VERSION, ACCESSIBILITY_LIMITS,
   ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS,
   ACCESSIBILITY_WCAG_TAGS, accessibilityAuditObservationSchema,
   type AccessibilityAuditObservation, type AccessibilityRuleObservation,
@@ -28,7 +28,7 @@ function safeHtml(html: string) {
   }).join("").slice(0, 500) || "<element>";
 }
 
-function normalizeRule(rule: CountedRule): AccessibilityRuleObservation {
+export function normalizeAccessibilityRule(rule: CountedRule): AccessibilityRuleObservation {
   return {
     ruleId: rule.id, impact: rule.impact ?? null, tags: rule.tags.slice(0, 24),
     help: safeText(rule.help, 300), description: safeText(rule.description, 600), helpUrl: rule.helpUrl,
@@ -108,7 +108,7 @@ export function retainAccessibilityExampleBreadth<T extends {
 
 export function unavailableAccessibilityAudit(input: {
   scanId: string; documentUrl: string; documentToken?: string | null;
-  reason: string; status?: "limited" | "failed" | "not_testable"; startedAtMs?: number;
+  diagnostic?: CaptureFailureDiagnostic; reason: string; status?: "limited" | "failed" | "not_testable"; startedAtMs?: number;
 }): AccessibilityAuditObservation {
   const end = Date.now();
   return accessibilityAuditObservationSchema.parse({
@@ -119,6 +119,7 @@ export function unavailableAccessibilityAudit(input: {
     startedAt: new Date(input.startedAtMs ?? end).toISOString(), completedAt: new Date(end).toISOString(),
     durationMs: Math.min(ACCESSIBILITY_AUDIT_BUDGET_MS + 2000, end - (input.startedAtMs ?? end)),
     rulesEvaluated: [], violations: [], reviewItems: [], limitations: [input.reason],
+    ...(input.diagnostic ? { executionDiagnostic: input.diagnostic } : {}),
   });
 }
 
@@ -137,9 +138,11 @@ export async function runAccessibilityAudit(input: {
   const budget = Math.max(1, Math.min(input.budgetMs ?? ACCESSIBILITY_AUDIT_BUDGET_MS, ACCESSIBILITY_AUDIT_BUDGET_MS));
   let timer: ReturnType<typeof setTimeout> | undefined, onAbort: (() => void) | undefined;
   let stopped = false;
+  let phase = "engine_injection";
   const work = async () => {
     const frames = input.page.frames(), frameUrls = frames.map(frame => frame.url()), limitations: string[] = [];
     let mainNavigated = false;
+    let unavailableChildFrameCount = Math.max(0, frames.length - 16);
     const changedFrames = new Set<import("playwright").Frame>();
     const onNavigation = (frame: import("playwright").Frame) => { if (frame === input.page.mainFrame()) mainNavigated = true; else changedFrames.add(frame); };
     input.page.on("framenavigated", onNavigation);
@@ -148,12 +151,16 @@ export async function runAccessibilityAudit(input: {
     for (const frame of frames.slice(0, 16)) {
       if (stopped || input.signal?.aborted) throw new Error("cancelled");
       try { await frame.evaluate(axe.source + "\n;void 0;"); }
-      catch { if (frame === input.page.mainFrame()) throw new Error("engine_injection_failed"); limitations.push("frame_unavailable"); }
+      catch { if (frame === input.page.mainFrame()) throw new Error("engine_injection_failed"); unavailableChildFrameCount++; limitations.push("frame_unavailable"); }
     }
     if (stopped) throw new Error("cancelled");
-    const results = await input.page.evaluate(async ({ tags, exampleLimit, mainRules }): Promise<AxeResults> => {
+    phase = "engine_execution";
+    const results = await input.page.evaluate(async ({ tags, exampleLimit, mainRules, mainDocumentOnly }): Promise<AxeResults> => {
       const engine = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<AxeResults> } }).axe;
-      const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, resultTypes: ["violations", "incomplete"], preload: false, elementRef: true });
+      // Axe otherwise waits up to 60s for a child frame, beyond this entire 8s
+      // audit. Bound that existing wait so main-document results can complete;
+      // unresponsive child checks remain incomplete rather than clean.
+      const results = await engine.run(document, { runOnly: { type: "tag", values: tags }, rules: { "frame-tested": { enabled: true } }, resultTypes: ["violations", "incomplete"], preload: false, elementRef: true, iframes: !mainDocumentOnly, frameWaitTime: 750 });
       const identities = new WeakMap<Element, number>();
       let nextId = 0;
       const frameElements = [...document.querySelectorAll("iframe,frame")].slice(0, 257);
@@ -202,14 +209,15 @@ export async function runAccessibilityAudit(input: {
       // These groups contribute evaluated rule IDs, never element examples.
       for (const rule of [...results.passes, ...results.inapplicable]) rule.nodes = [];
       return results;
-    }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule, mainRules: [...ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS] as string[] });
+    }, { tags: [...ACCESSIBILITY_WCAG_TAGS], exampleLimit: ACCESSIBILITY_LIMITS.examplesPerRule, mainRules: [...ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS] as string[], mainDocumentOnly: unavailableChildFrameCount > 0 });
+    phase = "result_normalization";
     if (results.testEngine.name !== "axe-core" || results.testEngine.version !== axe.version) return unavailable("engine_identity_mismatch");
     if (mainNavigated || input.page.url() !== documentUrl || input.documentIdentity()?.token !== documentToken) return unavailable("document_changed");
     const afterFrames = input.page.frames();
     const childFramesChanged = changedFrames.size > 0 || frames.length !== afterFrames.length || frames.some((frame, i) => frame !== afterFrames[i] || frame.url() !== frameUrls[i]);
     const engineRuleCount = new Set([...results.violations, ...results.incomplete, ...results.passes, ...results.inapplicable].map(rule => rule.id)).size;
     let frameCoverage: AccessibilityAuditObservation["frameCoverage"];
-    if (childFramesChanged) {
+    if (childFramesChanged || unavailableChildFrameCount > 0) {
       const originalNodeCount = [...results.violations, ...results.incomplete].reduce((sum, rule) => sum + ((rule as CountedRule).observedNodeCount ?? rule.nodes.length), 0);
       const retainMain = (rules: Result[]) => rules.flatMap(rule => {
         const count = (rule as CountedRule).mainDocumentNodeCount ?? 0;
@@ -217,11 +225,12 @@ export async function runAccessibilityAudit(input: {
         return count > 0 && nodes.length ? [{ ...rule, observedNodeCount: count, nodes }] : [];
       });
       results.violations = retainMain(results.violations); results.incomplete = retainMain(results.incomplete);
-      if (!results.violations.length && !results.incomplete.length) return unavailable("frames_changed");
+      if (!results.violations.length && !results.incomplete.length) return unavailable(unavailableChildFrameCount > 0 ? "frames_unavailable" : "frames_changed");
       frameCoverage = { version: "stable_main_document_evidence.v1", resultScope: "positive_findings_only", documentToken, engineRunCount: 1,
-        engineRuleCount, changedChildFrameCount: Math.min(10000, Math.max(1, changedFrames.size, Math.abs(frames.length - afterFrames.length))),
+        engineRuleCount, changedChildFrameCount: childFramesChanged ? Math.min(10000, Math.max(1, changedFrames.size, Math.abs(frames.length - afterFrames.length))) : 0,
+        ...(unavailableChildFrameCount ? { unavailableChildFrameCount: Math.min(10000, unavailableChildFrameCount) } : {}),
         excludedNodeCount: originalNodeCount - [...results.violations, ...results.incomplete].reduce((sum, rule) => sum + (rule as CountedRule).observedNodeCount!, 0) };
-      limitations.push("child_frames_changed_main_document_retained");
+      limitations.push(unavailableChildFrameCount ? "unavailable_frames_main_document_retained" : "child_frames_changed_main_document_retained");
     }
     if (results.violations.length > ACCESSIBILITY_LIMITS.rules || results.incomplete.length > ACCESSIBILITY_LIMITS.rules) limitations.push("rule_limit");
     if (results.incomplete.length) limitations.push("rules_need_review");
@@ -232,11 +241,35 @@ export async function runAccessibilityAudit(input: {
       scope: "starting_page_rendered_content", documentUrl, documentToken, engine: "axe-core", engineVersion: results.testEngine.version,
       configuredTags: [...ACCESSIBILITY_WCAG_TAGS], status: limitations.length ? "limited" : "completed",
       startedAt: new Date(startedAtMs).toISOString(), completedAt: new Date().toISOString(), durationMs: Date.now() - startedAtMs,
-      rulesEvaluated, violations: results.violations.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeRule),
-      reviewItems: results.incomplete.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeRule), limitations: [...new Set(limitations)].slice(0, 16), ...(frameCoverage ? { frameCoverage } : {}),
+      rulesEvaluated, violations: results.violations.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeAccessibilityRule),
+      reviewItems: results.incomplete.slice(0, ACCESSIBILITY_LIMITS.rules).map(normalizeAccessibilityRule), limitations: [...new Set(limitations)].slice(0, 16), ...(frameCoverage ? { frameCoverage } : {}),
     };
-    const retained = retainAccessibilityExampleBreadth(observation);
+    // An optional, one-menu probe runs only after the baseline audit and every
+    // privacy observer have frozen. It shares the existing eight-second cap.
+    // This is neither a consent action nor a whole-site keyboard assessment.
+    const menuMemoryMb = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE ?? (process.env.AWS_LAMBDA_FUNCTION_NAME ? "NaN" : "3008"));
+    const menu = process.env.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED === "1" &&
+      Number.isFinite(menuMemoryMb) && menuMemoryMb >= 512 && menuMemoryMb <= 4096 &&
+      Date.now() - startedAtMs + 1000 < budget
+      ? await inspectOneNavigationMenu(input.page, documentToken, () => input.documentIdentity()?.token === documentToken, normalizeAccessibilityRule)
+      : null;
+    if (menu) {
+      for (const rule of menu.violations) {
+        const existing = observation.violations.find(row => row.ruleId === rule.ruleId);
+        if (existing) {
+          existing.nodeCount += rule.nodeCount;
+          // Keep examples from both visible states within the original limit.
+          existing.representativeNodes = [...existing.representativeNodes.slice(0, 2), ...rule.representativeNodes.slice(0, 3)].slice(0, ACCESSIBILITY_LIMITS.examplesPerRule);
+        } else observation.violations.push(rule);
+        if (!observation.rulesEvaluated.includes(rule.ruleId)) observation.rulesEvaluated.push(rule.ruleId);
+      }
+    }
+    observation.completedAt = new Date().toISOString();
+    observation.durationMs = Date.now() - startedAtMs;
+    const withMenu = menu ? { ...observation, menuInspection: menu.inspection } : observation;
+    const retained = retainAccessibilityExampleBreadth(withMenu);
     if (!retained) return unavailable("evidence_size_limit");
+    phase = "contract_validation";
     return accessibilityAuditObservationSchema.parse(retained);
     } finally { input.page.off("framenavigated", onNavigation); }
   };
@@ -256,9 +289,101 @@ export async function runAccessibilityAudit(input: {
         if (input.signal?.aborted) onAbort();
       }),
     ]);
-  } catch { return unavailable("audit_execution_failed", "failed"); }
+  } catch (error) {
+    if (process.env.CERTSCORE_LOCAL_CAPTURE_DIAGNOSTICS === "1" && process.env.NODE_ENV !== "production" && !process.env.AWS_LAMBDA_FUNCTION_NAME) console.error("LOCAL_CAPTURE_FAILURE", JSON.stringify({ scope: "accessibility", phase, message: safeText(error instanceof Error ? error.message : "Unknown failure", 350) }));
+    return { ...unavailable("audit_execution_failed", "failed"), executionDiagnostic: describeCaptureFailure(error, phase) }; }
   finally {
     if (timer) clearTimeout(timer);
     if (onAbort) input.signal?.removeEventListener("abort", onAbort);
   }
+}
+
+/** One semantic navigation popup, never a link, form, privacy choice or Save.
+ * The optional work has its own 800 ms ceiling and cannot invalidate already
+ * verified baseline results when the popup cannot be inspected. */
+async function inspectOneNavigationMenu(
+  page: Page, documentToken: string, bound: () => boolean,
+  normalize: (rule: CountedRule) => AccessibilityRuleObservation,
+): Promise<{ inspection: NonNullable<AccessibilityAuditObservation["menuInspection"]>; violations: AccessibilityRuleObservation[] } | null> {
+  const url = page.url(), deadline = Date.now() + 800;
+  const guard = async (route: import("playwright").Route) => {
+    const request = route.request();
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) await route.abort();
+    else await route.fallback();
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([ (async () => {
+      await page.route("**/*", guard);
+      const selector = ':is(header, nav, [role="navigation"]) :is([aria-haspopup="menu"], [aria-haspopup="dialog"])[aria-expanded="false"]:not(a):not(input):not(select):not([form])';
+      const candidates = page.locator(`${selector}:visible`);
+      if (!await candidates.count()) return null;
+      const trigger = await candidates.first().elementHandle();
+      if (!trigger) return null;
+      const prepared = await trigger.evaluate(element => {
+        if (element.closest('form, [role="dialog"], [role="alertdialog"]') || !element.isConnected) return null;
+        const box = element.getBoundingClientRect();
+        const x = box.left + box.width / 2, y = box.top + box.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        if (box.width <= 0 || box.height <= 0 || !hit || !(hit === element || element.contains(hit))) return null;
+        const elements = [...document.querySelectorAll('a,button,[role="button"]')];
+        if (elements.length > 1000) return null;
+        const visible = elements.filter(node => {
+          let current: Element | null = node;
+          for (let depth = 0; current && depth < 32; depth++, current = current.parentElement) {
+            const style = getComputedStyle(current);
+            if (style.display === "none" || style.visibility !== "visible" || style.opacity === "0" || current.matches('[hidden],[inert],[aria-hidden="true"]')) return false;
+          }
+          return !current && node.getClientRects().length > 0;
+        });
+        // Ephemeral element identity stays in this page, never in evidence.
+        const root = element.closest('nav,[role="navigation"]') ?? element.closest('header,[role="banner"]');
+        if (!root) return null;
+        (window as unknown as { __certscoreMenuBefore?: {visible: Set<Element>; root: Element; trigger: Element; controlledId: string | null} }).__certscoreMenuBefore =
+          {visible: new Set(visible), root, trigger: element, controlledId: element.getAttribute("aria-controls")};
+        const path:string[]=[];
+        let current:Element|null=element;
+        for(let depth=0;current&&depth<12;depth++,current=current.parentElement){
+          if(current.id){path.unshift(`#${CSS.escape(current.id)}`);break;}
+          const siblings=current.parentElement?Array.from(current.parentElement.children).filter(node=>node.localName===current!.localName):[];
+          path.unshift(`${current.localName}${siblings.length>1?`:nth-of-type(${siblings.indexOf(current)+1})`:''}`);
+        }
+        const exactSelector=path.join(' > ');
+        if(exactSelector.length>400||document.querySelectorAll(exactSelector).length!==1||document.querySelector(exactSelector)!==element)return null;
+        const labelledBy=(element.getAttribute('aria-labelledby')??'').split(/\s+/).map(id=>document.getElementById(id)?.textContent??'').join(' ').trim();
+        return { selector:exactSelector, name:element.getAttribute('aria-label')||labelledBy||element.textContent||'',keyboardFocusable: (element as HTMLElement).tabIndex >= 0 };
+      });
+      if (!prepared || !bound() || page.url() !== url || Date.now() >= deadline) return null;
+      await trigger.click({ timeout: Math.max(1, Math.min(250, deadline - Date.now())), noWaitAfter: true });
+      if (!bound() || page.url() !== url || await trigger.getAttribute("aria-expanded") !== "true") return null;
+      const rows = await page.evaluate(async (): Promise<Result[]> => {
+        const engine = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<AxeResults> } }).axe;
+        const before = (window as unknown as { __certscoreMenuBefore?: {visible: Set<Element>; root: Element; trigger: Element; controlledId: string | null} }).__certscoreMenuBefore;
+        if (!before?.root.isConnected || !before.trigger.isConnected || !before.root.contains(before.trigger) || before.trigger.getAttribute("aria-expanded") !== "true") return [];
+        const panels = before.controlledId ? document.querySelectorAll(`#${CSS.escape(before.controlledId)}`) : null;
+        if (panels && panels.length !== 1) return [];
+        const scope = panels?.[0] ?? before.root;
+        const result = await engine.run(document, { runOnly: { type: "rule", values: ["link-name", "button-name"] }, resultTypes: ["violations"], preload: false, elementRef: true });
+        return result.violations.flatMap(rule => {
+          const nodes = rule.nodes.filter(node => node.element?.ownerDocument === document && node.element.isConnected && scope.contains(node.element) && !before.visible.has(node.element));
+          if (!nodes.length) return [];
+          for (const node of nodes) {
+            (node as IdentifiedNode).mainDocumentBound = true;
+            delete node.element;
+            for (const check of [...node.any, ...node.all, ...node.none]) { check.relatedNodes = []; delete check.data; }
+          }
+          return [{ ...rule, observedNodeCount: nodes.length, nodes: nodes.slice(0, 5) }];
+        });
+      });
+      if (!bound() || page.url() !== url || Date.now() >= deadline) return null;
+      return { inspection: { version: "bounded_navigation_menu.v1" as const, documentToken,
+        triggerSelector: prepared.selector, triggerAccessibleName:safeText(prepared.name,160),capturePolicyVersion:"menu_identity.v2" as const,triggerKeyboardFocusable: prepared.keyboardFocusable,
+        expanded: true as const, engineRunCount: 1 as const, rulesEvaluated: ["link-name", "button-name"] as ["link-name", "button-name"] },
+        violations: rows.map(rule => { const row = normalize(rule); row.representativeNodes.forEach(node => { node.captureState = "opened_navigation_menu"; }); return row; }) };
+    })(), new Promise<null>(resolve => { timer = setTimeout(() => {
+      // Terminate browser work as well as the promise; no post-publication probe.
+      void page.close({ runBeforeUnload: false }).catch(() => undefined); resolve(null);
+    }, 800); }) ]);
+  } catch { return null; }
+  finally { if (timer) clearTimeout(timer); await page.unroute("**/*", guard).catch(() => undefined); }
 }

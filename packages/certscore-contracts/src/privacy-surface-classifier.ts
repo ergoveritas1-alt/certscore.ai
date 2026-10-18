@@ -98,6 +98,8 @@ const CORE_PRIVACY_SURFACE_PHRASE_OVERRIDES: PrivacySurfacePhrase[] = [
     direct("do_not_sell_or_share", "do not share"),
     direct("notice_at_collection", "notice at collection"),
     direct("california_notice", "california privacy notice"),
+    direct("california_notice", "california consumer privacy notice"),
+    { surfaceType:"california_notice", phrase:"california consumer privacy act", strength:"equivalent", requiresPrivacyContext:true },
     direct("california_notice", "california notice"),
     { surfaceType:"california_notice", phrase:"ca notice", strength:"equivalent", requiresPrivacyContext:true },
     direct("california_notice", "state privacy rights"),
@@ -332,6 +334,17 @@ export function classifyPrivacySurface(
       strengthRank(right.term.strength) - strengthRank(left.term.strength) ||
       right.term.phrase.length - left.term.phrase.length
     )[0];
+
+  // A passive link to a static governing notice/hub is a document-discovery
+  // route even when its short label says Privacy Center or Advertising Choices.
+  // Panel controls and opaque privacy portals retain their choice semantics.
+  let documentPath="";
+  try {documentPath=new URL(input.url??"").pathname;}catch{}
+  if(phraseMatch && ["consent_preferences","your_privacy_choices"].includes(phraseMatch.term.surfaceType) &&
+    /\/(?:privacy\.html?|privacy[-/](?:policy|notice)(?:\.html?)?)\/?$/i.test(documentPath)) {
+    return {surfaceType:"privacy_policy",confidence:0.94,contextSatisfied:true,matchedLocale:"en",matchedTerm:"privacy policy",
+      matchStrength:"direct",variant:"governing_privacy_hub",reasonCodes:["matched_privacy_policy","static_governing_notice_destination","match_strength_direct"]};
+  }
 
   const staticUrlMatch = URL_SURFACE_PATTERNS
     .map((entry) => ({

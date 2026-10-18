@@ -3705,7 +3705,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
     },
     "/state-privacy-rights": {
       title: "State Privacy Rights",
-      body: "State Privacy Rights. California and other state residents may access, delete, correct, and opt out of sale or share of personal information and targeted advertising.",
+      body: "State Privacy Rights. California Privacy Rights. California and other state residents have the right to know and access their personal information, the right to delete their personal information, and the right to correct inaccurate personal information. You may opt out of sale or sharing of personal information and targeted advertising. Submit a privacy request by contacting our privacy team.",
     },
     "/privacy-center": {
       title: "Privacy Center",
@@ -3740,7 +3740,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
     },
     "/notice-at-collection": {
       title: "Notice at Collection",
-      body: "Notice at Collection. We collect identifiers, commercial information, internet activity, sensitive personal information, and retain data for stated business purposes.",
+      body: "Notice at Collection. Categories of personal information we collect include identifiers, commercial information, internet activity, and sensitive personal information. We use this information to provide requested services and protect the security of our website. We retain personal data only as long as necessary for these purposes.",
     },
     "/policies/vendors": {
       title: "Privacy Policy Vendors",
@@ -3752,7 +3752,7 @@ function policyDocumentHtml(pathname: string): string | undefined {
     },
     "/policies/webmd-like-state-privacy": {
       title: "State Privacy Policy",
-      body: "State Privacy Policy. Information we collect includes identifiers, internet activity, and sensitive personal information. Categories of sources and business purposes are described here. You may opt out by selecting your preferences within the cookie banner, by clicking the Do Not Sell or Share My Personal Information link, or by enabling an opt-out preference signal in your browser. The cookie banner will automatically read such signals and comply with your preferences for targeted advertising choices.",
+      body: "State Privacy Policy. Notice at Collection. Information we collect includes identifiers, internet activity, and sensitive personal information. We use this information to provide requested services and maintain website security. Categories of sources and business purposes are described here. You may opt out by selecting your preferences within the cookie banner, by clicking the Do Not Sell or Share My Personal Information link, or by enabling an opt-out preference signal in your browser. The cookie banner will automatically read such signals and comply with your preferences for targeted advertising choices.",
     },
     "/policies/webmd-like-cookie-policy": {
       title: "Cookie Policy",

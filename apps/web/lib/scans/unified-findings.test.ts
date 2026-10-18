@@ -3562,7 +3562,7 @@ test("certscore analytics banner with reject analytics and allow analytics does 
       acceptActionLabels: ["Allow analytics"],
       acceptPresent: true,
       bannerPresent: true,
-      bannerTextSnippet: "Help us improve CertScore with privacy-friendly analytics.",
+      bannerTextSnippet: "Help us improve CertScore.ai with privacy-friendly analytics.",
       rejectActionLabels: ["Reject analytics"],
       rejectPresent: true
     },

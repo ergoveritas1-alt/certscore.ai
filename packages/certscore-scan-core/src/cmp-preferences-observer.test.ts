@@ -152,7 +152,7 @@ test("OneTrust registered dialog binding opens only the existing hidden preferen
       assert.equal(saves, 0);
       if (mode === "valid") {
         assert.equal(packet.status, "completed", JSON.stringify(packet));
-        assert.equal(packet.support.recipeVersion, "onetrust_preferences.v2");
+        assert.equal(packet.support.recipeVersion, "onetrust_preferences.v3");
         assert.equal(packet.action.count, 1); assert.equal(packet.action.opened, true);
         assert.equal(packet.controls[0]?.kind, "category"); assert.equal(clicks, 1);
       } else {
@@ -314,20 +314,23 @@ test("parent cancellation after the single Options dispatch stays distinct from 
 
 test("early OneTrust declarations and visible native label targets survive bounded deeper inspection", { timeout: 20_000 }, async () => {
   let mode = "open", clicks = 0;
+  const configurationReadStates: string[] = [];
   const server = createServer((req, res) => {
+    if (req.url?.startsWith("/config-read?")) { configurationReadStates.push(req.url); res.end(); return; }
     if (req.url === "/options") { clicks++; res.end(); return; }
     res.setHeader("content-type", "text/html");
     res.end(`<section id="onetrust-banner-sdk"><button aria-controls="prefs" onclick="fetch('/options');document.getElementById('prefs').hidden=false">Cookie settings</button><a href="/privacy-cookies/" aria-label="Privacy and cookie statement">Read notice</a></section>
       ${mode === "open" ? '<section id="prefs" hidden><label><input style="display:none" type="checkbox">Analytics</label><label><input style="opacity:0;width:0;height:0" type="checkbox">Marketing</label><fieldset disabled><label><input style="display:none" type="checkbox">Disabled category</label></fieldset><div hidden><label><input type="checkbox">Hidden category</label></div><details><summary>More cookies</summary><table><tr><td>not_opened</td></tr></table></details></section>' : ''}
-      <script>window.OneTrust={GetDomainData:()=>({Groups:[{CustomGroupId:'C2',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],Hosts:[{HostId:'H1',HostName:'media.example.test',DisplayName:'Named Media',Cookies:[]}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]})};</script>`);
+      <script>window.OneTrust={GetDomainData:()=>{fetch('/config-read?opened='+Boolean(document.getElementById('prefs')&&!document.getElementById('prefs').hidden));return ({Groups:[{CustomGroupId:'C2',GroupName:'Analytics',VendorServices:[{CustomVendorServiceId:'S1',ServiceName:'Named Analytics'}],Hosts:[{HostId:'H1',HostName:'media.example.test',DisplayName:'Named Media',Cookies:[]}],FirstPartyCookies:[{Name:'_ga',Description:'Audience measurement',Lifespan:'2 years'}]}]})}};</script>`);
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address(); assert.ok(address && typeof address !== "string");
   try {
     for (mode of ["open", "missing_panel"]) {
-      clicks = 0;
+      clicks = 0; configurationReadStates.length = 0;
       const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: mode, exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
       assert.deepEqual(packet.declarations.map(cookie => cookie.name), ["_ga"]);
+      assert.deepEqual(configurationReadStates,[`/config-read?opened=${mode === "open"}`]);
       assert.deepEqual(packet.serviceNames, ["Named Analytics", "Named Media"]);
       assert.deepEqual(packet.declarationCoverage, {scope:"configured_services",configured:2,resolved:2,unresolved:0,truncated:false});
       assert.equal(packet.inspectionDiagnostic?.configuration?.version,"onetrust_loaded_configuration.v4");
@@ -920,4 +923,54 @@ test("Cookiebot Customize binds the original Details tab panel and never saves a
       assert.equal(packet.loadedInventory?.records[0]?.provider,"Google");assert.equal(packet.declarations[0]?.source,"cmp_loaded_inventory");assert.equal(packet.declarationInventoryComplete,false);}
     else assert.equal(packet.controlInventoryComplete,false,mode);
   }}finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+test("new read-only coverage policy reserves setup/retention inside 25 GB-seconds", () => {
+  for (const memory of [512, 2048, 3008, 4096, 8192, 10240]) {
+    const budget = cmpPreferenceBudgetMs(memory, "coverage_25_gb_seconds.v1");
+    assert.ok((budget + 2000) / 1000 * memory / 1024 <= 25);
+  }
+});
+
+test("expired worker capture returns a retained limited preference packet without browser work",async()=>{
+ let contexts=0;const browser={newContext:async()=>{contexts++;throw Error("Should not start");}} as unknown as import('playwright').Browser;
+ const packet=await runCmpPreferencesObserver({browser,deadlineAtMs:Date.now()-1,parentDispatchSha256:"a".repeat(64),config:{policyVersion:"bounded_cmp_preferences.v1",enabled:true,scanId:"expired-worker",exactTargetUrl:"https://example.test/"}});
+ assert.equal(contexts,0);assert.equal(packet.status,"limited");assert.equal(packet.action.count,0);assert.equal(packet.executionDiagnostic?.phase,"browser_start");assert.equal(packet.support.reason,"preference_budget_exhausted");
+});
+
+test("HubSpot exact external Options entrance opens its bound root without submitting preferences", {timeout:20_000}, async()=>{
+  let mode="valid", clicks=0, saves=0;
+  const server=createServer((req,res)=>{
+    if(req.url==="/clicked"){clicks++;res.end();return;}
+    if(req.url==="/save"){saves++;res.end();return;}
+    res.setHeader("Content-Type","text/html");
+    res.end(`<div id="hs-banner-parent"><div id="hs-eu-cookie-confirmation" hidden><button id="hs-eu-cookie-settings-button">Manage Cookies</button></div></div><footer>${mode==="form"?'<form>':''}<button type="button" id="hs-eu-cookie-settings-button" data-external>Manage Cookies</button>${mode==="duplicate"?'<button type="button" id="hs-eu-cookie-settings-button">Manage Cookies</button>':''}${mode==="form"?'</form>':''}</footer><script>document.querySelector('[data-external]').onclick=()=>{fetch('/clicked');const root=document.getElementById('hs-banner-parent');${mode==="replace"?'root.outerHTML=root.outerHTML;':''}document.getElementById('hs-banner-parent').insertAdjacentHTML('beforeend','<section id="hs-modal-content" role="alertdialog" aria-label="Cookie settings"><label><input type="checkbox">Analytics</label><button data-save>Save</button></section>');};</script>`);
+  });
+  await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));const address=server.address();assert.ok(address&&typeof address!=="string");
+  try{for(mode of ["valid","form","duplicate","replace"]){clicks=0;saves=0;
+    const packet=await runCmpPreferencesObserver({parentDispatchSha256:"a".repeat(64),config:{policyVersion:"bounded_cmp_preferences.v1",enabled:true,scanId:`external-${mode}`,exactTargetUrl:`http://127.0.0.1:${address.port}/`}});
+    assert.equal(saves,0);assert.ok(clicks<=1);
+    if(mode==="valid"){assert.equal(packet.action.opened,true,JSON.stringify(packet));assert.equal(packet.controls[0]?.kind,"category");assert.equal(clicks,1);}
+    else{assert.equal(packet.action.opened,false,mode);if(mode!=="replace")assert.equal(clicks,0);}
+  }}finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+
+
+test("unrelated deferred script cannot exhaust basic privacy-link capture on an unidentified CMP visit", { timeout: 12_000 }, async () => {
+  const server = createServer((req, res) => {
+    if (req.url === "/pending.js") { res.setHeader("Content-Type", "text/javascript"); return; }
+    res.setHeader("Content-Type", "text/html");
+    res.end('<html><head><script defer src="/pending.js"></script></head><body><a href="/privacy">Privacy policy</a></body></html>');
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address(); assert.ok(address && typeof address !== "string");
+  try {
+    const packet = await runCmpPreferencesObserver({ parentDispatchSha256: "a".repeat(64), config: { policyVersion: "bounded_cmp_preferences.v1", enabled: true, scanId: "pending-unrelated-script", exactTargetUrl: `http://127.0.0.1:${address.port}/` } });
+    assert.equal(packet.inspectionDiagnostic?.revision, "cmp_preferences.v17");
+    assert.equal(packet.action.count, 0);
+    assert.equal(packet.support.state, "unknown");
+    assert.equal(packet.controlInventoryComplete, false);
+    assert.equal(packet.checkpoints?.privacyLinks, true, JSON.stringify(packet));
+    assert.ok(packet.privacyLinks.some(link => link.url.endsWith("/privacy")));
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

@@ -1,21 +1,21 @@
 import {createHash} from "node:crypto";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
-import { classifyConsentControlLabel, saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, type SaleSharingOptOutDispatch, type SaleSharingOptOutEvidence } from "@certscore/contracts";
+import { describeCaptureFailure, classifyConsentControlLabel, saleSharingOptOutDispatchSchema, saleSharingOptOutEvidenceSchema, SALE_SHARING_OPT_OUT_POLICY, SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS, type SaleSharingOptOutDispatch, type SaleSharingOptOutEvidence } from "@certscore/contracts";
 import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
-import { CANONICAL_VENDOR_RESOLVER_VERSION, resolveCanonicalVendor } from "@certscore/vendor-resolver";
+import { CANONICAL_VENDOR_RESOLVER_VERSION, resolveCanonicalVendor, isCanonicalAdvertisingCollectionCandidate } from "@certscore/vendor-resolver";
 import { chromiumContextOptions, chromiumLaunchOptions } from "./playwright-runtime.js";
 import { installPublicNetworkGuardRoute } from "./public-network-guard.js";
 import { installWebBotAuthRoute } from "./web-bot-auth-routing.js";
 import { dispatchLocatorClickWithVerifiedGeometry } from "./cmp-control-actionability.js";
-import {isCollectionEndpoint} from "./scanners/pre-consent-runtime-scanner.js";
 import { parseGpcGppPing } from "./gpc-gpp-parser.js";
 
 /** Explicit visitor choice only. No GPC injection, cookie Reject, arbitrary form,
  * preference toggles, generic Save, personal data, retry or persistent state. */
 export async function runSaleSharingOptOutObserver(input: {
-  config: SaleSharingOptOutDispatch; parentDispatchSha256: string; signal?: AbortSignal; browser?: Browser;
+  config: SaleSharingOptOutDispatch; parentDispatchSha256: string; signal?: AbortSignal; browser?: Browser; deadlineAtMs?: number;
 }): Promise<SaleSharingOptOutEvidence> {
-  const config=saleSharingOptOutDispatchSchema.parse(input.config), started=Date.now(), deadline=started+SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS;
+  const config=saleSharingOptOutDispatchSchema.parse(input.config), started=Date.now();
+  const captureBudgetMs=Math.max(1,Math.min(SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS,(input.deadlineAtMs??Infinity)-started-250)),deadline=started+captureBudgetMs;
   const packet:SaleSharingOptOutEvidence={contractVersion:"certscore.sale-sharing-opt-out-evidence.v1",policyVersion:SALE_SHARING_OPT_OUT_POLICY,
     scanId:config.scanId,parentDispatchSha256:input.parentDispatchSha256,targetUrl:config.exactTargetUrl,documentToken:null,
     startedAt:new Date(started).toISOString(),completedAt:new Date(started).toISOString(),status:"unsupported",recipeVersion:null,provider:null,
@@ -24,9 +24,9 @@ export async function runSaleSharingOptOutObserver(input: {
   let browser=input.browser, context:BrowserContext|undefined, expired=false, changed=false;
   let stage: "browser_launch"|"context_setup"|"navigation"|"document_binding"|"recipe_inspection"|"choice_action"|"post_choice_capture" = "browser_launch";
   const cancel=()=>{expired=true;void context?.close().catch(()=>undefined);if(!input.browser)void browser?.close().catch(()=>undefined);};
-  const timer=setTimeout(cancel,SALE_SHARING_OPT_OUT_CAPTURE_BUDGET_MS);
+  const timer=setTimeout(cancel,captureBudgetMs);
   input.signal?.addEventListener("abort",cancel,{once:true});
-  const remaining=()=>{if(expired||input.signal?.aborted||Date.now()>=deadline)throw new Error("observation_budget_or_cancellation");return Math.max(1,deadline-Date.now());};
+  const remaining=()=>{if(expired||input.signal?.aborted||Date.now()>=deadline||(input.deadlineAtMs!==undefined&&Date.now()+250>=input.deadlineAtMs))throw new Error("observation_budget_or_cancellation");return Math.max(1,deadline-Date.now());};
   try {
     remaining();
     browser??=await chromium.launch({...chromiumLaunchOptions({headless:true}),timeout:remaining()});
@@ -105,7 +105,7 @@ export async function runSaleSharingOptOutObserver(input: {
         if(packet.requests.length===32){packet.truncated=true;return;}
         packet.requests.push({hostname:url.hostname,vendor:vendor.vendor,purpose:vendor.purpose as "advertising",msAfterConfirmation:elapsed,httpStatus:response.status(),
           ...(response.status() < 400 && request.method() !== "OPTIONS" && url.protocol === "https:" &&
-            vendor.registryAttribution?.matchKind === "endpoint" && isCollectionEndpoint(request.url(),request.resourceType()).observed ? {
+            vendor.registryAttribution?.matchKind === "endpoint" && isCanonicalAdvertisingCollectionCandidate(request.url(),request.resourceType()) ? {
               collectionEvidence:{contractVersion:"canonical_advertising_collection.v1" as const,
                 endpointSha256:createHash("sha256").update(request.url()).digest("hex"),registryVersion:CANONICAL_VENDOR_RESOLVER_VERSION,
                 ruleIds:vendor.registryAttribution.ruleIds.slice(0,16)}} : {})});
@@ -117,11 +117,14 @@ export async function runSaleSharingOptOutObserver(input: {
     packet.observationWindowMs=500;packet.captureComplete=true;packet.status=packet.truncated?"limited":"complete";
     if(packet.truncated)packet.limitations.push("request_capture_truncated");
   }catch(error){
+    packet.executionDiagnostic=describeCaptureFailure(error,stage);
     packet.status="limited";packet.captureComplete=false;packet.requests=[];
     const budgetExpired=expired || Date.now()>=deadline || (error instanceof Error && error.name === "TimeoutError");
     packet.limitations.push(changed?"document_changed":input.signal?.aborted?"observation_cancelled":budgetExpired?`${stage}_budget_exhausted`:`${stage}_failed`);
     if(changed){packet.registration=packet.submitted?"unconfirmed":"not_attempted";packet.confirmedAt=null;packet.before=null;packet.after=null;packet.documentToken=null;}
-  }finally{clearTimeout(timer);input.signal?.removeEventListener("abort",cancel);await context?.close().catch(()=>undefined);if(!input.browser)await browser?.close().catch(()=>undefined);}
+  }finally{clearTimeout(timer);input.signal?.removeEventListener("abort",cancel);let cleanupTimer:ReturnType<typeof setTimeout>|undefined;
+    await Promise.race([Promise.all([context?.close().catch(()=>undefined),!input.browser?browser?.close().catch(()=>undefined):undefined]),new Promise<void>(resolve=>{cleanupTimer=setTimeout(resolve,250);})]);
+    if(cleanupTimer)clearTimeout(cleanupTimer);}
   return finish();
   function finish(){if(packet.status==="complete" && (expired||input.signal?.aborted||Date.now()>deadline)){packet.status="limited";packet.captureComplete=false;packet.requests=[];packet.limitations.push("observation_budget_or_cancellation");}packet.completedAt=new Date().toISOString();return saleSharingOptOutEvidenceSchema.parse(packet);}
 }

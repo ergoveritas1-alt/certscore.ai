@@ -115,7 +115,7 @@ test("review-only refusal copy remains whole and limited to first-layer availabi
   row.criticalEvidence.statusBasis = "A first-layer GDPR/ePrivacy cookie consent surface was retained with an accept option and non-essential cookie/purpose text, but no same-layer reject, decline, refuse, or continue-without-accepting option was retained. This is a first-layer availability signal only; CertScore.ai did not run a consent flow.";
   const copy = deriveGdprEprivacyCoverageChecklistRowRationale(row);
   assert.match(copy, /accept option and non-essential cookie\/purpose text, but no same-layer refusal option/);
-  assert.match(copy, /first-layer availability only; CertScore did not run a consent flow\./);
+  assert.match(copy, /first-layer availability only; CertScore.ai did not run a consent flow\./);
   assert.doesNotMatch(copy, /\.\.\.|CertScore\.ai$/);
 });
 

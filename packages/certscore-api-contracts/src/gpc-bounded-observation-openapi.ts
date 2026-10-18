@@ -263,6 +263,59 @@ export const gpcBoundedObservationOpenApi = {
           },
           "maxItems": 100
         },
+        "advertisingCollectionRecipients": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "contractVersion",
+            "resolverVersion",
+            "rows"
+          ],
+          "properties": {
+            "contractVersion": {
+              "const": "canonical_collection_recipients.v1",
+              "type": "string"
+            },
+            "resolverVersion": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "evidenceId",
+                  "entityId",
+                  "label"
+                ],
+                "properties": {
+                  "evidenceId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "entityId": {
+                    "type": "string",
+                    "pattern": "^ent_[a-f0-9]{12}$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "observedAtMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "maxItems": 100
+            }
+          }
+        },
         "evidenceIds": {
           "type": "array",
           "items": {

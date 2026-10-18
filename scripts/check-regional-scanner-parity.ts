@@ -142,7 +142,9 @@ const observed = REGIONS.map((region) => {
   }
   const context = EXPECTED_CONTEXT[region];
   const required = [
-    ["Options/Customize worker", env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, "0"],
+    ["Read-only preferences worker", env.CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED, "1"],
+    ["Preference coverage budget", env.CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY, "coverage_25_gb_seconds.v1"],
+    ["Navigation-menu accessibility inspection", env.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED, "1"],
     ["memory", config.MemorySize, 3008],
     ["timeout", config.Timeout, 75],
     ["architecture", config.Architectures?.[0], "x86_64"],

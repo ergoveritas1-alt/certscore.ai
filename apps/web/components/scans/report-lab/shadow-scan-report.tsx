@@ -1,3 +1,4 @@
+import { GdprEprivacyCoverageSummary, GdprEprivacyReview } from "../gdpr-eprivacy-review";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
 import { EVIDENCE_SECTION_TITLES } from "../../../lib/scans/detailed-evidence-presentation";
 import { AssessmentHighlightsText } from "../assessment-highlights-text";
@@ -21,7 +22,7 @@ import { GpcActivityComparison } from "../gpc-activity-comparison";
 import { SiteIntegrityEvidence } from "../site-integrity-evidence";
 import { choicePathExecutionLabel } from "@certscore/contracts";
 import React from "react";
-import { RegulatoryReviewFocus, CaliforniaPrivacyWorkpaper } from "../regulatory-review-focus";
+import { RegulatoryReviewFocus, CaliforniaPrivacyWorkpaper, CaliforniaCoverageSummary } from "../regulatory-review-focus";
 import { resolveReportReviewFocus, reportUrlWithFocus, reviewFocusMismatchNote } from "../../../lib/scans/report-review-focus";
 import { ReportCoverageTiming } from "../report-coverage-timing";
 import { SinglePageResourceInventory } from "../single-page-resource-inventory";
@@ -72,7 +73,7 @@ import {
 } from "./industry-benchmark-data";
 import { ShadowPolicyEvidenceViewer } from "./shadow-policy-evidence-viewer";
 import { evidenceRowAnchor } from "../../../lib/scans/report-evidence-navigation";
-import { gpcCardActivity, gpcCardResponse, gpcSummaryLabel } from "./gpc-report-projection";
+import { gpcCollectionRecipients, gpcCardActivity, gpcCardResponse, gpcSummaryLabel } from "./gpc-report-projection";
 import { getConsentControlSummaryLabel } from "./timeline-report-model";
 import {
   SHADOW_PRIVACY_NOTICE_EVIDENCE,
@@ -321,7 +322,7 @@ function ScoreScale({ compact = false, report }: { compact?: boolean; report: Sh
         </div>
       </div>
       <div className="min-w-0 flex-1 border-l border-zinc-200 pl-4">
-        <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">{californiaReview ? "California page score" : report.fullSite ? "Diagnostic score" : "Overall score"}</p>
+        {report.fullSite ? <p className="text-[0.68rem] font-semibold uppercase text-zinc-500">Site score</p> : null}
         <p className="mt-1 text-lg font-semibold leading-tight text-zinc-950">{assessment}</p>
         <p className="mt-2 text-xs leading-5 text-zinc-500">{californiaReview ? score === null ? "Verified California review coverage is unavailable." : `Bounded California risk signal${report.californiaScore?.coverage === "limited" ? " · limited coverage" : ""}; not a compliance grade.` : focus}</p>
       </div>
@@ -541,6 +542,7 @@ export function SignalSnapshot({ report, siteOverview = false }: { report: Shado
             )}
           </ul>
         </details>
+        {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaCoverageSummary coverage={report.californiaScore?.reviewCoverage} /> : <GdprEprivacyCoverageSummary rows={report.gdprTransparencyRows} policyUrls={privacyUrls} />}
         <details className={signalRowClass}>
           <summary className={signalSummaryClass}>
             <span className="text-xs font-medium text-zinc-500">Transport security</span>
@@ -711,7 +713,7 @@ function EvidenceIndexRows({ rows, stackedTools = false, sharedEvidence = {} }: 
 function FindingsList({ dense = false, priority = false, report }: { dense?: boolean; priority?: boolean; report: ShadowReportData }) {
   return (
     <div className="border-t border-zinc-950">
-      {report.findings.map((finding) => <FindingRow dense={dense} finding={finding} key={finding.id} priority={priority} />)}
+      {report.findings.map((finding) => <FindingRow dense={dense} finding={finding} key={finding.id} priority={priority} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} />)}
     </div>
   );
 }
@@ -1326,9 +1328,9 @@ function TimelineVariant({ report, allowRestrictedScanOptions, defaultScanFrom, 
     </header>
     <FullSiteExecutiveSummary reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} californiaScore={report.californiaScore} inventorySummary={<ReportInventorySummary formCountStatus={report.formsSummary ? report.formsSummary.countStatus : "not_captured"} formsSummary={report.formsSummary} forms={report.collectionTableRows} formCount={report.metrics.forms} metrics={report.inventorySummary ?? []} siteIntegrity={report.siteIntegritySummary ?? (report.siteIntegrity ? { findings: [report.siteIntegrity], coverage: [{ pageId: report.scan.id, url: report.siteIntegrity.evidence.observation.documentUrl, homepage: true, status: report.siteIntegrity.evidence.observation.truncated ? "limited" : "captured" }] } : undefined)} />} score={{ value: report.score.value, priorityReview, scoredPages: 1, deductions: report.scoreExplanation?.score === report.score.value ? report.scoreExplanation.deductions : undefined }} pending={false} scannedPages={1}
       actions={<ShadowReportShareMenu key="share-report" reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />}
-      snapshot={<SignalSnapshot siteOverview report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} />
+      snapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} />
     <SitePriorityReview californiaAssessment={report.californiaPrivacyReview} reviewFocus={report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)} findings={priorityReview} pending={false} sitewideAvailable scannedPages={1} />
-    <ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} />
+    <ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />
     {report.resourceInventory ? <SinglePageResourceInventory inventory={report.resourceInventory} report={report}/> : <div id="report-resource-inventory"><RuntimeInventoryTable report={report} heading="Services & Resources" /></div>}
     <CollectionSurfacesTable afterAcceptLimited={report.afterAcceptFormsLimited} rows={report.collectionTableRows ?? []} loading={false} pagesWithoutInventory={report.collectionCoverage?.pagesWithoutInventory ?? 1} limitedPages={report.collectionCoverage?.limitedPages ?? 0} />
     <FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />
@@ -1525,6 +1527,7 @@ function MinimalVariant({ report }: { report: ShadowReportData }) {
 export function GpcEvidenceIndexCard({ projection, california = false }: { projection: GpcResponseReportProjection; california?: boolean }) {
   const proof = projection.assessment.comparison.enabledProof;
   const activity = gpcCardActivity(projection);
+  const recipients = gpcCollectionRecipients(projection);
   const scoredRisk = california && projection.californiaDeductionPoints > 0;
   const hasComparison = projection.assessment.comparison.comparable && projection.assessment.status !== "indeterminate";
   const evidenceJson: Record<string, unknown> = {
@@ -1536,9 +1539,18 @@ export function GpcEvidenceIndexCard({ projection, california = false }: { proje
     <details className="group/gpc border-b border-r border-zinc-200 p-5" id="gpc-evidence" data-testid="gpc-evidence-index-card">
       <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.gpc}
         recap={scoredRisk ? "Risk observed" : gpcSummaryLabel(projection)}
-        badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" ? [{status: "Limited"}] : []} />} />
+        badge={<EvidenceHeaderStatus rows={scoredRisk ? [{status: "Partial concern"}] : projection.assessment.status === "indeterminate" && !projection.activityComparison ? [{status: "Limited"}] : []} />} />
       <div className="mt-4 space-y-3 text-xs leading-5 text-zinc-600">
         {activity ? <p>{activity}</p> : null}
+        {recipients.length ? <div>
+          <p className="font-semibold text-zinc-800">Recipients with verified advertising collection</p>
+          <ul className="mt-1 space-y-1">
+            {recipients.map(recipient => <li key={recipient.entityId}>
+              <span className="font-semibold">{recipient.label}</span> · {recipient.count} collection request{recipient.count === 1 ? "" : "s"}
+              {recipient.firstMs !== undefined ? <> · {recipient.firstMs === recipient.lastMs ? "observed" : "first observed"} at {(recipient.firstMs / 1000).toFixed(2)} s{recipient.lastMs !== recipient.firstMs ? `; last at ${(recipient.lastMs! / 1000).toFixed(2)} s` : ""} after GPC visit start</> : null}
+            </li>)}
+          </ul>
+        </div> : null}
         {projection.observedFacts.length ? <dl className="space-y-2">{projection.observedFacts.filter(row => row.label !== "Activity with GPC").map(row => <div key={row.label}><dt className="font-semibold text-zinc-800">{row.label}</dt><dd>{row.value}</dd></div>)}</dl> : null}
         {!hasComparison ? <GpcActivityComparison comparison={projection.activityComparison} /> : null}
         {hasComparison ? <DetailedEvidenceFinding title="Comparison with GPC disabled" summary={gpcCardResponse(projection)}
@@ -1573,6 +1585,20 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
   ].filter(([, value]) => value && !/^(unknown|not identified|not captured|not determined)$/i.test(value.trim()));
   const { cookieRows, policyRows, consentRows, consentLinks, cmpLinks } = detailedEvidenceLayout(report);
   const controlCount = Object.values(report.controls).filter(status => status === "Observed").length;
+  const policyUrls = report.verifiedPolicyDocumentUrls ?? [...new Set(policyRows.flatMap(row => row.policyEvidence?.sourceUrl ? [row.policyEvidence.sourceUrl] : []))];
+  const policyEvidence = (
+    <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
+      {policyRows.map((row) => (
+        <DetailedEvidenceFinding key={row.id} id={evidenceRowAnchor(row.id)} title={row.title}
+          summary={policyFindingSummary({ ...row, hasSupportingEvidence: Boolean(row.policyEvidence?.sections.length) })} assessmentStatus={row.status}
+          badge={<StatusBadge status={row.status} />}
+          headerActions={(row.policyEvidence || (row.id === "privacy-notice-surface" && report.scan.id === SHADOW_REPORT.scan.id)) ?
+            <ShadowPolicyEvidenceViewer evidence={row.policyEvidence ?? SHADOW_PRIVACY_NOTICE_EVIDENCE} findingLabel={row.title} /> : null}
+          canonicalEvidenceJson={row.canonicalEvidenceJson} correctionSteps={row.correctionSteps}
+          evidenceJson={row.evidenceJson} evidenceRefs={row.evidenceRefs} />
+      ))}
+    </div>
+  );
   return (
     <section className={`scroll-mt-6 border-t border-zinc-200 bg-white [&_:target]:scroll-mt-6 [&_[data-evidence-target]]:scroll-mt-6 ${compact ? "[&_.p-5]:!px-3 [&_.p-5]:!py-2 [&_.mt-5]:!mt-2.5 [&_.py-3]:!py-1.5 [&_h3]:!text-sm [&_summary]:min-h-8" : ""}`} id="evidence">
       <div className={compact ? "py-4" : "mx-auto max-w-[90rem] px-5 py-8 lg:px-10 lg:py-10"}>
@@ -1614,19 +1640,9 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.tracking} recap={evidenceSectionRecap(report.trackingExternalRows)} badge={<EvidenceHeaderStatus rows={report.trackingExternalRows} />} />
               <EvidenceIndexRows rows={report.trackingExternalRows} />
             </details>}
-            <details className="group/policy border-b border-r border-zinc-200 p-5">
+            <details id={(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "gdpr_eprivacy" ? "gdpr-eprivacy-evidence" : undefined} className="group/policy border-b border-r border-zinc-200 p-5">
               <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.policy} recap={evidenceSectionRecap(policyRows)} badge={<EvidenceHeaderStatus rows={policyRows} />} />
-              <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
-                {policyRows.map((row) => (
-                  <DetailedEvidenceFinding key={row.id} id={evidenceRowAnchor(row.id)} title={row.title}
-                    summary={policyFindingSummary({ ...row, hasSupportingEvidence: Boolean(row.policyEvidence?.sections.length) })} assessmentStatus={row.status}
-                    badge={<StatusBadge status={row.status} />}
-                    headerActions={(row.policyEvidence || (row.id === "privacy-notice-surface" && report.scan.id === SHADOW_REPORT.scan.id)) ?
-                      <ShadowPolicyEvidenceViewer evidence={row.policyEvidence ?? SHADOW_PRIVACY_NOTICE_EVIDENCE} findingLabel={row.title} /> : null}
-                    canonicalEvidenceJson={row.canonicalEvidenceJson} correctionSteps={row.correctionSteps}
-                    evidenceJson={row.evidenceJson} evidenceRefs={row.evidenceRefs} />
-                ))}
-              </div>
+              {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "gdpr_eprivacy" ? <GdprEprivacyReview rows={policyRows} policyUrls={policyUrls}>{policyEvidence}</GdprEprivacyReview> : policyEvidence}
             </details>
 
             {report.accessibilityAudit ? <AccessibilityEvidence audit={report.accessibilityAudit} observation={report.accessibilityEvidence} /> : null}
@@ -1640,7 +1656,10 @@ export function EvidenceDirectory({ report, compact = false, additionalEvidence 
               <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.runtime} recap={evidenceSectionRecap(report.preConsentRuntimeRows)} badge={<EvidenceHeaderStatus rows={report.preConsentRuntimeRows} />} />
               <EvidenceIndexRows rows={report.preConsentRuntimeRows} stackedTools />
             </details>}
-            {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} focus="ccpa_cpra" scanId={report.scan.id} /> : null}
+            {(report.reviewFocus ?? resolveReportReviewFocus(undefined, report.scan.originCode)) === "ccpa_cpra" ? <CaliforniaPrivacyWorkpaper evidence={report.privacyAuditEvidence} focus="ccpa_cpra" scanId={report.scan.id}
+              assessment={report.californiaPrivacyReview} homepage={Boolean(report.fullSite)} gpcAvailable={Boolean(report.gpcResponse)}
+              coverage={report.californiaScore?.reviewCoverage} rightsAssessment={report.californiaScore?.rightsAssessment}
+              collectionNoticeAssessment={report.californiaScore?.collectionNoticeAssessment} saleSharingAssessment={report.californiaScore?.saleSharingAssessment} /> : null}
             <details className="group/transport border-b border-r border-zinc-200 p-5">
               <EvidenceSectionHeader title={EVIDENCE_SECTION_TITLES.transport} recap={evidenceSectionRecap(report.transportRows)} badge={<EvidenceHeaderStatus rows={report.transportRows} />} />
               <div className="mt-5 divide-y divide-zinc-200 border-t border-zinc-200">
@@ -1770,7 +1789,7 @@ export function ShadowScanReport({
     </>
   );
 
-  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace californiaAssessment={report.californiaPrivacyReview} californiaScore={report.californiaScore} reviewFocus={focus} afterAcceptForms={report.collectionTableRows?.filter(isAfterAcceptForm)} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} />} executiveSnapshot={<SignalSnapshot siteOverview report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
+  const reportContent = report.resultDisposition !== "no_go" && report.fullSite ? <FullSiteWorkspace californiaAssessment={report.californiaPrivacyReview} californiaScore={report.californiaScore} reviewFocus={focus} afterAcceptForms={report.collectionTableRows?.filter(isAfterAcceptForm)} afterAcceptFormsLimited={report.afterAcceptFormsLimited} formDestinationEvidence={<FormDestinationEvidence projection={report.formDestinations} warning={report.formDestinationWarning} />} homepageRuntimeCards={report.executiveRuntimeCards} executiveActions={<ShadowReportShareMenu fullSite reportUrl={report.scan.reportUrl ?? SHADOW_REPORT_SOURCE_URL} scanId={report.scan.id} siteLabel={report.scan.host} />} homepageTimeline={<ReportPageEventTimeline events={report.timeline} accept={report.actionTimelines?.accept} reject={report.actionTimelines?.reject} gpc={report.gpcTimeline} />} executiveSnapshot={<SignalSnapshot siteOverview={Boolean(report.fullSite)} report={report} />} evidenceDirectory={<EvidenceDirectory compact report={report} />} homepageVerdict={report.verdict} homepageHighlightLinks={report.assessmentHighlightLinks} initialNotice={fullSiteNotice} scanId={report.scan.id} requested={report.fullSite} homepageGraph={report.runtimeEvidenceGraph} homepageFindings={report.findings} homepageUrl={report.scan.url} siteMetadata={report.siteMetadata} identity={<ReportIdentity compact enhancedActions workspaceIdentity report={report} />} identityWithoutSharing={<ReportIdentity compact enhancedActions workspaceIdentity hideShare report={report} />} scanNext={<ReportScanNext allowRestrictedScanOptions={allowRestrictedScanOptions} defaultScanFrom={defaultScanFrom} mode={mode} report={report} />}>{homepageContent}</FullSiteWorkspace> : homepageContent;
 
   const completionEvent = report.resultDisposition !== "no_go" && !report.fullSite
     ? <ScanCompletedEvent scanId={report.scan.id} scanSource={mode === "authenticated" ? "dashboard" : "homepage"} domain={report.scan.host} /> : null;

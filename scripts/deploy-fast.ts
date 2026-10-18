@@ -59,8 +59,10 @@ const SCANNER_MEMORY_SIZE = 3008;
 const SCANNER_FUNCTION_NAME = "certscore-v2-dag-local-lambda";
 const SCANNER_WEB_BOT_AUTH_SECRET_ID = "consentcheck/web-bot-auth-private-key-pem";
 const SCANNER_IDENTITY_ENVIRONMENT = {
-  // Owner-disabled: retain passive CMP capture without the Options/Customize lane.
-  CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED: "0",
+  // Owner-authorized bounded read-only coverage rollout; legacy budgets are not enabled.
+  CERTSCORE_CMP_PREFERENCE_INSPECTION_ENABLED: "1",
+  CERTSCORE_CMP_PREFERENCE_COVERAGE_BUDGET_POLICY: "coverage_25_gb_seconds.v1",
+  CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED: "1",
   CERTSCORE_POST_ACCEPT_WORKER_ENABLED: "1",
   CERTSCORE_POST_REFUSAL_REJECT_WORKER_ENABLED: "1",
   CERTSCORE_SALE_SHARING_OPT_OUT_ENABLED: "1",

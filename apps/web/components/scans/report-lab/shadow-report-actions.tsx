@@ -16,8 +16,8 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
   const requestedFocus = new URL(reportUrl, "https://certscore.ai").searchParams.get("reviewFocus");
   const focusQuery = requestedFocus === "gdpr_eprivacy" || requestedFocus === "ccpa_cpra" ? `&reviewFocus=${requestedFocus}` : "";
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const emailSubject = `CertScore scan report for ${siteLabel}`;
-  const emailBody = `Review the CertScore scan report for ${siteLabel}:\n\n${new URL(reportUrl, "https://certscore.ai").toString()}`;
+  const emailSubject = `CertScore.ai scan report for ${siteLabel}`;
+  const emailBody = `Review the CertScore.ai scan report for ${siteLabel}:\n\n${new URL(reportUrl, "https://certscore.ai").toString()}`;
 
   async function copyReportLink() {
     try {

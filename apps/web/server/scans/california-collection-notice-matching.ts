@@ -222,16 +222,30 @@ export function matchCaliforniaCollectionNoticesV4(input:Parameters<typeof match
   const points=prior.points.map(point=>{
     if(point.kind!=="cookies"&&point.kind!=="browser_storage")return point;
     const items=runtimePurposeAssessment.items.filter(item=>point.kind === "cookies"?item.kind === "cookie":item.kind!=="cookie");
-    const purposePatterns:Record<string,RegExp>={marketing:/\bmarket\w*\b/i,personalization:/\b(?:personali[sz]\w*|customi[sz]\w*)\b/i,session_replay:/\b(?:session replay|session recording)\b/i,consent_management:/\b(?:remember\w*|sav\w*|manag\w*)\b.{0,70}\b(?:consent|choices?|settings?)\b/i,tag_management:/\btag management\b/i,infrastructure:/\b(?:site|website) (?:operation|function)\w*\b/i,performance_monitoring:/\b(?:performance|monitor\w*)\b/i,customer_support:/\b(?:customer support|customer service|live chat)\b/i,preferences:/\b(?:remember\w*|sav\w*)\b.{0,70}\b(?:preferences?|choices?|settings?)\b/i,analytics:/\b(?:analytics|analy[sz]\w*|measur\w*)\b/i,advertising:/\b(?:advertis\w*|market\w*)\b/i,functional:/\b(?:provid\w*|deliver\w*)\b.{0,70}\b(?:service|function)\w*\b/i,security:/\b(?:secur\w*|protect\w*|fraud)\b/i};
+    const purposePatterns:Record<string,RegExp>={marketing:/\bmarket\w*\b/i,personalization:/\b(?:personali[sz]\w*|customi[sz]\w*)\b/i,session_replay:/\b(?:session replay|session recording)\b/i,consent_management:/\b(?:remember\w*|sav\w*|stor\w*|manag\w*)\b.{0,70}\b(?:consent|choices?|settings?)\b/i,tag_management:/\btag management\b/i,infrastructure:/\b(?:site|website) (?:operation|function)\w*\b/i,performance_monitoring:/\b(?:performance|monitor\w*)\b/i,customer_support:/\b(?:customer support|customer service|live chat)\b/i,preferences:/\b(?:remember\w*|sav\w*|stor\w*)\b.{0,70}\b(?:preferences?|choices?|settings?)\b/i,analytics:/\b(?:analytics|analy[sz]\w*|measur\w*)\b/i,advertising:/\b(?:advertis\w*|market\w*)\b/i,functional:/\b(?:provid\w*|deliver\w*)\b.{0,70}\b(?:service|function)\w*\b/i,security:/\b(?:secur\w*|protect\w*|fraud)\b/i};
     const clauses=californiaPolicyClauses(input.documents);
     const known=items.length>0&&items.every(item=>item.purpose!=="unknown");
     const cookieCategories=clauses.filter(clause=>/\b(?:cookies?|online identifiers?|unique identifiers?)\b/i.test(clause.text));
-    const purposeRows=point.kind === "cookies"&&known?cookieCategories.filter(clause=>items.every(item=>purposePatterns[item.purpose]?.test(clause.text))&&!/\b(?:do not|does not|never)\s+(?:use|collect)\b/i.test(clause.text)):[];
+    // A category and its use can span an adjacent sentence/list. Only join an
+    // explicit cookie continuation, never an unrelated collection purpose.
+    const cookieWindows=cookieCategories.map(clause=>{
+      const index=clauses.indexOf(clause),next=clauses[index+1];
+      const continuation=next&&next.document===clause.document&&next.start-clause.start<600&&
+        /^(?:These cookies|Such cookies|They|We use (?:them|these cookies)|Their purposes?|Purposes? include)\b/i.test(next.text);
+      const text=continuation?clause.document.text.slice(clause.start,next.start+next.text.length):clause.text;
+      return {...clause,text};
+    }).filter(clause=>clause.text.length<=900);
+    const purposeRows=point.kind === "cookies"&&known?cookieWindows.filter(clause=>items.every(item=>purposePatterns[item.purpose]?.test(clause.text))&&!/\b(?:do not|does not|never)\s+(?:use|collect)\b/i.test(clause.text)):[];
     let assessed={...point};
     if(point.kind === "cookies"&&known&&input.policyComplete&&input.inventoryComplete){
-      const purposeMatch=purposeRows.length?"wording_retained" as const:"not_observed" as const;
+      const retainedPurposeRows=purposeRows.flatMap(clause=>{
+        const passages=[retainedCaliforniaPassage(clause)];
+        for(const item of items){const pattern=purposePatterns[item.purpose];if(pattern&&!passages.some(p=>pattern.test(p.excerpt)))passages.push(retainedCaliforniaPassage(clause,pattern));}
+        return passages.slice(0,2).every(p=>p.excerpt.length>0)&&items.every(item=>passages.slice(0,2).some(p=>purposePatterns[item.purpose]?.test(p.excerpt)))?passages.slice(0,2):[];
+      }).slice(0,2);
+      const purposeMatch=retainedPurposeRows.length?"wording_retained" as const:"not_observed" as const;
       const matched=purposeMatch === "wording_retained"&&point.categoryMatch === "wording_retained"&&point.association === "page_policy_link";
-      assessed={...point,purposeMatch,status:matched?"matched_text":point.status,passages:purposeRows.length?[retainedCaliforniaPassage(purposeRows[0]!),...point.passages].slice(0,2):point.passages};
+      assessed={...point,purposeMatch,status:matched?"matched_text":point.status,passages:retainedPurposeRows.length?retainedPurposeRows:point.passages};
     }
     if(point.kind === "browser_storage"&&items.length&&items.every(item=>item.dataOrigin === "document_referrer")&&input.policyComplete&&input.inventoryComplete){
       const categoryRows=clauses.filter(clause=>/\b(?:referr(?:er|ing)|referral|browsing history|navigation history)\b/i.test(clause.text));

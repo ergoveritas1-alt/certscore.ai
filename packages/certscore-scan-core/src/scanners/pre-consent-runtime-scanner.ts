@@ -1,3 +1,5 @@
+import { createResponseCompletionRecovery } from "../response-completion-recovery.js";
+import { classifyCanonicalCollectionEndpoint } from "@certscore/vendor-resolver";
 import { createCmpInitializationTracker, CMP_INITIALIZATION_SETTLE_POLICY } from "../cmp-initialization-settle.js";
 import {installPassiveTermlyInventoryCapture} from "../termly-network-inventory.js";
 import {cmpBasicEvidenceSchema,projectNetworkCmpCookies} from "@certscore/contracts";
@@ -678,6 +680,10 @@ export async function preConsentRuntimeScanner(
   const requestEvents = new WeakMap<Request, NetworkEvent>();
   const pendingResponseCaptures = new Set<Promise<void>>();
   let responseCaptureFinalized = false;
+  const responseCompletionRecovery = createResponseCompletionRecovery<Request, Response>({
+    finalized: () => responseCaptureFinalized,
+    responseFor: request => request.response(), requestOf: response => response.request(), capture: captureResponse,
+  });
   const cdpInitiatorsByUrl = new Map<string, string[][]>();
   const browserDocumentIdentityState: BrowserDocumentIdentityState = {};
   let networkMetadataSession: CDPSession | null = null;
@@ -1030,7 +1036,15 @@ export async function preConsentRuntimeScanner(
       cmpInitialization?.finish(requestIds.get(request), "completed");
       if (cmpInitialization) startCmpBasicCapture();
     }
-    if (isHttpUrl(request.url())) passiveEvidenceActivity.markRequestFinished(request);
+    if (!isHttpUrl(request.url())) return;
+    passiveEvidenceActivity.markRequestFinished(request);
+    const recovery = responseCompletionRecovery.recover(request);
+    if (recovery) {
+      const capture = recovery.catch(() => {
+        if (!responseCaptureFinalized) runtimeErrors.push("Completed-request response confirmation unavailable.");
+      }).finally(() => pendingResponseCaptures.delete(capture));
+      pendingResponseCaptures.add(capture);
+    }
   });
   page.on("requestfailed", (request) => {
     if (responseCaptureFinalized) return;
@@ -4672,6 +4686,7 @@ export async function preConsentRuntimeScanner(
     }
 
     const request = response.request();
+    if (!responseCompletionRecovery.begin(request)) return;
     const requestId = requestIds.get(request);
     const requestEvent = requestEvents.get(request);
     const hostname = getHostname(responseUrl) ?? undefined;
@@ -8963,7 +8978,7 @@ async function readConsentUiObservation(
     ...observation,
     documentReadyState: inventory.documentReadyState,
     inventoryOutcome:
-      observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "partial" : frameInaccessibleCount > 0
+      observation.inventoryOutcome === "document_mismatch" ? "document_mismatch" : observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "partial" : frameInaccessibleCount > 0
         ? "frame_inaccessible"
         : enrichedControls.length > 0
           ? "complete_with_controls"
@@ -8973,19 +8988,19 @@ async function readConsentUiObservation(
               ? "timed_out"
               : "partial",
     captureStatus:
-      observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "incomplete" : enrichedControls.length > 0
+      observation.inventoryOutcome === "document_mismatch" ? "incomplete" : observation.basis.includes(UNRESOLVED_CONSENT_DECISION) ? "incomplete" : observation.controls.length > 0
         ? "observed"
         : domInventoryCompleted || accessibilityInventory.captureStatus === "completed"
           ? observation.captureStatus
           : "incomplete",
     captureDiagnostics: {
-      completedChannels,
+      completedChannels: observation.inventoryOutcome === "document_mismatch" ? completedChannels.filter(channel=>channel!=="accessibility_tree") : completedChannels,
       timedOutChannels: accessibilityInventory.captureStatus === "timed_out"
         ? ["accessibility_tree"]
         : [],
       failedChannels: [
         ...(!domInventoryCompleted ? ["dom_inventory" as const] : []),
-        ...(accessibilityInventory.captureStatus === "failed" ? ["accessibility_tree" as const] : []),
+        ...(accessibilityInventory.captureStatus === "failed" || observation.inventoryOutcome === "document_mismatch" ? ["accessibility_tree" as const] : []),
       ],
     },
   };
@@ -9764,9 +9779,9 @@ function consentUiObservationFromAccessibilityInventory(
           ? "observed"
           : "incomplete",
     captureDiagnostics: {
-      completedChannels: inventory.captureStatus === "completed" ? ["accessibility_tree"] : [],
+      completedChannels: observation.inventoryOutcome !== "document_mismatch" && inventory.captureStatus === "completed" ? ["accessibility_tree"] : [],
       timedOutChannels: inventory.captureStatus === "timed_out" ? ["accessibility_tree"] : [],
-      failedChannels: inventory.captureStatus === "failed" ? ["accessibility_tree"] : [],
+      failedChannels: observation.inventoryOutcome === "document_mismatch" || inventory.captureStatus === "failed" ? ["accessibility_tree"] : [],
     },
   };
 }
@@ -10582,7 +10597,7 @@ function isPaidDeclineVariant(variant: string | null | undefined): boolean {
   return variant === "reject_with_subscription" || variant === "reject_with_payment";
 }
 
-function buildConsentUiObservationFromEvidence(input: {
+export function buildConsentUiObservationFromEvidence(input: {
   controls: ConsentUiObservation["controls"];
   defaultToggleEvidence?: ConsentDefaultToggleEvidence;
   documentIdentity?: BrowserDocumentIdentity;
@@ -10592,7 +10607,15 @@ function buildConsentUiObservationFromEvidence(input: {
   scanStartedAtMs: number;
   text: string;
 }): ConsentUiObservation {
-  const { controls, defaultToggleEvidence, documentIdentity, documentUrl, fallbackBasis = [], inventoryDiagnostics, scanStartedAtMs, text } = input;
+  const { defaultToggleEvidence, documentIdentity, documentUrl, inventoryDiagnostics, scanStartedAtMs, text } = input;
+  // Native AX observations carry their own exact document proof. A same-loader
+  // history/hash URL transition can happen after AX capture and before the DOM
+  // inventory finishes. Never relabel those controls as belonging to that URL.
+  const controls=input.controls.filter(control=>!control.domBinding ||
+    control.domBinding.documentUrl===documentUrl && control.domBinding.documentIdentity.source===documentIdentity?.source &&
+    control.domBinding.documentIdentity.token===documentIdentity?.token);
+  const staleNativeControls=controls.length!==input.controls.length;
+  const fallbackBasis=[...(input.fallbackBasis??[]),...(staleNativeControls?["inventory:native_ax_document_mismatch"]:[])];
   const canonicalSurfaceText = classifyConsentSurfaceText({ text });
   const visibleChoiceLabels = controls.filter((control) => control.visible !== false).map((control) => control.label);
   const acceptControlObserved = controls.some((control) => control.visible !== false && control.actionType === "accept_all");
@@ -10608,7 +10631,7 @@ function buildConsentUiObservationFromEvidence(input: {
   );
   const likelyPresent = canonicalSurfaceText.likelyPresent || controls.length > 0;
   const incomplete = fallbackBasis.some((basis) =>
-    basis === "bounded_capture_timeout_or_failure" || basis === "inventory:probe_failed"
+    basis === "bounded_capture_timeout_or_failure" || basis === "inventory:probe_failed" || basis === "inventory:native_ax_document_mismatch"
   );
   return {
     observationId: "consent_ui_pre_consent",
@@ -10616,12 +10639,13 @@ function buildConsentUiObservationFromEvidence(input: {
     documentUrl,
     ...(documentIdentity ? { documentIdentity } : {}),
     captureStatus: incomplete ? "incomplete" : likelyPresent ? "observed" : "no_evidence",
+    ...(staleNativeControls?{inventoryOutcome:"document_mismatch" as const}:{}),
     captureDiagnostics: {
-      completedChannels: inventoryDiagnostics?.inventorySources?.includes("accessibility_tree")
+      completedChannels: !staleNativeControls && inventoryDiagnostics?.inventorySources?.includes("accessibility_tree")
         ? ["accessibility_tree"]
         : [],
       timedOutChannels: incomplete ? ["dom_inventory"] : [],
-      failedChannels: fallbackBasis.includes("inventory:probe_failed") ? ["dom_inventory"] : [],
+      failedChannels: [...(fallbackBasis.includes("inventory:probe_failed") ? ["dom_inventory" as const] : []),...(staleNativeControls?["accessibility_tree" as const]:[])],
     },
     likelyPresent,
     basis: likelyPresent ? [
@@ -10647,7 +10671,7 @@ function buildConsentUiObservationFromEvidence(input: {
     rejectControlObserved,
     managePreferencesControlObserved,
     controls,
-    inventoryDiagnostics,
+    inventoryDiagnostics: staleNativeControls && inventoryDiagnostics ? {...inventoryDiagnostics,retainedControlCount:controls.length} : inventoryDiagnostics,
     evidenceRefs: [],
     confidence: controls.length > 0 ? 0.86 : likelyPresent ? canonicalSurfaceText.confidence : 0.5,
   };
@@ -10917,7 +10941,8 @@ export function mergeConsentUiObservations(
   if (
     currentDocumentToken &&
     candidateDocumentToken &&
-    currentDocumentToken !== candidateDocumentToken
+    (currentDocumentToken !== candidateDocumentToken || current.documentIdentity?.source !== candidate.documentIdentity?.source) ||
+    current.documentUrl && candidate.documentUrl && current.documentUrl !== candidate.documentUrl
   ) {
     const latestDocumentObservation = candidate.observedAtMs >= current.observedAtMs
       ? candidate
@@ -11932,6 +11957,7 @@ export function querySignalsFromUrl(url: string): {
     "email",
     "em",
     "external_id",
+    "first_party_id",
     "fbp",
     "fbc",
     "id",
@@ -12425,86 +12451,8 @@ function bodyFieldNames(body: string): string[] {
   }
 }
 
-export function isCollectionEndpoint(
-  url: string,
-  resourceType: string | undefined,
-): { observed: boolean; category?: string } {
-  const hostname = getHostname(url) ?? "";
-  const path = pathFromUrl(url) ?? "";
-  // Vendor purpose alone does not establish collection by a code/style/font
-  // resource. Retained SDK downloads can be labeled fetch or xhr, so inspect
-  // the pathname independently of resource type. Vendor activity stays retained.
-  // Dynamic script beacons and image collectors remain eligible below.
-  if (/\.(?:m?js|css|woff2?|ttf|otf|eot)$/i.test(path)) {
-    return { observed: false };
-  }
-  if (/^(?:www\.)?google\.com$/i.test(hostname)) {
-    if (/^\/ccm\/collect\b/i.test(path)) {
-      return { observed: true, category: "google_consent_or_tag_support" };
-    }
-    if (/^\/(?:pagead|ads|aclk|gmp\/conversion)\b/i.test(path) || /\/conversion\b/i.test(path)) {
-      return { observed: true, category: "advertising_collection" };
-    }
-    if (/^\/recaptcha\//i.test(path)) {
-      return { observed: false, category: "google_recaptcha_or_security" };
-    }
-  }
-  const endpointPatterns: Array<[RegExp, string]> = [
-    [/google-analytics\.com$/i, "analytics_collection"],
-    [/doubleclick\.net$/i, "advertising_collection"],
-    [/facebook\.com$/i, "advertising_collection"],
-    [/clarity\.ms$/i, "session_replay_collection"],
-    [/hotjar\.(?:com|io)$/i, "session_replay_collection"],
-    [/fullstory\.com$/i, "session_replay_collection"],
-    [/analytics\.tiktok\.com$/i, "advertising_collection"],
-    [/px\.ads\.linkedin\.com$/i, "advertising_collection"],
-    [/p\.tvpixel\.com$/i, "runtime_collection"],
-    [/\.omtrdc\.net$/i, "analytics_collection"],
-    [/\.2o7\.net$/i, "analytics_collection"],
-    [/\.demdex\.net$/i, "analytics_collection"],
-    [/\.amazon-adsystem\.com$/i, "advertising_collection"],
-    [/\.adsrvr\.org$/i, "advertising_collection"],
-    [/\.criteo\.(?:com|net)$/i, "advertising_collection"],
-    [/\.rlcdn\.com$/i, "advertising_collection"],
-    [/\.crwdcntrl\.net$/i, "advertising_collection"],
-    [/\.pubmatic\.com$/i, "advertising_collection"],
-    [/\.rubiconproject\.com$/i, "advertising_collection"],
-    [/\.openx\.net$/i, "advertising_collection"],
-    [/\.casalemedia\.com$/i, "advertising_collection"],
-    [/\.quantserve\.com$/i, "advertising_collection"],
-    [/\.amplitude\.com$/i, "analytics_collection"],
-    [/\.mixpanel\.com$/i, "analytics_collection"],
-    [/\.posthog\.com$/i, "analytics_collection"],
-    [/\.px-cloud\.net$/i, "security_or_performance_support"],
-    [/\.go-mpulse\.net$/i, "security_or_performance_support"],
-    [/\.nr-data\.net$/i, "security_or_performance_support"],
-    [/\.newrelic\.com$/i, "security_or_performance_support"],
-    [/\.forter\.com$/i, "security_or_performance_support"],
-    [/^(?:prod\d+-)?live-chat\.sprinklr\.com$/i, "customer_support"],
-    [/\.tapad\.com$/i, "advertising_collection"],
-    [/\.singular\.net$/i, "advertising_collection"],
-    [/^pixel-config\.reddit\.com$/i, "advertising_collection"],
-  ];
-  const pathPatterns: Array<[RegExp, string]> = [
-    [/\/(?:g\/)?collect\b/i, "analytics_collection"],
-    [/\/j\/collect\b/i, "analytics_collection"],
-    [/\/tr\b/i, "advertising_collection"],
-    [/\/events?\b/i, "advertising_collection"],
-    [/\/pagead\//i, "advertising_collection"],
-    [/\/activityi\b/i, "advertising_collection"],
-    [/\/rec\//i, "session_replay_collection"],
-  ];
-  for (const [pattern, category] of [...endpointPatterns, ...pathPatterns]) {
-    const target = endpointPatterns.some(([item]) => item === pattern) ? hostname : path;
-    if (pattern.test(target)) {
-      return { observed: true, category };
-    }
-  }
-  if (resourceType && ["xhr", "fetch", "beacon"].includes(resourceType) && /collect|event|pixel/i.test(url)) {
-    return { observed: true, category: "runtime_collection" };
-  }
-  return { observed: false };
-}
+// Kept as the runtime API; classification lives in the canonical resolver.
+export const isCollectionEndpoint = classifyCanonicalCollectionEndpoint;
 
 function classifyEndpointAttribution(input: {
   url: string;
@@ -13060,7 +13008,7 @@ function mergeVisualCaptureWithFullPageArtifact(
   };
 }
 
-async function capturePreConsentScreenshot(
+export async function capturePreConsentScreenshot(
   page: Page,
   screenshotPath: string,
   options: {
@@ -13095,10 +13043,13 @@ async function capturePreConsentScreenshot(
   const deferredViewportAttemptErrors: string[] = [];
   if (options.captureMode === "viewport_first") {
     let cdpViewportFailure: string | undefined;
-    const cdpTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
+    const cdpTimeoutMs = nextCaptureTimeoutMs(Math.min(viewportAttemptMaximumMs, Math.max(1, Math.floor(options.timeoutMs / 2))));
     if (cdpTimeoutMs !== null) {
       try {
-        await captureViewportScreenshotWithCdp(page, screenshotPath, cdpTimeoutMs);
+        // Capture the live view first. A stalled surface/compositor request can
+        // otherwise occupy Chromium's screenshot queue for the entire budget,
+        // preventing the compatible view path from ever starting usefully.
+        await captureViewportScreenshotWithCdp(page, screenshotPath, cdpTimeoutMs, false);
         return {
           status: "available",
           captureMethod: captureMethods.viewportPrimary,
@@ -13124,11 +13075,9 @@ async function capturePreConsentScreenshot(
     const compatibleViewportTimeoutMs = nextCaptureTimeoutMs(viewportAttemptMaximumMs);
     if (compatibleViewportTimeoutMs !== null) {
       try {
-        await page.screenshot({
-          path: screenshotPath,
-          fullPage: false,
-          timeout: compatibleViewportTimeoutMs,
-        });
+        // A busy compositor can stall surface capture indefinitely. The view
+        // path uses the same live viewport and remaining transaction budget.
+        await captureViewportScreenshotWithCdp(page, screenshotPath, compatibleViewportTimeoutMs, true);
         return {
           status: "available",
           captureMethod: captureMethods.viewportPrimary,
@@ -13273,6 +13222,7 @@ async function captureViewportScreenshotWithCdp(
   page: Page,
   screenshotPath: string,
   timeoutMs: number,
+  fromSurface = true,
 ): Promise<void> {
   const deadlineAtMs = Date.now() + Math.max(1, timeoutMs);
   const client = await acquireCdpSessionBeforeDeadline(
@@ -13287,7 +13237,7 @@ async function captureViewportScreenshotWithCdp(
       client.send("Page.captureScreenshot", {
         captureBeyondViewport: false,
         format: "png",
-        fromSurface: true,
+        fromSurface,
       }),
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => reject(new Error("Viewport screenshot timed out")), remainingMs);

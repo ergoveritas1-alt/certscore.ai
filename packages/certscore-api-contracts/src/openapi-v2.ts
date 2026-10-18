@@ -1038,11 +1038,12 @@ export function buildCertScoreApiV2OpenApiDocument() {
             },
             californiaPolicy: {
               type: "object",
+              description: "Eligible GPC contribution. The California score unions recipients with explicit opt-out evidence and applies one shared family total; do not add these effects together.",
               additionalProperties: false,
               required: ["applied", "deductionPoints"],
               properties: {
                 applied: { type: "boolean" },
-                deductionPoints: { type: "integer", enum: [0, 15] }
+                deductionPoints: { type: "integer", enum: [0, 15, 25, 32, 37, 40, 43, 45, 47] }
               }
             },
             evidenceUrl: { type: "string", format: "uri" }

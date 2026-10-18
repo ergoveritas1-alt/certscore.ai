@@ -58,7 +58,7 @@ test("all context scenarios render with truthful jurisdiction, evidence and inde
     assert.doesNotMatch(html, /Other issues|Accessibility &amp; site review|report-other-issues/);
     assert.equal((html.match(/id="report-top-issues"/g) ?? []).length, 1);
     assert.match(html, /sitewide-accessibility_priority_group/);
-    assert.equal(html.includes("Review the coverage below for the checks completed in this visit"), mode === "ccpa_cpra");
+    assert.doesNotMatch(html, /California review coverage|california-review-coverage|Review the coverage below/);
     for (const example of context.examples) {
       assert.ok(html.includes(example.url));
       assert.match(html, /Related enforcement/);
@@ -69,7 +69,7 @@ test("all context scenarios render with truthful jurisdiction, evidence and inde
 test("California overview and priority list omit EU-only findings while retaining accessibility in one top-issue count", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary score={{value:82, priorityReview:[postReject,ACCESSIBILITY_PREVIEW],scoredPages:1}} californiaScore={{policyVersion:"california-regulatory-posture.v1",score:86,scope:"starting_page",coverage:"bounded",assessmentSourceHash:"a".repeat(64),deductions:[]}} pending={false} scannedPages={1} reviewFocus="ccpa_cpra" homepageVerdict="EU-only tracking after Reject" />);
   assert.match(html, /California page score 86 out of 100/);
-  assert.match(html, /California-specific scoring/);
+  assert.doesNotMatch(html, /California-specific scoring/);
   assert.doesNotMatch(html, /82 out of 100/);
   assert.match(html, /1 top issue/);
   assert.doesNotMatch(html, /other issue|report-other-issues/);
@@ -98,33 +98,33 @@ test("California coverage separates supported evidence from unresolved review ar
 });
 
 test("California coverage exposes canonical rights clauses and collection matching without presenting compliance passes",async()=>{
-  const {CaliforniaCoverageSummary}=await import("../../components/scans/regulatory-review-focus");
+  const {CaliforniaCoverageDetails}=await import("../../components/scans/regulatory-review-focus");
   const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("../../server/scans/california-review-coverage.fixture");
   const {projectCaliforniaPrivacyReview}=await import("../../server/scans/california-privacy-review-projection");
   const f=californiaCoverageFixture("Privacy Policy. We give the individual access to personal information upon request. A customer may request correction of inaccurate personal information. We retain records until no longer necessary. Such information is destroyed or erased.");
   f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v5";f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
   const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
   if(review.contractVersion!=="certscore.california-privacy-review.v5")throw new Error("v5 expected");
-  const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment}/>);
+  const html=renderToStaticMarkup(<CaliforniaCoverageDetails coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment}/>);
   assert.match(html,/Rights clause assessment/);assert.match(html,/Rights wording retained/);assert.match(html,/Excluded retention\/security wording/);
   assert.match(html,/Collection-notice matching/);assert.match(html,/legal adequacy remain unassessed/);assert.doesNotMatch(html,/compliant|passed all/i);
 });
 
 test("v6 coverage distinguishes assessed gaps and renders retained sale/sharing claims",async()=>{
-  const {CaliforniaCoverageSummary}=await import("../../components/scans/regulatory-review-focus");
+  const {CaliforniaCoverageDetails}=await import("../../components/scans/regulatory-review-focus");
   const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("../../server/scans/california-review-coverage.fixture");
   const {projectCaliforniaPrivacyReview}=await import("../../server/scans/california-privacy-review-projection");
   const f=californiaCoverageFixture("Privacy Policy. We give the individual access to personal information upon request. A customer may request correction of personal information. We share personal information with service providers for billing.");
   f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v6";f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";});
   const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
   if(review.contractVersion!=="certscore.california-privacy-review.v6")throw new Error("v6 expected");
-  const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment} saleSharingAssessment={review.saleSharingAssessment}/>);
-  assert.match(html,/1 assessed gap/);assert.match(html,/Assessed: disclosure gaps found/);assert.match(html,/Sale\/sharing clause assessment/);
+  const html=renderToStaticMarkup(<CaliforniaCoverageDetails coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment} saleSharingAssessment={review.saleSharingAssessment}/>);
+  assert.match(html,/Assessed: disclosure gaps found/);assert.match(html,/Sale\/sharing clause assessment/);
   assert.match(html,/operational disclosures: described/);assert.doesNotMatch(html,/compliant|passed all/i);
 });
 
 test("v7 labels completed assessments independently of follow-up and separates technical lookup rows",async()=>{
-  const {CaliforniaCoverageSummary}=await import("../../components/scans/regulatory-review-focus");
+  const {CaliforniaCoverageDetails}=await import("../../components/scans/regulatory-review-focus");
   const {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL}=await import("../../server/scans/california-review-coverage.fixture");
   const {projectCaliforniaPrivacyReview}=await import("../../server/scans/california-privacy-review-projection");
   const f=californiaCoverageFixture("Privacy Policy. We give the individual access to personal information upon request. A customer may request correction of personal information. We share personal information with service providers for billing. We use cookies for analytics.");
@@ -133,7 +133,7 @@ test("v7 labels completed assessments independently of follow-up and separates t
   f.bundle.networkEvents=[{eventId:"contact",scenario:"fresh_pre_consent",documentUrl:CA_FIXTURE_URL,thirdParty:true}] as never;
   const review=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
   if(review.contractVersion!=="certscore.california-privacy-review.v7")throw new Error("v7 expected");
-  const html=renderToStaticMarkup(<CaliforniaCoverageSummary coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment} saleSharingAssessment={review.saleSharingAssessment}/>);
-  assert.match(html,/3 assessed/);assert.match(html,/3 partial/);assert.match(html,/Policy text assessed · recipient roles unresolved/);assert.match(html,/Page inspection complete · obligation unresolved/);
+  const html=renderToStaticMarkup(<CaliforniaCoverageDetails coverage={review.reviewCoverage} rightsAssessment={review.rightsAssessment} collectionNoticeAssessment={review.collectionNoticeAssessment} saleSharingAssessment={review.saleSharingAssessment}/>);
+  assert.match(html,/Policy text assessed · recipient roles unresolved/);assert.match(html,/Page inspection complete · obligation unresolved/);
   assert.match(html,/Technical product lookups/);assert.match(html,/Category: wording retained · Purpose: unresolved/);assert.doesNotMatch(html,/0 of 7|compliant|passed all/i);
 });

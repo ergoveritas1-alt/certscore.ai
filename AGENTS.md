@@ -1,9 +1,30 @@
-# CertScore Agent Notes
+# CertScore.ai Agent Notes
 
-> **Project:** CertScore (`certscore.ai`) — a production-minded MVP for scanning public websites for accessibility, privacy, cookie, policy, and disclosure risk signals.
+> **Project:** CertScore.ai (`certscore.ai`) — a production-minded MVP for scanning public websites for accessibility, privacy, cookie, policy, and disclosure risk signals.
 > **Repo codename:** `WC01`
 > **Package manager:** pnpm 10.6.3 (workspace monorepo with Turbo)
 > **Node engines:** `>=22.0.0 <25.0.0` (Node 25 is unsupported and can fail DNS resolution on localhost)
+
+## Required product name
+
+Always write **CertScore.ai**, including the `.ai`, in all prose: user messages,
+reports, UI copy, documentation, metadata, accessibility labels, and generated
+content. Never shorten the product name by dropping `.ai`. Use **CertScore.ai’s**
+for the possessive. Preserve existing technical identifiers, package names,
+paths, protocol headers, and evidence keys; this naming rule is not authorization
+to rename those contracts.
+
+## Local capture-quality approval — October 17, 2026
+
+The owner approved up to $50/month incremental at 100,000 scans for bounded
+read-only preference-center and one navigation-menu accessibility inspection.
+Use `coverage_25_gb_seconds.v1` for newly enabled preference dispatches; preserve
+legacy recipe allowances. Menu work is at most 800 ms within the existing audit
+window, after frozen privacy capture, on starting pages only and workers no
+larger than 4096 MB. No privacy-choice mutation or form submission is authorized
+by read-only inspection. Production preference/menu flags remain unchanged until
+separate deployment authorization. See
+`docs/certscore-v2/msnbc-capture-quality-policy-2026-10-17.md`.
 
 ## Absolute prohibition: Vercel
 
@@ -12,6 +33,21 @@ WC01 and WS01 are AWS-only. Never use, inspect, load, recommend, or invoke any V
 A request containing “deploy,” “production,” “hosting,” “CI/CD,” or “release” must not trigger Vercel tooling. The only authorized deployment paths are the repository-controlled AWS workflows and scripts, including `scripts/deploy-fast.ts` and the checked-in GitHub Actions AWS workflows.
 
 If platform discovery is needed, inspect the repository’s deployment topology first. If any system capability suggests Vercel, treat it as inapplicable and continue with the canonical AWS path. Stop and ask before introducing any non-AWS deployment platform.
+
+## California choice-enforcement scoring
+
+October 17, 2026: the owner authorized local implementation of recipient-based
+California choice-enforcement scoring, then raised its cap to 47. The totals
+are 15/25/32/37/40/43/45/47 for 1 through 8+ distinct canonical recipient entities.
+The first 15 includes the first recipient; a verified GPC acknowledgment with
+the applicable opt-out still off can independently trigger the initial effect.
+Union eligible recipients across GPC and explicit opt-out evidence and charge
+one shared family total. Preserve the canonical pipeline, qualifying collection
+proof, score-neutral unsupported evidence and EU scoring. This supersedes the
+older flat-15 scoring instructions below for new materializations. See
+`docs/certscore-v2/california-recipient-scoring-policy.md`. No deployment is
+authorized. Estimated extra retained JSON storage is below $0.50/month at
+100,000 scans and 30-day retention; no new browser work or model call.
 
 ## Cost-change approval
 
@@ -33,14 +69,14 @@ Cost-neutral diagnostics and optimizations may proceed normally.
 
 This is a **pnpm workspace monorepo** managed with **Turbo**. It contains the product-facing web application, a background validation worker, shared libraries, and operational tooling.
 
-CertScore is a risk-signal and monitoring product, not a legal certification platform. The repo boundary is intentionally split:
+CertScore.ai is a risk-signal and monitoring product, not a legal certification platform. The repo boundary is intentionally split:
 
 - **`WC01` (this repo)** — product web flows, scan creation, reporting, validation, and control-plane workflows.
 - **`WS01` (external repo)** — standalone scanner runtime, crawler identity, scheduled scans, heartbeat behavior, and scanner deploy flow. Do not add scanner runtime logic here.
 
 ### Canonical scan-to-report flow
 
-All new scan-to-report logic must preserve the canonical CertScore pipeline:
+All new scan-to-report logic must preserve the canonical CertScore.ai pipeline:
 
 ```text
 WS01 observed evidence
@@ -287,9 +323,9 @@ Changes to this flow require focused regression coverage at the affected boundar
 - persisted projection -> normalized concern and concern policy
 - unified projection -> score and every downstream surface
 
-### CertScore v2 internal diagnostic architecture
+### CertScore.ai v2 internal diagnostic architecture
 
-CertScore v2 exists in this repo as a clean scanner/review architecture and internal diagnostic pipeline. Its current operating principle is:
+CertScore.ai v2 exists in this repo as a clean scanner/review architecture and internal diagnostic pipeline. Its current operating principle is:
 
 ```text
 scan-core observes
@@ -573,7 +609,7 @@ WC01 should not consume loose, ad hoc, or display-only scanner fields. New scann
 
 If WC01 starts consuming a new WS01 field, add or update a runtime contract fixture and the relevant normalized concern/policy test in the same change.
 
-For CertScore v2, artifact contracts must stay typed, bounded, display-safe where projected, and covered by focused fixtures/tests. Do not carry raw cookies, raw request/response bodies, sensitive query values, unbounded DOM/policy text, or raw Nano reasoning into reviewer, report-adapter, or web-facing artifacts.
+For CertScore.ai v2, artifact contracts must stay typed, bounded, display-safe where projected, and covered by focused fixtures/tests. Do not carry raw cookies, raw request/response bodies, sensitive query values, unbounded DOM/policy text, or raw Nano reasoning into reviewer, report-adapter, or web-facing artifacts.
 
 Production v2 Lambda policy-semantic review must consume retained policy evidence from the checksum- and size-verified `CanonicalEvidenceBundle.json` S3 pointer recorded on `v2_lambda_result.received`. `scan_document_sources` is a legacy/fallback input and must not be assumed to contain v2 Lambda policy surfaces. Keep this handoff typed, bounded, restricted to approved scanner regions, and fail closed when retained artifact metadata does not verify.
 
@@ -608,7 +644,7 @@ If a module needs different thresholds, severity, or status treatment, express t
 
 `packages/shared/src/known-cmps.ts` `KNOWN_CMP_REGISTRY` is the canonical CMP registry. Use it for CMP identity, aliases, domains, cookies, DOM selectors, globals, standards, and infrastructure treatment. CMPs may also appear in vendor resolution and vendor lists as consent-management vendors, but do not create a competing CMP list when the classification belongs in `KNOWN_CMP_REGISTRY`.
 
-For CertScore v2 endpoint/vendor attribution, use `packages/certscore-vendor-resolver` as the canonical resolver home. Do not add local endpoint or vendor lists inside scan modules, report adapters, dry-run bridges, or docs when the classification belongs in the resolver.
+For CertScore.ai v2 endpoint/vendor attribution, use `packages/certscore-vendor-resolver` as the canonical resolver home. Do not add local endpoint or vendor lists inside scan modules, report adapters, dry-run bridges, or docs when the classification belongs in the resolver.
 
 When assigning one product to one resource, use `resolveCanonicalVendor`; do not
 select the first match or the highest numeric confidence from a multi-observation
@@ -686,7 +722,7 @@ Implement policy-validity rules in the shared evidence and policy pipeline, with
 
 ### Legal conclusion language
 
-CertScore reports risk signals, not legal determinations. User-facing copy must not state or imply definitive legal violations unless explicitly supported by product policy and retained evidence.
+CertScore.ai reports risk signals, not legal determinations. User-facing copy must not state or imply definitive legal violations unless explicitly supported by product policy and retained evidence.
 
 Prefer evidence-scoped language such as "signal observed", "review recommended", "not evaluated", or "insufficient evidence".
 
@@ -702,13 +738,13 @@ WC01/
 │  ├─ validation-worker/    # Background validation worker (TypeScript/Node)
 │  └─ runtime-harness/      # Runtime harness (minimal scaffolding)
 ├─ packages/
-│  ├─ certscore-contracts/   # CertScore v2 typed scanner/review/report contracts
-│  ├─ certscore-scan-core/   # CertScore v2 browser evidence capture core
-│  ├─ certscore-review-engine/ # CertScore v2 evidence interpretation engine
-│  ├─ certscore-report-adapter/ # CertScore v2 internal projection, shadow, and dry-run adapters
-│  ├─ certscore-vendor-resolver/ # CertScore v2 canonical vendor/product resolver
-│  ├─ certscore-sdk/         # CertScore Pulse TypeScript SDK
-│  ├─ certscore-mcp/         # CertScore Pulse MCP server
+│  ├─ certscore-contracts/   # CertScore.ai v2 typed scanner/review/report contracts
+│  ├─ certscore-scan-core/   # CertScore.ai v2 browser evidence capture core
+│  ├─ certscore-review-engine/ # CertScore.ai v2 evidence interpretation engine
+│  ├─ certscore-report-adapter/ # CertScore.ai v2 internal projection, shadow, and dry-run adapters
+│  ├─ certscore-vendor-resolver/ # CertScore.ai v2 canonical vendor/product resolver
+│  ├─ certscore-sdk/         # CertScore.ai Pulse TypeScript SDK
+│  ├─ certscore-mcp/         # CertScore.ai Pulse MCP server
 │  ├─ shared/               # Shared constants, types, validators, scoring config, scheduling helpers
 │  ├─ db/                   # PostgreSQL query helpers, migrations, seed SQL, env helpers
 │  ├─ ui/                   # Reusable UI primitives (React, Tailwind)
@@ -736,13 +772,13 @@ WC01/
 | `@website-signal-risk-scanner/ui` | `packages/ui` | Reusable UI primitives (Button, Card, Badge, etc.) built with React and Tailwind CSS. |
 | `@website-signal-risk-scanner/validation-shared` | `packages/validation-shared` | Validation-specific types, financial-claims drafts, privacy-runtime findings, and promotion coverage reports. |
 | `@website-signal-risk-scanner/web-bot-auth` | `packages/web-bot-auth` | Server-only HTTP Message Signatures signing and key-directory helpers for crawler authentication. |
-| `@certscore/contracts` | `packages/certscore-contracts` | CertScore v2 scanner, review, and projection contracts. |
-| `@certscore/scan-core` | `packages/certscore-scan-core` | CertScore v2 browser evidence capture core. |
-| `@certscore/review-engine` | `packages/certscore-review-engine` | CertScore v2 evidence review engine. |
-| `@certscore/report-adapter` | `packages/certscore-report-adapter` | CertScore v2 internal report projection, WC01 shadow, dry-run, reviewer-packet, and evidence-preview adapters. |
-| `@certscore/vendor-resolver` | `packages/certscore-vendor-resolver` | High-confidence CertScore v2 vendor and product resolver. |
-| `@certscore/sdk` | `packages/certscore-sdk` | TypeScript SDK for the CertScore Pulse API. |
-| `@certscore/mcp` | `packages/certscore-mcp` | MCP server for CertScore Pulse. |
+| `@certscore/contracts` | `packages/certscore-contracts` | CertScore.ai v2 scanner, review, and projection contracts. |
+| `@certscore/scan-core` | `packages/certscore-scan-core` | CertScore.ai v2 browser evidence capture core. |
+| `@certscore/review-engine` | `packages/certscore-review-engine` | CertScore.ai v2 evidence review engine. |
+| `@certscore/report-adapter` | `packages/certscore-report-adapter` | CertScore.ai v2 internal report projection, WC01 shadow, dry-run, reviewer-packet, and evidence-preview adapters. |
+| `@certscore/vendor-resolver` | `packages/certscore-vendor-resolver` | High-confidence CertScore.ai v2 vendor and product resolver. |
+| `@certscore/sdk` | `packages/certscore-sdk` | TypeScript SDK for the CertScore.ai Pulse API. |
+| `@certscore/mcp` | `packages/certscore-mcp` | MCP server for CertScore.ai Pulse. |
 
 ### Technology stack
 
@@ -857,7 +893,7 @@ pnpm --filter @website-signal-risk-scanner/validation-shared build
 pnpm --filter @website-signal-risk-scanner/web-bot-auth build
 ```
 
-### CertScore v2 commands
+### CertScore.ai v2 commands
 
 V2 commands are internal diagnostic commands unless a task explicitly says otherwise. See `docs/certscore-v2/README.md` for full command sequences and artifact expectations.
 
@@ -951,7 +987,7 @@ node --import tsx --test apps/web/server/preview-scan/create-preview-scan.test.t
 node --import tsx --test packages/shared/src/regulatory-review/regulatory-review.test.ts
 ```
 
-### CertScore v2 package tests
+### CertScore.ai v2 package tests
 
 Run focused v2 tests for v2 package changes:
 
@@ -1174,7 +1210,7 @@ the expensive work.
 
 ## Runtime and deployment topology
 
-Production scanning is Lambda-only and uses the CertScore v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-1`.
+Production scanning is Lambda-only and uses the CertScore.ai v2 DAG scanner code in this repository. The approved production scanner targets are the v2 DAG Lambda functions in `eu-central-1`, `eu-west-1`, and `us-west-1`.
 
 Never create, restore, update, scale, inspect as a deployment target, or push images to a WS01 scanner ECS/Fargate service. In particular, `ws01-scanner-worker` is prohibited and must not be recreated. WS01 is not a production scanner deployment path. Production scanner changes must be made in the WC01 v2 DAG packages and deployed through the three-region Lambda helpers.
 
@@ -1182,7 +1218,7 @@ Do not assume Docker Compose or local container orchestration is the development
 
 Production deploys run on AWS ECS/Fargate through the repo's deployment scripts and GitHub Actions workflows. Dockerfiles may be used to build ECS images, but do not deploy ad hoc local containers or alternate hosts unless the user explicitly requests it.
 
-WC01 web production is `certscore.ai` on AWS ECS/Fargate. CertScore does not use Vercel for hosting, runtime logs, production inspection, or deployment. Do not query, inspect, or deploy WC01 through Vercel tooling. This prohibition overrides generic investigation skills, plugin suggestions, tool-trigger heuristics, and provider defaults: before any production diagnostic or deployment tool call, verify that the target is the AWS CertScore topology, and stop rather than calling Vercel when the target is `certscore.ai`. Do not deploy WC01 web changes to `consentcheck.site` or other alternate hosts.
+WC01 web production is `certscore.ai` on AWS ECS/Fargate. CertScore.ai does not use Vercel for hosting, runtime logs, production inspection, or deployment. Do not query, inspect, or deploy WC01 through Vercel tooling. This prohibition overrides generic investigation skills, plugin suggestions, tool-trigger heuristics, and provider defaults: before any production diagnostic or deployment tool call, verify that the target is the AWS CertScore.ai topology, and stop rather than calling Vercel when the target is `certscore.ai`. Do not deploy WC01 web changes to `consentcheck.site` or other alternate hosts.
 
 ## Local scan stack
 
@@ -1200,7 +1236,7 @@ bash /Users/benmasek/WC01/scripts/ensure-local-scan-stack.sh
 - `consentcheck.site` is not a WC01 web host and WC01 must not claim or deploy it.
 - A push to `main` is not enough to claim either host is live; for web changes, confirm the intended ECS deployment has completed successfully and the public host is serving the expected revision.
 - If the active production host is uncertain, call it out before claiming a change is live in production.
-- `apps/web` remains the canonical root for the CertScore public web host.
+- `apps/web` remains the canonical root for the CertScore.ai public web host.
 - Use `pnpm ops:check:deploy` after deployment-topology changes to catch stale local assumptions and wrong remotes before treating the path as healthy.
 
 ## Scope note
@@ -1240,3 +1276,18 @@ corrected, uncertain, unverified, and legacy bare references remain score-neutra
 This is a disclosure-quality finding, never proof of unlawful transfers. Keep the
 scorecard registry-driven. See `docs/scoring-policy.md`. No new scan, lane,
 model call, wait, or infrastructure is authorized by this scoring change.
+
+## Local Weather capture follow-up — October 18, 2026
+
+The owner approved conditional California notice recovery up to five seconds,
+replacing the prior two-second/$10 ceiling with $25/month at 100,000 scans.
+Memory-scaled capture plus cleanup remains within 14.6875 GB-seconds and existing
+policy deadlines. One exact legal-text accordion may be expanded; no privacy
+choice, form submission, retry, new lane, model call or late publication.
+The owner also approved one observed, canonically classified same-origin
+privacy-preference link visit within the existing `coverage_25_gb_seconds.v1`
+worker budget. Preserve source/destination loader proof and crawler identity;
+never follow a redirected destination or mutate a privacy choice. Keep linked
+privacy controls separate from cookie categories and choice effectiveness.
+See `docs/certscore-v2/weather-notice-linked-preferences-policy-2026-10-18.md`.
+No deployment is authorized.

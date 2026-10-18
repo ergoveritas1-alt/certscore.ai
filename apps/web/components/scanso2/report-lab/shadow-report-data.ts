@@ -132,7 +132,7 @@ export type ChoicePathComparison = {
 
 export type GpcResponseReportProjection = {
   assessment: GpcResponseAssessment;
-  californiaDeductionPoints: 0 | 15;
+  californiaDeductionPoints: 0 | 15 | 25 | 32 | 37 | 40 | 43 | 45 | 47;
   evidenceRefs: string[];
   summary: string;
 };

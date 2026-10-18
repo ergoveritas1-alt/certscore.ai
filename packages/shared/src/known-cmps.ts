@@ -143,7 +143,7 @@ export type KnownCmpDefinition = {
   /** Named-CMP Options binding when aria-controls is absent. An on-demand
    * panel must appear under the same pre-existing registered vendor root.
    * Never opens via a vendor API or accepts an arbitrary new modal. */
-  preferenceDialogBinding?: { version: string; openingBudgetMs?: number; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[]; allowObservedOptionsLabel?: boolean; layerTransitionSelector?: string; tabSelector?: string };
+  preferenceDialogBinding?: { version: string; openingBudgetMs?: number; controlSelector: string; dialogSelector: string; deferredRootSelector?: string; dialogRoles?: string[]; allowObservedOptionsLabel?: boolean; allowPrivacyOptOutEntrance?: boolean; allowExternalOptionsEntrance?: boolean; layerTransitionSelector?: string; tabSelector?: string };
   /** Factual cookie identity from an already-loaded, own-data configuration.
    * Never a semantic consent witness or a global cookie-name alias. */
   configuredConsentCookiePath?: string;
@@ -429,7 +429,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     saleSharingOptOut: { version: "onetrust.explicit_sale_share.v1", entranceSelector: "#ot-sdk-btn.ot-sdk-show-settings", dialogSelector: "#onetrust-pc-sdk",
       submitSelector: "button.save-preference-btn-handler.onetrust-close-btn-handler", submitLabels: ["do not sell or share my personal information"],
       documentationUrls: ["https://developer.onetrust.com/onetrust/docs/common-custom-css", "https://developer.onetrust.com/onetrust/docs/iab-ccpa-us-privacy-string"] },
-    preferenceDialogBinding: { version: "onetrust_preferences.v2", controlSelector: "#onetrust-pc-btn-handler", dialogSelector: "#onetrust-pc-sdk", deferredRootSelector: "#onetrust-consent-sdk" },
+    preferenceDialogBinding: { version: "onetrust_preferences.v3", allowPrivacyOptOutEntrance: true, controlSelector: "#onetrust-pc-btn-handler, #ot-sdk-btn.ot-sdk-show-settings", dialogSelector: "#onetrust-pc-sdk", deferredRootSelector: "#onetrust-consent-sdk" },
     rejectLabelBoundNecessaryOnly: {
       policyVersion: "label_bound_necessary_only_reject.v2",
       bannerSelector: "#onetrust-banner-sdk",
@@ -982,7 +982,7 @@ export const KNOWN_CMP_REGISTRY: KnownCmpDefinition[] = [
     },
     acceptControlSelectors: ["#hs-eu-confirmation-button"],
     canonicalName: "HubSpot Consent Banner",
-    preferenceDialogBinding: { version: "hubspot_preferences.v1", controlSelector: "#hs-eu-cookie-settings-button", dialogSelector: "#hs-modal-content", deferredRootSelector: "#hs-banner-parent", dialogRoles: ["alertdialog"] },
+    preferenceDialogBinding: { version: "hubspot_preferences.v2", allowExternalOptionsEntrance: true, controlSelector: "#hs-eu-cookie-settings-button", dialogSelector: "#hs-modal-content", deferredRootSelector: "#hs-banner-parent", dialogRoles: ["alertdialog"] },
     cookieNames: ["__hs_cookie_cat_pref", "__hs_opt_out", "__hs_do_not_track"],
     domains: ["js.hs-banner.com"],
     domSelectors: ["#hs-eu-cookie-confirmation"],

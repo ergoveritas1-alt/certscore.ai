@@ -765,3 +765,14 @@ test("Article 13 rejection contract accepts bounded multi-action rights and nega
     assert.equal(isArticle13DisclosureEvidenceUsable(retention, "data_retention", { mode }), true);
   }
 });
+
+test("robot challenge plus privacy footer cannot become usable policy evidence", () => {
+  const challenge = "Robot or human? Robot or human? Activate and hold the button to confirm that you’re human. Thank You! Terms of Use Privacy Policy Do Not Sell My Personal Information Request My Personal Information © Retailer";
+  for (const mode of ["scan_core", "retained_report"] as const) {
+    const quality = assessArticle13PolicyTextQuality(challenge, { mode });
+    assert.equal(quality.usable, false);
+    assert.equal(quality.reason, "low_quality_access_challenge");
+  }
+  const substantivePolicy = ("We collect personal information to provide requested services, protect security and answer your requests. You can exercise your privacy rights by contacting our privacy office. ").repeat(25);
+  assert.notEqual(assessArticle13PolicyTextQuality(substantivePolicy + " Our security screen may say Robot or human? Activate and hold the button to confirm that you’re human.", { mode: "scan_core" }).reason, "low_quality_access_challenge");
+});

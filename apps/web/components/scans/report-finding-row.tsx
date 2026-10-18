@@ -8,7 +8,9 @@ import type { ShadowEvidenceStatus, ShadowFinding } from "./report-lab/shadow-re
 import { EvidenceJumpLink } from "./evidence-jump-link";
 import { findingEvidenceAnchor } from "../../lib/scans/report-evidence-navigation";
 import { topFindingReaderSummary, topFindingWhyItMatters } from "../../lib/scans/top-finding-reader-summary";
-import { ENFORCEMENT_REVIEWED_AT, type regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
+import { ENFORCEMENT_REVIEWED_AT, regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
+import type { ReportReviewFocus } from "@certscore/api-contracts";
+import { FindingApplicabilityNote } from "./finding-applicability-note";
 const monoClass = "font-mono tabular-nums";
 
 export function DisclosureChevron({ className = "" }: { className?: string }) {
@@ -104,10 +106,11 @@ export function EvidenceTools({
   );
 }
 
-export function FindingRow({ finding, dense = false, priority = false, pages, observations, idPrefix = "", regulatoryContext }: { regulatoryContext?: ReturnType<typeof regulatoryReviewContext>; finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; observations?: SitePriorityFinding["observations"]; idPrefix?: string }) {
+export function FindingRow({ finding, dense = false, priority = false, pages, observations, idPrefix = "", regulatoryContext, reviewFocus = "gdpr_eprivacy" }: { regulatoryContext?: ReturnType<typeof regulatoryReviewContext>; reviewFocus?: ReportReviewFocus; finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; observations?: SitePriorityFinding["observations"]; idPrefix?: string }) {
+  const context = regulatoryContext ?? (priority ? regulatoryReviewContext(finding.id, reviewFocus) : null);
   const evidenceAnchor = findingEvidenceAnchor(finding.id, finding.evidenceJson.presentationGroup);
   const readerSummary = priority || finding.id === "gpc_response" ? topFindingReaderSummary(finding) : finding.summary;
-  const why = regulatoryContext?.why ?? (priority ? topFindingWhyItMatters(finding) : null);
+  const why = context?.why ?? (priority ? topFindingWhyItMatters(finding) : null);
   return (
     <details className={`group border-b border-zinc-200 last:border-b-0 ${priority ? "transition-colors hover:bg-zinc-50 open:bg-white" : ""}`} id={`${idPrefix}${finding.id}`}>
       <summary className={`grid cursor-pointer list-none gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden ${priority ? "relative grid-cols-[2.25rem_minmax(0,1fr)] items-start px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto] sm:px-3" : dense ? "grid-cols-[2rem_minmax(0,1fr)_auto] py-4" : "grid-cols-[2.5rem_minmax(0,1fr)] py-4 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"}`}>
@@ -127,11 +130,12 @@ export function FindingRow({ finding, dense = false, priority = false, pages, ob
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
         {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{readerSummary}</p> : null}
         {priority && finding.id !== "gpc_response" && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{finding.summary}</p> : null}
-        {regulatoryContext ? <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
-          <a href={regulatoryContext.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{regulatoryContext.rule} ↗</a>
-          {regulatoryContext.examples.length ? <details className="group/enforcement mt-3">
+        {context || priority ? <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
+          {context ? <a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a> : null}
+          {priority ? <FindingApplicabilityNote findingId={finding.id} reviewFocus={reviewFocus} presentationGroup={finding.evidenceJson.presentationGroup} /> : null}
+          {context?.examples.length ? <details className="group/enforcement mt-3">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-500 [&::-webkit-details-marker]:hidden">Related enforcement <DisclosureChevron className="group-open/enforcement:rotate-180" /></summary>
-            <div className="mt-3 space-y-4">{regulatoryContext.examples.map(example => <article key={example.id}>
+            <div className="mt-3 space-y-4">{context.examples.map(example => <article key={example.id}>
               <p className="text-sm font-semibold">{example.name} <span className="font-normal text-zinc-500">· {example.date.slice(0, 4)}</span></p>
               <p className="mt-1 text-xs text-zinc-500">{example.authority}</p>
               <p className="mt-2 text-sm leading-6 text-zinc-700">{example.conduct}</p>

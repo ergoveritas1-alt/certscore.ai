@@ -30,3 +30,14 @@ test("actual collection requests survive script-resource exclusions", () => {
   ]) assert.equal(isCollectionEndpoint(url!, type!).observed, true, url);
   assert.equal(isCollectionEndpoint("https://www.google.com/recaptcha/api.js", "script").observed, false);
 });
+
+import { isCanonicalAdvertisingCollectionCandidate } from "@certscore/vendor-resolver";
+test("configuration and measurement-support contacts are retained without collection qualification", () => {
+  for (const url of ["https://config.aps.amazon-adsystem.com/configs/3219", "https://pagead2.googlesyndication.com/pagead/ping?e=test", "https://www.google.com/ccm/collect?en=page_view"]) {
+    assert.equal(isCanonicalAdvertisingCollectionCandidate(url, "fetch"), false, url);
+  }
+  assert.equal(isCollectionEndpoint("https://config.aps.amazon-adsystem.com/configs/3219", "fetch").category, "vendor_configuration");
+  for (const url of ["https://dpm.demdex.net/id", "https://www.google.com/pagead/1p-user-list/123/?npa=1", "https://c.amazon-adsystem.com/aax2/apstag?event=ad"]) {
+    assert.equal(isCanonicalAdvertisingCollectionCandidate(url, "fetch"), true, url);
+  }
+});

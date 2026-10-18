@@ -13,13 +13,15 @@ const findingIdSchema = z.enum(ACCESSIBILITY_SCORE_FINDING_IDS);
 type FindingId = z.infer<typeof findingIdSchema>;
 type Overlap = "distinct" | "image_link" | "unresolved_image_link";
 const provenanceSchema = z.object({
-  contractVersion: z.enum(["certscore.accessibility-audit-projection.v1", "certscore.accessibility-audit-projection.v2"]), verificationStatus: z.literal("verified"),
+  contractVersion: z.enum(["certscore.accessibility-audit-projection.v1", "certscore.accessibility-audit-projection.v2", "certscore.cmp-preference-accessibility-projection.v1"]), verificationStatus: z.literal("verified"),
   sourceHash: z.string().regex(/^[a-f0-9]{64}$/), evidenceRef: z.string().min(1),
   engine: z.literal("axe-core"), engineVersion: z.string().min(1), scanId: z.string().min(1),
   documentUrl: z.string().url(), documentToken: z.string().min(1), status: z.enum(["completed", "limited"]),
   evaluatedRules: z.array(z.string().min(1)).min(1).max(100),
+  sourceLane:z.enum(["runtime_evidence","cmp_preferences"]).optional(),scope:z.enum(["starting_page_rendered_content","opened_preference_panel"]).optional(),
 }).superRefine((p, ctx) => {
-  if (p.contractVersion === "certscore.accessibility-audit-projection.v1" ? p.evidenceRef !== "CanonicalEvidenceBundle.json#accessibilityAudit"
+  if (p.contractVersion === "certscore.cmp-preference-accessibility-projection.v1" ? p.evidenceRef!=="CanonicalEvidenceBundle.json#cmpPreferencesEvidence.accessibilityAudit" || p.sourceLane!=="cmp_preferences" || p.scope!=="opened_preference_panel"
+    : p.contractVersion === "certscore.accessibility-audit-projection.v1" ? p.evidenceRef !== "CanonicalEvidenceBundle.json#accessibilityAudit"
     : !(z.string().uuid().safeParse(p.scanId).success && p.evidenceRef.startsWith(`full-site:${p.scanId}:`) &&
       /:[0-9a-f-]{36}:evidence\.json#accessibilityAudit$/.test(p.evidenceRef))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid accessibility evidence reference" });
@@ -123,6 +125,7 @@ export const accessibilityScoreEffectSchema = z.object({
     valid &&= Array.isArray(activity) && activity.length === 3 && typeof activity[0] === "string" && activity[0].length > 0 &&
       z.string().url().safeParse(activity[1]).success && ["distinct", "image_link", "unresolved_image_link"].includes(activity[2]) &&
       /^sha256:[a-f0-9]{64}$/.test(effect.evidenceRefs[0]!) && (effect.evidenceRefs[1] === `${activity[0]}:CanonicalEvidenceBundle.json#accessibilityAudit` ||
+        effect.evidenceRefs[1] === `${activity[0]}:CanonicalEvidenceBundle.json#cmpPreferencesEvidence.accessibilityAudit` ||
         effect.evidenceRefs[1]!.startsWith(`${activity[0]}:full-site:${activity[0]}:`) && /:[0-9a-f-]{36}:evidence\.json#accessibilityAudit$/.test(effect.evidenceRefs[1]!)) &&
       /^document:.+/.test(effect.evidenceRefs[2]!);
   } catch { valid = false; }
@@ -159,4 +162,17 @@ export function accessibilityDeductionBreakdown(effects: readonly unknown[]) {
   const deductionPoints = SCORING_FAMILIES.accessibility.cap - remaining;
   return { family: "accessibility" as const, label: SCORING_FAMILIES.accessibility.label, deductionPoints, rules,
     imageLinkOverlap: sharedImageLink ? (text!.some(row => row.overlap === "unresolved_image_link") ? "unresolved" : "verified") : "none" };
+}
+
+/** Both regulatory postures consume the same canonical, verified category
+ * effects. Display ranking and repeated examples do not change the charge. */
+export function accessibilityFindingDeductionBreakdown(findings: readonly {
+  unifiedFindingId: string;
+  scoreEffects?: readonly NormalizedConcernScoreEffect[];
+}[]) {
+  return accessibilityDeductionBreakdown(findings.flatMap(finding =>
+    (finding.scoreEffects ?? []).filter(effect =>
+      effect.policyKey === `accessibility.${finding.unifiedFindingId}` ||
+      (finding.unifiedFindingId === "focus_management_issue" &&
+        effect.reasonCode === "verified_reproduced_focus_barrier"))));
 }

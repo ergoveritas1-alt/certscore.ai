@@ -83,15 +83,16 @@ export function californiaCoverageFamilyLabel(row:CaliforniaReviewCoverage["fami
  * Keep California rights separate from generic Canadian/EU access language. */
 export function locateCaliforniaReviewTopics(text: string, options: {californiaNotice?:boolean} = {}) {
   const bounded = text.slice(0, 160_000).replace(/\s+/g, " ").trim();
+  const allUsRights = /we provide (?:these|the following) rights to all residents of the U\.S\./i.test(bounded);
   const sentences = bounded.split(/(?<=[.!?])\s+(?=[A-Z])/u);
   const rules = [
     ["categories", /\b(?:categories of (?:personal |sensitive personal )?(?:information|data)|(?:personal )?information (?:we|that we) collect|(?:such|personal) information includes)\b/i],
     ["purposes", /\b(?:purposes? (?:for|of)|(?:we|[a-z]+) (?:use|uses|collect|collects|process|processes) (?:your |the |this )?(?:personal )?(?:information|data) (?:to|for))\b/i],
     ["retention", /\b(?:retain|keep|store)\b.{0,120}\b(?:for (?:as long|\d+|the (?:time|period))|(?:only )?as long as (?:is )?(?:necessary|needed)|until|as necessary)|\bretention (?:periods?|criteria|schedule)\b/i],
     ["right_to_know", /\b(?:right to (?:know|access)|request (?:access to|a copy of|that we disclose))\b.{0,140}\b(?:personal (?:information|data)|information (?:we|that))\b/i],
-    ["right_to_delete", /\b(?:right to (?:request )?(?:delete|deletion)|request (?:that we |us to )?delete)\b.{0,140}\b(?:personal (?:information|data)|your (?:information|data))\b/i],
-    ["right_to_correct", /\b(?:right to (?:request )?(?:correct|correction)|request (?:that we |us to )?correct)\b.{0,140}\b(?:personal (?:information|data)|inaccurate (?:information|data))\b/i],
-    ["non_discrimination", /\b(?:will not|do not|won.t) discriminate\b.{0,180}\b(?:privacy rights|ccpa|cpra|rights)|\bright to (?:non.discrimination|not be discriminated)\b/i],
+    ["right_to_delete", /\b(?:right to (?:(?:request|ask that we) )?(?:delete|deletion)|request (?:that we |us to )?delete)\b.{0,140}\b(?:personal (?:information|data)|your (?:information|data))\b/i],
+    ["right_to_correct", /\b(?:right to (?:(?:request|ask that we) )?(?:correct|correction)|request (?:that we |us to )?correct)\b.{0,140}\b(?:personal (?:information|data)|inaccurate (?:information|data))\b/i],
+    ["non_discrimination", /\b(?:will not|do not|won.t) (?:discriminate|retaliate)\b.{0,180}\b(?:privacy rights|ccpa|cpra|rights)|\bright to (?:non.discrimination|not be discriminated)\b/i],
     ["request_method", /\b(?:submit|exercise|make|send|request|contact)\b.{0,180}\b(?:privacy|rights|access|deletion|correction)\b.{0,180}(?:https?:\/\/|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\b(?:call|phone|telephone|online form|request form|web form)\b)|\b(?:privacy|rights|access|deletion|correction)\b.{0,180}\b(?:submit|exercise|request|contact)\b.{0,180}(?:https?:\/\/|[\w.+-]+@[\w.-]+\.[a-z]{2,}|\b(?:call|phone|telephone|online form|request form|web form)\b)/i],
   ] as const;
   const topics: Array<{topic:typeof CALIFORNIA_REVIEW_TOPICS[number];excerpt:string}> = rules.flatMap(([topic, pattern]) => {
@@ -99,7 +100,7 @@ export function locateCaliforniaReviewTopics(text: string, options: {californiaN
     const sentence = sentences.find(sentence => {
       if (!pattern.test(sentence) || /\b(?:do not have|does not provide|do not provide|have no|waive your|not entitled to|cannot exercise)\b/i.test(sentence)) return false;
       const offset = bounded.indexOf(sentence);
-      return !rightsTopic || options.californiaNotice || /\b(?:california|ccpa|cpra)\b/i.test(bounded.slice(Math.max(0,offset-1200),offset+sentence.length));
+      return !rightsTopic || options.californiaNotice || allUsRights || /\b(?:california|ccpa|cpra)\b/i.test(bounded.slice(Math.max(0,offset-1200),offset+sentence.length));
     });
     const match = sentence ? pattern.exec(sentence) : null;
     return sentence && match ? [{topic, excerpt: sentence.slice(Math.max(0,match.index-40),Math.max(0,match.index-40)+480).trim()}] : [];

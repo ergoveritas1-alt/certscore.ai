@@ -69,7 +69,7 @@ test("site paragraphs prioritize meaning and action while preserving the lead's 
 test("site score and coverage influence significance without inventing a finding", () => {
   assert.equal(buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "complete" } }), "No priority issues were identified in the assessed evidence.");
   const limited = buildSiteAssessmentSummary([], 10, { score: 100, coverage: { state: "limited" } });
-  assert.match(limited, /Detailed evidence/);
+  assert.equal(limited, "Review the retained evidence for this visit.");
   assert.doesNotMatch(limited, /all clear|compliant|safe/);
   const poor = buildSiteAssessmentSummary([{ title: "Projected issue", status: "Potential gap" }], 10, { score: 35 });
   assert.match(poor, /high-priority remediation/);
@@ -88,7 +88,7 @@ test("executive score uses the full-site projection while homepage context remai
 
 test("pending site assessment never borrows a homepage score or claims no issues", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary score={null} pending scannedPages={1} homepageVerdict="Homepage assessment already ready." />);
-  assert.match(html, /Page score awaiting scored evidence/);
+  assert.match(html, /Score awaiting scored evidence/);
   assert.match(html, /page score will appear/i);
   assert.doesNotMatch(html, /No priority issues|0 priority issues|out of 100/);
 });
@@ -108,8 +108,8 @@ test("a terminal unavailable score stays unavailable", () => {
 
 test("one scanned page shows only the single page assessment", () => {
   const html = renderToStaticMarkup(<FullSiteExecutiveSummary score={{...score,scoredPages:1}} pending={false} scannedPages={1} homepageVerdict="Retained single-page verdict." />);
-  assert.match(html,/Page score 29 out of 100/);
-  assert.match(html,/>Page score</);
+  assert.match(html,/Score 29 out of 100/);
+  assert.doesNotMatch(html,/>Page score</);
   assert.match(html,/Assessment highlights/);
   assert.match(html,/1 page scanned/);
   assert.doesNotMatch(html,/1 page assessed/);

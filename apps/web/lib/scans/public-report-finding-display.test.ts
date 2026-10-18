@@ -81,13 +81,13 @@ test("uses scan-quality wording for captured-page visual findings", () => {
 test("preserves reason-specific projected copy for no-go findings", () => {
   const display = getPublicReportFindingDisplay({
     findingId: "scan_quality_visual_no_go",
-    observedSummary: "CertScore observed a prelaunch page instead of the public website.",
+    observedSummary: "CertScore.ai observed a prelaunch page instead of the public website.",
     remediation: "Retry after the public website launches.",
     title: "The site is not ready for scanning"
   });
 
   assert.equal(display.title, "The site is not ready for scanning");
-  assert.equal(display.observedSummary, "CertScore observed a prelaunch page instead of the public website.");
+  assert.equal(display.observedSummary, "CertScore.ai observed a prelaunch page instead of the public website.");
   assert.match(display.remediation, /public website launches/i);
 });
 

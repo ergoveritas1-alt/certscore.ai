@@ -217,6 +217,8 @@ export {
 } from "./consent-geometry-visual-review.js";
 
 export interface RunScanInput {
+  /** Public calibration contact ceiling; does not change customer recovery. */
+  policyStopAfterAccessBlock?: boolean;
   /** Server-owned production capture; only takes effect in the isolated GPC lane. */
   retainGpcObservation?: boolean;
   /** In-process local calibration callback; never exposed by Lambda/public dispatch. */
@@ -624,6 +626,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
       browser: sharedBrowser,
       nanoAssistProvider: nanoPolicyAssistProvider,
       policySurfaceSeeds: input.policySurfaceSeeds,
+      stopAfterAccessBlock: input.policyStopAfterAccessBlock,
       discoveryMode: input.scenarioPlanningMode === "planned_parallel" ? "fast" : "full",
       signal: input.signal
         ? AbortSignal.any([input.signal, policySurfaceAbortController.signal])
@@ -697,6 +700,8 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
         globalPrivacyControlEnabled: evidenceLane === "gpc_observation",
         gpcOptOutPrototype: evidenceLane === "gpc_observation" && (input.retainGpcObservation === true || typeof input.onGpcObservationSession === "function") ? { scanId } : undefined,
         gpcImpactScanId: evidenceLane === "runtime_evidence" ? scanId : undefined,
+        accessibilityScanId: accessibilityRequired ? scanId : undefined,
+        cmpBasicScanId: evidenceLane === "consent_proof" ? scanId : undefined,
         onInventoryPage: input.resourceInventoryCrawl && evidenceLane === "runtime_evidence" ? async page => {
           const configuration = inventoryConfiguration(input.region ?? "local", input.profile === "tiny" ? "tiny" : "standard", leanPreConsent ? "fast" : "full");
           resourceInventoryContext = { finalUrl: page.url(), configuration, configurationHash: inventoryHash(configuration),
@@ -1092,6 +1097,7 @@ export async function runScan(input: RunScanInput): Promise<CanonicalEvidenceBun
           artifactWriter,
           browser: preConsentResult.renderedPolicyRecoveryBrowser ?? sharedBrowser,
           renderedRecoveryPage: preConsentResult.renderedPolicyRecoveryPage,
+          stopAfterAccessBlock: input.policyStopAfterAccessBlock,
           nanoAssistProvider: nanoPolicyAssistProvider,
           discoveryMode: "fast",
           signal: input.signal,

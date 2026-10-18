@@ -1223,6 +1223,38 @@ export const detailedEvidenceOpenApiSchemas = {
                       },
                       "maxItems": 4
                     },
+                    "privacyChoices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "label",
+                          "enabled",
+                          "checked"
+                        ],
+                        "properties": {
+                          "label": {
+                            "type": "string",
+                            "maxLength": 240
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "checked": {
+                            "anyOf": [
+                              {
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "maxItems": 100
+                    },
                     "categories": {
                       "type": "array",
                       "items": {

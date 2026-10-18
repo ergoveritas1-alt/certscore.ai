@@ -1,3 +1,4 @@
+import { hasBoundCmpPreferenceDocument } from "@certscore/contracts";
 import { projectVisibleCmpInventory, projectLoadedCmpInventory, completeConfiguredCmpNames, verifiedMainFrameVisualCapture } from "@certscore/contracts";
 import { createHash } from "node:crypto";
 import { possibleCmpCookieTemplate, cmpBasicEvidenceSchema, type CmpPreferencesEvidence, verifyConsentControlInspection, projectPostAcceptEvidenceForReport, projectPostRefusalEvidenceForReport, postAcceptEvidencePacketSchema, postRefusalEvidencePacketSchema, cmpAuditAssessmentSchema, cmpCookieExpiryEvidenceSchema, cmpAuditCriterionSchema, cmpPreferencesEvidenceSchema, type CanonicalEvidenceBundle, type CmpAuditAssessment, type ExtendedCmpCriterion } from "@certscore/contracts";
@@ -32,7 +33,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
   const evidence = parsed.data;
   const rows: CmpAuditAssessment["rows"] = ([...cmpAuditCriterionSchema.options, "implementation", "prominence"] as const).map(id => ({ id, status: "not_assessed", detail: "", evidenceRefs: [] }));
   const set = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs: string[] = ["CmpPreferencesEvidencePacket.json"]) => Object.assign(rows.find(row => row.id === id)!, { status, detail: detail.slice(0, 500), evidenceRefs: refs });
-  const bound = Boolean(evidence.documentToken && evidence.finalUrl === evidence.targetUrl && !evidence.limitations.includes("preference_document_changed"));
+  const bound = Boolean(hasBoundCmpPreferenceDocument(evidence) && !evidence.limitations.includes("preference_document_changed"));
   const usable = bound && evidence.status === "completed";
   const checkpoint = evidence.checkpoints;
   const partial = bound && evidence.status === "limited" && checkpoint?.version === "cmp_partial_capture.v1" && checkpoint.documentToken === evidence.documentToken;
@@ -68,7 +69,7 @@ function derivePreferenceAuditAssessment(bundle: CanonicalEvidenceBundle, geomet
       limitation: { group: "preferences", code: evidence.support.reason } });
   }
   return cmpAuditAssessmentSchema.parse({ version: "cmp_audit_assessment.v6", scanId: bundle.scanId,
-    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v13", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
+    sourceSha256: createHash("sha256").update(JSON.stringify({ version: "cmp_audit_assessment.v6", cookieComparisonPolicy: "cookie_name_comparison_details.v3", inventoryEvidencePolicy: "cmp_inventory_tables.v14", targetUrl: bundle.url, startedAt: bundle.startedAt, actionOutcomes: [bundle.postAcceptLaneOutcome, bundle.postRefusalLaneOutcome], rows, evidence, accept, reject, cookies: bundle.cookieEvents, snapshots: bundle.cookieSnapshots, coverage: bundle.runtimeCoverage, policies: bundle.policySurfaceObservations })).digest("hex"), support: evidence.limitations.includes("preference_budget_exhausted")
       ? { ...evidence.support, reason: "preference_budget_exhausted" } : evidence.support, rows });
 }
 
@@ -327,7 +328,7 @@ function applyVisualLimitations(bundle: CanonicalEvidenceBundle, rows: CmpAuditA
 }
 
 type AuditSet = (id: ExtendedCmpCriterion, status: CmpAuditAssessment["rows"][number]["status"], detail: string, refs?: string[]) => void;
-type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints" | "visibleInventory" | "loadedInventory" | "inventoryManifest">;
+type InventoryFacts = Pick<CmpPreferencesEvidence, "controls" | "controlInventoryComplete" | "privacyLinks" | "declarations" | "declarationInventoryComplete" | "serviceNames" | "serviceDisclosures" | "declarationCoverage" | "checkpoints" | "visibleInventory" | "loadedInventory" | "inventoryManifest" | "linkedPreferenceNavigation">;
 
 /** A document-settling limitation does not erase an already retained cookie
  * snapshot. It permits a partial name comparison only, never complete coverage,
@@ -417,6 +418,10 @@ function applyInventoryFacts(bundle: CanonicalEvidenceBundle, evidence: Inventor
     if (categories.length) rows.find(row => row.id === "categories")!.inventory = { categories: categories.filter(control => control.label.trim()).map(control => ({ name: control.label.trim(), checked: control.checked })) };
     if (!categories.length && usable && evidence.controlInventoryComplete) set("categories", "not_observed", "No selectable category controls were observed in the inspected preference panel.");
     if (services.size) set("services", "observed", `${services.size} individual ${services.size === 1 ? "service was" : "services were"} identified by labelled controls in the inspected CMP view. Control functionality was not tested.`);
+  }
+  if (controlsUsable && evidence.linkedPreferenceNavigation && evidence.controls.length) {
+    set("categories", "partially_assessed", `${evidence.controls.length} labelled privacy choices were observed on the linked privacy-settings page. Captured settings are shown below; cookie category coverage is separate.`);
+    rows.find(row=>row.id==="categories")!.inventory={privacyChoices:evidence.controls.map(({label,enabled,checked})=>({label,enabled,checked}))};
   }
   // v3 describes identified services, not separate choice controls. Use the
   // retained, document-bound API source accounting; cookie counts, category

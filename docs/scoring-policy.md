@@ -203,3 +203,32 @@ additional-page provenance and regression details. No scans, browser work, model
 calls, waits or new artifact reads are added to the scan path. Incremental
 metadata/processing is estimated below $0.50/month at 100,000 scans/month with
 three months of retention; the one read-only replay retrieval is below $0.02.
+
+### October 17, 2026: WCAG parity across review postures (local)
+
+Owner-authorized `california-regulatory-posture.v11-wcag` includes the existing
+verified accessibility category effects in the California posture. EU scoring
+already consumes them; its amounts are unchanged. Both aggregators use
+`accessibilityFindingDeductionBreakdown`, after canonical concern-policy and
+unified finding projection. Audit-only prominence does not suppress an otherwise
+verified score effect. Missing or failed audits remain neutral. Each category
+charges once, with the existing image/link overlap policy, keyboard/focus shared
+allowance and 12-point WCAG cap. WCAG evidence alone does not make an unavailable
+California privacy assessment available. No scanner lane, capture, model call,
+wait or recurring infrastructure cost is added. No deployment is authorized.
+
+The five retained local reports were rebuilt through canonical publication:
+Spotify CA 100→94 (EU 59), Healthline CA 100→97 (EU 53), Chase CA 100→98
+(EU 66), Linear CA 88→76 (EU 88), Walmart CA 100→100 (EU 80). All EU values
+are unchanged. Walmart's failed accessibility audit is not an accessibility pass.
+Artifacts and before/after assertions: `artifacts/wcag-posture-review-2026-10-17`.
+
+A bounded signed-out Spotify browser verification confirmed that the visible
+“Log in here” link is overridden by `aria-label=", opens in a new tab"`. The
+advertising expander's `aria-labelledby` resolves correctly and the DOM
+accessibility snapshot exposes its name; the native AX omission alone is not a
+confirmed unnamed-button failure. Escape restores focus to Your Privacy Choices.
+Manual review evidence is retained separately, without injecting it into scanner
+findings or adding a second semantic-category charge. No full scanner reruns
+were required. Central contact export/persistence costs are estimated below
+$0.05 in one-off AWS usage; recurring increase is $0/month.

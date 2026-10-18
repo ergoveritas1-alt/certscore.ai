@@ -1,12 +1,37 @@
-import { buildCanonicalGpcResponseProjection } from "../../../lib/scans/gpc-response-projection";
+import { buildCanonicalGpcResponseProjection, describeMeasuredGpcActivity } from "../../../lib/scans/gpc-response-projection";
 import type { UnifiedFindingDisplayPacket } from "../../../lib/scans/unified-findings";
 import type { GpcResponseReportProjection } from "./shadow-report-data";
+import type { ActionTimelineProjection } from "../../../lib/scans/action-timeline-projection";
+
+/** Timing from the canonical finding's verified observation, never from raw lane signals. */
+export function projectGpcTimeline(projection: GpcResponseReportProjection | null | undefined): ActionTimelineProjection | null {
+  if (projection?.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") return null;
+  const observation = projection.assessment.observation;
+  if (observation.status === "unavailable" || !observation.delivery.httpHeaderRetained || !observation.delivery.mainNavigatorReadbackRetained) return null;
+  const requests = observation.requests;
+  const eligibleIds = new Set(requests.advertisingCollectionEvidenceIds ?? []);
+  const events: ActionTimelineProjection["events"] = [{ at: "0s", atMs: 0, label: "GPC visit", detail: "GPC verified on the page request and in the browser", tone: "positive" }];
+  const recipients = new Map<string, { label: string; atMs: number }>();
+  for (const row of requests.advertisingCollectionRecipients?.rows ?? []) {
+    if (!eligibleIds.has(row.evidenceId) || row.observedAtMs === undefined || !Number.isFinite(row.observedAtMs) || row.observedAtMs < 0 ||
+        requests.throughMs != null && row.observedAtMs > requests.throughMs) continue;
+    const existing = recipients.get(row.entityId);
+    if (!existing || row.observedAtMs < existing.atMs) recipients.set(row.entityId, { label: row.label, atMs: row.observedAtMs });
+  }
+  for (const { label, atMs } of recipients.values()) events.push({ at: `${Math.round(atMs / 10) / 100}s`, atMs,
+    label: "Advertising collection", detail: label, vendor: label, tone: "concern" });
+  if (requests.throughMs != null && requests.throughMs > 0) events.push({ at: `${Math.round(requests.throughMs / 10) / 100}s`,
+    atMs: requests.throughMs, label: "Observation end", detail: "Retained GPC visit closed", tone: "neutral" });
+  if (events.length < 2) return null;
+  events.sort((a, b) => a.atMs - b.atMs);
+  return { clockLabel: "Times from GPC visit start", coverage: observation.status === "complete" && requests.complete ? "complete" : "limited", events };
+}
 
 export function gpcSummaryLabel(projection: GpcResponseReportProjection): string {
   if (projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") {
     return projection.headline;
   }
-  const response = projection.assessment.status === "indeterminate"
+  const response = projection.activityComparison ? describeMeasuredGpcActivity(projection.activityComparison)!.headline : projection.assessment.status === "indeterminate"
     ? ""
     : projection.comparisonHeadline;
   return projection.assessment.observation.status === "complete"
@@ -29,6 +54,8 @@ export function gpcCardActivity(projection: GpcResponseReportProjection): string
 }
 
 export function gpcCardResponse(projection: GpcResponseReportProjection): string {
+  const measured = describeMeasuredGpcActivity(projection.activityComparison);
+  if (measured) return measured.summary;
   if (projection.assessment.status === "no_observable_response" && projection.assessment.comparison.comparable && projection.assessment.comparison.deltas.trackers.baselineCount === 0 &&
       projection.assessment.comparison.deltas.trackers.gpcCount === 0) return projection.coverageSummary;
   if (projection.assessment.status === "indeterminate") {
@@ -81,4 +108,22 @@ export function buildGpcResponseReportProjection(
     observedFacts: projection.observedFacts,
     activityComparison: projection.activityComparison,
   };
+}
+
+/** Describes only recipients already attributed to qualifying canonical evidence.
+ * Grouping and timing never create a finding or alter policy eligibility. */
+export function gpcCollectionRecipients(projection: GpcResponseReportProjection) {
+  if (projection.assessment.contractVersion !== "certscore.gpc-response-assessment.v3") return [];
+  const rows = projection.assessment.observation.requests.advertisingCollectionRecipients?.rows ?? [];
+  const groups = new Map<string, {entityId: string; label: string; count: number; firstMs?: number; lastMs?: number}>();
+  for (const row of rows) {
+    const group = groups.get(row.entityId) ?? {entityId: row.entityId, label: row.label, count: 0};
+    group.count++;
+    if (row.observedAtMs !== undefined) {
+      group.firstMs = Math.min(group.firstMs ?? row.observedAtMs, row.observedAtMs);
+      group.lastMs = Math.max(group.lastMs ?? row.observedAtMs, row.observedAtMs);
+    }
+    groups.set(row.entityId, group);
+  }
+  return [...groups.values()];
 }

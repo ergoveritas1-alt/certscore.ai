@@ -10,14 +10,14 @@ test("semantic summaries explain each retained rule and count failures without c
     "Automated accessibility checks found failures on 1 tested page (6 element failures). ARIA elements were missing required child roles; Buttons lacked discernible accessible names; Links lacked discernible accessible names.");
 });
 
-test("accessibility summaries identify a retained CertScore canary page without changing ordinary page scope", () => {
+test("accessibility summaries identify a retained CertScore.ai canary page without changing ordinary page scope", () => {
   const canaryPage = "https://example.com/.well-known/certscore-canary/sentinels/privacy-evidence.html";
   assert.equal(describeAccessibilityEvidence("text_alternative_accessibility_issue", [
     { ruleId: "image-alt", nodeCount: 1, pageUrl: canaryPage }
-  ]), "Automated accessibility checks found failures on 1 tested CertScore canary page (1 element failure). Images lacked required text alternatives.");
+  ]), "Automated accessibility checks found failures on 1 tested CertScore.ai canary page (1 element failure). Images lacked required text alternatives.");
   assert.equal(describeVisualContrastEvidence([
     { ruleId: "color-contrast", nodeCount: 1, pageUrl: canaryPage }
-  ]), "Low-contrast text was detected on 1 tested CertScore canary page (1 element failure).");
+  ]), "Low-contrast text was detected on 1 tested CertScore.ai canary page (1 element failure).");
   assert.equal(describeAccessibilityEvidence("text_alternative_accessibility_issue", [
     { ruleId: "image-alt", nodeCount: 1, pageUrl: canaryPage },
     { ruleId: "image-alt", nodeCount: 1, pageUrl: "https://example.com/" }

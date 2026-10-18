@@ -1,7 +1,7 @@
 import { afterRejectScoringNarrative, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { assessConsentProminenceMateriality } from "./consent-prominence-materiality";
 import { readOutdatedTransferDisclosureAssessment } from "./outdated-transfer-disclosure-policy";
-import { readAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
+import { readAccessibilityAudit, readPreferenceAccessibilityAudit, accessibilityExamples } from "./accessibility-audit-evidence";
 import { describeAccessibilityEvidence, getAccessibilityFindingIdForRuleCode } from "./accessibility-evidence";
 import { formDestinationProjectionSchema, formDestinationCopy, qualifiesFormDestinationReview, FORM_DESTINATION_FINDING_ID, FORM_DESTINATION_SIGNAL } from "@certscore/contracts";
 import { cmsSecurityProjectionSchema, cmsSecurityCopy, CMS_SECURITY_FINDING_ID, CMS_SECURITY_SIGNAL, readCaliforniaPrivacyReviewFromConsent, californiaPrivacyReviewFindingIds, californiaPrivacyReviewCopy, CALIFORNIA_PRIVACY_REVIEW_SIGNAL } from "@certscore/contracts";
@@ -4495,8 +4495,9 @@ function resolveGdprTransparencyConcernConflicts(concerns: NormalizedConcern[]) 
 
 
 function buildAccessibilityAuditConcerns(runtimeArtifacts: Record<string, unknown> | null | undefined) {
-  const projection = readAccessibilityAudit(runtimeArtifacts?.accessibilityAudit);
-  if (!projection) return [];
+  const projections=[readAccessibilityAudit(runtimeArtifacts?.accessibilityAudit),readPreferenceAccessibilityAudit(runtimeArtifacts?.preferenceAccessibilityAudit)].filter((p):p is NonNullable<typeof p>=>Boolean(p));
+  return projections.flatMap(projection=>{
+  const scopeKey=projection.observation.scope === "opened_preference_panel"?"preferences":"runtime";
   const grouped = new Map<string, ReturnType<typeof accessibilityExamples>>();
   for (const example of accessibilityExamples(projection.observation)) {
     const id = getAccessibilityFindingIdForRuleCode(example.ruleCode);
@@ -4507,13 +4508,14 @@ function buildAccessibilityAuditConcerns(runtimeArtifacts: Record<string, unknow
     const title = getReportUnifiedFinding(id)?.label ?? "Automated accessibility issue";
     const description = describeAccessibilityEvidence(id, examples) ?? "Automated accessibility checks found failures on the tested page.";
     return buildConcernFromSharedInput({
-      categoryId: "accessibility", originType: "runtime_artifact", originKey: `accessibility.audit.${id}`,
+      categoryId: "accessibility", originType: "runtime_artifact", originKey: `accessibility.audit.${id}${scopeKey==="preferences"?".preferences":""}`,
       title, description, observedValue: description, severity: examples.some(example => example.severity === "high") ? "high" : "medium",
-      sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `accessibility.audit.${id}`, signalLabel: title,
+      sourceType: "signal", signalSource: "runtime_artifact_signal", signalKey: `accessibility.audit.${id}${scopeKey==="preferences"?".preferences":""}`, signalLabel: title,
       evidence: [projection.observation.documentUrl],
       rawEvidence: { unifiedFindingId: id, findingSubtype: id, accessibilityAuditProvenance: {
         contractVersion: projection.contractVersion, verificationStatus: projection.verificationStatus,
         sourceHash: projection.sourceHash, evidenceRef: projection.evidenceRef,
+        scope:projection.observation.scope, sourceLane:projection.observation.sourceLane,
         engine: projection.observation.engine, engineVersion: projection.observation.engineVersion,
         scanId: projection.observation.scanId, documentUrl: projection.observation.documentUrl,
         documentToken: projection.observation.documentToken, status: projection.observation.status,
@@ -4524,6 +4526,7 @@ function buildAccessibilityAuditConcerns(runtimeArtifacts: Record<string, unknow
         } : {}),
         pageUrl: projection.observation.documentUrl, runtimeEvidenceArtifacts: [projection.evidenceRef] },
     });
+  });
   });
 }
 

@@ -159,7 +159,7 @@ const apiV2GpcResponseObjectSchema = z.object({
   }).strict(),
   californiaPolicy: z.object({
     applied: z.boolean(),
-    deductionPoints: z.union([z.literal(0), z.literal(15)]),
+    deductionPoints: z.union([z.literal(0), z.literal(15), z.literal(25), z.literal(32), z.literal(37), z.literal(40), z.literal(43), z.literal(45), z.literal(47)]),
   }).strict(),
   evidenceUrl: z.string().url(),
 }).strict();
@@ -208,13 +208,16 @@ export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcRespo
   }
   if (response.contractVersion === "certscore.gpc-response-assessment.v3" && response.californiaPolicy.applied) {
     const o=response.observation;
-    const direct=o && o.status === "complete" && o.sourceSha256 === response.comparison.gpcArtifact?.sha256 &&
+    const direct=o && o.status !== "unavailable" && o.sourceSha256 && o.sessionSha256 && o.documentUrlSha256 && o.sourceSha256 === response.comparison.gpcArtifact?.sha256 &&
       Boolean(o.scanId) && o.delivery.httpHeaderRetained && o.delivery.mainNavigatorReadbackRetained &&
-      o.delivery.fullContextVerified && o.requests.complete &&
+      (o.positiveEvidence?.representativeDocument || o.status === "complete" && o.delivery.fullContextVerified && o.requests.complete) &&
       (((o.requests.advertisingCollectionCount ?? 0)>0 && Boolean(o.requests.advertisingCollectionEvidenceIds?.length)) ||
         (o.semanticProbe === "observed" && o.registration.cmpGpcSignal === "received" &&
           (o.registration.sale === "not_opted_out" || o.registration.sharing === "not_opted_out")));
     if (!direct) context.addIssue({code:"custom",message:"California risk scoring requires verified direct GPC evidence."});
+    const recipients = new Set(o?.requests.advertisingCollectionRecipients?.rows.map(row => row.entityId) ?? []);
+    const expected = [15, 25, 32, 37, 40, 43, 45, 47][Math.max(0, Math.min(8, recipients.size) - 1)];
+    if (response.californiaPolicy.deductionPoints !== expected) context.addIssue({code:"custom",message:"California GPC weight must match distinct retained recipients."});
   }
   if (response.californiaPolicy.applied !== (response.californiaPolicy.deductionPoints > 0)) {
     context.addIssue({
@@ -223,6 +226,8 @@ export const apiV2GpcResponseSchema: z.ZodType<ApiV2GpcResponse> = apiV2GpcRespo
       path: ["californiaPolicy"],
     });
   }
+  if (response.contractVersion !== "certscore.gpc-response-assessment.v3" && response.californiaPolicy.deductionPoints > 15)
+    context.addIssue({code:"custom",message:"Recipient increments require a source-bound v3 observation."});
 });
 
 export type ApiV2PostAcceptObservation = z.infer<typeof apiV2PostAcceptObservationSchema>;

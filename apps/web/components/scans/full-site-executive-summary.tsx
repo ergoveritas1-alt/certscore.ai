@@ -5,7 +5,6 @@ import { selectRegulatoryReview } from "../../lib/scans/regulatory-review-catalo
 import { REVIEW_FOCUS_LABELS } from "../../lib/scans/report-review-focus";
 import type { ReportReviewFocus } from "@certscore/api-contracts";
 import { AssessmentHighlightsText } from "./assessment-highlights-text";
-import { CaliforniaCoverageSummary } from "./regulatory-review-focus";
 
 import React, { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { FullSiteReportResponse } from "../../server/scans/full-site-report";
@@ -65,7 +64,7 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
   const priorities = review?.topIssues ?? score?.priorityReview;
   const highlightPriorities = review?.regulatory.length ? review.regulatory : priorities;
   const singlePage = scannedPages === 1;
-  const scoreLabel = californiaReview ? "California page score" : singlePage ? "Page score" : "Site score";
+  const scoreLabel = californiaReview ? "California score" : singlePage ? "Score" : "Site score";
   const highlights = priorities && (!singlePage || reviewFocus) ? buildAssessmentHighlightsPresentation(highlightPriorities!, singlePage ? { kind: "page" } : { kind: "site", scannedPages: scannedPages ?? score?.scoredPages ?? null }, { score: value, coverage: { state: score?.limitedPages ? "limited" : "unknown" } }) : null;
   return <section id="report-overview" aria-label="Executive overview" className="my-4 rounded-xl border border-zinc-200 bg-white">
     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-5 py-3">
@@ -83,14 +82,13 @@ export function FullSiteExecutiveSummary({ score, californiaScore, pending, load
             </div>
           </div>
           <div className="min-w-0 border-l border-zinc-200 pl-3 lg:pl-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{scoreLabel}</p>
+            {!singlePage ? <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Site score</p> : null}
             <p className="mt-2 text-lg font-semibold text-zinc-950">{californiaReview && priorities?.length === 0 ? californiaPresentation.emptyLabel : priorities ? `${priorities.length} ${reviewFocus ? "top" : "priority"} ${priorities.length === 1 ? "issue" : "issues"}` : loadingSavedResult ? "Loading saved assessment" : pending ? "Assessment in progress" : "Assessment unavailable"}</p>
             <p className="mt-1 text-xs leading-5 text-zinc-500">{scannedPages === null ? loadingSavedResult ? "Loading sitewide page totals" : "Waiting for page outcomes" : `${scannedPages} ${scannedPages === 1 ? "page" : "pages"} scanned`}</p>
           </div>
         </div>
         {!score && !californiaReview ? <p className="mt-2 text-xs text-zinc-500">{loadingSavedResult ? "The sitewide score will appear when the saved result loads." : pending ? `${singlePage ? "The page score" : "The site-wide score"} will appear when the assessment is ready.` : `${singlePage ? "Page scoring" : "Site-wide scoring"} is unavailable for this scan.`}</p> : null}
         {californiaReview && value === null ? <p className="mt-2 text-xs text-zinc-600">{californiaPresentation.unavailableScore}</p> : null}
-        {californiaReview ? <CaliforniaCoverageSummary coverage={californiaScore?.reviewCoverage} rightsAssessment={californiaScore?.rightsAssessment} collectionNoticeAssessment={californiaScore?.collectionNoticeAssessment} saleSharingAssessment={californiaScore?.saleSharingAssessment} /> : null}
         {score?.limitedPages ? <p className="mt-1 text-xs text-amber-800">{score.limitedPages} {score.limitedPages === 1 ? "page has" : "pages have"} limited scoring coverage.</p> : null}
         </div>
         <div data-overview-block>{snapshot ?? <p className="py-3 text-sm text-zinc-500">The signal snapshot will appear when the starting-page assessment is ready.</p>}</div>

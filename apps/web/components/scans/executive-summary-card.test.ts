@@ -1566,7 +1566,7 @@ test("ExecutiveSummaryCard renders limited review for latimes-style interrupted 
   assert.match(html, /Limited review/);
   assert.doesNotMatch(html, /data-testid="executive-posture-badge"[^>]*>Report generated</);
   assert.doesNotMatch(html, /Runtime coverage was limited by site protections/);
-  assert.doesNotMatch(html, /CertScore did not confirm a headline homepage issue from retained evidence/);
+  assert.doesNotMatch(html, /CertScore.ai did not confirm a headline homepage issue from retained evidence/);
   assert.doesNotMatch(html, /Observed vendor and request counts may be incomplete/);
   assert.doesNotMatch(html, /This scan has incomplete coverage/);
   assert.match(html, /No headline homepage issue was confirmed from retained evidence/);
@@ -2020,7 +2020,7 @@ test("ExecutiveSummaryCard withholds scores when the captured page is not repres
         coverageLabel: "Scanner access limitation",
         guidance: [],
         headline: "Public site access was limited during this scan",
-        message: "Access controls prevented CertScore from verifying the public site.",
+        message: "Access controls prevented CertScore.ai from verifying the public site.",
         recommendationTitle: "Recommended retry path",
         reason: "The homepage displayed an access-denied response.",
         title: "The site denied access to the scanner",

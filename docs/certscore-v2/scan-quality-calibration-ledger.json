@@ -22,9 +22,9 @@
     },
     "https://spotify.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T18:35:18.069Z",
-      "lastContactAt": "2026-10-09T18:35:18.069Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-11-15T01:09:58.606Z",
+      "lastContactAt": "2026-10-18T01:09:58.606Z",
+      "lastContactSource": "manual_browser_calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -63,8 +63,8 @@
     },
     "https://linear.app": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T13:21:58.500Z",
-      "lastContactAt": "2026-10-11T13:21:58.500Z",
+      "cooldownUntil": "2026-11-15T00:33:45.820Z",
+      "lastContactAt": "2026-10-18T00:33:45.820Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -83,13 +83,15 @@
       "url": "https://gatech.edu"
     },
     "https://bestbuy.com": {
-      "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T18:36:24.743Z",
-      "lastContactAt": "2026-10-09T18:36:24.743Z",
-      "lastContactSource": "calibration",
-      "lastNoGoReasons": [],
-      "lastOutcome": "completed",
-      "state": "cooldown",
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-15T01:41:20.565+00:00",
+      "lastContactAt": "2026-10-18T01:41:20.565+00:00",
+      "lastContactSource": "scan_quality_calibration",
+      "lastNoGoReasons": [
+        "visual_capture_failed_or_placeholder"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
       "url": "https://bestbuy.com"
     },
     "https://ftc.gov": {
@@ -175,13 +177,15 @@
       "url": "https://hotjar.com"
     },
     "https://progressive.com": {
-      "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T18:37:23.822Z",
-      "lastContactAt": "2026-10-09T18:37:23.822Z",
-      "lastContactSource": "calibration",
-      "lastNoGoReasons": [],
-      "lastOutcome": "completed",
-      "state": "cooldown",
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-15T01:40:04+00:00",
+      "lastContactAt": "2026-10-18T01:40:04+00:00",
+      "lastContactSource": "manual_browser_calibration",
+      "lastNoGoReasons": [
+        "privacy_rights_form_captcha"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
       "url": "https://progressive.com"
     },
     "https://usa.gov": {
@@ -262,8 +266,8 @@
     },
     "https://chase.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-05T20:10:55.866Z",
-      "lastContactAt": "2026-10-08T20:10:55.866Z",
+      "cooldownUntil": "2026-11-15T00:54:22.088Z",
+      "lastContactAt": "2026-10-18T00:54:22.088Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -271,14 +275,16 @@
       "url": "https://chase.com"
     },
     "https://att.com": {
-      "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T19:58:40.604+00:00",
-      "lastContactAt": "2026-10-14T19:58:40.604+00:00",
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-15T01:44:45.023+00:00",
+      "lastContactAt": "2026-10-18T01:44:45.023+00:00",
       "lastContactSource": "scan_quality_calibration",
-      "lastNoGoReasons": [],
-      "lastOutcome": "completed",
+      "lastNoGoReasons": [
+        "privacy_route_http_403"
+      ],
+      "lastOutcome": "no_go",
       "note": "Owner-requested local CMP quality follow-up: 1f4885fd-d203-42db-abae-92190521a4b2. Four serial full scans total across IKEA, AT&T and Ars Technica; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
-      "state": "cooldown",
+      "state": "blocked",
       "url": "https://att.com"
     },
     "https://target.com": {
@@ -295,9 +301,9 @@
     },
     "https://healthline.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T21:54:36.341034+00:00",
-      "lastContactAt": "2026-10-14T21:54:36.341034+00:00",
-      "lastContactSource": "mcp",
+      "cooldownUntil": "2026-11-15T00:30:31.909Z",
+      "lastContactAt": "2026-10-18T00:30:31.909Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -315,8 +321,8 @@
     },
     "https://hubspot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T23:37:17.049+00:00",
-      "lastContactAt": "2026-10-14T23:37:17.049+00:00",
+      "cooldownUntil": "2026-11-15T01:42:14.425+00:00",
+      "lastContactAt": "2026-10-18T01:42:14.425+00:00",
       "lastContactSource": "scan_quality_calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -326,8 +332,8 @@
     },
     "https://walmart.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T14:16:50.415Z",
-      "lastContactAt": "2026-10-09T14:16:50.415Z",
+      "cooldownUntil": "2026-11-15T01:21:37.294Z",
+      "lastContactAt": "2026-10-18T01:21:37.294Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -409,9 +415,9 @@
     },
     "https://caltech.edu": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T18:37:48.281Z",
-      "lastContactAt": "2026-10-09T18:37:48.281Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-11-15T01:45:30.474+00:00",
+      "lastContactAt": "2026-10-18T01:45:30.474+00:00",
+      "lastContactSource": "scan_quality_calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -429,9 +435,9 @@
     },
     "https://plannedparenthood.org": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-06T16:55:48.696Z",
-      "lastContactAt": "2026-10-09T16:55:48.696Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-11-15T01:42:48.829+00:00",
+      "lastContactAt": "2026-10-18T01:42:48.829+00:00",
+      "lastContactSource": "scan_quality_calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -525,9 +531,9 @@
     },
     "https://toyota.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-08T13:22:42.646Z",
-      "lastContactAt": "2026-10-11T13:22:42.646Z",
-      "lastContactSource": "calibration",
+      "cooldownUntil": "2026-11-15T01:43:25.175+00:00",
+      "lastContactAt": "2026-10-18T01:43:25.175+00:00",
+      "lastContactSource": "scan_quality_calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -650,8 +656,8 @@
     },
     "https://arstechnica.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-11T20:59:07.678+00:00",
-      "lastContactAt": "2026-10-14T20:59:07.678+00:00",
+      "cooldownUntil": "2026-11-15T01:43:57.609+00:00",
+      "lastContactAt": "2026-10-18T01:43:57.609+00:00",
       "lastContactSource": "scan_quality_calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",

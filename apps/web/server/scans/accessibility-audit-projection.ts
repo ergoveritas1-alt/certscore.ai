@@ -1,3 +1,4 @@
+import {cmpPreferencesEvidenceSchema,cmpPreferenceAccessibilityProjectionSchema,hasBoundCmpPreferenceDocument} from "@certscore/contracts";
 import {
   accessibilityAuditObservationSchema, accessibilityAuditProjectionSchema,
   type AccessibilityAuditObservation, type CanonicalEvidenceBundle, type DomSnapshotArtifact,
@@ -42,7 +43,7 @@ export function projectAccessibilityAudit(bundle: CanonicalEvidenceBundle, sourc
   // Failed/not-testable observations contain no evaluable results. Preserve
   // their actual coverage reason rather than inventing a binding failure.
   if (!bound && observation.status !== "failed" && observation.status !== "not_testable") {
-    observation = { ...observation, status: "limited", rulesEvaluated: [], violations: [], reviewItems: [], exampleCoverage: undefined, frameCoverage: undefined, limitations: ["evidence_binding_invalid"] };
+    observation = { ...observation, status: "limited", rulesEvaluated: [], violations: [], reviewItems: [], exampleCoverage: undefined, frameCoverage: undefined, menuInspection: undefined, limitations: ["evidence_binding_invalid"] };
   }
   return accessibilityAuditProjectionSchema.parse({
     contractVersion: "certscore.accessibility-audit-projection.v1", verificationStatus: "verified",
@@ -79,4 +80,19 @@ export function projectAdditionalPageAccessibilityAudit(evidence: Record<string,
     evidenceRef: `full-site:${packet.pageJobId}:${packet.attemptId}:evidence.json#accessibilityAudit`, observation: a,
   });
   return projection.success ? projection.data : null;
+}
+
+/** Independently bound preference-lane observations enter the same canonical
+ * accessibility concern path, with their actual scope and source retained. */
+export function projectPreferenceAccessibilityAudit(bundle:CanonicalEvidenceBundle,source:{verificationStatus?:string;sha256?:string}|undefined){
+  if(source?.verificationStatus!=="verified"||!source.sha256)return null;
+  const parsed=cmpPreferencesEvidenceSchema.safeParse(bundle.cmpPreferencesEvidence);if(!parsed.success)return null;
+  const packet=parsed.data,audit=packet.accessibilityAudit;
+  if(!audit||packet.scanId!==bundle.scanId||packet.targetUrl!==bundle.url||!hasBoundCmpPreferenceDocument(packet)||
+    packet.limitations.includes("preference_document_changed")||!packet.action.opened||packet.action.count!==1||
+    !packet.checkpoints?.controls||packet.checkpoints.controlsSurface!=="preferences"||
+    packet.checkpoints.documentToken!==packet.documentToken||audit.scanId!==bundle.scanId||audit.documentUrl!==packet.finalUrl||audit.documentToken!==packet.documentToken||
+    Date.parse(audit.startedAt)<Date.parse(packet.startedAt)||Date.parse(audit.completedAt)>Date.parse(packet.completedAt))return null;
+  return cmpPreferenceAccessibilityProjectionSchema.parse({contractVersion:"certscore.cmp-preference-accessibility-projection.v1",verificationStatus:"verified",
+    sourceHash:source.sha256,evidenceRef:"CanonicalEvidenceBundle.json#cmpPreferencesEvidence.accessibilityAudit",observation:audit});
 }

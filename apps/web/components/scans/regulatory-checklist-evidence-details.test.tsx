@@ -62,7 +62,7 @@ test("RegulatoryChecklistActiveTrace renders a concise end-user result explanati
   assert.match(html, /Why this result/);
   assert.match(html, /max-h-\[50vh\]/);
   assert.doesNotMatch(html, /Gap Observed/);
-  assert.doesNotMatch(html, /CertScore rated this as Gap Observed/);
+  assert.doesNotMatch(html, /CertScore.ai rated this as Gap Observed/);
   assert.doesNotMatch(html, /after evaluating the retained gate values and evidence/);
   assert.match(html, /Basis/);
   assert.match(html, /Evidence used/);

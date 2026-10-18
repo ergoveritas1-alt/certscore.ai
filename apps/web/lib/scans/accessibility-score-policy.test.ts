@@ -1,3 +1,7 @@
+import { californiaCoverageFixture, CA_FIXTURE_SOURCE, CA_FIXTURE_URL } from "../../server/scans/california-review-coverage.fixture";
+import { projectCaliforniaPrivacyReview } from "../../server/scans/california-privacy-review-projection";
+import { deriveCaliforniaRegulatoryScore } from "./california-regulatory-score";
+import { buildApiV2PostureScores } from "../api-v2/posture-scores";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { accessibilityProjectionFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
@@ -151,4 +155,52 @@ test("accessibility preserves the shared score floor and retained no-go decision
   const input = { checklistRows: [...checked, ...gaps] as GdprEprivacyCoverageChecklistItem[], unifiedFindings: packets };
   assert.equal(deriveCanonicalOverallScoreExplanationForReport({ ...input, scanRecord: { runtimeArtifacts: null } })?.score, 0);
   assert.equal(deriveCanonicalOverallScoreExplanationForReport({ ...input, scanRecord: { runtimeArtifacts: noGo.runtimeArtifacts } }), null);
+});
+
+test("EU and current CA postures reuse verified WCAG effects once, including the same cap and overlap policy", async () => {
+  const f = californiaCoverageFixture();
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy = "california-privacy-review.v10";
+  f.bundle.policySurfaceObservations.forEach(surface => { surface.documentLanguage = "en"; });
+  const assessment = projectCaliforniaPrivacyReview(f.bundle, CA_FIXTURE_SOURCE, CA_FIXTURE_URL, f.policyEvidence)!;
+  for (const [rules, expected] of [
+    [[rule("label"), rule("button-name"), rule("target-size")], 6],
+    [imageLink(true), 11],
+    [[rule("label"), rule("image-alt"), rule("color-contrast"), rule("nested-interactive")], 12],
+  ] as const) {
+    const packets = project([...rules]);
+    const duplicated = [...packets, ...packets];
+    const ca = deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [], unifiedFindings: duplicated });
+    const eu = deriveCanonicalOverallScoreExplanationForReport({ scanRecord: { runtimeArtifacts: null }, checklistRows: checked, unifiedFindings: duplicated })!;
+    assert.equal(ca.score, 100 - expected);
+    assert.equal(eu.score, 100 - expected);
+    assert.equal(ca.deductions.reduce((sum, row) => sum + row.points, 0), expected);
+    const api = buildApiV2PostureScores({ score: eu.score, californiaScore: ca });
+    assert.equal(api.ccpaCpra.score, ca.score);
+    assert.equal(api.gdprEprivacy.score, eu.score);
+  }
+  const invalid = project([rule("label")]).map(packet => ({ ...packet, scoreEffects: packet.scoreEffects?.map(effect => ({ ...effect, evidenceRefs: [] })) }));
+  assert.equal(deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [], unifiedFindings: invalid }).score, 100);
+  f.policyEvidence.projection.documents.forEach(document => { document.documentTextCoverage.status = "truncated"; });
+  const limited = projectCaliforniaPrivacyReview(f.bundle, CA_FIXTURE_SOURCE, CA_FIXTURE_URL, f.policyEvidence)!;
+  assert.equal(deriveCaliforniaRegulatoryScore({ assessment: limited, checklistRows: [], unifiedFindings: project([rule("label")]) }).score, null,
+    "WCAG evidence alone cannot manufacture an available CA privacy assessment");
+});
+
+test("CA composes rights and WCAG effects and accepts only the identical retained v10 privacy schedule", async () => {
+  const { deriveConsentControlAssessment } = await import("@certscore/contracts");
+  const f = californiaCoverageFixture("California Privacy Policy. You have the right to know what personal information we collect. You may request correction of inaccurate personal information.");
+  f.bundle.policySurfaceInspection!.californiaReviewPolicy = "california-privacy-review.v10";
+  f.bundle.policySurfaceObservations.forEach(surface => { surface.documentLanguage = "en"; });
+  const assessment = projectCaliforniaPrivacyReview(f.bundle, CA_FIXTURE_SOURCE, CA_FIXTURE_URL, f.policyEvidence)!;
+  const parent = deriveConsentControlAssessment({ scan: { scanId: f.bundle.scanId, finalUrl: CA_FIXTURE_URL } });
+  parent.californiaPrivacyReview = assessment;
+  const privacy = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: { consentControlAssessment: parent }, reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+  const wcag = project([rule("label")]);
+  const current = deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [], unifiedFindings: [...privacy, ...wcag] });
+  assert.equal(current.score, 84, "12 rights points plus four WCAG points");
+  assert.equal(current.deductions.length, 2);
+  const retained = privacy.map(packet => ({ ...packet, scoreEffects: packet.scoreEffects?.map(effect => ({ ...effect, policyVersion: "california-regulatory-posture.v10-recipients" })) }));
+  assert.equal(deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [], unifiedFindings: [...retained, ...wcag] }).score, 84);
+  const incompatible = privacy.map(packet => ({ ...packet, scoreEffects: packet.scoreEffects?.map(effect => ({ ...effect, policyVersion: "california-regulatory-posture.v9" })) }));
+  assert.equal(deriveCaliforniaRegulatoryScore({ assessment, checklistRows: [], unifiedFindings: [...incompatible, ...wcag] }).score, null);
 });

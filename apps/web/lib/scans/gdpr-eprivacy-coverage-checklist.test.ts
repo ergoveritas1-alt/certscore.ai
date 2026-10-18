@@ -277,7 +277,7 @@ test("checklist consumes approved multilingual GDPR Transparency Article 13 cove
   );
 });
 
-test("CertScore privacy policy evidence projects every GDPR Transparency row through the canonical pipeline", () => {
+test("CertScore.ai privacy policy evidence projects every GDPR Transparency row through the canonical pipeline", () => {
   const policyText = getCertScorePrivacyPolicyText();
   const classification = classifyGdprTransparencyTopics({
     localeHints: ["en"],
@@ -1947,7 +1947,7 @@ test("deriveGdprEprivacyCoverageChecklist renders consent choice quality as a st
           visualParityEvidenceObserved: null
         },
         limitation:
-          "Basic same-layer Accept and Decline controls were observed, but CertScore did not confirm granular cookie preferences, purpose/vendor choices, default toggle states, or a cookie preference center.",
+          "Basic same-layer Accept and Decline controls were observed, but CertScore.ai did not confirm granular cookie preferences, purpose/vendor choices, default toggle states, or a cookie preference center.",
         rowId: "consent_choice_quality",
         status: "Review signal"
       })
@@ -2194,7 +2194,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps footer ad-choice controls as GDP
       preference_withdrawal_control: makeCoverageOutcome({
         evidenceRefs: ["Evidence: consent control lifecycle", "Observed control: Ad Choices", "Observed control: Google Analytics Opt-Out"],
         limitation:
-          "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
+          "Footer privacy/ad-choice and vendor opt-out links were observed, but CertScore.ai did not confirm a GDPR/ePrivacy cookie preference center or consent-withdrawal control.",
         rowId: "preference_withdrawal_control",
         status: "Review signal"
       })
@@ -2220,7 +2220,7 @@ test("deriveGdprEprivacyCoverageChecklist demotes inconsistent checked post-choi
           "Observed control: Close preference center",
           "Observed control: Google Analytics Opt-Out"
         ],
-        limitation: "CertScore observed a post-choice consent or preference control in the tested context.",
+        limitation: "CertScore.ai observed a post-choice consent or preference control in the tested context.",
         retainedEvidence: {
           cookiePreferencesLinkObserved: false,
           footerPreferenceLinkObserved: true,
@@ -2330,7 +2330,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap when pre
           "Evidence: no first-layer reject option retained"
         ],
         limitation:
-          "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option.",
+          "CertScore.ai scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option.",
         retainedEvidence: {
           firstLayerCookieConsentBannerObserved: false,
           gdprEprivacyConsentSurfaceObserved: "unconfirmed",
@@ -2468,7 +2468,7 @@ test("deriveGdprEprivacyCoverageChecklist keeps missing reject as a gap without 
           "Evidence: no first-layer reject option retained"
         ],
         limitation:
-          "CertScore scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option.",
+          "CertScore.ai scanned the page and retained pre-consent cookie or tracking activity, but did not retain a first-layer reject, decline, refuse, or continue-without-accepting option.",
         retainedEvidence: {
           consentSurfaceObserved: true,
           firstLayerCookieConsentBannerObserved: false,
@@ -2717,7 +2717,7 @@ test("deriveGdprEprivacyCoverageChecklist renders retained post-reject persisten
       post_reject_tracking_reduction: makeCoverageOutcome({
         evidenceRefs: ["Evidence: post-reject tracking reduction evidence"],
         limitation:
-          "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore did not retain enough canonical detail to project a post-reject persistence gap.",
+          "A reject action and post-reject comparison window were retained, and post-reject non-essential activity was observed, but CertScore.ai did not retain enough canonical detail to project a post-reject persistence gap.",
         retainedEvidence: {
           missingEvidenceNeeded: [
             "Eligible post-reject non-essential vendor/request/cookie details with category, URL/domain, timing, and consent state."
@@ -3887,7 +3887,7 @@ test("deriveGdprEprivacyReviewSummary composes simple-cookie-notice reject persi
       preference_withdrawal_control: makeCoverageOutcome({
         evidenceRefs: ["Evidence: consent control lifecycle"],
         limitation:
-          "CertScore observed an initial consent surface, but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control on the tested public pages. Review whether users can later change or withdraw consent through another path.",
+          "CertScore.ai observed an initial consent surface, but did not observe an obvious cookie preferences, privacy settings, or consent-preference reopen control on the tested public pages. Review whether users can later change or withdraw consent through another path.",
         rowId: "preference_withdrawal_control",
         status: "Gap observed"
       }),
@@ -4038,7 +4038,7 @@ test("deriveGdprEprivacyReviewSummary reports thin privacy policy text as a tech
       policy_text_extraction: makeCoverageOutcome({
         evidenceRefs: ["Evidence: privacy-policy text extraction limited"],
         limitation:
-          "GDPR Transparency disclosure checks were limited because CertScore found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
+          "GDPR Transparency disclosure checks were limited because CertScore.ai found a privacy-policy surface but did not extract enough usable policy text to evaluate individual Article 13 disclosures.",
         retainedEvidence: {
           policyTextExtractionHealth: {
             extractedTextLength: 842,
@@ -4054,7 +4054,7 @@ test("deriveGdprEprivacyReviewSummary reports thin privacy policy text as a tech
       legal_basis_disclosure_observed: makeCoverageOutcome({
         evidenceRefs: ["Evidence: privacy-policy text extraction limited"],
         limitation:
-          "A privacy-policy surface was found, but CertScore did not extract enough usable policy text to confirm this disclosure from retained evidence.",
+          "A privacy-policy surface was found, but CertScore.ai did not extract enough usable policy text to confirm this disclosure from retained evidence.",
         retainedEvidence: {
           policyTextExtractionHealth: {
             extractedTextLength: 842,

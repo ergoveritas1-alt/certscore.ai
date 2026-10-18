@@ -37,7 +37,7 @@ test("bundled axe detects concrete WCAG failures and strips page text and attrib
 test("an evaluated page with no failures completes without a fabricated accessibility score", async () => {
   await withPage('<p>Readable content</p><button>Continue</button>', async page => {
     const result = await audit(page);
-    assert.equal(result.status, "completed");
+    assert.equal(result.status, "completed", JSON.stringify({limitations:result.limitations,review:result.reviewItems.map(rule=>rule.ruleId)}));
     assert.equal(result.violations.length, 0);
     assert.ok(result.rulesEvaluated.length);
     assert.equal("score" in result, false);
@@ -91,6 +91,17 @@ test("frame selectors cannot manufacture a top-document DOM relationship", async
       assert.equal(rule.nodeCount, 1);
       assert.equal(rule.representativeNodes[0]!.imageLinkIdentity, undefined);
     }
+  });
+});
+
+test("an unresponsive child cannot consume the main-document audit deadline", async () => {
+  await withPage('<button id="empty"></button><iframe title="Unresponsive child" srcdoc="&lt;script&gt;window.addEventListener(\'message\',event=&gt;event.stopImmediatePropagation(),true)&lt;/script&gt;"></iframe>', async page => {
+    const started = Date.now();
+    const result = await audit(page);
+    assert.ok(Date.now() - started < 6000, "Child messaging must stay inside the original audit allowance");
+    assert.ok(result.rulesEvaluated.length > 20);
+    assert.equal(result.violations.find(row => row.ruleId === "button-name")?.nodeCount, 1);
+    assert.ok(result.reviewItems.some(row => row.ruleId === "frame-tested"), "Unresponsive child coverage remains explicit");
   });
 });
 
@@ -231,5 +242,57 @@ test("prolific axe results retain full counts while browser transfer carries bou
     assert.equal(result.violations.find(rule => rule.ruleId === "button-name")?.representativeNodes.length, 5);
     assert.ok(result.exampleCoverage!.omittedNodeCount >= 295);
     assert.equal(result.exampleCoverage!.byteBudgetLimited, false);
+  });
+});
+
+test("bounded navigation opening retains newly exposed unnamed links without losing baseline findings", async () => {
+  const previous = process.env.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED;
+  process.env.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED = "1";
+  try {
+    await withPage('<header><p hidden aria-haspopup="dialog" aria-expanded="false">Hidden mobile menu</p><p id="menu" aria-haspopup="dialog" aria-expanded="false" onclick="this.setAttribute(\'aria-expanded\',\'true\');document.getElementById(\'panel\').hidden=false;document.getElementById(\'unrelated\').hidden=false">Shows</p><div id="panel" hidden><a href="/show" style="display:block;width:100px;height:40px"></a></div></header><aside id="unrelated" hidden><a href="/ad" style="display:block;width:100px;height:40px"></a></aside><img src="data:image/png;base64,AA==">', async page => {
+      const result = await audit(page);
+      assert.ok(result.violations.some(row => row.ruleId === "image-alt"));
+      assert.equal(result.menuInspection?.expanded, true, JSON.stringify(result));
+      assert.equal(result.menuInspection?.triggerKeyboardFocusable, false);
+      assert.equal(result.menuInspection?.triggerSelector,'#menu');
+      assert.equal(result.menuInspection?.triggerAccessibleName,'Shows');
+      assert.equal(result.menuInspection?.capturePolicyVersion,'menu_identity.v2');
+      assert.equal(result.violations.find(row => row.ruleId === "link-name")?.nodeCount, 1, "Coincident content outside the bound navigation scope is not a menu finding");
+      assert.ok(result.violations.find(row => row.ruleId === "link-name")?.representativeNodes.some(node => node.captureState === "opened_navigation_menu"));
+    });
+  } finally { if (previous === undefined) delete process.env.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED; else process.env.CERTSCORE_ACCESSIBILITY_MENU_INSPECTION_ENABLED = previous; }
+});
+
+test("unavailable child engine preserves verified main-document positives from one run", async t => {
+  await withPage('<button></button><iframe title="Unavailable child" srcdoc="&lt;p&gt;Child&lt;/p&gt;"></iframe>', async page => {
+    const child = page.frames().find(frame => frame !== page.mainFrame())!;
+    t.mock.method(child, "evaluate", async () => { throw new Error("Frame was detached"); });
+    const evaluate = page.evaluate.bind(page); let runs = 0;
+    t.mock.method(page, "evaluate", async (fn, arg) => {
+      if (arg && typeof arg === "object" && "exampleLimit" in arg) runs++;
+      return evaluate(fn, arg);
+    });
+    const result = await audit(page);
+    assert.equal(runs, 1);
+    assert.equal(result.status, "limited");
+    assert.equal(result.frameCoverage?.unavailableChildFrameCount, 1);
+    assert.equal(result.frameCoverage?.changedChildFrameCount, 0);
+    assert.equal(result.violations.find(row => row.ruleId === "button-name")?.nodeCount, 1);
+    assert.ok(result.violations.every(rule => rule.representativeNodes.every(node => node.mainDocumentBound)));
+  });
+});
+
+test("audit failure records a safe stage and code without retaining exception content", async t => {
+  await withPage('<button>Continue</button>', async page => {
+    const evaluate = page.evaluate.bind(page);
+    t.mock.method(page, "evaluate", async (fn, arg) => {
+      if (arg && typeof arg === "object" && "exampleLimit" in arg) throw new Error("Execution context was destroyed secret@example.com https://private.test/?token=secret");
+      return evaluate(fn, arg);
+    });
+    const result = await audit(page);
+    assert.equal(result.status, "failed");
+    assert.deepEqual(result.executionDiagnostic, { version: "capture_failure.v1", phase: "engine_execution", code: "document_changed", errorName: "Error" });
+    assert.doesNotMatch(JSON.stringify(result), /secret|private.test/);
+    assert.deepEqual(result.rulesEvaluated, []);
   });
 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import {sanitizeEvidenceRequestUrl} from "./evidence-request-url";
 
 export const RUNTIME_EVIDENCE_GRAPH_VERSION = "certscore.runtime-evidence-graph.v1";
 export const RUNTIME_EVIDENCE_GRAPH_LIMITS = Object.freeze({
@@ -221,18 +222,7 @@ export type RuntimeGraphCookieScope = z.infer<typeof runtimeGraphCookieScopeSche
 
 /** Strip query/fragment and redact identifier-like path segments before retention. */
 export function sanitizeRuntimeGraphUrl(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  try {
-    const url = new URL(value);
-    if (!["http:", "https:"].includes(url.protocol)) return undefined;
-    const path = url.pathname.split("/").map((part) => {
-      let decoded: string;
-      try { decoded = decodeURIComponent(part); } catch { return "_redacted_"; }
-      return /@|[\u0000-\u001f]|\d{6,}/.test(decoded) || decoded.length > 80 ||
-        /^[a-f0-9-]{24,}$/i.test(decoded) ? "_redacted_" : part;
-    }).join("/");
-    return `${url.origin}${path}`.slice(0, 600);
-  } catch { return undefined; }
+  return sanitizeEvidenceRequestUrl(value, {query:"omit"})?.slice(0,600);
 }
 
 export function sanitizeRuntimeGraphName(value: unknown): string {

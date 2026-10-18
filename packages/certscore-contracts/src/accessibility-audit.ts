@@ -1,3 +1,4 @@
+import {captureFailureDiagnosticSchema} from "./capture-failure-diagnostic";
 import { z } from "zod";
 
 export const ACCESSIBILITY_AUDIT_VERSION = "certscore.accessibility-audit.v1" as const;
@@ -19,6 +20,7 @@ export const ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS = [
 const selectorSchema = z.union([z.string().min(1).max(400), z.array(z.string().min(1).max(400)).min(1).max(8)]);
 const nodeSchema = z.object({
   mainDocumentBound: z.literal(true).optional(),
+  captureState: z.literal("opened_navigation_menu").optional(),
   selectors: z.array(selectorSchema).min(1).max(ACCESSIBILITY_LIMITS.selectorsPerNode),
   htmlSnippet: z.string().min(1).max(500),
   failureSummary: z.string().min(1).max(800),
@@ -63,11 +65,20 @@ export const accessibilityAuditObservationSchema = z.object({
   violations: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   reviewItems: z.array(accessibilityRuleObservationSchema).max(ACCESSIBILITY_LIMITS.rules),
   limitations: z.array(z.string().max(120)).max(16),
+  executionDiagnostic: captureFailureDiagnosticSchema.optional(),
+  menuInspection: z.object({
+    version: z.literal("bounded_navigation_menu.v1"), documentToken: z.string().min(1).max(200),
+    triggerSelector: z.string().min(1).max(400), triggerKeyboardFocusable: z.boolean(),
+    capturePolicyVersion: z.literal("menu_identity.v2").optional(), triggerAccessibleName:z.string().max(160).optional(),
+    expanded: z.literal(true), engineRunCount: z.literal(1),
+    rulesEvaluated: z.array(z.enum(["link-name", "button-name"])).min(1).max(2),
+  }).strict().optional(),
   frameCoverage: z.object({
     version: z.literal("stable_main_document_evidence.v1"), resultScope: z.literal("positive_findings_only"),
     documentToken: z.string().min(1).max(200), engineRunCount: z.literal(1),
     engineRuleCount: z.number().int().positive().max(ACCESSIBILITY_LIMITS.rules),
-    changedChildFrameCount: z.number().int().positive().max(10000),
+    changedChildFrameCount: z.number().int().nonnegative().max(10000),
+    unavailableChildFrameCount: z.number().int().positive().max(10000).optional(),
     excludedNodeCount: z.number().int().nonnegative().max(200_000_000),
   }).strict().optional(),
   // Bounded examples describe retained detail, separately from engine coverage.
@@ -85,6 +96,9 @@ export const accessibilityAuditObservationSchema = z.object({
   if ((audit.status === "completed" || audit.violations.length > 0 || audit.reviewItems.length > 0) && (!audit.documentToken || !audit.rulesEvaluated.length)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed evidence requires a bound document and evaluated rules." });
   if (audit.status === "completed" && (audit.limitations.length || audit.reviewItems.length)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Unresolved coverage cannot be complete." });
   if ((audit.status === "failed" || audit.status === "not_testable") && (audit.violations.length || audit.reviewItems.length || audit.rulesEvaluated.length)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Failed audits cannot supply results." });
+  const menuNodes = [...audit.violations, ...audit.reviewItems].flatMap(rule => rule.representativeNodes).filter(node => node.captureState);
+  if ((audit.menuInspection && audit.menuInspection.documentToken !== audit.documentToken) ||
+      menuNodes.length && !audit.menuInspection) ctx.addIssue({code: "custom", message: "Menu examples require same-document verified opening evidence."});
   if (audit.exampleCoverage) {
     const rows = [...audit.violations, ...audit.reviewItems];
     const observed = rows.reduce((sum, row) => sum + row.nodeCount, 0);
@@ -95,7 +109,8 @@ export const accessibilityAuditObservationSchema = z.object({
   if (audit.frameCoverage) {
     const rows = [...audit.violations, ...audit.reviewItems];
     if (audit.status !== "limited" || audit.frameCoverage.documentToken !== audit.documentToken || !rows.length ||
-        !audit.limitations.includes("child_frames_changed_main_document_retained") ||
+        !(audit.limitations.includes("child_frames_changed_main_document_retained") || audit.limitations.includes("unavailable_frames_main_document_retained")) ||
+        !(audit.frameCoverage.changedChildFrameCount > 0 || (audit.frameCoverage.unavailableChildFrameCount ?? 0) > 0) ||
         audit.rulesEvaluated.length !== new Set(rows.map(row => row.ruleId)).size ||
         audit.frameCoverage.engineRuleCount < audit.rulesEvaluated.length ||
         rows.some(row => !(ACCESSIBILITY_MAIN_DOCUMENT_RULE_IDS as readonly string[]).includes(row.ruleId) || row.representativeNodes.some(node => node.mainDocumentBound !== true))) {

@@ -11,7 +11,7 @@ const safeFields = new Set([
   "acceptanceRegistration", "refusalRegistration", "decisionEvidence", "captureCoverage",
   "actionControlProof", "afterActionCapture", "timing", "resolver", "limitations",
   "scanEvidenceLaneAssessment", "scan_evidence_lane_assessment", "usablePolicySurfaceUrls", "evidenceRefs",
-  "visualCapture", "notes",
+  "visualCapture", "notes", "controls", "domBinding", "documentIdentity", "source", "token",
   "gpcImpactCapture", "gpcImpactSemanticObservation", "gpcObservationSession", "semanticObservation", "gppDiagnostics", "stateTransitions",
 ]);
 
@@ -19,13 +19,14 @@ export function evidenceValidationFailure(error: unknown): { code: string; messa
   if (!(error instanceof Error) || error.name !== "ZodError" || !("issues" in error) || !Array.isArray(error.issues)) return;
   const issues = error.issues.slice(0, 6).map((issue: unknown) => {
     if (!issue || typeof issue !== "object") return "packet (invalid)";
-    const record = issue as { path?: unknown; code?: unknown };
+    const record = issue as { path?: unknown; code?: unknown; params?: {invariant?:unknown} };
     const path = Array.isArray(record.path) ? record.path.slice(0, 8).map(segment =>
       typeof segment === "number" && Number.isSafeInteger(segment) && segment >= 0 ? `[${segment}]`
         : typeof segment === "string" && safeFields.has(segment) ? segment : "[field]"
     ).join(".") : "packet";
     const code = typeof record.code === "string" && /^[a-z_]{1,40}$/.test(record.code) ? record.code : "invalid";
-    return `${path || "packet"} (${code})`;
+    const invariant=record.params?.invariant === "native_ax_observation_document_binding" ? ":native_ax_observation_document_binding" : "";
+    return `${path || "packet"} (${code}${invariant})`;
   });
   return {
     code: "v2_dag_lambda_evidence_invalid",

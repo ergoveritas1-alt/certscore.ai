@@ -1,14 +1,14 @@
 import { gpcReaderSummary } from "./gpc-reader-summary";
 import {deriveCaliforniaGpcResponsePolicy} from "./california-gpc-response-policy";
 import { GPC_CUSTOMER_RESULTS_ENABLED, hasVerifiedCustomerGpcEvidence } from "./gpc-customer-policy";
-import { gpcResponseAssessmentSchema, type GpcResponseAssessment } from "@certscore/contracts";
+import { gpcResponseAssessmentSchema, type GpcResponseAssessment, type GpcActivityComparison } from "@certscore/contracts";
 import type { UnifiedFindingDisplayPacket } from "./unified-findings";
 import { describeGpcObservedFacts } from "./gpc-observed-facts";
 import { readGpcActivityComparison } from "./gpc-activity-comparison";
 
 export type CanonicalGpcResponseProjection = {
   assessment: GpcResponseAssessment;
-  californiaDeductionPoints: 0 | 15;
+  californiaDeductionPoints: import("./california-choice-enforcement-policy").CaliforniaChoiceEnforcementPoints;
   comparisonHeadline: string;
   coverageSummary: string;
   headline: string;
@@ -91,6 +91,18 @@ export function describeCanonicalGpcResponse(assessment: GpcResponseAssessment) 
   return { ...comparison, comparisonHeadline: comparison.headline, headline };
 }
 
+/** Describes the already-verified fixed-window measurement independently of
+ * the historical whole-page quiet test. It never changes response eligibility. */
+export function describeMeasuredGpcActivity(comparison?: GpcActivityComparison) {
+  if (!comparison) return null;
+  const seconds = comparison.durationMs / 1000;
+  const { advertisingMarketing: ads, analyticsReplay: analytics } = comparison.activity;
+  return {
+    headline: `${seconds}-second matched comparison`,
+    summary: `Over the same ${seconds}-second interval after page commit, advertising/marketing requests: ${ads.baselineRequests} without GPC and ${ads.gpcRequests} with GPC; analytics/replay requests: ${analytics.baselineRequests} without GPC and ${analytics.gpcRequests} with GPC.`,
+  };
+}
+
 /**
  * Projects GPC only from the canonical unified-finding output. Callers must
  * not rebuild a GPC result directly from raw lane artifacts.
@@ -115,21 +127,25 @@ export function buildCanonicalGpcResponseProjection(
   const policy=deriveCaliforniaGpcResponsePolicy(parsedAssessment.data);
   const deduction=finding.scoreEffects?.some(e=>e.appliesTo === "california_posture" && e.policyVersion === policy.policyVersion &&
     e.policyKey === policy.policyKey && e.deductionPoints === policy.deductionPoints) ? policy.deductionPoints : 0;
+  const activityComparison = readGpcActivityComparison(finding.details.activityComparison, parsedAssessment.data);
+  const measured = describeMeasuredGpcActivity(activityComparison);
   const presentation = describeCanonicalGpcResponse(parsedAssessment.data);
   const observedFacts = describeGpcObservedFacts(parsedAssessment.data.contractVersion === "certscore.gpc-response-assessment.v3"
     ? parsedAssessment.data.observation : undefined);
-  if (observedFacts.length && parsedAssessment.data.comparison.comparable) {
+  if (measured) {
+    observedFacts.push({ label: measured.headline, value: measured.summary });
+  } else if (observedFacts.length && parsedAssessment.data.comparison.comparable) {
     observedFacts.push({ label: "Matched comparison", value: presentation.comparisonHeadline });
   }
 
   return {
     assessment: parsedAssessment.data,
     californiaDeductionPoints: deduction,
-    coverageSummary: presentation.coverageSummary,
-    comparisonHeadline: presentation.comparisonHeadline,
+    coverageSummary: measured?.summary ?? presentation.coverageSummary,
+    comparisonHeadline: measured?.headline ?? presentation.comparisonHeadline,
     headline: presentation.headline,
     summary: gpcReaderSummary(finding.summary),
     observedFacts,
-    activityComparison: readGpcActivityComparison(finding.details.activityComparison, parsedAssessment.data),
+    activityComparison,
   };
 }

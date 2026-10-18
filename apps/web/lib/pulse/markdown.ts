@@ -140,8 +140,8 @@ function compactConsentLaneResults(pulse: PulseMarkdownInput) {
     const summary = `${line(gpc.findingTitle)}; status: ${formatLabel(gpc.status)}` +
       (typeof proofCount === "number" ? `; Sec-GPC: 1 proof retained on ${proofCount} request(s)` : "");
     results.push(`- ${gpc.evidenceUrl ? markdownLink(`GPC response: ${summary}`, gpc.evidenceUrl) : `GPC response: ${summary}`}`);
-    if (gpc.californiaPolicy?.applied === true && gpc.californiaPolicy?.deductionPoints === 15) {
-      results.push("- California scoring path: 15-point GPC deduction applied.");
+    if (gpc.californiaPolicy?.applied === true && gpc.californiaPolicy.deductionPoints > 0) {
+      results.push("- California privacy-choice enforcement risk observed.");
     }
   }
 

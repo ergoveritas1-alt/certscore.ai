@@ -1,3 +1,6 @@
+import { classifyPrivacySurface } from "./privacy-surface-classifier";
+import {accessibilityRuleObservationSchema} from "./accessibility-audit";
+import {captureFailureDiagnosticSchema} from "./capture-failure-diagnostic";
 import {cmpNetworkCookieInventorySchema,projectNetworkCmpCookies} from "./cmp-network-cookie-inventory";
 import { z } from "zod";
 import {cmpInventoryManifestSchema,cmpCaptureProgressSchema} from "./cmp-inventory-manifest";
@@ -20,11 +23,11 @@ const cmpNamedDisclosureSchema = z.object({
 export const CMP_PREFERENCE_POLICY_VERSION = "bounded_cmp_preferences.v1" as const;
 export const CMP_PREFERENCE_BUDGET_MS = 17_000;
 export const CMP_PREFERENCE_JOIN_MS = CMP_PREFERENCE_BUDGET_MS + 2_000;
-/** Reserve two seconds for worker setup/retention within 56 GB-seconds.
+/** Reserve two seconds for worker setup/retention within the selected GB-second ceiling.
  * Unknown deployed memory fails conservatively to the maximum Lambda size. */
-export function cmpPreferenceBudgetMs(memoryMb: number = 3008): number {
+export function cmpPreferenceBudgetMs(memoryMb: number = 3008, policy?: "coverage_25_gb_seconds.v1"): number {
   const memory = Number.isFinite(memoryMb) && memoryMb >= 512 && memoryMb <= 10240 ? memoryMb : 10240;
-  return Math.min(CMP_PREFERENCE_BUDGET_MS, Math.floor(56_000 * 1024 / memory) - 2_000);
+  return Math.min(CMP_PREFERENCE_BUDGET_MS, Math.floor((policy === "coverage_25_gb_seconds.v1" ? 25_000 : 56_000) * 1024 / memory) - 2_000);
 }
 export const cmpAuditCriterionSchema = z.enum(["categories", "services", "privacy_access", "consent_record", "duration", "declared_not_found", "found_not_declared", "cookie_information"]);
 export type ExtendedCmpCriterion = z.infer<typeof cmpAuditCriterionSchema> | "implementation" | "prominence";
@@ -39,6 +42,7 @@ export const cmpInspectionSupportSchema = z.object({
   reason: z.string().max(240),
 });
 export const cmpPreferenceDispatchSchema = z.object({
+  computeBudgetPolicy: z.literal("coverage_25_gb_seconds.v1").optional(),
   policyVersion: z.literal(CMP_PREFERENCE_POLICY_VERSION),
   enabled: z.literal(true),
   scanId: z.string().min(1).max(160),
@@ -80,6 +84,7 @@ export const cmpInventoryTablesSchema = z.object({
   }).strict().refine(value => value.requests.length <= value.requestCount && value.nonEssentialRequestCount <= value.requestCount && value.requests.filter(row => row.nonEssential).length <= value.nonEssentialRequestCount, "Activity counts must agree with retained requests")).max(2).refine(values => new Set(values.map(value => value.action)).size === values.length, "One activity window per action").optional(),
 
   expiries: z.array(cmpCookieExpiryEvidenceSchema).max(4).optional(),
+  privacyChoices: z.array(z.object({label:z.string().min(1).max(240),enabled:z.boolean(),checked:z.boolean().nullable()}).strict()).min(1).max(100).optional(),
   categories: z.array(z.object({ name: z.string().min(1).max(240), checked: z.boolean().nullable() }).strict()).max(100).optional(),
   services: z.array(z.object({ name: z.string().min(1).max(240), source: z.enum(["cmp_api_inventory", "labelled_control", "cmp_named_disclosure", "cmp_visible_inventory", "cmp_loaded_inventory"]), sourceRef: z.string().max(120).optional() }).strict()).max(100).optional(),
   serviceDisclosures: z.array(cmpNamedDisclosureSchema).max(1).optional(),
@@ -97,6 +102,31 @@ export const cmpInventoryTablesSchema = z.object({
   })).max(100).optional(),
 }).strict();
 
+/** Optional positive-only audit of the actually opened, loader-bound panel.
+ * This is separate from the required runtime-lane homepage audit. */
+export const cmpPreferenceAccessibilitySchema=z.object({
+  contractVersion:z.literal("certscore.cmp-preference-accessibility.v1"),
+  scanId:z.string().min(1).max(160),sourceLane:z.literal("cmp_preferences"),scope:z.literal("opened_preference_panel"),
+  documentUrl:z.string().url().max(2000),documentToken:z.string().min(1).max(160),panelSelector:z.string().min(1).max(400),
+  engine:z.literal("axe-core"),engineVersion:z.string().min(1).max(40),
+  status:z.enum(["completed","limited"]),positiveFindingsOnly:z.literal(true),
+  startedAt:z.string().datetime(),completedAt:z.string().datetime(),durationMs:z.number().int().min(0).max(800),
+  rulesEvaluated:z.array(z.string().min(1).max(100)).min(1).max(10),
+  violations:z.array(accessibilityRuleObservationSchema).max(10),reviewItems:z.array(accessibilityRuleObservationSchema).max(10),
+}).strict().superRefine((row,ctx)=>{
+  if(Date.parse(row.completedAt)<Date.parse(row.startedAt)||Date.parse(row.completedAt)-Date.parse(row.startedAt)>800||
+    new Set(row.rulesEvaluated).size!==row.rulesEvaluated.length||
+    [...row.violations,...row.reviewItems].some(rule=>!row.rulesEvaluated.includes(rule.ruleId))||
+    row.status==="completed"&&row.reviewItems.length)ctx.addIssue({code:"custom",message:"Invalid bounded preference audit"});
+});
+export type CmpPreferenceAccessibility=z.infer<typeof cmpPreferenceAccessibilitySchema>;
+export const cmpPreferenceAccessibilityProjectionSchema=z.object({
+  contractVersion:z.literal("certscore.cmp-preference-accessibility-projection.v1"),
+  verificationStatus:z.literal("verified"),sourceHash:z.string().regex(/^[a-f0-9]{64}$/),
+  evidenceRef:z.literal("CanonicalEvidenceBundle.json#cmpPreferencesEvidence.accessibilityAudit"),observation:cmpPreferenceAccessibilitySchema,
+}).strict();
+
+
 export const cmpPreferencesEvidenceSchema = z.object({
   contractVersion: z.literal("certscore.cmp-preferences-evidence.v1"),
   policyVersion: z.literal(CMP_PREFERENCE_POLICY_VERSION),
@@ -104,6 +134,12 @@ export const cmpPreferencesEvidenceSchema = z.object({
   parentDispatchSha256: z.string().regex(/^[a-f0-9]{64}$/),
   targetUrl: z.string().url().max(2000),
   finalUrl: z.string().url().max(2000).nullable(),
+  navigationBinding: z.object({policyVersion:z.literal("passive_redirect_exact_document.v1"), requestedUrl:z.string().url().max(2000), finalUrl:z.string().url().max(2000), documentToken:z.string().min(1).max(160), redirectCount:z.number().int().min(0).max(8)}).strict().optional(),
+  linkedPreferenceNavigation: z.object({
+    policyVersion:z.literal("read_only_linked_preferences.v1"), sourceUrl:z.string().url().max(2000),
+    sourceDocumentToken:z.string().min(1).max(160), label:z.string().min(1).max(160),
+    destinationUrl:z.string().url().max(2000), documentToken:z.string().min(1).max(160),
+  }).strict().optional(),
   documentToken: z.string().max(160).nullable(),
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime(),
@@ -112,6 +148,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   action: z.object({ count: z.number().int().min(0).max(1), intent: z.literal("options"), label: z.string().max(160).nullable(), opened: z.boolean() }),
   controls: z.array(z.object({ label: z.string().max(240), kind: z.enum(["category", "service", "unclassified"]), enabled: z.boolean(), checked: z.boolean().nullable() })).max(100),
   controlInventoryComplete: z.boolean(),
+  accessibilityAudit: cmpPreferenceAccessibilitySchema.optional(),
   privacyLinks: z.array(cmpPrivacyLinkSchema).max(16),
   declarations: z.array(z.object({ name: z.string().min(1).max(160), purpose: z.string().max(240), duration: z.string().max(240), source: z.enum(["cmp_visible_inventory", "cmp_api_inventory", "cmp_loaded_inventory"]) })).max(100),
   declarationInventoryComplete: z.boolean(),
@@ -138,13 +175,15 @@ export const cmpPreferencesEvidenceSchema = z.object({
     unresolved: z.number().int().min(0).max(10000),
     truncated: z.boolean(),
   }).optional(),
+  executionDiagnostic: captureFailureDiagnosticSchema.optional(),
   inspectionDiagnostic: z.object({
-    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
+    revision: z.enum(["borlabs_preferences.v1", "cmp_preferences.v2", "cmp_preferences.v3", "cmp_preferences.v4", "cmp_preferences.v5", "cmp_preferences.v6", "cmp_preferences.v7", "cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17"]), passiveDialogReveal: z.boolean().optional(), budgetMs: z.number().int().min(1).max(17_000),
     identityScopes: z.object({ version: z.literal("cmp_scope_activity.v1"),
       providers: z.array(z.object({ provider: z.string().min(1).max(120), state: z.enum(["visible", "inactive", "unverified"]) }).strict()).max(40),
     }).strict().optional(),
     navigationHttpStatus: z.number().int().min(100).max(599).optional(),
     basicCaptureReserveMs: z.number().int().min(0).max(1000).optional(),
+    linkedPageStage:z.enum(["navigation","readiness","controls","completed"]).optional(),
     configuration: z.object({ version: z.enum(["onetrust_loaded_configuration.v1", "onetrust_loaded_configuration.v2", "onetrust_loaded_configuration.v3", "onetrust_loaded_configuration.v4", "cookieyes_loaded_configuration.v1"]), status: z.enum(["available", "unavailable"]),
       groupCount: z.number().int().min(0).max(10000).optional(), retainedCookieCount: z.number().int().min(0).max(100).optional(), truncated: z.boolean().optional(),
     }).strict().optional(),
@@ -170,12 +209,23 @@ export const cmpPreferencesEvidenceSchema = z.object({
     }).strict().optional(),
   }).optional(),
 }).superRefine((packet, ctx) => {
+  if(packet.linkedPreferenceNavigation && (packet.inspectionDiagnostic?.revision!=="cmp_preferences.v17" ||
+    !hasBoundCmpPreferenceDocument(packet) || packet.action.count!==0 || packet.action.opened || packet.controlInventoryComplete ||
+    packet.controls.some(control=>control.kind!=="unclassified")))
+    ctx.addIssue({code:"custom",message:"Read-only linked preferences require their own navigation proof and no choice action"});
+  const audit=packet.accessibilityAudit;
+  if(audit&&(!packet.action.opened||packet.action.count!==1||!packet.checkpoints?.controls||packet.checkpoints.controlsSurface!=="preferences"||
+    !["cmp_preferences.v13","cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17"].includes(packet.inspectionDiagnostic?.revision??"")||packet.inspectionDiagnostic?.surfaceBinding?.outcome!=="opened"||
+    audit.scanId!==packet.scanId||audit.documentUrl!==packet.finalUrl||audit.documentToken!==packet.documentToken||
+    Date.parse(audit.startedAt)<Date.parse(packet.startedAt)||Date.parse(audit.completedAt)>Date.parse(packet.completedAt)))
+    ctx.addIssue({code:"custom",message:"Preference accessibility requires the versioned opened document checkpoint"});
+
   if (packet.captureProgress && (!packet.documentToken || packet.captureProgress.documentToken!==packet.documentToken ||
-      packet.finalUrl!==packet.targetUrl || packet.inspectionDiagnostic?.revision!=="cmp_preferences.v12" ||
+      !hasBoundCmpPreferenceDocument(packet) || !["cmp_preferences.v12","cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17"].includes(packet.inspectionDiagnostic?.revision??"") ||
       [packet.captureProgress.controlsAtMs,packet.captureProgress.declarationsAtMs,packet.captureProgress.privacyLinksAtMs].some(at=>at!==undefined && at>Date.parse(packet.completedAt)-Date.parse(packet.startedAt))))
     ctx.addIssue({code:z.ZodIssueCode.custom,message:"Capture progress must bind the current versioned document."});
   if (packet.inventoryManifest && (!packet.checkpoints?.declarations || packet.captureProgress?.declarationsAtMs===undefined ||
-      packet.inspectionDiagnostic?.revision!=="cmp_preferences.v12" ||
+      !["cmp_preferences.v12","cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17"].includes(packet.inspectionDiagnostic?.revision??"") ||
       packet.inventoryManifest.source.startsWith("cookieyes_") && packet.support.provider!=="CookieYes" ||
       packet.inventoryManifest.source.startsWith("onetrust_") && packet.support.provider!=="OneTrust" ||
       packet.inventoryManifest.source==="termly_cookie_response.v1" ||
@@ -184,7 +234,7 @@ export const cmpPreferencesEvidenceSchema = z.object({
   const loadedDeclarations = packet.declarations.filter(row => row.source === "cmp_loaded_inventory");
   if (packet.loadedInventory || loadedDeclarations.length) {
     const projected = packet.loadedInventory ? projectLoadedCmpInventory(packet.loadedInventory).declarations : [];
-    if (!packet.loadedInventory || !["cmp_preferences.v11","cmp_preferences.v12"].includes(packet.inspectionDiagnostic?.revision ?? "") ||
+    if (!packet.loadedInventory || !["cmp_preferences.v11","cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17"].includes(packet.inspectionDiagnostic?.revision ?? "") ||
         packet.support.provider !== "Cookiebot" || packet.loadedInventory.version !== "cookiebot_loaded_declarations.v1" || !packet.action.opened || !packet.checkpoints?.declarations ||
         packet.inspectionDiagnostic?.surfaceBinding?.verification?.result !== "verified" ||
         packet.declarationInventoryComplete || loadedDeclarations.length !== projected.length ||
@@ -193,20 +243,20 @@ export const cmpPreferencesEvidenceSchema = z.object({
   }
   if (packet.visibleInventory) {
     const projected = projectVisibleCmpInventory(packet.visibleInventory);
-    if (!["cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12"].includes(packet.inspectionDiagnostic?.revision ?? "") || !packet.action.opened || !packet.checkpoints?.declarations || projected.declarations.some(row =>
+    if (!["cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17"].includes(packet.inspectionDiagnostic?.revision ?? "") || !packet.action.opened || !packet.checkpoints?.declarations || projected.declarations.some(row =>
         !packet.declarations.some(declared => declared.name === row.name && declared.purpose === row.purpose && declared.duration === row.duration && declared.source === row.source)))
       ctx.addIssue({code: z.ZodIssueCode.custom, message: "Visible inventory requires versioned exact declaration projection"});
   }
-  if (packet.status === "completed" && (!packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
+  if (packet.status === "completed" && (!packet.documentToken || !hasBoundCmpPreferenceDocument(packet))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Completed preference evidence requires exact document binding." });
   if (packet.inspectionDiagnostic?.surfaceBinding?.mode === "registered_portal" &&
-      (!["cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
+      (!["cmp_preferences.v8", "cmp_preferences.v9", "cmp_preferences.v10", "cmp_preferences.v11", "cmp_preferences.v12", "cmp_preferences.v13", "cmp_preferences.v14", "cmp_preferences.v15", "cmp_preferences.v16", "cmp_preferences.v17"].includes(packet.inspectionDiagnostic.revision) || packet.action.opened &&
        packet.inspectionDiagnostic.surfaceBinding.verification?.result !== "verified"))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Registered portal opening requires versioned verified binding." });
   if (packet.action.opened && packet.action.count !== 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Opening proof requires the single authorized Options action." });
   if (packet.action.opened && packet.inspectionDiagnostic?.optionsResolution && (packet.inspectionDiagnostic.optionsResolution.overflow || packet.inspectionDiagnostic.optionsResolution.counts.actionable !== 1))
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Options diagnostics must agree with unique opening proof." });
-  if ((packet.controls.length || packet.controlInventoryComplete) && !packet.action.opened && !(packet.checkpoints?.controls && packet.checkpoints.controlsSurface === "first_layer")) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Preference controls require a verified opened surface." });
-  if (packet.checkpoints && (!packet.documentToken || packet.checkpoints.documentToken !== packet.documentToken || packet.finalUrl !== packet.targetUrl)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Partial checkpoints require exact document binding." });
+  if ((packet.controls.length || packet.controlInventoryComplete) && !packet.action.opened && !(packet.checkpoints?.controls && (packet.checkpoints.controlsSurface === "first_layer" || packet.linkedPreferenceNavigation && hasBoundCmpPreferenceDocument(packet)))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Preference controls require a verified opened surface." });
+  if (packet.checkpoints && (!packet.documentToken || packet.checkpoints.documentToken !== packet.documentToken || !hasBoundCmpPreferenceDocument(packet))) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Partial checkpoints require exact document binding." });
   if (packet.configuredConsentCookies?.length && (!packet.checkpoints || !packet.support.provider)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Configured cookie identity requires a provider-bound document checkpoint." });
   if (packet.declarationCoverage && packet.declarationInventoryComplete && (packet.declarationCoverage.truncated || packet.declarationCoverage.unresolved || packet.declarationCoverage.configured !== packet.declarationCoverage.resolved || !packet.checkpoints?.declarations)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Complete configured inventory requires verified source accounting." });
   if (Date.parse(packet.completedAt) < Date.parse(packet.startedAt)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Invalid preference observation window." });
@@ -336,7 +386,7 @@ export const cmpAuditRowSchema = z.object({
 
 }).superRefine((row, ctx) => {
   const inventory = row.inventory;
-  if (inventory && ((inventory.categories && row.id !== "categories") || (inventory.services && row.id !== "services") || (inventory.declarations && row.id !== "cookie_information") ||
+  if (inventory && ((inventory.categories && row.id !== "categories") || (inventory.privacyChoices && (row.id !== "categories" || row.status !== "partially_assessed")) || (inventory.services && row.id !== "services") || (inventory.declarations && row.id !== "cookie_information") ||
     (inventory.consentStorage && row.id !== "consent_record") || (inventory.choiceActivity && row.id !== "implementation") || (inventory.cookies && row.id !== "found_not_declared") || (inventory.expiries && row.id !== "duration") || ["not_assessed", "incomplete", "not_applicable"].includes(row.status) || row.evidenceRefs.length === 0)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Inventory tables require the corresponding assessed criterion and retained evidence." });
   }
@@ -381,4 +431,27 @@ export type CmpAuditAssessment = z.infer<typeof cmpAuditAssessmentSchema>;
 export function cmpAuditRowsEqual(left: unknown, right: unknown): boolean {
   const a = cmpAuditRowSchema.safeParse(left), b = cmpAuditRowSchema.safeParse(right);
   return a.success && b.success && JSON.stringify(a.data) === JSON.stringify(b.data);
+}
+
+/** Redirect proof is produced before the one read-only Options action. Historical
+ * packets still require exact original-target equality. */
+export function hasBoundCmpPreferenceDocument(packet: {targetUrl:string;finalUrl:string|null;documentToken:string|null;navigationBinding?:{policyVersion:string;requestedUrl:string;finalUrl:string;documentToken:string;redirectCount:number};linkedPreferenceNavigation?:{policyVersion:string;sourceUrl:string;sourceDocumentToken:string;label:string;destinationUrl:string;documentToken:string}}):boolean {
+ if(!packet.documentToken||!packet.finalUrl)return false;
+ const proof=packet.navigationBinding;
+ const linked=packet.linkedPreferenceNavigation;
+ if(linked) {
+  try {
+   const source=new URL(linked.sourceUrl), destination=new URL(linked.destinationUrl);
+   const labelType=classifyPrivacySurface({linkText:linked.label}).surfaceType;
+   const parentBound=linked.sourceUrl===packet.targetUrl || Boolean(proof && proof.policyVersion==="passive_redirect_exact_document.v1" &&
+    proof.requestedUrl===packet.targetUrl && proof.finalUrl===linked.sourceUrl && proof.documentToken===linked.sourceDocumentToken && proof.redirectCount<=8);
+   return linked.policyVersion==="read_only_linked_preferences.v1" && parentBound && linked.destinationUrl===packet.finalUrl &&
+    linked.documentToken===packet.documentToken && Boolean(linked.sourceDocumentToken) && linked.sourceDocumentToken!==linked.documentToken && source.origin===destination.origin && source.pathname!==destination.pathname &&
+    (destination.protocol==="https:" || destination.protocol==="http:" && ["localhost","127.0.0.1","[::1]"].includes(destination.hostname)) &&
+    !source.username && !source.password && !destination.username && !destination.password && !destination.search && !destination.hash &&
+    ["consent_preferences","your_privacy_choices","do_not_sell_or_share"].includes(labelType);
+  } catch {return false;}
+ }
+ if(!proof)return packet.finalUrl===packet.targetUrl;
+ try {const target=new URL(proof.finalUrl);return proof.policyVersion==="passive_redirect_exact_document.v1" && proof.requestedUrl===packet.targetUrl && proof.finalUrl===packet.finalUrl && proof.documentToken===packet.documentToken && proof.redirectCount<=8 && target.protocol==="https:" && !target.username && !target.password && !target.hash;}catch{return false;}
 }

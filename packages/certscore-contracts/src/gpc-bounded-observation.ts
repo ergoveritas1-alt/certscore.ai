@@ -20,10 +20,28 @@ export const gpcBoundedObservationSchema = z.object({
     classifiedCount: count, collectionCount: count,
     advertisingCollectionCount: count.optional(),
     advertisingCollectionEvidenceIds: z.array(z.string().min(1).max(160)).max(100).optional(),
+    advertisingCollectionRecipients: z.object({
+      contractVersion: z.literal("canonical_collection_recipients.v1"),
+      resolverVersion: z.string().min(1).max(120),
+      rows: z.array(z.object({ evidenceId: z.string().min(1).max(160),
+        entityId: z.string().regex(/^ent_[a-f0-9]{12}$/), label: z.string().min(1).max(200),
+        // Producer timestamp relative to the retained GPC worker visit start.
+        observedAtMs: count.optional(),
+      }).strict()).max(100),
+    }).strict().optional(),
     evidenceIds: z.array(z.string().min(1).max(160)).max(100), samplesTruncated: z.boolean() }).strict(),
   limitationKeys: z.array(z.string().min(1).max(160)).max(32),
   scoreEffect: z.literal("none"), legalInterpretation: z.literal("not_assessed"),
 }).strict().superRefine((o, ctx) => {
+  const recipients = o.requests.advertisingCollectionRecipients;
+  if (recipients && (!o.requests.advertisingCollectionEvidenceIds ||
+    recipients.rows.length !== o.requests.advertisingCollectionEvidenceIds.length ||
+    new Set(recipients.rows.map(row => row.evidenceId)).size !== recipients.rows.length ||
+    recipients.rows.some(row => !o.requests.advertisingCollectionEvidenceIds!.includes(row.evidenceId) ||
+      row.observedAtMs !== undefined && (o.requests.fromMs === null || o.requests.throughMs === null ||
+        row.observedAtMs < Math.max(o.requests.fromMs, o.requests.documentCommittedAtMs ?? 0) || row.observedAtMs > o.requests.throughMs)))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Recipient attribution must bind exactly to retained qualifying collection evidence." });
+  }
   if ((o.status === "complete" && (!o.sourceSha256 || !o.sessionSha256 || !o.documentUrlSha256 ||
       !o.delivery.httpHeaderRetained || !o.delivery.mainNavigatorReadbackRetained || !o.requests.complete ||
       !["observed", "unsupported", "unavailable"].includes(o.semanticProbe) || o.limitationKeys.length > 0 ||

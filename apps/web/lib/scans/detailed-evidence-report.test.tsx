@@ -130,7 +130,7 @@ test("scanner integration support remains independent of a CMP feature assessmen
   assert.equal(output.detailedEvidence.sections[0]!.counts.unsupported, 0);
 });
 
-test("California privacy choices share website/export headers and retain verified controls, candidates and passages", async () => {
+test("California privacy review share website/export headers and retain verified controls, candidates and passages", async () => {
   const { CaliforniaPrivacyWorkpaper } = await import("../../components/scans/regulatory-review-focus");
   const report = fixture(); report.reviewFocus = "ccpa_cpra";
   report.privacyAuditEvidence = {

@@ -32,3 +32,13 @@ test("schema failure diagnostics identify visual note bounds without retaining n
   assert.equal(result.message, "Evidence validation failed: visualCapture.notes.[3] (too_big)");
   assert.doesNotMatch(JSON.stringify(result), /private-query/);
 });
+
+test("native document invariant diagnostics expose only the allowlisted invariant",()=>{
+ const error=Object.assign(new Error('private'),{name:'ZodError',issues:[
+  {path:['consentUiObservations',0,'controls'],code:'custom',params:{invariant:'native_ax_observation_document_binding'},message:'private'},
+  {path:['consentUiObservations',1],code:'custom',params:{invariant:'private-value'},message:'private'},
+ ]});
+ const result=evidenceValidationFailure(error)!;
+ assert.match(result.message,/controls \(custom:native_ax_observation_document_binding\)/);
+ assert.doesNotMatch(result.message,/private/);
+});

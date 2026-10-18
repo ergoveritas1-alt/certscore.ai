@@ -4,6 +4,8 @@ import { VendorBrandChip } from "./vendor-brand-chip";
 import { RegulatoryChecklistCorrectionSteps, RegulatoryChecklistEvidenceDetails } from "./regulatory-checklist-evidence-details";
 import type { ShadowEvidenceStatus, ShadowFinding } from "./report-lab/shadow-report-data";
 import { topFindingReaderSummary } from "../../lib/scans/top-finding-reader-summary";
+import { FindingApplicabilityNote } from "../scans/finding-applicability-note";
+import { regulatoryReviewContext } from "../../lib/scans/regulatory-review-catalog";
 const monoClass = "font-mono tabular-nums";
 
 export function DisclosureChevron({ className = "" }: { className?: string }) {
@@ -106,6 +108,7 @@ export function EvidenceTools({
 
 export function FindingRow({ finding, dense = false, priority = false, pages, idPrefix = "" }: { finding: ShadowFinding; dense?: boolean; priority?: boolean; pages?: Array<{id: string; url: string; homepage: boolean}>; idPrefix?: string }) {
   const readerSummary = priority ? topFindingReaderSummary(finding) : finding.summary;
+  const context = priority ? regulatoryReviewContext(finding.id, "gdpr_eprivacy") : null;
   return (
     <details className={`group border-b border-zinc-200 last:border-b-0 ${priority ? "transition-colors hover:bg-rose-50/40 open:bg-white" : ""}`} id={`${idPrefix}${finding.id}`}>
       <summary className={`grid cursor-pointer list-none gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sky-500 [&::-webkit-details-marker]:hidden ${priority ? "relative grid-cols-[2.25rem_minmax(0,1fr)] items-start px-2 py-3 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto_auto] sm:items-center sm:px-3" : dense ? "grid-cols-[2rem_minmax(0,1fr)_auto] py-4" : "grid-cols-[2.5rem_minmax(0,1fr)] py-4 sm:grid-cols-[3rem_minmax(0,1fr)_auto_auto]"}`}>
@@ -124,6 +127,10 @@ export function FindingRow({ finding, dense = false, priority = false, pages, id
       <div className={`${dense ? "pl-0 sm:pl-11" : priority ? "px-3 sm:pl-[4.75rem] sm:pr-4" : "pl-0 sm:pl-12"} pb-6`}>
         {dense ? <p className="mb-3 max-w-3xl text-sm leading-6 text-zinc-600">{finding.summary}</p> : null}
         {priority && readerSummary !== finding.summary ? <p className="mb-4 max-w-3xl text-sm leading-6 text-zinc-600"><span className="font-semibold text-zinc-900">Assessment detail: </span>{finding.summary}</p> : null}
+        {priority ? <div className="mb-4 rounded-lg border border-sky-100 bg-sky-50/40 px-4 py-3">
+          {context ? <a href={context.ruleUrl} target="_blank" rel="noreferrer" className="text-xs font-medium text-sky-800 underline underline-offset-2">{context.rule} ↗</a> : null}
+          <FindingApplicabilityNote findingId={finding.id} reviewFocus="gdpr_eprivacy" presentationGroup={finding.evidenceJson.presentationGroup} />
+        </div> : null}
         {pages?.length ? <details className="group/pages mb-4 border-b border-zinc-200 pb-3">
           <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold [&::-webkit-details-marker]:hidden">Affected pages <DisclosureChevron className="text-zinc-400 group-open/pages:rotate-180" /></summary>
           <ul className="mt-3 max-h-36 space-y-1 overflow-auto text-sm">{pages.map(page => <li key={page.id}><a className="break-all text-sky-700 underline" href={page.url} target="_blank" rel="noreferrer">{page.url}</a>{page.homepage ? " · Homepage" : ""}</li>)}</ul>

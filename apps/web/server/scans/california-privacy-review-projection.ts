@@ -1,3 +1,4 @@
+import {cmpPreferencesEvidenceSchema,hasBoundCmpPreferenceDocument} from "@certscore/contracts";
 import {matchCaliforniaCollectionNotices,matchCaliforniaCollectionNoticesV2,matchCaliforniaCollectionNoticesV3,matchCaliforniaCollectionNoticesV4,matchCaliforniaCollectionNoticesV5} from "./california-collection-notice-matching";
 import { createHash } from "node:crypto";
 import { assessCaliforniaRightsClauses,assessCaliforniaSaleSharingClauses, inspectCaliforniaRightsConcepts, californiaDisclosureInspectionSchema, verifiedSaleSharingOptOutSchema } from "@certscore/contracts";
@@ -28,6 +29,25 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
       destinationStatus: exactDestinationError ? "http_error" as const : control.retrieval === "fetched" ? "retrieved" as const : "not_tested" as const,
       ...(exactDestinationError ? {httpStatus: observed!.httpStatus as 404 | 410} : {}) };
   });
+  // Independently verified, read-only linked settings can supply positive
+  // named choice facts. They never establish homepage absence or execution.
+  const linkedPacket=cmpPreferencesEvidenceSchema.safeParse(bundle.cmpPreferencesEvidence);
+  if(linkedPacket.success) {
+    const packet=linkedPacket.data;
+    if(packet.linkedPreferenceNavigation && packet.scanId===bundle.scanId && packet.targetUrl===documentUrl &&
+      hasBoundCmpPreferenceDocument(packet) && packet.checkpoints?.controls &&
+      Date.parse(packet.startedAt)>=start-5000 && Date.parse(packet.completedAt)<=end &&
+      !packet.limitations.includes("preference_document_changed")) {
+      packet.controls.forEach((control,index)=>{
+        const kind=classifyPrivacySurface({linkText:control.label}).surfaceType;
+        if(control.enabled && ["do_not_sell_or_share","your_privacy_choices"].includes(kind) && controls.length<12 &&
+          !controls.some(row=>row.label===control.label&&row.destinationUrl===packet.finalUrl)) {
+          controls.push({label:control.label.slice(0,200),kind:kind as "do_not_sell_or_share"|"your_privacy_choices",
+            evidenceRef:`CmpPreferencesEvidencePacket.json#controls.${index}`,destinationUrl:packet.finalUrl,destinationStatus:"retrieved"});
+        }
+      });
+    }
+  }
   const choiceSurface = controls.length ? "observed" : inspection?.coverage === "complete" && inspection.namedChoiceCandidateCount === 0 &&
     !workpaper.truncated && !(workpaper.contractVersion === "certscore.privacy-audit-evidence.v2" && workpaper.controlCandidates.some(row => row.kind !== "cookie_settings"))
       ? "not_observed_in_inspected_scope" : "unknown";
@@ -83,7 +103,32 @@ export function projectCaliforniaPrivacyReview(bundle: CanonicalEvidenceBundle, 
       topics:inspectCaliforniaRightsConcepts(inspectedDocuments.map(row => row!.text))}) : undefined;
   const clauseDocuments=disclosureInspection ? inspectedDocuments!.map(row=>({evidenceRef:row!.document.evidenceRef,
     textSha256:createHash("sha256").update(row!.text).digest("hex"),text:row!.text,url:row!.document.url})) : [];
-  const rightsAssessment=clausePolicy && disclosureInspection ? assessCaliforniaRightsClauses(clauseDocuments,source!.sha256!) : undefined;
+  // Positive clauses from verified, complete individual documents survive an
+  // unresolved supplement. Only complete governing coverage permits negatives.
+  let positivePassageLanguage = false;
+  const positiveDocuments = (reviewCoverage?.sourceDocuments ?? []).flatMap(document => {
+    if (!document.complete) return [];
+    const observationId = document.evidenceRef.replace(/^policy-text:/, "");
+    const surface = bundle.policySurfaceObservations.find(row => row.observationId === observationId);
+    const text = policyEvidence?.texts.find(row => row.observationId === observationId)?.text;
+    if (!surface || surface.translationApplied || !text ||
+        createHash("sha256").update(text).digest("hex") !== document.sha256) return [];
+    const language = surface.documentLanguage?.trim().toLowerCase();
+    if (language && language.split("-")[0] !== "en") return [];
+    // Current assessments may retain explicit English grant clauses even when
+    // the document has no language tag. English-only deterministic passage
+    // matching establishes positives; it cannot establish any missing right.
+    if (!language) {
+      if (!transferPolicy) return [];
+      positivePassageLanguage = true;
+    }
+    return [{ evidenceRef: document.evidenceRef,
+      textSha256: createHash("sha256").update(text).digest("hex"), text, url: document.url }];
+  });
+  const rightsAssessment = clausePolicy && (disclosureInspection || transferPolicy) && positiveDocuments.length
+    ? assessCaliforniaRightsClauses(positiveDocuments, source!.sha256!, {
+        completeCoverage: Boolean(disclosureInspection), positivePassageLanguage,
+      }) : undefined;
   const saleSharingAssessment=refinedPolicy && disclosureInspection?assessCaliforniaSaleSharingClauses(clauseDocuments,source!.sha256!):undefined;
   const collectionNoticeAssessment=clausePolicy ? (readUsePolicy?matchCaliforniaCollectionNoticesV5:runtimePurposePolicy?matchCaliforniaCollectionNoticesV4:categoryPolicy?matchCaliforniaCollectionNoticesV3:refinedPolicy?matchCaliforniaCollectionNoticesV2:matchCaliforniaCollectionNotices)({bundle,sourceHash:source!.sha256!,documentUrl:workpaper.documentUrl,
     documents:clauseDocuments,policyComplete:Boolean(disclosureInspection),inventoryComplete:reviewCoverage?.contractVersion === "certscore.california-review-coverage.v2" && reviewCoverage.captureCoverage.collectionInventoryComplete}) : undefined;

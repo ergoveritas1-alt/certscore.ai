@@ -517,3 +517,10 @@ test('privacy rights application forms do not masquerade as governing policy sup
  assert.equal(classifyPrivacySurface({linkText:'online form',url:'https://publisher.example/privacy/app-form'}).surfaceType,'unknown');
  assert.equal(classifyPrivacySurface({linkText:'California Notice',url:'https://publisher.example/privacy/california'}).surfaceType,'california_notice');
 });
+test("static notice and hub destinations are fetched even when labels describe choices",()=>{
+ for(const [linkText,url]of [["Privacy Center","https://about.brand.test/privacy.html"],["Advertising choices","https://about.brand.test/privacy/privacy-notice.html#choice"]]) {
+  const result=classifyPrivacySurface({linkText,url});assert.equal(result.surfaceType,"privacy_policy");if(linkText==="Privacy Center")assert.equal(result.reasonCodes.includes("static_governing_notice_destination"),true);
+ }
+ assert.equal(classifyPrivacySurface({linkText:"Privacy Center",url:"https://site.test/#preferences"}).surfaceType,"consent_preferences");
+ assert.equal(classifyPrivacySurface({linkText:"Your Privacy Choices",url:"https://privacyportal.test/choice"}).surfaceType,"your_privacy_choices");
+});

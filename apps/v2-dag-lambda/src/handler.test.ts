@@ -5063,6 +5063,8 @@ for (const preferences of ["complete", "partial", "hang", "wrong_hash", "wrong_t
       assert.ok(Date.now() - start < 1500, "CMP worker must not wait its 19-second budget at report publication");
       const joined = preferences === "complete" || preferences === "partial";
       assert.equal(result.bundle.cmpPreferenceLaneOutcome.status, joined ? "joined" : "limited");
+      if (preferences === "wrong_hash") assert.equal(result.bundle.cmpPreferenceLaneOutcome.diagnostic?.code, "checksum_mismatch");
+      if (preferences === "wrong_target") assert.equal(result.bundle.cmpPreferenceLaneOutcome.diagnostic?.phase, "artifact_binding");
       assert.equal(Boolean(result.bundle.cmpPreferencesEvidence), joined);
       if (preferences === "partial") {
         assert.equal(result.bundle.cmpPreferencesEvidence.status, "limited");
