@@ -236,8 +236,8 @@
     },
     "https://weather.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T10:12:35.305Z",
-      "lastContactAt": "2026-10-18T10:12:35.305Z",
+      "cooldownUntil": "2026-11-15T10:48:07.828Z",
+      "lastContactAt": "2026-10-18T10:48:07.828Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -336,8 +336,8 @@
     },
     "https://fandango.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T10:11:59.508Z",
-      "lastContactAt": "2026-10-18T10:11:59.508Z",
+      "cooldownUntil": "2026-11-15T10:35:15.238Z",
+      "lastContactAt": "2026-10-18T10:35:15.238Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -419,8 +419,8 @@
     },
     "https://homedepot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T10:13:07.699Z",
-      "lastContactAt": "2026-10-18T10:13:07.699Z",
+      "cooldownUntil": "2026-11-15T10:32:13.323Z",
+      "lastContactAt": "2026-10-18T10:32:13.323Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -545,8 +545,8 @@
     },
     "https://fidelity.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T10:13:42.669Z",
-      "lastContactAt": "2026-10-18T10:13:42.669Z",
+      "cooldownUntil": "2026-11-15T10:34:04.129Z",
+      "lastContactAt": "2026-10-18T10:34:04.129Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1273,7 +1273,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-18T10:14:08.575Z",
+  "updatedAt": "2026-10-18T10:50:03.242Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",
