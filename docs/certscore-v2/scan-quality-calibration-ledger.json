@@ -236,9 +236,9 @@
     },
     "https://weather.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T02:43:40.903+00:00",
-      "lastContactAt": "2026-10-18T02:43:40.903+00:00",
-      "lastContactSource": "scan_quality_calibration",
+      "cooldownUntil": "2026-11-15T10:12:35.305Z",
+      "lastContactAt": "2026-10-18T10:12:35.305Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "note": "Owner-requested local CMP quality follow-up: 6687f0ce-c8c2-423c-8c27-ec2385fd80a6. Three serial full scans total across Weather.com, Sentry and HubSpot; temporary local quota admission restored after each. No deployment, identity/region switch, extra capture budget or retries of no-go results.",
@@ -336,11 +336,11 @@
     },
     "https://fandango.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T02:41:17.591+00:00",
-      "lastContactAt": "2026-10-18T02:41:17.591+00:00",
-      "lastContactSource": "scan_quality_calibration",
+      "cooldownUntil": "2026-11-15T10:11:59.508Z",
+      "lastContactAt": "2026-10-18T10:11:59.508Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
-      "lastOutcome": "failed",
+      "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://fandango.com"
     },
@@ -419,9 +419,9 @@
     },
     "https://homedepot.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T02:41:51.801+00:00",
-      "lastContactAt": "2026-10-18T02:41:51.801+00:00",
-      "lastContactSource": "scan_quality_calibration",
+      "cooldownUntil": "2026-11-15T10:13:07.699Z",
+      "lastContactAt": "2026-10-18T10:13:07.699Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -545,9 +545,9 @@
     },
     "https://fidelity.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T02:45:10.56+00:00",
-      "lastContactAt": "2026-10-18T02:45:10.56+00:00",
-      "lastContactSource": "scan_quality_calibration",
+      "cooldownUntil": "2026-11-15T10:13:42.669Z",
+      "lastContactAt": "2026-10-18T10:13:42.669Z",
+      "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
       "state": "cooldown",
@@ -1273,7 +1273,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-18T02:49:29.941Z",
+  "updatedAt": "2026-10-18T10:14:08.575Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",
