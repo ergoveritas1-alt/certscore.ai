@@ -236,8 +236,8 @@
     },
     "https://weather.com": {
       "consecutiveNoGoCount": 0,
-      "cooldownUntil": "2026-11-15T10:48:07.828Z",
-      "lastContactAt": "2026-10-18T10:48:07.828Z",
+      "cooldownUntil": "2026-11-15T11:15:02.889Z",
+      "lastContactAt": "2026-10-18T11:15:02.889Z",
       "lastContactSource": "calibration",
       "lastNoGoReasons": [],
       "lastOutcome": "completed",
@@ -1273,7 +1273,7 @@
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-18T10:50:03.242Z",
+  "updatedAt": "2026-10-18T11:32:55.408Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",
