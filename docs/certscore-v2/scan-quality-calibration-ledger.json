@@ -1276,13 +1276,27 @@
       "lastOutcome": "completed",
       "state": "cooldown",
       "url": "https://heise.de"
+    },
+    "https://imunify.com/": {
+      "consecutiveNoGoCount": 1,
+      "cooldownUntil": "2026-11-16T17:35:04.538Z",
+      "lastContactAt": "2026-10-19T17:35:04.538Z",
+      "lastContactSource": "calibration",
+      "lastNoGoReasons": [
+        "captcha_or_challenge"
+      ],
+      "lastOutcome": "no_go",
+      "state": "blocked",
+      "url": "https://imunify.com/",
+      "note": "Owner explicitly authorized exactly one fresh production Imunify scan with a cooldown exception after the October 19 accuracy release. Scan f8ae9d38-618a-4fca-b5d2-a12078432448 used existing California routing, scanner identity and standard budgets; redirected to imunify360.com and retained a genuine Cloudflare security-verification page. No retry or region/identity change. Report/API parity verified; California and overall scores remain unavailable for this nonrepresentative visit."
     }
   },
   "ledgerVersion": "certscore.scan_quality_calibration_ledger.1",
-  "updatedAt": "2026-10-18T11:32:55.408Z",
+  "updatedAt": "2026-10-19T17:36:22.115Z",
   "contactOnlyUrls": [
     "https://anthropic.com",
     "https://borlabs.io/",
+    "https://imunify.com/",
     "https://mistral.ai/",
     "https://sits.com/en/",
     "https://termly.io/",
