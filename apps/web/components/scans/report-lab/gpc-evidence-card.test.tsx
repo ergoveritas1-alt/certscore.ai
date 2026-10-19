@@ -48,6 +48,20 @@ test("GPC detail groups qualifying recipients and shows retained request timing 
   assert.match(legacy,/Adobe Inc\./);assert.doesNotMatch(legacy,/after GPC visit start/);
 });
 
+test("GPC cards show recipient evidence without explaining applied or withheld deductions",()=>{
+ for(const points of [0,15,25,47] as const){
+  const candidate=structuredClone(projection);
+  candidate.californiaDeductionPoints=points;
+  if(candidate.assessment.contractVersion!=="certscore.gpc-response-assessment.v3")throw Error("v3 required");
+  candidate.assessment.observation.requests.advertisingCollectionRecipients={contractVersion:"canonical_collection_recipients.v1",resolverVersion:"fixture",rows:[
+   {entityId:"linkedin-fixture",label:"LinkedIn Corporation",evidenceId:"request-a",observedAtMs:1500},
+  ]};
+  const html=renderToStaticMarkup(<GpcEvidenceIndexCard projection={candidate} california />);
+  assert.match(html,/LinkedIn Corporation/);
+  assert.doesNotMatch(html,/deduct|scoring|score (?:effect|impact)|point (?:penalty|breakdown)|\d+.point/i);
+ }
+});
+
 test("verified five-second activity remains visible when the independent quiet-page response is indeterminate",()=>{
  const measured=structuredClone(projection);
  measured.activityComparison={contractVersion:'certscore.gpc-activity-comparison.v1',evidencePolicy:'page_http_signal.v2',scanId:'fixture',status:'measured',scope:'matched_post_commit_request_window',durationMs:5000,

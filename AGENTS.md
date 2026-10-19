@@ -36,6 +36,22 @@ If platform discovery is needed, inspect the repository’s deployment topology 
 
 ## California choice-enforcement scoring
 
+### Scan-report scoring presentation — October 19, 2026
+
+The owner requires verified findings to affect the score through the canonical
+pipeline when the approved scoring policy makes them eligible. For GPC, verified
+successful advertising/marketing collection under the delivered signal may
+qualify; vendor presence or a script download alone does not.
+
+Never show or explain scoring deductions in customer scan reports, including
+finding cards, executive summaries, tooltips, evidence panels, or rendered report
+exports. Do not add point breakdowns, deduction formulas, explanations of why a
+deduction applied or was withheld, or phrases such as "scoring withheld because
+capture verification was limited." Show the resulting score and factual findings
+and evidence. Preserve typed score data for canonical computation, API contracts,
+and internal diagnostics; this presentation rule does not authorize changing
+scoring policy, hiding findings, or promoting unverified evidence.
+
 October 17, 2026: the owner authorized local implementation of recipient-based
 California choice-enforcement scoring, then raised its cap to 47. The totals
 are 15/25/32/37/40/43/45/47 for 1 through 8+ distinct canonical recipient entities.

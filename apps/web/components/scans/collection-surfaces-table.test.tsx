@@ -15,6 +15,7 @@ test("form rows expose page provenance, collapsed field details, and retained sn
   assert.match(html, /Forms &amp; fields/); assert.match(html, /2 forms/);
   assert.match(html, /aria-expanded="false"/); assert.match(html, /hidden=""/);
   assert.match(html, /Your email/); assert.match(html, /https:\/\/example.test\/other/); assert.match(html, /View form: Contact us/);
+  assert.doesNotMatch(html, /score effect|deduction|scoring withheld/i);
 });
 test("missing, withheld, and unsafe snapshot URLs never become usable links", () => {
   for (const snapshot of [{ status: "unavailable" as const }, { status: "withheld" as const }, { status: "available" as const, url: "javascript:alert(1)" }]) {

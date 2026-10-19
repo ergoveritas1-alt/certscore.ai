@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import nodeTest from "node:test";
 import { gzipSync } from "node:zlib";
-import type { Browser } from "playwright";
+import { chromium, type Browser } from "playwright";
 import {
   classifyPrivacySurface,
   GDPR_TRANSPARENCY_TOPIC_PHRASE_REGISTRY,
@@ -32,6 +32,7 @@ import {
   extractCandidates,
   extractPolicyCookieDisclosures,
   extractPolicySections,
+  fetchRenderedPolicyDocumentText,
   gdprTransparencyTopicCandidatesFromRetainedPolicySections,
   isFetchablePolicyCandidateForPolicySurface,
   isFetchablePolicyHrefForPolicySurface,
@@ -43,6 +44,8 @@ import {
   normalizePolicySurfaceUrl,
   POLICY_HOMEPAGE_FETCH_TIMEOUT_MS,
   policyDocumentRoleForChildSelection,
+  privacyDocumentCandidateFromRetainedBody,
+  retainedPolicyExplicitlyExcludesWebsiteVisitors,
   policySurfaceObservationsFromRetainedRenderedLinks,
   prioritizePolicyCandidateEvaluation,
   retainedArticle13SectionEvidenceFromSections,
@@ -62,6 +65,10 @@ import {
 } from "./scanners/policy-surface-scanner.js";
 import { preConsentRuntimeScanner } from "./scanners/pre-consent-runtime-scanner.js";
 import { startStaticFixtureServer, type StaticFixturePage } from "./test-fixtures/static-server.js";
+
+import { publisherPolicyHtml, publisherPolicyText, vendorPolicyHtml } from "./test-fixtures/policy-source-association.js";
+
+import { redirectedPolicyText, startRedirectedPolicyRecoveryFixture } from "./test-fixtures/redirected-policy-recovery.js";
 
 const policyTestShard = parsePolicyTestShard(process.env.CERTSCORE_POLICY_TEST_SHARD);
 let policyTestIndex = 0;
@@ -87,6 +94,85 @@ function parsePolicyTestShard(value: string | undefined): { index: number; total
   }
   return { index, total };
 }
+
+test("short governing policy keeps its own source instead of a longer linked provider policy", async () => {
+  let providerRequests = 0;
+  const server = createServer((_request, response) => {
+    providerRequests++;
+    response.writeHead(200, { "content-type": "text/html" }); response.end(vendorPolicyHtml);
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address(); assert.ok(address && typeof address === "object");
+  const providerUrl = `http://127.0.0.1:${address.port}/legal/privacy`;
+  try {
+    let substituted = false;
+    const resolved = await resolvePolicyVisibleText({html:publisherPolicyHtml(providerUrl),
+      baseUrl:"https://sketchgarden.example/privacy", surfaceType:"privacy_policy",timeoutMs:1000,
+      onResolvedPolicyDocument:()=>{substituted=true;}});
+    assert.ok(publisherPolicyText.length < 2500, "Reproduce the former generic recovery trigger");
+    assert.match(resolved,/Sketchgarden is an open source drawing project/);
+    assert.doesNotMatch(resolved,/Metricpond is the data controller/);
+    assert.match(resolved,/Metricpond Privacy Policy/, "Provider link remains distinct evidence in the governing document");
+    assert.equal(providerRequests,0); assert.equal(substituted,false);
+    const sections=extractPolicySections({html:publisherPolicyHtml(providerUrl),sourceUrl:"https://sketchgarden.example/privacy",visibleText:resolved});
+    assert.ok(sections.every(section=>section.sourceUrl==="https://sketchgarden.example/privacy"));
+    assert.ok(sections.every(section=>!section.textExcerpt.includes("Metricpond is the data controller")));
+  } finally {server.close();await once(server,"close");}
+});
+
+for (const collapsedCalifornia of [false,true]) test(`policySurfaceScanner retains short governing HTML, text, identity and provider link coherently${collapsedCalifornia ? " with collapsed California disclosure" : ""}`, async () => {
+  const requests:string[]=[];
+  const server=createServer((request,response)=>{
+    requests.push(request.url??"");response.setHeader("content-type","text/html");
+    const address=server.address();assert.ok(address&&typeof address==="object");
+    if(request.url==="/")response.end(`<main>Sketchgarden public drawing project.</main><footer><a href="/privacy">Privacy Policy</a></footer>`);
+    else if(request.url==="/privacy")response.end(publisherPolicyHtml(`http://localhost:${address.port}/vendor/privacy`).replace("</main>", collapsedCalifornia ?
+      `<button aria-expanded="false" aria-controls="ca" onclick="this.setAttribute('aria-expanded','true');document.getElementById('ca').hidden=false">California Consumer Privacy Act (CCPA) Notice</button><div id="ca" hidden>California residents can contact our privacy team about the rights described above.</div></main>` : "</main>"));
+    else if(request.url==="/vendor/privacy")response.end(vendorPolicyHtml);
+    else {response.statusCode=404;response.end("Not found");}
+  });
+  server.listen(0,"127.0.0.1");await once(server,"listening");
+  const address=server.address();assert.ok(address&&typeof address==="object");
+  const url=`http://127.0.0.1:${address.port}/`;
+  const dir=await mkdtemp(path.join(tmpdir(),"policy-source-association-"));
+  try {
+    const result=await policySurfaceScanner({url,normalizedUrl:url,scanStartedAtMs:Date.now(),internalBudgetMs:6000,
+      artifactWriter:await createArtifactWriter(dir),nanoAssistProvider:createDefaultMockNanoPolicyAssistProvider()});
+    const policy=result.policySurfaceObservations.find(row=>row.normalizedUrl===`${url}privacy`);
+    assert.equal(policy?.status,"fetched");assert.equal(policy.finalUrl,`${url}privacy`);
+    assert.equal(policy.title,"Sketchgarden Privacy Policy");assert.equal(policy.targetRelationship,"target_controller");
+    const ref=policy.artifactRefs.find(row=>row.artifactId.startsWith("policy_surface_text_"));assert.ok(ref);
+    const retained=await readFile(ref.path,"utf8");
+    assert.match(retained,/Sketchgarden is an open source drawing project/);
+    assert.match(retained,/Metricpond Privacy Policy/);assert.doesNotMatch(retained,/Metricpond is the data controller/);
+    assert.ok(policy.retainedPolicySections.every(section=>section.sourceUrl===policy.normalizedUrl));
+    assert.ok(policy.retainedPolicySections.every(section=>!section.textExcerpt.includes("Metricpond is the data controller")));
+    assert.ok(!requests.includes("/vendor/privacy"));
+    assert.equal(result.moduleRun.timingBreakdown?.some(row=>row.label.startsWith("policy rendered low-quality")),collapsedCalifornia,
+      "Preserving short source adds no generic browser recovery and preserves existing collapsed California recovery");
+  } finally {server.close();await once(server,"close");await rm(dir,{recursive:true,force:true});}
+});
+
+test("generic shell recovery returns source metadata with text and requires a source-aware consumer", async () => {
+  const server = createServer((request,response)=>{
+    if(request.url==="/redirect") {response.writeHead(302,{location:"/legal/privacy"});response.end();return;}
+    response.writeHead(200,{"content-type":"text/html"});response.end(vendorPolicyHtml);
+  });
+  server.listen(0,"127.0.0.1");await once(server,"listening");
+  const address=server.address();assert.ok(address&&typeof address==="object");
+  const base=`http://127.0.0.1:${address.port}`;
+  const html=`<title>Privacy Center</title><p>Loading privacy policy</p><a href="${base}/redirect">Privacy Policy</a>`;
+  try {
+    let document:Parameters<NonNullable<Parameters<typeof resolvePolicyVisibleText>[0]["onResolvedPolicyDocument"]>>[0]|undefined;
+    const text=await resolvePolicyVisibleText({html,baseUrl:`${base}/shell`,surfaceType:"privacy_policy",timeoutMs:1000,
+      onResolvedPolicyDocument:resolved=>{document=resolved;}});
+    assert.match(text,/Metricpond is the data controller/);assert.ok(document);
+    assert.equal(document.url,`${base}/legal/privacy`);assert.equal(document.text,text);
+    assert.match(document.fetched.text,/<title>Metricpond Privacy Policy/);
+    const textOnly=await resolvePolicyVisibleText({html,baseUrl:`${base}/shell`,surfaceType:"privacy_policy",timeoutMs:1000});
+    assert.doesNotMatch(textOnly,/Metricpond is the data controller/,"Text-only API cannot detach a recovered source from its identity");
+  } finally {server.close();await once(server,"close");}
+});
 
 test("does not render a guessed privacy path when an observed privacy link owns recovery", () => {
   assert.equal(shouldUseRenderedLowQualityFallbackSlot({
@@ -712,8 +798,11 @@ test("browser-recovered privacy links receive a bounded canonical document fetch
 
     assert.equal(privacy?.status, "fetched");
     assert.equal(privacy?.documentEvaluationState, "usable");
-    assert.match(privacy?.normalizedUrl ?? "", /nodeId=privacy-main/);
-    assert.doesNotMatch(privacy?.normalizedUrl ?? "", /ref_=/);
+    assert.equal(privacy?.normalizedUrl, `${server.baseUrl}/policies/article13-long`);
+    const shell=recovered.observations.find(row=>row.normalizedUrl?.includes("nodeId=privacy-main"));
+    assert.ok(shell);assert.doesNotMatch(shell.normalizedUrl??"",/ref_=/);
+    assert.equal(privacy?.parentObservationId,shell.observationId);
+    assert.equal(privacy?.linkSourcePageUrl,shell.normalizedUrl);
     assert.ok((privacy?.gdprTransparencyTopicCandidates.length ?? 0) > 0);
   } finally {
     await server.close();
@@ -867,7 +956,7 @@ test("browser recovery is not suppressed by a retained service-provider privacy 
     assert.equal(recovered.observations.some((observation) =>
       observation.status === "fetched" &&
       observation.documentEvaluationState === "usable" &&
-      observation.normalizedUrl === privacyUrl
+      observation.normalizedUrl === `${server.baseUrl}/policies/article13-long`
     ), true);
   } finally {
     await server.close();
@@ -2231,7 +2320,9 @@ test("policySurfaceScanner discovers footer privacy links and bounded policy fac
     );
 
     assert.equal(privacy?.status, "fetched");
-    assert.equal(privacy?.discoveryMethod, "nano_assisted_link_classification");
+    assert.equal(privacy?.discoveryMethod, "footer_link");
+    assert.equal(privacy?.assistMetadata.some(meta => meta.assistType === "link_classification" && meta.modelAssistProvider === "nano"), true,
+      "Nano assistance remains separate from the observed footer provenance");
     assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/privacy`);
     assert.deepEqual(privacy?.mentionedVendors.sort(), ["Google Analytics", "Meta"]);
     assert.equal(privacy?.observedTopics.includes("analytics"), true);
@@ -4136,13 +4227,16 @@ test("policySurfaceScanner follows localized canonical policy links from thin pr
     const privacy = result.policySurfaceObservations.find((observation) =>
       observation.status === "fetched" &&
       observation.surfaceType === "privacy_policy" &&
-      observation.normalizedUrl === `${baseUrl}/datenschutz-shell`
+      observation.normalizedUrl === `${baseUrl}/static/datenschutzhinweis_fixture.html`
     );
     const retainedPolicySurfaceTextRef = privacy?.artifactRefs.find((ref) =>
       ref.artifactId.startsWith("policy_surface_text_")
     );
 
-    assert.ok(privacy, "localized privacy shell should be fetched");
+    assert.ok(privacy, "localized governing policy should be fetched with its own source identity");
+    assert.equal(privacy.finalUrl,privacy.normalizedUrl);
+    assert.equal(privacy.parentSurfaceUrl,`${baseUrl}/datenschutz-shell`);
+    assert.ok(privacy.retainedPolicySections.every(section=>section.sourceUrl===privacy.normalizedUrl));
     assert.match(privacy.textExcerpt ?? "", /Verantwortlicher für die Datenverarbeitung/i);
     assert.doesNotMatch(privacy.textExcerpt ?? "", /^Datenschutzhinweis FOCUS online Webseite/);
     assert.ok(retainedPolicySurfaceTextRef?.path);
@@ -4643,7 +4737,9 @@ test("policySurfaceScanner discovers late-rendered localized privacy policy link
 
     assert.equal(privacy?.status, "fetched");
     assert.equal(privacy?.normalizedUrl, `${baseUrl}/policies/privacy`);
-    assert.equal(privacy?.discoveryMethod, "nano_assisted_link_classification");
+    assert.equal(privacy?.discoveryMethod, "footer_link");
+    assert.equal(privacy?.assistMetadata.some(meta => meta.assistType === "link_classification" && meta.modelAssistProvider === "nano"), true,
+      "Nano assistance remains separate from the observed footer provenance");
     assert.equal(cookie?.status, "fetched");
     assert.equal(cookie?.normalizedUrl, `${baseUrl}/policies/cookies`);
     assert.equal(privacySummary?.linkText, "Polityka Prywatności Gazeta.pl");
@@ -4735,7 +4831,7 @@ test("policySurfaceScanner prioritizes one secondary CCPA and GPC notice when Na
       observation.status === "fetched"
     );
 
-    assert.ok(privacy);
+    assert.ok(privacy, JSON.stringify(result.policySurfaceObservations.map(row=>({url:row.normalizedUrl,status:row.status,role:row.documentRole,type:row.surfaceType,reason:row.documentRoleReasonCodes,excerpt:row.textExcerpt?.slice(0,180)}))));
     assert.equal(cookie, undefined, "The one-supplement ceiling prioritizes the California notice over the cookie supplement");
     assert.ok(statePrivacy);
     assert.ok(statePrivacy.selectionReasonCodes?.includes("single_supplement_fetch_limit"));
@@ -5008,6 +5104,279 @@ test("policySurfaceScanner canonically retains a German Datenschutzhinweise foot
   });
 });
 
+test("policySurfaceScanner discovers the observed relative footer policy after a denied redirect destination", async () => {
+  const fixture = await startRedirectedPolicyRecoveryFixture();
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-denied-redirect-"));
+  try {
+    const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 12_000, discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+    const privacy = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl);
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.discoveryMethod, "footer_link");
+    assert.equal(privacy?.documentRole, "policy_document");
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.equal(privacy?.linkObservationState, "observed");
+    assert.equal(fixture.requests.filter(route => route === "/alias").length, 1,
+      "The observed redirect destination drives recovery without another alias navigation");
+    assert.equal(result.policySurfaceObservations.some(row => row.normalizedUrl === `${fixture.baseUrl}/canonical/` && row.status === "fetched"), false);
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.equal(diagnostics.homepageFetch?.httpStatus, 403);
+    assert.equal(diagnostics.corePolicySurfaceRetained, true);
+  } finally { await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+});
+
+test("policySurfaceScanner retains committed observed-link policy response while unrelated resources keep loading", async () => {
+  const fixture = await startRedirectedPolicyRecoveryFixture({ directPolicyBlocked: true, stallPolicyLoad: true,
+    policyText: Array(5).fill("Privacy Policy. Cloud Security Ltd is the controller of your personal information. We collect contact details to provide services under our contract and process technical information for our legitimate security interests. We retain information only as long as necessary and share it with contracted service providers. You may request access, correction, deletion and portability of your information, object to processing, withdraw consent, and complain to your supervisory authority. Contact privacy@example.test for privacy requests.").join(" ") });
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-committed-response-"));
+  try {
+    const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 12_000, discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+    const privacy = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl);
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.httpStatus, 200);
+    assert.equal(privacy?.documentEvaluationState, "usable");
+    assert.match(privacy?.textExcerpt ?? "", /controller of your personal information/);
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.ok(diagnostics.successfulFetches.some(row => row.attempts.some(attempt =>
+      attempt.navigationMethod === "observed_link_click" && attempt.httpStatus === 200 && attempt.outcome === "fetched")));
+    assert.ok(fixture.requests.includes("/never-loading-policy-resource"));
+  } finally { await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+});
+
+test("policySurfaceScanner does not bind an unrelated committed destination to the observed policy link", async () => {
+  const fixture = await startRedirectedPolicyRecoveryFixture({ directPolicyBlocked: true, misdirectPolicyClick: true });
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-unrelated-response-"));
+  try {
+    const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 10_000, discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+    const privacy = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl);
+    assert.equal(privacy?.status === "fetched", false);
+    assert.equal(privacy?.documentEvaluationState === "usable", false);
+    assert.equal(result.policySurfaceObservations.some(row => row.status === "fetched" && row.finalUrl?.endsWith("/unrelated-policy")), false);
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.ok(diagnostics.failedFetches.some(row => row.attempts.some(attempt =>
+      attempt.navigationMethod === "observed_link_click" && attempt.outcome === "navigation_no_response" &&
+      attempt.failureStage === "response_verification")));
+  } finally { await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+});
+
+test("policySurfaceScanner resolves duplicate footer labels with one bounded href read", async () => {
+  const fixture = await startRedirectedPolicyRecoveryFixture({ directPolicyBlocked: true, duplicatePolicyLinks: true });
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-duplicate-links-"));
+  const browser = await chromium.launch({ headless: true });
+  let bulkHrefReads = 0;
+  let serialHrefReads = 0;
+  const originalNewContext = browser.newContext.bind(browser);
+  browser.newContext = async (...args) => {
+    const context = await originalNewContext(...args);
+    const originalNewPage = context.newPage.bind(context);
+    context.newPage = async () => {
+      const page = await originalNewPage();
+      const originalLocator = page.locator.bind(page);
+      page.locator = (selector, options) => {
+        const locator = originalLocator(selector, options);
+        if (selector === 'a[href], [role="link"][data-href], [role="link"][data-url]') {
+          const originalEvaluateAll = locator.evaluateAll.bind(locator);
+          locator.evaluateAll = ((...args: Parameters<typeof locator.evaluateAll>) => {
+            bulkHrefReads++; return originalEvaluateAll(...args);
+          }) as typeof locator.evaluateAll;
+          const originalNth = locator.nth.bind(locator);
+          locator.nth = index => {
+            const child = originalNth(index);
+            const originalGetAttribute = child.getAttribute.bind(child);
+            child.getAttribute = async (...args) => { serialHrefReads++; return originalGetAttribute(...args); };
+            return child;
+          };
+        }
+        return locator;
+      };
+      return page;
+    };
+    return context;
+  };
+  try {
+    const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 12_000, discoveryMode: "fast", browser,
+      artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+    const privacy = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl);
+    assert.equal(privacy?.status, "fetched");
+    assert.equal(privacy?.httpStatus, 200);
+    assert.ok(bulkHrefReads >= 1, "Duplicate accessible labels require destination resolution");
+    assert.equal(serialHrefReads, 0, "Large menus must not cause per-anchor protocol reads");
+  } finally { await browser.close(); await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+});
+
+test("rendered policy failure stages retain only bounded diagnostic vocabulary", async () => {
+  const result = await fetchRenderedPolicyDocumentText({
+    browserRuntime: { async getBrowser() { throw new Error("secret-query-token-must-not-be-retained"); }, async close() {} },
+    input: {} as Parameters<typeof policySurfaceScanner>[0],
+    url: "https://policy.example/privacy", timeoutMs: 1_000,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.attempts?.[0]?.failureStage, "browser_start");
+  assert.doesNotMatch(JSON.stringify(result), /secret-query-token/);
+});
+
+test("denied-homepage observed ranking overlaps a pending hub without guessed browser work", async () => {
+  const fixture = await startRedirectedPolicyRecoveryFixture({ hubWaitForPolicy: true,
+    policyText: redirectedPolicyText.repeat(4), policyLinkText: "Do Not Sell or Share My Personal Information" });
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-observed-schedule-"));
+  let observedRankingCalls = 0;
+  let guessedRankingCalls = 0;
+  try {
+    const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 12_000, discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: {
+        async classifyLinks(request) {
+          if (request.candidates.every(row => row.discoveryMethod === "guessed_common_path")) guessedRankingCalls++;
+          else { observedRankingCalls++; await fixture.hubRequest; assert.equal(fixture.hubPending, true); }
+          return { rankedCandidates: request.candidates.filter(row => row.normalizedUrl.includes("privacy-policies-hub") || row.normalizedUrl === fixture.policyUrl)
+            .map((row, priorityRank) => ({ candidateId: row.candidateId, likelySurfaceType: row.deterministicSurfaceType,
+              shouldFetch: true, priorityRank, confidence: 0.95, uncertaintyNotes: [] })) };
+        },
+      } });
+    assert.equal(fixture.policyRequestedBeforeHubClosed, true, "Observed policy fetch must not wait for the hub timeout");
+    assert.equal(observedRankingCalls, 1);
+    assert.equal(guessedRankingCalls, 0, "Observed recovery does not spend a speculative common-path model call");
+    const privacy = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl && row.surfaceType === "privacy_policy");
+    const choice = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl && row.surfaceType === "do_not_sell_or_share");
+    assert.equal(privacy?.documentRole, "policy_document");
+    assert.equal(privacy?.governingPolicySelection?.state, "primary");
+    assert.equal(choice?.linkObservationState, "observed");
+    assert.equal(choice?.discoveryMethod, "footer_link", "Nano assistance preserves actual observed link provenance");
+    assert.equal(choice?.article13DisclosureSignals.length, 0);
+    const diagnostics = await readPolicyCaptureDiagnostics(result);
+    assert.equal(diagnostics.failedFetches.some(row => row.stage === "candidate_rendered" && row.candidateUrl?.includes("/privacy")), false);
+    const textRefs = result.artifactRefs.filter(ref => ref.artifactId.startsWith("policy_surface_text_"));
+    assert.equal(textRefs.length, 1, "Choice and privacy facets share one retained body artifact");
+    assert.deepEqual(choice?.artifactRefs, privacy?.artifactRefs);
+  } finally { await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+});
+
+for (const {visitorExcluded, choiceLink} of [{visitorExcluded:false,choiceLink:true}, {visitorExcluded:true,choiceLink:true}, {visitorExcluded:true,choiceLink:false}]) {
+  test(`owned privacy body behind ${choiceLink ? "choice" : "privacy"} link retains separate ${visitorExcluded ? "visitor-excluded" : "governing"} document facet`, async () => {
+    const text = `${visitorExcluded ? "This Policy applies to our customers, partners, and end-users. It does not cover our current and former employees, candidates, and website visitors. " : ""}${redirectedPolicyText.repeat(4)}`;
+    const fixture = await startRedirectedPolicyRecoveryFixture({ policyText: text, policyTitle: "Clients Privacy Policy",
+      policyLinkText: choiceLink ? "Do Not Sell or Share My Personal Information" : "Privacy Policy" });
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-choice-facet-"));
+    try {
+      const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+        scanStartedAtMs: Date.now(), internalBudgetMs: 8_000, discoveryMode: "fast",
+        artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+      const privacy = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl && row.surfaceType === "privacy_policy");
+      const choice = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl && row.surfaceType === "do_not_sell_or_share");
+      assert.equal(privacy?.status, "fetched");
+      assert.equal(privacy?.documentTextCoverage?.status, "complete");
+      assert.equal(privacy?.documentRole, visitorExcluded ? "unknown" : "policy_document");
+      assert.equal(privacy?.governingPolicySelection?.state, visitorExcluded ? "ineligible" : "primary");
+      assert.equal(privacy?.governingPolicyBodyAssessment?.state, visitorExcluded ? "insufficient" : "substantive");
+      if (choiceLink) {
+        assert.equal(choice?.surfaceType, "do_not_sell_or_share");
+        assert.equal(choice?.directlyLinkedFromScannedPage, true);
+        assert.notEqual(privacy?.observationId, choice?.observationId);
+      } else assert.equal(choice, undefined);
+      if (visitorExcluded) {
+        assert.ok(privacy?.documentRoleReasonCodes?.includes("policy_body_explicitly_excludes_website_visitors"));
+        assert.deepEqual(privacy?.article13DisclosureSignals, []);
+        assert.deepEqual(privacy?.gdprTransparencyTopicCandidates, []);
+        assert.deepEqual(privacy?.retainedArticle13SectionEvidence, []);
+      }
+    } finally { await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+  });
+}
+
+test("a Privacy Policy link and marketing footer repetitions cannot establish a governing body", async () => {
+  const fixture = await startRedirectedPolicyRecoveryFixture({ policyTitle: "Cloud Security for Linux Web Servers",
+    policyText: "Cloud Security is a comprehensive security suite for Linux web servers. Protect your website with malware scanning, firewall protection and server monitoring. Read our Privacy Policy, contact sales and start a free trial. ".repeat(15) });
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-marketing-"));
+  try {
+    const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 8_000, discoveryMode: "fast",
+      artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+    const surface = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl);
+    assert.equal(surface?.governingPolicyBodyAssessment?.state, "insufficient");
+    assert.equal(surface?.documentRole, "unknown");
+    assert.equal(surface?.governingPolicySelection?.state, "ineligible");
+    assert.deepEqual(surface?.article13DisclosureSignals, []);
+  } finally { await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+});
+
+test("privacy document facet rejects URL-only, unowned, incomplete and marketing text", () => {
+  const candidate = extractCandidates("https://example.test/", '<footer><a href="/clients-privacy-policy">Do Not Sell or Share My Personal Information</a></footer>', "")[0]!;
+  const valid = { candidate, title: "Privacy Policy", text: redirectedPolicyText.repeat(4), targetRelationship: "target_controller" as const, completeTextRetentionAvailable: true };
+  assert.ok(privacyDocumentCandidateFromRetainedBody(valid));
+  assert.equal(privacyDocumentCandidateFromRetainedBody({ ...valid, title: "Security Services for Linux" }), undefined);
+  assert.equal(privacyDocumentCandidateFromRetainedBody({ ...valid, targetRelationship: "third_party" }), undefined);
+  assert.equal(privacyDocumentCandidateFromRetainedBody({ ...valid, completeTextRetentionAvailable: false }), undefined);
+  assert.equal(privacyDocumentCandidateFromRetainedBody({ ...valid, text: "Our security suite protects cloud servers. Learn about our products and read our privacy policy. ".repeat(40) }), undefined);
+  assert.equal(retainedPolicyExplicitlyExcludesWebsiteVisitors("This policy covers website visitors. It does not cover employees."), false);
+  const privacyCandidate = privacyDocumentCandidateFromRetainedBody(valid)!;
+  const excludedText = `This policy covers customers. It does not cover website visitors. ${valid.text}`;
+  const body = assessGoverningPolicyBodyEvidence({ candidate: privacyCandidate, text: excludedText,
+    title: valid.title, documentSubstance: assessPolicyDocumentSubstance({ surfaceType: "privacy_policy", title: valid.title, text: excludedText }),
+    documentTextChars: excludedText.length, documentTextCoverageStatus: "complete", evidenceBoundObservedTopicCount: 4,
+    substantiveDisclosureSignalCount: 4, targetRelationship: "target_controller" });
+  assert.equal(body.state, "insufficient");
+  assert.ok(body.reasonCodes.includes("policy_body_explicitly_excludes_website_visitors"));
+  assert.equal(assessPolicyDocumentRoleForChildSelection(privacyCandidate, {fetchCandidates:[],observedChildCandidates:[]},
+    {governingPolicyBodyAssessment:body,substantiveDisclosureSignalCount:4,evidenceBoundObservedTopicCount:4}).role, "unknown");
+});
+
+test("ordinary policy discovery preserves footer CMP config as a declared hint", () => {
+  const candidates = extractCandidates("https://security.example/", '<footer><script>window.didomiConfig = {"app":{"privacyPolicyURL":"/config-only-privacy"}};</script></footer>', "");
+  const config = candidates.find(row => row.normalizedUrl === "https://security.example/config-only-privacy");
+  assert.equal(config?.discoveryMethod, "deterministic_keyword_match");
+  assert.equal(config?.clickable, false);
+  assert.equal(config?.cmpDiscovery?.[0]?.source, "cmp_config");
+});
+
+for (const renderedBlocked of [false, true]) {
+test(`policySurfaceScanner ${renderedBlocked ? "rejects blocked-page footer routes" : "preserves positive footer policy routes"} when later rendered readiness stalls`, async () => {
+  const fixture = await startRedirectedPolicyRecoveryFixture({ renderedBlocked, footerConfig: true });
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-footer-checkpoint-"));
+  const browser = await chromium.launch({ headless: true });
+  const originalNewContext = browser.newContext.bind(browser);
+  browser.newContext = async (...args) => {
+    const context = await originalNewContext(...args);
+    const originalNewPage = context.newPage.bind(context);
+    context.newPage = async () => {
+      const page = await originalNewPage();
+      page.waitForFunction = (async () => {
+        await page.waitForTimeout(12_000);
+        throw new Error("Fixture stalled readiness");
+      }) as typeof page.waitForFunction;
+      return page;
+    };
+    return context;
+  };
+  try {
+    const result = await policySurfaceScanner({ url: fixture.targetUrl, normalizedUrl: fixture.targetUrl,
+      scanStartedAtMs: Date.now(), internalBudgetMs: 6_000, discoveryMode: "fast", browser,
+      artifactWriter: await createArtifactWriter(tempRoot), nanoAssistProvider: createDefaultMockNanoPolicyAssistProvider() });
+    const privacy = result.policySurfaceObservations.find(row => row.normalizedUrl === fixture.policyUrl);
+    if (renderedBlocked) {
+      assert.equal(privacy, undefined, "A denied rendered page must not provide a policy checkpoint");
+      assert.equal(fixture.requests.includes("/canonical/security-privacy/"), false);
+    } else {
+      assert.equal(privacy?.status, "fetched");
+      assert.equal(privacy?.linkObservationState, "observed");
+      assert.equal(privacy?.linkSourcePageUrl, `${fixture.baseUrl}/canonical/`);
+    }
+    assert.equal(fixture.requests.includes("/config-only-privacy"), false,
+      "A script/config hint is not an observed footer anchor checkpoint");
+    assert.equal(result.policySurfaceObservations.some(row => row.normalizedUrl.endsWith("/config-only-privacy")), false);
+    assert.equal(result.privacyChoiceInspection, undefined,
+      "A positive checkpoint must never assert complete privacy-choice inspection");
+    assert.ok(result.moduleRun.timingBreakdown?.some(row => row.label === "rendered discovery: policy link readiness" && row.detail.includes("still pending")));
+    assert.equal(result.policySurfaceObservations.some(row => row.normalizedUrl === `${fixture.baseUrl}/canonical/` && row.status === "fetched"), false);
+  } finally { await browser.close(); await fixture.close(); await rm(tempRoot, { recursive: true, force: true }); }
+});
+}
+
 test("policySurfaceScanner uses common-path fallback when homepage fetch fails", async () => {
   const server = await startStaticFixtureServer();
   const tempRoot = await mkdtemp(path.join(tmpdir(), "certscore-policy-scan-"));
@@ -5229,7 +5598,7 @@ test("policySurfaceScanner stops redundant rendered discovery after a fresh prio
       selectionReasonCodes: observation.selectionReasonCodes,
       status: observation.status,
     }))));
-    assert.equal(policyIndex?.documentRole, "policy_index");
+    assert.equal(policyIndex?.documentRole, "policy_index", JSON.stringify(result.policySurfaceObservations.map(row=>({url:row.normalizedUrl,status:row.status,role:row.documentRole,parent:row.parentSurfaceUrl,reason:row.selectionReasonCodes}))));
     assert.equal(privacy.documentRole, "policy_document");
     assert.equal(privacy.selectionReasonCodes?.includes("scan_region_policy_route_match"), true);
     assert.equal(privacy.surfaceType, "privacy_policy");
@@ -5353,11 +5722,12 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
           candidate.discoveryMethod === "guessed_common_path"
         ) ? "common_path" : "rendered";
         classificationOrder.push(classificationKind);
-        assert.notEqual(
-          classificationKind,
-          "rendered",
-          "a deterministic rendered privacy link should be recovered before another Nano ranking pass",
-        );
+        assert.equal(classificationKind, "rendered",
+          "Observed routes own the ranking call before any common-path fallback is needed");
+        assert.ok(input.candidates.some(candidate =>
+          candidate.normalizedUrl === `${server.baseUrl}/browser-visible-policy-homepage/privacy` &&
+          candidate.clickable && candidate.discoveryMethod !== "guessed_common_path"),
+        "Ranking consumes the actual observed policy route");
         return defaultNanoProvider.classifyLinks!(input);
       },
     };
@@ -5380,8 +5750,8 @@ test("policySurfaceScanner uses rendered footer links before common-path fallbac
     assert.equal(privacy.surfaceType, "privacy_policy");
     assert.equal(diagnostics.renderedCandidateCount > 0, true);
     assert.equal(diagnostics.commonPathFallbackUsed, false);
-    assert.equal(classificationOrder[0], "common_path");
-    assert.equal(classificationOrder.includes("rendered"), false);
+    assert.deepEqual(classificationOrder, ["rendered"],
+      "Successful observed recovery uses one ranking call and no speculative common-path ranking");
     assert.equal(
       diagnostics.candidateSummary.some((candidate) =>
         candidate.normalizedUrl === `${server.baseUrl}/browser-visible-policy-homepage/privacy`
@@ -6133,7 +6503,7 @@ test("policySurfaceScanner records mock Nano link ranking and topic extraction m
   await withPolicyScan("policy-ambiguous-choices", async ({ result }) => {
     const choices = observedSurface(result.policySurfaceObservations, "your_privacy_choices");
 
-    assert.equal(choices?.discoveryMethod, "nano_assisted_link_classification");
+    assert.equal(choices?.discoveryMethod, "footer_link");
     assert.equal(choices?.directVsInferred, "mixed");
     assert.equal(choices?.assistMetadata.some((meta) => meta.assistType === "link_classification"), true);
     assert.equal(choices?.assistMetadata.some((meta) => meta.assistType === "topic_extraction"), true);
@@ -6848,10 +7218,23 @@ test("policySurfaceScanner prefers a canonical policy document linked from a pri
 
 test("policySurfaceScanner resolves canonical policy links against a redirected privacy-center URL", async () => {
   await withPolicyScan("policy-redirected-privacy-center", async ({ result, baseUrl }) => {
-    const privacy = observedSurface(result.policySurfaceObservations, "privacy_policy");
+    const privacy = result.policySurfaceObservations.find(row=>row.status==="fetched" && row.normalizedUrl===`${baseUrl}/policycenter/b2c/en-us`);
 
-    assert.equal(privacy?.status, "fetched");
-    assert.equal(privacy?.normalizedUrl, `${baseUrl}/policycenter/b2c/`);
+    assert.equal(privacy?.status, "fetched", JSON.stringify(result.policySurfaceObservations.map(row=>({url:row.normalizedUrl,status:row.status,role:row.documentRole,parent:row.parentSurfaceUrl,reason:row.selectionReasonCodes}))));
+    assert.equal(privacy?.normalizedUrl, `${baseUrl}/policycenter/b2c/en-us`);
+    assert.equal(privacy?.finalUrl, privacy?.normalizedUrl);
+    assert.equal(privacy?.linkSourcePageUrl, `${baseUrl}/policycenter/b2c/`);
+    assert.equal(privacy?.traversalDepth, 1);
+    assert.equal(privacy?.directlyLinkedFromScannedPage, false);
+    const shell=result.policySurfaceObservations.find(row=>row.normalizedUrl===`${baseUrl}/policycenter/b2c/`);
+    assert.ok(shell);assert.equal(privacy?.parentObservationId,shell.observationId);
+    const sibling=result.policySurfaceObservations.find(row=>row.normalizedUrl===`${baseUrl}/policycenter/b2c/children`);
+    assert.ok(sibling);assert.equal(sibling.parentSurfaceUrl,shell.normalizedUrl);
+    assert.equal(sibling.linkSourcePageUrl,shell.normalizedUrl);
+    assert.match(privacy?.title ?? "", /Privacy Policy/i);
+    assert.doesNotMatch(privacy?.title ?? "", /Privacy Center/i);
+    assert.ok(privacy?.retainedPolicySections.every(section=>section.sourceUrl===privacy.normalizedUrl));
+    assert.ok(privacy?.retainedPolicySections.every(section=>!section.textExcerpt.includes("Choose the privacy notice that applies to you")));
     assert.match(privacy?.textExcerpt ?? "", /standard contractual clauses/i);
     assert.doesNotMatch(privacy?.textExcerpt ?? "", /Children's Privacy Policy/i);
     assert.equal(privacy?.article13DisclosureSignals.some((signal) =>

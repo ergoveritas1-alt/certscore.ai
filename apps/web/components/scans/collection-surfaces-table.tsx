@@ -65,7 +65,7 @@ function reviewPolicy(field: Form["fields"][number]) { return FIELD_REVIEW_POLIC
 function reviewRank(field: Form["fields"][number]) { return ({ highest:4, high:3, personal:2, contextual:1, unknown:0 })[reviewPolicy(field).tier]; }
 function FieldReview({ field }: { field: Form["fields"][number] }) {
  const policy=reviewPolicy(field),rank=reviewRank(field);
- return <span title={`${policy.label}. Field review indicator; no score effect.`} className={`inline-flex items-center gap-1 ${rank>=3 ? "text-rose-700" : rank===2 ? "text-slate-600" : "text-slate-500"}`}>{rank>=3 ? <span role="img" aria-label="Field requires review">⚠</span> : rank===2 ? <span role="img" aria-label="Field review information">ⓘ</span> : null}<span className="line-clamp-2 max-h-8 max-w-40 overflow-hidden leading-4">{policy.label}</span></span>;
+ return <span title={`${policy.label}. Field review indicator.`} className={`inline-flex items-center gap-1 ${rank>=3 ? "text-rose-700" : rank===2 ? "text-slate-600" : "text-slate-500"}`}>{rank>=3 ? <span role="img" aria-label="Field requires review">⚠</span> : rank===2 ? <span role="img" aria-label="Field review information">ⓘ</span> : null}<span className="line-clamp-2 max-h-8 max-w-40 overflow-hidden leading-4">{policy.label}</span></span>;
 }
 function ControlState({ field }: { field: Form["fields"][number] }) {
  const kind=field.controlKind ?? field.inputType;

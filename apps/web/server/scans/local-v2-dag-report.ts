@@ -902,6 +902,7 @@ function hasSubstantivePolicySurfaceEvidence(surface: LocalV2PolicySurface) {
 
 function isEvaluatedPrivacyPolicySurface(surface: LocalV2PolicySurface) {
   return surface.surfaceType === "privacy_policy" &&
+    !(surface.documentRole === "unknown" && surface.governingPolicyBodyAssessment?.state === "insufficient") &&
     surface.documentRole !== "policy_index" && (
     surface.documentEvaluationState === "usable" ||
     ((surface.status === undefined || ["fetched", "observed"].includes(surface.status)) &&

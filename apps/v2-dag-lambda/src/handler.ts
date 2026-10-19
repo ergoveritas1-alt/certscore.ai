@@ -1155,21 +1155,43 @@ export function buildLocalV2DagLambdaLaneRun(input: {
     effectiveUrl: sanitizedLaneUrl(attempt.url),
   }));
   const noGoReason = input.bundle.scanNoGoAssessment?.reasonCodes[0] ?? null;
-  const challengeDetected = siteFacingNavigation?.challengeDetected ?? Boolean(
+  // Background security traffic is not itself a blocked page. Only this visit's
+  // explicit, corroborated usable-document evidence can resolve that narrow
+  // diagnostic. Preserve the original no-go observation and challenge signals.
+  const noGo = input.bundle.scanNoGoAssessment;
+  const signals = noGo?.supportingSignals;
+  const incidentalChallengeTraffic = laneId !== "policy_evidence" &&
+    moduleRun.status !== "failed" && moduleRun.status !== "not_testable" &&
+    noGo?.decision === "continue_with_diagnostics" &&
+    noGo.reasonCodes.includes("potential_security_challenge") &&
+    noGo.reasonCodes.every(reason => ["potential_security_challenge", "scan_no_go_corroborated"].includes(reason)) &&
+    input.bundle.scanEvidenceLaneAssessment?.outcome === "usable" &&
+    (input.bundle.runtimeCoverage?.coverageStatus === "usable" || input.bundle.runtimeCoverage?.coverageStatus === "limited_partial") &&
+    signals?.securityChallengeRequestObserved === true &&
+    signals.blockingFrameChallengeObserved === false && signals.documentStatusBlocked === false &&
+    signals.expectedOriginReached === true && signals.successfulSettledMainDocument === true &&
+    typeof signals.mainDocumentStatus === "number" &&
+    signals.mainDocumentStatus >= 200 && signals.mainDocumentStatus < 400 &&
+    signals.substantiveCapturedPageTextObserved === true && signals.substantiveRetainedDomVolumeObserved === true &&
+    signals.visualHardNoGoPageState === false && signals.visualNoGo === false &&
+    (!siteFacingNavigation || !siteFacingNavigation.challengeDetected &&
+      (siteFacingNavigation.terminalAccess === undefined || siteFacingNavigation.terminalAccess === "representative_page") &&
+      (siteFacingNavigation.terminalHttpStatus == null || siteFacingNavigation.terminalHttpStatus >= 200 && siteFacingNavigation.terminalHttpStatus < 400));
+  const challengeDetected = siteFacingNavigation?.terminalAccess === "bot_challenge" || !incidentalChallengeTraffic && (siteFacingNavigation?.challengeDetected ?? Boolean(
     input.bundle.scanNoGoAssessment?.supportingSignals.challengeSignalsDetected ||
     noGoReason === "captcha_or_challenge" ||
     noGoReason === "potential_security_challenge"
-  );
+  ));
   const challengeType = siteFacingNavigation?.challengeType ?? (challengeDetected ? noGoReason : null);
   const executionOutcome: ScanLaneRun["executionOutcome"] = moduleRun.status === "completed"
     ? "success"
     : moduleRun.status === "failed" || moduleRun.status === "not_testable"
       ? "failed"
       : "degraded";
-  const accessStatus = laneId === "policy_evidence" ? siteFacingNavigation?.terminalHttpStatus : firstHttpStatus;
+  const accessStatus = laneId === "policy_evidence" ? siteFacingNavigation?.terminalHttpStatus : siteFacingNavigation?.terminalHttpStatus ?? firstHttpStatus;
   const accessOutcome: ScanLaneRun["accessOutcome"] = challengeDetected
     ? "bot_challenge"
-    : noGoReason === "access_denied_or_forbidden_page" ||
+    : siteFacingNavigation?.terminalAccess === "access_denied" || noGoReason === "access_denied_or_forbidden_page" ||
         noGoReason === "authentication_required" ||
         noGoReason === "rate_limited_429" ||
         accessStatus === 401 || accessStatus === 403 || accessStatus === 429 || accessStatus === 451
@@ -1180,7 +1202,7 @@ export function buildLocalV2DagLambdaLaneRun(input: {
           ? "navigation_failed"
           : laneId === "policy_evidence"
             ? input.bundle.scanNoGoAssessment?.decision === "no_go" ? "unknown" : siteFacingNavigation?.terminalAccess ?? "unknown"
-          : input.bundle.scanNoGoAssessment?.decision !== "no_go" && firstHttpStatus !== null && firstHttpStatus >= 200 && firstHttpStatus < 400
+          : input.bundle.scanNoGoAssessment?.decision !== "no_go" && accessStatus != null && accessStatus >= 200 && accessStatus < 400
             ? "representative_page"
             : "unknown";
   const completedAt = moduleRun.completedAt ?? null;

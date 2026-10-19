@@ -5,6 +5,11 @@ import { buildUnifiedFindingDisplayPackets } from "../../lib/scans/unified-findi
 import { buildPersistedScanReportProjection, readPersistedScanReportProjection, SCAN_REPORT_PROJECTION_VERSION } from "./scan-report-projection-contract";
 import type { PersistedCanonicalReportProjection } from "./persisted-canonical-report-projection";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import type { ScanDetailResponse } from "./get-scan-by-id";
 import { buildCanonicalReportExport } from "./report-export";
@@ -16,7 +21,7 @@ import { deriveConsentControlAssessment } from "@certscore/contracts";
 import { buildTrackingWorkpaper, renderTrackingWorkpaperCsv } from "./tracking-workpaper";
 import { reviewCcpaScoring } from "../../scripts/lib/ccpa-scoring-review";
 import { buildApiV2ScanResource, buildApiV2ScanStatus } from "../../lib/api-v2/scan-resource";
-import {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL} from "./california-review-coverage.fixture";
+import {californiaCoverageFixture,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,CA_FIXTURE_POLICY} from "./california-review-coverage.fixture";
 import {projectCaliforniaPrivacyReview} from "./california-privacy-review-projection";
 
 function scanRecord(): ScanDetailResponse {
@@ -387,6 +392,68 @@ test("projects GDPR Transparency and retained collection assessments into separa
   assert.equal(readPersistedScanReportProjection({ scan: scan.scan, snapshot: { ...snapshot, report_projection_payload_sha256: "0".repeat(64) } }), null);
 });
 
+test("incidental challenge classification carries LinkedIn collection through canonical scoring and exports", async () => {
+  const { gpcIncidentalChallengeFixture } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/gpc-incidental-challenge.cases");
+  const { gpcRuntimeFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
+  const { buildLocalV2DagLambdaLaneRun } = await import("../../../v2-dag-lambda/src/handler");
+  const { buildGpcProductionAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-production-observation");
+  const { buildGpcResponseAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-response-assessment");
+  const { buildNormalizedConcerns } = await import("../../lib/scans/normalized-concerns");
+  for (const mode of ["incidental", "blocked", "library_only", "missing_delivery", "bad_checksum"] as const) {
+    const record = scanRecord();
+    const bundle = gpcIncidentalChallengeFixture(record.scan.id);
+    if (mode === "blocked") bundle.scanNoGoAssessment!.decision = "no_go";
+    if (mode === "library_only") for (const event of bundle.networkEvents) event.collectionEndpointObserved = false;
+    if (mode === "missing_delivery") {
+      bundle.gpcObservationSession!.semanticObservation!.navigatorGpc = false;
+      bundle.gpcPrototypeSessionBinding!.sessionSha256 = createHash("sha256").update(JSON.stringify(bundle.gpcObservationSession)).digest("hex");
+    }
+    bundle.scanLaneRuns = [buildLocalV2DagLambdaLaneRun({ bundle, workerLane: "gpc_observation", region: "local" })!];
+    const bytes = Buffer.from(JSON.stringify(bundle));
+    const pointer = { uri: "s3://fixture/gpc.json", sha256: createHash("sha256").update(bytes).digest("hex"), sizeBytes: bytes.length };
+    const comparison = buildGpcResponseAssessment({ baseline: gpcRuntimeFixture({ enabled: false }), gpc: bundle,
+      baselineArtifact: { ...pointer, uri: "s3://fixture/baseline.json" }, gpcArtifact: pointer });
+    const assessment = buildGpcProductionAssessment({ scanId: bundle.scanId, comparison,
+      source: { bytes: mode === "bad_checksum" ? Buffer.alloc(bytes.length) : bytes, pointer } });
+    const f = californiaCoverageFixture();
+    f.bundle.scanId = record.scan.id;
+    f.policyEvidence.projection.scanId = record.scan.id;
+    f.bundle.policySurfaceInspection!.californiaReviewPolicy = "california-privacy-review.v10";
+    f.bundle.policySurfaceObservations.forEach(surface => { surface.documentLanguage = "en"; });
+    const child = projectCaliforniaPrivacyReview(f.bundle, CA_FIXTURE_SOURCE, CA_FIXTURE_URL, f.policyEvidence)!;
+    assert.ok(child);
+    const parent = deriveConsentControlAssessment({ scan: { scanId: record.scan.id, finalUrl: CA_FIXTURE_URL } });
+    parent.californiaPrivacyReview = child;
+    record.runtimeArtifacts = { consentControlAssessment: parent, gpcResponseAssessment: assessment };
+    record.accessPostureSummary = {} as ScanDetailResponse["accessPostureSummary"];
+    const packets = buildUnifiedFindingDisplayPackets({ runtimeArtifacts: record.runtimeArtifacts,
+      reviewFindingCandidates: [], validationFindings: [], validationFindingLookup: new Map() });
+    const canonical = (record as unknown as { canonicalReportProjection: PersistedCanonicalReportProjection }).canonicalReportProjection;
+    canonical.normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts: record.runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
+    canonical.ownerUnifiedFindings = canonical.globalUnifiedFindings = packets;
+    record.snapshot = { report_projection_status: "ready", certscore_overall: 73, score_version: "overall-posture.v11" } as ScanDetailResponse["snapshot"];
+    const persisted = buildPersistedScanReportProjection(record);
+    const restored = readPersistedScanReportProjection({ scan: record.scan, snapshot: {
+      report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+      report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+      report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_computed_at: f.bundle.completedAt,
+    } })!;
+    assert.ok(restored);
+    const exported = buildCanonicalReportExport(restored, undefined, "ccpa_cpra")!;
+    const eligible = mode === "incidental";
+    assert.equal(exported.californiaScore.score, eligible ? 85 : 100, mode);
+    assert.equal(exported.gpcResponse!.californiaPolicy.deductionPoints, eligible ? 15 : 0, mode);
+    assert.equal(exported.californiaScore.deductions.filter(row => row.findingId === "gpc_response").length, eligible ? 1 : 0);
+    const finding = packets.find(row => row.unifiedFindingId === "gpc_response")!;
+    assert.equal(finding.scoreEffects?.some(effect => effect.appliesTo === "california_posture" && effect.deductionPoints === 15) ?? false, eligible);
+    assert.equal(finding.scoreEffects?.some(effect => effect.appliesTo === "certscore_overall") ?? false, false);
+    const api = buildApiV2ScanResource(restored);
+    assert.equal(api.postureScores?.ccpaCpra.score, exported.californiaScore.score);
+    assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.score, exported.californiaScore.score);
+    assert.doesNotMatch(renderCanonicalReportPdf(exported).toString("latin1"), /deduct|scoring withheld|score impact|15.point|point penalty/i);
+  }
+});
+
 test("verified bounded GPC measurements survive both customer review focuses without scoring", async () => {
   const { gpcRuntimeFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-runtime");
   const { gpcActivityComparisonFixture } = await import("../../../../packages/certscore-contracts/src/test-fixtures/gpc-activity-comparison");
@@ -476,4 +543,250 @@ for(const version of ["v5","v6","v7","v8","v9","v10"] as const) test(`${version}
   assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.rightsAssessment.topics.length,4);
   assert.equal(exported.gpcResponse,null);
   if(version === "v6" || version === "v7" || version === "v8" || version === "v9" || version === "v10"){assert.ok(exported.californiaScore.saleSharingAssessment);assert.match(renderCanonicalReportPdf(exported).toString("latin1"),/Sale\/sharing clause/);}
+});
+
+test("source-bound short policy and separate provider evidence preserve canonical California findings and exports",async()=>{
+  const {publisherPolicyHtml,publisherPolicyText,vendorPolicyText}=await import("../../../../packages/certscore-scan-core/src/test-fixtures/policy-source-association");
+  const {resolvePolicyVisibleText,extractPolicySections,classifyPolicyDocumentOwnership}=await import("../../../../packages/certscore-scan-core/src/scanners/policy-surface-scanner");
+  const {buildNormalizedConcerns,buildUnifiedFindingCandidatesFromConcerns}=await import("../../lib/scans/normalized-concerns");
+  const {deriveConcernPolicy}=await import("../../lib/scans/concern-policy");
+  const {consentControlAssessmentSchema}=await import("@certscore/contracts");
+  const targetUrl=CA_FIXTURE_URL,providerUrl="https://metricpond.example/privacy";
+  const html=publisherPolicyHtml(providerUrl);
+  const resolved=await resolvePolicyVisibleText({html,baseUrl:`${targetUrl}privacy`,surfaceType:"privacy_policy",timeoutMs:100,
+    onResolvedPolicyDocument:()=>{assert.fail("A provider source must not replace usable target text");}});
+  assert.match(resolved,/Sketchgarden is an open source drawing project/);
+  assert.doesNotMatch(resolved,/Metricpond is the data controller/);
+  const sections=extractPolicySections({html,sourceUrl:`${targetUrl}privacy`,visibleText:resolved});
+  assert.ok(sections.some(section=>section.sourceOffsetBasis==="sanitized_html"),"Legitimate HTML and retained-text representations may have different hashes");
+  for(const mode of ["target_positive","target_negative","provider_only","partial_target"] as const) {
+    const text=mode==="provider_only"?vendorPolicyText:mode==="target_negative"?
+      publisherPolicyText.replace("We will not discriminate against you for exercising your privacy rights. ",""):resolved;
+    const f=californiaCoverageFixture(text),record=scanRecord();
+    f.bundle.scanId=record.scan.id;f.policyEvidence.projection.scanId=record.scan.id;
+    f.bundle.policySurfaceInspection!.californiaReviewPolicy="california-privacy-review.v10";
+    const ownership=classifyPolicyDocumentOwnership({targetUrl,documentUrl:mode==="provider_only"?providerUrl:`${targetUrl}privacy`,
+      documentTitle:mode==="provider_only"?"Metricpond Privacy Policy":"Sketchgarden Privacy Policy",text});
+    f.bundle.policySurfaceObservations.forEach(surface=>{surface.documentLanguage="en";Object.assign(surface,ownership);});
+    f.policyEvidence.projection.documents.forEach(document=>{document.targetRelationship=ownership.targetRelationship!;});
+    if(mode==="provider_only")assert.equal(ownership.targetRelationship,"service_provider");
+    if(mode==="partial_target")f.policyEvidence.projection.documents.forEach(document=>{document.documentTextCoverage.status="truncated";});
+    const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
+    if(mode==="provider_only")assert.equal(child,null,"No target-owned governing evidence means no usable California assessment");
+    else assert.ok(child,mode);
+    const initial=deriveConsentControlAssessment({scan:{scanId:record.scan.id,finalUrl:CA_FIXTURE_URL}});
+    if(child)initial.californiaPrivacyReview=child;
+    const parent=consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(initial)));
+    record.runtimeArtifacts={...record.runtimeArtifacts,consentControlAssessment:parent};
+    const concerns=buildNormalizedConcerns({reviewFindingCandidates:[],validationFindings:[],runtimeArtifacts:record.runtimeArtifacts});
+    const negative=concerns.find(row=>row.suggestedUnifiedFindingId==="california_rights_disclosure_not_observed");
+    assert.equal(Boolean(negative),mode==="target_negative",mode);
+    if(negative) {
+      const policy=deriveConcernPolicy({concern:negative,evidenceStrengthFlags:negative.evidenceStrengthFlags,
+        rawEvidence:negative.evidenceBundle.rawEvidence,consentControlAssessment:parent});
+      assert.equal(policy.promotionEligibility,"eligible");
+      assert.ok(policy.scoreEffects?.some(effect=>effect.appliesTo==="california_posture"&&effect.deductionPoints===12));
+      assert.ok(buildUnifiedFindingCandidatesFromConcerns(concerns).some(row=>row.normalizedConcern===negative));
+    }
+    const packets=buildUnifiedFindingDisplayPackets({reviewFindingCandidates:[],validationFindings:[],validationFindingLookup:new Map(),runtimeArtifacts:record.runtimeArtifacts});
+    assert.equal(packets.some(row=>row.unifiedFindingId==="california_rights_disclosure_not_observed"),mode==="target_negative",mode);
+    const canonical=(record as unknown as {canonicalReportProjection:{ownerUnifiedFindings:typeof packets;globalUnifiedFindings:typeof packets}}).canonicalReportProjection;
+    canonical.ownerUnifiedFindings=packets;canonical.globalUnifiedFindings=packets;
+    record.accessPostureSummary={} as ScanDetailResponse["accessPostureSummary"];
+    record.snapshot={report_projection_status:"ready",certscore_overall:73,score_version:"overall-posture.v11"} as ScanDetailResponse["snapshot"];
+    const persisted=buildPersistedScanReportProjection(record);
+    const restored=readPersistedScanReportProjection({scan:record.scan,snapshot:{
+      report_projection_status:"ready",report_projection_version:SCAN_REPORT_PROJECTION_VERSION,
+      report_projection_payload:JSON.parse(persisted.serialized),report_projection_payload_sha256:persisted.sha256,
+      report_projection_payload_size_bytes:persisted.sizeBytes,report_projection_computed_at:"2026-10-19T00:00:00.000Z",
+    }});
+    assert.ok(restored);
+    assert.deepEqual(restored.runtimeArtifacts?.consentControlAssessment,parent,"Persistence preserves typed source provenance and conclusions");
+    const exported=buildCanonicalReportExport(restored,undefined,"ccpa_cpra")!,api=buildApiV2ScanResource(restored);
+    const expected=mode==="target_positive"?100:mode==="target_negative"?88:null;
+    assert.equal(exported.californiaScore.score,expected,mode);
+    assert.equal(api.postureScores?.ccpaCpra.score,expected,mode);
+    const withoutCalifornia=buildApiV2ScanResource({...restored,runtimeArtifacts:{...restored.runtimeArtifacts,
+      consentControlAssessment:{...parent,californiaPrivacyReview:undefined},
+    }});
+    assert.deepEqual(api.postureScores?.gdprEprivacy,withoutCalifornia.postureScores?.gdprEprivacy,"California evidence cannot alter the persisted EU score");
+    assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.score,expected);
+    assert.equal(exported.californiaScore.deductions.some(row=>row.policyKey==="california.rights_disclosure_not_observed"),mode==="target_negative");
+    assert.ok(renderCanonicalReportPdf(exported).byteLength>0);
+    if(mode==="provider_only")assert.deepEqual(exported.californiaScore.deductions,[],"Vendor-only retained text cannot establish target presence or absence");
+  }
+});
+
+test("redirected denied homepage recovers only observed policy evidence through the persisted canonical report", async () => {
+  const require = createRequire(import.meta.url);
+  const serverOnlyPath = require.resolve("server-only");
+  require.cache[serverOnlyPath] = { exports: {}, loaded: true } as NodeModule;
+  const { startRedirectedPolicyRecoveryFixture } = await import("../../../../packages/certscore-scan-core/src/test-fixtures/redirected-policy-recovery");
+  const { policySurfaceScanner } = await import("../../../../packages/certscore-scan-core/src/scanners/policy-surface-scanner");
+  const { createArtifactWriter } = await import("../../../../packages/certscore-scan-core/src/artifact-writer");
+  const { dedupePolicySurfaces, summarizePolicySurfaces, verifyLocalV2DagLambdaArtifactBody } = await import("./local-v2-dag-report");
+  const { buildNormalizedConcerns } = await import("../../lib/scans/normalized-concerns");
+  const { deriveConcernPolicy } = await import("../../lib/scans/concern-policy");
+  const { consentControlAssessmentSchema } = await import("@certscore/contracts");
+
+  for (const mode of ["recovered", "missing_right", "retrieval_failed", "clients_only", "marketing"] as const) {
+    const governing = mode === "recovered" || mode === "missing_right";
+    const policyText = mode === "clients_only"
+      ? `Clients Privacy Policy. This policy covers customers, partners and end-users. It does not cover website visitors. ${CA_FIXTURE_POLICY.repeat(5)}`
+      : mode === "marketing"
+      ? "Cloud Security is a comprehensive security suite for Linux web servers. Protect your website with malware scanning, firewall protection and server monitoring. Read our Privacy Policy, contact sales and start a free trial. ".repeat(15)
+      : (mode === "missing_right"
+      ? CA_FIXTURE_POLICY.replace("We will not discriminate against you for exercising your privacy rights. ", "")
+      : CA_FIXTURE_POLICY).repeat(5);
+    const fixture = await startRedirectedPolicyRecoveryFixture({
+      policyText, policyFails: mode === "retrieval_failed", duplicatePolicyLinks: true, directPolicyBlocked: true,
+      ...(mode === "clients_only" ? { policyTitle: "Clients Privacy Policy", policyLinkText: "Do Not Sell or Share My Personal Information" } : {}),
+      ...(mode === "marketing" ? { policyTitle: "Cloud Security for Linux Web Servers" } : {}),
+    });
+    const outDir = await mkdtemp(path.join(tmpdir(), "policy-recovery-canonical-"));
+    try {
+      const captured = await policySurfaceScanner({
+        url: fixture.targetUrl, normalizedUrl: fixture.targetUrl, scanStartedAtMs: Date.now(),
+        internalBudgetMs: 12_000, discoveryMode: "fast", nanoAssistProvider: {
+          async classifyLinks({ candidates, assistId }) {
+            return { assistId, rankedCandidates: candidates.map((candidate, priorityRank) => ({
+              candidateId: candidate.candidateId, likelySurfaceType: candidate.deterministicSurfaceType,
+              shouldFetch: true, priorityRank, confidence: 0.95, reason: "Deterministic fixture link ranking", uncertaintyNotes: [],
+            })) };
+          },
+        },
+        artifactWriter: await createArtifactWriter(outDir),
+      });
+      const policy = captured.policySurfaceObservations.find(surface => surface.normalizedUrl === fixture.policyUrl);
+      assert.ok(policy, "The rendered footer route survives the denied direct homepage");
+      assert.equal(policy.linkObservationState, "observed");
+      assert.equal(policy.linkSourcePageUrl, `${fixture.baseUrl}/canonical/`);
+      assert.equal(policy.status === "fetched", mode !== "retrieval_failed");
+      if (mode === "marketing") assert.equal(policy.documentRole, "unknown", JSON.stringify({
+        title: policy.title, body: policy.governingPolicyBodyAssessment, roleReasons: policy.documentRoleReasonCodes,
+        signals: policy.article13DisclosureSignals, sections: policy.retainedArticle13SectionEvidence,
+      }));
+      assert.ok(!captured.policySurfaceObservations.some(surface =>
+        surface.finalUrl === `${fixture.baseUrl}/canonical/` && surface.status === "fetched"),
+      "Homepage marketing or denial content cannot become the policy body");
+
+      for (const verified of mode === "recovered" ? [true, false] : [true]) {
+        const record = scanRecord();
+        const f = californiaCoverageFixture();
+        const documentUrl = `${fixture.baseUrl}/canonical/`;
+        f.bundle.scanId = record.scan.id;
+        f.bundle.normalizedUrl = fixture.targetUrl;
+        f.bundle.policySurfaceObservations = captured.policySurfaceObservations;
+        f.bundle.policySurfaceInspection!.californiaReviewPolicy = "california-privacy-review.v10";
+        f.bundle.policySurfaceInspection!.privacyChoiceInspection = captured.privacyChoiceInspection;
+        if (f.bundle.collectionSurfaceInventory) f.bundle.collectionSurfaceInventory.pageUrl = documentUrl;
+        const bundleBytes = Buffer.from(JSON.stringify(f.bundle));
+        const source = {
+          schemaVersion: "certscore.v2.canonical-evidence-bundle.v1", verificationStatus: "verified" as const,
+          sha256: createHash("sha256").update(bundleBytes).digest("hex"), sizeBytes: bundleBytes.byteLength,
+          uri: "s3://policy-fixture/CanonicalEvidenceBundle.json",
+        };
+        verifyLocalV2DagLambdaArtifactBody({ body: bundleBytes, expectedSha256: source.sha256, expectedSizeBytes: source.sizeBytes });
+        const artifactsById = new Map();
+        const texts: Array<{ observationId: string; text: string }> = [];
+        for (const surface of captured.policySurfaceObservations) {
+          const ref = surface.artifactRefs.find(ref => ref.artifactId.startsWith("policy_surface_text_"));
+          if (!ref) continue;
+          assert.ok(ref.path);
+          const bytes = await readFile(ref.path);
+          const sha256 = createHash("sha256").update(bytes).digest("hex");
+          const checked = { body: bytes, expectedSha256: sha256, expectedSizeBytes: bytes.byteLength };
+          if (verified) verifyLocalV2DagLambdaArtifactBody(checked);
+          else assert.throws(() => verifyLocalV2DagLambdaArtifactBody({ ...checked, body: Buffer.alloc(bytes.byteLength) }), /checksum mismatch/);
+          artifactsById.set(ref.artifactId, {
+            artifactId: ref.artifactId, fileName: path.basename(ref.path), sha256, sizeBytes: bytes.byteLength,
+            uri: `s3://policy-fixture/${path.basename(ref.path)}`,
+            ...(verified ? { text: bytes.toString("utf8"), verificationStatus: "verified" } : { verificationStatus: "verification_failed" }),
+          });
+          if (verified) texts.push({ observationId: surface.observationId, text: bytes.toString("utf8") });
+        }
+        const summary = summarizePolicySurfaces(dedupePolicySurfaces(captured.policySurfaceObservations, documentUrl), "127.0.0.1", {
+          targetUrl: documentUrl, discoveredPolicySurfaces: captured.policySurfaceObservations,
+          policyEvidenceLaneStatus: captured.moduleRun.status === "completed" ? "complete" : "degraded",
+          policyTextEvidenceContext: { artifactsById, scanId: record.scan.id, generatedAt: f.bundle.completedAt, sourceBundle: source },
+        });
+        if (governing && verified) {
+          assert.equal(summary.policyTextEvidenceProjection.documents[0]?.finalUrl, fixture.policyUrl);
+          assert.equal(summary.policyTextEvidenceProjection.documents[0]?.artifactVerificationStatus, "verified");
+        }
+        const child = projectCaliforniaPrivacyReview(f.bundle, source, documentUrl, {
+          projection: summary.policyTextEvidenceProjection, texts,
+        });
+        assert.ok(child, "The representative rendered visit retains a typed California assessment");
+        assert.ok(child.contractVersion === "certscore.california-privacy-review.v10");
+        if (governing && verified) {
+          assert.equal(child.reviewCoverage?.sourceDocuments[0]?.url, fixture.policyUrl);
+          const rights = child.rightsAssessment!.topics;
+          assert.equal(rights.length, 4);
+          for (const right of rights) assert.equal(right.status,
+            mode === "missing_right" && right.topic === "non_discrimination" ? "not_observed" : "disclosed");
+        } else {
+          assert.equal(child.rightsAssessment, undefined);
+          assert.equal(child.reviewCoverage?.families.find(family => family.id === "california_rights")?.status, "unknown");
+          assert.deepEqual(child.reviewCoverage?.sourceDocuments, []);
+        }
+        const parent = deriveConsentControlAssessment({ scan: { scanId: record.scan.id, finalUrl: documentUrl } });
+        if (child) parent.californiaPrivacyReview = child;
+        record.runtimeArtifacts = {
+          policyDisclosureSummary: summary,
+          consentControlAssessment: consentControlAssessmentSchema.parse(JSON.parse(JSON.stringify(parent))),
+        };
+        const concerns = buildNormalizedConcerns({ reviewFindingCandidates: [], validationFindings: [], runtimeArtifacts: record.runtimeArtifacts });
+        const sufficientPolicyTopics = concerns.filter(concern =>
+          concern.evidenceBundle.rawEvidence?.gdprTransparencyArticle13ConcernState === "sufficient");
+        if (governing) {
+          assert.ok(sufficientPolicyTopics.length > 0, "Recovered policy clauses enter the normalized GDPR concern path");
+          for (const concern of sufficientPolicyTopics) assert.equal(
+            new URL(String(concern.evidenceBundle.rawEvidence?.sourceUrl)).href.replace(/\/$/, ""),
+            fixture.policyUrl.replace(/\/$/, ""));
+          // Verified bundle sections can support positives independently of the
+          // full-text artifact. A failed full-text checksum still bars absence.
+        } else {
+          assert.equal(sufficientPolicyTopics.length, 0, `${mode} cannot create visitor policy-topic coverage`);
+          assert.equal(summary.privacyPolicyPresent, false, `${mode} cannot satisfy governing policy availability`);
+        }
+        const missing = concerns.find(concern => concern.suggestedUnifiedFindingId === "california_rights_disclosure_not_observed");
+        const shouldDeduct = mode === "missing_right" && verified;
+        assert.equal(Boolean(missing), shouldDeduct, `${mode}, verified=${verified}`);
+        if (missing) assert.equal(deriveConcernPolicy({ concern: missing, evidenceStrengthFlags: missing.evidenceStrengthFlags,
+          rawEvidence: missing.evidenceBundle.rawEvidence, consentControlAssessment: parent }).promotionEligibility, "eligible");
+        const packets = buildUnifiedFindingDisplayPackets({ reviewFindingCandidates: [], validationFindings: [],
+          validationFindingLookup: new Map(), runtimeArtifacts: record.runtimeArtifacts });
+        const canonical = (record as unknown as { canonicalReportProjection: PersistedCanonicalReportProjection }).canonicalReportProjection;
+        canonical.normalizedConcerns = concerns;
+        canonical.ownerUnifiedFindings = packets;
+        canonical.globalUnifiedFindings = packets;
+        record.accessPostureSummary = {} as ScanDetailResponse["accessPostureSummary"];
+        record.snapshot = { report_projection_status: "ready", certscore_overall: 73,
+          score_version: "overall-posture.v11" } as ScanDetailResponse["snapshot"];
+        const persisted = buildPersistedScanReportProjection(record);
+        const restored = readPersistedScanReportProjection({ scan: record.scan, snapshot: {
+          report_projection_status: "ready", report_projection_version: SCAN_REPORT_PROJECTION_VERSION,
+          report_projection_payload: JSON.parse(persisted.serialized), report_projection_payload_sha256: persisted.sha256,
+          report_projection_payload_size_bytes: persisted.sizeBytes, report_projection_computed_at: f.bundle.completedAt,
+        } });
+        assert.ok(restored);
+        assert.deepEqual(restored.runtimeArtifacts?.consentControlAssessment, record.runtimeArtifacts.consentControlAssessment);
+        const exported = buildCanonicalReportExport(restored, undefined, "ccpa_cpra")!;
+        assert.equal(exported.californiaScore.deductions.some(row => row.policyKey === "california.rights_disclosure_not_observed"), shouldDeduct);
+        const api = buildApiV2ScanResource(restored);
+        assert.equal(api.postureScores?.ccpaCpra.score, exported.californiaScore.score);
+        if (governing && verified) assert.equal(exported.californiaScore.score, shouldDeduct ? 88 : 100);
+        const withoutCalifornia = buildApiV2ScanResource({ ...restored, runtimeArtifacts: {
+          ...restored.runtimeArtifacts, consentControlAssessment: { ...parent, californiaPrivacyReview: undefined },
+        } });
+        assert.deepEqual(api.postureScores?.gdprEprivacy, withoutCalifornia.postureScores?.gdprEprivacy);
+        assert.equal(JSON.parse(JSON.stringify(exported)).californiaScore.score, exported.californiaScore.score);
+        assert.ok(renderCanonicalReportPdf(exported).byteLength > 0);
+      }
+    } finally {
+      await fixture.close();
+      await rm(outDir, { recursive: true, force: true });
+    }
+  }
 });

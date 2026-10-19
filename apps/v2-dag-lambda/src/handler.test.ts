@@ -1384,6 +1384,39 @@ test("policy access uses terminal evidence, never the initial redirect or succes
   }
 });
 
+test("incidental challenge traffic does not override this lane's corroborated substantive successful page", async () => {
+  const { gpcIncidentalChallengeFixture } = await import("../../../packages/certscore-scan-core/src/test-fixtures/gpc-incidental-challenge.cases");
+  for (const defect of ["none", "real_challenge", "blocking_frame", "blocked_status", "malformed_status", "missing_text", "missing_proof", "empty_capture", "wrong_origin", "unsettled", "failed", "policy_lane", "explicit_navigation_challenge", "terminal_denial"] as const) {
+    const bundle = gpcIncidentalChallengeFixture();
+    const signals = bundle.scanNoGoAssessment!.supportingSignals;
+    if (defect === "real_challenge") bundle.scanNoGoAssessment!.decision = "no_go";
+    if (defect === "blocking_frame") signals.blockingFrameChallengeObserved = true;
+    if (defect === "blocked_status") signals.mainDocumentStatus = 403;
+    if (defect === "malformed_status") signals.mainDocumentStatus = "200";
+    if (defect === "missing_text") signals.substantiveRetainedDomVolumeObserved = false;
+    if (defect === "missing_proof") delete signals.visualHardNoGoPageState;
+    if (defect === "empty_capture") bundle.runtimeCoverage!.coverageStatus = "limited_none";
+    if (defect === "wrong_origin") signals.expectedOriginReached = false;
+    if (defect === "unsettled") signals.successfulSettledMainDocument = false;
+    if (defect === "failed") bundle.modulesRun[0]!.status = "failed";
+    if (defect === "policy_lane") bundle.modulesRun[0]!.moduleName = "policySurfaceScanner";
+    if (defect === "explicit_navigation_challenge") bundle.modulesRun[0]!.siteFacingNavigation = {
+      requestedUrl: bundle.url, firstResponseAt: null, firstResponseOffsetMs: null, firstHttpStatus: 200,
+      firstEffectiveUrl: bundle.url, navigationCount: 1, challengeDetected: true, challengeType: "captcha_or_challenge",
+    };
+    if (defect === "terminal_denial") bundle.modulesRun[0]!.siteFacingNavigation = {
+      requestedUrl: bundle.url, firstResponseAt: null, firstResponseOffsetMs: null, firstHttpStatus: 200,
+      firstEffectiveUrl: bundle.url, navigationCount: 1, challengeDetected: false, challengeType: null,
+      terminalAccess: "access_denied", terminalHttpStatus: 403,
+    };
+    const original = structuredClone(bundle.scanNoGoAssessment);
+    const lane = buildLocalV2DagLambdaLaneRun({ bundle, workerLane: defect === "policy_lane" ? "policy_evidence" : "gpc_observation", region: "local" })!;
+    assert.equal(lane.challengeDetected, !["none", "terminal_denial"].includes(defect), defect);
+    assert.equal(lane.accessOutcome, defect === "none" ? "representative_page" : defect === "terminal_denial" ? "access_denied" : "bot_challenge", defect);
+    assert.deepEqual(bundle.scanNoGoAssessment, original, "retain the observed security traffic and diagnostic limitations");
+  }
+});
+
 test("technical browser success remains a bot-challenge access outcome", () => {
   const bundle = canonicalBundleFixture("scan-challenge", {
     modulesRun: [{
