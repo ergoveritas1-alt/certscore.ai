@@ -50,6 +50,7 @@ import {
   type ConsentUiObservation,
   type VisualCaptureSummary,
   classifyConsentControlLabel,
+  isConsentControlInteractionEligible,
   classifyConsentControlLinkDestination,
   hasUnresolvedConsentDecision,
   UNRESOLVED_CONSENT_DECISION,
@@ -7858,6 +7859,7 @@ async function readDirectCmpSemanticConsentUiObservation(
       role?: string;
       selectorHint: string;
       tagName: string;
+      semanticallyInteractive?: boolean;
       visible: true;
     }>;
   };
@@ -7949,6 +7951,8 @@ async function readDirectCmpSemanticConsentUiObservation(
             ? `[data-testid="${dataTestId}"]`
             : element.tagName.toLowerCase(),
         tagName: element.tagName.toLowerCase(),
+        semanticallyInteractive: element.matches("button,[role='button'],a,[role='link'],input[type='button'],input[type='submit'],summary") || element.hasAttribute("onclick") ||
+          element.hasAttribute("tabindex") && Number(element.getAttribute("tabindex")) >= 0,
         visible: true,
       });
       if (controls.length >= 12) break;
@@ -8097,6 +8101,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
       role?: string;
       selectorHint: string;
       tagName: string;
+      semanticallyInteractive?: boolean;
       visible: true;
     }>;
     contextText: string;
@@ -8313,6 +8318,8 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
         role: element.getAttribute("role") || undefined,
         selectorHint: selectorHintFor(element),
         tagName: element.tagName.toLowerCase(),
+        semanticallyInteractive: element.matches(semanticControlSelector) || element.hasAttribute("onclick") ||
+          element.hasAttribute("tabindex") && Number(element.getAttribute("tabindex")) >= 0,
         visible: true,
       });
       if (controls.length >= 12) break;
@@ -8415,6 +8422,7 @@ async function readRapidFirstLayerConsentUiObservationUnbounded(
     classifiedControls.some(({ classification }) => classification.intent === "accept") &&
     classifiedControls.some(({ classification }) => classification.intent === "reject");
   const controls = classifiedControls.flatMap(({ control, classification }) => {
+    if (!isConsentControlInteractionEligible(control)) return [];
     if (hasMultipleCanonicalConsentIntents(control.label)) return [];
     const actionType = consentUiControlActionTypeFromClassification(classification);
     if (!actionType || (actionType === "other" && !isPaidDeclineClassification(classification))) return [];
@@ -9075,19 +9083,7 @@ function safeStringArray(input: unknown, maxLength: number): string[] {
 }
 
 function isStaticTextConsentInventoryControl(control: ConsentUiInventoryControl): boolean {
-  const tagName = control.tagName?.toLowerCase();
-  if (!tagName || !/^(?:p|span|strong|em|small|h[1-6]|li|dt|dd)$/.test(tagName)) {
-    return false;
-  }
-  const role = control.role?.toLowerCase();
-  if (role === "button" || role === "link") {
-    return false;
-  }
-  const matchedTerm = control.matchedTerm?.replace(/\s+/g, " ").trim().toLowerCase();
-  if (matchedTerm && CANONICAL_CONSENT_INVENTORY_LABELS.includes(matchedTerm)) {
-    return false;
-  }
-  return !/(?:button|btn|choice|option|preference|purpose)/i.test(control.selectorHint ?? "");
+  return !isConsentControlInteractionEligible(control);
 }
 
 function isCompositeConsentInventoryControl(control: ConsentUiInventoryControl): boolean {
@@ -10500,6 +10496,8 @@ const CONSENT_INVENTORY_PROBE_SCRIPT = String.raw`(() => {
           role: element.getAttribute("role") || undefined,
           selectorHint: selectorHintFor(element),
           tagName: element.tagName.toLowerCase(),
+          semanticallyInteractive: element.matches(controlSelector + ",[role='link'],summary") ||
+            element.hasAttribute("onclick") || element.hasAttribute("tabindex") && Number(element.getAttribute("tabindex")) >= 0,
           linkHref: element.tagName.toLowerCase() === "a" ? element.getAttribute("href") ?? "" : undefined,
           visible: true,
           consentContextEvidence: "local_surface",
@@ -10611,10 +10609,11 @@ export function buildConsentUiObservationFromEvidence(input: {
   // Native AX observations carry their own exact document proof. A same-loader
   // history/hash URL transition can happen after AX capture and before the DOM
   // inventory finishes. Never relabel those controls as belonging to that URL.
-  const controls=input.controls.filter(control=>!control.domBinding ||
+  const documentBoundControls=input.controls.filter(control=>!control.domBinding ||
     control.domBinding.documentUrl===documentUrl && control.domBinding.documentIdentity.source===documentIdentity?.source &&
     control.domBinding.documentIdentity.token===documentIdentity?.token);
-  const staleNativeControls=controls.length!==input.controls.length;
+  const staleNativeControls=documentBoundControls.length!==input.controls.length;
+  const controls=documentBoundControls.filter(isConsentControlInteractionEligible);
   const fallbackBasis=[...(input.fallbackBasis??[]),...(staleNativeControls?["inventory:native_ax_document_mismatch"]:[])];
   const canonicalSurfaceText = classifyConsentSurfaceText({ text });
   const visibleChoiceLabels = controls.filter((control) => control.visible !== false).map((control) => control.label);
@@ -13365,6 +13364,7 @@ function hasConfirmedFirstLayerGeometryControls(geometry: ConsentControlGeometry
 function confirmedFirstLayerGeometryControlCount(geometry: ConsentControlGeometryArtifact): number {
   return geometry.candidates.filter((candidate) =>
     isAroGeometryAction(candidate.actionType) &&
+    isConsentControlInteractionEligible(candidate) &&
     candidate.layer === "first_layer" &&
     candidate.decisionStatus === "confirmed_visible"
   ).length;
@@ -13908,6 +13908,7 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
       const actionType = candidate.actionType;
       if (
         !isAroGeometryAction(actionType) ||
+        !isConsentControlInteractionEligible(candidate) ||
         // The bundle's simple control row cannot retain category-state proof.
         // Composite selected-only observations stay in the verified geometry
         // packet and are assessed there, never copied as an unqualified Reject.
@@ -13933,6 +13934,8 @@ export function consentUiObservationFromConfirmedGeometryControls(input: {
         role: candidate.role,
         selectorHint: candidate.selectorHint,
         tagName: candidate.tagName.slice(0, 32),
+        semanticallyInteractive: candidate.semanticallyInteractive,
+        ...(candidate.consentContextConfirmed === true ? {consentContextEvidence:"local_surface" as const} : {}),
         visible: true,
       }];
     })

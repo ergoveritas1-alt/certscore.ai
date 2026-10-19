@@ -10,6 +10,7 @@ import {
 import { isPromotionGradePreconsentRequestRow } from "./preconsent-public-evidence";
 import { evaluateSaleShareRuntimeCoherence } from "./sale-share-runtime-coherence";
 import { classifyConsentControlLabel, type ConsentControlIntent } from "@certscore/contracts";
+import { resolveCanonicalCookieKnowledge } from "@certscore/vendor-resolver";
 
 type ContractDecision = {
   allowedNarrativeTier: "weak" | "moderate" | "strong";
@@ -624,20 +625,6 @@ function getStringArrayValuesFromEvidenceAndEntities(record: Record<string, unkn
   ]);
 }
 
-function classifyCookieNameForPromotion(name: string) {
-  const normalized = name.toLowerCase();
-  if (/(^_ga|^_gid|^_gat|ga_|goog|gtm|plausible|analytics|amplitude|segment|mixpanel|posthog|ajs_anonymous_id|^_ali_s_|^yandex|^yuid|^cna$|^sca$)/i.test(normalized)) {
-    return "analytics";
-  }
-  if (/(^_fbp|^_fbc|gcl_|ttclid|ttp|li_sugr|bcookie|lidc|uuid2|xandr|adnxs|anusercookie|rtmark|doubleclick|criteo|cto_bundle|_mkto_trk|muid|fr\b|demdex|dpm\.demdex|amcvs?_|adobeorg|kndctr_.*adobeorg|mbox|mboxedgecluster|at_check|pubmatic|krtbcookie|pugt|spugt|bidswitch|tuuid|id5|casalemedia|cmid|cmps|cmpro|gumgum|3lift|tluid|tapad|adsrvr|tdid|rubiconproject|openx|scorecardresearch|quantserve|crwdcntrl|panoramaid|_pubcid|^yabs|^sync_cookie_csrf$|^ftid$|^bh$|^ad-privacy$)/i.test(normalized)) {
-    return "advertising";
-  }
-  if (/(qsi_replaysession|qualtrics|siteintercept|hotjar|fullstory|clarity|contentsquare|mouseflow)/i.test(normalized)) {
-    return "session_replay";
-  }
-  return "unknown";
-}
-
 function isPromotionGradeCookieCategory(value: string | null | undefined) {
   return Boolean(value && /analytics|advertising|marketing|retargeting|session_replay|personalization/i.test(value));
 }
@@ -1188,11 +1175,17 @@ function hasPromotionGradePreconsentCookieEvidence(rawEvidence: Record<string, u
                 ? row.vendor_category
                 : null;
     const cookieName = typeof row.cookieName === "string" ? row.cookieName : typeof row.cookie_name === "string" ? row.cookie_name : null;
-    const inferredCategory = cookieName ? classifyCookieNameForPromotion(cookieName) : "unknown";
-    const promotionCategory = isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory);
+    // An explicit retained unknown/necessary classification cannot be upgraded
+    // by a name substring. Only legacy rows without a purpose may consult the
+    // canonical, domain-scoped cookie registry.
+    const inferredCategory = !category && cookieName ? resolveCanonicalCookieKnowledge(cookieName, {
+      cookieDomain: getStringValue(row, ["domain", "cookieDomain", "cookie_domain"]),
+    }).category : "unknown";
+    const promotionCategory = isPromotionGradeCookieCategory(category) || category === "dmp" || isPromotionGradeCookieCategory(inferredCategory);
     const firstPartyTrackingCookie =
       party === "first_party" &&
-      (isPromotionGradeCookieCategory(category) || isPromotionGradeCookieCategory(inferredCategory));
+      promotionCategory;
+    if (row.nonEssential === false || row.non_essential === false || row.essentiality === "essential" || row.essentiality === "unknown") return false;
     const nonEssential = row.nonEssential === true || row.non_essential === true || promotionCategory;
     const beforeConsent =
       timingEvidence === "before_consent_cookie_write" ||

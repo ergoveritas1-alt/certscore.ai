@@ -51,6 +51,14 @@ export function isArticle13DisclosureEvidenceUsable(
   return article13DisclosureRejectReason(value, disclosureType, options) === null;
 }
 
+/** A rights witness stands on its own; a complaint is a separate topic. */
+export function isDataSubjectRightsDisclosureEvidenceUsable(value: string) {
+  return isArticle13DisclosureEvidenceUsable(value, "data_subject_rights", { mode: "retained_report" }) ||
+    (classifyGdprTransparencyTopics({ text: value }).matches.some(match =>
+      match.topic === "data_subject_rights" && ["direct", "equivalent"].includes(match.matchStrength)
+    ) && isArticle13DisclosureEvidenceUsable(value, "data_subject_rights", { mode: "multilingual_classifier" }));
+}
+
 export function hasSubstantiveProcessingPurposesEvidence(value: string) {
   const text = normalizeArticle13Whitespace(value);
   const purposeOutcomePattern =
@@ -726,6 +734,12 @@ function hasLocalizedArticle13EvidenceContext(
 
 export function hasSubstantiveRightsDisclosure(value: string) {
   const text = normalizeArticle13Whitespace(value);
+  if (
+    /\brights? to\s*:?[\s]*(?:request|obtain)\b.{0,100}\b(?:access|copy|correct|rectif\w*|delete|erase|restrict|portability)\b/i.test(text) ||
+    /\byou (?:can|may) (?:request |obtain )?access your (?:personal )?(?:information|data)\b/i.test(text)
+  ) {
+    return true;
+  }
   if (
     /\b(?:your rights|data subject rights|right to (?:access|delete|erasure|rectification|object|restrict|portability)|rights? to (?:access|delete|erasure|rectification|object|restrict|portability)|exercise (?:your )?rights|privacy controls|download a copy|export (?:your )?(?:data|information)|request to (?:remove|delete|access|correct))\b/i.test(text)
   ) {

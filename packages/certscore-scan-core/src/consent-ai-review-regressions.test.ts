@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chromium, type Browser } from "playwright";
+import { consentUiObservationSchema } from "@certscore/contracts";
 import { captureConsentControlGeometry } from "./consent-control-geometry.js";
 import { consentControlsFromAccessibilityTree, detectConsentUi, mergeConsentUiObservations, readRapidFirstLayerConsentUiObservation } from "./scanners/pre-consent-runtime-scanner.js";
 let browser: Browser;
@@ -141,4 +142,32 @@ test("successful text read cannot repair failed structured capture", async () =>
     assert.notEqual(result.inventoryOutcome, "complete_empty");
     assert.equal(result.captureStatus, "incomplete");
   } finally { await page.close(); }
+});
+
+test("static Privacy choices text never becomes a control in rapid or full passive inventory",async()=>{
+  const page=await browser.newPage();
+  try {
+    await page.setContent(banner('<h1>Privacy choices</h1><p>Your Privacy Choices</p><button>Accept all</button><button>Manage preferences</button>'));
+    for(const observation of [await readRapidFirstLayerConsentUiObservation(page,Date.now(),1500),await detectConsentUi(page,Date.now())]){
+      assert.ok(observation.controls.some(row=>row.actionType==="accept_all"));
+      assert.ok(observation.controls.some(row=>row.actionType==="manage_preferences"));
+      assert.ok(observation.controls.every(row=>row.actionType!=="do_not_sell_share"),JSON.stringify(observation.controls));
+    }
+  }finally{await page.close();}
+});
+
+test("qualified Arabic and custom interactive controls survive static-text filtering",async()=>{
+  const page=await browser.newPage();
+  try{
+    await page.setContent(banner('<h1>Privacy choices</h1><button>السماح بالكل</button><button>الأساسي فقط</button><button>إدارة الاختيارات</button><span role="button">Your Privacy Choices</span>'));
+    const observation=await detectConsentUi(page,Date.now(),1000);
+    assert.equal(observation.acceptControlObserved,true);
+    assert.equal(observation.rejectControlObserved,true);
+    assert.equal(observation.managePreferencesControlObserved,true);
+    const retained=consentUiObservationSchema.parse(JSON.parse(JSON.stringify(observation)));
+    assert.equal(retained.controls.find(row=>row.label==="الأساسي فقط")?.semanticallyInteractive,true);
+    const geometry=await captureConsentControlGeometry(page,{timeoutMs:2000});
+    assert.ok(geometry.candidates.some(row=>row.actionType==="reject_all"&&row.label==="الأساسي فقط"));
+    assert.ok(observation.controls.every(row=>row.tagName!=="h1"));
+  }finally{await page.close();}
 });

@@ -42,6 +42,11 @@ test("web uses exact transferred bytes without S3, and stale hints retain verifi
     assert.equal(reads.length, 2, "invalid hint must use the original remote path");
     assert.equal(await readers.readLocalV2DagBundleFromS3({ ...input("bundle"), expectedSha256: "0".repeat(64), transferredBytes }), null,
       "a mismatched original cannot be projected through either transport");
+    await assert.rejects(readers.readLocalV2DagBundleFromS3({ ...input("bundle"), expectedSha256: "0".repeat(64), transferredBytes, strictPublication:true }),
+      (error:unknown)=>(error as {name:string}).name==="ReportPublicationInvariantError");
+    S3Client.prototype.send=(async()=>{throw Object.assign(new Error("temporary storage outage"),{code:"ECONNRESET"});}) as typeof originalSend;
+    assert.equal(await readers.readLocalV2DagBundleFromS3({...input("bundle"),uri:`${expected.bundle.uri}-unavailable`,strictPublication:true}),null,
+      "unavailable storage is distinct from verified corrupt bytes");
   } finally { S3Client.prototype.send = originalSend; }
 });
 

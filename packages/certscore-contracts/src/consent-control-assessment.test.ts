@@ -704,3 +704,23 @@ test("complete broad inventory cannot bypass an unresolved control-specific deci
   assert.equal(result.controls.options.state, "unknown");
   assert.equal(result.assessmentStatus, "limited");
 });
+
+test("new materializations honor structural control eligibility without reinterpreting stored assessments",()=>{
+  for(const patch of [{tagName:"h1"},{tagName:"button",consentContextConfirmed:false},{tagName:"span",semanticallyInteractive:false},{tagName:"button",consentContextEvidence:"unverified"}]){
+    const input=baseInput();input.observations=[{observationId:"typed",observedAtMs:100,likelyPresent:true,
+      documentId:input.document!.canonicalDocumentId,layerInspected:"first_layer",captureStatus:"observed",
+      controls:[candidate({actionType:"accept_all",label:"Accept all",...patch})]}];
+    const result=deriveConsentControlAssessment(input);
+    assert.notEqual(result.controls.accept.state,"observed",JSON.stringify(patch));
+    assert.equal(result.evidence.length,0);
+  }
+  for(const patch of [{tagName:"button"},{tagName:"span",role:"button"},{tagName:"span",semanticallyInteractive:true}]){
+    const input=baseInput();input.observations=[{observationId:"typed",observedAtMs:100,likelyPresent:true,
+      documentId:input.document!.canonicalDocumentId,layerInspected:"first_layer",captureStatus:"observed",
+      controls:[candidate({actionType:"accept_all",label:"Accept all",...patch})]}];
+    const result=deriveConsentControlAssessment(input);
+    assert.equal(result.controls.accept.state,"observed",JSON.stringify(patch));
+    const stored=JSON.parse(JSON.stringify(result));
+    assert.deepEqual(consentControlAssessmentSchema.parse(stored),stored);
+  }
+});

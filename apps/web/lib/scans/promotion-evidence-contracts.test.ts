@@ -1156,3 +1156,12 @@ test("a replay detector label cannot substitute for retained page/flow linkage",
     assert.equal(hasSensitiveSessionReplaySurfaceCooccurrenceArtifact({ sensitivePayloadViolations: [{ ...row, ...link }] }), true);
   }
 });
+
+test("retained unknown first-party cookie names cannot create tracking proof",()=>{
+  for(const cookieName of ["mixpanel_anon_id","split_segment_v2_nov24","split_segment","analytics_preference","_ga"]){
+    const evidence={preconsent_cookie_evidence:[{cookieName,domain:"fixture.test",category:"unknown",party:"first_party",timingEvidence:"before_consent_cookie_write"}],
+      preconsent_tracker_vendors:[],preconsent_tracker_evidence_urls:[],preconsent_tracking_detected:true};
+    assert.equal(hasStrongPreconsentRuntimeEvidence(evidence),false,cookieName);
+    assert.equal(hasPreconsentSequenceEvidence(evidence),false,cookieName);
+  }
+});

@@ -3,6 +3,7 @@ import { retainedConsentAssessment } from "../../lib/scans/after-action-report-e
 import "server-only";
 import { projectScanReportNoGo, resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import { getLocalV2DagReportInput } from "./local-v2-dag-report";
+import { boundedPublicationSchemaIssues, ReportPublicationInvariantError } from "./report-publication-invariant";
 
 import { createHash } from "node:crypto";
 import { presentRuntimeGraphForRead } from "./runtime-evidence-graph-projection";
@@ -438,6 +439,51 @@ function canonicalConsentAssessment(scanRecord: ScanDetailResponse): ConsentCont
   });
 }
 
+/** Validate optional child evidence before any concern, score or persisted projection. */
+function prepareCanonicalConsentInput(scanRecord: ScanDetailResponse): ScanDetailResponse {
+  if (scanRecord.scan.status !== "completed" ||
+      record(scanRecord.scan.scanConfigJson)?.processor !== LOCAL_V2_DAG_SCAN_PROCESSOR) return scanRecord;
+  const runtime = record(scanRecord.runtimeArtifacts);
+  const hybrid = record(runtime?.hybridRuntimeEvidence) ?? record(runtime?.hybrid_runtime_evidence);
+  const candidate = runtime?.consentControlAssessment ?? runtime?.consent_control_assessment ??
+    hybrid?.consentControlAssessment ?? hybrid?.consent_control_assessment ??
+    record(scanRecord.snapshot)?.consent_control_assessment;
+  const parsed = consentControlAssessmentSchema.safeParse(candidate);
+  const raw = record(candidate);
+  if (parsed.success || !raw || !Object.hasOwn(raw, "californiaPrivacyReview")) return scanRecord;
+
+  // Never weaken the strict contract or salvage an invalid parent. Excluding an
+  // invalid optional child leaves independently verified parent evidence intact.
+  const { californiaPrivacyReview: excluded, ...parent } = raw;
+  const verifiedParent = consentControlAssessmentSchema.safeParse(parent);
+  if (!verifiedParent.success || verifiedParent.data.scan.scanId !== scanRecord.scan.id) return scanRecord;
+  const assessment = verifiedParent.data;
+  console.warn(JSON.stringify({
+    event: "scan.report_publication.child_excluded",
+    version: "california-child-isolation.v1",
+    scanId: scanRecord.scan.id,
+    child: "californiaPrivacyReview",
+    sourceHash: createHash("sha256").update(JSON.stringify(excluded) ?? "null").digest("hex"),
+    issues: boundedPublicationSchemaIssues(parsed.error.issues).slice(0, 2),
+  }));
+  const canonicalHybrid = {
+    ...hybrid,
+    consentControlAssessment: assessment,
+    consent_control_assessment: assessment,
+  };
+  return {
+    ...scanRecord,
+    snapshot: withCanonicalConsentAssessmentSnapshot(record(scanRecord.snapshot), assessment),
+    runtimeArtifacts: {
+      ...runtime,
+      consentControlAssessment: assessment,
+      consent_control_assessment: assessment,
+      hybridRuntimeEvidence: canonicalHybrid,
+      hybrid_runtime_evidence: canonicalHybrid,
+    },
+  };
+}
+
 function assertCanonicalConsentProjectionInput(
   scanRecord: ScanDetailResponse,
   assessment: ConsentControlAssessment | null
@@ -451,8 +497,19 @@ function assertCanonicalConsentProjectionInput(
   }
 
   if (!assessment) {
-    throw new Error(
-      `Refusing to mark scan ${scanRecord.scan.id} report projection ready before ConsentControlAssessment v2 is materialized.`
+    const runtime = record(scanRecord.runtimeArtifacts);
+    const hybrid = record(runtime?.hybridRuntimeEvidence) ?? record(runtime?.hybrid_runtime_evidence);
+    const candidate = runtime?.consentControlAssessment ?? runtime?.consent_control_assessment ??
+      hybrid?.consentControlAssessment ?? hybrid?.consent_control_assessment ??
+      record(scanRecord.snapshot)?.consent_control_assessment;
+    const parsed = consentControlAssessmentSchema.safeParse(candidate);
+    throw new ReportPublicationInvariantError(
+      candidate == null ? "consent_assessment_missing" : "consent_assessment_invalid",
+      "consent_assessment",
+      {
+        message: `Refusing to mark scan ${scanRecord.scan.id} report projection ready before ConsentControlAssessment v2 is materialized.`,
+        issues: parsed.success ? [{code:"custom",path:["scan","scanId"]}] : parsed.error.issues,
+      },
     );
   }
 }
@@ -585,6 +642,7 @@ export async function deriveScanReportProjection(
   scanRecord: ScanDetailResponse,
   source: ScanReportProjectionSource = {}
 ) {
+  scanRecord = prepareCanonicalConsentInput(scanRecord);
   const snapshot = record(scanRecord.snapshot);
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
   const noGo = projectScanReportNoGo(scanRecord);
@@ -798,7 +856,7 @@ export async function deriveScanReportProjection(
     );
   }
 
-  return { canonicalReportProjection, value };
+  return { canonicalReportProjection, value, canonicalInputRecord: scanRecord };
 }
 
 export async function persistScanReportProjection(
@@ -806,7 +864,9 @@ export async function persistScanReportProjection(
   source: ScanReportProjectionSource = {}
 ) {
   assertCanonicalReportProjectionReady(scanRecord);
-  const { canonicalReportProjection, value } = await deriveScanReportProjection(scanRecord, source);
+  const originalSourceRecord = scanRecord;
+  const { canonicalReportProjection, value, canonicalInputRecord } = await deriveScanReportProjection(scanRecord, source);
+  scanRecord = canonicalInputRecord;
   const snapshot = record(scanRecord.snapshot);
   const sourceSnapshot = record(source.snapshot) ?? snapshot;
   const sourceRuntimeArtifacts = record(source.runtimeArtifacts) ?? record(scanRecord.runtimeArtifacts);
@@ -821,7 +881,7 @@ export async function persistScanReportProjection(
   const hash = await measureReportProjectionPhase(
     scanRecord.scan.id,
     "source_hash",
-    () => sourceHash(scanRecord, value, source)
+    () => sourceHash(originalSourceRecord, value, source)
   );
   const projectedSnapshot = {
     ...withCanonicalConsentAssessmentSnapshot(record(scanRecord.snapshot), assessment),

@@ -10,7 +10,9 @@ import { projectPostAcceptForms } from "../../lib/scans/post-accept-form-project
 import { assessOutdatedTransferDisclosure } from "../../lib/scans/outdated-transfer-disclosure-policy";
 import { projectPrivacyAuditEvidenceForMaterialization } from "./privacy-audit-projection";
 import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
+import { isConsentControlInteractionEligible } from "@certscore/contracts";
 import { readGpcActivityComparison } from "../../lib/scans/gpc-activity-comparison";
+import { ReportPublicationInvariantError } from "./report-publication-invariant";
 import { projectFormDestinations } from "./form-destination-projection";
 import { projectCmsSecurity } from "./cms-security-projection";
 import { projectSiteIntegrity } from "./site-integrity-projection";
@@ -1556,7 +1558,14 @@ function extractSupervisoryAuthoritySupportingContactContext(value: string) {
 type LocalV2DagLocalArtifactVerification = {
   expectedSha256?: string | null;
   expectedSizeBytes?: number | null;
+  strictPublication?: boolean;
 };
+
+function rethrowPermanentPublicationArtifactFailure(error: unknown, strictPublication?: boolean) {
+  if (!strictPublication) return;
+  if (error instanceof ReportPublicationInvariantError) throw error;
+  if (error instanceof SyntaxError) throw new ReportPublicationInvariantError("artifact_json_invalid", "artifact_verification");
+}
 
 async function readLocalV2DagJsonArtifact(
   outDir: string,
@@ -1587,10 +1596,12 @@ async function readLocalV2DagBundle(
       (parsed.schemaVersion !== "certscore.v2.canonical-evidence-bundle.v1" &&
         parsed.schemaVersion !== "certscore.v2.alpha.1")
     ) {
+      if (verification.strictPublication) throw new ReportPublicationInvariantError("artifact_contract_invalid", "artifact_verification");
       return null;
     }
     return parsed as CanonicalEvidenceBundle;
-  } catch {
+  } catch (error) {
+    rethrowPermanentPublicationArtifactFailure(error, verification.strictPublication);
     return null;
   }
 }
@@ -1605,8 +1616,10 @@ async function readLocalV2DagManifest(
       "LocalV2DagLambdaManifest.json",
       verification,
     );
+    if (!isRecord(parsed) && verification.strictPublication) throw new ReportPublicationInvariantError("artifact_contract_invalid", "artifact_verification");
     return isRecord(parsed) ? parsed : null;
-  } catch {
+  } catch (error) {
+    rethrowPermanentPublicationArtifactFailure(error, verification.strictPublication);
     return null;
   }
 }
@@ -1711,13 +1724,13 @@ export function verifyLocalV2DagLambdaArtifactBody(input: {
   expectedSizeBytes?: number | null;
 }) {
   if (input.expectedSizeBytes !== null && input.expectedSizeBytes !== undefined && input.body.byteLength !== input.expectedSizeBytes) {
-    throw new Error("Local v2 DAG Lambda S3 artifact size mismatch.");
+    throw new ReportPublicationInvariantError("artifact_size_mismatch", "artifact_verification", {message:"Local v2 DAG Lambda S3 artifact size mismatch."});
   }
   if (
     input.expectedSha256 &&
     createHash("sha256").update(input.body).digest("hex") !== input.expectedSha256
   ) {
-    throw new Error("Local v2 DAG Lambda S3 artifact checksum mismatch.");
+    throw new ReportPublicationInvariantError("artifact_checksum_mismatch", "artifact_verification", {message:"Local v2 DAG Lambda S3 artifact checksum mismatch."});
   }
   return input.body;
 }
@@ -1794,6 +1807,7 @@ async function readLocalV2DagBundleFromS3(input: {
   expectedSizeBytes?: number | null;
   uri: string;
   transferredBytes?: ReadonlyMap<string, Buffer>;
+  strictPublication?: boolean;
 }): Promise<CanonicalEvidenceBundle | null> {
   try {
     const parsed = await readLocalV2DagJsonArtifactFromS3(input);
@@ -1802,10 +1816,12 @@ async function readLocalV2DagBundleFromS3(input: {
       (parsed.schemaVersion !== "certscore.v2.canonical-evidence-bundle.v1" &&
         parsed.schemaVersion !== "certscore.v2.alpha.1")
     ) {
+      if (input.strictPublication) throw new ReportPublicationInvariantError("artifact_contract_invalid", "artifact_verification");
       return null;
     }
     return parsed as CanonicalEvidenceBundle;
-  } catch {
+  } catch (error) {
+    rethrowPermanentPublicationArtifactFailure(error, input.strictPublication);
     return null;
   }
 }
@@ -1815,11 +1831,14 @@ async function readLocalV2DagManifestFromS3(input: {
   expectedSizeBytes?: number | null;
   uri: string;
   transferredBytes?: ReadonlyMap<string, Buffer>;
+  strictPublication?: boolean;
 }): Promise<Record<string, unknown> | null> {
   try {
     const parsed = await readLocalV2DagJsonArtifactFromS3(input);
+    if (!isRecord(parsed) && input.strictPublication) throw new ReportPublicationInvariantError("artifact_contract_invalid", "artifact_verification");
     return isRecord(parsed) ? parsed : null;
-  } catch {
+  } catch (error) {
+    rethrowPermanentPublicationArtifactFailure(error, input.strictPublication);
     return null;
   }
 }
@@ -4418,6 +4437,11 @@ function geometryCandidateIsConfirmedVisible(
 ) {
   const computedStyle = getRecord(candidate, "computedStyle");
   return (
+    isConsentControlInteractionEligible({
+      tagName: getString(candidate.tagName), role: getString(candidate.role),
+      consentContextConfirmed: typeof candidate.consentContextConfirmed === "boolean" ? candidate.consentContextConfirmed : undefined,
+      semanticallyInteractive: typeof candidate.semanticallyInteractive === "boolean" ? candidate.semanticallyInteractive : undefined,
+    }) &&
     getString(candidate.decisionStatus) === "confirmed_visible" &&
     candidate.enabled !== false &&
     candidate.intersectsViewport === true &&
@@ -4655,6 +4679,7 @@ function hasCompletedCanonicalFirstLayerControlInventory(
     ? observation.inventoryDiagnostics
     : null;
   const controls = (observation.controls ?? []).filter((control) =>
+    isConsentControlInteractionEligible(control) &&
     control.visible !== false &&
     (
       control.actionType === "accept_all" ||
@@ -4725,7 +4750,7 @@ export function summarizeFirstLayerConsentChoices(
   const geometryStatus = consentGeometryAssessmentStatus(bundle, geometryEvidence);
   const controls = (observation?.controls ?? []).flatMap((control) => {
     const label = getString(control?.label);
-    return label && control?.visible !== false ? [{ ...control, label }] : [];
+    return label && control?.visible !== false && isConsentControlInteractionEligible(control) ? [{ ...control, label }] : [];
   });
   const visibleChoiceLabels = uniqueStrings(controls.map((control) => control.label)).slice(0, 12);
   const acceptLabels = uniqueStrings(controls
@@ -4872,6 +4897,7 @@ export function reconcileConsentSurfaceInspectionWithGeometry(
         observation.likelyPresent === true &&
         observation.layerInspected === "first_layer" &&
         (observation.controls ?? []).some((control) =>
+          isConsentControlInteractionEligible(control) &&
           control.visible !== false &&
           (
             control.actionType === "accept_all" ||
@@ -6636,7 +6662,7 @@ export function buildGpcResponseRuntimeProjection(
 // fully derived report detail, so retaining an older entry can cause a
 // projection repair to persist stale evidence even after the projector is
 // deployed.
-const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v31";
+const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_VERSION = "local-v2-report-materialization-v33";
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_TTL_MS = 60 * 60 * 1_000;
 const LOCAL_V2_DAG_REPORT_MATERIALIZATION_CACHE_MAX_ENTRIES = 6;
 const localV2DagReportMaterializationCache = new BoundedPromiseCache<string, ScanDetailResponse>({
@@ -6722,11 +6748,13 @@ async function materializeLocalV2DagScanDetailUncached(
         const localManifestPromise = readLocalV2DagManifest(input.outDir!, verifiedArtifactChainAvailable ? {
           expectedSha256: input.manifestArtifactSha256,
           expectedSizeBytes: input.manifestArtifactSizeBytes,
+          strictPublication: options.requireBundle,
         } : {});
         const [localBundle, localGeometryEvidence, localManifest] = await Promise.all([
           readLocalV2DagBundle(input.outDir!, verifiedArtifactChainAvailable ? {
             expectedSha256: input.scanArtifactSha256,
             expectedSizeBytes: input.scanArtifactSizeBytes,
+            strictPublication: options.requireBundle,
           } : {}),
           localManifestPromise.then(manifest => readLocalV2ConsentControlGeometry(input.outDir!, manifest)),
           localManifestPromise,
@@ -6757,6 +6785,7 @@ async function materializeLocalV2DagScanDetailUncached(
                 expectedSizeBytes: input.scanArtifactSizeBytes,
                 uri: input.scanArtifactUri!,
                 transferredBytes,
+                strictPublication: options.requireBundle,
               })
             )
           : Promise.resolve(null),
@@ -6778,6 +6807,7 @@ async function materializeLocalV2DagScanDetailUncached(
                 expectedSizeBytes: input.manifestArtifactSizeBytes,
                 uri: input.manifestArtifactUri!,
                 transferredBytes,
+                strictPublication: options.requireBundle,
               })
             )
           : Promise.resolve(null),

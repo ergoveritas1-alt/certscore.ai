@@ -1626,3 +1626,24 @@ test("policy content identity includes retained ownership and fetch provenance",
   assert.notEqual(baseline.contentHash, ownershipChanged.contentHash);
   assert.notEqual(baseline.contentHash, fetchStateChanged.contentHash);
 });
+
+test("rights credit requires its own retained passage, not vendor wording plus a complaint elsewhere", async () => {
+  const vendorExcerpt = "Partner Company answers you if you use your data protection rights against Partner Company.";
+  const complaint = "You can also complain to a regulator. In Europe it is the data protection authority where you live.";
+  const ownRights = "You have the right to request access to or delete your personal information by contacting us.";
+  for (const valid of [false, true]) {
+    const packet = buildFixturePacket(`Our privacy policy explains how we process personal data. ${vendorExcerpt} ${complaint} ${valid ? ownRights : ""}`);
+    const document = packet.documents[0]!;
+    const rows = completeRows({ data_subject_rights: {
+      status: "observed", confidence: 0.96, sourceDocumentIds: [document.documentId], sourceUrls: [document.canonicalUrl],
+      evidenceExcerpts: [vendorExcerpt, valid ? ownRights : complaint], reasonCodes: ["RIGHTS_REFERENCE", "COMPLAINT_MECHANISM"],
+      rationale: "The model proposed rights credit from retained passages."
+    } });
+    const artifact = await reviewPolicyPacketWithMini({apiKey:"test-key", mode:"shadow", model:"gpt-5.4-mini", packet,
+      fetchImpl: async () => new Response(JSON.stringify({model:"gpt-5.4-mini",choices:[{message:{content:JSON.stringify({rows})}}]}),{status:200})});
+    const rights = artifact.rows.find(row => row.topic === "data_subject_rights")!;
+    assert.equal(rights.status === "observed", valid);
+    assert.notEqual(rights.status, "not_observed_with_sufficient_coverage");
+    if (valid) assert.deepEqual(rights.evidenceExcerpts, [ownRights]);
+  }
+});

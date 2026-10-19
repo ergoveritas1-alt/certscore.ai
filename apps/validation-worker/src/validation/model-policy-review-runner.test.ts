@@ -6,6 +6,7 @@ import {
 } from "@certscore/contracts";
 import {
   RUNTIME_POLICY_REVIEW_TOPICS,
+  buildPolicyReviewPacket,
   STATIC_POLICY_REVIEW_TOPICS,
   summarizePolicyReviewArtifact,
   type PolicyReviewPacket,
@@ -564,4 +565,24 @@ test("same-scan static review join uses the primary database connection", async 
 
   assert.match(runnerSource, /consistentRead:\s*true/);
   assert.match(repositorySource, /readOnly:\s*input\.consistentRead !== true/);
+});
+
+test("cached rights reviews are revalidated against current retained passages without a model call", () => {
+  const vendor = "Partner Company answers you if you use your data protection rights against Partner Company.";
+  const ownRights = "You have the right to access or delete your personal data by contacting us.";
+  for (const valid of [false, true]) {
+    const packet = buildPolicyReviewPacket({scanId:"current-rights-scan",scanContext:{targetUrl:"https://example.test/"},documentSources:[{
+      id:"current-policy",canonical_url:"https://example.test/privacy",document_type:"privacy_policy",document_text:`Our privacy policy explains personal-data processing. ${vendor} You can also complain to a regulator. ${valid ? ownRights : ""}`,
+      document_fetch_state:"fetched",document_evaluation_state:"usable",target_relationship:"target_controller",document_owner_entity:"Example",ownership_confidence:1,
+    }]});
+    assert.ok(packet);
+    const cached = artifact();
+    cached.rows = cached.rows.filter(row => row.topic === "data_subject_rights").map(row => ({...row,evidenceExcerpts:[vendor,valid ? ownRights : "You can also complain to a regulator."]}));
+    const original = structuredClone(cached);
+    const rebound = rebindCachedStaticArtifact({artifact:cached,packet});
+    assert.equal(rebound.rows[0]?.status === "observed",valid);
+    assert.equal(rebound.cacheKey,cached.cacheKey,"deterministic revalidation does not invalidate the model cache");
+    if(valid)assert.deepEqual(rebound.rows[0]?.evidenceExcerpts,[ownRights]);
+    assert.deepEqual(cached,original,"cached source artifact is not rewritten");
+  }
 });

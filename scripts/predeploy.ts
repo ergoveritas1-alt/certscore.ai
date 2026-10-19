@@ -52,6 +52,8 @@ const REPORT_PUBLICATION_CHECK: Check = {
   command: ["pnpm", "exec", "tsx", "--tsconfig", "apps/web/tsconfig.test.json", "--test",
     "apps/web/server/scans/canonical-scan-report-publisher.test.ts",
     "apps/web/server/scans/report-artifact-transfer.test.ts",
+    "apps/web/server/scans/score-materialization-failure.test.ts",
+    "apps/web/server/scans/score-materialization-request-repository.test.ts",
     "apps/web/server/scans/local-action-packet-mirror.test.ts"],
 };
 

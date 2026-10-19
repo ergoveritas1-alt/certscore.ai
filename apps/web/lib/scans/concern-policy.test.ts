@@ -133,7 +133,7 @@ test("deriveConcernPolicy keeps Article 13 evidence and deterministic no-match r
   assert.equal(noMatch.externalSurfacingEligibility, "audit_only");
 });
 
-test("deriveConcernPolicy applies the exact California GPC deduction without changing the neutral lane fields", () => {
+test("deriveConcernPolicy keeps unverified legacy GPC evidence internal and score-neutral", () => {
   const delta = {
     baselineCount: 1,
     gpcCount: 1,
@@ -196,10 +196,9 @@ test("deriveConcernPolicy applies the exact California GPC deduction without cha
     }
   });
 
-  assert.equal(policy.promotionEligibility, "eligible");
-  assert.equal(policy.scoreEffects?.length, 1);
-  assert.equal(policy.scoreEffects?.[0]?.framework, "california");
-  assert.equal(policy.scoreEffects?.[0]?.deductionPoints, 15);
+  assert.equal(policy.promotionEligibility, "internal_only");
+  assert.equal(policy.externalSurfacingEligibility, "audit_only");
+  assert.equal(policy.scoreEffects?.length ?? 0, 0);
   assert.equal(gpcResponseAssessment.scoreEffect, "none");
   assert.equal(gpcResponseAssessment.legalInterpretation, "not_assessed");
 });

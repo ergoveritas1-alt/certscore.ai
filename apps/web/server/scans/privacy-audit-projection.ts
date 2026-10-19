@@ -1,4 +1,4 @@
-import { CALIFORNIA_NOTICE_PASSAGE_POLICY, classifyPrivacySurface, locateCaliforniaNoticePassages, type CanonicalEvidenceBundle } from "@certscore/contracts";
+import { CALIFORNIA_NOTICE_PASSAGE_POLICY, classifyPrivacySurface, isConsentControlInteractionEligible, locateCaliforniaNoticePassages, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { privacyAuditEvidenceSchema, type PrivacyAuditEvidence, type PrivacyAuditEvidenceV2 } from "@certscore/api-contracts";
 
 function safeUrl(value: string | undefined) {
@@ -86,6 +86,7 @@ export function projectPrivacyAuditEvidence(bundle: CanonicalEvidenceBundle, sou
     if (document?.url !== documentUrl || document.documentIdentity?.token !== observation.documentIdentity.token) continue;
     if (observation.inventoryOutcome === "document_mismatch" || observation.inventoryOutcome === "no_go") continue;
     for (const control of observation.controls) {
+      if (!isConsentControlInteractionEligible(control)) continue;
       if (!control.visible || control.visibilityEvidence !== "box_model_verified" || !control.artifactRef || control.artifactRef.length > 240) continue;
       const kind = classifyPrivacySurface({ linkText: control.label }).surfaceType;
       if (kind !== "do_not_sell_or_share" && kind !== "your_privacy_choices" && kind !== "cookie_settings") continue;

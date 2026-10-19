@@ -1,8 +1,16 @@
+import { REPORT_PUBLICATION_INVARIANTS, boundedPublicationSchemaIssues } from "./report-publication-invariant";
+
 type MaterializationFailureDisposition = {
-  code: "contract_validation_failed" | "materialization_failed_transient" | "materialization_not_ready" | "projection_too_large";
+  code: "publication_invariant_failed" | "contract_validation_failed" | "materialization_failed_transient" | "materialization_not_ready" | "projection_too_large";
   diagnostic: string;
   retryAfterSeconds?: number;
   retryable: boolean;
+  details?: {
+    version: "report-publication-failure.v1";
+    phase: string;
+    invariant?: string;
+    issues: ReturnType<typeof boundedPublicationSchemaIssues>;
+  };
 };
 
 const MATERIALIZATION_NOT_READY_RETRY_SECONDS = 1;
@@ -44,7 +52,7 @@ function isProjectionTooLargeError(error: unknown) {
 
 function lifecyclePhase(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  const match = /^Score lifecycle ([a-z0-9-]+) failed(?:[:.]|$)/i.exec(message);
+  const match = /^Score lifecycle ([a-z0-9-]{1,80}) failed(?:[:.]|$)/i.exec(message);
   return match?.[1] ?? null;
 }
 
@@ -63,6 +71,20 @@ function isStaleProjectionSourceError(error: unknown) {
 
 export function classifyScoreMaterializationFailure(error: unknown): MaterializationFailureDisposition {
   const chain = errorChain(error);
+  const invariantError = chain.find(value => {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Record<string, unknown>;
+    return candidate.name === "ReportPublicationInvariantError" &&
+      REPORT_PUBLICATION_INVARIANTS.some(invariant => invariant === candidate.invariant) &&
+      (candidate.phase === "consent_assessment" || candidate.phase === "artifact_verification");
+  }) as {invariant:string;phase:string;issues:unknown[]} | undefined;
+  if (invariantError) return {
+    code: "publication_invariant_failed",
+    diagnostic: `publication_invariant_failed:${invariantError.invariant}`,
+    retryable: false,
+    details: {version:"report-publication-failure.v1",phase:invariantError.phase,invariant:invariantError.invariant,
+      issues: boundedPublicationSchemaIssues(Array.isArray(invariantError.issues) ? invariantError.issues : [])},
+  };
   if (chain.some(isProjectionTooLargeError)) {
     return {
       code: "projection_too_large",
@@ -88,13 +110,16 @@ export function classifyScoreMaterializationFailure(error: unknown): Materializa
     };
   }
   const phase = chain.map(lifecyclePhase).find((value) => value !== null);
-  if (chain.some(isSchemaValidationError)) {
+  const schemaError = chain.find(isSchemaValidationError) as {issues?: {code?:unknown;path?:unknown}[]} | undefined;
+  if (schemaError) {
     return {
       code: "contract_validation_failed",
       diagnostic: phase
         ? `contract_validation_failed:${phase}`
         : "contract_validation_failed",
       retryable: false,
+      details: {version:"report-publication-failure.v1",phase:phase ?? "schema_validation",
+        issues: boundedPublicationSchemaIssues(schemaError.issues ?? [])},
     };
   }
   return {
@@ -104,4 +129,12 @@ export function classifyScoreMaterializationFailure(error: unknown): Materializa
       : "materialization_failed_transient",
     retryable: true,
   };
+}
+
+/** Stored in the existing bounded last_error field; no evidence or raw errors. */
+export function serializeScoreMaterializationFailure(disposition: MaterializationFailureDisposition) {
+  if (!disposition.details) return disposition.diagnostic;
+  const diagnostic = {code:disposition.code,...disposition.details,issues:[...disposition.details.issues]};
+  while (JSON.stringify(diagnostic).length > 500 && diagnostic.issues.length) diagnostic.issues.pop();
+  return JSON.stringify(diagnostic);
 }

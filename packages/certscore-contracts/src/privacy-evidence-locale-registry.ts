@@ -139,7 +139,7 @@ const BASE_PRIVACY_EVIDENCE_LOCALE_REGISTRY: readonly PrivacyEvidenceLocaleRegis
   }),
   locale("ar", {
     privacyPolicyLabels: ["سياسة الخصوصية", "إشعار الخصوصية"], privacyPolicyPathSlugs: ["siyasat-khususiyya"], cookiePolicyLabels: ["سياسة ملفات تعريف الارتباط"], cookiePolicyPathSlugs: ["ar/cookies"], cookieSettingsLabels: ["إعدادات ملفات تعريف الارتباط"], termsLabels: ["شروط الاستخدام"], termsPathSlugs: ["terms"], contextHints: ["الخصوصية", "بيانات شخصية", "ملفات تعريف الارتباط", "الموافقة"], tldHints: [".sa", ".ae", ".eg"],
-    consentControls: { accept: ["قبول الكل", "السماح بالكل"], reject: ["رفض الكل", "عدم السماح بالكل"], options: ["إعدادات ملفات تعريف الارتباط", "إدارة التفضيلات"], necessaryOnly: ["الضرورية فقط", "ملفات تعريف الارتباط الضرورية فقط"] },
+    consentControls: { accept: ["قبول الكل", "السماح بالكل"], reject: ["رفض الكل", "عدم السماح بالكل"], options: ["إعدادات ملفات تعريف الارتباط", "إدارة التفضيلات", "إدارة الاختيارات"], necessaryOnly: ["الضرورية فقط", "ملفات تعريف الارتباط الضرورية فقط", "الأساسي فقط"] },
   }),
   locale("hu", {
     privacyPolicyLabels: ["adatvédelmi irányelvek", "adatvédelmi tájékoztató", "adatvédelmi tudnivalók", "adatvédelem"], privacyPolicyPathSlugs: ["adatvedelem", "adatvedelmi-tajekoztato"], cookiePolicyLabels: ["süti szabályzat"], cookiePolicyPathSlugs: ["suti-szabalyzat"], cookieSettingsLabels: ["süti beállítások"], termsLabels: ["felhasználási feltételek"], termsPathSlugs: ["aszf"], contextHints: ["adatvédelem", "személyes adatok", "süti", "hozzájárulás"], tldHints: [".hu"],

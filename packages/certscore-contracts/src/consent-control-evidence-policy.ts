@@ -1,10 +1,25 @@
 import { verifyConsentControlInspection } from "./consent-control-inspection";
 /** Pure, bounded interpretation of retained structural facts. No browser or model work. */
-export const CONSENT_CONTROL_CAPTURE_POLICY_VERSION = "consent-control-capture.v3";
+export const CONSENT_CONTROL_CAPTURE_POLICY_VERSION = "consent-control-capture.v4";
 export const UNRESOLVED_CONSENT_DECISION = "unresolved_visible_consent_decision";
 
 type RecordLike = Record<string, unknown>;
 const record = (value: unknown): RecordLike => value && typeof value === "object" && !Array.isArray(value) ? value as RecordLike : {};
+
+/** Retained structural facts, never labels or selector names, establish an
+ * interactive control. Legacy typed candidates may omit tag metadata; their
+ * existing explicit actionability gate still applies. Diagnostic classifier
+ * profiles carry no production credit and do not override these facts. */
+export function isConsentControlInteractionEligible(candidate: {
+  tagName?: string | null; role?: string | null; semanticallyInteractive?: boolean;
+  consentContextConfirmed?: boolean; consentContextEvidence?: string;
+}): boolean {
+  if (candidate.consentContextConfirmed === false || candidate.consentContextEvidence === "unverified" ||
+      candidate.semanticallyInteractive === false) return false;
+  if (candidate.semanticallyInteractive === true || ["button", "link"].includes(candidate.role?.toLowerCase() ?? "")) return true;
+  const tag = candidate.tagName?.toLowerCase();
+  return !tag || ["button", "input", "a", "summary", "ax-node"].includes(tag);
+}
 
 export function hasPositiveControlBox(value: unknown): boolean {
   const box = record(value);

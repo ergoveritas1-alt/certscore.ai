@@ -12,6 +12,7 @@ import {
   hasUnresolvedConsentDecision,
   UNRESOLVED_CONSENT_DECISION,
   CONSENT_CONTROL_CAPTURE_POLICY_VERSION,
+  isConsentControlInteractionEligible,
   hasUnresolvedAdaptivePartialConsentInventory,
   isVerifiedTerminalConsentPacket,
   type CanonicalEvidenceBundle,
@@ -74,16 +75,23 @@ function hasUnresolvedLegacyFirstLayerDecision(raw: Record<string, unknown> | nu
   });
 }
 
-function normalizedDocumentId(value: string | null | undefined) {
+function retainedDocumentUrl(value: string | null | undefined) {
   if (!value) return null;
   try {
     const url = new URL(value);
     url.hash = "";
-    if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
     return url.toString();
   } catch {
     return null;
   }
+}
+
+function normalizedDocumentId(value: string | null | undefined) {
+  const retained = retainedDocumentUrl(value);
+  if (!retained) return null;
+  const url = new URL(retained);
+  if (url.pathname !== "/") url.pathname = url.pathname.replace(/\/+$/, "");
+  return url.toString();
 }
 
 function retainedDocumentToken(value: unknown): string | null {
@@ -209,6 +217,10 @@ function geometryInput(
           (presentationType === "persistent_link" && row.decisionStatus === "footer_or_policy_link");
         const selection = initialConsentSelectionSchema.safeParse(row.initialSelection);
         return [{
+          tagName: typeof row.tagName === "string" ? row.tagName : undefined,
+          role: typeof row.role === "string" ? row.role : undefined,
+          semanticallyInteractive: typeof row.semanticallyInteractive === "boolean" ? row.semanticallyInteractive : undefined,
+          consentContextConfirmed: typeof row.consentContextConfirmed === "boolean" ? row.consentContextConfirmed : undefined,
           ...(selection.success && selectionVerified ? { initialSelection: selection.data } : {}),
           evidenceId: typeof row.candidateId === "string" ? row.candidateId : undefined,
           actionType: supportedActionType,
@@ -298,27 +310,28 @@ function geometryInput(
 /** The verified consent lane owns its document, independently of runtime redirects.
  * URL equality alone cannot override the global document: require the retained
  * lane outcome and matching observation, DOM and geometry loader tokens. */
-function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometry: Record<string, unknown> | null | undefined): { url: string; token: string } | null {
+function verifiedConsentLaneDocument(bundle: CanonicalEvidenceBundle, rawGeometry: Record<string, unknown> | null | undefined): { url: string; finalUrl: string; token: string } | null {
   if (consentSessionAccessLimited(bundle, rawGeometry)) return null;
   const lane = bundle.scanLaneRuns?.find((run) => run.laneId === "consent_proof");
   const lanes = bundle.scanEvidenceLaneAssessment ?? bundle.scan_evidence_lane_assessment;
   if (lane?.executionOutcome !== "success") return null;
   const access = rawGeometry?.access as { status?: string; httpStatus?: number } | undefined;
   const latest = [...(bundle.consentUiObservations ?? [])].sort((a, b) => b.observedAtMs - a.observedAtMs)[0];
-  const retainedPositive = latest?.captureStatus === "observed" && latest.controls.some(control => control.visible === true && ["accept_all", "reject_all", "manage_preferences"].includes(control.actionType) &&
+  const retainedPositive = latest?.captureStatus === "observed" && latest.controls.some(control => isConsentControlInteractionEligible(control) && control.visible === true && ["accept_all", "reject_all", "manage_preferences"].includes(control.actionType) &&
     (control.tagName !== "ax-node" || control.visibilityEvidence === "box_model_verified" && control.consentContextEvidence === "local_surface"));
   if (lanes?.lanes.consent !== "usable" && !(lanes?.lanes.consent === "limited" && retainedPositive &&
     access?.status === "loaded" && typeof access.httpStatus === "number" && access.httpStatus < 400)) return null;
-  const geometryUrl = normalizedDocumentId(typeof rawGeometry?.pageUrl === "string" ? rawGeometry.pageUrl : null);
+  const finalUrl = retainedDocumentUrl(typeof rawGeometry?.pageUrl === "string" ? rawGeometry.pageUrl : null);
+  const geometryUrl = normalizedDocumentId(finalUrl);
   const geometryToken = retainedDocumentToken(rawGeometry?.documentIdentity);
-  if (!geometryUrl || !geometryToken || !["https:", "http:"].includes(new URL(geometryUrl).protocol)) return null;
+  if (!finalUrl || !geometryUrl || !geometryToken || !["https:", "http:"].includes(new URL(geometryUrl).protocol)) return null;
   const observation = [...(bundle.consentUiObservations ?? [])].sort((a, b) => b.observedAtMs - a.observedAtMs)[0];
   if (!observation || normalizedDocumentId(observation.documentUrl) !== geometryUrl ||
     retainedDocumentToken(observation.documentIdentity) !== geometryToken ||
     !["observed", "no_evidence"].includes(observation.captureStatus ?? "")) return null;
   return (bundle.domSnapshots ?? []).some((snapshot) => snapshot.consentStateAtTime === "pre_consent" &&
     normalizedDocumentId(snapshot.url) === geometryUrl && retainedDocumentToken(snapshot.documentIdentity) === geometryToken)
-    ? { url: geometryUrl, token: geometryToken } : null;
+    ? { url: geometryUrl, finalUrl, token: geometryToken } : null;
 }
 
 /** Scope inspection coverage to the independently verified consent document.
@@ -360,12 +373,15 @@ export function deriveMaterializedConsentControlAssessment(input: {
     (control.tagName === "ax-node" || control.selectorHint?.startsWith("ax:")) &&
     (control.visibilityEvidence !== "box_model_verified" || control.consentContextEvidence !== "local_surface")
   ));
-  const canonicalDocumentId = normalizedDocumentId(
-    consentLaneDocument?.url ?? input.finalUrl ??
+  // Keep the captured URL for exact child-assessment binding. The normalized
+  // document ID is only for the existing document/loader comparisons.
+  const finalUrl = retainedDocumentUrl(
+    consentLaneDocument?.finalUrl ?? input.finalUrl ??
     input.bundle.domSnapshots.at(-1)?.url ??
     input.bundle.normalizedUrl ??
     input.bundle.url,
   );
+  const canonicalDocumentId = normalizedDocumentId(finalUrl);
   const requestedUrl = normalizedDocumentId(input.requestedUrl ?? input.bundle.url);
   const observationTimestamp = (observation: { observedAtMs?: unknown }) =>
     typeof observation.observedAtMs === "number" ? observation.observedAtMs : 0;
@@ -584,6 +600,10 @@ export function deriveMaterializedConsentControlAssessment(input: {
         const actionType = retainedActionType(control.actionType, control.classifierReasonCodes);
         const controlVariant = retainedControlVariant(control.classifierReasonCodes);
         const candidate: ConsentControlAssessmentCandidate = {
+          tagName: control.tagName,
+          role: control.role,
+          semanticallyInteractive: control.semanticallyInteractive,
+          consentContextEvidence: control.consentContextEvidence,
           evidenceId,
           actionType,
           controlVariant,
@@ -812,7 +832,7 @@ export function deriveMaterializedConsentControlAssessment(input: {
     scan: {
       scanId: input.scanId ?? input.bundle.scanId,
       requestedUrl,
-      finalUrl: canonicalDocumentId,
+      finalUrl,
       scanStatus: "completed",
       noGo: consentNoGo,
       noGoReasonCodes: consentLaneDocument && !accessLimited ? [] : input.noGoReasonCodes,

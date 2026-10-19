@@ -4,7 +4,7 @@ import { resolveCanonicalVendor } from "@certscore/vendor-resolver";
 import { gpcProductionRuntimeFixture } from "../../../certscore-contracts/src/test-fixtures/gpc-production";
 
 /** Fictional visit with real registry endpoints; never a production evidence source. */
-export function gpcIncidentalChallengeFixture(scanId?: string) {
+export function gpcIncidentalChallengeFixture(scanId?: string, additionalCollectionUrls: string[] = []) {
   const bundle = gpcProductionRuntimeFixture();
   if (scanId) {
     bundle.scanId = scanId;
@@ -12,10 +12,10 @@ export function gpcIncidentalChallengeFixture(scanId?: string) {
     bundle.gpcObservationSession!.semanticObservation!.scanId = scanId;
   }
   const template = bundle.networkEvents[1]!;
-  const urls = ["https://px.ads.linkedin.com/collect/", "https://px.ads.linkedin.com/collect/", "https://snap.licdn.com/li.lms-analytics/insight.min.js"];
+  const urls = ["https://px.ads.linkedin.com/collect/", "https://px.ads.linkedin.com/collect/", ...additionalCollectionUrls.slice(0, 2), "https://snap.licdn.com/li.lms-analytics/insight.min.js"];
   bundle.networkEvents = [bundle.networkEvents[0]!, ...urls.map((url, index) => ({ ...template,
     eventId: `linkedin-${index}`, requestId: `linkedin-${index}`, requestUrl: url, url,
-    collectionEndpointObserved: index < 2,
+    collectionEndpointObserved: index < urls.length - 1,
   }))];
   bundle.normalizedVendorObservations = bundle.networkEvents.slice(1).map(event =>
     resolveCanonicalVendor({ type: "request", url: event.requestUrl, evidenceId: event.eventId,

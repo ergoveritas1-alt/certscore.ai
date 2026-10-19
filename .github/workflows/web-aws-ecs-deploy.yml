@@ -231,9 +231,13 @@ jobs:
             apps/web/lib/api-v2/scan-report-summary.test.ts
 
       - name: Test report publication ownership and artifact transfer
+        env:
+          CERTSCORE_PUBLICATION_TEST_ADMIN_URL: postgresql://postgres:local-fixture-only@127.0.0.1:5432/postgres
         run: |
           pnpm exec tsx --tsconfig apps/web/tsconfig.test.json --test \
             apps/web/server/scans/canonical-scan-report-publisher.test.ts \
+            apps/web/server/scans/score-materialization-failure.test.ts \
+            apps/web/server/scans/score-materialization-request-repository.test.ts \
             apps/web/server/scans/report-artifact-transfer.test.ts
 
       - name: Test public page request logging

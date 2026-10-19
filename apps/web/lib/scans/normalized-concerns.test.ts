@@ -3031,3 +3031,16 @@ test("cross-document GDPR observed and absence conflict fails closed to one ambi
     true,
   );
 });
+
+test("cached Mini rights credit cannot borrow a complaint to promote vendor-only rights wording", () => {
+  const vendorExcerpt = "Partner Company answers you if you use your data protection rights against Partner Company.";
+  const ownRights = "You have the right to access or delete your personal data by contacting us.";
+  for (const valid of [false, true]) {
+    const artifact = makeProductionPolicyModelReviewArtifact();
+    artifact.rows[0] = {...artifact.rows[0]!, topic:"data_subject_rights", evidenceExcerpts:[vendorExcerpt, valid ? ownRights : "You can also complain to a regulator."]};
+    const concerns = buildNormalizedConcerns({reviewFindingCandidates:[],validationFindings:[],runtimeArtifacts:{policyModelReviewArtifact:artifact}});
+    const rights = concerns.find(row => row.originKey === "gdpr_transparency.article13.data_subject_rights");
+    assert.equal(Boolean(rights), valid);
+    if (valid) assert.deepEqual(rights!.evidenceBundle.rawEvidence?.policySnippets, [ownRights]);
+  }
+});

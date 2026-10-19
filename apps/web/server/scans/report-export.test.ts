@@ -399,9 +399,9 @@ test("incidental challenge classification carries LinkedIn collection through ca
   const { buildGpcProductionAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-production-observation");
   const { buildGpcResponseAssessment } = await import("../../../../packages/certscore-scan-core/src/gpc-response-assessment");
   const { buildNormalizedConcerns } = await import("../../lib/scans/normalized-concerns");
-  for (const mode of ["incidental", "blocked", "library_only", "missing_delivery", "bad_checksum"] as const) {
+  for (const mode of ["incidental", "two_recipients", "blocked", "library_only", "missing_delivery", "bad_checksum"] as const) {
     const record = scanRecord();
-    const bundle = gpcIncidentalChallengeFixture(record.scan.id);
+    const bundle = gpcIncidentalChallengeFixture(record.scan.id, mode === "two_recipients" ? ["https://www.facebook.com/tr/?id=fixture&ev=PageView"] : []);
     if (mode === "blocked") bundle.scanNoGoAssessment!.decision = "no_go";
     if (mode === "library_only") for (const event of bundle.networkEvents) event.collectionEndpointObserved = false;
     if (mode === "missing_delivery") {
@@ -440,12 +440,13 @@ test("incidental challenge classification carries LinkedIn collection through ca
     } })!;
     assert.ok(restored);
     const exported = buildCanonicalReportExport(restored, undefined, "ccpa_cpra")!;
-    const eligible = mode === "incidental";
-    assert.equal(exported.californiaScore.score, eligible ? 85 : 100, mode);
-    assert.equal(exported.gpcResponse!.californiaPolicy.deductionPoints, eligible ? 15 : 0, mode);
+    const eligible = mode === "incidental" || mode === "two_recipients";
+    const points = mode === "two_recipients" ? 25 : eligible ? 15 : 0;
+    assert.equal(exported.californiaScore.score, 100 - points, mode);
+    assert.equal(exported.gpcResponse!.californiaPolicy.deductionPoints, points, mode);
     assert.equal(exported.californiaScore.deductions.filter(row => row.findingId === "gpc_response").length, eligible ? 1 : 0);
     const finding = packets.find(row => row.unifiedFindingId === "gpc_response")!;
-    assert.equal(finding.scoreEffects?.some(effect => effect.appliesTo === "california_posture" && effect.deductionPoints === 15) ?? false, eligible);
+    assert.equal(finding.scoreEffects?.some(effect => effect.appliesTo === "california_posture" && effect.deductionPoints === points) ?? false, eligible);
     assert.equal(finding.scoreEffects?.some(effect => effect.appliesTo === "certscore_overall") ?? false, false);
     const api = buildApiV2ScanResource(restored);
     assert.equal(api.postureScores?.ccpaCpra.score, exported.californiaScore.score);

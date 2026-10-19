@@ -10,7 +10,7 @@ import { persistCompletedLegacyGdprEprivacyAssessment } from "../../../../server
 import { persistAdminScanSummaryForPublishedRecord } from "../../../../server/admin/admin-scan-summary";
 import { loadPersistedScanReportProjection } from "../../../../server/scans/scan-report-projection";
 import { publishCanonicalScanReportProjection } from "../../../../server/scans/canonical-scan-report-publisher";
-import { classifyScoreMaterializationFailure } from "../../../../server/scans/score-materialization-failure";
+import { classifyScoreMaterializationFailure, serializeScoreMaterializationFailure } from "../../../../server/scans/score-materialization-failure";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -38,17 +38,18 @@ async function timedMaterializationPhase<T>(
   } catch (error) {
     console.error("[scan-materialization] phase failed", {
       durationMs: Date.now() - startedAt,
-      errorMessage: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+      diagnostic: serializeScoreMaterializationFailure(classifyScoreMaterializationFailure(error)),
       errorName: error instanceof Error ? error.name : "UnknownError",
       phase,
       scanId,
     });
-    throw error;
+    throw new Error(`Score lifecycle ${phase.replaceAll("_", "-")} failed.`, {cause:error});
   }
 }
 
 export async function POST(request: Request) {
   let scanId: string | null = null;
+  let authorizedRequest: {scanId:string;token:string} | null = null;
   try {
     // Bound even unauthenticated bodies before decoding compressed hints.
     const reader = request.body?.getReader();
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
     if (!authorization) {
       return NextResponse.json({ error: "Materialization request is not authorized." }, { status: 401 });
     }
+    authorizedRequest = {scanId:authorizedScanId,token};
     let canonicalScanRecord = mode === "finalize"
       ? await timedMaterializationPhase(
         authorizedScanId,
@@ -159,12 +161,18 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const disposition = classifyScoreMaterializationFailure(error);
+    const diagnostic = serializeScoreMaterializationFailure(disposition);
     let retryable = disposition.retryable;
     let retryAfterSeconds = disposition.retryAfterSeconds;
     let code: string = disposition.code;
-    if (scanId && /^[0-9a-f-]{36}$/i.test(scanId)) {
+    if (!authorizedRequest && !retryable) {
+      retryable = true;
+      retryAfterSeconds = 1;
+      code = "failure_persistence_unavailable";
+    }
+    if (authorizedRequest) {
       if (disposition.retryable) {
-        const schedule = await recordScoreMaterializationRequestError(scanId, disposition.diagnostic)
+        const schedule = await recordScoreMaterializationRequestError(authorizedRequest.scanId, diagnostic)
           .catch(() => null);
         if (schedule) {
           retryable = schedule.retryable;
@@ -172,12 +180,22 @@ export async function POST(request: Request) {
           if (!schedule.retryable) code = "retry_exhausted";
         }
       } else {
-        await failScoreMaterializationRequest(scanId, disposition.diagnostic).catch(() => undefined);
+        try {
+          await failScoreMaterializationRequest(authorizedRequest.scanId, diagnostic, authorizedRequest.token);
+          console.error(JSON.stringify({event:"scan.report_publication.blocked",scanId:authorizedRequest.scanId,
+            code:disposition.code,diagnostic,retryable:false}));
+        } catch {
+          // A terminal acknowledgement is valid only after the durable state
+          // transition. Recovery must remain possible if that write fails.
+          retryable = true;
+          retryAfterSeconds = 1;
+          code = "failure_persistence_unavailable";
+        }
       }
     }
     console.error("[score-assessment] completion materialization failed", {
       code,
-      diagnostic: disposition.diagnostic,
+      diagnostic,
       errorName: error instanceof Error ? error.name : "UnknownError",
       retryAfterSeconds: retryAfterSeconds ?? null,
       retryable,
@@ -188,6 +206,8 @@ export async function POST(request: Request) {
       error: "Score materialization failed.",
       retryAfterSeconds,
       retryable,
-    }, { status: retryable ? 503 : 422 });
+    }, { status: retryable ? 503 : 422,
+      ...(retryable && retryAfterSeconds ? {headers:{"Retry-After":String(retryAfterSeconds)}} : {}),
+    });
   }
 }

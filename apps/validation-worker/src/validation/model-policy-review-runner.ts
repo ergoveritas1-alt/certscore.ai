@@ -15,6 +15,7 @@ import {
   STATIC_POLICY_REVIEW_TOPICS,
   deriveDeterministicLegalFrameworkSignals,
   deriveDeterministicPolicyReviewSignals,
+  enforcePolicyReviewInvariants,
   planPolicyRuntimeSemanticReview,
   reviewPolicyPacketWithModel,
   reviewPolicyPacketWithMini,
@@ -131,7 +132,9 @@ export function rebindCachedStaticArtifact(input: {
         return documentId ? [documentId] : [];
       }),
     )],
-  }));
+  })).map(row => row.topic === "data_subject_rights"
+    ? enforcePolicyReviewInvariants([row], input.packet)[0]!
+    : row);
   const deterministicLegalFrameworkSignals = input.artifact.deterministicLegalFrameworkSignals
     .flatMap((signal) => {
       const sourceDocumentId = documentIdForUrl(signal.sourceUrl);

@@ -134,6 +134,7 @@ export interface ConsentControlCandidateEvidence {
   presentationType: ConsentControlPresentationType;
   placementType: ConsentControlPlacementType;
   tagName: string;
+  semanticallyInteractive?: boolean;
   role?: string;
   ariaLabel?: string;
   title?: string;
@@ -922,6 +923,7 @@ function buildCandidateEvidence(
     presentationType: presentationTypeForCandidate(candidate),
     placementType: "unknown",
     tagName: candidate.tagName,
+    semanticallyInteractive: candidate.semanticallyInteractive,
     role: candidate.role,
     ariaLabel: candidate.ariaLabel,
     title: candidate.title,

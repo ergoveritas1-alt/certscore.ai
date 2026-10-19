@@ -1318,3 +1318,11 @@ test("registered Continue acknowledges Terms/privacy updates without becoming a 
   for(const patch of [{observationRecipe:undefined},{contextText:"Continue to checkout"},{contextText:input.contextText+" You consent to cookies."}])
     assert.equal(classifyConsentControlLabel({...input,...patch}).reasonCodes.includes("notice_acknowledgment_only"),false);
 });
+
+test("retained Arabic necessary-only and manage-choice labels use canonical qualified classification",()=>{
+  for(const [label,intent] of [["الأساسي فقط","reject"],["إدارة الاختيارات","options"]] as const){
+    const result=classifyConsentControlLabel({label,hasConsentContext:true,contextText:"ملفات تعريف الارتباط",usage:"observation"});
+    assert.equal(result.intent,intent,label);
+    assert.equal(result.matchedLocale,"ar");
+  }
+});

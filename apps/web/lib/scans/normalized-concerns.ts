@@ -21,6 +21,7 @@ import {
   evaluateLegalFrameworkValidity,
   hasStaleLegalFrameworkReference,
   hasSubstantiveProcessingPurposesEvidence,
+  isDataSubjectRightsDisclosureEvidenceUsable,
   hasUnsupportedGenericPrivacyContact,
   policyModelReviewArtifactSchema,
   gpcResponseAssessmentSchema,
@@ -2998,7 +2999,11 @@ function buildGdprTransparencyModelReviewConcerns(
       return [];
     }
 
-    const evidenceText = row.evidenceExcerpts[0] ?? null;
+    // Revalidate cached semantic rows using the same rights-passage contract
+    // as the producer. Keep the original artifact intact for internal audit.
+    const evidenceText = topic === "data_subject_rights"
+      ? row.evidenceExcerpts.find(excerpt => isDataSubjectRightsDisclosureEvidenceUsable(excerpt)) ?? null
+      : row.evidenceExcerpts[0] ?? null;
     const sourceUrl = row.sourceUrls[0] ?? null;
     if (!evidenceText || modelReviewEvidenceMatchesKnownCrossTopicFalsePositive(topic, evidenceText)) {
       return [];

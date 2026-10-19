@@ -4,7 +4,7 @@ import { CONTROL_INSPECTION_POLICY, LEGACY_CONTROL_INSPECTION_POLICY, consentCon
 import { z } from "zod";
 import { consentControlVisualComparisonSchema, type ConsentControlVisualComparison } from "./consent-control-visual-comparison";
 import { CONSENT_CONTROL_LABEL_REGISTRY_VERSION } from "./consent-control-label-classifier";
-import { CONSENT_CONTROL_CAPTURE_POLICY_VERSION } from "./consent-control-evidence-policy";
+import { CONSENT_CONTROL_CAPTURE_POLICY_VERSION, isConsentControlInteractionEligible } from "./consent-control-evidence-policy";
 import type {
   ConsentControlIntent,
   ConsentControlMatchStrength,
@@ -152,7 +152,7 @@ export const consentControlAssessmentSchema = z.object({
   const california = assessment.californiaPrivacyReview;
   if (california && (assessment.artifactVersion !== "2.2" || assessment.scan.noGo ||
       california.scanId !== assessment.scan.scanId || california.documentUrl !== assessment.scan.finalUrl)) {
-    context.addIssue({code: z.ZodIssueCode.custom, message: "California choice assessment must bind the same usable scan and final document."});
+    context.addIssue({code: z.ZodIssueCode.custom, path: ["californiaPrivacyReview"], message: "California choice assessment must bind the same usable scan and final document."});
   }
   if (assessment.cmpAudit && assessment.cmpAudit.scanId !== assessment.scan.scanId) context.addIssue({ code: z.ZodIssueCode.custom, message: "CMP audit must bind the assessment scan." });
   const visual = assessment.visualComparison;
@@ -222,6 +222,11 @@ export type ConsentControlAssessmentObservation = {
 };
 
 export type ConsentControlAssessmentCandidate = {
+  tagName?: string;
+  role?: string;
+  semanticallyInteractive?: boolean;
+  consentContextConfirmed?: boolean;
+  consentContextEvidence?: string;
   initialSelection?: InitialConsentSelection;
   evidenceId?: string;
   intent?: ConsentControlAssessmentEvidence["intent"] | "unknown";
@@ -382,6 +387,7 @@ function eligibleCandidate(candidate: ConsentControlAssessmentCandidate, fallbac
     presentationType === "persistent_link";
   if (
     !intent ||
+    !isConsentControlInteractionEligible(candidate) ||
     (layer !== "first_layer" && !retainedPersistentOptionsLink) ||
     visible !== true ||
     actionable !== true

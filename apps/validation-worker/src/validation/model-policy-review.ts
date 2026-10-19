@@ -3,6 +3,7 @@ import {
   POLICY_REVIEW_TOPIC_DEFINITIONS,
   LEGAL_FRAMEWORK_VALIDITY_REGISTRY,
   classifyGdprTransparencyTopics,
+  isDataSubjectRightsDisclosureEvidenceUsable,
   evaluateLegalFrameworkValidity,
   policyModelReviewArtifactSchema,
   policyModelReviewRowSchema,
@@ -1772,7 +1773,10 @@ function canonicalRetainedTopicEvidence(
         getString(evidence.signalObserved) === "observed" &&
         getString(evidence.selectedEvidenceStrength) === "strong" &&
         excerpt &&
-        excerpt.length >= 30
+        excerpt.length >= 30 &&
+        (topic !== "data_subject_rights" ||
+          (isDataSubjectRightsDisclosureEvidenceUsable(excerpt) &&
+            normalizePolicyReviewExcerpt(document.text).includes(normalizePolicyReviewExcerpt(excerpt))))
       ) {
         return {
           excerpt: excerpt.slice(0, 360),
@@ -1797,6 +1801,21 @@ function canonicalRetainedTopicEvidence(
       document.documentFetchState === "fetched" &&
       document.documentEvaluationState === "usable"
     );
+  if (topic === "data_subject_rights") {
+    // Rights must be established by the credited passage itself. A complaint
+    // elsewhere in the packet cannot validate a vendor-scoped rights reference.
+    for (const document of packet.documents.filter(document =>
+      row.sourceDocumentIds.includes(document.documentId) && isTargetPolicyDocument(document) &&
+      document.documentFetchState === "fetched" && document.documentEvaluationState === "usable"
+    )) {
+      const excerpt = row.evidenceExcerpts.find(value =>
+        isDataSubjectRightsDisclosureEvidenceUsable(value) &&
+        normalizePolicyReviewExcerpt(document.text).includes(normalizePolicyReviewExcerpt(value))
+      );
+      if (excerpt) return { excerpt, provenance: "review_excerpt", sourceDocumentId: document.documentId, sourceUrl: document.canonicalUrl };
+    }
+    return null;
+  }
   if (
     referencedDocument &&
     classifyGdprTransparencyTopics({ text: retainedEvidenceText }).matches.some(
@@ -1813,20 +1832,7 @@ function canonicalRetainedTopicEvidence(
   return null;
 }
 
-function hasSubstantiveDataSubjectRightsEvidence(packet: PolicyReviewPacket) {
-  const policyText = packet.documents.map((document) => document.text).join("\n");
-  return [
-    /\bright to (?:access|rectif|correct|erase|erasure|delete|object|restrict|restriction|portability|data portability)\b/i,
-    /\brights? to (?:request|obtain)\b.{0,100}\b(?:access|copy|correct|rectif|delete|erase|restrict|port)\b/i,
-    /\bright of (?:access|rectification|erasure|objection|restriction|data portability)\b/i,
-    /\byou (?:can|may) (?:request |obtain )?access your (?:personal )?(?:information|data)\b/i,
-    /\b(?:request|ask us to)\b.{0,100}\b(?:access|copy|correct|rectif|delete|erase|restrict|port)\b/i,
-    /\blodge (?:a )?complaint\b/i,
-    /\bcomplain to (?:a |the )?(?:supervisory authority|data protection authority|regulator)\b/i
-  ].some((pattern) => pattern.test(policyText));
-}
-
-function enforcePolicyReviewInvariants(
+export function enforcePolicyReviewInvariants(
   rows: PolicyModelReviewRow[],
   packet: PolicyReviewPacket
 ) {
@@ -2011,10 +2017,18 @@ function enforcePolicyReviewInvariants(
     }
     if (
       row.topic === "data_subject_rights" &&
-      row.status === "observed" &&
-      !hasSubstantiveDataSubjectRightsEvidence(packet) &&
-      !canonicalRetainedTopicEvidence(row, packet, "data_subject_rights")
+      row.status === "observed"
     ) {
+      const canonicalEvidence = canonicalRetainedTopicEvidence(row, packet, "data_subject_rights");
+      if (canonicalEvidence) {
+        return policyModelReviewRowSchema.parse({
+          ...row,
+          sourceDocumentIds: [canonicalEvidence.sourceDocumentId],
+          sourceUrls: [canonicalEvidence.sourceUrl],
+          evidenceExcerpts: [canonicalEvidence.excerpt],
+          reasonCodes: [...new Set([...row.reasonCodes, "rights_passage_relevance_verified_v1"])].slice(0, 20),
+        });
+      }
       if (!topicCoverageIsSufficient(packet, row.topic)) {
         return insufficientCoverageRow(
           row,
@@ -2030,8 +2044,8 @@ function enforcePolicyReviewInvariants(
         sourceUrls: [],
         evidenceExcerpts: [],
         conflictingExcerpts: [],
-        reasonCodes: ["preference_or_opt_out_language_without_substantive_rights"],
-        rationale: "Email unsubscribe or advertising opt-out language does not establish substantive data-subject rights such as access, correction, deletion, objection, portability, or complaint rights."
+        reasonCodes: ["preference_or_opt_out_language_without_substantive_rights", "rights_passage_relevance_not_verified_v1"],
+        rationale: "The cited passages did not establish substantive data-subject rights for the target's processing. Vendor-only rights references, preference controls, or a separate complaint passage cannot establish this topic."
       });
     }
     if (row.topic !== "cookie_inventory") {

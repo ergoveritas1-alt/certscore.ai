@@ -87,7 +87,7 @@ export * from "./consent-control-label-classifier";
 export * from "./consent-control-link";
 export * from "./consent-control-evidence-policy";
 export * from "./consent-control-inspection";
-import { UNRESOLVED_CONSENT_DECISION } from "./consent-control-evidence-policy";
+import { UNRESOLVED_CONSENT_DECISION, isConsentControlInteractionEligible } from "./consent-control-evidence-policy";
 export * from "./consent-action-control-proof";
 export * from "./choice-path-evidence-disposition";
 export * from "./consent-preference-category-classifier";
@@ -782,6 +782,7 @@ export const consentUiObservationSchema = z.object({
     label: z.string().max(120),
     actionType: z.enum(["accept_all", "reject_all", "manage_preferences", "save_preferences", "do_not_sell_share", "other"]),
     tagName: z.string().max(32).optional(),
+    semanticallyInteractive: z.boolean().optional(),
     domBinding: consentAccessibilityDomBindingSchema.optional(),
     role: z.string().max(64).optional(),
     presentationType: z.enum(["dedicated_button", "inline_link", "persistent_link", "unknown"]).optional(),
@@ -3186,10 +3187,10 @@ export function deriveConsentSurfaceInspectionOutcome(input: {
   const actionableControlObserved = observations.some((observation) =>
     observation.layerInspected === "first_layer" &&
     (
-      (observation.acceptControlObserved && observation.controls.length === 0) ||
-      observation.rejectControlObserved ||
-      observation.managePreferencesControlObserved ||
+      (observation.controls.length === 0 && (observation.acceptControlObserved ||
+        observation.rejectControlObserved || observation.managePreferencesControlObserved)) ||
       observation.controls.some((control) =>
+        isConsentControlInteractionEligible(control) &&
         control.visible !== false &&
         (
           control.semanticRole === "explicit_accept" ||

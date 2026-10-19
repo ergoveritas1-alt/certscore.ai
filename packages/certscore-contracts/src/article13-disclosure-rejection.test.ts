@@ -11,6 +11,7 @@ import {
   hasSubstantiveRecipientsEvidence,
   hasSubstantiveRetentionEvidence,
   isArticle13DisclosureEvidenceUsable,
+  isDataSubjectRightsDisclosureEvidenceUsable,
   looksLikeArticle13TableOfContents,
   type Article13DisclosureRejectionMode,
 } from "./article13-disclosure-rejection";
@@ -775,4 +776,25 @@ test("robot challenge plus privacy footer cannot become usable policy evidence",
   }
   const substantivePolicy = ("We collect personal information to provide requested services, protect security and answer your requests. You can exercise your privacy rights by contacting our privacy office. ").repeat(25);
   assert.notEqual(assessArticle13PolicyTextQuality(substantivePolicy + " Our security screen may say Robot or human? Activate and hold the button to confirm that you’re human.", { mode: "scan_core" }).reason, "low_quality_access_challenge");
+});
+
+test("rights evidence is specific to the credited passage and preserves explicit access requests", () => {
+  const rejected = [
+    "Partner Company answers you if you use your data protection rights against Partner Company.",
+    "You can also complain to a regulator. In Europe it is the data protection authority where you live.",
+  ];
+  const accepted = [
+    "You have the right to request access to or delete your personal information by contacting us.",
+    "You can access your information, including your profile and account history.",
+    "You may have rights relating to personal information, including the rights to: Request access… Request deletion… Request correction…",
+  ];
+  for (const mode of ["scan_core", "retained_report"] as const) {
+    for (const text of rejected) assert.notEqual(article13DisclosureRejectReason(text, "data_subject_rights", {mode}), null);
+    for (const text of accepted) assert.equal(article13DisclosureRejectReason(text, "data_subject_rights", {mode}), null);
+  }
+  for (const text of rejected) assert.equal(isDataSubjectRightsDisclosureEvidenceUsable(text), false);
+  for (const text of [...accepted,
+    "Vous disposez d'un droit d'accès aux données personnelles et pouvez demander leur suppression.",
+    "Sie haben das Recht auf Auskunft über personenbezogene Daten und auf Löschung Ihrer personenbezogenen Daten.",
+  ]) assert.equal(isDataSubjectRightsDisclosureEvidenceUsable(text), true, text);
 });

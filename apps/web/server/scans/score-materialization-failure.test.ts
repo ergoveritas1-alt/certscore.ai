@@ -3,6 +3,8 @@ import test from "node:test";
 import { z } from "zod";
 import { ScanReportProjectionTooLargeError } from "./scan-report-projection-contract";
 import { classifyScoreMaterializationFailure } from "./score-materialization-failure";
+import { serializeScoreMaterializationFailure } from "./score-materialization-failure";
+import { ReportPublicationInvariantError } from "./report-publication-invariant";
 
 test("oversized canonical projections fail terminally instead of retrying", () => {
   const error = new ScanReportProjectionTooLargeError({
@@ -33,6 +35,7 @@ test("schema contract failures are terminal and expose only bounded diagnostics"
     code: "contract_validation_failed",
     diagnostic: "contract_validation_failed:canonical-projection",
     retryable: false,
+    details: {version:"report-publication-failure.v1",phase:"canonical-projection",issues:[{code:"too_big",path:""}]},
   });
 });
 
@@ -85,4 +88,27 @@ test("stale projection sources use the bounded fast retry path", () => {
     retryAfterSeconds: 1,
     retryable: true,
   });
+});
+
+test("typed publication invariants are terminal with bounded value-free internal diagnostics", () => {
+  const error = new ReportPublicationInvariantError("consent_assessment_invalid", "consent_assessment", {
+    message: "sensitive-user@example.test https://private.test/?token=secret",
+    issues: Array.from({length:20},()=>({code:"custom",path:["californiaPrivacyReview","documentUrl","https://private.test/?token=secret"],message:"private details"})),
+  });
+  const result=classifyScoreMaterializationFailure(new Error("wrapper",{cause:error}));
+  assert.equal(result.retryable,false);
+  assert.equal(result.code,"publication_invariant_failed");
+  assert.equal(result.details?.phase,"consent_assessment");
+  assert.equal(result.details?.issues[0]?.path,"californiaPrivacyReview.documentUrl.?");
+  assert.ok(result.details!.issues.length<=6);
+  const retained=serializeScoreMaterializationFailure(result);
+  assert.ok(retained.length<=500);assert.doesNotThrow(()=>JSON.parse(retained));
+  assert.doesNotMatch(retained,/secret|private|sensitive-user|example.test/);
+});
+
+test("storage/network failures and stale/not-ready races stay retryable", () => {
+  for(const code of ["ECONNRESET","ETIMEDOUT","ENOTFOUND","40001","40P01"]){
+    const result=classifyScoreMaterializationFailure(Object.assign(new Error("infrastructure failure"),{code}));
+    assert.equal(result.retryable,true,code);
+  }
 });

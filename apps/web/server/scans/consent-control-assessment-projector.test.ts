@@ -2,6 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { cmpPreferencesEvidenceSchema, consentControlAssessmentSchema, deriveConsentSurfaceInspectionOutcome, type CanonicalEvidenceBundle } from "@certscore/contracts";
 import { deriveLaneOwnedConsentSurfaceInspection, deriveMaterializedConsentControlAssessment, deriveWs01ConsentControlAssessment } from "./consent-control-assessment-projector";
+import { projectCaliforniaPrivacyReview } from "./california-privacy-review-projection";
+
+for (const finalUrl of ["https://redirect-fixture.test/web/", "https://redirect-fixture.test/en/"]) {
+  test(`materialized consent preserves the retained final URL for California binding: ${finalUrl}`, () => {
+    const source = bundle([], { url: finalUrl, captureStatus: "no_evidence", likelyPresent: false });
+    source.startedAt = "2026-07-27T18:04:00.000Z";
+    const assessment = deriveMaterializedConsentControlAssessment({
+      bundle: source, finalUrl, requestedUrl: "https://redirect-fixture.test/", noGo: false,
+      consentSurfaceInspection: completeInspection("no_surface_observed", false),
+    });
+    const child = projectCaliforniaPrivacyReview(source, { verificationStatus: "verified", sha256: "a".repeat(64) }, finalUrl)!;
+    assert.ok(child);
+    assessment.californiaPrivacyReview = child;
+    assert.equal(assessment.scan.finalUrl, finalUrl);
+    assert.equal(assessment.document.canonicalDocumentId, finalUrl.slice(0, -1));
+    assert.ok(consentControlAssessmentSchema.safeParse(JSON.parse(JSON.stringify(assessment))).success);
+    assert.equal(consentControlAssessmentSchema.safeParse({
+      ...assessment, californiaPrivacyReview: { ...child, documentUrl: `${finalUrl}other` },
+    }).success, false, "a genuinely different California document must still block publication");
+  });
+}
 
 function bundle(
   controls: Array<Record<string, unknown>>,
@@ -1516,11 +1537,15 @@ function independentConsentLaneFixture() {
 
 test("three retained document bindings preserve consent evidence despite another lane's blocked final URL", () => {
   const { b, g } = independentConsentLaneFixture();
+  g.pageUrl = "https://oxfam.org/en/";
+  b.domSnapshots[0]!.url = g.pageUrl;
+  b.consentUiObservations[0]!.documentUrl = g.pageUrl;
   const result = deriveMaterializedConsentControlAssessment({ bundle: b, consentControlGeometryEvidence: g,
     consentSurfaceInspection: completeInspection("actionable_surface_observed", true), noGo: true,
     finalUrl: "https://oxfam.org/blocked" });
   assert.equal(result.controls.accept.state, "observed");
   assert.equal(result.document.canonicalDocumentId, "https://oxfam.org/en");
+  assert.equal(result.scan.finalUrl, g.pageUrl);
   assert.equal(result.scan.noGo, false);
 });
 
@@ -1680,5 +1705,38 @@ test("runtime blocking does not erase a verified consent lane, but its own block
       assert.equal(result.scan.noGo,false,mode);
     } else assert.equal(result.controls.accept.state,"unknown",mode);
     assert.deepEqual(b,before,"input evidence is not rewritten");
+  }
+});
+
+test("diagnostic geometry outside consent context cannot create A/R/O or missing-Reject evidence", () => {
+  const source = bundle([], { captureStatus: "no_evidence", likelyPresent: false });
+  source.consentUiObservations[0]!.inventoryOutcome = "complete_empty";
+  const diagnostic = geometry(["accept_all", "manage_preferences"].map((actionType, i) => ({
+    candidateId: `diagnostic-${i}`, actionType, label: i ? "Manage choices" : "Accept all",
+    tagName: "button", layer: "first_layer", consentContextConfirmed: false,
+    decisionStatus: "confirmed_visible", enabled: true,
+    diagnosticClassifications: [{productionCredit:false}],
+  })), {firstLayerAccept:true,firstLayerReject:false,firstLayerOptions:true});
+  const result = deriveMaterializedConsentControlAssessment({bundle:source,consentControlGeometryEvidence:diagnostic,
+    consentSurfaceInspection:completeInspection("no_surface_observed_complete_coverage",false),noGo:false});
+  assert.notEqual(result.controls.accept.state,"observed");
+  assert.notEqual(result.controls.options.state,"observed");
+  assert.equal(result.surface.status,"not_observed");
+  assert.equal(result.evidence.length,0);
+});
+
+test("a static privacy heading cannot become opt-out evidence while real consent controls survive", () => {
+  for (const tagName of ["h1","p","span"]) {
+    const source = bundle([
+      {actionType:"accept_all",label:"Accept all",tagName:"button",visible:true,layer:"first_layer"},
+      {actionType:"manage_preferences",label:"Manage preferences",tagName:"button",visible:true,layer:"first_layer"},
+      {actionType:"do_not_sell_share",label:"Privacy choices",tagName,visible:true,layer:"first_layer",consentContextEvidence:"local_surface"},
+    ]);
+    const result=deriveMaterializedConsentControlAssessment({bundle:source,noGo:false,
+      consentSurfaceInspection:completeInspection("actionable_surface_observed",true)});
+    assert.equal(result.controls.accept.state,"observed");
+    assert.equal(result.controls.options.state,"observed");
+    assert.notEqual(result.controls.privacyOptOut.state,"observed",tagName);
+    assert.ok(!result.evidence.some(row=>row.label==="Privacy choices"));
   }
 });

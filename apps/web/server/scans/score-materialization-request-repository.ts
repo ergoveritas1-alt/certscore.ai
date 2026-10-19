@@ -35,8 +35,9 @@ export async function authorizeScoreMaterializationRequest(input: {
        join public.scans scan on scan.id = request.scan_id
       where request.scan_id = $1::uuid
       limit 1`,
-    [input.scanId],
-    { readOnly: true }
+    // Authorization must see terminal state immediately; replica lag must not
+    // admit another publication after the durable worker request was closed.
+    [input.scanId]
   );
   if (!row || row.status !== "pending") return null;
   const received = Buffer.from(tokenSha256(input.token), "hex");
@@ -118,14 +119,18 @@ export async function recordScoreMaterializationRequestError(scanId: string, err
   } satisfies ScoreMaterializationRetrySchedule;
 }
 
-export async function failScoreMaterializationRequest(scanId: string, diagnostic: string) {
-  await query(
+export async function failScoreMaterializationRequest(scanId: string, diagnostic: string, token?: string) {
+  const result = await query(
     `update public.scan_score_materialization_requests
         set status = 'terminal_failure',
             completed_at = coalesce(completed_at, now()),
+            first_failed_at = coalesce(first_failed_at, now()),
+            next_attempt_at = now(),
             last_error = $2
       where scan_id = $1::uuid
-        and status = 'pending'`,
-    [scanId, diagnostic.slice(0, 500)]
+        and status = 'pending'
+        and ($3::text is null or token_sha256 = $3)`,
+    [scanId, diagnostic.slice(0, 500), token ? tokenSha256(token) : null]
   );
+  if (result.rowCount !== 1) throw new Error("Terminal materialization outcome was not durably recorded.");
 }

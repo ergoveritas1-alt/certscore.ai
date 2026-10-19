@@ -14,6 +14,7 @@ export async function getReadTriggeredPublicationDeferral(scanId: string): Promi
     merged_signals_ready: boolean;
     findings_ready: boolean;
     worker_reserved: boolean;
+    terminal_failure: boolean;
   }>(
     `select scan.status as scan_status,
             coalesce(scan.scan_config_json->>'processor' = $2, false) as projection_required,
@@ -21,6 +22,8 @@ export async function getReadTriggeredPublicationDeferral(scanId: string): Promi
                      where event.scan_id = scan.id and event.event_type = 'signals.merge_completed') as merged_signals_ready,
             exists (select 1 from public.scan_events event
                      where event.scan_id = scan.id and event.event_type = 'findings.unified_derivation_completed') as findings_ready,
+            exists (select 1 from public.scan_score_materialization_requests request
+                     where request.scan_id = scan.id and request.status = 'terminal_failure') as terminal_failure,
             exists (
               select 1 from public.scan_score_materialization_requests request
                where request.scan_id = scan.id
@@ -47,6 +50,7 @@ export async function getReadTriggeredPublicationDeferral(scanId: string): Promi
     [scanId, LOCAL_V2_DAG_SCAN_PROCESSOR, REPORT_PUBLICATION_TIMEOUT_MS],
   );
   if (!row) return null; // Preserve the publisher's scoped missing-scan result.
+  if (row.projection_required && row.terminal_failure) return "durable_publication_terminal_failure";
   const readiness = getCanonicalScanReportPublicationReadiness({
     scanStatus: row.scan_status,
     projectionRequired: row.projection_required,

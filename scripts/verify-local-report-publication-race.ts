@@ -39,9 +39,14 @@ async function main() {
   const transport = path.join(directory, 'transport.cjs');
   await build({ entryPoints: [path.join(root, 'packages/shared/src/report-artifact-transfer.ts')], outfile: transport, bundle: true, platform: 'node', format: 'cjs' });
   const artifactRoot = path.join(root, 'artifacts/report-artifact-transfer-20261008/owned-after-1');
+  const retainedDirectory = process.env.CERTSCORE_PUBLICATION_RACE_ARTIFACT_DIRECTORY;
+  const artifactFiles = {
+    bundle: retainedDirectory ? path.resolve(retainedDirectory, 'bundle.json') : artifactRoot + '-scanArtifactUri.json',
+    manifest: retainedDirectory ? path.resolve(retainedDirectory, 'manifest.json') : artifactRoot + '-manifestUri.json',
+  };
   const originals = {
-    bundle: await readFile(artifactRoot + '-scanArtifactUri.json'),
-    manifest: await readFile(artifactRoot + '-manifestUri.json'),
+    bundle: await readFile(artifactFiles.bundle),
+    manifest: await readFile(artifactFiles.manifest),
   };
   const originalId = JSON.parse(originals.bundle.toString()).scanId;
   await writeFile(fixture, `
@@ -50,7 +55,7 @@ async function main() {
     const {withNonBlockingDatabaseLock:lock}=require(${JSON.stringify(path.join(root,'packages/db/dist/non-blocking-lock.js'))});
     const transport=require(${JSON.stringify(transport)});
     const fs=require('node:fs');
-    const originals={bundle:fs.readFileSync(${JSON.stringify(artifactRoot+'-scanArtifactUri.json')}),manifest:fs.readFileSync(${JSON.stringify(artifactRoot+'-manifestUri.json')})};
+    const originals={bundle:fs.readFileSync(${JSON.stringify(artifactFiles.bundle)}),manifest:fs.readFileSync(${JSON.stringify(artifactFiles.manifest)})};
     const hash=body=>require('node:crypto').createHash('sha256').update(body).digest('hex');
     const identities=Object.fromEntries(Object.entries(originals).map(([kind,body])=>[kind,{uri:'s3://retained-local-replay/'+kind,sha256:hash(body),sizeBytes:body.length}]));
     async function queryOne(sql,values){return (await pool.query(sql,values)).rows[0]??null}
@@ -171,7 +176,7 @@ async function main() {
     const id=randomUUID();await reset(id,owner);
     const response=await poll('after',id);assert.equal(response.status,200);
     const operations=(await pool.query('select operation from test_operations')).rows.map((r:any)=>r.operation);
-    const shouldDefer=owner==='active'||owner==='incomplete';
+    const shouldDefer=owner==='active'||owner==='incomplete'||owner==='terminal';
     assert.equal(operations.includes('publication'),!shouldDefer,owner);
     assert.equal(operations.includes('lock_attempt'),!shouldDefer,owner);
     results.push({owner,recoveryPublished:operations.includes('publication')});
