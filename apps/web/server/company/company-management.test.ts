@@ -32,7 +32,8 @@ test("company mutations enforce server-side capability checks and bounded logo t
   assert.match(actions, /requireCompanyCapability\(companyId, "manage_users"\)/);
   assert.match(actions, /requireCompanyCapability\(companyId, "manage_logo"\)/);
   assert.match(actions, /image\/png/);
-  assert.match(actions, /2 \* 1024 \* 1024/);
+  assert.match(actions, /normalizeCompanyLogo/);
+  assert.match(actions, /MAX_LOGO_UPLOAD_BYTES/);
   assert.match(authorization, /access\.organizationId !== organizationId/);
   assert.match(authorization, /\["advanced", "admin"\]/);
   assert.match(migration, /logo_storage_key/);
@@ -227,7 +228,8 @@ test("admin-created accounts receive welcome copy while reset actions retain res
 test("admin user activity counts are scoped to the user who submitted the scan", async () => {
   const repository = await readFile("apps/web/server/admin/repository.ts", "utf8");
 
-  assert.match(repository, /scans\.submitted_by_user_id = selected_users\.id/);
+  assert.match(repository, /select submitted_by_user_id as user_id, count\(distinct domain_id\)::int as domain_count/);
+  assert.match(repository, /from scans where submitted_by_user_id is not null group by submitted_by_user_id/);
   assert.match(repository, /scans\.submitted_by_user_id = users\.id/);
   assert.doesNotMatch(repository, /where scans\.organization_id = selected_memberships\.organization_id/);
 });

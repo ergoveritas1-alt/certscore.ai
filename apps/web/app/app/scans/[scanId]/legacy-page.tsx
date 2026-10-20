@@ -1,3 +1,4 @@
+import { canManageCompanyLogo } from "../../../../server/company/policy";
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
@@ -281,7 +282,7 @@ async function ScanDetailReportContent({
                   visualEvidenceHref={visualEvidenceHref}
                   visualEvidenceWithheldReason={homepageScreenshotState?.status === "withheld" ? homepageScreenshotState.reason : null}
                 />
-                <ReportDownloadActions scanId={displayScanRecord.scan.id} />
+                <ReportDownloadActions scanId={displayScanRecord.scan.id} canExportPdf={canManageCompanyLogo({ isPlatformAdmin, membershipRole: membership.role })} />
               </div>
               <div className="w-full lg:ml-auto lg:max-w-[calc(16rem+20ch)]">
                 <DomainScanForm

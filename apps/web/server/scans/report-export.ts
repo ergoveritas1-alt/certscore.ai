@@ -1,3 +1,6 @@
+import { buildReportAppendixEvidence } from "./report-export-evidence";
+import { deriveCanonicalOverallScoreForReport } from "./canonical-overall-score";
+import { resolveScanReportScore } from "../../lib/scans/scan-report-disposition";
 import { californiaAssessmentPresentation } from "../../lib/scans/california-assessment-presentation";
 import type { FullSiteReportExport } from "./full-site-report";
 import { readAccessibilityAudit, projectAccessibilityAuditSummary } from "../../lib/scans/accessibility-audit-evidence";
@@ -20,7 +23,7 @@ import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency
 import { selectSiteIntegrityFinding } from "../../lib/scans/site-integrity-report";
 import { deriveCaliforniaRegulatoryScore } from "../../lib/scans/california-regulatory-score";
 
-export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v6" as const;
+export const CANONICAL_REPORT_EXPORT_VERSION = "canonical-report-export-v8" as const;
 const MAX_APPENDIX_INVENTORY_ROWS = 500;
 const MAX_APPENDIX_ARRAY_ITEMS = 50;
 
@@ -40,7 +43,7 @@ function consentAssessment(scanRecord: ScanDetailResponse) {
     hybrid?.consent_control_assessment,
   ]) {
     const parsed = consentControlAssessmentSchema.safeParse(candidate);
-    if (parsed.success) return parsed.data;
+    if (parsed.success && parsed.data.scan.scanId === scanRecord.scan.id) return parsed.data;
   }
   return null;
 }
@@ -204,7 +207,7 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
       timingEvidence: row.timingEvidence ?? null,
       attributionSignatures: row.attributionSignatures.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
       regulatoryRelevance: row.regulatoryRelevance.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
-      requestDetails: (row.requestDetails ?? []).slice(0, 20).map((request) => ({
+      requestDetails: (row.requestDetails ?? []).map((request) => ({
         ...(request.resourceRole ? { resourceRole: request.resourceRole } : {}),
         method: request.method,
         hostname: request.hostname,
@@ -217,14 +220,14 @@ function buildRuntimeAppendix(scanRecord: ScanDetailResponse, normalizedConcerns
         identifierParameterNames: request.identifierParameterNames.slice(0, MAX_APPENDIX_ARRAY_ITEMS),
         essentiality: request.essentiality,
       })),
-      dataFlows: row.dataFlows.slice(0, 20).map((flow) => ({
+      dataFlows: row.dataFlows.map((flow) => ({
         endpoint: flow.endpoint,
         idSync: flow.idSync,
         controllingEntity: flow.controllingEntity,
         networkDestination: flow.networkDestination,
         transferMechanism: flow.transferMechanism,
       })),
-      cookieDetails: row.cookieDetails.slice(0, 20).map((cookie) => ({
+      cookieDetails: row.cookieDetails.map((cookie) => ({
         cookieName: cookie.cookieName,
         category: cookie.category,
         description: cookie.description ?? null,
@@ -310,6 +313,14 @@ function buildDataCollectionSurfacesAppendix(
 export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullSite?: FullSiteReportExport, requestedFocus?: unknown) {
   const canonical = getPersistedCanonicalReportProjection(scanRecord);
   if (!canonical) return null;
+  const retainedScore = scanRecord.snapshot?.certscore_overall;
+  const usableRetainedScore = typeof retainedScore === "number" && Number.isFinite(retainedScore) && retainedScore >= 0 && retainedScore <= 100 &&
+    (!scanRecord.snapshot?.report_projection_status || scanRecord.snapshot.report_projection_status === "ready") ? retainedScore : null;
+  const startingPageScore = resolveScanReportScore(scanRecord, usableRetainedScore ?? deriveCanonicalOverallScoreForReport({
+    scanRecord, checklistRows: canonical.checklistRows, unifiedFindings: canonical.ownerUnifiedFindings,
+  }));
+  const score = { value: fullSite ? fullSite.score?.value ?? null : startingPageScore,
+    scope: fullSite ? "full_site" as const : "starting_page" as const };
   const assessment = consentAssessment(scanRecord);
   const californiaScore = deriveCaliforniaRegulatoryScore({ assessment: readCaliforniaPrivacyReviewFromConsent(assessment),
     checklistRows: canonical.checklistRows, unifiedFindings: canonical.ownerUnifiedFindings });
@@ -336,6 +347,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
     artifactType: "certscore_canonical_report_export",
     artifactVersion: CANONICAL_REPORT_EXPORT_VERSION,
     generatedAt: new Date().toISOString(),
+    score,
     reviewFocus: focus,
     reviewFocusLabel: REVIEW_FOCUS_LABELS[focus],
     reviewScope: reviewFocusScopeNote(focus, scanRecord.scan.scanFromValue),
@@ -395,6 +407,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       })),
     ],
     appendix: {
+      evidenceDossier: buildReportAppendixEvidence(scanRecord, canonical, assessment),
       ...(siteIntegrity ? { siteIntegrity } : {}),
       ...(fullSite?.score?.siteIntegrity ? { siteIntegritySite: fullSite.score.siteIntegrity } : {}),
       cookieAndTrackerInventory: buildRuntimeAppendix(scanRecord, normalizedConcerns),
@@ -403,7 +416,7 @@ export function buildCanonicalReportExport(scanRecord: ScanDetailResponse, fullS
       ),
       gdprTransparency: buildGdprTransparencyAppendix(canonical.checklistPresentation),
     },
-    notice: "CertScore reports observed risk signals and retained evidence. It is not a legal certification, a determination of compliance, or legal advice.",
+    notice: "CertScore.ai reports observed risk signals and retained evidence. It is not a legal certification, a determination of compliance, or legal advice.",
   };
 }
 

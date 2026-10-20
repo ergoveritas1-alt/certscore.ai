@@ -14,6 +14,7 @@ const nextConfig = {
   // Local/manual builds without the receipt retain Next's type validation.
   typescript: { ignoreBuildErrors: hasVerifiedBuildTypecheck() },
   experimental: {
+    serverActions: { bodySizeLimit: "3mb" },
     // Our extension-alias customization disables Next's automatic build worker.
     // Restore isolated compilation and release each compiler's retained graph.
     webpackBuildWorker: true,

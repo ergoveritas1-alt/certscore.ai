@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { findAppUserByEmailRecord, findOrganizationMembershipByUserId } from "../users/repository";
-import { putStorageObject } from "../storage/s3";
+import { deleteStorageObject, putStorageObject } from "../storage/s3";
+import { isWorkspaceLogoKey, MAX_LOGO_UPLOAD_BYTES, normalizeCompanyLogo } from "./logo-image";
 import { requireCompanyCapability } from "./authorization";
 import {
   addCompanyMembership,
@@ -13,6 +14,7 @@ import {
   findCompanyByName,
   removeCompanyMembership,
   updateCompanyLogo,
+  updateCompanyReportHeaderTheme,
   updateCompanyName,
   updateCompanyMembershipRole
 } from "./repository";
@@ -43,6 +45,9 @@ function revalidateCompany(organizationId: string) {
   revalidatePath("/app/admin/companies");
   revalidatePath(`/app/admin/companies/${organizationId}`);
   revalidatePath("/app/settings/company");
+  revalidatePath("/app/settings");
+  revalidatePath("/app/scans/[scanId]", "page");
+  revalidatePath("/app/scanso2/[scanId]", "page");
 }
 
 export async function createCompanyFormAction(formData: FormData) {
@@ -116,24 +121,73 @@ export async function removeCompanyUserFormAction(formData: FormData) {
 }
 
 export async function uploadCompanyLogoFormAction(formData: FormData) {
-  const companyId = formValue(formData, "companyId");
+  const companyId = z.string().uuid().parse(formValue(formData, "companyId"));
   await requireCompanyCapability(companyId, "manage_logo");
   const file = formData.get("logo");
   if (!(file instanceof File) || file.size === 0) throw new Error("Choose an image file.");
-  if (file.size > 2 * 1024 * 1024) throw new Error("Logo must be 2 MB or smaller.");
-  const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
-  if (!allowedTypes.has(file.type)) throw new Error("Logo must be PNG, JPEG, WebP, or SVG.");
-
-  const extension = file.type === "image/svg+xml" ? "svg" : file.type.split("/")[1] ?? "bin";
-  const key = `company-logos/${companyId}/${randomUUID()}.${extension}`;
-  await putStorageObject({ key, body: Buffer.from(await file.arrayBuffer()), contentType: file.type });
-  await updateCompanyLogo(companyId, key);
+  if (file.size > MAX_LOGO_UPLOAD_BYTES) throw new Error("Logo must be 2 MB or smaller.");
+  const body = await normalizeCompanyLogo(Buffer.from(await file.arrayBuffer()), file.type);
+  const key = `company-logos/${companyId}/${randomUUID()}.png`;
+  await putStorageObject({ key, body, contentType: "image/png" });
+  let previous: string | null;
+  try {
+    previous = await updateCompanyLogo(companyId, key);
+  } catch (error) {
+    await discardCompanyLogo(companyId, key);
+    throw error;
+  }
+  await discardCompanyLogo(companyId, previous);
   revalidateCompany(companyId);
 }
 
 export async function removeCompanyLogoFormAction(formData: FormData) {
-  const companyId = formValue(formData, "companyId");
+  const companyId = z.string().uuid().parse(formValue(formData, "companyId"));
   await requireCompanyCapability(companyId, "manage_logo");
-  await updateCompanyLogo(companyId, null);
+  const previous = await updateCompanyLogo(companyId, null);
+  await discardCompanyLogo(companyId, previous);
   revalidateCompany(companyId);
+}
+
+async function discardCompanyLogo(companyId: string, key: string | null) {
+  if (!key || !isWorkspaceLogoKey(companyId, key)) return;
+  try {
+    await deleteStorageObject(key);
+  } catch {
+    console.error(JSON.stringify({ event: "company.logo_cleanup_failed" }));
+  }
+}
+
+export async function saveWorkspaceLogoAction(
+  _state: { error: string | null; success: string | null }, formData: FormData,
+): Promise<{ error: string | null; success: string | null }> {
+  try {
+    if (formValue(formData, "intent") === "remove") await removeCompanyLogoFormAction(formData);
+    else await uploadCompanyLogoFormAction(formData);
+    return { error: null, success: formValue(formData, "intent") === "remove" ? "Workspace logo removed." : "Workspace logo saved." };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    return {
+      error: /^(Choose |Logo must |Use a valid)/.test(message) ? message
+        : message.startsWith("Company capability denied") ? "Only workspace managers can change the report logo."
+        : "Unable to save the workspace logo. Try again.",
+      success: null,
+    };
+  }
+}
+
+export async function saveWorkspaceReportHeaderAction(
+  _state: { error: string | null; success: string | null }, formData: FormData,
+): Promise<{ error: string | null; success: string | null }> {
+  try {
+    const companyId = z.string().uuid().parse(formValue(formData, "companyId"));
+    await requireCompanyCapability(companyId, "manage_logo");
+    const theme = z.enum(["white", "black"]).safeParse(formValue(formData, "headerTheme"));
+    if (!theme.success) return { error: "Choose a white or black report header.", success: null };
+    await updateCompanyReportHeaderTheme(companyId, theme.data);
+    revalidateCompany(companyId);
+    return { error: null, success: "Report header saved." };
+  } catch (error) {
+    return { error: error instanceof Error && error.message.startsWith("Company capability denied")
+      ? "Advanced access is required to change report branding." : "Unable to save the report header. Try again.", success: null };
+  }
 }

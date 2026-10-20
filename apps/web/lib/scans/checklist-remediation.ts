@@ -28,6 +28,27 @@ const policyChecks: Record<string, string> = {
   automated_decision_making_profiling_disclosure: "the applicable automated decision-making or profiling disclosures",
 };
 const runtimeChecks: Record<string, string[]> = {
+  weak_cookie_security_attributes: [
+    "Use the retained cookie name, domain and path to locate the responsible Set-Cookie response or client-side cookie writer.",
+    "For cookies that should only travel over HTTPS, set Secure at the source. For cookies that do not need JavaScript access, set HttpOnly on the server response.",
+    "Choose SameSite for the actual cross-site use case; test login, embedded content and redirects before publishing the change. SameSite=None requires Secure.",
+    "Inspect the new response and stored cookie in a fresh browser session, including duplicate cookies on other domains or paths.",
+  ],
+  transport_security_tls_certificate: [
+    "Identify which public endpoint terminates TLS for the affected hostname: CDN, load balancer or web server.",
+    "Check the served certificate's hostname coverage, validity dates and intermediate chain. Replace or renew the certificate or correct the chain for the issue shown in the retained result.",
+    "Install the corrected certificate at the TLS termination point and verify each affected hostname. Confirm automatic renewal is configured and monitored.",
+  ],
+  cookie_disclosure_gap: [
+    "Match the retained cookie names and domains to their owning tags or services and confirm their purposes and lifetimes.",
+    "Have the privacy owner review the corresponding notice entries. Update confirmed omissions in the published notice and CMP declaration inventory, or remove the unwanted integration.",
+    "Compare a fresh cookie inventory with the revised notice, including cookies set after the relevant visitor choices.",
+  ],
+  preconsent_tracking: [
+    "Locate the initiating script, tag-manager trigger or embed for each retained pre-consent request.",
+    "For activity confirmed to require consent, prevent the integration from loading or firing until the relevant affirmative choice is registered. Check both hard-coded scripts and tag-manager rules.",
+    "Retest fresh sessions before a choice, after Reject and after Accept; compare the cited request endpoints and cookie/storage activity.",
+  ],
   pre_consent_cookies_storage: [
     "Inspect the listed cookie and storage identities, their purposes, and the retained timing evidence. Distinguish a directly observed write from snapshot presence.",
     "For items confirmed to require consent, gate their creation and use on the relevant affirmative choice; check the responsible tag or integration.",

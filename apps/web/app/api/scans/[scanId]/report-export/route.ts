@@ -10,6 +10,12 @@ import { renderCanonicalReportPdf } from "../../../../../server/scans/report-exp
 import { loadPersistedScanReportProjection } from "../../../../../server/scans/scan-report-projection";
 import { getPublicScanStatusProjection } from "../../../../../server/scans/scan-status-projection";
 import { loadVisualEvidenceObject } from "../../../../../server/scans/visual-evidence-object";
+import { getCurrentUser, getDashboardContext } from "../../../../../server/auth";
+import { isPlatformAdminEmail } from "../../../../../server/admin/platform-admin";
+import { normalizeReportHeaderTheme, type ReportHeaderTheme } from "../../../../../lib/report-header-theme";
+import { getWorkspaceBrandingRecord, loadWorkspaceReportLogo } from "../../../../../server/company/report-branding";
+import { getOrganizationScanStatusProjection } from "../../../../../server/scans/scan-status-projection";
+import { canManageCompanyLogo } from "../../../../../server/company/policy";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,10 +29,11 @@ function error(status: number, message: string) {
   });
 }
 
-async function loadReportBrandLogo() {
+async function loadReportBrandLogo(headerTheme: ReportHeaderTheme) {
+  const filename = headerTheme === "black" ? "certscore-mark-light.png" : "certscore-mark-dark.png";
   const candidates = [
-    path.join(process.cwd(), "public", "certscore-mark-light.png"),
-    path.join(process.cwd(), "apps", "web", "public", "certscore-mark-light.png"),
+    path.join(process.cwd(), "public", filename),
+    path.join(process.cwd(), "apps", "web", "public", filename),
   ];
   for (const candidate of candidates) {
     try {
@@ -43,6 +50,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (!/^[a-f0-9-]{36}$/i.test(scanId)) return error(400, "Invalid scan ID.");
   const format = request.nextUrl.searchParams.get("format") ?? "json";
   if (format !== "json" && format !== "pdf" && format !== "csv") return error(400, "Format must be json, pdf or csv.");
+  const branding = request.nextUrl.searchParams.get("branding");
+  if (branding !== null && branding !== "workspace") return error(400, "Invalid report branding.");
+  if (branding && format !== "pdf") return error(400, "Workspace branding is available for PDF exports.");
+  let workspaceId: string | null = null;
+  if (format === "pdf") {
+    if (!await getCurrentUser()) return error(401, "Sign in to download a PDF report.");
+    const viewer = await getDashboardContext();
+    if (!canManageCompanyLogo({ isPlatformAdmin: isPlatformAdminEmail(viewer.user.email), membershipRole: viewer.membership.role })) {
+      return error(403, "Advanced access is required for PDF reports.");
+    }
+    const accessible = isPlatformAdminEmail(viewer.user.email) || await getOrganizationScanStatusProjection({ organizationId: viewer.organization.id, scanId });
+    if (!accessible) return error(404, "Report not available in this workspace.");
+    workspaceId = viewer.organization.id;
+  }
   const focus = request.nextUrl.searchParams.get("reviewFocus");
   if (focus !== null && focus !== "gdpr_eprivacy" && focus !== "ccpa_cpra") return error(400, "Invalid review focus.");
   const trackingWorkpaper = format === "csv" || (format === "json" && request.nextUrl.searchParams.get("workpaper") === "tracking");
@@ -59,7 +80,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (request.nextUrl.searchParams.get("scope") === "full-site" && !fullSite) {
     return error(409, "The full-site report is not available for download.");
   }
-  const report = buildCanonicalReportExport(scanRecord, fullSite, focus);
+  const report = buildCanonicalReportExport(scanRecord, fullSite, focus ?? (format === "pdf" ? "gdpr_eprivacy" : undefined));
   if (!report) return error(409, "The canonical report projection is unavailable for this scan.");
 
   const safeHost = (report.scan.domainHostname ?? "scan-report").replace(/[^a-z0-9.-]+/gi, "-").slice(0, 80);
@@ -71,7 +92,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
     },
   });
   if (format === "pdf") {
-    const brandLogo = await loadReportBrandLogo();
+    const headerTheme = normalizeReportHeaderTheme(workspaceId ? (await getWorkspaceBrandingRecord(workspaceId))?.headerTheme : undefined);
+    let workspaceBrand;
+    if (branding === "workspace" && workspaceId) {
+      try {
+        workspaceBrand = await loadWorkspaceReportLogo(workspaceId);
+      } catch {
+        return error(409, "The workspace logo could not be loaded. Upload a new logo in Settings and try again.");
+      }
+      if (!workspaceBrand) return error(409, "Upload a workspace logo in Settings before downloading a white-label PDF.");
+    }
+    const brandLogo = workspaceBrand?.image ?? await loadReportBrandLogo(headerTheme);
     const visualArtifact = getVisualEvidenceArtifacts(scanRecord.runtimeArtifacts)
       .sort((left, right) => Number(left.captureStep !== "initial_load") - Number(right.captureStep !== "initial_load"))
       .find((artifact) => artifact.status === "available" && artifact.key) ?? null;
@@ -82,10 +113,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
           key: visualArtifact.key,
         })
       : null;
-    return new NextResponse(renderCanonicalReportPdf(report, { brandLogo, visualEvidence }), {
+    return new NextResponse(renderCanonicalReportPdf(report, { brandLogo, brandName: workspaceBrand?.name, headerTheme, visualEvidence }), {
       headers: {
         "Cache-Control": "private, no-store",
-        "Content-Disposition": `attachment; filename="certscore-${safeHost}.pdf"`,
+        "Content-Disposition": `attachment; filename="${workspaceBrand ? "report" : "certscore"}-${safeHost}.pdf"`,
         "Content-Type": "application/pdf",
         "X-Content-Type-Options": "nosniff",
       },

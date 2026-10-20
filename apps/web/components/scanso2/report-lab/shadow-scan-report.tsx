@@ -1,3 +1,4 @@
+import { ReportPdfAccessProvider } from "../../scans/report-lab/shadow-report-actions";
 import { GPC_CUSTOMER_RESULTS_ENABLED } from "../../../lib/scans/gpc-customer-policy";
 import { ScanCompletedEvent } from "../../analytics/data-layer-events";
 import { choicePathExecutionLabel } from "@certscore/contracts";
@@ -56,6 +57,7 @@ import {
 } from "./shadow-report-data";
 
 type ShadowScanReportProps = {
+  canExportPdf?: boolean;
   fullSiteNotice?: FullSiteScanNoticeData | null;
   allowRestrictedScanOptions?: boolean;
   defaultScanFrom?: ServerScanFrom;
@@ -1756,6 +1758,7 @@ function VariantBody({
 }
 
 export function ShadowScanReport({
+  canExportPdf = false,
   fullSiteNotice,
   allowRestrictedScanOptions,
   defaultScanFrom,
@@ -1795,10 +1798,12 @@ export function ShadowScanReport({
 
   if (mode === "authenticated") {
     return (
+      <ReportPdfAccessProvider allowed={canExportPdf}>
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
         {completionEvent}
         {reportContent}
       </div>
+      </ReportPdfAccessProvider>
     );
   }
 

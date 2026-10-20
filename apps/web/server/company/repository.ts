@@ -1,6 +1,7 @@
 import "server-only";
 
-import { query, queryOne } from "@website-signal-risk-scanner/db";
+import { query, queryOne, withWriteTransaction } from "@website-signal-risk-scanner/db";
+import { normalizeReportHeaderTheme, type ReportHeaderTheme } from "../../lib/report-header-theme";
 import type { AssignableMembershipRole } from "../../lib/auth/membership-role-policy";
 import { canLoseAdvancedAccess, canRemoveCompanyMember, roleForNewCompanyMember } from "./policy";
 
@@ -27,6 +28,7 @@ export type CompanyUser = {
 };
 
 export type CompanyDetail = CompanyListItem & {
+  reportHeaderTheme: ReportHeaderTheme;
   plan: string;
   planStatus: string;
   updatedAt: string;
@@ -78,6 +80,7 @@ export async function getCompanyDetail(organizationId: string): Promise<CompanyD
             o.logo_storage_key,
             o.created_at,
             o.updated_at,
+            o.report_header_theme,
             o.plan,
             o.plan_status,
             count(distinct om.user_id)::int as user_count,
@@ -121,6 +124,7 @@ export async function getCompanyDetail(organizationId: string): Promise<CompanyD
   const mapped = mapCompany(row);
   return {
     ...mapped,
+    reportHeaderTheme: normalizeReportHeaderTheme(row.report_header_theme),
     plan: String(row.plan ?? "free"),
     planStatus: String(row.plan_status ?? "active"),
     updatedAt: String(row.updated_at),
@@ -243,9 +247,23 @@ export async function removeCompanyMembership(input: { organizationId: string; u
 }
 
 export async function updateCompanyLogo(organizationId: string, logoStorageKey: string | null) {
-  await query(`update organizations set logo_storage_key = $2 where id = $1`, [organizationId, logoStorageKey]);
+  return withWriteTransaction(async (client) => {
+    const previous = await client.query<{ logo_storage_key: string | null }>(
+      "select logo_storage_key from organizations where id = $1 for update", [organizationId],
+    );
+    if (!previous.rows[0]) throw new Error("Workspace not found.");
+    await client.query("update organizations set logo_storage_key = $2 where id = $1", [organizationId, logoStorageKey]);
+    return previous.rows[0].logo_storage_key;
+  });
 }
 
 export async function updateCompanyName(organizationId: string, name: string) {
   await query(`update organizations set name = $2 where id = $1`, [organizationId, name]);
+}
+
+export async function updateCompanyReportHeaderTheme(organizationId: string, theme: ReportHeaderTheme) {
+  const updated = await queryOne<{ id: string }>(
+    "update organizations set report_header_theme = $2 where id = $1 returning id", [organizationId, theme],
+  );
+  if (!updated) throw new Error("Workspace not found.");
 }

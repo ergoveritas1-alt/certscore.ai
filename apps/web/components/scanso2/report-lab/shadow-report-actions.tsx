@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useReportPdfAccess } from "../../scans/report-lab/shadow-report-actions";
 
 type ShadowReportActionsProps = {
   reportUrl: string;
@@ -13,6 +14,7 @@ const menuItemClass =
   "flex w-full items-center justify-between gap-4 rounded-md px-3 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500";
 
 export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite = false }: ShadowReportActionsProps) {
+  const canExportPdf = useReportPdfAccess();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const emailSubject = `CertScore scan report for ${siteLabel}`;
   const emailBody = `Review the CertScore scan report for ${siteLabel}:\n\n${reportUrl}`;
@@ -50,14 +52,14 @@ export function ShadowReportShareMenu({ reportUrl, scanId, siteLabel, fullSite =
           <span>Email report</span>
           <span aria-hidden="true" className="text-zinc-400">@</span>
         </a>
-        <a
+        {canExportPdf ? <a
           className={menuItemClass}
           download
-          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf${fullSite ? "&scope=full-site" : ""}`}
+          href={`/api/scans/${encodeURIComponent(scanId)}/report-export?format=pdf&reviewFocus=gdpr_eprivacy${fullSite ? "&scope=full-site" : ""}`}
         >
           <span>{fullSite ? "Download full-site PDF" : "Download PDF report"}</span>
           <span aria-hidden="true" className="text-zinc-400">↓</span>
-        </a>
+        </a> : null}
         <a
           className={menuItemClass}
           download

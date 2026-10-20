@@ -64,7 +64,8 @@ import {
   RuntimeObservationTimeline,
 } from "../runtime-observation-sections";
 import { getGdprEprivacyPostureTone } from "../../../lib/scans/regulatory-coverage-score";
-import { ShadowReportShareMenu } from "./shadow-report-actions";
+import { ReportPdfAccessProvider, ShadowReportShareMenu } from "./shadow-report-actions";
+import { WorkspaceReportBrand, type WorkspaceReportBranding } from "./workspace-report-brand";
 import { ExpandableExecutiveGrid } from "./expandable-executive-grid";
 import { buildRuntimeInventoryCopyPayload } from "./inventory-table-copy";
 import {
@@ -88,6 +89,8 @@ import {
 } from "./shadow-report-data";
 
 type ShadowScanReportProps = {
+  canExportPdf?: boolean;
+  branding?: WorkspaceReportBranding | null;
   reviewFocus?: unknown;
   fullSiteNotice?: FullSiteScanNoticeData | null;
   allowRestrictedScanOptions?: boolean;
@@ -1753,6 +1756,8 @@ function VariantBody({
 }
 
 export function ShadowScanReport({
+  canExportPdf = false,
+  branding,
   reviewFocus,
   fullSiteNotice,
   allowRestrictedScanOptions,
@@ -1798,11 +1803,14 @@ export function ShadowScanReport({
 
   if (mode === "authenticated") {
     return (
+      <ReportPdfAccessProvider allowed={canExportPdf}>
       <div className="-mx-5 min-h-screen overflow-x-hidden bg-[#fcfcfb] text-zinc-950 lg:-mx-10">
         {completionEvent}
+        {branding ? <WorkspaceReportBrand branding={branding} scanId={report.scan.id} fullSite={Boolean(report.fullSite)} /> : null}
         {reportContent}
         {reportDisclaimer}
       </div>
+      </ReportPdfAccessProvider>
     );
   }
 

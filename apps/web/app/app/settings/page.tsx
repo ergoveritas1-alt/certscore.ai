@@ -4,6 +4,9 @@ import { AdminSettingsCard } from "../../../components/settings/admin-settings-c
 import { ApiKeysCard } from "../../../components/settings/api-keys-card";
 import { EmailVerificationCard } from "../../../components/settings/email-verification-card";
 import { ScanLocationSettingsCard } from "../../../components/settings/scan-location-settings-card";
+import { ReportBrandingCard } from "../../../components/settings/report-branding-card";
+import { canManageCompanyLogo } from "../../../server/company/policy";
+import { getWorkspaceReportBranding } from "../../../server/company/report-branding";
 import { isPlatformAdminEmail } from "../../../server/admin/platform-admin";
 import { getDashboardContext } from "../../../server/auth";
 import { formatScanUsageResetDate } from "../../../lib/dashboard/scan-usage-reset";
@@ -69,8 +72,10 @@ function formatMissingTables(tables: string[]) {
 }
 
 export default async function SettingsPage() {
-  const { organization, profile, user } = await getDashboardContext();
+  const { membership, organization, profile, user } = await getDashboardContext();
   const isPlatformAdmin = isPlatformAdminEmail(user.email);
+  const canManageBranding = canManageCompanyLogo({ isPlatformAdmin, membershipRole: membership.role });
+  const reportBranding = canManageBranding ? await getWorkspaceReportBranding(organization.id) : null;
   const userProviders = user.authProvider.split(",").map((provider) => provider.trim());
   const [basePlanLimits, manualRescanLimitOverride, systemHealth, verificationStatus, apiKeys, organizationSettings, activity] = await Promise.all([
     getPlanLimits(organization.plan),
@@ -125,6 +130,11 @@ export default async function SettingsPage() {
           </div>
         </div>
       </section>
+
+      <Card className="border border-slate-200 bg-white shadow-sm">
+        <CardHeader><CardTitle>Report branding</CardTitle><p className="text-sm text-slate-600">Choose your workspace logo and a white or black report header.</p></CardHeader>
+        <CardContent><ReportBrandingCard companyId={organization.id} name={organization.name} logoUrl={reportBranding?.logoUrl ?? null} headerTheme={reportBranding?.headerTheme} canManage={canManageBranding} /></CardContent>
+      </Card>
 
       <Card className="border border-slate-200 bg-white shadow-sm">
         <CardHeader>

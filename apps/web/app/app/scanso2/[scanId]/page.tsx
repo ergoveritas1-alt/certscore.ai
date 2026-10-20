@@ -1,3 +1,4 @@
+import { canManageCompanyLogo } from "../../../../server/company/policy";
 import { FullSiteReportContinuity } from "../../../../components/scanso2/full-site-report-continuity";
 import { loadFullSiteNotice } from "../../../../server/scans/full-site-notice";
 import { readFullSiteOptions } from "../../../../server/scans/full-site-options";
@@ -120,6 +121,7 @@ export default async function ScanDetailPage({ params }: ScanDetailPageProps) {
       <PendingScanStartedEvent />
       <ScanProgressReportVisible scanId={scanId} />
       <ShadowScanReport
+        canExportPdf={canManageCompanyLogo({ isPlatformAdmin, membershipRole: membership.role })}
         fullSiteNotice={fullSiteNotice}
         allowRestrictedScanOptions={canUseRestrictedScanOptions({
           membershipRole: membership.role,

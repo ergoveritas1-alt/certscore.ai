@@ -1,3 +1,4 @@
+import { retainedConsentVendor } from "../../../lib/scans/retained-consent-vendor";
 import { readCaliforniaPrivacyReviewFromConsent } from "@certscore/contracts";
 import { projectCaliforniaRegulatoryPriorities } from "../../../lib/scans/california-regulatory-priorities";
 import { projectAccessibilityPriorities } from "../../../lib/scans/accessibility-priority";
@@ -25,7 +26,6 @@ import { buildSinglePageResourceInventory } from "../../../lib/scans/single-page
 import { afterClickCoverage } from "../after-action-summary";
 import { projectScanReportNoGo } from "../../../lib/scans/scan-report-disposition";
 import { siteMetadataProjectionSchema } from "@certscore/contracts";
-import { KNOWN_CMP_REGISTRY } from "@website-signal-risk-scanner/shared";
 import { acceptPathIncompleteReason } from "./accept-path-reason";
 import type { GdprEprivacyCoverageChecklistItem } from "../../../lib/scans/gdpr-eprivacy-coverage-checklist";
 import { deriveGdprEprivacyCoverageChecklistRowRationale } from "../../../lib/scans/gdpr-eprivacy-checklist-rationale";
@@ -215,16 +215,6 @@ function retainedScanDurationMs(scanRecord: ScanDetailResponse) {
     ?? durationFromTimestamps(scanRecord.scan);
 }
 
-function retainedConsentVendor(scanRecord: ScanDetailResponse) {
-  const retainedName = recordString(record(scanRecord.snapshot), ["cmp_vendor_name", "cmpVendorName"])
-    ?? recordString(record(scanRecord.runtimeArtifacts), ["cmp_vendor_name", "cmpVendorName"]);
-  if (!retainedName) return null;
-  const normalized = retainedName.toLowerCase();
-  return KNOWN_CMP_REGISTRY.find((entry) =>
-    normalized.includes(entry.canonicalName.toLowerCase()) ||
-    entry.aliases.some((alias) => normalized.includes(alias.toLowerCase()))
-  )?.canonicalName ?? retainedName;
-}
 
 function formatTimelineTime(milliseconds: number) {
   if (milliseconds <= 0) return "0s";

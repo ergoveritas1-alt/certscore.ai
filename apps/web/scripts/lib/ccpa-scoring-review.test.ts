@@ -94,7 +94,7 @@ test("partial, truncated and empty notice passages never imply adequate coverage
   }
 });
 
-test("indeterminate and inconsistent GPC evidence cannot become a pass", () => {
+test("indeterminate GPC stays limited while canonical policy is retained and malformed policy is rejected", () => {
   const input = report();
   input.gpcResponse.status = "indeterminate";
   input.gpcResponse.findingTitle = "GPC response";
@@ -107,6 +107,10 @@ test("indeterminate and inconsistent GPC evidence cannot become a pass", () => {
   assert.equal(result.checks.gpc_response.status, "limited");
   assert.equal(result.existingGpcPolicy?.deductionPoints, 0);
   input.gpcResponse.californiaPolicy = { applied: true, deductionPoints: 15 };
+  const retained = reviewCcpaScoring(input);
+  assert.equal(retained.checks.gpc_response.status, "limited");
+  assert.deepEqual(retained.existingGpcPolicy, input.gpcResponse.californiaPolicy);
+  input.gpcResponse.californiaPolicy = { applied: true, deductionPoints: 0 };
   assert.equal(reviewCcpaScoring(input).existingGpcPolicy, null);
 });
 
@@ -128,5 +132,14 @@ test("rejects wrong artifacts, unsupported exports and unfinished scans", () => 
     { ...report(), artifactVersion: "canonical-report-export-v5" },
     { ...report(), scan: { ...report().scan, status: "running" } }]) {
     assert.throws(() => reviewCcpaScoring(input));
+  }
+});
+
+
+test("offline review accepts the current export with an overall score and preserves historical v6 support", () => {
+  const historical = reviewCcpaScoring(report());
+  for (const version of ["canonical-report-export-v7", "canonical-report-export-v8"]) {
+    const current = reviewCcpaScoring({ ...report(), artifactVersion: version, score: { value: 64, scope: "starting_page" } });
+    assert.deepEqual(current, { ...historical, source: { ...historical.source, artifactVersion: version } });
   }
 });

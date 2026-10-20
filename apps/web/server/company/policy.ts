@@ -4,6 +4,10 @@ export function isAdvancedCompanyRole(role: string | null | undefined) {
   return role === "advanced" || role === "admin";
 }
 
+export function canManageCompanyLogo(input: { isPlatformAdmin: boolean; membershipRole: string | null }) {
+  return input.isPlatformAdmin || isAdvancedCompanyRole(input.membershipRole);
+}
+
 export function roleForNewCompanyMember(memberCount: number, requestedRole: AssignableMembershipRole = "user"): AssignableMembershipRole {
   return memberCount === 0 ? "advanced" : requestedRole;
 }

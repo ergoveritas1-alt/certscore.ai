@@ -19,6 +19,8 @@ import {
 } from "../../../../server/scans/scan-status-projection";
 import { canUseRestrictedScanOptions } from "../../../../server/scans/restricted-scan-options";
 import { getOrganizationSettings } from "../../../../server/settings/get-organization-settings";
+import { getWorkspaceReportBranding } from "../../../../server/company/report-branding";
+import { canManageCompanyLogo } from "../../../../server/company/policy";
 
 type ScanDetailPageProps = {
   params: Promise<{ scanId: string }>;
@@ -123,6 +125,8 @@ export default async function ScanDetailPage({ params, searchParams }: ScanDetai
       <PendingScanStartedEvent />
       <ScanProgressReportVisible scanId={scanId} />
       <ShadowScanReport
+        canExportPdf={canManageCompanyLogo({ isPlatformAdmin, membershipRole: membership.role })}
+        branding={canManageCompanyLogo({ isPlatformAdmin, membershipRole: membership.role }) ? await getWorkspaceReportBranding(organization.id) : null}
         reviewFocus={requestedFocus}
         fullSiteNotice={fullSiteNotice}
         allowRestrictedScanOptions={canUseRestrictedScanOptions({

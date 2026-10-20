@@ -4,7 +4,7 @@ import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { PrivacyAuditEvidence } from "@certscore/api-contracts";
 import { CaliforniaPrivacyWorkpaper, RegulatoryReviewFocus } from "./regulatory-review-focus";
-import { ShadowReportShareMenu } from "./report-lab/shadow-report-actions";
+import { ReportPdfAccessProvider, ShadowReportShareMenu } from "./report-lab/shadow-report-actions";
 
 test("review selector is compact and exposes both focus choices", () => {
   const markup = renderToStaticMarkup(<RegulatoryReviewFocus focus="ccpa_cpra" />);
@@ -67,9 +67,9 @@ test("California evidence distinguishes identified links from verified visitor-f
   assert.doesNotMatch(html, /Observed: “Cookie Settings”/);
 });
 
-test("share and download links preserve focus, with tracking exports explicitly starting-page scoped", () => {
-  const markup = renderToStaticMarkup(<ShadowReportShareMenu reportUrl="/scan/fixture?reviewFocus=ccpa_cpra" scanId="fixture" siteLabel="example.test" fullSite />);
-  assert.match(markup, /format=pdf[^"<]*reviewFocus=ccpa_cpra/);
+test("advanced PDF downloads start with GDPR/ePrivacy while sharing and workpapers preserve focus", () => {
+  const markup = renderToStaticMarkup(<ReportPdfAccessProvider allowed><ShadowReportShareMenu reportUrl="/scan/fixture?reviewFocus=ccpa_cpra" scanId="fixture" siteLabel="example.test" fullSite /></ReportPdfAccessProvider>);
+  assert.match(markup, /format=pdf[^"<]*reviewFocus=gdpr_eprivacy/);
   assert.match(markup, /format=csv[^"<]*reviewFocus=ccpa_cpra/);
   assert.match(markup, /workpaper=tracking[^"<]*reviewFocus=ccpa_cpra/);
   assert.match(markup, /https%3A%2F%2Fcertscore.ai%2Fscan%2Ffixture%3FreviewFocus%3Dccpa_cpra/);
@@ -120,4 +120,14 @@ test("California coverage has one linked summary and one complete evidence revie
   const top=renderToStaticMarkup(<SitePriorityReview findings={[]} pending={false} sitewideAvailable scannedPages={1} reviewFocus="ccpa_cpra" californiaAssessment={assessment}/>);
   assert.doesNotMatch(top,/data-testid="california-choice-inspection"|California review coverage/);
   assert.deepEqual(assessment,before);
+});
+
+
+test("regular and public report menus omit PDF downloads", () => {
+  for (const allowed of [false, undefined]) {
+    const menu = <ShadowReportShareMenu reportUrl="/scan/fixture" scanId="fixture" siteLabel="example.test" />;
+    const markup = renderToStaticMarkup(allowed === undefined ? menu : <ReportPdfAccessProvider allowed={allowed}>{menu}</ReportPdfAccessProvider>);
+    assert.doesNotMatch(markup, /format=pdf/);
+    assert.match(markup, /format=json/);
+  }
 });

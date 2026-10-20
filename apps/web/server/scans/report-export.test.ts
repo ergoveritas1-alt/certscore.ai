@@ -1,3 +1,5 @@
+import { reportCmpEvidenceFixture } from "./report-appendix-evidence.fixture";
+import { consentControlAssessmentSchema } from "@certscore/contracts";
 import { selectSiteIntegrityFinding } from "../../lib/scans/site-integrity-report";
 import { SITE_INTEGRITY_FINDING_ID } from "@certscore/contracts";
 import { siteIntegrityProjectionFixture } from "../../../../packages/certscore-contracts/src/site-integrity.fixture";
@@ -213,6 +215,8 @@ test("full-site JSON and PDF retain scope while homepage projection and score in
   assert.equal(report.fullSite?.resources.length, 1);
   assert.match(pdf.toString("latin1"),/Full-site score .*GDPR\/ePrivacy-weighted.*51/);
   assert.equal(report.fullSite?.score?.value,51);
+  assert.deepEqual(report.score, { value: 51, scope: "full_site" });
+  assert.match(pdf.toString("latin1"), /35 Tf[^\n]*\(51\)/);
   assert.match(pdf.toString("latin1"),/robots.txt restricts crawl coverage/);
 });
 
@@ -220,7 +224,7 @@ test("builds downloads from the persisted canonical projection only", () => {
   const report = buildCanonicalReportExport(scanRecord());
 
   assert.ok(report);
-  assert.equal(report.artifactVersion, "canonical-report-export-v6");
+  assert.equal(report.artifactVersion, "canonical-report-export-v8");
   assert.equal(report.scan.domainHostname, "example.test");
   assert.equal(report.executiveSummary.sentences.length, 3);
   assert.match(report.executiveSummary.sentences[2] ?? "", /not a determination of legal compliance/i);
@@ -790,4 +794,56 @@ test("redirected denied homepage recovers only observed policy evidence through 
       await rm(outDir, { recursive: true, force: true });
     }
   }
+});
+
+
+test("PDF export carries the canonical CertScore.ai score, preserves retained scores and fails closed for no-go", async () => {
+  const { deriveCanonicalOverallScoreForReport } = await import("./canonical-overall-score");
+  const record = scanRecord();
+  const canonical = (record as unknown as { canonicalReportProjection: PersistedCanonicalReportProjection }).canonicalReportProjection;
+  const expected = deriveCanonicalOverallScoreForReport({ scanRecord: record, checklistRows: canonical.checklistRows, unifiedFindings: canonical.ownerUnifiedFindings });
+  assert.deepEqual(buildCanonicalReportExport(record)!.score, { value: expected, scope: "starting_page" });
+  record.snapshot = { certscore_overall: 61, report_projection_status: "ready" } as ScanDetailResponse["snapshot"];
+  const before = structuredClone(record);
+  assert.equal(buildCanonicalReportExport(record)!.score.value, 61);
+  assert.deepEqual(record, before);
+  for (const invalid of [-1, 101, Number.NaN, "82"]) {
+    record.snapshot = { certscore_overall: invalid, report_projection_status: "ready" } as ScanDetailResponse["snapshot"];
+    assert.equal(buildCanonicalReportExport(record)!.score.value, expected);
+  }
+  const retained = JSON.parse(await readFile("apps/web/lib/scans/test-fixtures/authentication-no-go-20260909.json", "utf8"));
+  record.runtimeArtifacts = retained.runtimeArtifacts;
+  record.snapshot = { certscore_overall: 100, report_projection_status: "ready" } as ScanDetailResponse["snapshot"];
+  assert.equal(buildCanonicalReportExport(record)!.score.value, null);
+});
+
+
+test("PDF appendix exports all bound CMP detail and preserves shared action reportability", () => {
+  const record = scanRecord();
+  const fixture = reportCmpEvidenceFixture(record.scan.id);
+  record.runtimeArtifacts = { consentControlAssessment: fixture.assessment, cmpVendorName: "OneTrust" };
+  const canonical = (record as unknown as { canonicalReportProjection: PersistedCanonicalReportProjection }).canonicalReportProjection;
+  canonical.normalizedConcerns = fixture.normalizedConcerns;
+  const before = structuredClone(record);
+  const report = buildCanonicalReportExport(record)!;
+  const audit = report.appendix.evidenceDossier.cmp.audit;
+  assert.equal(audit.rows.length, 13);
+  assert.equal(audit.rows.find(row => row.id === "cookie_information")!.supportingEvidence!.inventory!.declarations!.length, 100);
+  assert.equal(audit.rows.find(row => row.id === "implementation")!.supportingEvidence!.inventory!.choiceActivity![0]!.requests[0]!.path, "/collect");
+  assert.deepEqual(record, before);
+  assert.deepEqual(report.projection.unifiedFindings, []);
+  assert.equal(report.score.value, null);
+  const pdf = renderCanonicalReportPdf(report).toString("latin1");
+  assert.ok(pdf.indexOf("retained_cookie_100") < pdf.indexOf("Appendix B:"));
+  assert.doesNotMatch(pdf, /deduction|point penalty|scoring withheld/i);
+  fixture.assessment.controls.reject.state = "unknown";
+  fixture.assessment.assessmentStatus = "limited";
+  fixture.assessment.coverage.status = "limited";
+  const restricted = buildCanonicalReportExport(record)!.appendix.evidenceDossier.cmp.audit;
+  assert.deepEqual(restricted.rows.find(row => row.id === "implementation")!.supportingEvidence!.inventory!.choiceActivity, []);
+  canonical.normalizedConcerns = [];
+  const unbound = buildCanonicalReportExport(record)!.appendix.evidenceDossier.cmp.audit;
+  assert.ok(unbound.rows.every(row => !row.supportingEvidence?.inventory), "Raw typed CMP rows cannot bypass normalized concern eligibility");
+  record.runtimeArtifacts!.consentControlAssessment = consentControlAssessmentSchema.parse({ ...fixture.assessment, scan: { ...fixture.assessment.scan, scanId: "other-scan" }, cmpAudit: { ...fixture.assessment.cmpAudit, scanId: "other-scan" } });
+  assert.equal(buildCanonicalReportExport(record)!.consentControlAssessment, null);
 });

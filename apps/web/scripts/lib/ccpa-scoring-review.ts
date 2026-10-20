@@ -4,7 +4,7 @@ import { apiV2GpcResponseSchema, privacyAuditEvidenceSchema } from "@certscore/a
 // Offline review only. Do not import this module into report or scoring paths.
 const exportEnvelope = z.object({
   artifactType: z.literal("certscore_canonical_report_export"),
-  artifactVersion: z.literal("canonical-report-export-v6"),
+  artifactVersion: z.enum(["canonical-report-export-v6", "canonical-report-export-v7", "canonical-report-export-v8"]),
   generatedAt: z.string().datetime(),
   scan: z.object({
     id: z.string().min(1),

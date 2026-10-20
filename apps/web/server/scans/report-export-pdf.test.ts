@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { observedControlAssessment } from "../../lib/scans/test-fixtures/observed-control-assessment";
+import { accessibilityAuditFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
+import { reportCmpEvidenceFixture, reportTechnicalEvidenceFixture } from "./report-appendix-evidence.fixture";
+import { projectCmpAudit } from "../../lib/scans/cmp-audit-projection";
+import { appendixEvidenceLines } from "./report-pdf-appendices";
 import { renderCanonicalReportPdf } from "./report-export-pdf";
+import { PDF_REPORT_TOPICS, pdfTopicForFinding, pdfTopicForRow } from "./report-pdf-topics";
 import type { CanonicalReportExport } from "./report-export";
 
-test("renders a multi-section canonical report as a valid bounded PDF", () => {
+const visiblePdfText = (source: string) => [...source.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(match => match[1]!.replace(/\\([\\()])/g, "$1")).join(" ");
+
+test("renders a multi-section canonical report as a valid bounded PDF", async () => {
   const report = {
     artifactType: "certscore_canonical_report_export",
-    artifactVersion: "canonical-report-export-v6",
+    artifactVersion: "canonical-report-export-v8",
+    score: { value: 64, scope: "starting_page" },
     reviewFocus: "gdpr_eprivacy",
     reviewFocusLabel: "GDPR/ePrivacy",
     reviewScope: "Observed from Ireland. Changing review focus uses the same evidence.",
@@ -105,16 +114,7 @@ test("renders a multi-section canonical report as a valid bounded PDF", () => {
       evidenceIndex: null,
       scoreAssessmentInput: {},
     },
-    consentControlAssessment: {
-      assessmentStatus: "complete",
-      coverage: { status: "complete" },
-      controls: {
-        accept: { state: "observed" },
-        reject: { state: "observed" },
-        options: { state: "observed" },
-        privacyOptOut: { state: "unknown" },
-      },
-    },
+    consentControlAssessment: { ...structuredClone(observedControlAssessment), scan: { ...observedControlAssessment.scan, scanId: "00000000-0000-0000-0000-000000000001" } },
     limitations: [{ code: "pre_interaction_observation_only", detail: "No consent controls were clicked." }],
     appendix: {
       gdprTransparency: {
@@ -243,30 +243,38 @@ test("renders a multi-section canonical report as a valid bounded PDF", () => {
   assert.equal(pdf.subarray(0, 8).toString("latin1"), "%PDF-1.4");
   assert.match(pdf.toString("latin1"), /\/Type \/Catalog/);
   assert.match(pdf.toString("latin1"), /Executive summary/);
-  assert.match(pdf.toString("latin1"), /Appendix: Detailed cookie and tracker inventory/);
-  assert.match(pdf.toString("latin1"), /Appendix: Data collection surfaces/);
-  assert.match(pdf.toString("latin1"), /Appendix: GDPR Transparency/);
-  assert.match(pdf.toString("latin1"), /Appendix: Transport Security/);
-  const cookieAppendixIndex = pdf.toString("latin1").indexOf("Appendix: Detailed cookie and tracker inventory");
-  const collectionAppendixIndex = pdf.toString("latin1").indexOf("Appendix: Data collection surfaces");
-  const transparencyAppendixIndex = pdf.toString("latin1").indexOf("Appendix: GDPR Transparency");
-  const transportAppendixIndex = pdf.toString("latin1").indexOf("Appendix: Transport Security");
-  assert.ok(cookieAppendixIndex < collectionAppendixIndex);
-  assert.ok(collectionAppendixIndex < transparencyAppendixIndex);
-  assert.ok(transparencyAppendixIndex < transportAppendixIndex);
-  assert.equal(pdf.toString("latin1").match(/Valid SSL\/TLS certificate/g)?.length, 1);
-  assert.equal(pdf.toString("latin1").match(/TLS certificate review/g)?.length, 1);
-  assert.ok(
-    pdf.toString("latin1").indexOf("Appendix: Transport Security") <
-      pdf.toString("latin1").indexOf("Valid SSL/TLS certificate"),
-  );
-  assert.doesNotMatch(
-    pdf.toString("latin1").slice(
-      pdf.toString("latin1").indexOf("Key findings"),
-      cookieAppendixIndex,
-    ),
-    /Valid SSL\/TLS certificate|TLS certificate review/,
-  );
+  const pdfText = pdf.toString("latin1");
+  const streams = [...pdfText.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!);
+  for (const [index, topic] of PDF_REPORT_TOPICS.entries()) {
+    assert.ok(visiblePdfText(streams[0]!).includes(topic.title), `Page 1 must include ${topic.title}`);
+    const heading = `Appendix ${String.fromCharCode(65 + index)}: ${topic.title}`;
+    assert.equal(streams.filter(stream => stream.includes(`(${heading}) Tj`)).length, 1);
+    assert.ok(streams.findIndex(stream => stream.includes(heading)) > 0);
+    assert.ok(pdfText.includes(`/Dest (${topic.id})`));
+    if (index) assert.ok(pdfText.indexOf(heading) > pdfText.indexOf(`Appendix ${String.fromCharCode(64 + index)}:`));
+  }
+  assert.doesNotMatch(streams[0]!, /Appendix A:|No forms found|Controller\/contact disclosure/);
+  assert.match(streams[0]!, /GDPR\/ePrivacy findings posture/);
+  assert.equal(pdfText.match(/Valid SSL\/TLS certificate/g)?.length, 1);
+  assert.equal(pdfText.slice(pdfText.indexOf("Appendix G: TLS")).match(/TLS certificate review/g)?.length, 1);
+  assert.ok(pdfText.indexOf("Appendix G: TLS") < pdfText.indexOf("Valid SSL/TLS certificate"));
+  assert.match(pdfText, /\/Subtype \/Link/);
+  assert.match(pdfText, /\/S \/URI/);
+  assert.match(streams[0]!, /CertScore.ai score/);
+  assert.match(streams[0]!, /Findings by severity/);
+  assert.match(streams[0]!, /Topic evidence at a glance/);
+  assert.match(streams[0]!, /Site assessment/);
+  assert.doesNotMatch(streams[0]!, /Findings by topic|\(Topics\)|\(Findings\)/);
+  assert.match(streams[0]!, /35 Tf[^\n]*\(64\)/);
+  assert.doesNotMatch(streams[0]!, /\(82\)/, "The headline must use the canonical overall score, not checklist score");
+  assert.match(streams[0]!, / c\nS Q/, "Summary charts must use vector paths");
+  const unavailableScore = structuredClone(report); unavailableScore.score.value = null;
+  assert.match(renderCanonicalReportPdf(unavailableScore).toString("latin1"), /\(N\/A\)/);
+  for (const value of [0, 100]) {
+    const boundaryScore = structuredClone(report); boundaryScore.score.value = value;
+    assert.match(renderCanonicalReportPdf(boundaryScore).toString("latin1"), new RegExp(`35 Tf[^\\n]*\\(${value}\\)`));
+  }
+  assert.match(pdfText, /Accessibility evidence unavailable; conformance remains unknown/);
   assert.match(pdf.toString("latin1"), /Contact form/);
   assert.match(pdf.toString("latin1"), /Work email/);
   assert.doesNotMatch(pdf.toString("latin1"), /Public data collection surfaces/);
@@ -289,8 +297,196 @@ test("renders a multi-section canonical report as a valid bounded PDF", () => {
     visualEvidence: { body: jpegWithSof, contentType: "image/jpeg" },
   }).toString("latin1");
   assert.match(pdfWithVisualEvidence, /Captured page evidence/);
-  assert.match(pdfWithVisualEvidence, /Appendix: Full captured page/);
+  assert.match(pdfWithVisualEvidence, /Captured page evidence - full capture/);
   assert.match(pdfWithVisualEvidence, /\/Subtype \/Image/);
   assert.match(pdfWithVisualEvidence, /\/Im1 Do/);
   assert.match(pdfWithVisualEvidence, /\/Logo Do/);
+
+  const sharp = (await import("sharp")).default;
+  const logo = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="160"><rect x="8" y="8" width="144" height="144" rx="30" fill="#0284c7"/><path d="M40 100L80 40L120 100Z" fill="white"/><text x="175" y="100" font-size="45" font-family="Helvetica" fill="#0f172a">Northstar</text></svg>')).png().toBuffer();
+  const brandedPdf = renderCanonicalReportPdf(report, {
+    brandName: "Northstar Research (Client Reports)",
+    brandLogo: { body: logo, contentType: "image/png" },
+  });
+  const blackHeaderPdf = renderCanonicalReportPdf(report, {
+    brandName: "Northstar Research (Client Reports)", brandLogo: { body: logo, contentType: "image/png" }, headerTheme: "black",
+  });
+  const firstTextStream = (buffer: Buffer) => [...buffer.toString("latin1").matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive summary"))!;
+  assert.match(firstTextStream(brandedPdf), /1 1 1 rg 0 690 612 152 re f/);
+  assert.match(firstTextStream(brandedPdf), /23 Tf 0.12 0.18 0.27 rg/);
+  assert.match(firstTextStream(blackHeaderPdf), /0 0 0 rg 0 690 612 152 re f/);
+  assert.match(firstTextStream(blackHeaderPdf), /23 Tf 1 1 1 rg/);
+  assert.match(blackHeaderPdf.toString("latin1"), /0 0 0 rg 0 812 612 30 re f/);
+  assert.match(brandedPdf.toString("latin1"), /1 1 1 rg 0 812 612 30 re f/);
+  const brandedText = brandedPdf.toString("latin1");
+  assert.match(brandedText, /Northstar Research \\\(Client Reports\\\)/);
+  assert.match(brandedText, /\/Logo Do/);
+  assert.doesNotMatch(brandedText, /CERTSCORE\.AI|CertScore\.ai  -  retained technical evidence/);
+  assert.match(brandedText, /Executive summary/);
+  assert.match(brandedText, /Accept control: Observed/);
+  const richReport = structuredClone(report);
+  const cmpFixture = reportCmpEvidenceFixture(report.scan.id);
+  richReport.consentControlAssessment = cmpFixture.assessment;
+  const cmpAudit = projectCmpAudit({ scanId: report.scan.id, consentControlAssessment: cmpFixture.assessment, consentVendor: "OneTrust", normalizedConcerns: cmpFixture.normalizedConcerns });
+  const cmpRow = (id: string) => cmpAudit.rows.find(row => row.id === id)!;
+  const technical = reportTechnicalEvidenceFixture(report.scan.id);
+  richReport.appendix.evidenceDossier = { cmp: { provider: "OneTrust", audit: cmpAudit }, cmsSecurity: technical.cms, formDestinations: technical.forms, checklistDetails: [{ id: "transport_security_tls_certificate", topic: "tls", label: "TLS certificate", status: "Observed", explanation: "Verified origin certificate.", note: "", evidenceRefs: ["transport:tls:1"], correctionSteps: [], subchecks: [], facts: [{ label: "issuer", value: "Example Certificate Authority" }, { label: "validTo", value: "2027-08-24T00:00:00Z" }] }, { id: "controller_contact_disclosure", topic: "policy", label: "Controller contact disclosure", status: "Observed", explanation: "Contact details in the retained privacy notice.", note: "", evidenceRefs: ["policy:notice:1"], correctionSteps: [], subchecks: [], facts: [{ label: "selectedPolicySectionExcerpt", value: "For questions about personal data, contact the controller at privacy@example.test." }, { label: "sourceUrl", value: "https://example.test/privacy" }] }] };
+  const tracker = structuredClone(richReport.appendix.cookieAndTrackerInventory.rows[0]!);
+  Object.assign(tracker, { rowNumber: 2, type: "tracker", vendor: "Example Metrics", domains: ["metrics.example.test"], cookieNames: [], resourceNames: ["Example Metrics"], requestDetails: [{ method: "POST", hostname: "metrics.example.test", path: "/collect", vendor: "Example Metrics", responseObserved: true, responseStorageAttempted: false, cookieNamesSent: [], responseCookieNamesSet: [], identifierParameterNames: ["client_id"], essentiality: "non_essential" }], relationship: { party: "third_party", site: "cross_site", entity: "external_entity" } });
+  richReport.appendix.cookieAndTrackerInventory.rows = [...richReport.appendix.cookieAndTrackerInventory.rows, tracker];
+  Object.assign(richReport.appendix.cookieAndTrackerInventory.summary, { trackerRows: 1, totalRows: 2, includedRows: 2, requestEvidenceRows: 1 });
+  richReport.accessibilityEvidence = accessibilityAuditFixture({ scanId: report.scan.id });
+  richReport.accessibilityAudit = { status: "completed", required: true, scope: "starting_page_rendered_content", engine: "axe-core", engineVersion: "4.11.3", durationMs: 1000, failedRuleCount: 4, affectedNodeCount: 4, reviewRuleCount: 0 };
+  richReport.projection.unifiedFindings = [
+    ...richReport.projection.unifiedFindings,
+    ...["preconsent_tracking", "cookie_disclosure_gap", "weak_cookie_security_attributes"].map((id, index) => ({ unifiedFindingId: id, severity: "high", title: `Priority finding ${index + 1} with a long title `.repeat(5), summary: "Detailed retained evidence. ".repeat(24), presentation: { findingName: `Priority finding ${index + 1} with a long title `.repeat(5), suggestedFix: "Review the implementation against retained evidence and verify the correction. ".repeat(8) } })),
+    { unifiedFindingId: "semantic_labeling_accessibility_issue", severity: "critical", details: { family: "accessibility" }, title: "Accessible names require review" },
+  ] as unknown as CanonicalReportExport["projection"]["unifiedFindings"];
+  const longCellReport = structuredClone(richReport);
+  longCellReport.appendix.evidenceDossier.checklistDetails[1]!.facts[0]!.value = "Retained clause repeated for long-cell verification. ".repeat(400) + "FINAL_RETAINED_CLAUSE";
+  const longCellPdf = renderCanonicalReportPdf(longCellReport);
+  assert.ok(longCellPdf.toString("latin1").includes("FINAL_RETAINED_CLAUSE"), "Long table cells must continue without losing their final evidence");
+  const dashboards = appendixEvidenceLines(richReport, { text: () => [], heading: text => ({ text }) });
+  assert.deepEqual(dashboards.policy[0]!.overview!.metrics.map(metric => metric.value), ["1", "1", "1"]);
+  assert.equal(dashboards.storage[0]!.overview!.metrics[2]!.value, "1", "Cookie-domain counts exclude external-service-only domains");
+  assert.equal(dashboards.external[0]!.overview!.metrics[1]!.value, "1", "External-domain counts exclude cookie-only domains");
+  assert.equal(dashboards.security[0]!.overview!.metrics[1]!.value, "Not retained", "A missing plugin inventory cannot become a zero-plugin result");
+  const richBefore = JSON.stringify(richReport);
+  const richPdf = renderCanonicalReportPdf(richReport, { brandName: "Northstar Research", brandLogo: { body: logo, contentType: "image/png" } });
+  assert.equal(JSON.stringify(richReport), richBefore, "Rendering must never change canonical evidence or scoring inputs");
+  const richText = richPdf.toString("latin1");
+  const summaryStream = [...richText.matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => match[1]!).find(stream => stream.includes("Executive summary"))!;
+  assert.match(summaryStream, /Priority finding 1/);
+  assert.doesNotMatch(summaryStream, /Appendix A:/);
+  assert.equal((summaryStream.match(/\(5\) Tj/g) ?? []).length, 1, "The finding total appears only once, in the doughnut");
+  assert.match(richText.slice(richText.indexOf("Appendix H: ADA/WCAG")), /Automated rule evidence: image-alt/);
+  assert.match(richText, /\(#image-alt\)/);
+  assert.match(richText, /https:\/\/dequeuniversity.com/);
+  assert.doesNotMatch(richText, /deduction|scoring withheld|point penalty/i);
+  for (const [index, topic] of PDF_REPORT_TOPICS.entries()) {
+    const from = richText.indexOf(`Appendix ${String.fromCharCode(65 + index)}:`);
+    const to = index < 7 ? richText.indexOf(`Appendix ${String.fromCharCode(66 + index)}:`) : richText.length;
+    const appendix = richText.slice(from, to);
+    const stages = ["01 Topic overview", "02 Fixes and verification", "03 Detailed evidence", "04 Sources and workpaper"];
+    assert.ok(stages.every(stage => appendix.includes(stage)), `${topic.id}: consistent structure`);
+    assert.deepEqual(stages.map(stage => appendix.indexOf(stage)), stages.map(stage => appendix.indexOf(stage)).sort((a, b) => a - b));
+    if (appendix.includes("Where to investigate")) {
+      for (const label of ["What to change / review", "How to verify", "Evidence / workpaper references"])
+        assert.ok(appendix.includes(label), `${topic.id}: ${label}`);
+    }
+  }
+  const consentAppendix = richText.slice(richText.indexOf("Appendix A:"), richText.indexOf("Appendix B:"));
+  for (const row of cmpAudit.rows) assert.ok(consentAppendix.includes(row.label.slice(0, 30)), row.id);
+  for (const retained of ["OneTrust", "retained_cookie_100", "Audience measurement", "Analytics consent", "metrics.example.test/collect"]) assert.ok(consentAppendix.includes(retained), retained);
+  assert.ok((consentAppendix.match(/CMP-stated purpose/g)?.length ?? 0) > 1, "Long inventories repeat column headers on continued pages");
+  assert.ok(richText.includes("Appendix A: Consent management \\(continued\\)"));
+  assert.match(richText.slice(richText.indexOf("Appendix G:")), /Example Certificate Authority/);
+  assert.doesNotMatch(richText.slice(0, richText.indexOf("Appendix G:")), /Example Certificate Authority/);
+  const richVisibleText = [...richText.matchAll(/\(((?:\\.|[^\\)])*)\) Tj/g)].map(match => match[1]!.replace(/\\([\\()])/g, "$1")).join(" ");
+  assert.ok(richVisibleText.includes("Timing association only"));
+  assert.doesNotMatch(richText, /Exact field-value match|undefined/);
+  assert.ok(richVisibleText.includes("Drupal") && richVisibleText.includes("7.98"));
+  assert.equal((richText.match(/retained checks:/g) ?? []).length, 3, "Only topics with retained checklist rows show a checklist status strip");
+  assert.doesNotMatch(richText, /No checklist rows retained for this topic/);
+  assert.match(richText, /\/PageMode \/UseOutlines/);
+  for (const topic of PDF_REPORT_TOPICS) for (const section of ["overview", "fixes", "evidence", "sources"])
+    assert.ok(richText.includes(`/Dest (${topic.id}-${section})`), `${topic.id} ${section} has a navigation target`);
+  assert.match(richText, /\/Dest \(executive\)/);
+  const limitedReport = structuredClone(report);
+  limitedReport.consentControlAssessment!.controls.reject.state = "unknown";
+  limitedReport.consentControlAssessment!.assessmentStatus = "limited";
+  limitedReport.consentControlAssessment!.coverage.status = "limited";
+  const limitedText = renderCanonicalReportPdf(limitedReport).toString("latin1");
+  assert.match(limitedText, /Reject \/ necessary-only control: Not observed/);
+  assert.doesNotMatch(limitedText, /Reject \/ necessary-only control: Unknown/);
+  limitedReport.consentControlAssessment!.document.identityStatus = "mismatched";
+  assert.doesNotMatch(renderCanonicalReportPdf(limitedReport).toString("latin1"), /Accept control: Observed/);
+  const previewReport = structuredClone(richReport);
+  previewReport.executiveSummary.posture = "elevated review priority";
+  previewReport.executiveSummary.sentences[0] = "The retained evidence indicates elevated review priority across consent, cookie disclosure and storage security reviews.";
+  previewReport.executiveSummary.counts.highPriorityFindings = 4;
+  const previewCopy: Record<string, { title: string; action: string }> = {
+    preconsent_tracking: { title: "Tracking before a recorded consent choice", action: "Review the retained vendor requests and gate non-essential activity until a choice is recorded." },
+    cookie_disclosure_gap: { title: "Cookie disclosure requires review", action: "Compare retained cookie names with the published cookie notice and update the relevant disclosure." },
+    weak_cookie_security_attributes: { title: "Cookie security attributes need review", action: "Review the retained cookie attributes and verify the appropriate security settings." },
+  };
+  for (const finding of previewReport.projection.unifiedFindings as Array<Record<string, unknown>>) {
+    const copy = previewCopy[String(finding.unifiedFindingId)];
+    if (copy) { finding.title = copy.title; finding.summary = String(finding.unifiedFindingId) === "preconsent_tracking" ? "An analytics cookie and a metrics request were retained before a recorded consent choice." : `The retained scan flags ${String(finding.unifiedFindingId) === "cookie_disclosure_gap" ? "cookie disclosure" : "cookie security attributes"} for review.`; finding.presentation = { findingName: copy.title, suggestedFix: copy.action }; }
+  }
+  // The downloadable design preview uses internally consistent, illustrative data.
+  // The stress fixtures above deliberately retain mismatches and extreme lengths.
+  previewReport.limitations = [];
+  Object.assign(previewReport.scan, { createdAt: "2026-10-20T12:00:00.000Z", startedAt: "2026-10-20T12:00:01.000Z", completedAt: "2026-10-20T12:00:20.000Z" });
+  previewReport.generatedAt = "2026-10-20T12:01:00.000Z";
+  previewReport.consentControlAssessment!.provenance.computedAt = "2026-10-20T12:00:20.000Z";
+  previewReport.gdprEprivacyReview!.summaryCounts.gap_observed = 1;
+  previewReport.gdprEprivacyReview!.reviewSummary.coverageText = "Retained evidence covers the starting page and the bounded observation windows.";
+  previewReport.gdprEprivacyReview!.reviewSummary.priorityReviewText = "Review the listed findings alongside their retained evidence and implementation steps.";
+  const previewFindings = previewReport.projection.unifiedFindings as Array<Record<string, unknown>>;
+  const tlsFinding = previewFindings.find(finding => finding.unifiedFindingId === "transport_security_tls_certificate")!;
+  tlsFinding.primaryPageUrl = "https://example.test/";
+  tlsFinding.presentation = { findingName: "TLS certificate chain requires review", findingDescription: "The retained HTTPS probe could not validate the certificate chain served by example.test.", suggestedFix: "Install the complete intermediate certificate chain at the public TLS endpoint." };
+  const tlsRow = previewReport.gdprEprivacyReview!.rows.find(row => row.id === "transport_security_tls_certificate")!;
+  Object.assign(tlsRow, { status: "Gap observed", evidenceLabel: "Gap observed", assessmentStatus: "gap_observed", assessmentDirection: "negative_signal", rationale: "The retained probe could not validate the served certificate chain." });
+  const tlsDetail = previewReport.appendix.evidenceDossier!.checklistDetails.find(row => row.id === tlsRow.id)!;
+  Object.assign(tlsDetail, { status: "Gap observed", explanation: tlsRow.rationale });
+  tlsDetail.facts.push({ label: "validTlsCertificate", value: "No" }, { label: "tlsProbeErrorMessage", value: "Unable to verify the first certificate in the served chain." });
+  for (const finding of previewFindings.filter(item => ["preconsent_tracking", "weak_cookie_security_attributes", "cookie_disclosure_gap"].includes(String(item.unifiedFindingId)))) {
+    finding.primaryPageUrl = "https://example.test/";
+    finding.evidence = { pageUrls: ["https://example.test/"], entities: { cookies: ["_example"], domains: ["example.test"] } };
+  }
+  const weakDetail = { id: "weak_cookie_security_attributes", topic: "storage" as const, label: "Cookie security attributes", status: "Review signal" as const, explanation: "The retained _example cookie was set without Secure.", note: "", evidenceRefs: ["cookie:_example:initial"], correctionSteps: [], subchecks: [], facts: [{ label: "cookieName", value: "_example" }, { label: "domain", value: "example.test" }, { label: "path", value: "/" }, { label: "secure", value: "No" }] };
+  previewReport.appendix.evidenceDossier!.checklistDetails.push(weakDetail);
+  const a11y = previewReport.accessibilityEvidence!;
+  a11y.documentUrl = "https://example.test/";
+  a11y.startedAt = "2026-10-20T12:00:05.000Z";
+  a11y.completedAt = "2026-10-20T12:00:06.000Z";
+  const ruleCopy: Record<string, [string, string, string, string]> = {
+    "image-alt": ["Images need a text alternative", "The team image has no alt attribute.", "#team-image", '<img id="team-image" src="/team.jpg">'],
+    label: ["Form fields need an accessible label", "The email input has no associated label or accessible name.", "#contact-email", '<input id="contact-email" type="email">'],
+    "button-name": ["Buttons need an accessible name", "The icon-only menu button has no accessible name.", "#menu-toggle", '<button id="menu-toggle"><svg aria-hidden="true"></svg></button>'],
+    "color-contrast": ["Text needs sufficient color contrast", "The help text has a measured contrast of 2.3:1 against a required 4.5:1.", ".contact-help", '<p class="contact-help">We will reply by email.</p>'],
+  };
+  for (const rule of a11y.violations) {
+    const [help, description, selector, html] = ruleCopy[rule.ruleId]!;
+    rule.help = help; rule.description = description;
+    for (const node of rule.representativeNodes) Object.assign(node, { selectors: [selector], htmlSnippet: html, failureSummary: description });
+  }
+  const accessibilityFinding = previewFindings.find(finding => finding.unifiedFindingId === "semantic_labeling_accessibility_issue")!;
+  accessibilityFinding.primaryPageUrl = "https://example.test/";
+  accessibilityFinding.summary = "An image, an email field and a menu button lack accessible names. The retained help-text sample also falls below its contrast threshold.";
+  previewReport.appendix.evidenceDossier!.cmp.audit.rows.find(row => row.id === "cookie_information")!.supportingEvidence!.inventory!.declarations = cmpRow("cookie_information").supportingEvidence!.inventory!.declarations!.slice(0, 6);
+  const longAssessmentReport = structuredClone(previewReport);
+  longAssessmentReport.projection.unifiedFindings = [{ unifiedFindingId: "cookie_disclosure_gap", severity: "high", title: "Privacy disclosure review", summary: "W".repeat(530), presentation: { suggestedFix: "Review the retained policy disclosure." } }] as unknown as CanonicalReportExport["projection"]["unifiedFindings"];
+  const longAssessmentPdf = renderCanonicalReportPdf(longAssessmentReport);
+  const previewPdf = renderCanonicalReportPdf(previewReport, { brandName: "Northstar Research", brandLogo: { body: logo, contentType: "image/png" } });
+  const previewBlackPdf = renderCanonicalReportPdf(previewReport, { brandName: "Northstar Research", brandLogo: { body: logo, contentType: "image/png" }, headerTheme: "black" });
+  const previewPageStreams = [...previewPdf.toString("latin1").matchAll(/stream\n([\s\S]*?)\nendstream/g)].map(match => visiblePdfText(match[1]!));
+  assert.ok(previewPageStreams.some(page => page.includes("Evidence: Cookie security attributes") && page.includes("Cookie name")), "keep the short cookie evidence heading and its table on the same page");
+  assert.ok(previewPageStreams.some(page => page.includes("Automated rule evidence: image-alt") && page.includes("#team-image")), "keep the accessibility evidence heading and affected element together");
+  if (process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR) {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    await mkdir(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, { recursive: true });
+    await writeFile(path.join(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, "workspace-report.pdf"), brandedPdf);
+    await writeFile(path.join(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, "long-assessment.pdf"), longAssessmentPdf);
+    await writeFile(path.join(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, "detailed-report.pdf"), richPdf);
+    await writeFile(path.join(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, "long-evidence-cell.pdf"), longCellPdf);
+    await writeFile(path.join(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, "black-header-report.pdf"), blackHeaderPdf);
+    await writeFile(path.join(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, "visual-executive-summary.pdf"), previewPdf);
+    await writeFile(path.join(process.env.CERTSCORE_BRANDING_PDF_PREVIEW_DIR, "visual-executive-summary-black.pdf"), previewBlackPdf);
+  }
+});
+
+test("PDF topics group canonical identifiers and metadata without treating unknown findings as consent", () => {
+  assert.equal(pdfTopicForRow("transport_security_tls_certificate"), "tls");
+  assert.equal(pdfTopicForRow("transport_security_form_transport"), "forms");
+  assert.equal(pdfTopicForFinding({ unifiedFindingId: "preconsent_tracking" }), "consent");
+  assert.equal(pdfTopicForFinding({ unifiedFindingId: "weak_cookie_security_attributes" }), "storage");
+  assert.equal(pdfTopicForFinding({ unifiedFindingId: "cookie_retention_lifetime_review_signal" }), "storage");
+  assert.equal(pdfTopicForFinding({ unifiedFindingId: "controller_contact_disclosure" }), "policy");
+  assert.equal(pdfTopicForFinding({ details: { family: "accessibility" } }), "accessibility");
+  assert.equal(pdfTopicForFinding({ details: { family: "cms_security" } }), "security");
+  assert.equal(pdfTopicForFinding({ unifiedFindingId: "future_finding", title: "Consent high risk TLS" }), null);
 });
