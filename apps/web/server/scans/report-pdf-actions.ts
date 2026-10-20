@@ -1,3 +1,4 @@
+import { pdfNarrativeFindings, pdfFindingLocations } from "./report-pdf-evidence";
 import type { CanonicalReportExport } from "./report-export";
 import { pdfTopicForFinding, type PdfReportTopic } from "./report-pdf-topics";
 import { CERT_SCORE_FINDING_REGISTRY } from "../../lib/scans/finding-registry";
@@ -41,13 +42,13 @@ export function pdfAppendixActions(report: CanonicalReportExport): Record<PdfRep
   const sections: Record<PdfReportTopic, PdfAction[]> = { consent: [], storage: [], policy: [], forms: [], security: [], external: [], tls: [], accessibility: [] };
   const details = report.appendix.evidenceDossier?.checklistDetails ?? [];
   const usedRows = new Set<string>();
-  for (const finding of report.projection.unifiedFindings as Array<Record<string, unknown>>) {
+  for (const finding of pdfNarrativeFindings(report)) {
     const presentation = object(finding.presentation);
     const ids = unique([finding.unifiedFindingId, finding.id, finding.findingId, finding.checklistRowId, presentation.findingId, presentation.checklistRowId].map(string));
     const matching = details.filter(row => ids.includes(row.id));
     matching.forEach(row => usedRows.add(row.id));
     const packet = object(finding.evidence);
-    const entities = Object.entries(object(packet.entities)).flatMap(([key, values]) => strings(values).map(value => `${key}: ${value}`));
+    const entities = pdfFindingLocations(object(packet.entities));
     const registry = ids.map(id => CERT_SCORE_FINDING_REGISTRY[id]).find(Boolean);
     const guidance = ids.map(rowId => checklistRemediation({ rowId, status: "Review signal" })).find(item => item?.steps.length);
     sections[pdfTopicForFinding(finding) ?? "policy"].push({
@@ -65,7 +66,7 @@ export function pdfAppendixActions(report: CanonicalReportExport): Record<PdfRep
     if (usedRows.has(row.id) || evidenceHeaderStatus([row])?.label !== "Review") continue;
     sections[row.topic ?? "policy"].push({
       id: row.id, title: row.label, status: row.status, explanation: row.explanation,
-      affected: row.facts.map(fact => `${fact.label}: ${fact.value}`),
+      affected: row.facts.filter(fact => /url|domain|hostname|cookie.?name|selector|^path$|version/i.test(fact.label)).map(fact => `${fact.label}: ${fact.value}`),
       steps: row.correctionSteps ?? [], references: unique([row.id, ...row.evidenceRefs]),
     });
   }

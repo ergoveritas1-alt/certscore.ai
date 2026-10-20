@@ -1,3 +1,4 @@
+import { pdfNarrativeFindings } from "./report-pdf-evidence";
 import { pdfAppendixActions, PDF_TOPIC_VERIFICATION } from "./report-pdf-actions";
 import { formatScanFromLabel } from "@website-signal-risk-scanner/shared";
 import { pdfSiteAssessment, pdfSummaryTopics, type SummaryVisual } from "./report-pdf-summary";
@@ -788,6 +789,7 @@ function paginate(lines: PdfLine[]) {
   let y = 790;
   let appendixTitle = "";
   let subsection = "";
+  let actionTitle = "";
   let tableHeader: PdfLine | undefined;
   const height = (line: PdfLine) => (line.gapBefore ?? 0) + (line.reservedHeight ?? ((line.size ?? 10) + 4 + (line.gapAfter ?? 0)));
   const newPage = (line: PdfLine) => {
@@ -802,6 +804,12 @@ function paginate(lines: PdfLine[]) {
         const context: PdfLine = { text: subsection, size: 8, kind: "caption", gapAfter: 8 };
         page.push(context);
         y -= height(context);
+      }
+    }
+    if (actionTitle && line.flowGroup?.includes("-action-") && line.kind !== "actionHeading" && line.kind !== "appendixStage" && subsection === "02 Fixes and verification") {
+      for (const text of wrapPdfText(`${actionTitle} (continued)`, 512, 8, true)) {
+        const context: PdfLine = { text, size: 8, bold: true, kind: "caption", gapAfter: 4 };
+        page.push(context); y -= height(context);
       }
     }
     if (line.kind === "tableRow" && tableHeader && tableHeader.tableId === line.tableId) {
@@ -845,8 +853,9 @@ function paginate(lines: PdfLine[]) {
     }
     const needed = Math.max(height(line) + (line.keepWithNextHeight ?? 0), paragraphHeight <= 160 ? paragraphHeight : 0, height(line) + Math.min(160, nextParagraphHeight));
     if (y - needed < 48 && page.length > 0) newPage(line);
-    if (line.chapterTitle) { appendixTitle = line.chapterTitle; subsection = ""; }
-    if (line.kind === "appendixStage") subsection = line.text;
+    if (line.chapterTitle) { appendixTitle = line.chapterTitle; subsection = ""; actionTitle = ""; }
+    if (line.kind === "appendixStage") { subsection = line.text; actionTitle = ""; }
+    if (line.kind === "actionHeading") actionTitle = line.text;
     if (line.kind === "tableHeader") tableHeader = line;
     else if (line.kind !== "tableRow") tableHeader = undefined;
     page.push(line);
@@ -1005,7 +1014,7 @@ function executivePage(report: CanonicalReportExport, hasLogo: boolean, headerTh
 
   const rawScore = report.score?.value;
   const score = typeof rawScore === "number" && Number.isFinite(rawScore) && rawScore >= 0 && rawScore <= 100 ? rawScore : null;
-  const findings = report.projection.unifiedFindings as Array<Record<string, unknown>>;
+  const findings = pdfNarrativeFindings(report);
   const topics = pdfSummaryTopics(report);
   const severityGroups = [
     { label: "High / critical", count: findings.filter(f => f.severity === "high" || f.severity === "critical").length, color: "0.76 0.24 0.22" },

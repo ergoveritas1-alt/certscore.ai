@@ -1,3 +1,4 @@
+import { pdfNarrativeFindings } from "./report-pdf-evidence";
 import { evidenceSectionCounts } from "../../lib/scans/detailed-evidence-presentation";
 import { buildAssessmentHighlights } from "../../lib/scans/assessment-highlights";
 import { projectConsentControlReport } from "../../lib/scans/consent-control-report";
@@ -9,7 +10,7 @@ const string = (value: unknown) => typeof value === "string" ? value : undefined
 
 /** Same assessment writer as the scan report, using only projected findings and retained score/coverage. */
 export function pdfSiteAssessment(report: CanonicalReportExport) {
-  const findings = report.projection.unifiedFindings.map(finding => {
+  const findings = pdfNarrativeFindings(report).map(finding => {
     const packet = object(finding);
     const presentation = object(packet.presentation);
     const severity = ["critical", "high", "medium", "low"].includes(String(packet.severity))

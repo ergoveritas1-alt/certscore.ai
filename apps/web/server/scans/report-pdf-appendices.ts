@@ -1,3 +1,4 @@
+import { pdfNarrativeFindings, pdfFindingEntityRows } from "./report-pdf-evidence";
 import type { CanonicalReportExport } from "./report-export";
 import type { PdfLine } from "./report-export-pdf";
 import { PDF_REPORT_TOPICS, pdfTopicForFinding, pdfTopicForRow, type PdfReportTopic } from "./report-pdf-topics";
@@ -53,7 +54,7 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
   const sections: Record<PdfReportTopic, PdfLine[]> = { consent: [], storage: [], policy: [], forms: [], security: [], external: [], tls: [], accessibility: [] };
   const dossier = report.appendix.evidenceDossier;
   const runtime = report.appendix.cookieAndTrackerInventory;
-  const findings = report.projection.unifiedFindings as Array<Record<string, unknown>>;
+  const findings = pdfNarrativeFindings(report);
   const controls = projectConsentControlReport(report.consentControlAssessment, report.scan.id);
   const cmp = dossier?.cmp;
   const collection = report.appendix.dataCollectionSurfaces;
@@ -176,7 +177,7 @@ export function appendixEvidenceLines(report: CanonicalReportExport, layout: Lay
       ...(packet.pageUrls ?? []).map(url => ["Affected page", url]), ...(packet.sourceUrls ?? []).map(url => ["Source URL", url]),
       ...(packet.snippets ?? []).filter(snippet => !/deduction|scoring withheld|point penalty/i.test(snippet)).map(snippet => ["Retained excerpt", snippet]),
       ...Object.entries(packet.counts ?? {}).filter(([key]) => !/score|deduct|point/i.test(key)).map(([key, count]) => [label(key), String(count)]),
-      ...Object.entries(packet.entities ?? {}).map(([key, values]) => [label(key), values.join(", ")]),
+      ...pdfFindingEntityRows(packet.entities ?? {}, label),
     ];
     if (rows.length) sections[pdfTopicForFinding(finding) ?? "policy"].push(layout.heading(`Finding evidence: ${value(finding.title ?? finding.unifiedFindingId)}`), ...pdfEvidenceTable(`finding-evidence-${finding.unifiedFindingId}`, ["Evidence type", "Retained detail"], rows, [135, 377]));
   }

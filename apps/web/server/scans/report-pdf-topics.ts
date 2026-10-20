@@ -1,3 +1,4 @@
+import { pdfNarrativeFindings } from "./report-pdf-evidence";
 import { getReportUnifiedFinding, getReportUnifiedFindingByAlias, getReportEvidenceCategory } from "@website-signal-risk-scanner/shared";
 import { CERT_SCORE_FINDING_REGISTRY } from "../../lib/scans/finding-registry";
 import { isGdprTransparencyReportRowId } from "../../lib/scans/gdpr-transparency-report-contract";
@@ -16,6 +17,7 @@ export const PDF_REPORT_TOPICS = [
 export type PdfReportTopic = typeof PDF_REPORT_TOPICS[number]["id"];
 
 const rowTopics: Record<string, PdfReportTopic> = {
+  cookie_policy_present: "policy", privacy_policy_present: "policy", california_rights_disclosure_not_observed: "policy", post_refusal_non_essential_activity: "consent",
   consent_surface_observed: "consent", cmp_framework_signal_observed: "consent", reject_all_path_availability: "consent",
   accept_consent_control: "consent", options_settings_preferences_control: "consent", consent_choice_quality: "consent",
   post_reject_tracking_reduction: "consent", preference_withdrawal_control: "consent", gpc_response: "consent",
@@ -64,21 +66,20 @@ export function pdfTopicForFinding(finding: Record<string, unknown>): PdfReportT
   for (const id of ids) { const topic = pdfTopicForRow(id); if (topic) return topic; }
   const family = object(finding.details).family;
   for (const id of ids) { const section = CERT_SCORE_FINDING_REGISTRY[id]?.section; if (section && sectionTopics[section]) return sectionTopics[section]!; }
-  if (typeof family === "string" && familyTopics[family]) return familyTopics[family]!;
   const definition = ids.map(id => getReportUnifiedFinding(id) ?? getReportUnifiedFindingByAlias(id)).find(Boolean);
   const alignments = finding.categoryAlignments ?? definition?.categoryAlignments;
   const owner = Array.isArray(alignments) ? alignments.map(object).find(row => row.relation === "owner") : null;
-  if (typeof owner?.evidenceCategoryId !== "string") return null;
+  if (typeof owner?.evidenceCategoryId !== "string") return typeof family === "string" ? familyTopics[family] ?? null : null;
   const section = getReportEvidenceCategory(owner.evidenceCategoryId)?.sectionId;
   const categorySectionTopics: Record<string, PdfReportTopic> = {
     privacy_notices_rights_data_handling: "policy", policy_clarity_consistency_review: "policy",
     consent_controls_enforcement: "consent", tracking_third_party_ecosystem: "external", sensitive_data_collection: "forms",
     access_barriers_task_completion: "accessibility", accessibility_commitments_conformance_support: "accessibility",
   };
-  return ownerTopics[owner.evidenceCategoryId] ?? (section ? categorySectionTopics[section] ?? null : null);
+  return ownerTopics[owner.evidenceCategoryId] ?? (section ? categorySectionTopics[section] ?? null : null) ?? (typeof family === "string" ? familyTopics[family] ?? null : null);
 }
 export function pdfTopicOverview(report: CanonicalReportExport) {
-  const findings = report.projection.unifiedFindings as Array<Record<string, unknown>>;
+  const findings = pdfNarrativeFindings(report);
   return PDF_REPORT_TOPICS.map(topic => {
     const rows = (report.gdprEprivacyReview?.rows ?? []).filter(row => pdfTopicForRow(row.id) === topic.id);
     const selected = findings.filter(finding => pdfTopicForFinding(finding) === topic.id);

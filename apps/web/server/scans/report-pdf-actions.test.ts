@@ -24,7 +24,7 @@ test("repair area uses explicit finding identity and retained guidance without c
   const before = structuredClone(report);
   const actions = pdfAppendixActions(report);
   assert.equal(actions.storage.length, 1, "Exact matching checklist row enriches the finding, not a duplicate task");
-  assert.deepEqual(actions.storage[0]!.affected, ["https://example.test/account", "cookies: session"]);
+  assert.deepEqual(actions.storage[0]!.affected, ["https://example.test/account", "Cookie: session"]);
   assert.ok(actions.storage[0]!.steps.includes("Update the responsible Set-Cookie response."));
   assert.ok(actions.storage[0]!.references.includes("cookie:session:1"));
   assert.deepEqual(report, before);
