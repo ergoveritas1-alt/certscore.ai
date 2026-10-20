@@ -111,10 +111,15 @@ jobs:
 
       - name: Audit CMP registry and IAB coverage (daily)
         if: ${{ github.event_name == 'schedule' }}
+        env:
+          # Resolve workspace source exports without requiring package builds.
+          TSX_TSCONFIG_PATH: ./tsconfig.base.json
         run: pnpm ops:cmp-action-coverage -- --scheduled --registry-only
 
       - name: Audit CMP registry and IAB coverage (manual)
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          TSX_TSCONFIG_PATH: ./tsconfig.base.json
         run: pnpm ops:cmp-action-coverage -- --registry-only
 
       - name: Run scheduled monitoring sweep

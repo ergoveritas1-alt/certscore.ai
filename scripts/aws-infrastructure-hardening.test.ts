@@ -89,6 +89,16 @@ test("production ops monitor assumes the validation role for ECS probes", async 
   );
 });
 
+test("scheduled and manual CMP audits resolve workspace source on clean runners", async () => {
+  const source = await readFile(".github/workflows/prod-ops-monitor.yml", "utf8");
+  const audits = source.split(/\n      - name: /).filter((step) => step.startsWith("Audit CMP registry"));
+  assert.equal(audits.length, 2);
+  for (const audit of audits) {
+    assert.match(audit, /TSX_TSCONFIG_PATH: \.\/tsconfig\.base\.json/);
+    assert.match(audit, /run: pnpm ops:cmp-action-coverage.*--registry-only/);
+  }
+});
+
 test("production ops probe detects repeated Nano terminal failures per scan", async () => {
   const source = await readFile("apps/validation-worker/scripts/prod-ops-db-probe.ts", "utf8");
   const workflow = await readFile(".github/workflows/prod-ops-monitor.yml", "utf8");
