@@ -9,12 +9,13 @@ that behavior, rather than claiming effective consent enforcement. The existing
 owned/synthetic disclosure stays in place. No report evidence or scoring rules
 are overridden.
 
-The policy provides nine independently testable transparency topics: controller
-contact, purposes, legal basis, recipients, retention, rights, transfers,
-supervisory-authority complaints and automated decision-making. A reserved
+The policy provides six independently testable transparency topics: controller
+contact, purposes, legal basis, recipients, retention and rights. Together with
+policy availability these yield seven Observed rows out of eleven. Transfer,
+supervisory-authority and automated-decision disclosures are deliberately omitted. A reserved
 example contact is explicitly non-deliverable; no DPO appointment is claimed.
 Observed disclosure text is not verification of legal adequacy or real rights
-fulfilment. Local canonical concern-policy/checklist tests assert all nine rows;
+fulfilment. Local canonical concern-policy/checklist tests assert the six topic rows;
 publication still needs a fresh scan to establish the actual report result.
 
 The page also has three deliberate, rendered WCAG defects (`image-alt`, `label`

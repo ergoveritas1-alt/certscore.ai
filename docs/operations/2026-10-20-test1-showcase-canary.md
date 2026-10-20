@@ -14,15 +14,18 @@ No CertScore.ai app or scanner production deployment is included.
 | Area | Real page content | Verification |
 | --- | --- | --- |
 | Policy discovery | Visible same-origin Privacy Policy links | Policy lane fetches the exact linked document |
-| Transparency | Nine substantive topic disclosures | Retained sections and canonical concern-policy/checklist test |
+| Transparency | Six substantive topic disclosures plus policy availability | Seven Observed rows through retained sections and canonical concern-policy/checklist projection |
 | Accessibility | Missing image alternative, unlabelled email input, unnamed icon button | Bundled axe-core 4.11.3 detects all three serious/critical rules |
 | Forms | Five empty personal-information fields and a local notice | Existing form capture retains field categories and linked notice |
 | Integrity | One off-screen link to reserved `promotion.example` | Runtime capture retains domain, concealment and code proof without navigation |
 | Consent | Original controls and shared runtime unchanged | Six initial requests; Accept remains unconfirmed; Reject registers denied then starts its intentional extra request |
 
-Policy topics are controller contact, processing purposes, legal basis,
-recipients, retention, rights, transfers, supervisory-authority complaints and
-automated decision-making/profiling. The fictitious contact is clearly identified
+The later PDF-review follow-up requests exactly seven Observed policy rows,
+including policy availability. Policy topics are now controller contact,
+processing purposes, legal basis, recipients, retention and rights. Transfers,
+supervisory-authority complaints and automated decision-making/profiling clauses
+are deliberately omitted from the actual canary source, not hidden in a display
+projection. The fictitious contact is clearly identified
 as non-deliverable and no DPO appointment is asserted. A disclosure being
 Observed does not validate its legal sufficiency or operational fulfilment.
 

@@ -147,8 +147,11 @@ test("test1 policy is visibly discoverable and retains source-bound transparency
       const policy = result.policySurfaceObservations.find(row => row.surfaceType === "privacy_policy" && row.status === "fetched" && row.normalizedUrl.endsWith("/test1-privacy-policy.html"));
       assert.ok(policy, JSON.stringify(result.policySurfaceObservations));
       const topics = policy.retainedArticle13SectionEvidence.filter(row => row.signalObserved === "observed").map(row => row.coverageArea);
-      for (const topic of ["controller_contact", "processing_purposes", "legal_basis", "recipients_or_vendor_categories", "data_retention", "data_subject_rights", "international_transfers", "supervisory_authority", "automated_decision_making_or_profiling"]) {
+      for (const topic of ["controller_contact", "processing_purposes", "legal_basis", "recipients_or_vendor_categories", "data_retention", "data_subject_rights"]) {
         assert.ok(topics.includes(topic as typeof topics[number]), `${topic}: ${topics.join(", ")}`);
+      }
+      for (const topic of ["international_transfers", "supervisory_authority", "automated_decision_making_or_profiling"]) {
+        assert.equal(topics.includes(topic as typeof topics[number]), false, topic);
       }
       for (const row of policy.retainedArticle13SectionEvidence.filter(row => row.signalObserved === "observed")) {
         assert.equal(row.selectedPolicySectionUrl, new URL("test1-privacy-policy.html", url).href);
