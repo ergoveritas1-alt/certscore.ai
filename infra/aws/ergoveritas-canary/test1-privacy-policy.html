@@ -1,0 +1,43 @@
+<!-- OWNED CANARY PRIVACY POLICY — intentional scanner-validation scenario -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>Privacy Policy — ErgoVeritas test 1</title>
+  <style>body{font:16px/1.6 system-ui,sans-serif;max-width:820px;margin:36px auto;padding:0 24px;color:#172b44}h1,h2{line-height:1.25}a{color:#075985}table{border-collapse:collapse;width:100%}th,td{border:1px solid #cbd5e1;padding:10px;text-align:left}</style>
+</head>
+<body>
+  <main>
+    <h1>Privacy Policy for the ErgoVeritas test 1 canary</h1>
+    <p>Updated 20 October 2026. This notice applies only to <a href="/test1.html">ergoveritas.com/test1.html</a>, an owned synthetic scanner-validation page. It describes its deliberately configured behavior so CertScore.ai can test evidence capture. This is not a general privacy notice for other ErgoVeritas pages or a promise that this deliberately failing test is compliant.</p>
+    <h2>Controller and contact</h2>
+    <p>ErgoVeritas Canary Publisher is the controller identified in this synthetic test scenario. The scenario's privacy contact is privacy@test1.example, a reserved, non-deliverable example address for scanner validation, not a working channel for personal data or rights requests. We do not appoint a data protection officer for this synthetic scenario.</p>
+    <h2>Personal data and purposes of processing</h2>
+    <p>We process cookie identifiers, browser and device attributes, page-view events, consent-choice events, and network-request metadata to validate analytics, advertising, session-replay and fingerprinting detection. The purposes of processing are controlled quality assurance, audience-measurement classification and testing whether refusal is reflected in observed requests. The demo enquiry displays name, email, phone, postal code and message fields; its values are not submitted, read by the test runtime, or written to browser storage.</p>
+    <h2>Legal basis for processing</h2>
+    <p>The legal basis described by this synthetic scenario is legitimate interests under Article 6(1)(f) GDPR for controlled diagnostic quality assurance. Optional analytics, advertising and replay are modeled as consent-based processing under Article 6(1)(a) GDPR. The runtime deliberately activates optional requests before a choice and again after Reject, so the stated consent basis does not establish that valid consent was obtained. This notice documents that test defect; it does not justify the behavior.</p>
+    <h2>Recipients and service providers</h2>
+    <p>We share personal data in the form of synthetic cookie identifiers and network-request metadata with analytics providers including Google Analytics, advertising provider Meta, replay providers Microsoft Clarity, Hotjar and FullStory, and product-measurement provider Segment. AWS is the hosting provider that receives ordinary page-request metadata. The purposes are measurement, advertising classification, session-replay classification and product-event classification. The page uses fixed synthetic identifiers rather than enquiry values; successful provider ingestion is not guaranteed by a request attempt.</p>
+    <h2>Cookies, storage and consent behavior</h2>
+    <p>On a fresh visit the runtime writes _ga_TEST1, _gid, _fbp, _clck, _hjSessionUser_100001 and fs_uid, plus an OptanonConsent test receipt. It writes certscore_test1_analytics and certscore_test1_consent_state to local storage and certscore_test1_session_replay to session storage. These are synthetic identifiers and decision markers, not evidence that a real CMP service has been installed.</p>
+    <p>Accept and Manage are visible first-layer test controls without implemented decision handlers. Reject changes the test decision to denied and hides the banner, but intentionally writes _gid and starts a Google Analytics request approximately 75 milliseconds later. This page does not implement a GPC-dependent reduction. These behaviors are intentionally left available for independent scanner observation; a visible control or changed receipt alone is not proof of effective refusal.</p>
+    <h2>Data retention</h2>
+    <p>We retain personal data represented by local-storage test identifiers and consent decision markers until you clear this site's browser data. Session-storage test identifiers are retained for the lifetime of the browser tab's session. First-party cookie identifiers and the test consent receipt expire within 15 minutes of their latest write. The operator does not receive or retain demo enquiry values. Separate infrastructure logs and third-party recipient retention periods are not specified by this fixture, and no provider-side deletion is asserted.</p>
+    <h2>International transfers</h2>
+    <p>Personal data in network-request metadata may be transferred outside the European Economic Area when the named analytics, advertising, replay or hosting recipients process requests internationally, including in the United States. This fixture does not establish which recipient location handled a request or verify contractual transfer safeguards. It does not claim that an adequacy decision or Standard Contractual Clauses have been verified for this test.</p>
+    <h2>Data subject rights and withdrawal</h2>
+    <p>You have the right to access your personal data, the right to rectification of inaccurate personal data, the right to erasure, restriction of processing, data portability and objection to processing based on legitimate interests. Consent may be withdrawn without affecting the lawfulness of earlier processing. These are disclosure examples, not working request tools: the reserved privacy contact above does not receive requests. Visitors can clear this site's browser data or close the page to remove local test state or stop further page activity; this does not erase data already received by third parties.</p>
+    <h2>Complaints to a supervisory authority</h2>
+    <p>Individuals have the right to lodge a complaint with a competent data protection supervisory authority, including the authority in the country of their habitual residence, place of work or alleged infringement. This statement describes the complaint right; the synthetic page is not a complaint-submission service.</p>
+    <h2>Automated decision-making and profiling</h2>
+    <p>This site does not use personal data for solely automated decision-making or profiling that produces legal or similarly significant effects on a visitor. Its synthetic measurement and fingerprinting operations test browser-signal detection, not credit, employment, insurance or eligibility decisions. This statement does not determine what a third-party recipient may do independently.</p>
+    <h2 id="demo-form">Demo enquiry and collection boundary</h2>
+    <p>The form is for invented personal information only. Its preview button does not serialize fields, send an email, call a CRM, navigate to a collection endpoint or save values. A submit-event guard and a form-action Content Security Policy independently prevent submission. The form inventory demonstrates what information the fields request, not proof that their values were transmitted. Optional requests listed above are separate and use fixed synthetic test identifiers.</p>
+    <h2>Concealed-link integrity example</h2>
+    <p>The test page contains one intentionally off-screen outbound link to promotion.example, a reserved example domain. It has no click handler, is not automatically followed and does not collect enquiry values. It is an integrity-review fixture, not evidence that the site was compromised.</p>
+    <p><a href="/test1.html">Return to the test page</a> · <a href="/test-environment-notice">Test environment notice</a></p>
+  </main>
+</body>
+</html>
