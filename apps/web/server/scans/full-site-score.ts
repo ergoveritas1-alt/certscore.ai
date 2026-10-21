@@ -33,9 +33,9 @@ import { groupStoredReportScorePriorities } from "../../lib/scans/accessibility-
 import { projectExecutiveFindingsFromUnifiedPackets } from "../../lib/scans/executive-findings-projection";
 const VERSION = FULL_SITE_SCORING_POLICY_VERSION;
 const PRIORITY_VERSION = "site-priority-review.v19";
-const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
+const HISTORICAL_VERSIONS = [["full-site-distinct-findings.v10", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v9", "gdpr-eprivacy-posture.v20"], ["full-site-distinct-findings.v8", "gdpr-eprivacy-posture.v19"], ["full-site-distinct-findings.v7", "gdpr-eprivacy-posture.v18"], ["full-site-distinct-findings.v6", "gdpr-eprivacy-posture.v17"]] as const;
 const persistedScoreSchema = z.object({
-  version: z.enum([VERSION, "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
+  version: z.enum([VERSION, "full-site-distinct-findings.v10", "full-site-distinct-findings.v9", "full-site-distinct-findings.v8", "full-site-distinct-findings.v7", "full-site-distinct-findings.v6"]), value: z.number().int().min(0).max(100).nullable(),
   scoredPages: z.number().int().min(1), limitedPages: z.number().int().nonnegative(), scope: z.string(),
   priorityReview: z.array(sitePriorityFindingSchema),
   deductions: z.array(z.object({

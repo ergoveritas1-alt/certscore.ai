@@ -1,8 +1,8 @@
 
 /** Owner-approved September 6/17 and October 10/11, 2026. Shared by scoring and review UI. */
-export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v20";
-export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v10";
-export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
+export const SCORING_POLICY_VERSION = "gdpr-eprivacy-posture.v21";
+export const FULL_SITE_SCORING_POLICY_VERSION = "full-site-distinct-findings.v11";
+export type GdprEprivacyScoringPolicyVersion = typeof SCORING_POLICY_VERSION | "gdpr-eprivacy-posture.v20" | "gdpr-eprivacy-posture.v19" | "gdpr-eprivacy-posture.v18";
 export const POST_REJECT_SCORING_TIERS = { high_risk: 15, measurement: 5, performance_only: 0, review: 0 } as const;
 export const SCORE_FLOOR = 0;
 export const SCORE_BASE = 100;

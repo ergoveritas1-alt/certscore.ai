@@ -1,6 +1,6 @@
 import { buildPostRefusalRuntimeProjection } from "../scans/post-refusal-runtime-projection";
 import { buildNormalizedConcerns } from "../scans/normalized-concerns";
-import { afterRejectProjection, highRiskAfterRejectAssessment } from "../scans/test-fixtures/after-reject-scoring";
+import { afterRejectProjection, afterRejectClickProjection, highRiskAfterRejectAssessment } from "../scans/test-fixtures/after-reject-scoring";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -359,9 +359,11 @@ test("historical v9 explanation keeps the prior fifteen-point Reject policy", ()
 
 
 test("new measurement and performance tiers agree across report, API, status and exported evidence", () => {
-  for (const [profile, score] of [["measurement", 95], ["performance", 100]] as const) {
+  for (const [profile, score, registration] of [["measurement", 95, "confirmed"], ["performance", 100, "confirmed"],
+    ["advertising", 85, "unconfirmed"], ["measurement", 95, "unconfirmed"], ["performance", 100, "unconfirmed"]] as const) {
     const scan = fixture();
-    const runtimeArtifacts = buildPostRefusalRuntimeProjection(afterRejectProjection(profile));
+    const projection = registration === "confirmed" ? afterRejectProjection(profile) : afterRejectClickProjection(profile);
+    const runtimeArtifacts = buildPostRefusalRuntimeProjection(projection);
     scan.runtimeArtifacts = { ...runtimeArtifacts, consentControlAssessment: observedControlAssessment };
     const normalizedConcerns = buildNormalizedConcerns({ runtimeArtifacts, reviewFindingCandidates: [], validationFindings: [] });
     const coverageOutcomes = deriveGdprEprivacyCoveragePolicyOutcomes({ runtimeArtifacts, normalizedConcerns, scanCompleted: true, coverageLimited: false });
@@ -383,8 +385,24 @@ test("new measurement and performance tiers agree across report, API, status and
     assert.deepEqual(status.scoreExplanation, api.scoreExplanation);
     assert.equal(api.scoreExplanation?.totalPolicyDeductionPoints, 100 - score);
     assert.deepEqual((buildReportDisplayExport(report as unknown as Record<string, unknown>) as unknown as { scoreExplanation: unknown }).scoreExplanation, api.scoreExplanation);
-    const finding = canonical.globalUnifiedFindings.find(row => row.unifiedFindingId === "post_refusal_non_essential_activity");
-    assert.match(finding?.presentation.findingName ?? "", profile === "performance" ? /Performance measurement/ : /Analytics measurement/);
+    const finding = canonical.globalUnifiedFindings.find(row => row.unifiedFindingId === (registration === "confirmed"
+      ? "post_refusal_non_essential_activity" : "post_reject_click_tracking"));
+    assert.ok(finding);
+    if (registration === "confirmed") assert.match(finding.presentation.findingName, profile === "performance" ? /Performance measurement/ : /Analytics measurement/);
+    else {
+      assert.equal(projection.registrationStatus, "unconfirmed");
+      assert.equal(projection.decisionEvidence?.decision, "unknown");
+      assert.ok("afterRejectScoringAssessment" in runtimeArtifacts);
+      assert.equal(runtimeArtifacts.afterRejectScoringAssessment?.registration, "unconfirmed");
+      assert.doesNotMatch(finding.presentation.findingName, /after confirmed refusal/i);
+      // Historical overall versions must still explain the old zero-point result.
+      for (const version of ["overall-posture.v10", "overall-posture.v11"]) {
+        scan.snapshot!.score_version = version;
+        assert.equal(projectScanScoreExplanation(scan, 100)?.totalPolicyDeductionPoints, 0);
+        assert.equal(projectScanScoreExplanation(scan, 100)?.policyVersion, "gdpr-eprivacy-posture.v20");
+      }
+    }
+    assert.doesNotMatch([finding.presentation.findingName, finding.presentation.whyThisMatters, finding.presentation.suggestedFix].join(" "), /deduction|point(?:s)? deducted/i);
     assert.doesNotMatch(finding?.presentation.suggestedFix ?? "", /Update the reject path so confirmed refusal suppresses/);
   }
 });

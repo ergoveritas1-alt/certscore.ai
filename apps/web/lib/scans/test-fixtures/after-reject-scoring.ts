@@ -39,3 +39,21 @@ export function afterRejectProjection(profile: "advertising" | "measurement" | "
     storageCollectionDiagnostics: { preAction: channels, postAction: channels },
   });
 }
+
+export function afterRejectClickProjection(profile: Parameters<typeof afterRejectProjection>[0] = "advertising") {
+  const p = afterRejectProjection(profile);
+  const {inFlightAtRefusalRegistration: _inFlight, msOffsetFromRefusal: _offset, ...request} = p.scoringEvidence!.requests[0]!;
+  return postRefusalReportProjectionSchema.parse({...p, registrationStatus:"unconfirmed", status:"unconfirmed",
+    refusalExercised:false, refusalRegisteredAtMs:undefined, productionProjectable:false,
+    evidenceDisposition:"indeterminate", indeterminateReason:"refusal_registration_not_confirmed",
+    decisionEvidence:{policyVersion:"semantic_consent_registration.v2",decision:"unknown",basis:"unverified"},
+    registeredObservationCompletion:undefined, postRefusalActivity:[], observationCount:0,
+    interactionDiagnostics:{navigation:{outcome:"completed",documentCommitted:true,finalUrlAuthorized:true},
+      click:{outcome:"completed",reResolvedBeforeDispatch:false,confirmationCheckedAfterError:false}},
+    afterActionCapture:{policyVersion:"bounded_after_action_capture.v2",action:"reject",activationStatus:"completed",
+      actionDispatchedAtMs:110,captureEndedAtMs:620,requestedWindowMs:500,stopReason:"window_elapsed",requestsDropped:0,
+      storageSnapshotRetained:true,storageWriteCoverage:"bounded_main_document_sample",storageWrites:[],
+      requestIds:[request.requestId],requestAncestry:[{requestId:request.requestId,rootStartedAtMs:request.rootStartedAtMs}]},
+    afterActionRequests:[request],afterActionStorage:[],
+  });
+}

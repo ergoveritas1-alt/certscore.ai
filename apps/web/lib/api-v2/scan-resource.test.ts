@@ -1,3 +1,4 @@
+import { CANONICAL_OVERALL_SCORE_VERSION } from "../scans/california-gpc-response-policy";
 import { observedControlAssessment } from "../scans/test-fixtures/observed-control-assessment";
 import { accessibilityProjectionFixture } from "../../../../packages/certscore-contracts/src/accessibility-audit.fixture";
 import { createHash } from "node:crypto";
@@ -389,7 +390,7 @@ test("API resource/status hide GPC and remove its retained score deduction", () 
   assert.equal(resource.gpcResponse,null);
   assert.equal(status.gpcResponse,null);
   assert.equal(resource.score,null, "No scorable checklist evidence: do not invent a replacement score.");
-  assert.equal(resource.scoreVersion,"overall-posture.v11");
+  assert.equal(resource.scoreVersion,CANONICAL_OVERALL_SCORE_VERSION);
 });
 
 for (const scenario of ["no_observable_response", "responsive", "indeterminate", "late_journey", "redirect", "stale_redirect"] as const) {

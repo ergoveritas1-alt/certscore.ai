@@ -6283,8 +6283,7 @@ function derivePostRejectOutcome(input: GdprEprivacyCoveragePolicyInput) {
     ? "Analytics measurement requests were retained after Reject with denied-storage declarations and no observed persistent identifier transmission in the inspected requests."
     : assessment.tier === "performance_only"
       ? "Page-performance requests were retained after Reject. The inspected requests and bounded storage snapshots supported performance-only measurement."
-      : assessment.tier === "review"
-        ? `${outcome.limitation} The retained evidence did not support a purpose-specific after-Reject deduction.` : outcome.limitation;
+      : outcome.limitation;
   const status = outcome.status === "Gap observed" && assessment.deductionPoints < 15 ? "Review signal" : outcome.status;
   return makeOutcome(outcome.rowId, status, limitation, outcome.evidenceRefs, {
     missingOrIncompleteSourceSignals: outcome.criticalEvidence.missingOrIncompleteSourceSignals,

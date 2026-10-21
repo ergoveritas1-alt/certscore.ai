@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { afterRejectProjection } from "./test-fixtures/after-reject-scoring";
+import { afterRejectProjection, afterRejectClickProjection } from "./test-fixtures/after-reject-scoring";
 import { assessAfterRejectScoring, retainedAfterRejectScoringAssessment } from "./after-reject-scoring-policy";
 import { buildPostRefusalRuntimeProjection } from "./post-refusal-runtime-projection";
 import { buildNormalizedConcerns } from "./normalized-concerns";
@@ -17,6 +17,16 @@ function project(projection: ReturnType<typeof afterRejectProjection>) {
   return { runtimeArtifacts, normalizedConcerns, row };
 }
 
+test("review-tier customer copy retains the request facts without explaining score eligibility", () => {
+  const projection = afterRejectProjection("measurement");
+  projection.scoringEvidence!.requests[0]!.measurementEvidence = undefined;
+  assert.equal(assessAfterRejectScoring(projection)?.tier, "review");
+  const {row, runtimeArtifacts} = project(projection);
+  assert.doesNotMatch([row.explanation, row.note, row.limitation].filter(Boolean).join(" "), /deduction|scoring (?:withheld|applied)|purpose-specific after-Reject/i);
+  assert.equal(retainedAfterRejectScoringAssessment(runtimeArtifacts)?.deductionPoints, 0);
+  assert.equal(projection.postRefusalActivity.length, 1);
+});
+
 test("15/5/0 tiers flow through persisted typed assessment, concerns, policy and checklist", () => {
   for (const [profile, points, tier] of [["advertising", 15, "high_risk"], ["measurement", 5, "measurement"], ["performance", 0, "performance_only"]] as const) {
     const projection = afterRejectProjection(profile), original = structuredClone(projection);
@@ -29,6 +39,7 @@ test("15/5/0 tiers flow through persisted typed assessment, concerns, policy and
     assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [row] }).score, 100 - points);
     assert.equal(deriveGdprEprivacyDeductionBreakdown([row]).reduce((sum, family) => sum + family.deductionPoints, 0), points);
     if (points < 15) assert.equal(row.assessmentStatus, "review_signal");
+    assert.doesNotMatch([row.explanation, row.note, row.limitation].filter(Boolean).join(" "), /deduction|scoring (?:withheld|applied)|point(?:s)? deducted/i);
     assert.equal(projection.postRefusalActivity.length, 1, "zero deduction must not erase the observed request");
     assert.deepEqual(projection, original);
   }
@@ -112,4 +123,77 @@ test("known purpose without verified operational essentiality cannot qualify low
   p.scoringEvidence!.postActionStorage[0] = { ...p.scoringEvidence!.postActionStorage[0]!, name: "cookieyes-consent", purpose: "consent_management",
     purposeAssessment: { version: "action_storage_purpose.v1", essentiality: "essential" } };
   assert.equal(assessAfterRejectScoring(p)?.tier, "performance_only");
+});
+
+test("a completed authorized Reject click supports the same 15/5/0 tiers without verifying refusal registration", () => {
+  for (const [profile,points] of [["advertising",15],["measurement",5],["performance",0]] as const) {
+    const p=afterRejectClickProjection(profile), original=structuredClone(p);
+    const assessment=assessAfterRejectScoring(p)!;
+    assert.equal(assessment.registration,"unconfirmed");assert.equal(assessment.deductionPoints,points);
+    assert.ok(assessment.reasons.includes("verified_reject_click"));
+    const {row,runtimeArtifacts}=project(p);
+    assert.equal(row.assessmentStatus,"review_signal");
+    assert.equal(retainedAfterRejectScoringAssessment(runtimeArtifacts)?.deductionPoints,points);
+    assert.equal(deriveGdprEprivacyDeductionBreakdown([row]).reduce((n,family)=>n+family.deductionPoints,0),points);
+    assert.equal(deriveRegulatoryCoverageScore({framework:"gdpr_eprivacy",rows:[row]}).score,100-points);
+    assert.equal(deriveGdprEprivacyDeductionBreakdown([row],"gdpr-eprivacy-posture.v20").length,0);
+    assert.equal(p.decisionEvidence?.basis,"unverified");assert.deepEqual(p,original);
+    assert.doesNotMatch([row.explanation,row.note,row.limitation].filter(Boolean).join(" "),/deduction|scoring (?:withheld|applied)|point(?:s)? deducted/i);
+  }
+});
+
+test("Reject click alone, drifted requests and incomplete captures stay neutral", () => {
+  for (const mutate of [
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.packetSha256=undefined;},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.actionControlProof!.authorizedTargetSha256=undefined;},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.actionControlProof!.frameIdentitySha256=undefined;},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.afterActionCapture!.requestAncestry=[];},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.afterActionCapture!.requestAncestry![0]!.rootStartedAtMs=100;},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.afterActionCapture!.requestsDropped=1;},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.captureCoverage!.requestsDroppedAfterAction=1;},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.afterActionCapture!.stopReason="aborted";},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.afterActionCapture!.activationStatus="uncertain";},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.interactionDiagnostics!.click.outcome="not_attempted";},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.scoringEvidence!.requests=[];},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.afterActionRequests![0]!.sanitizedUrl="https://different.example/";},
+    (p:ReturnType<typeof afterRejectClickProjection>)=>{p.scoringEvidence!.requests[0]!.method="OPTIONS";},
+  ]) {
+    const p=afterRejectClickProjection();mutate(p);
+    assert.equal(assessAfterRejectScoring(p)?.deductionPoints??0,0);
+  }
+  const p=afterRejectClickProjection("measurement");
+  p.scoringEvidence!.requests[0]!.measurementEvidence=undefined;p.afterActionRequests![0]!.measurementEvidence=undefined;
+  const assessment=assessAfterRejectScoring(p)!;
+  assert.equal(assessment.deductionPoints,0);
+  assert.ok(assessment.reasons.includes("verified_reject_click"));
+  assert.ok(!assessment.reasons.includes("registration_unconfirmed"));
+});
+
+test("historical v1 assessment and v20 score retain the old unconfirmed-registration result", () => {
+  const p=afterRejectClickProjection();
+  const legacy=assessAfterRejectScoring(p,"after_reject_measurement_tiers.v1")!;
+  assert.equal(legacy.deductionPoints,0);assert.deepEqual(legacy.reasons,["registration_unconfirmed"]);
+  const runtime={postRefusalEvidenceProjection:p,afterRejectScoringAssessment:legacy};
+  assert.deepEqual(retainedAfterRejectScoringAssessment(runtime),legacy);
+  const current=project(p).row;
+  assert.equal(deriveGdprEprivacyDeductionBreakdown([current])[0]?.deductionPoints,15);
+  assert.equal(deriveGdprEprivacyDeductionBreakdown([current],"gdpr-eprivacy-posture.v20").length,0);
+});
+
+test("unconfirmed-click scoring uses the full retained requests and charges the family once", () => {
+  const p = afterRejectClickProjection("performance");
+  const template = p.afterActionRequests![0]!;
+  const requests: NonNullable<typeof p.afterActionRequests> = Array.from({ length: 9 }, (_, i) => ({ ...template, requestId: `performance-${i}`,
+    measurementEvidence: template.measurementEvidence ? { ...template.measurementEvidence, requestId: `performance-${i}` } : undefined }));
+  const ad = afterRejectClickProjection("advertising").afterActionRequests![0]!;
+  requests.push({ ...ad, requestId: "advertising-outside-assessment-sample" });
+  p.afterActionRequests = requests;
+  p.scoringEvidence!.requests = requests.map(row => ({ ...row, inFlightAtRefusalRegistration: false }));
+  p.afterActionCapture!.requestIds = requests.map(row => row.requestId);
+  p.afterActionCapture!.requestAncestry = requests.map(row => ({ requestId: row.requestId, rootStartedAtMs: row.rootStartedAtMs! }));
+  const { row, runtimeArtifacts } = project(p);
+  assert.ok("rejectClickTrackingAssessment" in runtimeArtifacts);
+  assert.equal(runtimeArtifacts.rejectClickTrackingAssessment?.requests.length, 8);
+  assert.deepEqual(assessAfterRejectScoring(p)?.requestIds, ["advertising-outside-assessment-sample"]);
+  assert.equal(deriveRegulatoryCoverageScore({ framework: "gdpr_eprivacy", rows: [row, row] }).score, 85);
 });

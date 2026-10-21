@@ -5,8 +5,8 @@ The owner-approved September 6, 2026 scoring table is defined in
 this registry directly. Change the registry rather than copying policy numbers
 into report components or documentation.
 
-Local versions: `gdpr-eprivacy-posture.v20`, `overall-posture.v10`, and
-`full-site-distinct-findings.v9`. These changes have not been deployed. The California GPC evidence policy remains v1;
+Local versions: `gdpr-eprivacy-posture.v21`, `overall-posture.v12`, and
+`full-site-distinct-findings.v11`. These changes have not been deployed. The California GPC evidence policy remains v1;
 its existing eligible 15-point effect is unchanged.
 
 The score starts at 100, subtracts eligible deductions after shared family caps,
@@ -42,7 +42,7 @@ receive 15; qualified storage-denied analytics measurement receives 5; verified
 performance-only measurement and insufficient-evidence review receive 0. Only
 the strongest supported effect applies within the existing 15-point family cap.
 The new version requires a source-bound typed assessment; raw status flags cannot
-create a deduction. Historical v18/v19 click-tracking weights remain unchanged.
+create a deduction. A completed authorized Reject click with eligible directly observed post-click requests can qualify without semantic refusal verification; registration remains unconfirmed. The original packet, complete bounded capture, zero drops, post-click ancestry and purpose-specific proof remain required. Historical v18/v19 click-tracking weights and v20 registration-gated assessments remain unchanged.
 See [after-Reject evidence and scoring](certscore-v2/after-reject-measurement-tiers-policy.md). Legacy privacy-checklist accessibility, choice-quality, withdrawal and
 cross-border rows have no direct deduction;
 the underlying findings/checklist evidence remains available.

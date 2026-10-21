@@ -547,6 +547,21 @@ the source-bound typed assessment through the canonical concern and checklist
 path. Unconfirmed registration is review-only in v20; historical v18/v19 amounts
 remain unchanged. A zero deduction is not proof of successful refusal or legal
 compliance. See `docs/certscore-v2/after-reject-measurement-tiers-policy.md`.
+The October 21 owner-approved `after_reject_measurement_tiers.v2` correction
+supersedes the semantic-registration prerequisite for new v21 assessments. A
+verified completed authorized Reject click with eligible directly observed
+post-click requests may qualify for the same 15/5/0 tiers while registration
+remains unconfirmed. Retain verified original packet/control/document proof,
+complete bounded v2 capture, zero drops, strictly post-click request ancestry
+and purpose/identifier gates. A click alone, opaque analytics, missing capture,
+pre-click chains and storage presence remain neutral. Registered-refusal
+contradictions and storage-write effects retain their existing proof rules.
+Persist the typed assessment through the same canonical pipeline and charge
+only the strongest family effect once. Preserve historical assessments/scores;
+never promote registration or explain deductions in customer reports. This adds
+no browser work, invocation, model call, wait or retention; incremental bounded
+CPU/metadata is estimated below $0.10/month at 100,000 scans. See the same policy
+document for the current version and historical compatibility.
 Production deployment requires separate authorization. Accept comparison and other independent deductions
 are unchanged. This adds no waiting or invocations; bounded ancestry/provenance
 metadata is estimated below $1/month at 100,000 scans/month and 30-day retention.
