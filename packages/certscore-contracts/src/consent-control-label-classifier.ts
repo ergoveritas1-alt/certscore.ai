@@ -5,7 +5,7 @@ import {
 } from "./supported-languages";
 import type { ConsentControlLinkDestination } from "./consent-control-link";
 
-export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v20";
+export const CONSENT_CONTROL_LABEL_REGISTRY_VERSION = "consent-control-label-registry.v22";
 
 export type ConsentControlIntent =
   | "accept"
@@ -215,7 +215,7 @@ export const CONSENT_CONTROL_PHRASE_REGISTRY: ConsentControlTerm[] = [
   { locale: "cs", phrase: "odmítnout všechny", intent: "reject", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "nl", phrase: "accepteer alles", intent: "accept", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "ru", phrase: "принять", intent: "accept", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
-  { locale: "ru", phrase: "отклонить", intent: "reject", strength: "direct", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
+  { locale: "ru", phrase: "отклонить", intent: "reject", strength: "direct", requiresConsentContext: true, exactLabelOnly: true },
   { locale: "en", phrase: "accept necessary cookies only", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "accept only necessary", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },
   { locale: "en", phrase: "accept essential cookies only", intent: "reject", strength: "equivalent", variant: "necessary_only", requiresConsentContext: true, exactLabelOnly: true, observationOnly: true },

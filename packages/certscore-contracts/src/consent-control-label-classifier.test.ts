@@ -1183,7 +1183,7 @@ test("reviewed September cohort labels are exact contextual observations, not ne
   const choices = [
     ["Kabul Et", "accept"], ["Reddet", "reject"], ["Acceptă", "accept"], ["Refuză", "reject"],
     ["Souhlasím se všemi", "accept"], ["Odmítnout všechny", "reject"], ["Accepteer alles", "accept"],
-    ["Принять", "accept"], ["Отклонить", "reject"],
+    ["Принять", "accept"],
     ["ACCEPT NECESSARY COOKIES ONLY", "reject"], ["Accept Only Necessary", "reject"],
     ["Accept essential cookies only", "reject"], ["DECLINE NON-NECESSARY", "reject"],
     ["Reject Non-Essentials", "reject"], ["Declinar consentimiento", "reject"],
