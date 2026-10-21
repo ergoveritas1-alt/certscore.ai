@@ -4221,7 +4221,12 @@ export async function preConsentRuntimeScanner(
       }
     }
 
-    if (deferGpcFinalization) await finalizeGpcEvidence();
+    // The dedicated passive GPC lane already owes DOM metadata and transport
+    // work below. Retain its listener through that work without adding a wait,
+    // readback, or budget. Other capture modes keep their earlier boundary.
+    const finalizeGpcAfterPassiveMetadata = deferGpcFinalization &&
+      captureScope === "runtime_evidence" && input.globalPrivacyControlEnabled === true;
+    if (deferGpcFinalization && !finalizeGpcAfterPassiveMetadata) await finalizeGpcEvidence();
 
     // All consent visual capture is complete. Reuse only the unused portion
     // of the single 350ms passive-read allowance, never a new tail budget.
@@ -4248,7 +4253,14 @@ export async function preConsentRuntimeScanner(
     );
     const metadataDocumentUrl = page.url();
     const metadataDocumentToken = currentBrowserDocumentIdentity(page)?.token;
-    let siteMetadata = captureRuntimeEvidence ? await readDocumentSiteMetadata(page) : null;
+    const gpcMetadataAllowanceMs = finalizeGpcAfterPassiveMetadata ? optionalEvidenceAllowance({
+      remainingMs: remainingModuleBudgetMs(), maximumMs: 250, requiredReserveMs: 2_500,
+    }) : 0;
+    let siteMetadata = !captureRuntimeEvidence ? null : finalizeGpcAfterPassiveMetadata
+      ? gpcMetadataAllowanceMs > 0 ? await recordBoundedTiming(timingBreakdown,
+        "page evidence: site metadata", "Passive metadata yields to the existing terminal GPC readback reserve.",
+        gpcMetadataAllowanceMs, () => readDocumentSiteMetadata(page), () => null) : null
+      : await readDocumentSiteMetadata(page);
     // Only the starting-page baseline owns this fallback; GPC/additional pages do not repeat it.
     if (siteMetadata && !input.globalPrivacyControlEnabled && input.executionProfile !== "inventory_only") {
       const options = chromiumContextOptions();
@@ -4289,8 +4301,11 @@ export async function preConsentRuntimeScanner(
     });
     const transportNetworkProbes = earlyTransportNetworkProbes;
     throwIfAborted(input.signal);
+    // Reordering must not let the optional refresh consume the single terminal
+    // GPC read's existing 2.5s allowance. Retain early transport evidence when
+    // the unchanged deadline leaves no room for both.
     const transportSecurityRemainingMs = optionalEvidenceAllowance({ remainingMs: remainingModuleBudgetMs(),
-      maximumMs: 12_000, requiredReserveMs: requiredTailReserveMs });
+      maximumMs: 12_000, requiredReserveMs: requiredTailReserveMs + (finalizeGpcAfterPassiveMetadata ? 2_500 : 0) });
     const { observation: transportSecurityObservation, artifactRef: transportSecurityArtifactRef } =
       transportNetworkProbes && transportSecurityRemainingMs >= 1_000
         ? await recordBoundedTiming(
@@ -4334,6 +4349,11 @@ export async function preConsentRuntimeScanner(
         })();
     retainedTransportSecurityObservation = transportSecurityObservation ?? undefined;
     retainedTransportSecurityArtifactRef = transportSecurityArtifactRef;
+
+    // Keep the original early loader anchor and paired-impact freeze. A page
+    // change during passive metadata invalidates proof rather than rebinding it.
+    // Stop before geometry, inventory hooks, accessibility or form pixel work.
+    if (finalizeGpcAfterPassiveMetadata) await finalizeGpcEvidence();
 
     if (shouldCaptureLateConsentGeometryShadow({
       captureScope: input.captureScope,

@@ -15,6 +15,7 @@ export function describeAccessReliability(bundle: CanonicalEvidenceBundle | null
     (bundle?.runtimeCoverage?.coverageStatus === "limited_none" || bundle?.scanNoGoAssessment?.decision === "no_go"));
   const reason = !bundle ? "source_unverified" : positiveAccess ? "representative_page" :
     /renderer crash/i.test(errors) ? "renderer_crash" :
+    /Protocol error \(Page\.stopLoading\): Not attached to an active page/.test(errors) ? "navigation_reset_inactive_page" :
     /interrupted by another navigation to ["']about:blank|Navigation to ["']about:blank["'] is interrupted by another navigation to ["']chrome-error:\/\/chromewebdata\//.test(errors) ? "navigation_reset_interruption" :
     /ERR_BLOCKED_BY_CLIENT/.test(errors) ? "client_or_safety_block" :
     /ERR_NETWORK_CHANGED/.test(errors) ? "network_changed" :
@@ -93,22 +94,19 @@ export async function resetForNavigationRecovery(page: Pick<Page, "goto" | "cont
       try {
         await session.send("Page.stopLoading");
       } catch (error) {
-        // Chromium briefly has no active page while committing a failed TLS/
-        // transport navigation. Await that exact error-document event, then
-        // stop once on the active page, inside the same reset allowance.
+        // Chromium can keep the error-document renderer inactive even after
+        // its commit. That terminal main-frame commit settles the failed
+        // navigation; requiring another stop (even on a new CDP session) can
+        // fail identically. Continue to the single blank reset only after this
+        // exact commit, inside the same original reset allowance.
         if (!(error instanceof Error) || !error.message.includes("Protocol error (Page.stopLoading): Not attached to an active page")) throw error;
         if (page.mainFrame().url() !== "chrome-error://chromewebdata/") {
           await Promise.race([errorDocument, interrupted]);
         }
         checkActive();
-        // An error-document commit can replace the renderer target while this
-        // CDP session remains bound to the inactive page. Rebind the existing
-        // single stop retry; do not retry against that stale session.
-        detach();
-        session = undefined;
-        session = await page.context().newCDPSession(page as Page);
-        checkActive();
-        await session.send("Page.stopLoading");
+        if (page.mainFrame().url() !== "chrome-error://chromewebdata/") {
+          throw Error("Navigation recovery error document changed before reset.");
+        }
       }
       checkActive();
       const navigationTimeoutMs = deadline - Date.now();

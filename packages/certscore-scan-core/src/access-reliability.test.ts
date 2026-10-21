@@ -8,7 +8,8 @@ test("access diagnostics distinguish site challenges from scanner transport/rese
   for (const [error, reason] of [["page.goto: Navigation is interrupted by another navigation to \"about:blank\"", "navigation_reset_interruption"],
     ["page.goto: Navigation to \"about:blank\" is interrupted by another navigation to \"chrome-error://chromewebdata/\"", "navigation_reset_interruption"],
     ["net::ERR_NETWORK_CHANGED", "network_changed"], ["net::ERR_HTTP2_PROTOCOL_ERROR", "http2_transport_failure"], ["net::ERR_BLOCKED_BY_CLIENT", "client_or_safety_block"],
-    ["net::ERR_EMPTY_RESPONSE", "empty_transport_response"], ["Chromium renderer crash event", "renderer_crash"]]) {
+    ["net::ERR_EMPTY_RESPONSE", "empty_transport_response"], ["Chromium renderer crash event", "renderer_crash"],
+    ["Target navigation failed: net::ERR_EMPTY_RESPONSE\ncdpSession.send: Protocol error (Page.stopLoading): Not attached to an active page", "navigation_reset_inactive_page"]]) {
     const b=gpcRuntimeFixture({enabled:true}); b.runtimeCoverage!.coverageStatus="limited_none";b.modulesRun[0]!.errors=[error!];
     const d=describeAccessReliability(b);assert.equal(d.reason,reason);assert.equal(d.positiveAccess,false);assert.equal(d.contradictoryAccessLabels,true);assert.equal(d.scoreEffect,"none");
   }
@@ -86,7 +87,7 @@ test("only the main Chromium error-document commit permits an inactive-page rese
   page.emit('framenavigated', main);
   if (cancelled) await assert.rejects(result, /cancelled/);
   else await result;
-  assert.equal(stops, cancelled ? 1 : 2);
+  assert.equal(stops, 1, 'a terminal error commit does not require another stop');
   assert.equal(resets, cancelled ? 0 : 1);
   assert.equal(page.listenerCount('framenavigated'), 0);
  }
@@ -103,23 +104,21 @@ test("an error document committed before reset does not require another frame ev
   goto: async () => { resets++; return null; },
  }) as unknown as Page;
  await resetForNavigationRecovery(page, 3000);
- assert.equal(stops, 2);
+ assert.equal(stops, 1);
  assert.equal(resets, 1);
  assert.equal(page.listenerCount('framenavigated'), 0);
 });
 
 
-test("inactive error-page CDP session is replaced before the bounded stop retry", async () => {
- let attachments = 0, resets = 0;
- const detached: number[] = [];
- const sends: number[] = [];
+test("a committed inactive error renderer resets without another attachment or stop", async () => {
+ let attachments = 0, resets = 0, stops = 0, detached = 0;
  const page = Object.assign(new EventEmitter(), {
   mainFrame: () => ({ url: () => 'chrome-error://chromewebdata/' }),
   context: () => ({ newCDPSession: async () => {
-   const id = ++attachments;
+   attachments++;
    return {
-    send: async () => { sends.push(id); if (id === 1) throw Error('Protocol error (Page.stopLoading): Not attached to an active page'); },
-    detach: async () => { detached.push(id); },
+    send: async () => { stops++; throw Error('Protocol error (Page.stopLoading): Not attached to an active page'); },
+    detach: async () => { detached++; },
    };
   } }),
   goto: async (url: string, options: { timeout: number }) => {
@@ -129,31 +128,70 @@ test("inactive error-page CDP session is replaced before the bounded stop retry"
   },
  }) as unknown as Page;
  await resetForNavigationRecovery(page, 3000);
- assert.equal(attachments, 2);
- assert.deepEqual(sends, [1, 2], 'never retry the known inactive session');
- assert.deepEqual(detached, [1, 2]);
+ assert.equal(attachments, 1);
+ assert.equal(stops, 1);
+ assert.equal(detached, 1);
  assert.equal(resets, 1);
 });
 
-test("a late CDP reattachment cannot dispatch stop or reset after cancellation", async () => {
+test("an inactive page without a committed main error document cannot dispatch a reset", async () => {
+ let stops = 0, resets = 0, detached = 0;
+ const main = { url: () => 'https://failed.test/' };
+ const page = Object.assign(new EventEmitter(), {
+  mainFrame: () => main,
+  context: () => ({ newCDPSession: async () => ({
+   send: async () => { stops++; throw Error('Protocol error (Page.stopLoading): Not attached to an active page'); },
+   detach: async () => { detached++; },
+  }) }),
+  goto: async () => { resets++; return null; },
+ }) as unknown as Page;
+ const result = resetForNavigationRecovery(page, 1050);
+ await Promise.resolve(); await Promise.resolve();
+ page.emit('framenavigated', { url: () => 'chrome-error://chromewebdata/' });
+ await assert.rejects(result, /deadline/);
+ assert.equal(stops, 1);
+ assert.equal(resets, 0);
+ assert.equal(detached, 1);
+ assert.equal(page.listenerCount('framenavigated'), 0);
+});
+
+test("error-page drift and unrelated stop errors cannot bypass the recovery gate", async () => {
+ for (const unrelated of [false, true]) {
+  let resets = 0;
+  const main = { url: () => 'https://failed.test/' };
+  const page = Object.assign(new EventEmitter(), {
+   mainFrame: () => main,
+   context: () => ({ newCDPSession: async () => ({
+    send: async () => { throw Error(unrelated ? 'Protocol error: session closed' : 'Protocol error (Page.stopLoading): Not attached to an active page'); },
+    detach: async () => {},
+   }) }),
+   goto: async () => { resets++; return null; },
+  }) as unknown as Page;
+  const result = resetForNavigationRecovery(page, 3000);
+  await Promise.resolve(); await Promise.resolve();
+  if (!unrelated) {
+   main.url = () => 'chrome-error://chromewebdata/'; page.emit('framenavigated', main);
+   main.url = () => 'https://changed.test/';
+  }
+  await assert.rejects(result, unrelated ? /session closed/ : /changed before reset/);
+  assert.equal(resets, 0);
+ }
+});
+
+test("a late initial CDP attachment cannot stop or reset after cancellation", async () => {
  const controller = new AbortController();
- let attachments = 0, resets = 0, secondStops = 0, detached = 0;
  let attach!: (session: unknown) => void;
+ let stops = 0, resets = 0, detached = 0;
  const page = Object.assign(new EventEmitter(), {
   mainFrame: () => ({ url: () => 'chrome-error://chromewebdata/' }),
-  context: () => ({ newCDPSession: async () => {
-   if (++attachments === 1) return { send: async () => { throw Error('Protocol error (Page.stopLoading): Not attached to an active page'); }, detach: async () => { detached++; } };
-   return new Promise(resolve => { attach = resolve; });
-  } }),
+  context: () => ({ newCDPSession: async () => new Promise(resolve => { attach = resolve; }) }),
   goto: async () => { resets++; return null; },
  }) as unknown as Page;
  const result = resetForNavigationRecovery(page, 3000, controller.signal);
- while (!attach) await Promise.resolve();
  controller.abort(Error('cancelled'));
  await assert.rejects(result, /cancelled/);
- attach({ send: async () => { secondStops++; }, detach: async () => { detached++; } });
+ attach({ send: async () => { stops++; }, detach: async () => { detached++; } });
  await new Promise(resolve => setImmediate(resolve));
- assert.equal(resets, 0);
- assert.equal(secondStops, 0);
- assert.equal(detached, 2);
+ assert.equal(stops, 0); assert.equal(resets, 0); assert.equal(detached, 1);
+ assert.equal(page.listenerCount('framenavigated'), 0);
 });
