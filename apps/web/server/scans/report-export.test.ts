@@ -579,6 +579,7 @@ test("source-bound short policy and separate provider evidence preserve canonica
     const child=projectCaliforniaPrivacyReview(f.bundle,CA_FIXTURE_SOURCE,CA_FIXTURE_URL,f.policyEvidence)!;
     assert.ok(child,mode);
     if(mode==="provider_only") {
+      assert.ok(child.contractVersion === "certscore.california-privacy-review.v10");
       assert.equal(child.disclosureInspection,undefined,"A provider policy cannot prove target disclosure presence or absence");
       assert.deepEqual(child.reviewCoverage?.sourceDocuments,[]);
       assert.equal(child.reviewCoverage?.captureCoverage?.policyTextComplete,false);
